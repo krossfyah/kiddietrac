@@ -1,14 +1,59 @@
+# ─── Secrets — NEVER commit these ────────────────────────
 .env
 .env.*
 !.env.example
-storage/logs/*.log
-storage/framework/cache/*
-storage/framework/sessions/*
-storage/framework/views/*
-vendor/
-node_modules/
-bootstrap/cache/*.php
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# ─── Laravel framework ───────────────────────────────────
+backend/vendor/
+backend/node_modules/
+backend/storage/logs/*.log
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/framework/testing/*
+backend/storage/app/private/*
+backend/storage/app/public/*
+backend/bootstrap/cache/*.php
+!backend/bootstrap/cache/.gitkeep
+backend/public/storage
+
+# ─── Build artifacts ─────────────────────────────────────
+backend/public/hot
+backend/public/mix-manifest.json
+backend/public/build/
+*.log
+npm-debug.log*
+
+# ─── Database dumps & backups ────────────────────────────
 *.sql
 *.sql.gz
 *.tar.gz
+*.zip
+kiddietrac-*-backup-*/
+kiddietrac-v*-backup*/
+
+# ─── OS junk ─────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# ─── IDE ─────────────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-*
+
+# ─── Frontend builds & deps ──────────────────────────────
+parent-portal/node_modules/
+parent-portal/.cache/
+
+# ─── PHP-specific ────────────────────────────────────────
+*.phar
+
+# ─── Vendor directory (composer-managed, not source) ─────
+backend/vendor-laravel11/
+backend/vendor/
