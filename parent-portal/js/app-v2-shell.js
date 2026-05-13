@@ -65,11 +65,13 @@
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
           { hash: 'waitlist',       label: 'Waitlist',         icon: '⏳' },
+          { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
         ]},
         { label: 'Reseller', items: [
           { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
           { hash: 'admin-features', label: 'Feature flags',    icon: '⚙️' },
           { hash: 'admin-branding', label: 'Branding',         icon: '🎨' },
+          { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
         ]},
       ];
     }
@@ -90,6 +92,8 @@
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
           { hash: 'waitlist',       label: 'Waitlist',         icon: '⏳' },
+          { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
+          { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
         ]},
       ];
     }
@@ -100,6 +104,7 @@
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢' },
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
         ]},
       ];
     }
@@ -115,6 +120,7 @@
         { hash: 'billing',        label: 'Billing',        icon: '💳' },
         { hash: 'autopay',        label: 'Autopay',        icon: '🔁' },
         { hash: 'announcements',  label: 'Announcements',  icon: '📢' },
+        { hash: 'incidents',     label: 'Incidents',      icon: '⚠️' },
       ]},
     ];
   }

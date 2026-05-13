@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CentreController;
 use App\Http\Controllers\Api\CheckEventController;
 use App\Http\Controllers\Api\ChildController;
 use App\Http\Controllers\Api\DailyEventController;
+use App\Http\Controllers\Api\DigestStatusController;
 use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\HelpController;
 use App\Http\Controllers\Api\IncidentController;
@@ -84,6 +85,9 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::get('/children/{child}', [ChildController::class, 'show']);
             Route::get('/children/{child}/timeline', [DailyEventController::class, 'timeline']);
             Route::get('/children/{child}/digest/{date}', [DailyEventController::class, 'digest']);
+            // v20: Director — AI digest status board
+            Route::get('/director/digest-status', [DigestStatusController::class, 'index']);
+            Route::post('/director/digest-status/regenerate', [DigestStatusController::class, 'regenerate']);
             Route::get('/children/{child}/invoices', [InvoiceController::class, 'forChild']);
             Route::get('/children/{child}/photos', [MediaController::class, 'forChild']);
             Route::get('/children/{child}/observations', [MediaController::class, 'observationsForChild']);
@@ -92,6 +96,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::post('/messages', [MessageController::class, 'sendToRoom']);
             Route::get('/notifications', [NotificationController::class, 'mine']);
             Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+
+            // v20: incident workflow (parent side)
+            Route::get('/incidents',                       [IncidentController::class, 'index']);
+            Route::get('/incidents/{id}',                  [IncidentController::class, 'show']);
+            Route::post('/incidents/{id}/acknowledge',     [IncidentController::class, 'acknowledge']);
         });
 
         Route::prefix('provider')->middleware('role:educator,centre_director,agency_admin')->group(function () {
@@ -109,8 +118,14 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
             Route::post('/photos', [MediaController::class, 'upload']);
             Route::post('/observations', [MediaController::class, 'createObservation']);
-            Route::post('/incidents', [IncidentController::class, 'create']);
-            Route::post('/medications/give', [IncidentController::class, 'logMedication']);
+            Route::post('/incidents', [IncidentController::class, 'store']);
+            Route::post('/medications/give', fn () => response()->json(['error' => 'Medications logging coming in v21'], 501));
+
+            // v20: incident workflow (provider/educator side)
+            Route::get('/incidents',                       [IncidentController::class, 'index']);
+            Route::get('/incidents/{id}',                  [IncidentController::class, 'show']);
+            Route::patch('/incidents/{id}',                [IncidentController::class, 'update']);
+            Route::post('/incidents/{id}/submit',          [IncidentController::class, 'submit']);
 
             Route::get('/conversations', [MessageController::class, 'educatorConversations']);
             Route::get('/conversations/{conversation}', [MessageController::class, 'show']);
@@ -161,6 +176,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
             Route::get('/incidents', [IncidentController::class, 'index']);
             Route::patch('/incidents/{incident}/review', [IncidentController::class, 'review']);
+
+            // v20: incident workflow (director side)
+            Route::get('/incidents/{id}',                       [IncidentController::class, 'show']);
+            Route::post('/incidents/{id}/notify-parent',        [IncidentController::class, 'notifyParent']);
+            Route::post('/incidents/{id}/close',                [IncidentController::class, 'close']);
 
             // ─── Storage quota & audit (v7) ───
             Route::get('/storage/usage', function (\Illuminate\Http\Request $request) {
