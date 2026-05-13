@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\AiLessonPlanController;
 use App\Http\Controllers\Api\MedicationController;
 use App\Http\Controllers\Api\ImmunizationController;
 use App\Http\Controllers\Api\ChildHealthController;
+use App\Http\Controllers\Api\EDocumentController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MediaController;
@@ -113,6 +114,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::get('/children/{child}/health',         [ChildHealthController::class, 'show']);
             Route::get('/children/{child}/medications',    [MedicationController::class, 'parentList']);
             Route::get('/children/{child}/immunizations',  [ImmunizationController::class, 'parentList']);
+
+            // v22p2.2: eDocuments (parent inbox + e-sign)
+            Route::get('/edocuments',                       [EDocumentController::class, 'parentIndex']);
+            Route::post('/edocuments/{id}/sign',            [EDocumentController::class, 'sign']);
+            Route::get('/edocuments/{id}/download',         [EDocumentController::class, 'parentDownload']);
         });
 
         Route::prefix('provider')->middleware('role:educator,centre_director,agency_admin')->group(function () {
@@ -238,6 +244,14 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::post('/invitation-codes',                    [InvitationController::class, 'store']);
             Route::post('/invitation-codes/{id}/revoke',        [InvitationController::class, 'revoke']);
             Route::delete('/invitation-codes/{id}',             [InvitationController::class, 'destroy']);
+
+            // v22p2.2: eDocuments (PDF templates + e-signatures)
+            Route::get('/edocuments',                           [EDocumentController::class, 'index']);
+            Route::post('/edocuments',                          [EDocumentController::class, 'store']);
+            Route::patch('/edocuments/{id}',                    [EDocumentController::class, 'update']);
+            Route::post('/edocuments/{id}/archive',             [EDocumentController::class, 'archive']);
+            Route::get('/edocuments/{id}/signatures',           [EDocumentController::class, 'signatures']);
+            Route::get('/edocuments/{id}/download',             [EDocumentController::class, 'directorDownload']);
 
             // ─── Storage quota & audit (v7) ───
             Route::get('/storage/usage', function (\Illuminate\Http\Request $request) {

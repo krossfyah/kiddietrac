@@ -79,6 +79,7 @@
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
+          { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
         ]},
       ];
     }
@@ -108,6 +109,7 @@
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
+          { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
         ]},
       ];
     }
@@ -139,6 +141,7 @@
         { hash: 'incidents',     label: 'Incidents',      icon: '⚠️' },
         { hash: 'medications',   label: 'Medications',    icon: '💊' },
         { hash: 'immunizations', label: 'Immunizations',  icon: '🩹' },
+        { hash: 'edocuments',    label: 'Documents',      icon: '📄' },
       ]},
     ];
   }
