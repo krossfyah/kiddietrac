@@ -1,8 +1,8 @@
-/* ═══════════════════════════════════════════════════════════════════
+/* ===================================================================
    KIDDIETRAC service worker v14
    v11: caching + offline; v14: + Web Push support
-   ═══════════════════════════════════════════════════════════════════ */
-const CACHE = 'kt-v17-3';
+   =================================================================== */
+const CACHE = 'kt-v17-4';
 const ASSETS = ['/', '/index.html', '/dashboard.html', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -29,7 +29,7 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
-// ─── PUSH ───────────────────────────────────────────────────────────
+// --- PUSH -----------------------------------------------------------
 self.addEventListener('push', (event) => {
   let payload = { title: 'Kiddietrac', body: 'You have a new notification' };
   try {
