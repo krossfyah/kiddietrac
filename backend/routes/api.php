@@ -273,6 +273,10 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::post('/users', [AdminController::class, 'createUser']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
         Route::post('/users/{user}/role', [AdminController::class, 'setUserRole']);
+        // v22p1.2: user lifecycle
+        Route::delete('/users/{user}', [AdminController::class, 'destroyUser']);
+        Route::post('/users/{user}/reset-password', [AdminController::class, 'resetUserPassword']);
+        Route::post('/users/{user}/resend-welcome', [AdminController::class, 'resendWelcome']);
     
         Route::get('/families', [AdminController::class, 'listFamilies']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);

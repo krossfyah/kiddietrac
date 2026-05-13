@@ -432,6 +432,78 @@
     const status = Dom.el('div', { style: 'min-height: 20px; color: #DC2626; font-size: 13px; margin: 8px 0;' });
     body.appendChild(status);
 
+    // v22p1.2: Lifecycle actions — reset password, resend welcome, delete
+    const danger = Dom.el('div', { style: 'margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ink-100, #E5E7EB);' });
+    danger.appendChild(Dom.el('div', { style: 'font-size: 11px; font-weight: 800; color: var(--ink-500); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;' }, 'Account actions'));
+
+    const actionRow = Dom.el('div', { style: 'display: flex; gap: 8px; flex-wrap: wrap;' });
+
+    const resetBtn = Dom.el('button', {
+      style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
+    }, '🔑 Reset password');
+    resetBtn.addEventListener('click', async () => {
+      if (!confirm('Reset ' + user.name + "'s password? A new temporary password will be emailed to " + user.email + '.')) return;
+      resetBtn.disabled = true; resetBtn.textContent = 'Resetting...';
+      try {
+        const r = await Api.post('/admin/users/' + user.id + '/reset-password', { send_email: true });
+        status.style.color = '#16A34A';
+        status.textContent = r.email_sent
+          ? '✓ Password reset and emailed.'
+          : ('✓ Password reset. Email failed — share manually: ' + r.temp_password);
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = 'Reset failed: ' + (e.message || 'error');
+      } finally {
+        resetBtn.disabled = false; resetBtn.textContent = '🔑 Reset password';
+      }
+    });
+    actionRow.appendChild(resetBtn);
+
+    const resendBtn = Dom.el('button', {
+      style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
+    }, '✉ Resend welcome');
+    resendBtn.addEventListener('click', async () => {
+      if (!confirm('Resend the welcome invite to ' + user.email + '? A new temporary password will be generated.')) return;
+      resendBtn.disabled = true; resendBtn.textContent = 'Sending...';
+      try {
+        const r = await Api.post('/admin/users/' + user.id + '/resend-welcome', {});
+        status.style.color = '#16A34A';
+        status.textContent = r.email_sent
+          ? '✓ Welcome email sent.'
+          : ('Email failed — share temp password manually: ' + r.temp_password);
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = 'Resend failed: ' + (e.message || 'error');
+      } finally {
+        resendBtn.disabled = false; resendBtn.textContent = '✉ Resend welcome';
+      }
+    });
+    actionRow.appendChild(resendBtn);
+
+    const deleteBtn = Dom.el('button', {
+      style: 'padding: 8px 14px; background: white; color: #B91C1C; border: 1.5px solid #FCA5A5; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-left: auto;',
+    }, '🗑 Delete user');
+    deleteBtn.addEventListener('click', async () => {
+      const c1 = confirm('Delete ' + user.name + ' (' + user.email + ')?\n\nThey will be unable to sign in. Their family/child records stay intact for audit.');
+      if (!c1) return;
+      const c2 = prompt('Type "delete" to confirm:');
+      if (c2 !== 'delete') return;
+      deleteBtn.disabled = true; deleteBtn.textContent = 'Deleting...';
+      try {
+        await Api.delete('/admin/users/' + user.id);
+        await renderUsersTab(content);
+        Shell.Modal.close();
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = 'Delete failed: ' + (e.message || 'error');
+        deleteBtn.disabled = false; deleteBtn.textContent = '🗑 Delete user';
+      }
+    });
+    actionRow.appendChild(deleteBtn);
+
+    danger.appendChild(actionRow);
+    body.appendChild(danger);
+
     Shell.Modal.open({
       title: 'Manage ' + user.name,
       body: body,

@@ -10,6 +10,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 /**
@@ -572,5 +574,198 @@ final class AdminController extends Controller
             ],
             'users_by_role' => $byRole,
         ]);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //   v22p1.2 — user lifecycle: delete, reset password, resend welcome
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * Verify a target user is within the admin's agency (staff via role_assignments,
+     * or guardian via families.centre_id).
+     */
+    private function userBelongsToAgency(int $userId, int $agencyId): bool
+    {
+        $centreIds = $this->getCentreIds($agencyId);
+
+        $hasStaffRole = DB::table('role_assignments')
+            ->where('user_id', $userId)
+            ->where(function ($q) use ($agencyId, $centreIds) {
+                $q->where('agency_id', $agencyId);
+                if (!empty($centreIds)) $q->orWhereIn('centre_id', $centreIds);
+            })
+            ->exists();
+        if ($hasStaffRole) return true;
+
+        if (empty($centreIds)) return false;
+        return DB::table('guardians')
+            ->join('families', 'families.id', '=', 'guardians.family_id')
+            ->where('guardians.user_id', $userId)
+            ->whereIn('families.centre_id', $centreIds)
+            ->exists();
+    }
+
+    /**
+     * DELETE /admin/users/{user}
+     * Soft-delete the user, deactivate role assignments, revoke tokens.
+     * Does not cascade to families or children — those keep their guardian link
+     * intact for audit (but the user can no longer log in).
+     */
+    public function destroyUser(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if ($userId === $request->user()->id) {
+            return response()->json(['message' => 'You cannot delete your own account.'], 422);
+        }
+        if (!$this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
+
+        $user = DB::table('users')->where('id', $userId)->first();
+        if (!$user) return response()->json(['message' => 'User not found'], 404);
+
+        DB::transaction(function () use ($userId) {
+            DB::table('role_assignments')->where('user_id', $userId)->update([
+                'active' => false,
+            ]);
+            // Revoke any sanctum tokens so the user is logged out instantly.
+            DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
+            DB::table('users')->where('id', $userId)->update([
+                'status' => 'deactivated',
+                'deleted_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        $this->audit($request->user()->id, 'user.deleted', 'user', $userId, ['email' => $user->email]);
+
+        return response()->json(['message' => 'User deleted', 'id' => $userId]);
+    }
+
+    /**
+     * POST /admin/users/{user}/reset-password
+     * Generate a fresh temporary password, set it on the user, and email them
+     * a notice with the temp password and a "use Forgot password" link.
+     * Body: { send_email?: bool, set_status_invited?: bool }
+     */
+    public function resetUserPassword(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
+
+        $data = $request->validate([
+            'send_email'           => ['nullable', 'boolean'],
+            'set_status_invited'   => ['nullable', 'boolean'],
+        ]);
+        $sendEmail = $data['send_email'] ?? true;
+
+        $user = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
+        if (!$user) return response()->json(['message' => 'User not found'], 404);
+
+        // 12-char, mixed-case + digits. The user is encouraged to change it via Forgot password.
+        $tempPassword = Str::random(12);
+
+        DB::transaction(function () use ($userId, $tempPassword, $data) {
+            $upd = ['password' => Hash::make($tempPassword), 'updated_at' => now()];
+            if (!empty($data['set_status_invited'])) {
+                $upd['status'] = 'invited';
+            }
+            DB::table('users')->where('id', $userId)->update($upd);
+            // Revoke existing sessions so the old password really stops working.
+            DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
+        });
+
+        $emailed = false;
+        if ($sendEmail) {
+            $emailed = $this->sendAccountEmail(
+                $user->email,
+                trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+                'Your Kiddietrac password has been reset',
+                "Your administrator has reset your Kiddietrac password.\n\n" .
+                "Temporary password: {$tempPassword}\n\n" .
+                "Sign in at https://app.kiddietrac.com and use the 'Forgot password' link to choose a new one."
+            );
+        }
+
+        $this->audit($request->user()->id, 'user.password_reset', 'user', $userId, [
+            'email_sent' => $emailed,
+        ]);
+
+        return response()->json([
+            'message'       => $emailed ? 'Password reset; email sent.' : 'Password reset.',
+            'temp_password' => $tempPassword,
+            'email_sent'    => $emailed,
+        ]);
+    }
+
+    /**
+     * POST /admin/users/{user}/resend-welcome
+     * Re-send the welcome invite email. Always generates a fresh temp password
+     * since the previous one was effectively lost.
+     */
+    public function resendWelcome(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
+
+        $user = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
+        if (!$user) return response()->json(['message' => 'User not found'], 404);
+
+        $tempPassword = Str::random(12);
+
+        DB::transaction(function () use ($userId, $tempPassword) {
+            DB::table('users')->where('id', $userId)->update([
+                'password'   => Hash::make($tempPassword),
+                'status'     => 'invited',
+                'updated_at' => now(),
+            ]);
+            DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
+        });
+
+        $emailed = $this->sendAccountEmail(
+            $user->email,
+            trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+            'Welcome to Kiddietrac',
+            "Welcome to Kiddietrac!\n\n" .
+            "Your account is ready at https://app.kiddietrac.com\n\n" .
+            "Temporary password: {$tempPassword}\n\n" .
+            "We recommend signing in then using 'Forgot password' to set your own."
+        );
+
+        $this->audit($request->user()->id, 'user.welcome_resent', 'user', $userId, [
+            'email_sent' => $emailed,
+        ]);
+
+        return response()->json([
+            'message'       => $emailed ? 'Welcome email sent.' : 'Welcome email failed to send (saved temp password — share manually).',
+            'temp_password' => $tempPassword,
+            'email_sent'    => $emailed,
+        ]);
+    }
+
+    /**
+     * Send a transactional account email via the configured Laravel mailer.
+     * Returns true on dispatch, false if the mailer threw. Errors are logged.
+     */
+    private function sendAccountEmail(string $to, string $name, string $subject, string $body): bool
+    {
+        try {
+            Mail::raw($body, function ($msg) use ($to, $name, $subject) {
+                $msg->to($to, $name ?: null)->subject($subject);
+            });
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('sendAccountEmail failed', [
+                'to' => $to, 'subject' => $subject, 'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 }
