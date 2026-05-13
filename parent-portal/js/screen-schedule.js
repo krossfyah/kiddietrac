@@ -30,7 +30,12 @@
   let activeWeek = mondayOf(new Date());
 
   async function getCentres() {
-    try { const r = await api('GET', '/admin/centres'); return r.centres || []; } catch (e) { return []; }
+    // v21: hit /director/centres when user is a director, /admin/centres for agency_admin
+    const user = (window.KT && window.KT.Auth && window.KT.Auth.user()) || {};
+    const role = (window.KT && window.KT.Shell && window.KT.Shell.Roles && window.KT.Shell.Roles.primaryRoleOf(user)) || '';
+    const url = role === 'agency_admin' ? '/admin/centres' : '/director/centres';
+    try { const r = await api('GET', url); return r.centres || []; }
+    catch (e) { return []; }
   }
 
   async function render(container) {

@@ -94,8 +94,15 @@
     catch (e) { body.innerHTML = '<div style="padding:18px;color:#DC2626;">' + esc(e.message) + '</div>'; return; }
 
     const flags = data.feature_flags || {};
-    const plans = catalog.plans || [];
-    const features = catalog.features || [];
+    // v21.1: API returns plans/features as objects keyed by code, not arrays. Normalize.
+    const plansRaw = catalog.plans || {};
+    const plans = Array.isArray(plansRaw)
+      ? plansRaw
+      : Object.keys(plansRaw).map(code => ({ code, name: plansRaw[code].label || code, monthly_cents: plansRaw[code].monthly_cents || 0 }));
+    const featuresRaw = catalog.features || {};
+    const features = Array.isArray(featuresRaw)
+      ? featuresRaw
+      : Object.keys(featuresRaw).map(code => ({ code, name: featuresRaw[code].label || code, plan_min: featuresRaw[code].plan_min }));
 
     body.innerHTML = `
       <div style="background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px;">

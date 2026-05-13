@@ -73,6 +73,7 @@
   }
 
   function route() {
+    if (window.KT_V17_NAV_INSTALLED) return; // v21.1: v17 shell owns routing now
     const hash = window.location.hash.replace('#', '').toLowerCase().split('/')[0];
     const container = getMainContainer();
     if (!container) return;

@@ -48,16 +48,19 @@
   let currentTheme = '';
 
   async function getRooms() {
-    try {
-      // Try the existing admin centres endpoint first; for educators, may need a different fetch
-      const me = getUser();
-      const res = await api('GET', '/admin/centres');
-      const rooms = [];
-      (res.centres || []).forEach(c => {
-        (c.rooms || []).forEach(r => rooms.push({ ...r, centre_name: c.name }));
-      });
-      if (rooms.length > 0) return rooms;
-    } catch (e) {}
+    const me = getUser();
+    const role = (me && (me.primary_role || (me.roles && me.roles[0]))) || '';
+    // v21.1: only agency_admin can hit /admin/centres; everyone else uses /provider/bootstrap.
+    if (role === 'agency_admin') {
+      try {
+        const res = await api('GET', '/admin/centres');
+        const rooms = [];
+        (res.centres || []).forEach(c => {
+          (c.rooms || []).forEach(r => rooms.push({ ...r, centre_name: c.name }));
+        });
+        if (rooms.length > 0) return rooms;
+      } catch (e) {}
+    }
     try {
       const res = await api('GET', '/provider/bootstrap');
       return res.rooms || [];

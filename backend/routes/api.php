@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\DigestStatusController;
 use App\Http\Controllers\Api\FamilyController;
 use App\Http\Controllers\Api\HelpController;
 use App\Http\Controllers\Api\IncidentController;
+use App\Http\Controllers\Api\AiObservationController;
+use App\Http\Controllers\Api\AiLessonPlanController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\MessageController;
@@ -85,9 +87,6 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::get('/children/{child}', [ChildController::class, 'show']);
             Route::get('/children/{child}/timeline', [DailyEventController::class, 'timeline']);
             Route::get('/children/{child}/digest/{date}', [DailyEventController::class, 'digest']);
-            // v20: Director — AI digest status board
-            Route::get('/director/digest-status', [DigestStatusController::class, 'index']);
-            Route::post('/director/digest-status/regenerate', [DigestStatusController::class, 'regenerate']);
             Route::get('/children/{child}/invoices', [InvoiceController::class, 'forChild']);
             Route::get('/children/{child}/photos', [MediaController::class, 'forChild']);
             Route::get('/children/{child}/observations', [MediaController::class, 'observationsForChild']);
@@ -127,6 +126,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::patch('/incidents/{id}',                [IncidentController::class, 'update']);
             Route::post('/incidents/{id}/submit',          [IncidentController::class, 'submit']);
 
+            // v21: AI Observation Notes
+            Route::get('/observations',                    [AiObservationController::class, 'index']);
+            Route::post('/observations/structure',         [AiObservationController::class, 'structure']);
+            Route::post('/observations/save',              [AiObservationController::class, 'save']);
+
             Route::get('/conversations', [MessageController::class, 'educatorConversations']);
             Route::get('/conversations/{conversation}', [MessageController::class, 'show']);
             Route::post('/messages', [MessageController::class, 'educatorReply']);
@@ -136,6 +140,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         });
 
         Route::prefix('director')->middleware('role:centre_director,agency_admin')->group(function () {
+            // v20: AI digest status board (correctly placed in director group)
+            Route::get('/digest-status', [DigestStatusController::class, 'index']);
+            Route::post('/digest-status/regenerate', [DigestStatusController::class, 'regenerate']);
+                        // v21: centre list for current director
+            Route::get('/centres', [CentreController::class, 'myCentres']);
             Route::get('/dashboard', [CentreController::class, 'directorDashboard']);
             Route::get('/centre', [CentreController::class, 'mine']);
             Route::patch('/centre', [CentreController::class, 'update']);
@@ -180,6 +189,12 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             // v20: incident workflow (director side)
             Route::get('/incidents/{id}',                       [IncidentController::class, 'show']);
             Route::post('/incidents/{id}/notify-parent',        [IncidentController::class, 'notifyParent']);
+
+            // v21: AI Lesson Plan Generator
+            Route::get('/lesson-plans-ai',                       [AiLessonPlanController::class, 'index']);
+            Route::post('/lesson-plans-ai/generate',             [AiLessonPlanController::class, 'generate']);
+            Route::post('/lesson-plans-ai/save',                 [AiLessonPlanController::class, 'save']);
+            Route::post('/lesson-plans-ai/{id}/publish',         [AiLessonPlanController::class, 'publish']);
             Route::post('/incidents/{id}/close',                [IncidentController::class, 'close']);
 
             // ─── Storage quota & audit (v7) ───

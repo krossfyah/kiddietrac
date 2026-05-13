@@ -182,9 +182,11 @@ final class StaffController extends Controller
         $from = $request->input('from', now()->startOfWeek()->toDateString());
         $to = $request->input('to', now()->endOfWeek()->toDateString());
 
-        $shifts = DB::table('shifts')
+        // shifts table has room_id, not centre_id — scope via rooms in this centre
+        $roomIds = DB::table('rooms')->where('centre_id', $centreId)->pluck('id')->all();
+        $shifts = empty($roomIds) ? collect() : DB::table('shifts')
             ->join('users', 'users.id', '=', 'shifts.user_id')
-            ->where('shifts.centre_id', $centreId)
+            ->whereIn('shifts.room_id', $roomIds)
             ->whereBetween('shifts.starts_at', [$from.' 00:00:00', $to.' 23:59:59'])
             ->select('shifts.*', 'users.first_name', 'users.last_name')
             ->orderBy('shifts.starts_at')

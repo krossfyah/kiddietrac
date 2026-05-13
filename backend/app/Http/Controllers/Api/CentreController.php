@@ -456,4 +456,40 @@ For official Ministry reporting, please verify with the centre director.
 </body></html>
 HTML;
     }
+
+    /**
+     * v21: Returns centres visible to the current user.
+     * agency_admin -> all centres in their agency
+     * centre_director -> only their centres (via role_assignments)
+     * others -> empty
+     */
+    public function myCentres(\Illuminate\Http\Request $request)
+    {
+        $user = $request->user();
+        if (!$user) return response()->json(['centres' => []]);
+
+        $roles = \Illuminate\Support\Facades\DB::table('role_assignments')
+            ->where('user_id', $user->id)
+            ->get(['role', 'centre_id', 'agency_id']);
+
+        $isAgencyAdmin = $roles->contains(function ($r) { return $r->role === 'agency_admin'; });
+
+        $q = \Illuminate\Support\Facades\DB::table('centres')
+            ->select('id', 'name', 'address_line1 as address', 'city', 'province')
+            ->orderBy('name');
+
+        if (!$isAgencyAdmin) {
+            $centreIds = $roles->whereIn('role', ['centre_director', 'agency_admin'])
+                ->pluck('centre_id')->filter()->unique()->all();
+            if (empty($centreIds)) return response()->json(['centres' => []]);
+            $q->whereIn('id', $centreIds);
+        } else {
+            // Agency admin: scope to their agency_id if any
+            $agencyIds = $roles->pluck('agency_id')->filter()->unique()->all();
+            if (!empty($agencyIds)) $q->whereIn('agency_id', $agencyIds);
+        }
+
+        return response()->json(['centres' => $q->get()]);
+    }
+
 }
