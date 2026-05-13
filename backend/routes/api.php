@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\AiLessonPlanController;
 use App\Http\Controllers\Api\MedicationController;
 use App\Http\Controllers\Api\ImmunizationController;
 use App\Http\Controllers\Api\ChildHealthController;
+use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\MessageController;
@@ -60,6 +61,10 @@ Route::prefix('v1')->group(function () {
 
     // ─── Public signup (rate-limited, v7) ───
     Route::post('/signup/centre', [SignupController::class, 'signup'])->middleware('throttle:3,60');
+
+    // v22p2.1: public invite-code parent signup
+    Route::get('/signup/invitation/{code}', [InvitationController::class, 'probe'])->middleware('throttle:30,1');
+    Route::post('/signup/by-code', [SignupController::class, 'byCode'])->middleware('throttle:5,60');
 
 
 Route::any('/login', function () { return response()->json(['message' => 'Unauthenticated. Please sign in via the app.'], 401); })->name('login');
@@ -227,6 +232,12 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             // v22p1: Child health profile (allergies / dietary / alerts)
             Route::get('/children/{child}/health',              [ChildHealthController::class, 'show']);
             Route::patch('/children/{child}/health',            [ChildHealthController::class, 'update']);
+
+            // v22p2.1: Invitation codes (director-managed parent self-signup)
+            Route::get('/invitation-codes',                     [InvitationController::class, 'index']);
+            Route::post('/invitation-codes',                    [InvitationController::class, 'store']);
+            Route::post('/invitation-codes/{id}/revoke',        [InvitationController::class, 'revoke']);
+            Route::delete('/invitation-codes/{id}',             [InvitationController::class, 'destroy']);
 
             // ─── Storage quota & audit (v7) ───
             Route::get('/storage/usage', function (\Illuminate\Http\Request $request) {

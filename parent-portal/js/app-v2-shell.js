@@ -77,6 +77,9 @@
           { hash: 'admin-branding', label: 'Branding',         icon: '🎨' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
         ]},
+        { label: 'Enrollment', items: [
+          { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
+        ]},
       ];
     }
     if (role === 'centre_director') {
@@ -102,6 +105,9 @@
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
+        ]},
+        { label: 'Enrollment', items: [
+          { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
         ]},
       ];
     }

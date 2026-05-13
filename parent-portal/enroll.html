@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enroll your child · Kiddietrac</title>
+  <meta name="description" content="Use your centre's invitation link to register your child with Kiddietrac">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#081C41">
+  <link rel="stylesheet" href="/css/kt-brand-v16.css">
+  <link rel="stylesheet" href="/css/kt-login-v22.css">
+  <style>
+    /* Enrollment-page-specific tweaks on top of kt-login-v22.css */
+    .auth-card { padding: 48px 44px; }
+    .enroll-section {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid #E2E8F0;
+    }
+    .enroll-section h3 {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #475569;
+      margin: 0 0 14px;
+    }
+    .enroll-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-row.full { grid-column: 1 / -1; }
+    .centre-banner {
+      background: linear-gradient(135deg, rgba(31,96,128,0.08), rgba(142,199,60,0.10));
+      border: 1px solid rgba(31,96,128,0.18);
+      padding: 14px 18px;
+      border-radius: 14px;
+      margin: 14px 0 8px;
+      font-size: 14px;
+      color: #0F172A;
+    }
+    .centre-banner b { color: #1F6080; }
+    .terms-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin: 16px 0 8px;
+      font-size: 13px; color: #475569;
+    }
+    .terms-row input { margin-top: 2px; }
+    .invalid-state {
+      background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C;
+      padding: 16px 18px; border-radius: 12px; margin: 20px 0;
+      font-size: 14px; line-height: 1.55;
+    }
+    @media (max-width: 600px) {
+      .enroll-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body class="auth-body">
+  <div class="auth-page">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <img src="/logo-wordmark-large.png" alt="KiddieTrac" style="height:120px;width:auto;display:block;margin-bottom:8px;" onerror="this.style.display='none'">
+      </div>
+
+      <h1 class="auth-title">Enroll your child</h1>
+      <p class="auth-sub">Use the invitation link from your childcare centre to create your parent account and add your child.</p>
+
+      <div id="kt-status"></div>
+
+      <form id="enrollForm" class="auth-form" novalidate style="display:none;">
+        <div class="enroll-section" style="border-top:none;margin-top:0;padding-top:0;">
+          <h3>Your account</h3>
+          <div class="enroll-grid">
+            <div class="form-row"><label for="p_first">First name</label><input id="p_first" required></div>
+            <div class="form-row"><label for="p_last">Last name</label><input id="p_last" required></div>
+            <div class="form-row full"><label for="p_email">Email</label><input id="p_email" type="email" autocomplete="email" required></div>
+            <div class="form-row"><label for="p_phone">Phone</label><input id="p_phone" type="tel" autocomplete="tel"></div>
+            <div class="form-row">
+              <label for="p_relationship">Relationship</label>
+              <select id="p_relationship">
+                <option value="mother">Mother</option>
+                <option value="father">Father</option>
+                <option value="guardian">Guardian</option>
+                <option value="grandparent">Grandparent</option>
+                <option value="foster">Foster</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="form-row full"><label for="p_password">Choose a password (min 8 characters)</label><input id="p_password" type="password" autocomplete="new-password" minlength="8" required></div>
+          </div>
+        </div>
+
+        <div class="enroll-section">
+          <h3>Family contact</h3>
+          <div class="enroll-grid">
+            <div class="form-row full"><label for="family_name">Family name (as you'd like it on receipts)</label><input id="family_name" placeholder="e.g. The Patel family" required></div>
+            <div class="form-row full"><label for="addr">Street address</label><input id="addr"></div>
+            <div class="form-row"><label for="city">City</label><input id="city"></div>
+            <div class="form-row"><label for="province">Province</label>
+              <select id="province">
+                <option value="">Select…</option>
+                <option>ON</option><option>QC</option><option>BC</option><option>AB</option>
+                <option>MB</option><option>SK</option><option>NS</option><option>NB</option>
+                <option>NL</option><option>PE</option><option>NT</option><option>NU</option><option>YT</option>
+              </select>
+            </div>
+            <div class="form-row"><label for="postal">Postal code</label><input id="postal" placeholder="M5G 1Z4"></div>
+          </div>
+        </div>
+
+        <div class="enroll-section">
+          <h3>Your child</h3>
+          <div class="enroll-grid">
+            <div class="form-row"><label for="c_first">First name</label><input id="c_first" required></div>
+            <div class="form-row"><label for="c_last">Last name</label><input id="c_last" required></div>
+            <div class="form-row"><label for="c_dob">Date of birth</label><input id="c_dob" type="date" required></div>
+            <div class="form-row"><label for="c_gender">Gender</label>
+              <select id="c_gender">
+                <option value="">Prefer not to say</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="non_binary">Non-binary</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="form-row full"><label for="c_start">Hoped-for start date</label><input id="c_start" type="date"></div>
+          </div>
+        </div>
+
+        <div class="terms-row">
+          <input id="terms" type="checkbox" required>
+          <label for="terms" style="cursor:pointer;">
+            I agree to the Kiddietrac <a href="https://kiddietrac.ca/terms" target="_blank" style="color:#1F6080;font-weight:600;">Terms of Service</a> and consent to the centre keeping records about my child as required by Ontario's Child Care and Early Years Act (CCEYA).
+          </label>
+        </div>
+
+        <div id="errorMsg" class="form-error" hidden></div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+          Create my account and enroll my child
+        </button>
+
+        <div class="auth-divider"><span>or</span></div>
+        <p class="auth-foot">
+          Already have an account? <a href="/index.html">Sign in</a>
+        </p>
+      </form>
+    </div>
+
+    <div class="auth-marketing" aria-hidden="true">
+      <div class="marketing-content">
+        <div class="marketing-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+          </svg>
+          AI-AUGMENTED · CANADA-FIRST
+        </div>
+        <h2>Welcome to your child's daily story.</h2>
+        <p>You're a few minutes from setting up your parent account. Once your centre confirms enrollment, you'll see real-time check-in, photos, observations, and an AI-summarized recap every evening.</p>
+
+        <div class="marketing-feature">
+          <div class="feature-icon">🌱</div>
+          <div>
+            <h3>HDLH-aligned learning</h3>
+            <p>Every observation is linked to How Does Learning Happen?'s four foundations.</p>
+          </div>
+        </div>
+        <div class="marketing-feature">
+          <div class="feature-icon">🛡️</div>
+          <div>
+            <h3>CCEYA-compliant by design</h3>
+            <p>Medications, allergies, immunizations, ratios — everything Ontario licensing inspectors ask for.</p>
+          </div>
+        </div>
+        <div class="marketing-feature">
+          <div class="feature-icon">💸</div>
+          <div>
+            <h3>CWELCC made simple</h3>
+            <p>Your $10/day rate, tax receipts ready every January, autopay if you want it.</p>
+          </div>
+        </div>
+
+        <div class="marketing-trust">
+          <div class="trust-stat"><div class="num">CCEYA</div><div class="lab">Compliant</div></div>
+          <div class="trust-stat"><div class="num">HDLH</div><div class="lab">Aligned</div></div>
+          <div class="trust-stat"><div class="num">AI</div><div class="lab">Augmented</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var API = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+      var statusEl = document.getElementById('kt-status');
+      var form = document.getElementById('enrollForm');
+      var err = document.getElementById('errorMsg');
+      var btn = document.getElementById('submitBtn');
+
+      function getCode() {
+        var q = new URLSearchParams(window.location.search);
+        var c = (q.get('code') || '').toUpperCase().trim();
+        return c;
+      }
+
+      function showInvalid(msg) {
+        statusEl.innerHTML = '<div class="invalid-state"><b>Invalid invitation link.</b><br>' +
+          (msg || 'This link is no longer valid.') +
+          ' Please contact your childcare centre for a new link.</div>';
+      }
+
+      function showBanner(info) {
+        var html = '<div class="centre-banner">You\'re enrolling at <b>' + escapeHtml(info.centre_name || 'your centre') + '</b>';
+        if (info.centre_city) html += ', ' + escapeHtml(info.centre_city);
+        if (info.label) html += ' — <i>' + escapeHtml(info.label) + '</i>';
+        html += '.</div>';
+        statusEl.innerHTML = html;
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      var code = getCode();
+      if (!code) {
+        showInvalid('No invitation code in the link.');
+        return;
+      }
+
+      // Probe the code
+      fetch(API + '/signup/invitation/' + encodeURIComponent(code), { headers: { 'Accept': 'application/json' } })
+        .then(function (r) {
+          if (!r.ok) {
+            return r.json().then(function (j) { throw new Error(j.message || 'Invalid invitation'); });
+          }
+          return r.json();
+        })
+        .then(function (info) {
+          showBanner(info);
+          form.style.display = '';
+        })
+        .catch(function (e) {
+          showInvalid(e.message);
+        });
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        err.hidden = true;
+
+        var data = {
+          code: code,
+          parent_first_name: document.getElementById('p_first').value.trim(),
+          parent_last_name:  document.getElementById('p_last').value.trim(),
+          parent_email:      document.getElementById('p_email').value.trim().toLowerCase(),
+          parent_phone:      document.getElementById('p_phone').value.trim() || null,
+          parent_password:   document.getElementById('p_password').value,
+          relationship:      document.getElementById('p_relationship').value,
+          family_name:       document.getElementById('family_name').value.trim(),
+          address_line1:     document.getElementById('addr').value.trim() || null,
+          city:              document.getElementById('city').value.trim() || null,
+          province:          document.getElementById('province').value || null,
+          postal_code:       document.getElementById('postal').value.trim() || null,
+          child_first_name:  document.getElementById('c_first').value.trim(),
+          child_last_name:   document.getElementById('c_last').value.trim(),
+          child_date_of_birth: document.getElementById('c_dob').value,
+          child_gender:      document.getElementById('c_gender').value || null,
+          expected_start_date: document.getElementById('c_start').value || null,
+          agreed_to_terms:   document.getElementById('terms').checked,
+        };
+
+        btn.disabled = true; btn.textContent = 'Creating your account…';
+
+        fetch(API + '/signup/by-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(data),
+        }).then(function (r) {
+          return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; });
+        }).then(function (resp) {
+          if (!resp.ok) {
+            var msg = resp.body.message || 'Could not complete your enrollment.';
+            if (resp.body.errors) {
+              var first = Object.values(resp.body.errors)[0];
+              if (first && first[0]) msg = first[0];
+            }
+            throw new Error(msg);
+          }
+          // Auto-login: store token + user and redirect to dashboard
+          sessionStorage.setItem('kt_token', resp.body.token);
+          sessionStorage.setItem('kt_user',  JSON.stringify(resp.body.user));
+          window.location.href = '/dashboard.html';
+        }).catch(function (e) {
+          err.textContent = e.message;
+          err.hidden = false;
+          btn.disabled = false;
+          btn.textContent = 'Create my account and enroll my child';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

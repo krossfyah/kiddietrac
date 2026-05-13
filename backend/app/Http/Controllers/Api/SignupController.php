@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\WelcomeEmail;
+use App\Models\InvitationCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -176,6 +177,184 @@ final class SignupController extends Controller
                 'Add families and enroll children',
                 'Invite parents and educators',
             ],
+        ], 201);
+    }
+
+    /**
+     * POST /signup/by-code
+     * Public, throttled. Self-service parent enrollment using a director-issued
+     * invitation code. Creates user (guardian), family, child, guardian link,
+     * and role_assignment. Returns a sanctum token so the parent is auto-logged-in.
+     */
+    public function byCode(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'code'                  => ['required', 'string', 'max:32'],
+            // Parent (the user signing up)
+            'parent_first_name'     => ['required', 'string', 'max:80'],
+            'parent_last_name'      => ['required', 'string', 'max:80'],
+            'parent_email'          => ['required', 'email', 'max:180', 'unique:users,email'],
+            'parent_phone'          => ['nullable', 'string', 'max:40'],
+            'parent_password'       => ['required', 'string', 'min:8'],
+            'relationship'          => ['nullable', 'in:mother,father,guardian,grandparent,foster,other'],
+            // Family / address
+            'family_name'           => ['required', 'string', 'max:120'],
+            'address_line1'         => ['nullable', 'string', 'max:200'],
+            'city'                  => ['nullable', 'string', 'max:80'],
+            'province'              => ['nullable', 'string', 'max:40'],
+            'postal_code'           => ['nullable', 'string', 'max:12'],
+            // Child
+            'child_first_name'      => ['required', 'string', 'max:80'],
+            'child_last_name'       => ['required', 'string', 'max:80'],
+            'child_date_of_birth'   => ['required', 'date'],
+            'child_gender'          => ['nullable', 'in:female,male,non_binary,prefer_not_to_say,other'],
+            'expected_start_date'   => ['nullable', 'date'],
+            // Acknowledgement
+            'agreed_to_terms'       => ['required', 'accepted'],
+        ]);
+
+        $invite = InvitationCode::where('code', strtoupper(trim($data['code'])))->first();
+        if (! $invite || ! $invite->isUsable()) {
+            return response()->json([
+                'message' => 'This invitation link is no longer valid. Please contact the centre.',
+            ], 422);
+        }
+
+        // Throttle: don't allow > 5 enrollments per code per hour, just in case
+        // a code leaks.
+        $recent = DB::table('audit_logs')
+            ->where('action', 'parent_signup_by_code')
+            ->where('entity_id', $invite->id)
+            ->where('created_at', '>', now()->subHour())
+            ->count();
+        if ($recent >= 5) {
+            return response()->json([
+                'message' => 'Too many sign-ups using this invitation in the last hour. Please try again later.',
+            ], 429);
+        }
+
+        $result = DB::transaction(function () use ($data, $invite, $request) {
+            // User (guardian)
+            $userId = DB::table('users')->insertGetId([
+                'email'             => strtolower($data['parent_email']),
+                'password'          => Hash::make($data['parent_password']),
+                'first_name'        => $data['parent_first_name'],
+                'last_name'         => $data['parent_last_name'],
+                'phone'             => $data['parent_phone'] ?? null,
+                'locale'            => 'en-CA',
+                'timezone'          => 'America/Toronto',
+                'status'            => 'active',
+                'email_verified_at' => now(),
+                'created_at'        => now(),
+                'updated_at'        => now(),
+            ]);
+
+            // Family
+            $familyId = DB::table('families')->insertGetId([
+                'centre_id'      => $invite->centre_id,
+                'family_name'    => $data['family_name'],
+                'primary_phone'  => $data['parent_phone'] ?? null,
+                'primary_email'  => strtolower($data['parent_email']),
+                'address_line1'  => $data['address_line1'] ?? null,
+                'city'           => $data['city'] ?? null,
+                'province'       => $data['province'] ?? null,
+                'postal_code'    => $data['postal_code'] ?? null,
+                'preferred_lang' => 'en',
+                'created_at'     => now(),
+                'updated_at'     => now(),
+            ]);
+
+            // Guardian link (user <-> family)
+            DB::table('guardians')->insert([
+                'family_id'           => $familyId,
+                'user_id'             => $userId,
+                'relationship'        => $data['relationship'] ?? 'guardian',
+                'is_primary'          => true,
+                'can_pickup'          => true,
+                'can_receive_billing' => true,
+                'billing_share_pct'   => 100,
+                'created_at'          => now(),
+            ]);
+
+            // Child (waitlist by default — director will move to enrolled)
+            $childId = DB::table('children')->insertGetId([
+                'family_id'           => $familyId,
+                'first_name'          => $data['child_first_name'],
+                'last_name'           => $data['child_last_name'],
+                'date_of_birth'       => $data['child_date_of_birth'],
+                'gender'              => $data['child_gender'] ?? null,
+                'enrollment_status'   => 'waitlist',
+                'applied_at'          => now(),
+                'expected_start_date' => $data['expected_start_date'] ?? null,
+                'created_at'          => now(),
+                'updated_at'          => now(),
+            ]);
+
+            // Role assignment
+            DB::table('role_assignments')->insert([
+                'user_id'    => $userId,
+                'role'       => 'guardian',
+                'agency_id'  => $invite->agency_id,
+                'centre_id'  => $invite->centre_id,
+                'active'     => true,
+                'created_at' => now(),
+            ]);
+
+            // Bump invitation usage; mark expired if at cap.
+            $newUsed = $invite->used_count + 1;
+            DB::table('invitation_codes')->where('id', $invite->id)->update([
+                'used_count' => $newUsed,
+                'status'     => $newUsed >= $invite->max_uses ? 'expired' : $invite->status,
+                'updated_at' => now(),
+            ]);
+
+            // Audit
+            try {
+                DB::table('audit_logs')->insert([
+                    'user_id'     => $userId,
+                    'entity_type' => 'invitation_code',
+                    'entity_id'   => $invite->id,
+                    'action'      => 'parent_signup_by_code',
+                    'payload'     => "Self-signup. Code: {$invite->code}. Family: {$data['family_name']}. Child: {$data['child_first_name']} {$data['child_last_name']}",
+                    'ip_address'  => $request->ip(),
+                    'user_agent'  => substr((string) $request->userAgent(), 0, 500),
+                    'created_at'  => now(),
+                ]);
+            } catch (Throwable $e) {
+                Log::warning('Audit failed for byCode signup', ['error' => $e->getMessage()]);
+            }
+
+            return [
+                'user_id'   => $userId,
+                'family_id' => $familyId,
+                'child_id'  => $childId,
+                'centre_id' => $invite->centre_id,
+            ];
+        });
+
+        // Auto-login: create a token so the parent lands on the dashboard.
+        $user  = \App\Models\User::find($result['user_id']);
+        $token = $user->createToken('signup-by-code')->plainTextToken;
+
+        return response()->json([
+            'message'   => 'Welcome to Kiddietrac! Your child has been added to the waitlist.',
+            'token'     => $token,
+            'user'      => [
+                'id'           => $user->id,
+                'email'        => $user->email,
+                'first_name'   => $user->first_name,
+                'last_name'    => $user->last_name,
+                'name'         => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+                'roles'        => ['guardian'],
+                'primary_role' => 'guardian',
+                'centre_id'    => null,
+                'agency_id'    => $invite->agency_id,
+                'status'       => 'active',
+                'locale'       => 'en-CA',
+                'timezone'     => 'America/Toronto',
+            ],
+            'child_id'  => $result['child_id'],
+            'family_id' => $result['family_id'],
         ], 201);
     }
 }
