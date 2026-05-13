@@ -4,12 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Immunization extends Model
+class MedicationLog extends Model
 {
     protected $guarded = [];
     protected $casts = [
-        'administered_on' => 'date',
-        'next_due_on' => 'date',
-        'exempt' => 'boolean',
+        'administered_at' => 'datetime',
+        'parent_notified_at' => 'datetime',
     ];
 }

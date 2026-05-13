@@ -14,6 +14,9 @@ use App\Http\Controllers\Api\HelpController;
 use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\Api\AiObservationController;
 use App\Http\Controllers\Api\AiLessonPlanController;
+use App\Http\Controllers\Api\MedicationController;
+use App\Http\Controllers\Api\ImmunizationController;
+use App\Http\Controllers\Api\ChildHealthController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\MessageController;
@@ -100,6 +103,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::get('/incidents',                       [IncidentController::class, 'index']);
             Route::get('/incidents/{id}',                  [IncidentController::class, 'show']);
             Route::post('/incidents/{id}/acknowledge',     [IncidentController::class, 'acknowledge']);
+
+            // v22p1: Parent reads of child health
+            Route::get('/children/{child}/health',         [ChildHealthController::class, 'show']);
+            Route::get('/children/{child}/medications',    [MedicationController::class, 'parentList']);
+            Route::get('/children/{child}/immunizations',  [ImmunizationController::class, 'parentList']);
         });
 
         Route::prefix('provider')->middleware('role:educator,centre_director,agency_admin')->group(function () {
@@ -118,7 +126,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::post('/photos', [MediaController::class, 'upload']);
             Route::post('/observations', [MediaController::class, 'createObservation']);
             Route::post('/incidents', [IncidentController::class, 'store']);
-            Route::post('/medications/give', fn () => response()->json(['error' => 'Medications logging coming in v21'], 501));
+
+            // v22p1: Medications
+            Route::get('/medications',                  [MedicationController::class, 'activeForProvider']);
+            Route::post('/medications/give',            [MedicationController::class, 'give']);
+            Route::get('/children/{child}/health',      [ChildHealthController::class, 'show']);
 
             // v20: incident workflow (provider/educator side)
             Route::get('/incidents',                       [IncidentController::class, 'index']);
@@ -196,6 +208,25 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::post('/lesson-plans-ai/save',                 [AiLessonPlanController::class, 'save']);
             Route::post('/lesson-plans-ai/{id}/publish',         [AiLessonPlanController::class, 'publish']);
             Route::post('/incidents/{id}/close',                [IncidentController::class, 'close']);
+
+            // v22p1: Medications
+            Route::get('/medications',                          [MedicationController::class, 'index']);
+            Route::post('/medications',                         [MedicationController::class, 'store']);
+            Route::get('/medications/{id}',                     [MedicationController::class, 'show']);
+            Route::patch('/medications/{id}',                   [MedicationController::class, 'update']);
+            Route::post('/medications/{id}/authorize',          [MedicationController::class, 'authorize']);
+            Route::post('/medications/{id}/discontinue',        [MedicationController::class, 'discontinue']);
+            Route::get('/medications/{id}/logs',                [MedicationController::class, 'logs']);
+
+            // v22p1: Immunizations
+            Route::get('/immunizations',                        [ImmunizationController::class, 'index']);
+            Route::post('/immunizations',                       [ImmunizationController::class, 'store']);
+            Route::patch('/immunizations/{id}',                 [ImmunizationController::class, 'update']);
+            Route::delete('/immunizations/{id}',                [ImmunizationController::class, 'destroy']);
+
+            // v22p1: Child health profile (allergies / dietary / alerts)
+            Route::get('/children/{child}/health',              [ChildHealthController::class, 'show']);
+            Route::patch('/children/{child}/health',            [ChildHealthController::class, 'update']);
 
             // ─── Storage quota & audit (v7) ───
             Route::get('/storage/usage', function (\Illuminate\Http\Request $request) {
