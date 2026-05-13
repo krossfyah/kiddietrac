@@ -30,8 +30,12 @@
   let activeCentreId = null;
 
   async function loadCentres() {
+    // v22p1.1: agency_admin can hit /admin/centres; centre_director must use /director/centres (else 403).
+    const u = (window.KT && window.KT.Auth && window.KT.Auth.user()) || {};
+    const role = (u && (u.primary_role || (u.roles && u.roles[0]))) || '';
+    const url = role === 'agency_admin' ? '/admin/centres' : '/director/centres';
     try {
-      const res = await api('GET', '/admin/centres');
+      const res = await api('GET', url);
       return res.centres || [];
     } catch (e) {
       return [];

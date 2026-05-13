@@ -1,0 +1,50 @@
+/* Kiddietrac v22 sidebar layout fix
+   Makes the staff sidebar a flex column with a scrolling nav region and a
+   sticky user-profile pill at the bottom. Without this, the nav list overflows
+   the viewport and QUICK ADD (injected by screen-director-v5a.js) lands below
+   the fold. */
+
+@media (min-width: 769px) {
+  .app-sidebar {
+    display: flex !important;
+    flex-direction: column;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
+  .app-sidebar .nav-brand {
+    flex: 0 0 auto;
+  }
+
+  .app-sidebar .nav-links,
+  .app-sidebar #navLinks {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 8px;
+  }
+
+  /* Quick Add (injected by screen-director-v5a.js) — sit just above the
+     user pill, even when the nav list is long. */
+  .app-sidebar .kt-v5a-actions {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--kt-border, #E5E7EB);
+    margin: 0 !important;
+    background: #fff;
+  }
+
+  .app-sidebar .nav-user {
+    flex: 0 0 auto;
+  }
+
+  /* Thin scrollbar for the nav list */
+  .app-sidebar .nav-links::-webkit-scrollbar,
+  .app-sidebar #navLinks::-webkit-scrollbar { width: 6px; }
+  .app-sidebar .nav-links::-webkit-scrollbar-thumb,
+  .app-sidebar #navLinks::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.15);
+    border-radius: 3px;
+  }
+}

@@ -465,7 +465,16 @@
         section.appendChild(btn);
       });
 
-      sidebar.appendChild(section);
+      // v22p1.1: insert ABOVE the .nav-user pill so QUICK ADD stays in view, instead of
+      // falling off-screen at the very bottom of a tall sidebar. Anchor on navUser's actual
+      // parent, since `sidebar` may have matched an outer wrapper (e.g. .app-shell--sidebar)
+      // rather than the .app-sidebar aside itself.
+      var navUser = document.querySelector('.nav-user');
+      if (navUser && navUser.parentNode) {
+        navUser.parentNode.insertBefore(section, navUser);
+      } else {
+        sidebar.appendChild(section);
+      }
       return true;
     };
 
@@ -478,19 +487,18 @@
     }
   }
 
-  // Only inject for directors
+  // v22p1.1: inject for both centre_director AND agency_admin (same sidebar layout)
+  function isStaffWithSidebar() {
+    var u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
+    return u && (u.primary_role === 'centre_director' || u.primary_role === 'agency_admin');
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
-    const user = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
-    if (user.primary_role === 'centre_director') {
-      setTimeout(injectQuickActions, 500);
-    }
+    if (isStaffWithSidebar()) setTimeout(injectQuickActions, 500);
   });
 
   // Also re-inject on hash change (single-page nav)
   window.addEventListener('hashchange', () => {
-    const user = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
-    if (user.primary_role === 'centre_director') {
-      setTimeout(injectQuickActions, 200);
-    }
+    if (isStaffWithSidebar()) setTimeout(injectQuickActions, 200);
   });
 })(window);

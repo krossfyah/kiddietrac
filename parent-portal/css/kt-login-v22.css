@@ -1,0 +1,346 @@
+/* Kiddietrac v22 login redesign
+   Overrides styles.css and kt-brand-v16.css for /index.html only.
+   Goals: warm, modern, brand-aligned, animated but not noisy. */
+
+:root {
+  --kt-navy: #081C41;
+  --kt-teal: #1F6080;
+  --kt-mint: #8EC73C;
+  --kt-cream: #FFF7E6;
+  --kt-coral: #FF8E8E;
+  --kt-sun:   #FFC857;
+}
+
+body.auth-body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  color: #0F172A;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(142, 199, 60, 0.18) 0, transparent 38%),
+    radial-gradient(circle at 88% 88%, rgba(31, 96, 128, 0.22) 0, transparent 42%),
+    radial-gradient(circle at 65% 12%, rgba(255, 200, 87, 0.16) 0, transparent 40%),
+    linear-gradient(135deg, #FBFEFB 0%, #F1F8FF 50%, #FFFBF0 100%);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Soft floating blobs in the background for warmth */
+body.auth-body::before,
+body.auth-body::after {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+body.auth-body::before {
+  width: 380px; height: 380px;
+  background: radial-gradient(circle, #8EC73C 0%, transparent 70%);
+  top: -120px; left: -120px;
+  animation: kt-float 14s ease-in-out infinite;
+}
+body.auth-body::after {
+  width: 460px; height: 460px;
+  background: radial-gradient(circle, #1F6080 0%, transparent 70%);
+  bottom: -160px; right: -160px;
+  animation: kt-float 18s ease-in-out infinite reverse;
+}
+
+@keyframes kt-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(40px, -30px) scale(1.08); }
+}
+
+.auth-page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  align-items: stretch;
+}
+
+@media (max-width: 980px) {
+  .auth-page { grid-template-columns: 1fr; }
+  .auth-marketing { display: none !important; }
+}
+
+/* ── Left side: auth card ── */
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 56px 48px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 20px 60px rgba(8, 28, 65, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.auth-logo img {
+  height: 120px !important;
+  filter: drop-shadow(0 4px 12px rgba(31, 96, 128, 0.18));
+}
+
+.auth-title {
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  font-size: 42px;
+  line-height: 1.1;
+  font-weight: 800;
+  margin: 28px 0 12px;
+  background: linear-gradient(135deg, var(--kt-navy) 0%, var(--kt-teal) 60%, var(--kt-mint) 120%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.5px;
+}
+
+.auth-sub {
+  font-size: 17px;
+  color: #475569;
+  margin: 0 0 36px;
+  max-width: 380px;
+  line-height: 1.55;
+}
+
+.auth-form .form-row {
+  margin-bottom: 18px;
+  position: relative;
+}
+
+.auth-form label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 8px;
+  letter-spacing: 0.2px;
+}
+
+.auth-form .forgot-link {
+  font-size: 12px;
+  color: var(--kt-teal);
+  text-decoration: none;
+  font-weight: 600;
+}
+.auth-form .forgot-link:hover { color: var(--kt-mint); text-decoration: underline; }
+
+.auth-form input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  font-size: 15px;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 12px;
+  background: white;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 80ms ease;
+  font-family: inherit;
+}
+.auth-form input:focus {
+  outline: none;
+  border-color: var(--kt-teal);
+  box-shadow: 0 0 0 4px rgba(31, 96, 128, 0.12);
+}
+.auth-form input:not(:placeholder-shown):invalid:not(:focus) {
+  border-color: #F87171;
+}
+
+.btn.btn-primary.btn-block {
+  width: 100%;
+  padding: 15px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--kt-navy) 0%, var(--kt-teal) 100%);
+  color: white;
+  box-shadow: 0 8px 20px rgba(31, 96, 128, 0.25);
+  transition: transform 120ms ease, box-shadow 160ms ease;
+  margin-top: 6px;
+}
+.btn.btn-primary.btn-block:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(31, 96, 128, 0.35);
+}
+.btn.btn-primary.btn-block:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.form-error {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #B91C1C;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 28px 0 18px;
+  color: #94A3B8;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.auth-divider::before, .auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #E2E8F0;
+}
+.auth-divider span { padding: 0 14px; }
+
+.auth-foot {
+  font-size: 13px;
+  color: #64748B;
+  line-height: 1.6;
+}
+.auth-foot a {
+  color: var(--kt-teal);
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-foot a:hover { color: var(--kt-mint); }
+
+/* ── Right side: marketing ── */
+.auth-marketing {
+  position: relative;
+  background: linear-gradient(155deg, var(--kt-navy) 0%, var(--kt-teal) 50%, #2C8FA8 110%);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 48px;
+  color: white;
+}
+
+/* Decorative shapes inside the marketing panel */
+.auth-marketing::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 25% 30%, rgba(142, 199, 60, 0.28) 0, transparent 40%),
+    radial-gradient(circle at 80% 75%, rgba(255, 200, 87, 0.18) 0, transparent 35%);
+  pointer-events: none;
+}
+
+.marketing-content {
+  position: relative;
+  z-index: 1;
+  max-width: 440px;
+}
+
+.marketing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(142, 199, 60, 0.18);
+  border: 1px solid rgba(142, 199, 60, 0.36);
+  color: #DBF5B5;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  margin-bottom: 24px;
+  text-transform: uppercase;
+}
+.marketing-badge svg { stroke: #DBF5B5; }
+
+.marketing-content h2 {
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  font-size: 38px;
+  line-height: 1.15;
+  font-weight: 800;
+  margin: 0 0 18px;
+  letter-spacing: -0.4px;
+}
+.marketing-content > p {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0 0 36px;
+  opacity: 0.92;
+}
+
+.marketing-feature {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  backdrop-filter: blur(6px);
+  transition: background 200ms ease, transform 200ms ease;
+}
+.marketing-feature:hover {
+  background: rgba(255, 255, 255, 0.13);
+  transform: translateX(4px);
+}
+.marketing-feature .feature-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  font-size: 22px;
+}
+.marketing-feature h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.marketing-feature p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  opacity: 0.85;
+}
+
+/* Trust signal strip */
+.marketing-trust {
+  display: flex;
+  gap: 24px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.trust-stat {
+  flex: 1;
+  min-width: 100px;
+}
+.trust-stat .num {
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--kt-mint);
+  line-height: 1;
+}
+.trust-stat .lab {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-top: 4px;
+}
