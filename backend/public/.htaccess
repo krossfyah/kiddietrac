@@ -1,0 +1,38 @@
+# ─── Subdomain isolation ───────────────────────────────────────
+# Prevent inheritance of parent .htaccess rewrite rules.
+# This is critical on GoDaddy shared hosting where the main
+# domain's .htaccess otherwise hijacks subdomain requests.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteOptions IgnoreInherit
+</IfModule>
+
+# ─── Standard Laravel handling ────────────────────────────────
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Handle X-XSRF-Token Header
+    RewriteCond %{HTTP:x-xsrf-token} .
+    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+
+    # Redirect Trailing Slashes If Not A Folder
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# ─── Block sensitive files ────────────────────────────────────
+<FilesMatch "^(\.env|\.git|composer\.(json|lock))$">
+    Require all denied
+</FilesMatch>

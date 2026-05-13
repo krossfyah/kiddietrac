@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in · Kiddietrac</title>
+  <meta name="description" content="Sign in to your Kiddietrac parent account">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#081C41">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kiddietrac">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/kt-brand-v16.css">
+</head>
+<body class="auth-body">
+  <div class="auth-page">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" style="height:80px;width:auto;display:block;margin-bottom:8px;" onerror="this.style.display='none'">
+      </div>
+      <!-- kt-v16-auth-logo-swapped -->
+
+      <h1 class="auth-title">Welcome back</h1>
+      <p class="auth-sub">Sign in to see how your little one's day is going.</p>
+
+      <form id="loginForm" class="auth-form" novalidate>
+        <div class="form-row">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" autocomplete="email" required>
+        </div>
+
+        <div class="form-row">
+          <label for="password">
+            Password
+            <a href="/forgot-password.html" class="forgot-link">Forgot?</a>
+          </label>
+          <input type="password" id="password" name="password" autocomplete="current-password" minlength="10" required>
+        </div>
+
+        <div id="errorMsg" class="form-error" hidden></div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+          Sign in
+        </button>
+
+        <div class="auth-divider"><span>or</span></div>
+
+        <p class="auth-foot">
+          Don't have an account?
+          Your childcare centre will send you an invitation email.
+          <a href="https://kiddietrac.ca/contact">Contact us</a> if you need help.
+        </p>
+      </form>
+    </div>
+
+    <div class="auth-marketing" aria-hidden="true">
+      <div class="marketing-content">
+        <div class="marketing-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+          </svg>
+          AI-AUGMENTED · CANADA-FIRST
+        </div>
+        <h2>Every moment, every milestone — beautifully captured.</h2>
+        <p>From morning check-in to your AI-summarized day at 6pm, Kiddietrac brings your child's day to you with the warmth and clarity you deserve.</p>
+
+        <div class="marketing-feature">
+          <div class="feature-icon">📸</div>
+          <div>
+            <h3>Real-time photos & updates</h3>
+            <p>See what your child is doing, eating, and learning — as it happens.</p>
+          </div>
+        </div>
+        <div class="marketing-feature">
+          <div class="feature-icon">💬</div>
+          <div>
+            <h3>Direct line to educators</h3>
+            <p>Message your child's room teacher anytime. Replies usually within an hour.</p>
+          </div>
+        </div>
+        <div class="marketing-feature">
+          <div class="feature-icon">💳</div>
+          <div>
+            <h3>Simple billing with CWELCC</h3>
+            <p>Your $10/day fee, applied automatically. Tax receipts ready every January.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Minimal auth flow — production-ready
+    const API_BASE = window.KT_CONFIG?.apiBase || 'https://api.kiddietrac.com/api/v1';
+
+    const form = document.getElementById('loginForm');
+    const errorMsg = document.getElementById('errorMsg');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorMsg.hidden = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in…';
+
+      const data = {
+        email: document.getElementById('email').value.trim().toLowerCase(),
+        password: document.getElementById('password').value,
+        device_name: navigator.userAgent.substring(0, 100),
+        device_platform: 'web',
+      };
+
+      try {
+        const res = await fetch(API_BASE + '/auth/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: JSON.stringify(data),
+        });
+
+        if (res.status === 429) {
+          throw new Error('Too many attempts. Please wait a few minutes.');
+        }
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.errors?.email?.[0] || body.message || 'Invalid email or password.');
+        }
+
+        const body = await res.json();
+
+        // Store securely — use httpOnly cookies in production; for SPA we use sessionStorage + short-lived token
+        sessionStorage.setItem('kt_token', body.token);
+        sessionStorage.setItem('kt_user', JSON.stringify(body.user));
+
+        // Redirect based on role
+        if (body.user.roles.includes('guardian')) {
+          window.location.href = '/dashboard.html';
+        } else if (body.user.roles.includes('centre_director')) {
+          window.location.href = '/dashboard.html';
+        } else if (body.user.roles.includes('agency_admin')) {
+          window.location.href = '/dashboard.html';
+        } else {
+          window.location.href = '/dashboard.html';
+        }
+
+      } catch (err) {
+        errorMsg.textContent = err.message;
+        errorMsg.hidden = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign in';
+      }
+    });
+  </script>
+  <script src="/js/login-v7.js" defer></script>
+  <script src="/js/branding-loader.js" defer></script>
+  <script src="/js/api-helpers-v10.js" defer></script>
+  <script src="/js/mobile-helper-v11.js" defer></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/service-worker.js').catch(function (e) { console.warn('SW reg failed:', e); });
+    });
+  }
+</script>
+  <script src="/js/screen-chat.js" defer></script>
+  <script src="/js/nav-additions-v12.js" defer></script>
+  <script src="/js/screen-waitlist.js" defer></script>
+  <script src="/js/screen-announcements.js" defer></script>
+  <script src="/js/screen-autopay.js" defer></script>
+  <script src="/js/nav-additions-v13.js" defer></script>
+  <script src="/js/screen-lesson-plans.js" defer></script>
+  <script src="/js/screen-schedule.js" defer></script>
+  <script src="/js/screen-certifications.js" defer></script>
+  <script src="/js/push-client.js" defer></script>
+  <script src="/js/nav-additions-v14.js" defer></script>
+  <script src="/js/screen-admin-mrr.js" defer></script>
+  <script src="/js/screen-admin-features.js" defer></script>
+  <script src="/js/screen-admin-branding.js" defer></script>
+  <script src="/js/nav-additions-v15.js" defer></script>
+</body>
+</html>

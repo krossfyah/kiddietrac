@@ -1,0 +1,1103 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KIDDIETRAC v2 — Director / Educator / Modal styles
+   Layered on top of styles.css
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ────────────────────────────────────────────────────────────
+   Loading state
+   ──────────────────────────────────────────────────────────── */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Director Layout — sidebar + content
+   ──────────────────────────────────────────────────────────── */
+.director-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 24px;
+  min-height: calc(100vh - 64px);
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.director-sidebar {
+  background: var(--kt-surface);
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  padding: 16px;
+  height: fit-content;
+  position: sticky;
+  top: 88px;
+}
+
+.director-sidebar .sidebar-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--kt-text-faint);
+  text-transform: uppercase;
+  padding: 8px 12px;
+  margin-top: 8px;
+}
+
+.director-sidebar .sidebar-label:first-child { margin-top: 0; }
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--kt-radius-sm);
+  color: var(--kt-text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 2px;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.sidebar-link:hover { background: var(--kt-bg); }
+.sidebar-link.active {
+  background: var(--kt-blue-50);
+  color: var(--kt-blue);
+  font-weight: 600;
+}
+
+.sidebar-link .sidebar-icon {
+  font-size: 18px;
+  width: 22px;
+  text-align: center;
+}
+
+.sidebar-link .sidebar-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--kt-danger);
+  color: white;
+  padding: 2px 7px;
+  border-radius: 100px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Director Dashboard — stats cards + room grid
+   ──────────────────────────────────────────────────────────── */
+.director-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-tile {
+  background: var(--kt-surface);
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  padding: 18px;
+  position: relative;
+}
+
+.stat-tile.stat-good { border-left: 4px solid var(--kt-success); }
+.stat-tile.stat-warn { border-left: 4px solid var(--kt-warn); }
+.stat-tile.stat-bad  { border-left: 4px solid var(--kt-danger); }
+
+.stat-tile .stat-tile-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--kt-text-muted);
+  text-transform: uppercase;
+}
+
+.stat-tile .stat-tile-value {
+  font-family: var(--kt-font-display);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--kt-text);
+  margin: 4px 0;
+}
+
+.stat-tile .stat-tile-detail {
+  font-size: 13px;
+  color: var(--kt-text-muted);
+}
+
+.stat-tile .stat-tile-trend {
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.stat-tile .trend-up { color: var(--kt-success); }
+.stat-tile .trend-down { color: var(--kt-danger); }
+
+/* Room cards in dashboard */
+.room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.room-tile {
+  background: var(--kt-surface);
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  padding: 18px;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.room-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kt-shadow);
+}
+
+.room-tile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.room-tile-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--kt-font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--kt-text);
+}
+
+.room-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.room-tile-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.room-tile-stat {
+  font-size: 12px;
+  color: var(--kt-text-muted);
+}
+
+.room-tile-stat strong {
+  display: block;
+  font-family: var(--kt-font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--kt-text);
+  letter-spacing: -0.5px;
+}
+
+.ratio-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 100px;
+}
+
+.ratio-status.ok { background: var(--kt-success-bg); color: var(--kt-success); }
+.ratio-status.tight { background: var(--kt-warn-bg); color: var(--kt-warn); }
+.ratio-status.breach { background: var(--kt-danger-bg); color: var(--kt-danger); }
+
+/* ────────────────────────────────────────────────────────────
+   Data tables (children list, families list, etc.)
+   ──────────────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--kt-surface);
+  border-radius: var(--kt-radius);
+  overflow: hidden;
+  border: 1px solid var(--kt-border);
+}
+
+.data-table thead th {
+  background: var(--kt-bg);
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--kt-text-muted);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--kt-border);
+}
+
+.data-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--kt-border);
+  font-size: 14px;
+  color: var(--kt-text);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background: var(--kt-bg);
+}
+
+.cell-with-avatar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Search + filter bar
+   ──────────────────────────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--kt-border);
+  border-radius: var(--kt-radius-sm);
+  background: var(--kt-surface);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--kt-text);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--kt-blue);
+}
+
+.filter-select {
+  padding: 10px 14px;
+  border: 1.5px solid var(--kt-border);
+  border-radius: var(--kt-radius-sm);
+  background: var(--kt-surface);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--kt-text);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Modal
+   ──────────────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 40, 60, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+  animation: fade-in 0.15s ease;
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  background: var(--kt-surface);
+  border-radius: var(--kt-radius-lg);
+  box-shadow: var(--kt-shadow-lg);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slide-up 0.2s ease;
+}
+
+@keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.modal-header {
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid var(--kt-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  font-family: var(--kt-font-display);
+  font-weight: 700;
+  font-size: 22px;
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--kt-text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.modal-close:hover { background: var(--kt-bg); }
+
+.modal-body {
+  padding: 24px 28px;
+}
+
+.modal-footer {
+  padding: 16px 28px;
+  border-top: 1px solid var(--kt-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Educator tablet layout
+   ──────────────────────────────────────────────────────────── */
+.educator-shell {
+  min-height: calc(100vh - 64px);
+  background: var(--kt-bg);
+}
+
+.educator-topbar {
+  background: var(--kt-surface);
+  border-bottom: 1px solid var(--kt-border);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.educator-topbar h2 {
+  font-family: var(--kt-font-display);
+  font-weight: 700;
+  font-size: 22px;
+  margin: 0;
+}
+
+.room-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.room-pill {
+  padding: 8px 16px;
+  border: 1.5px solid var(--kt-border);
+  border-radius: 100px;
+  background: var(--kt-surface);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--kt-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.room-pill.active {
+  background: var(--kt-blue);
+  color: white;
+  border-color: var(--kt-blue);
+}
+
+.educator-roster {
+  padding: 20px 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.child-card {
+  background: var(--kt-surface);
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+
+.child-card.at-centre {
+  border-left: 4px solid var(--kt-success);
+}
+
+.child-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kt-shadow);
+}
+
+.child-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.child-card-name {
+  font-family: var(--kt-font-display);
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--kt-text);
+}
+
+.child-card-age {
+  font-size: 12px;
+  color: var(--kt-text-muted);
+}
+
+.child-card-flags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.health-flag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--kt-danger-bg);
+  color: var(--kt-danger);
+}
+
+.health-flag.severity-life_threatening { background: var(--kt-danger); color: white; }
+
+.child-card-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--kt-text-muted);
+  margin-bottom: 10px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--kt-success);
+}
+
+.child-card-last {
+  font-size: 12px;
+  color: var(--kt-text);
+  padding: 6px 10px;
+  background: var(--kt-bg);
+  border-radius: var(--kt-radius-sm);
+  margin-bottom: 10px;
+}
+
+.child-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.child-card-actions .btn {
+  flex: 1;
+  padding: 8px;
+  font-size: 12px;
+}
+
+/* Quick log modal — large touch targets */
+.quick-log-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.quick-log-btn {
+  padding: 24px 16px;
+  border: 1.5px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  background: var(--kt-surface);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kt-text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s;
+}
+
+.quick-log-btn:hover {
+  border-color: var(--kt-blue);
+  background: var(--kt-blue-50);
+}
+
+.quick-log-btn .quick-icon {
+  font-size: 28px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Empty / error states
+   ──────────────────────────────────────────────────────────── */
+.empty-large {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--kt-text-muted);
+}
+
+.empty-large .empty-emoji {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-large h3 {
+  font-family: var(--kt-font-display);
+  font-size: 22px;
+  color: var(--kt-text);
+  margin-bottom: 8px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Form
+   ──────────────────────────────────────────────────────────── */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.form-grid .full-width { grid-column: 1 / -1; }
+
+.form-grid .form-row { margin-bottom: 0; }
+
+/* ────────────────────────────────────────────────────────────
+   Page header helpers
+   ──────────────────────────────────────────────────────────── */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.section-header h2 {
+  font-family: var(--kt-font-display);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+}
+
+/* Responsive */
+@media (max-width: 920px) {
+  .director-shell { grid-template-columns: 1fr; padding: 16px; }
+  .director-sidebar { position: static; }
+  .educator-roster { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); padding: 12px; gap: 10px; }
+  .form-grid { grid-template-columns: 1fr; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   v17 — Sidebar layout for agency_admin (and any role opted in)
+   ════════════════════════════════════════════════════════════════════
+   How it works:
+   - body.role-agency-admin gets the sidebar layout
+   - The same <nav> that used to be at the top is repurposed as a
+     left rail by overriding .app-nav with .app-sidebar styles.
+   - Other roles are unaffected (the new selectors require the
+     .app-sidebar class which only the new HTML/JS adds).
+   ════════════════════════════════════════════════════════════════════ */
+
+body.layout-sidebar .app-shell,
+.app-shell.app-shell--sidebar {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  grid-template-rows: 1fr;
+  min-height: 100vh;
+}
+
+/* The repurposed nav element — keeps .app-nav class so v12/v13/v14/v15
+   find-nav lookups still resolve harmlessly, but app-sidebar styles win
+   via cascade order (this rule appears after the original .app-nav). */
+.app-nav.app-sidebar,
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  background: var(--kt-surface);
+  border-right: 1px solid var(--kt-border);
+  border-bottom: none;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.app-sidebar .nav-brand {
+  padding: 20px 20px 18px;
+  border-bottom: 1px solid var(--kt-border);
+  flex-shrink: 0;
+  font-size: 16px;
+}
+.app-sidebar .nav-brand img {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+.app-sidebar .sidebar-nav {
+  display: block;     /* v17.2: override .nav-links { display: flex } from styles.css */
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 10px 18px;
+}
+
+.app-sidebar .sidebar-nav::-webkit-scrollbar { width: 6px; }
+.app-sidebar .sidebar-nav::-webkit-scrollbar-thumb { background: var(--kt-border); border-radius: 3px; }
+
+.app-sidebar .sidebar-section {
+  margin-top: 18px;
+}
+.app-sidebar .sidebar-section:first-child { margin-top: 0; }
+
+.app-sidebar .sidebar-section-label {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  font-weight: 700;
+  color: var(--kt-text-faint);
+  text-transform: uppercase;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+}
+
+.app-sidebar .nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--kt-radius-sm);
+  color: var(--kt-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  margin-bottom: 1px;
+  position: relative;
+  transition: background .12s ease, color .12s ease;
+}
+.app-sidebar .nav-link:hover {
+  background: var(--kt-bg);
+  color: var(--kt-text);
+  text-decoration: none;
+}
+.app-sidebar .nav-link.active {
+  background: var(--kt-blue-50);
+  color: var(--kt-blue);
+  font-weight: 600;
+}
+.app-sidebar .nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 58%;
+  background: var(--kt-teal);
+  border-radius: 0 3px 3px 0;
+}
+.app-sidebar .nav-link .nav-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.app-sidebar .nav-link .nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--kt-danger);
+  color: white;
+  padding: 2px 7px;
+  border-radius: 100px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.app-sidebar .nav-user {
+  border-top: 1px solid var(--kt-border);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background .12s ease;
+  border-radius: 0;
+}
+.app-sidebar .nav-user:hover { background: var(--kt-bg); }
+.app-sidebar .nav-user .nav-user-text {
+  min-width: 0;
+  flex: 1;
+}
+.app-sidebar .nav-user .nav-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kt-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-sidebar .nav-user .nav-user-role {
+  font-size: 11px;
+  color: var(--kt-text-faint);
+  text-transform: capitalize;
+}
+
+/* Main content area when sidebar is active — use the width */
+.app-shell--sidebar .app-main,
+body.layout-sidebar .app-main {
+  max-width: 1400px;
+  margin: 0;
+  padding: 28px 36px 56px;
+  width: 100%;
+}
+
+/* Mobile collapse — sidebar becomes top strip */
+@media (max-width: 920px) {
+  .app-shell.app-shell--sidebar,
+  body.layout-sidebar .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .app-nav.app-sidebar, .app-sidebar {
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--kt-border);
+    padding: 8px 16px;
+    gap: 12px;
+  }
+  .app-sidebar .nav-brand { border-bottom: none; padding: 0; }
+  .app-sidebar .sidebar-nav { display: none; }   /* hamburger handled in v18 */
+  .app-sidebar .nav-user { border-top: none; padding: 4px 8px; margin-left: auto; }
+  .app-shell--sidebar .app-main { padding: 20px; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   v17 — Polished page header (works everywhere, not sidebar-specific)
+   ════════════════════════════════════════════════════════════════════ */
+
+.page-header-v17 {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--kt-border);
+}
+
+.page-header-v17 .crumbs {
+  font-size: 12px;
+  color: var(--kt-text-faint);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.page-header-v17 .crumbs .sep { opacity: .5; }
+
+.page-header-v17 h1 {
+  font-family: var(--kt-font-display);
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.6px;
+  color: var(--kt-text);
+  margin: 0;
+}
+
+.page-header-v17 .sub {
+  font-size: 14px;
+  color: var(--kt-text-muted);
+  margin-top: 4px;
+}
+
+.page-header-v17 .actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   v17 — Stat tile polish (extends existing .stat-tile)
+   ════════════════════════════════════════════════════════════════════ */
+
+.stat-tile-v17 {
+  background: var(--kt-surface);
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.stat-tile-v17:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kt-shadow);
+}
+.stat-tile-v17::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--kt-teal);
+}
+.stat-tile-v17.accent-navy::after    { background: var(--kt-blue); }
+.stat-tile-v17.accent-teal::after    { background: var(--kt-teal); }
+.stat-tile-v17.accent-warn::after    { background: var(--kt-warn); }
+.stat-tile-v17.accent-danger::after  { background: var(--kt-danger); }
+.stat-tile-v17.accent-success::after { background: var(--kt-success); }
+
+.stat-tile-v17 .label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--kt-text-faint);
+  text-transform: uppercase;
+}
+.stat-tile-v17 .value {
+  font-family: var(--kt-font-display);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--kt-text);
+  margin: 4px 0 2px;
+  line-height: 1.1;
+}
+.stat-tile-v17 .delta {
+  font-size: 12px;
+  font-weight: 600;
+}
+.stat-tile-v17 .delta.up    { color: var(--kt-success); }
+.stat-tile-v17 .delta.down  { color: var(--kt-danger); }
+.stat-tile-v17 .delta.muted { color: var(--kt-text-faint); font-weight: 500; }
+
+/* ════════════════════════════════════════════════════════════════════
+   v17 — Centre card polish (extends existing .room-tile pattern)
+   ════════════════════════════════════════════════════════════════════ */
+
+.centre-card-v17 {
+  background: var(--kt-surface);
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  padding: 0;
+  overflow: hidden;
+  transition: transform .15s ease, box-shadow .15s ease;
+  display: flex;
+  flex-direction: column;
+}
+.centre-card-v17:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kt-shadow);
+}
+
+.centre-card-v17 .head {
+  padding: 16px 18px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--kt-border);
+}
+.centre-card-v17 .head .name {
+  font-family: var(--kt-font-display);
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--kt-text);
+  margin: 0;
+  line-height: 1.2;
+}
+.centre-card-v17 .head .city {
+  font-size: 12px;
+  color: var(--kt-text-muted);
+  margin-top: 2px;
+}
+
+.centre-card-v17 .stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  padding: 12px 0;
+}
+.centre-card-v17 .stats .item {
+  padding: 4px 16px;
+  border-right: 1px solid var(--kt-border);
+}
+.centre-card-v17 .stats .item:last-child { border-right: none; }
+.centre-card-v17 .stats .item .ilabel {
+  font-size: 10px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--kt-text-faint);
+  font-weight: 700;
+}
+.centre-card-v17 .stats .item .ivalue {
+  font-family: var(--kt-font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--kt-text);
+  letter-spacing: -.4px;
+  margin-top: 2px;
+}
+
+.centre-card-v17 .capacity {
+  padding: 4px 18px 14px;
+}
+.centre-card-v17 .capacity .row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--kt-text-muted);
+  margin-bottom: 4px;
+  letter-spacing: .4px;
+}
+.centre-card-v17 .capacity .bar {
+  background: var(--kt-bg);
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.centre-card-v17 .capacity .bar .fill {
+  height: 100%;
+  background: var(--kt-teal);
+  transition: width .6s ease;
+}
+.centre-card-v17 .capacity .bar .fill.warn   { background: var(--kt-warn); }
+.centre-card-v17 .capacity .bar .fill.danger { background: var(--kt-danger); }
+
+.centre-card-v17 .footer {
+  padding: 0 14px 14px;
+  margin-top: auto;
+}
+.centre-card-v17 .footer .manage-btn {
+  width: 100%;
+  background: var(--kt-blue);
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: var(--kt-radius-sm);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .15s;
+  font-family: inherit;
+}
+.centre-card-v17 .footer .manage-btn:hover { background: var(--kt-blue-dark); }
+
+/* ════════════════════════════════════════════════════════════════════
+   v17 — Tag polish (status pills)
+   ════════════════════════════════════════════════════════════════════ */
+.tag-v17 {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 100px;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+.tag-v17.success { background: var(--kt-success-bg); color: var(--kt-success); }
+.tag-v17.warn    { background: var(--kt-warn-bg);    color: var(--kt-warn); }
+.tag-v17.danger  { background: var(--kt-danger-bg);  color: var(--kt-danger); }
+.tag-v17.info    { background: var(--kt-blue-50);    color: var(--kt-blue); }
+
+/* ════════════════════════════════════════════════════════════════════
+   v17 — Activity feed
+   ════════════════════════════════════════════════════════════════════ */
+.activity-feed-v17 {
+  background: var(--kt-surface);
+  border: 1px solid var(--kt-border);
+  border-radius: var(--kt-radius);
+  overflow: hidden;
+}
+.activity-feed-v17 .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--kt-border);
+  gap: 14px;
+}
+.activity-feed-v17 .row:last-child { border-bottom: none; }
+.activity-feed-v17 .row:hover { background: var(--kt-bg); }
+.activity-feed-v17 .row .who {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--kt-text);
+}
+.activity-feed-v17 .row .detail {
+  font-size: 12px;
+  color: var(--kt-text-muted);
+  margin-top: 2px;
+}
+.activity-feed-v17 .row .when {
+  font-size: 12px;
+  color: var(--kt-text-faint);
+  flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   v17.2 — Cohabitation with screen-director.js's .director-shell
+   ════════════════════════════════════════════════════════════════════
+   screen-director.js renders <div class="director-shell"> with its own
+   240px inner sidebar inside `main`. When the v17 outer .app-sidebar is
+   active, the inner sidebar is redundant and creates a double-sidebar
+   layout. Suppress it here, and collapse .director-shell to one column
+   so the content area takes the full width. */
+.app-shell--sidebar .director-shell {
+  grid-template-columns: 1fr;
+}
+.app-shell--sidebar .director-sidebar {
+  display: none;
+}
+
+/* Bonus: when not in sidebar layout, ensure the legacy .director-shell
+   still works as before (it does — this is just defensive). */
+.app-shell:not(.app-shell--sidebar) .director-shell {
+  /* leave alone — original grid-template-columns: 240px 1fr applies */
+}

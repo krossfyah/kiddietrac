@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+storage/logs/*.log
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+vendor/
+node_modules/
+bootstrap/cache/*.php
+*.sql
+*.sql.gz
+*.tar.gz
+.DS_Store

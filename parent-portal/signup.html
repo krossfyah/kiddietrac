@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Start your free trial — Kiddietrac</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F9FAFB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1F2937; line-height: 1.5; min-height: 100vh; padding: 24px 16px; }
+  .wrap { max-width: 540px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+  .leaf { width: 24px; height: 28px; background: #8EC73C; border-radius: 0 100% 100% 100% / 0 100% 100% 100%; }
+  .brand-name { font-size: 22px; font-weight: 800; color: #1F6080; letter-spacing: -0.5px; }
+  .card { background: white; padding: 32px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); margin-bottom: 16px; }
+  h1 { margin: 0 0 8px; font-size: 26px; color: #1F2937; }
+  .lead { color: #6B7280; margin-bottom: 24px; font-size: 15px; }
+  h2 { margin: 24px 0 12px; font-size: 16px; color: #1F6080; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; font-size: 12px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+  input[type=text], input[type=email], input[type=tel], input[type=password], input[type=number], select {
+    width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 12px;
+  }
+  input:focus, select:focus { outline: 2px solid #1F6080; outline-offset: -1px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .terms { display: flex; gap: 10px; align-items: flex-start; padding: 12px; background: #F3F4F6; border-radius: 8px; margin: 16px 0; font-size: 13px; }
+  .terms a { color: #1F6080; }
+  .btn { width: 100%; background: #1F6080; color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 8px; }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .err { background: #FEF2F2; border-left: 3px solid #DC2626; color: #991B1B; padding: 10px 14px; border-radius: 4px; font-size: 14px; margin-bottom: 16px; }
+  .login-link { text-align: center; color: #6B7280; font-size: 14px; }
+  .login-link a { color: #1F6080; }
+  .trial-info { background: linear-gradient(135deg, #1F6080 0%, #2c7894 100%); color: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; }
+  .trial-info strong { display: block; font-size: 18px; margin-bottom: 4px; }
+  .trial-info span { opacity: 0.9; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <span class="leaf"></span>
+    <span class="brand-name">KIDDIETRAC</span>
+  </div>
+
+  <div class="card">
+    <div id="form-stage">
+      <div class="trial-info">
+        <strong>30-day free trial</strong>
+        <span>Set up your centre and start using Kiddietrac today. No credit card required.</span>
+      </div>
+
+      <h1>Start your free trial</h1>
+      <p class="lead">Set up your childcare centre on Kiddietrac in under 5 minutes.</p>
+
+      <div id="error-msg" class="err" hidden></div>
+
+      <form id="signup-form">
+        <h2>Your centre</h2>
+
+        <label for="centre_name">Centre name</label>
+        <input id="centre_name" name="centre_name" type="text" required maxlength="180" placeholder="e.g. Sunshine Daycare">
+
+        <div class="row">
+          <div>
+            <label for="city">City</label>
+            <input id="city" name="city" type="text" required maxlength="80">
+          </div>
+          <div>
+            <label for="province">Province</label>
+            <select id="province" name="province" required>
+              <option value="ON" selected>Ontario</option>
+              <option value="AB">Alberta</option>
+              <option value="BC">British Columbia</option>
+              <option value="MB">Manitoba</option>
+              <option value="NB">New Brunswick</option>
+              <option value="NL">Newfoundland and Labrador</option>
+              <option value="NS">Nova Scotia</option>
+              <option value="NT">Northwest Territories</option>
+              <option value="NU">Nunavut</option>
+              <option value="PE">Prince Edward Island</option>
+              <option value="QC">Quebec</option>
+              <option value="SK">Saskatchewan</option>
+              <option value="YT">Yukon</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="address_line1">Street address (optional)</label>
+        <input id="address_line1" name="address_line1" type="text" maxlength="200">
+
+        <div class="row">
+          <div>
+            <label for="postal_code">Postal code</label>
+            <input id="postal_code" name="postal_code" type="text" maxlength="12" placeholder="L7C 1A1">
+          </div>
+          <div>
+            <label for="phone">Centre phone</label>
+            <input id="phone" name="phone" type="tel" maxlength="40">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="license_number">Licence # (optional)</label>
+            <input id="license_number" name="license_number" type="text" maxlength="60" placeholder="or TBD">
+          </div>
+          <div>
+            <label for="license_capacity">Capacity</label>
+            <input id="license_capacity" name="license_capacity" type="number" min="1" max="500" value="30">
+          </div>
+        </div>
+
+        <h2>You (the director)</h2>
+
+        <div class="row">
+          <div>
+            <label for="director_first_name">First name</label>
+            <input id="director_first_name" name="director_first_name" type="text" required maxlength="80">
+          </div>
+          <div>
+            <label for="director_last_name">Last name</label>
+            <input id="director_last_name" name="director_last_name" type="text" required maxlength="80">
+          </div>
+        </div>
+
+        <label for="director_email">Your email</label>
+        <input id="director_email" name="director_email" type="email" required maxlength="180" autocomplete="email">
+
+        <label for="director_phone">Your phone (optional)</label>
+        <input id="director_phone" name="director_phone" type="tel" maxlength="40" autocomplete="tel">
+
+        <label for="director_password">Password</label>
+        <input id="director_password" name="director_password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+
+        <div class="terms">
+          <input id="agreed_to_terms" name="agreed_to_terms" type="checkbox" required>
+          <label for="agreed_to_terms" style="margin: 0; font-weight: 400;">
+            I agree to the <a href="/terms.html" target="_blank">Terms of Service</a> and <a href="/privacy.html" target="_blank">Privacy Policy</a>.
+          </label>
+        </div>
+
+        <button id="submit-btn" type="submit" class="btn">Create my centre</button>
+      </form>
+    </div>
+
+    <div id="success-stage" hidden>
+      <h1 style="color: #16A34A;">✓ You're all set!</h1>
+      <p>Your centre is created. Use the email and password you just set to log in.</p>
+      <p><strong>Next steps:</strong></p>
+      <ol>
+        <li>Log in with your email and password</li>
+        <li>Add your first room (from the QUICK ADD sidebar)</li>
+        <li>Add families and enroll children</li>
+        <li>Invite parents and educators</li>
+      </ol>
+      <p style="margin-top: 24px;"><a href="/" class="btn" style="display: block; text-align: center; text-decoration: none;">Go to login</a></p>
+    </div>
+  </div>
+
+  <p class="login-link">Already have an account? <a href="/">Log in</a></p>
+</div>
+
+<script>
+  (function () {
+    const form = document.getElementById('signup-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const errorMsg = document.getElementById('error-msg');
+
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      errorMsg.hidden = true;
+
+      const data = {};
+      new FormData(form).forEach(function (v, k) {
+        if (k === 'agreed_to_terms') {
+          data[k] = true;
+        } else if (k === 'license_capacity') {
+          if (v) data[k] = parseInt(v, 10);
+        } else if (v !== '') {
+          data[k] = v;
+        }
+      });
+
+      if (!data.agreed_to_terms) {
+        errorMsg.textContent = 'Please agree to the Terms and Privacy Policy to continue.';
+        errorMsg.hidden = false;
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating your centre...';
+
+      try {
+        const res = await fetch('/api/v1/signup/centre', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const body = await res.json().catch(function () { return {}; });
+
+        if (!res.ok) {
+          let msg = body.message || 'Signup failed.';
+          if (body.errors) {
+            const firstField = Object.keys(body.errors)[0];
+            if (firstField && body.errors[firstField][0]) {
+              msg = body.errors[firstField][0];
+            }
+          }
+          errorMsg.textContent = msg;
+          errorMsg.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create my centre';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
+        document.getElementById('form-stage').hidden = true;
+        document.getElementById('success-stage').hidden = false;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) {
+        errorMsg.textContent = 'Network error. Please try again.';
+        errorMsg.hidden = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create my centre';
+      }
+    });
+  })();
+</script>
+</body>
+</html>

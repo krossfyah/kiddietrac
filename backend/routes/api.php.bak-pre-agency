@@ -1,0 +1,161 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CentreController;
+use App\Http\Controllers\Api\CheckEventController;
+use App\Http\Controllers\Api\ChildController;
+use App\Http\Controllers\Api\DailyEventController;
+use App\Http\Controllers\Api\FamilyController;
+use App\Http\Controllers\Api\HelpController;
+use App\Http\Controllers\Api\IncidentController;
+use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\RoomController;
+use App\Http\Controllers\Api\RoomManagementController;
+use App\Http\Controllers\Api\SignupController;
+use App\Http\Controllers\Api\StaffController;
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('v1')->group(function () {
+
+    Route::get('/health', fn () => response()->json([
+        'status' => 'ok',
+        'timestamp' => now()->toIso8601String(),
+        'version' => '7.0.0',
+        'laravel' => app()->version(),
+        'php' => PHP_VERSION,
+    ]));
+
+    Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+    Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
+    Route::post('/auth/reset', [AuthController::class, 'resetPassword']);
+
+    // ─── Public signup (rate-limited, v7) ───
+    Route::post('/signup/centre', [SignupController::class, 'signup'])->middleware('throttle:3,60');
+
+    Route::middleware('auth:sanctum')->group(function () {
+
+        Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::get('/auth/me', [AuthController::class, 'me']);
+        Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
+
+        // ─── Help (available to all authenticated users) ───
+        Route::get('/help', [HelpController::class, 'index']);
+        Route::get('/help/{slug}', [HelpController::class, 'show']);
+        Route::post('/help/ask', [HelpController::class, 'ask'])->middleware('throttle:30,1');
+
+        Route::prefix('parent')->group(function () {
+            Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
+            Route::get('/children', [FamilyController::class, 'myChildren']);
+            Route::get('/children/{child}', [ChildController::class, 'show']);
+            Route::get('/children/{child}/timeline', [DailyEventController::class, 'timeline']);
+            Route::get('/children/{child}/digest/{date}', [DailyEventController::class, 'digest']);
+            Route::get('/children/{child}/invoices', [InvoiceController::class, 'forChild']);
+            Route::get('/children/{child}/photos', [MediaController::class, 'forChild']);
+            Route::get('/children/{child}/observations', [MediaController::class, 'observationsForChild']);
+            Route::get('/messages', [MessageController::class, 'myConversations']);
+            Route::get('/messages/{conversation}', [MessageController::class, 'show']);
+            Route::post('/messages', [MessageController::class, 'sendToRoom']);
+            Route::get('/notifications', [NotificationController::class, 'mine']);
+            Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+        });
+
+        Route::prefix('provider')->middleware('role:educator,centre_director,agency_admin')->group(function () {
+            Route::get('/bootstrap', [RoomController::class, 'bootstrap']);
+            Route::get('/rooms/{room}/roster', [RoomController::class, 'roster']);
+            Route::get('/rooms/{room}/ratio', [RoomController::class, 'currentRatio']);
+
+            Route::post('/check-in', [CheckEventController::class, 'checkIn']);
+            Route::post('/check-out', [CheckEventController::class, 'checkOut']);
+            Route::post('/check-in-batch', [CheckEventController::class, 'checkInBatch']);
+
+            Route::post('/events', [DailyEventController::class, 'store']);
+            Route::patch('/events/{event}', [DailyEventController::class, 'update']);
+            Route::delete('/events/{event}', [DailyEventController::class, 'destroy']);
+
+            Route::post('/photos', [MediaController::class, 'upload']);
+            Route::post('/observations', [MediaController::class, 'createObservation']);
+            Route::post('/incidents', [IncidentController::class, 'create']);
+            Route::post('/medications/give', [IncidentController::class, 'logMedication']);
+
+            Route::get('/conversations', [MessageController::class, 'educatorConversations']);
+            Route::get('/conversations/{conversation}', [MessageController::class, 'show']);
+            Route::post('/messages', [MessageController::class, 'educatorReply']);
+
+            Route::post('/clock-in', [StaffController::class, 'clockIn']);
+            Route::post('/clock-out', [StaffController::class, 'clockOut']);
+        });
+
+        Route::prefix('director')->middleware('role:centre_director,agency_admin')->group(function () {
+            Route::get('/dashboard', [CentreController::class, 'directorDashboard']);
+            Route::get('/centre', [CentreController::class, 'mine']);
+            Route::patch('/centre', [CentreController::class, 'update']);
+
+            // ─── Rooms CRUD (new in v5a) ───
+            Route::get('/rooms', [RoomManagementController::class, 'index']);
+            Route::post('/rooms', [RoomManagementController::class, 'store']);
+            Route::patch('/rooms/{room}', [RoomManagementController::class, 'update']);
+            Route::delete('/rooms/{room}', [RoomManagementController::class, 'destroy']);
+
+            Route::get('/enrollments', [ChildController::class, 'enrollmentList']);
+            Route::post('/enrollments', [ChildController::class, 'enroll']);
+            Route::patch('/enrollments/{enrollment}', [ChildController::class, 'updateEnrollment']);
+            Route::get('/waitlist', [ChildController::class, 'waitlist']);
+
+            Route::get('/children/{child}', [ChildController::class, 'show']);
+
+            Route::get('/families', [FamilyController::class, 'index']);
+            Route::post('/families', [FamilyController::class, 'store']);
+            Route::get('/families/{family}', [FamilyController::class, 'show']);
+            Route::post('/families/{family}/invite', [FamilyController::class, 'invite']);
+
+            Route::get('/staff', [StaffController::class, 'index']);
+            Route::post('/staff/invite', [StaffController::class, 'invite']);
+            Route::get('/staff/{user}/certifications', [StaffController::class, 'certifications']);
+            Route::post('/staff/{user}/certifications', [StaffController::class, 'addCertification']);
+            Route::get('/staff/schedule', [StaffController::class, 'schedule']);
+            Route::post('/staff/shifts', [StaffController::class, 'createShift']);
+
+            Route::get('/compliance/overview', [CentreController::class, 'compliance']);
+            Route::get('/compliance/export', [CentreController::class, 'complianceExport']);
+            Route::get('/reports/attendance', [CentreController::class, 'attendanceReport']);
+
+            Route::get('/invoices', [InvoiceController::class, 'index']);
+            Route::post('/invoices/generate', [InvoiceController::class, 'generateBatch']);
+            Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
+            Route::post('/invoices/{invoice}/payments', [InvoiceController::class, 'recordPayment']);
+
+            Route::get('/incidents', [IncidentController::class, 'index']);
+            Route::patch('/incidents/{incident}/review', [IncidentController::class, 'review']);
+
+            // ─── Storage quota & audit (v7) ───
+            Route::get('/storage/usage', function (\Illuminate\Http\Request $request) {
+                $centreId = (new \App\Http\Concerns\ResolvesCentreContext)->resolveCentreId($request->user()) ?? 0;
+                if (!$centreId) return response()->json(['message' => 'No centre access'], 403);
+                $service = new \App\Services\StorageQuotaService();
+                return response()->json($service->getUsage($centreId));
+            });
+
+            Route::get('/audit-log', function (\Illuminate\Http\Request $request) {
+                $centreId = (new \App\Http\Concerns\ResolvesCentreContext)->resolveCentreId($request->user()) ?? 0;
+                if (!$centreId) return response()->json(['message' => 'No centre access'], 403);
+                $logs = \Illuminate\Support\Facades\DB::table('audit_logs')
+                    ->leftJoin('users', 'users.id', '=', 'audit_logs.user_id')
+                    ->where('audit_logs.centre_id', $centreId)
+                    ->orWhereNull('audit_logs.centre_id') // global events (login, signup) without centre
+                    ->orderByDesc('audit_logs.created_at')
+                    ->limit(100)
+                    ->select('audit_logs.*', 'users.first_name', 'users.last_name', 'users.email')
+                    ->get();
+                return response()->json(['logs' => $logs]);
+            });
+        });
+    });
+});

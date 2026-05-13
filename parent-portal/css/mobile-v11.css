@@ -1,0 +1,288 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KIDDIETRAC v11 — Mobile / responsive overrides
+   Phone (parents): ≤480px portrait
+   Tablet (educators): 481–1024px
+   Desktop (directors/admins): >1024px (existing styles)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Universal: touch-friendly defaults ─── */
+* {
+  -webkit-tap-highlight-color: rgba(31, 96, 128, 0.15);
+}
+input, button, select, textarea {
+  font-size: 16px; /* prevents iOS zoom on focus */
+}
+button, .btn, [role="button"] {
+  min-height: 44px; /* Apple HIG touch target */
+}
+
+/* ─── Phone: ≤ 600px ─── */
+@media (max-width: 600px) {
+
+  /* App shell adjustments */
+  body { font-size: 15px; }
+
+  /* Top nav: compress to icon-only or tabs at bottom */
+  .kt-topnav, header {
+    padding: 8px 12px !important;
+  }
+  .kt-topnav .logo, header .logo {
+    font-size: 18px !important;
+  }
+  .kt-topnav nav, header nav ul {
+    gap: 4px !important;
+  }
+  .kt-topnav nav a, header nav a {
+    padding: 6px 10px !important;
+    font-size: 13px !important;
+  }
+
+  /* Sidebar: convert to bottom tab bar on phones */
+  .kt-sidebar, [class*="sidebar"] {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    height: 56px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    border-top: 1px solid var(--ink-200, #E5E7EB) !important;
+    background: white !important;
+    z-index: 100 !important;
+    padding: 0 !important;
+    overflow-x: auto !important;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.04) !important;
+  }
+  .kt-sidebar > div, .kt-sidebar > section {
+    display: flex !important;
+    flex-direction: row !important;
+    flex: 1 !important;
+    padding: 0 !important;
+  }
+  .kt-sidebar a, .kt-sidebar .nav-item, [class*="sidebar"] a {
+    flex: 1 !important;
+    text-align: center !important;
+    padding: 8px 4px !important;
+    font-size: 11px !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    margin: 0 !important;
+    min-height: 56px !important;
+  }
+  /* Hide section headers in sidebar on mobile */
+  .kt-sidebar > div > div:first-child,
+  .kt-sidebar [style*="letter-spacing"] {
+    display: none !important;
+  }
+  /* Hide Quick Add section on phone — too cramped */
+  .kt-v5a-actions {
+    display: none !important;
+  }
+
+  /* Main content: full width, bottom padding for tab bar */
+  main, .kt-main {
+    padding: 12px !important;
+    padding-bottom: 72px !important;
+    width: 100% !important;
+  }
+
+  /* Grids collapse to single column */
+  .stat-tile, [class*="stat"], .grid {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Cards: full width, less padding */
+  .card, [class*="card"] {
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Headers shrink */
+  h1 { font-size: 22px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+
+  /* Modals: full screen on phone */
+  .kt-modal-overlay, [class*="modal-overlay"] {
+    align-items: flex-end !important;
+  }
+  .kt-modal, [class*="modal-content"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 90vh !important;
+    border-radius: 16px 16px 0 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Tables: horizontal scroll or stacked */
+  table {
+    display: block !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    font-size: 13px !important;
+  }
+  table th, table td {
+    padding: 8px 12px !important;
+  }
+
+  /* Forms */
+  input, select, textarea {
+    padding: 12px !important;
+    font-size: 16px !important;
+  }
+  .form-row, [class*="form-row"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Photo gallery: 2 cols instead of 4+ */
+  [style*="repeat(auto-fill"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  /* Hide floating help button on phone or make it smaller */
+  #kt-floating-help {
+    width: 48px !important;
+    height: 48px !important;
+    bottom: 72px !important; /* avoid overlapping bottom nav */
+    right: 16px !important;
+  }
+
+  /* Tabs go horizontal scrollable */
+  [style*="display: flex"][style*="border-bottom"] {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Parent today view: stack the 2-column grid */
+  [style*="grid-template-columns: 2fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Avatar tabs (child switcher) — wrap nicely */
+  .child-tab {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* ─── Phone landscape and small tablet portrait: 601–768px ─── */
+@media (min-width: 601px) and (max-width: 768px) {
+  [style*="repeat(auto-fill"] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  /* Sidebar still on left but narrower */
+  .kt-sidebar, [class*="sidebar"] {
+    width: 200px !important;
+  }
+  main, .kt-main {
+    padding: 16px !important;
+  }
+}
+
+/* ─── Tablet (educator workstation): 769–1024px ─── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Tablet-specific: educator view gets bigger touch targets */
+  body[data-role="educator"] button,
+  body[data-role="educator"] .btn,
+  .educator-shell button {
+    min-height: 56px !important;
+    padding: 14px 24px !important;
+    font-size: 17px !important;
+  }
+  /* Educator cards bigger for finger-friendly tapping */
+  .educator-shell .child-card,
+  .educator-shell [class*="card"] {
+    padding: 20px !important;
+  }
+}
+
+/* ─── Very small phones: 360px and below ─── */
+@media (max-width: 360px) {
+  h1 { font-size: 20px !important; }
+  .kt-sidebar a, [class*="sidebar"] a {
+    font-size: 10px !important;
+    padding: 6px 2px !important;
+  }
+  .card, [class*="card"] {
+    padding: 12px !important;
+  }
+}
+
+/* ─── Landscape phones: shorten vertical spacing ─── */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
+  .hero, [class*="hero"] {
+    padding: 24px 0 !important;
+  }
+  main, .kt-main {
+    padding-bottom: 60px !important;
+  }
+}
+
+/* ─── PWA / standalone (when added to home screen) ─── */
+@media (display-mode: standalone) {
+  /* Compensate for iOS notch / status bar */
+  header, .kt-topnav {
+    padding-top: env(safe-area-inset-top) !important;
+  }
+  .kt-sidebar, [class*="sidebar"] {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+}
+
+/* ─── Dark mode support (basic) ─── */
+@media (prefers-color-scheme: dark) {
+  /* Only apply if user hasn't manually set a light theme */
+  body[data-theme="auto"] {
+    background: #0F172A;
+    color: #E2E8F0;
+  }
+  body[data-theme="auto"] .card,
+  body[data-theme="auto"] [class*="card"] {
+    background: #1E293B !important;
+    color: #E2E8F0 !important;
+  }
+}
+
+/* ─── Improved focus rings (accessibility) ─── */
+input:focus-visible,
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--brand-blue, #1F6080);
+  outline-offset: 2px;
+}
+
+/* ─── Smooth scrolling ─── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ─── Print: hide nav, expand content (useful for invoice/report printing) ─── */
+@media print {
+  header, nav, .kt-sidebar, [class*="sidebar"],
+  .kt-v5a-actions, #kt-floating-help,
+  button, .btn {
+    display: none !important;
+  }
+  main, .kt-main {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}

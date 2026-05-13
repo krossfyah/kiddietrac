@@ -1,0 +1,80 @@
+[12-May-2026 03:01:26 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:01:26 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:01:45 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:01:45 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:05:07 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:05:07 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:05:07 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:05:07 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:09:37 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:09:37 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:09:40 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:09:40 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:29:26 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:29:26 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:34:47 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:34:47 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:34:47 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 03:34:47 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 05:12:03 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 05:12:03 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 05:12:04 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 05:12:04 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 07:10:31 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 07:10:31 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 10:57:14 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 10:57:14 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 10:59:21 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 10:59:21 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 13:34:43 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 13:34:43 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 15:14:15 UTC] PHP Warning:  require(/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php): Failed to open stream: No such file or directory in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
+[12-May-2026 15:14:15 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/k3l6yt3xmih3/kiddietrac/backend/public/../vendor/autoload.php' (include_path='.:/opt/alt/php83/usr/share/pear:/opt/alt/php83/usr/share/php:/usr/share/pear:/usr/share/php') in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/k3l6yt3xmih3/kiddietrac/backend/public/index.php on line 14
