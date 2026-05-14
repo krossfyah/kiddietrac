@@ -23,6 +23,210 @@
     return base.replace(/\/api\/v1\/?$/, '') + p;
   }
 
+  // ─────────────────────────────────────────────────────────
+  // v22p4.1: widget add/remove framework
+  // ─────────────────────────────────────────────────────────
+  const WIDGET_DEFS = {
+    'mrr-sparkline': {
+      title: 'Recurring revenue',
+      build: (ctx) => widgetMrrSparkline(ctx.mrr),
+    },
+    'arr-agencies': {
+      title: 'Annualised revenue + plan mix',
+      build: (ctx) => widgetArrAgencies(ctx.mrr),
+    },
+    'users-by-role': {
+      title: 'Users by role',
+      build: (ctx) => widgetUsersByRole(ctx.analytics),
+    },
+    'enrollment-delta': {
+      title: 'Enrollment & revenue (30d)',
+      build: (ctx) => widgetEnrollmentDelta(ctx.analytics, ctx.mrr),
+    },
+    // ── New in v22p4.1 ──
+    'centre-occupancy': {
+      title: 'Centre occupancy',
+      build: (ctx) => widgetCentreOccupancy(ctx.data),
+    },
+    'compliance-snapshot': {
+      title: 'Compliance snapshot',
+      build: (ctx) => widgetComplianceSnapshot(ctx.data),
+    },
+    'pending-tasks': {
+      title: 'Pending approvals',
+      build: (ctx) => widgetPendingTasks(),
+    },
+    'recent-activity-mini': {
+      title: 'Activity feed',
+      build: (ctx) => widgetRecentActivityMini(ctx.data),
+    },
+  };
+  const DEFAULT_WIDGETS = ['mrr-sparkline', 'arr-agencies', 'users-by-role', 'enrollment-delta'];
+
+  function getEnabledWidgets() {
+    try {
+      const raw = localStorage.getItem('kt_agency_widgets');
+      if (!raw) return DEFAULT_WIDGETS.slice();
+      const arr = JSON.parse(raw);
+      // Drop ids that no longer exist
+      return arr.filter(id => WIDGET_DEFS[id]);
+    } catch (e) { return DEFAULT_WIDGETS.slice(); }
+  }
+  function saveEnabledWidgets(arr) {
+    try { localStorage.setItem('kt_agency_widgets', JSON.stringify(arr)); } catch (e) {}
+  }
+  function renderWidgetsGrid(section, ctx) {
+    const grid = section.querySelector('#kt-widgets-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const enabled = getEnabledWidgets();
+    if (!enabled.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;background:var(--kt-surface);border:1px dashed var(--kt-border);border-radius:14px;color:var(--kt-text-muted);">No widgets enabled. Click <b>+ Add widget</b> to pick from 8 insight cards.</div>';
+      return;
+    }
+    enabled.forEach(id => {
+      const def = WIDGET_DEFS[id];
+      if (!def) return;
+      const card = def.build(ctx) || document.createElement('div');
+      // Hover-revealed remove button
+      const card_wrap = document.createElement('div');
+      card_wrap.style.cssText = 'position:relative;';
+      card.style.height = '100%';
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '×';
+      removeBtn.title = 'Remove widget';
+      removeBtn.style.cssText = 'position:absolute;top:8px;right:8px;width:24px;height:24px;border-radius:6px;background:rgba(15,23,42,0.06);color:#475569;border:none;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 120ms ease;';
+      card_wrap.addEventListener('mouseenter', () => removeBtn.style.opacity = '1');
+      card_wrap.addEventListener('mouseleave', () => removeBtn.style.opacity = '0');
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const updated = getEnabledWidgets().filter(x => x !== id);
+        saveEnabledWidgets(updated);
+        renderWidgetsGrid(section, ctx);
+      });
+      card_wrap.appendChild(card);
+      card_wrap.appendChild(removeBtn);
+      grid.appendChild(card_wrap);
+    });
+  }
+  function openWidgetPicker(section, ctx) {
+    const enabled = getEnabledWidgets();
+    const available = Object.keys(WIDGET_DEFS).filter(id => !enabled.includes(id));
+    if (!available.length) {
+      window.KT.Shell.Modal.open({
+        title: 'All widgets are already on your dashboard',
+        body: Dom.el('p', {}, 'Hover any widget and click × to remove it first.'),
+        actions: [{ label: 'Got it', style: 'btn-primary' }],
+      });
+      return;
+    }
+    const body = document.createElement('div');
+    body.style.cssText = 'display:grid;gap:10px;';
+    available.forEach(id => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:white;border:1.5px solid #E2E8F0;border-radius:10px;cursor:pointer;text-align:left;font-family:inherit;';
+      row.innerHTML = '<div><div style="font-weight:700;font-size:14px;color:#0F172A;">' + esc(WIDGET_DEFS[id].title) + '</div><div style="font-size:12px;color:#64748B;margin-top:2px;">id: ' + id + '</div></div>' +
+        '<span style="padding:6px 12px;background:#1F6080;color:white;border-radius:6px;font-size:12px;font-weight:600;">Add</span>';
+      row.addEventListener('click', () => {
+        const updated = getEnabledWidgets();
+        if (!updated.includes(id)) updated.push(id);
+        saveEnabledWidgets(updated);
+        window.KT.Shell.Modal.close();
+        // Re-fetch context-free widgets that don't need data don't need re-fetch; but
+        // the simplest is to re-render the whole grid using the latest ctx.
+        // Re-render: we still have the most recent ctx from the closing closure.
+        // Best path: trigger a small re-render via the section's data.
+        renderWidgetsGrid(section, ctx);
+      });
+      body.appendChild(row);
+    });
+    window.KT.Shell.Modal.open({
+      title: 'Add widget',
+      body: body,
+      actions: [{ label: 'Done', style: 'btn-secondary' }],
+    });
+  }
+
+  // ── New widget builders ──
+  function widgetCentreOccupancy(data) {
+    const centres = (data && data.centres) || [];
+    if (!centres.length) return widgetCard('Centre occupancy', '', '<div style="color:#94A3B8;flex:1;display:flex;align-items:center;">No centres yet.</div>');
+    const rows = centres.slice(0, 6).map(c => {
+      const cap = c.license_capacity || 0;
+      const enrolled = c.enrolled || 0;
+      const pct = cap ? Math.round((enrolled / cap) * 100) : 0;
+      const color = pct >= 90 ? '#DC2626' : pct >= 70 ? '#F59E0B' : '#16A34A';
+      return '<div style="margin-bottom:8px;">' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:3px;">' +
+          '<span style="font-weight:600;">' + esc(c.name) + '</span><span style="color:#94A3B8;">' + enrolled + ' / ' + cap + '</span>' +
+        '</div>' +
+        '<div style="height:6px;background:#F1F5F9;border-radius:3px;overflow:hidden;">' +
+          '<div style="height:100%;width:' + Math.min(100, pct) + '%;background:' + color + ';"></div>' +
+        '</div></div>';
+    }).join('');
+    return widgetCard('Centre occupancy', 'Enrolled vs. licensed capacity', rows);
+  }
+  function widgetComplianceSnapshot(data) {
+    const centres = (data && data.centres) || [];
+    const breaches = centres.reduce((acc, c) => acc + (c.rooms_in_breach || 0), 0);
+    const lowStaff = centres.filter(c => (c.present_now || 0) > 0 && (c.staff_on_floor || 0) === 0).length;
+    const compliant = centres.length - lowStaff;
+    const status = breaches === 0 && lowStaff === 0
+      ? { color: '#16A34A', label: 'ALL CLEAR' }
+      : { color: '#DC2626', label: 'ATTENTION NEEDED' };
+    const html = '<div style="display:flex;align-items:center;gap:12px;flex:1;">' +
+      '<div style="width:64px;height:64px;border-radius:50%;background:' + status.color + ';color:white;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;flex-shrink:0;">' +
+        (breaches + lowStaff) +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:14px;font-weight:800;color:' + status.color + ';letter-spacing:0.5px;">' + status.label + '</div>' +
+        '<div style="font-size:12px;color:#64748B;margin-top:6px;">' + breaches + ' ratio breach' + (breaches === 1 ? '' : 'es') + '<br>' + lowStaff + ' centre' + (lowStaff === 1 ? '' : 's') + ' with children + no staff<br>' + compliant + ' centre' + (compliant === 1 ? '' : 's') + ' compliant</div>' +
+      '</div></div>';
+    return widgetCard('Compliance snapshot', 'CCEYA ratios in real time', html);
+  }
+  function widgetPendingTasks() {
+    // Fire-and-forget: render a card with placeholders, then asynchronously
+    // fill from /director/medications?status=pending_auth + /director/edocuments.
+    const card = widgetCard('Pending approvals', 'Items waiting on your attention',
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;align-content:start;">' +
+        '<div><div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1;" id="kt-pa-meds">--</div><div style="font-size:11px;color:#6B7280;margin-top:4px;font-weight:600;">MED AUTHORIZATIONS</div></div>' +
+        '<div><div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1;" id="kt-pa-edocs">--</div><div style="font-size:11px;color:#6B7280;margin-top:4px;font-weight:600;">UNSIGNED eDOCS</div></div>' +
+        '<div><div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1;" id="kt-pa-onb">--</div><div style="font-size:11px;color:#6B7280;margin-top:4px;font-weight:600;">USERS UN-ONBOARDED</div></div>' +
+        '<div><div style="font-size:24px;font-weight:800;color:#0F172A;line-height:1;" id="kt-pa-invs">--</div><div style="font-size:11px;color:#6B7280;margin-top:4px;font-weight:600;">UNUSED INVITES</div></div>' +
+      '</div>');
+    Api.get('/director/medications?status=pending_auth').then(r => {
+      const el = card.querySelector('#kt-pa-meds'); if (el) el.textContent = (r.medications || []).length;
+    }).catch(() => {});
+    Api.get('/director/edocuments').then(r => {
+      const docs = r.templates || [];
+      const unsigned = docs.reduce((acc, d) => acc + ((d.families_total || 0) - (d.families_signed || 0)), 0);
+      const el = card.querySelector('#kt-pa-edocs'); if (el) el.textContent = unsigned;
+    }).catch(() => {});
+    Api.get('/admin/users').then(r => {
+      const users = r.users || [];
+      const noOnb  = users.filter(u => !u.onboarded_at).length;
+      const el = card.querySelector('#kt-pa-onb'); if (el) el.textContent = noOnb;
+    }).catch(() => {});
+    Api.get('/director/invitation-codes').then(r => {
+      const codes = r.invitation_codes || [];
+      const active = codes.filter(c => c.is_usable).length;
+      const el = card.querySelector('#kt-pa-invs'); if (el) el.textContent = active;
+    }).catch(() => {});
+    return card;
+  }
+  function widgetRecentActivityMini(data) {
+    const events = (data && data.recent_activity) || [];
+    if (!events.length) return widgetCard('Activity feed', '', '<div style="color:#94A3B8;flex:1;display:flex;align-items:center;">No recent activity.</div>');
+    const rows = events.slice(0, 5).map(a => {
+      return '<div style="padding:8px 0;border-bottom:1px solid #F1F5F9;font-size:12px;">' +
+        '<div style="color:#0F172A;"><b>' + esc(a.actor) + '</b> <span style="color:#64748B;">' + esc(a.action) + '</span></div>' +
+        '<div style="color:#94A3B8;font-size:11px;margin-top:2px;">' + esc(a.display_time) + (a.centre_name ? ' · ' + esc(a.centre_name) : '') + '</div>' +
+      '</div>';
+    }).join('');
+    return widgetCard('Activity feed', 'Latest 5 events', rows + '<div style="margin-top:auto;text-align:center;padding-top:10px;"><a href="#admin-billing" style="color:#1F6080;font-size:12px;font-weight:600;">See all activity →</a></div>');
+  }
+
   // v22p3.6: insight-widget builders
   function widgetCard(title, subtitle, contentHtml) {
     const card = document.createElement('div');
@@ -237,37 +441,36 @@
       </div>
     `);
 
-    // ─── v22p3.6: Business widgets ────────────────────────────
-    // Fetch MRR + analytics in parallel and render four insight cards.
+    // ─── v22p4.1: Customizable business widgets ──────────────
+    // 8 widget options, user chooses which to display via localStorage.
+    // Defaults to the 4 original widgets. Each card has a × button to hide;
+    // a "+ Add widget" button shows a picker of disabled widgets.
     const widgetsSection = document.createElement('div');
     widgetsSection.style.marginBottom = '32px';
     widgetsSection.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;">
-        <h2 style="font-family:var(--kt-font-display);font-weight:700;font-size:20px;margin:0;">Business insights</h2>
-        <span style="font-size:12px;color:var(--kt-text-faint);">Live · last 12 months</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2 style="font-family:var(--kt-font-display);font-weight:700;font-size:20px;margin:0;">Business insights</h2>
+          <div style="font-size:12px;color:var(--kt-text-faint);margin-top:2px;">Live · pick what you want on this dashboard</div>
+        </div>
+        <button id="kt-add-widget" style="padding:8px 14px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">+ Add widget</button>
       </div>
       <div id="kt-widgets-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
-        <div style="height:160px;background:var(--kt-bg);border-radius:14px;opacity:.5;"></div>
-        <div style="height:160px;background:var(--kt-bg);border-radius:14px;opacity:.5;"></div>
-        <div style="height:160px;background:var(--kt-bg);border-radius:14px;opacity:.5;"></div>
-        <div style="height:160px;background:var(--kt-bg);border-radius:14px;opacity:.5;"></div>
+        ${'<div style="height:160px;background:var(--kt-bg);border-radius:14px;opacity:.5;"></div>'.repeat(4)}
       </div>
     `;
     wrap.appendChild(widgetsSection);
 
-    // Render widgets asynchronously so they don't block the page.
+    // Render widgets asynchronously. Pull both endpoints once and pass results
+    // to every widget builder — each ignores what it doesn't need.
     Promise.all([
       Api.get('/admin/mrr/overview').catch(() => null),
       Api.get('/admin/analytics').catch(() => null),
     ]).then(([mrr, an]) => {
-      const grid = widgetsSection.querySelector('#kt-widgets-grid');
-      if (!grid) return;
-      grid.innerHTML = '';
-      grid.appendChild(widgetMrrSparkline(mrr));
-      grid.appendChild(widgetArrAgencies(mrr));
-      grid.appendChild(widgetUsersByRole(an));
-      grid.appendChild(widgetEnrollmentDelta(an, mrr));
+      renderWidgetsGrid(widgetsSection, { mrr: mrr, analytics: an, data: data });
     });
+
+    widgetsSection.querySelector('#kt-add-widget').addEventListener('click', () => openWidgetPicker(widgetsSection, { data: data }));
 
     // ─── Centres section ──────────────────────────────────────
     const centresSection = document.createElement('div');
@@ -345,13 +548,16 @@
       });
       centresSection.appendChild(grid);
 
-      // Wire centre buttons
+      // Wire centre buttons. v22p4.1: previously this set kt_centre_id and
+      // reloaded — but agency_admin:dashboard is the SAME screen so the page
+      // visibly didn't change. Now we route to the admin Centres tab and
+      // stash an auto-open hint so the centre's edit modal opens on arrival.
       centresSection.querySelectorAll('.manage-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const id = btn.getAttribute('data-centre-id');
-          window.sessionStorage.setItem('kt_centre_id', id);
-          window.location.hash = 'dashboard';
-          window.location.reload();
+          sessionStorage.setItem('kt_centre_id', id);
+          sessionStorage.setItem('kt_admin_open_centre', id);
+          window.location.hash = 'admin-centres';
         });
       });
     }

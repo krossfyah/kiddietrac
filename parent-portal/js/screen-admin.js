@@ -160,6 +160,16 @@
     });
     table.appendChild(tbody);
     content.appendChild(table);
+
+    // v22p4.1: if the agency overview routed here with kt_admin_open_centre
+    // set, auto-open the centre's edit modal. Consume + clear the flag so
+    // it only fires once.
+    var autoOpen = sessionStorage.getItem('kt_admin_open_centre');
+    if (autoOpen) {
+      sessionStorage.removeItem('kt_admin_open_centre');
+      var target = data.centres.find(function (c) { return String(c.id) === String(autoOpen); });
+      if (target) setTimeout(function () { showCentreModal(target, content); }, 50);
+    }
   }
 
   function showCentreModal(centre, content) {

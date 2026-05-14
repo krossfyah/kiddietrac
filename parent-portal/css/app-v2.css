@@ -784,12 +784,15 @@ body.layout-sidebar .app-shell,
   text-transform: capitalize;
 }
 
-/* Main content area when sidebar is active — use the width */
+/* Main content area when sidebar is active — v22p4.1: use the FULL available
+   width minus padding. The hard 1400 px cap left a lot of empty desktop
+   real estate; cap at 1800 px so ultra-wide screens still cap readability
+   but most laptops + monitors fill the area. */
 .app-shell--sidebar .app-main,
 body.layout-sidebar .app-main {
-  max-width: 1400px;
+  max-width: 1800px;
   margin: 0;
-  padding: 28px 36px 56px;
+  padding: 28px 40px 56px;
   width: 100%;
 }
 
