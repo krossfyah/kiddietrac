@@ -316,19 +316,34 @@
       if (actions.length) {
         const footer = Dom.el('div', { class: 'modal-footer' });
         actions.forEach(a => {
+          // v22p3.1: accept either `handler` (preferred) OR `onClick` (legacy from
+          // screen-admin.js). Without this back-compat, every screen-admin action
+          // button no-ops and the modal just closes — that's why "Create centre"
+          // and "Save user" appeared to do nothing.
+          const cb = a.handler || a.onClick;
+          const isPrimary = a.style === 'btn-primary' || a.primary;
           const btn = Dom.el('button', {
-            class: 'btn ' + (a.style || 'btn-secondary'),
+            class: 'btn ' + (a.style || (isPrimary ? 'btn-primary' : 'btn-secondary')),
             onClick: async () => {
-              if (a.handler) {
+              if (cb) {
                 btn.disabled = true;
                 btn.textContent = a.busyLabel || 'Saving…';
                 try {
-                  const result = await a.handler();
-                  if (result !== false) close();
+                  const result = await cb();
+                  // If the callback returned `false` (legacy onClick callers do
+                  // this on validation error), leave the modal open and restore
+                  // the button. Otherwise close.
+                  if (result === false) {
+                    btn.disabled = false;
+                    btn.textContent = a.label;
+                  } else {
+                    close();
+                  }
                 } catch (err) {
                   btn.disabled = false;
                   btn.textContent = a.label;
-                  Dom.toast(err.message || 'Something went wrong', 'error');
+                  if (Dom.toast) Dom.toast(err.message || 'Something went wrong', 'error');
+                  else console.error(err);
                 }
               } else {
                 close();
@@ -344,6 +359,13 @@
       root.appendChild(backdrop);
 
       return { close };
+    },
+
+    // v22p3.1: facade-level close so callers can do Shell.Modal.close() without
+    // holding the handle returned by open().
+    close() {
+      const root = Dom.$('#modalRoot');
+      if (root) Dom.clear(root);
     },
 
     confirm({ title, message, confirmLabel = 'Confirm', destructive = false, onConfirm }) {
