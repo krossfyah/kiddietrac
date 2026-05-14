@@ -81,6 +81,12 @@
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
         ]},
+        { label: 'Administration', items: [
+          { hash: 'admin-users',      label: 'User management',  icon: '👥' },
+          { hash: 'admin-centres',    label: 'Centres',          icon: '🏫' },
+          { hash: 'admin-families',   label: 'Families',         icon: '👪' },
+          { hash: 'admin-billing',    label: 'Billing',          icon: '💳' },
+        ]},
       ];
     }
     if (role === 'centre_director') {

@@ -39,9 +39,14 @@
                  : 'color: var(--ink-500);'),
       }, label);
       btn.addEventListener('click', () => {
+        // v22p2.3: use admin-<tab> hash format so the v17 shell can route directly
+        // (admin/<tab> is not a registered key and was falling back to dashboard).
         state.activeTab = key;
-        window.location.hash = 'admin/' + key;
-        renderAdmin(main, ctx);
+        if (window.location.hash !== '#admin-' + key) {
+          window.location.hash = 'admin-' + key;
+        } else {
+          renderAdmin(main, ctx);
+        }
       });
       return btn;
     }
@@ -57,9 +62,11 @@
     const content = Dom.el('div', { id: 'admin-tab-content' });
     wrap.appendChild(content);
 
-    // Route to tab renderer
+    // Route to tab renderer. Honour both legacy "admin/<tab>" and v22p2.3 "admin-<tab>".
     const hash = (window.location.hash || '').replace('#', '');
-    if (hash.startsWith('admin/')) {
+    if (hash.startsWith('admin-')) {
+      state.activeTab = hash.replace('admin-', '');
+    } else if (hash.startsWith('admin/')) {
       state.activeTab = hash.replace('admin/', '');
     }
 
@@ -905,4 +912,11 @@
   window.KT.renderAdmin = renderAdmin;
 
   Shell.registerScreen('agency_admin:admin', renderAdmin);
+  // v22p2.3: register deep-link hashes per tab so nav entries can land on a specific tab.
+  ['centres', 'users', 'families', 'branding', 'billing'].forEach(function (tab) {
+    Shell.registerScreen('agency_admin:admin-' + tab, function (main, ctx) {
+      state.activeTab = tab;
+      return renderAdmin(main, ctx);
+    });
+  });
 })(window);
