@@ -74,15 +74,23 @@
 <span class="preheader">{{ $preheader ?? $title ?? 'A message from Kiddietrac' }}</span>
 <div class="wrap">
 <div class="card">
-  <div class="header">
-    <img src="https://app.kiddietrac.com/logo-wordmark@2x.png" alt="KiddieTrac" height="32" class="logo-img" style="height:32px;max-height:32px;color:#081C41;font-size:22px;font-weight:800;letter-spacing:-0.5px;">
+  <div class="header" style="text-align:center;">
+    <img src="https://app.kiddietrac.com/logo-wordmark-large.png" alt="KiddieTrac" height="56" class="logo-img" style="height:56px;max-height:56px;display:inline-block;margin:0 auto;">
   </div>
 
   {!! $slot ?? $content ?? '' !!}
 
   <div class="footer">
-    This email was sent by <strong style="color:inherit;">Kiddietrac</strong> on behalf of your childcare centre.<br>
-    Visit <a href="{{ $appUrl ?? 'https://app.kiddietrac.com' }}">app.kiddietrac.com</a> to manage your account.
+    <p style="margin:0 0 10px;color:inherit;font-size:12px;">This email was sent by <strong style="color:inherit;">Kiddietrac</strong> on behalf of your childcare centre. Visit <a href="{{ $appUrl ?? 'https://app.kiddietrac.com' }}">app.kiddietrac.com</a> to manage your account.</p>
+    <p style="margin:0 0 6px;">
+      <a href="https://kiddietrac.ca/privacy" style="margin-right:14px;">Privacy policy</a>
+      <a href="https://kiddietrac.ca/terms"   style="margin-right:14px;">Terms of service</a>
+      <a href="mailto:support@kiddietrac.com">Contact support</a>
+    </p>
+    <p style="margin:0;color:#8693A8;font-size:11px;">
+      KiddieTrac &middot; Smart Childcare Management Platform &middot; Ontario, Canada<br>
+      info@kiddietrac.com &middot; support@kiddietrac.com
+    </p>
   </div>
 </div>
 </div>

@@ -788,15 +788,24 @@ final class AdminController extends Controller
     }
 
     /**
-     * Send a transactional account email via the configured Laravel mailer.
-     * Returns true on dispatch, false if the mailer threw. Errors are logged.
+     * Send a transactional account email via the branded layout
+     * (app/Mail/AccountNotice + emails/account-notice.blade.php). Returns
+     * true on dispatch, false if the mailer threw. Errors are logged.
+     *
+     * v22p3.3: was Mail::raw() — now uses the branded HTML layout with
+     * logo, primary colour, and footer (privacy + terms + contact).
      */
     private function sendAccountEmail(string $to, string $name, string $subject, string $body): bool
     {
         try {
-            Mail::raw($body, function ($msg) use ($to, $name, $subject) {
-                $msg->to($to, $name ?: null)->subject($subject);
-            });
+            $mailable = new \App\Mail\AccountNotice(
+                recipientName: $name ?: 'there',
+                subjectLine:   $subject,
+                bodyText:      $body,
+                ctaLabel:      'Sign in to Kiddietrac',
+                ctaUrl:        config('app.url', 'https://app.kiddietrac.com'),
+            );
+            Mail::to($to, $name ?: null)->send($mailable);
             return true;
         } catch (\Throwable $e) {
             Log::warning('sendAccountEmail failed', [
