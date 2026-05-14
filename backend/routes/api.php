@@ -195,6 +195,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::post('/rooms', [RoomManagementController::class, 'store']);
             Route::patch('/rooms/{room}', [RoomManagementController::class, 'update']);
             Route::delete('/rooms/{room}', [RoomManagementController::class, 'destroy']);
+            // v22p3.4: per-room logo
+            Route::post('/rooms/{room}/logo', [RoomManagementController::class, 'uploadLogo']);
 
             Route::get('/enrollments', [ChildController::class, 'enrollmentList']);
             Route::post('/enrollments', [ChildController::class, 'enroll']);
@@ -311,6 +313,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::post('/centres', [AdminController::class, 'createCentre']);
         Route::patch('/centres/{centre}', [AdminController::class, 'updateCentre']);
         Route::delete('/centres/{centre}', [AdminController::class, 'archiveCentre']);
+        // v22p3.4: per-centre branding logo upload
+        Route::post('/centres/{centre}/logo', [AdminController::class, 'uploadCentreLogo']);
     
         Route::get('/users', [AdminController::class, 'listUsers']);
         Route::post('/users', [AdminController::class, 'createUser']);

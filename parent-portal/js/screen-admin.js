@@ -123,8 +123,30 @@
 
     const tbody = Dom.el('tbody', {});
     data.centres.forEach(c => {
-      const row = Dom.el('tr', { style: 'border-top: 1px solid var(--ink-100, #E5E7EB);' });
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' }, c.name));
+      // v22p3.4: tint the row's left edge with the centre's brand colour, render
+      // the logo (or initial) inline with the name.
+      const accent = c.brand_color || '#1F6080';
+      const row = Dom.el('tr', { style: 'border-top: 1px solid var(--ink-100, #E5E7EB);box-shadow:inset 4px 0 0 ' + accent + ';' });
+      const nameCell = Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' });
+      const nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
+      // smaller 32px logo for the row
+      var miniLogo = Dom.el('div', {
+        style: 'flex-shrink:0;width:32px;height:32px;border-radius:7px;overflow:hidden;background:' + accent + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;',
+      });
+      if (c.logo_url) {
+        var miniImg = Dom.el('img', { src: avatarSrc(c.logo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:contain;background:white;' });
+        miniImg.addEventListener('error', function () { miniImg.remove(); miniLogo.textContent = (c.name || '?').charAt(0).toUpperCase(); });
+        miniLogo.appendChild(miniImg);
+      } else {
+        miniLogo.textContent = (c.name || '?').charAt(0).toUpperCase();
+      }
+      nameWrap.appendChild(miniLogo);
+      var nameStack = Dom.el('div');
+      nameStack.appendChild(Dom.el('div', {}, c.name));
+      if (c.tagline) nameStack.appendChild(Dom.el('div', { style: 'font-size:11px;color:var(--ink-500);font-weight:500;margin-top:2px;' }, c.tagline));
+      nameWrap.appendChild(nameStack);
+      nameCell.appendChild(nameWrap);
+      row.appendChild(nameCell);
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500);' }, c.city || '—'));
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(c.status)));
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, c.enrolled_count + ' / ' + c.license_capacity));
@@ -180,6 +202,66 @@
     cwellWrap.appendChild(cwellInput);
     cwellWrap.appendChild(Dom.el('label', { style: 'font-size: 14px;' }, 'CWELCC enrolled (Ontario subsidy)'));
     form.appendChild(cwellWrap);
+
+    // v22p3.4: branding section (logo + colours + tagline). Only shown on edit
+    // since the centre needs to exist before we can attach an image.
+    if (isEdit) {
+      form.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:var(--ink-500);letter-spacing:1px;text-transform:uppercase;margin:18px 0 6px;padding-top:14px;border-top:1px solid var(--ink-100,#E5E7EB);' }, 'Branding'));
+
+      // Logo upload
+      const logoWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:12px;' });
+      let logoEl = renderCentreLogoPreview(centre);
+      const fileIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/svg+xml', style: 'display:none;' });
+      const upBtn = Dom.el('button', { type: 'button', style: 'padding:6px 12px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;' }, centre.logo_url ? 'Change logo' : 'Upload logo');
+      const upMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);margin-left:8px;' });
+      upBtn.addEventListener('click', () => fileIn.click());
+      fileIn.addEventListener('change', async () => {
+        const file = fileIn.files[0]; if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { upMsg.textContent = 'Max 2 MB'; upMsg.style.color = '#DC2626'; return; }
+        upBtn.disabled = true; upBtn.textContent = 'Uploading...';
+        try {
+          const fd = new FormData(); fd.append('logo', file);
+          const r = await Api.postForm('/admin/centres/' + centre.id + '/logo', fd);
+          centre.logo_url = r.logo_url;
+          const fresh = renderCentreLogoPreview(centre);
+          logoEl.replaceWith(fresh); logoEl = fresh;
+          upMsg.textContent = '✓ Logo updated'; upMsg.style.color = '#16A34A';
+          upBtn.textContent = 'Change logo';
+        } catch (e) {
+          upMsg.textContent = 'Failed: ' + (e.message || 'error'); upMsg.style.color = '#DC2626';
+        } finally {
+          upBtn.disabled = false;
+        }
+      });
+      logoWrap.appendChild(logoEl);
+      const upSide = Dom.el('div'); upSide.appendChild(upBtn); upSide.appendChild(fileIn); upSide.appendChild(upMsg);
+      logoWrap.appendChild(upSide);
+      form.appendChild(logoWrap);
+
+      // Brand + accent colour
+      const colourRow = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;' });
+      [
+        { k: 'brand_color',  label: 'Primary colour', val: centre.brand_color  || '#1F6080' },
+        { k: 'accent_color', label: 'Accent colour',  val: centre.accent_color || '#8EC73C' },
+      ].forEach(spec => {
+        const w = Dom.el('div');
+        w.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, spec.label));
+        const colourInput = Dom.el('input', { type: 'color', value: spec.val, style: 'width:100%;height:36px;border:1px solid var(--ink-300);border-radius:6px;cursor:pointer;padding:2px;' });
+        inputs[spec.k] = colourInput;
+        w.appendChild(colourInput);
+        colourRow.appendChild(w);
+      });
+      form.appendChild(colourRow);
+
+      // Tagline
+      const tagWrap = Dom.el('div', { style: 'margin-bottom:12px;' });
+      tagWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Tagline (shown on the centre card)'));
+      const tagIn = Dom.el('input', { type: 'text', placeholder: 'Where little curious minds grow', style: 'width:100%;padding:8px 12px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;' });
+      tagIn.value = centre.tagline || '';
+      inputs.tagline = tagIn;
+      tagWrap.appendChild(tagIn);
+      form.appendChild(tagWrap);
+    }
 
     if (isEdit) {
       const statusWrap = Dom.el('div', { style: 'margin: 12px 0;' });
@@ -444,6 +526,24 @@
     body.appendChild(avatarRow);
 
     body.appendChild(Dom.el('div', { style: 'margin-bottom: 16px;' }, 'Roles: ' + user.roles.join(', ')));
+
+    // v22p3.4: surface onboarding-wizard role_extras (RECE #, first aid expiry,
+    // specialty, etc.) inline so admins can verify educator credentials.
+    if (user.profile_extras && user.profile_extras.role_extras) {
+      const re = user.profile_extras.role_extras;
+      const keys = Object.keys(re).filter(k => re[k] !== null && re[k] !== '' && re[k] !== undefined);
+      if (keys.length) {
+        const credBox = Dom.el('div', { style: 'background:#F1F5F9;border-left:3px solid #1F6080;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px;' });
+        credBox.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#475569;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;' }, 'From onboarding'));
+        const grid = Dom.el('div', { style: 'display:grid;grid-template-columns:auto 1fr;gap:4px 14px;' });
+        keys.forEach(k => {
+          grid.appendChild(Dom.el('div', { style: 'color:#64748B;font-weight:600;' }, k.replace(/_/g, ' ') + ':'));
+          grid.appendChild(Dom.el('div', { style: 'color:#0F172A;' }, String(re[k])));
+        });
+        credBox.appendChild(grid);
+        body.appendChild(credBox);
+      }
+    }
 
     const fields = {
       first_name: user.first_name,
@@ -946,6 +1046,25 @@
   function btnSecondary() {
     return 'background: transparent; color: #DC2626; border: 1px solid #DC2626; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;';
   }
+  // v22p3.4: 64px centre logo preview (image if logo_url set, else placeholder)
+  function renderCentreLogoPreview(centre) {
+    var wrap = Dom.el('div', {
+      style: 'flex-shrink:0;width:64px;height:64px;border-radius:12px;overflow:hidden;background:' + (centre && centre.brand_color || '#E5E7EB') + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);',
+    });
+    if (centre && centre.logo_url) {
+      var img = Dom.el('img', {
+        src: avatarSrc(centre.logo_url),
+        alt: centre.name || '',
+        style: 'width:100%;height:100%;object-fit:contain;background:white;display:block;',
+      });
+      img.addEventListener('error', function () { img.remove(); wrap.textContent = (centre.name || '?').charAt(0).toUpperCase(); });
+      wrap.appendChild(img);
+    } else {
+      wrap.textContent = (centre && centre.name ? centre.name.charAt(0).toUpperCase() : '?');
+    }
+    return wrap;
+  }
+
   // v22p3.2: avatar circle (image if photo_url set, else colored initials)
   function avatarCircle(u, size) {
     size = size || 36;

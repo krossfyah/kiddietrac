@@ -98,6 +98,11 @@ final class AgencyController extends Controller
                 "rooms_in_breach" => $breach ? 1 : 0,
                 "license_capacity" => $c->license_capacity,
                 "capacity_pct" => $c->license_capacity ? round(($enrolled / max(1, $c->license_capacity)) * 100) : 0,
+                // v22p3.4: per-centre branding for the agency dashboard cards
+                "logo_url"     => $c->logo_url ?? null,
+                "brand_color"  => $c->brand_color ?? null,
+                "accent_color" => $c->accent_color ?? null,
+                "tagline"      => $c->tagline ?? null,
             ];
 
             $totalEnrolled += $enrolled;

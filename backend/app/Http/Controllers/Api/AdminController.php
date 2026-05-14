@@ -105,6 +105,11 @@ final class AdminController extends Controller
                 'email' => $c->email,
                 'status' => $c->status,
                 'cwelcc_enrolled' => (bool) $c->cwelcc_enrolled,
+                // v22p3.4: per-centre branding
+                'logo_url'     => $c->logo_url ?? null,
+                'brand_color'  => $c->brand_color ?? null,
+                'accent_color' => $c->accent_color ?? null,
+                'tagline'      => $c->tagline ?? null,
                 'enrolled_count' => $childrenCount,
                 'family_count' => $familyCount,
                 'staff_count' => $staffCount,
@@ -184,6 +189,10 @@ final class AdminController extends Controller
             'email' => ['sometimes', 'nullable', 'email', 'max:180'],
             'cwelcc_enrolled' => ['sometimes', 'boolean'],
             'status' => ['sometimes', 'in:onboarding,active,paused,closed'],
+            // v22p3.4: branding fields
+            'brand_color'  => ['sometimes', 'nullable', 'string', 'max:20'],
+            'accent_color' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'tagline'      => ['sometimes', 'nullable', 'string', 'max:200'],
         ]);
 
         $data['updated_at'] = now();
@@ -287,6 +296,14 @@ final class AdminController extends Controller
                 $roles[] = 'guardian';
             }
 
+            // v22p3.4: surface profile_extras (incl. role_extras) so the
+            // Manage modal can render educator credentials, etc.
+            $extras = null;
+            if (! empty($u->profile_extras)) {
+                $extras = is_string($u->profile_extras)
+                    ? (json_decode($u->profile_extras, true) ?: null)
+                    : $u->profile_extras;
+            }
             return [
                 'id' => $u->id,
                 'email' => $u->email,
@@ -297,6 +314,8 @@ final class AdminController extends Controller
                 'photo_url' => $u->photo_url,
                 'status' => $u->status,
                 'last_login_at' => $u->last_login_at,
+                'onboarded_at' => $u->onboarded_at ?? null,
+                'profile_extras' => $extras,
                 'roles' => $roles,
                 'created_at' => $u->created_at,
             ];
@@ -771,6 +790,40 @@ final class AdminController extends Controller
         ]);
         $this->audit($request->user()->id, 'user.onboarding_reopened', 'user', $userId);
         return response()->json(['message' => 'Onboarding reopened — the user will see the wizard on their next sign-in.']);
+    }
+
+    /**
+     * POST /admin/centres/{centre}/logo
+     * Upload a centre logo (jpg/png/webp/svg, max 2 MB). v22p3.4.
+     */
+    public function uploadCentreLogo(Request $request, int $centreId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        $centre = DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        if (!$centre) return response()->json(['message' => 'Centre not found'], 404);
+
+        $request->validate([
+            'logo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,svg', 'max:2048'],
+        ]);
+
+        $file = $request->file('logo');
+        $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $name = (string) Str::uuid() . '.' . $ext;
+        $file->storeAs('public/centre-logos', $name);
+
+        $publicPath = '/storage/centre-logos/' . $name;
+        DB::table('centres')->where('id', $centreId)->update([
+            'logo_url'   => $publicPath,
+            'updated_at' => now(),
+        ]);
+
+        $this->audit($request->user()->id, 'centre.logo_updated', 'centre', $centreId, ['path' => $publicPath]);
+
+        return response()->json([
+            'logo_url' => $publicPath,
+            'message'  => 'Centre logo updated',
+        ]);
     }
 
     /**

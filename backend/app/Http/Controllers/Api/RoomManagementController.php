@@ -52,6 +52,7 @@ final class RoomManagementController extends Controller
             'ratio_children' => ['required', 'integer', 'min:1', 'max:40'],
             'color_hex' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'description' => ['nullable', 'string', 'max:500'],
+            'tagline' => ['nullable', 'string', 'max:200'],
         ]);
 
         $id = DB::table('rooms')->insertGetId([
@@ -94,6 +95,7 @@ final class RoomManagementController extends Controller
             'ratio_children' => ['integer', 'min:1', 'max:40'],
             'color_hex' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'description' => ['nullable', 'string', 'max:500'],
+            'tagline' => ['nullable', 'string', 'max:200'],
             'active' => ['boolean'],
         ]);
 
@@ -140,5 +142,34 @@ final class RoomManagementController extends Controller
         ]);
 
         return response()->json(['message' => 'Room deactivated']);
+    }
+
+    /**
+     * POST /director/rooms/{room}/logo
+     * v22p3.4: upload a per-room logo (mascot, classroom theme image).
+     */
+    public function uploadLogo(Request $request, int $roomId): JsonResponse
+    {
+        $room = DB::table('rooms')->where('id', $roomId)->first();
+        if (!$room) return response()->json(['message' => 'Not found'], 404);
+        if (!$this->authorizeCentreAccess($request->user(), (int) $room->centre_id)) abort(403);
+
+        $request->validate([
+            'logo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,svg', 'max:2048'],
+        ]);
+        $file = $request->file('logo');
+        $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $name = (string) \Illuminate\Support\Str::uuid() . '.' . $ext;
+        $file->storeAs('public/room-logos', $name);
+        $publicPath = '/storage/room-logos/' . $name;
+        DB::table('rooms')->where('id', $roomId)->update([
+            'logo_url'   => $publicPath,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'logo_url' => $publicPath,
+            'message'  => 'Room logo updated',
+        ]);
     }
 }

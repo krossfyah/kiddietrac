@@ -14,6 +14,14 @@
     const n = (cents || 0) / 100;
     return '$' + n.toLocaleString('en-CA', { maximumFractionDigits: 0 });
   }
+  // v22p3.4: prefix relative /storage/ paths with the API host (PWA is served
+  // from app.kiddietrac.com; assets live under api.kiddietrac.com/storage/...).
+  function absUrl(p) {
+    if (!p) return '';
+    if (/^https?:\/\//i.test(p)) return p;
+    const base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    return base.replace(/\/api\/v1\/?$/, '') + p;
+  }
 
   // v22p3.6: insight-widget builders
   function widgetCard(title, subtitle, contentHtml) {
@@ -288,12 +296,23 @@
         const breaches = c.rooms_in_breach || 0;
         const cap = c.capacity_pct || 0;
         const fillClass = cap > 90 ? 'danger' : cap > 70 ? 'warn' : '';
+        // v22p3.4: render the centre logo + brand_color on the card. Falls back
+        // to the initial-in-a-tile when no logo is uploaded.
+        const brand = c.brand_color || '#1F6080';
+        const logoBlock = c.logo_url
+          ? `<img src="${esc(absUrl(c.logo_url))}" alt="${esc(c.name)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
+          : `<div style="width:44px;height:44px;border-radius:10px;background:${brand};color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">${esc((c.name || '?').charAt(0).toUpperCase())}</div>`;
         grid.insertAdjacentHTML('beforeend', `
-          <div class="centre-card-v17">
+          <div class="centre-card-v17" style="border-left:4px solid ${brand};">
             <div class="head">
-              <div>
-                <div class="name">${esc(c.name)}</div>
-                ${c.city ? `<div class="city">${esc(c.city)}</div>` : ''}
+              <div style="display:flex;align-items:center;gap:12px;">
+                ${logoBlock}
+                <div>
+                  <div class="name">${esc(c.name)}</div>
+                  ${c.tagline
+                    ? `<div style="font-size:12px;color:var(--kt-text-muted);font-weight:500;margin-top:1px;">${esc(c.tagline)}</div>`
+                    : (c.city ? `<div class="city">${esc(c.city)}</div>` : '')}
+                </div>
               </div>
               ${breaches > 0
                 ? `<span class="tag-v17 danger">${breaches} breach${breaches === 1 ? '' : 'es'}</span>`
