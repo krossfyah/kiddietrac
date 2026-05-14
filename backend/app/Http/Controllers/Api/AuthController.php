@@ -264,7 +264,85 @@ final class AuthController extends Controller
             'centre_id' => $centreId,
             'agency_id' => $agencyId,
             'centre' => $centre,
+            // v22p3.5: onboarding state surfaced so the frontend wizard knows
+            // whether to auto-trigger on this user's next dashboard load.
+            'onboarded_at' => $user->onboarded_at ?? null,
+            'profile_extras' => is_string($user->profile_extras ?? null)
+                ? json_decode($user->profile_extras, true)
+                : ($user->profile_extras ?? null),
         ];
+    }
+
+    /**
+     * PATCH /auth/me/onboarding
+     * Single-shot wizard submission: profile + address + role-specific extras.
+     * Marks the user as onboarded so the wizard does not re-trigger.
+     * v22p3.5.
+     */
+    public function updateOnboarding(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            // Standard profile fields (also editable via /auth/me)
+            'first_name'      => ['nullable', 'string', 'max:80'],
+            'last_name'       => ['nullable', 'string', 'max:80'],
+            'preferred_name'  => ['nullable', 'string', 'max:80'],
+            'phone'           => ['nullable', 'string', 'max:40'],
+            'locale'          => ['nullable', 'string', 'max:10'],
+            'timezone'        => ['nullable', 'string', 'max:60'],
+
+            // Address (lands in profile_extras to avoid altering users table)
+            'address_line1'   => ['nullable', 'string', 'max:200'],
+            'address_line2'   => ['nullable', 'string', 'max:200'],
+            'city'            => ['nullable', 'string', 'max:80'],
+            'province'        => ['nullable', 'string', 'max:40'],
+            'postal_code'     => ['nullable', 'string', 'max:12'],
+
+            // Common emergency contact
+            'emergency_contact_name'  => ['nullable', 'string', 'max:120'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:40'],
+
+            // Role-specific extras — captured as a generic object so we don't
+            // grow the users table for every new field a role needs.
+            'role_extras'     => ['nullable', 'array'],
+
+            // Mark as done (default true)
+            'complete'        => ['nullable', 'boolean'],
+        ]);
+
+        $user = $request->user();
+        $existingExtras = is_string($user->profile_extras ?? null)
+            ? (json_decode($user->profile_extras, true) ?: [])
+            : (is_array($user->profile_extras ?? null) ? $user->profile_extras : []);
+
+        $extras = array_replace($existingExtras, array_filter([
+            'address_line1'           => $data['address_line1']   ?? null,
+            'address_line2'           => $data['address_line2']   ?? null,
+            'city'                    => $data['city']            ?? null,
+            'province'                => $data['province']        ?? null,
+            'postal_code'             => $data['postal_code']     ?? null,
+            'emergency_contact_name'  => $data['emergency_contact_name']  ?? null,
+            'emergency_contact_phone' => $data['emergency_contact_phone'] ?? null,
+            'role_extras'             => $data['role_extras']     ?? null,
+        ], fn ($v) => $v !== null && $v !== ''));
+
+        $userUpdate = array_filter([
+            'first_name'     => $data['first_name']     ?? null,
+            'last_name'      => $data['last_name']      ?? null,
+            'preferred_name' => $data['preferred_name'] ?? null,
+            'phone'          => $data['phone']          ?? null,
+            'locale'         => $data['locale']         ?? null,
+            'timezone'       => $data['timezone']       ?? null,
+        ], fn ($v) => $v !== null && $v !== '');
+
+        $userUpdate['profile_extras'] = json_encode($extras);
+        $userUpdate['updated_at']     = now();
+        if (($data['complete'] ?? true) === true) {
+            $userUpdate['onboarded_at'] = now();
+        }
+
+        DB::table('users')->where('id', $user->id)->update($userUpdate);
+
+        return response()->json($this->formatUser(User::find($user->id)));
     }
 
     private function pickPrimaryRole(array $roles): ?string

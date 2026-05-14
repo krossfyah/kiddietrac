@@ -84,6 +84,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
+        // v22p3.5: onboarding wizard submission
+        Route::patch('/auth/me/onboarding', [AuthController::class, 'updateOnboarding']);
 
         // v22p3.2: self-service avatar upload (any authenticated user)
         Route::post('/auth/me/avatar', function (\Illuminate\Http\Request $request) {
@@ -320,6 +322,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::post('/users/{user}/resend-welcome', [AdminController::class, 'resendWelcome']);
         // v22p3.2: avatars
         Route::post('/users/{user}/avatar', [AdminController::class, 'uploadAvatar']);
+        // v22p3.5: reopen onboarding wizard for a user
+        Route::post('/users/{user}/reopen-onboarding', [AdminController::class, 'reopenOnboarding']);
     
         Route::get('/families', [AdminController::class, 'listFamilies']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);

@@ -752,6 +752,28 @@ final class AdminController extends Controller
     }
 
     /**
+     * POST /admin/users/{user}/reopen-onboarding
+     * Clear onboarded_at so the user is presented with the wizard again on
+     * next dashboard load. Used when the admin wants the user to top up
+     * their profile (eg, an educator's expired First Aid date).
+     * v22p3.5.
+     */
+    public function reopenOnboarding(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
+        DB::table('users')->where('id', $userId)->update([
+            'onboarded_at' => null,
+            'updated_at'   => now(),
+        ]);
+        $this->audit($request->user()->id, 'user.onboarding_reopened', 'user', $userId);
+        return response()->json(['message' => 'Onboarding reopened — the user will see the wizard on their next sign-in.']);
+    }
+
+    /**
      * POST /admin/users/{user}/avatar
      * Upload an avatar image (jpg/png/webp, max 2 MB) and persist photo_url.
      * v22p3.2.

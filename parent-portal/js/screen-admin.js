@@ -507,6 +507,26 @@
     });
     actionRow.appendChild(resetBtn);
 
+    // v22p3.5: reopen onboarding wizard
+    const reopenBtn = Dom.el('button', {
+      style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
+    }, '🪄 Reopen onboarding');
+    reopenBtn.addEventListener('click', async () => {
+      if (!confirm('Reopen the onboarding wizard for ' + user.name + '? They will be prompted to complete their profile on their next sign-in.')) return;
+      reopenBtn.disabled = true; reopenBtn.textContent = 'Reopening...';
+      try {
+        await Api.post('/admin/users/' + user.id + '/reopen-onboarding', {});
+        status.style.color = '#16A34A';
+        status.textContent = '✓ Wizard reopened. User will see it on next sign-in.';
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = 'Failed: ' + (e.message || 'error');
+      } finally {
+        reopenBtn.disabled = false; reopenBtn.textContent = '🪄 Reopen onboarding';
+      }
+    });
+    actionRow.appendChild(reopenBtn);
+
     const resendBtn = Dom.el('button', {
       style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
     }, '✉ Resend welcome');
