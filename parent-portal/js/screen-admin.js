@@ -283,7 +283,13 @@
     const tbody = Dom.el('tbody', {});
     data.users.forEach(u => {
       const row = Dom.el('tr', { style: 'border-top: 1px solid var(--ink-100, #E5E7EB);' });
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' }, u.name));
+      // v22p3.2: name cell now includes a 32px avatar circle (image or initials)
+      const nameCell = Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' });
+      const nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
+      nameWrap.appendChild(avatarCircle(u, 32));
+      nameWrap.appendChild(Dom.el('span', {}, u.name));
+      nameCell.appendChild(nameWrap);
+      row.appendChild(nameCell);
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px;' }, u.email));
 
       const rolesCell = Dom.el('td', { style: 'padding: 14px 16px;' });
@@ -401,7 +407,42 @@
   function showUserModal(user, content) {
     const body = Dom.el('div', {});
 
-    body.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500); margin-bottom: 8px;' }, user.email));
+    // v22p3.2: avatar row at the top — current avatar + "Change avatar" file picker
+    const avatarRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
+    let currentAvatar = avatarCircle(user, 64);
+    avatarRow.appendChild(currentAvatar);
+    const avatarSide = Dom.el('div', { style: 'flex:1;' });
+    avatarSide.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:15px;' }, user.name));
+    avatarSide.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-bottom:8px;' }, user.email));
+    const fileInput = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;' });
+    const changeBtn = Dom.el('button', { type: 'button', style: 'padding:6px 12px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;' }, 'Change avatar');
+    const avatarMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);margin-left:8px;' });
+    changeBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { avatarMsg.textContent = 'Max 2 MB'; avatarMsg.style.color = '#DC2626'; return; }
+      changeBtn.disabled = true; changeBtn.textContent = 'Uploading...';
+      try {
+        const fd = new FormData(); fd.append('avatar', file);
+        const r = await Api.postForm('/admin/users/' + user.id + '/avatar', fd);
+        user.photo_url = r.photo_url;
+        const fresh = avatarCircle(user, 64);
+        currentAvatar.replaceWith(fresh); currentAvatar = fresh;
+        avatarMsg.textContent = '✓ Updated'; avatarMsg.style.color = '#16A34A';
+      } catch (e) {
+        avatarMsg.textContent = 'Failed: ' + (e.message || 'error');
+        avatarMsg.style.color = '#DC2626';
+      } finally {
+        changeBtn.disabled = false; changeBtn.textContent = 'Change avatar';
+      }
+    });
+    avatarSide.appendChild(changeBtn);
+    avatarSide.appendChild(fileInput);
+    avatarSide.appendChild(avatarMsg);
+    avatarRow.appendChild(avatarSide);
+    body.appendChild(avatarRow);
+
     body.appendChild(Dom.el('div', { style: 'margin-bottom: 16px;' }, 'Roles: ' + user.roles.join(', ')));
 
     const fields = {
@@ -885,6 +926,48 @@
   function btnSecondary() {
     return 'background: transparent; color: #DC2626; border: 1px solid #DC2626; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;';
   }
+  // v22p3.2: avatar circle (image if photo_url set, else colored initials)
+  function avatarCircle(u, size) {
+    size = size || 36;
+    const wrap = Dom.el('div', {
+      style: 'flex-shrink:0;width:' + size + 'px;height:' + size + 'px;border-radius:50%;overflow:hidden;background:' + avatarColor(u) + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:' + Math.round(size * 0.4) + 'px;letter-spacing:0.3px;box-shadow:0 1px 3px rgba(0,0,0,0.1);',
+    });
+    if (u && u.photo_url) {
+      const img = Dom.el('img', {
+        src: avatarSrc(u.photo_url),
+        alt: u.name || '',
+        style: 'width:100%;height:100%;object-fit:cover;display:block;',
+      });
+      img.addEventListener('error', () => {
+        img.remove();
+        wrap.textContent = avatarInitials(u);
+      });
+      wrap.appendChild(img);
+    } else {
+      wrap.textContent = avatarInitials(u);
+    }
+    return wrap;
+  }
+  function avatarInitials(u) {
+    const n = (u && (u.name || ((u.first_name || '') + ' ' + (u.last_name || '')))) || '';
+    const parts = n.trim().split(/\s+/).slice(0, 2);
+    return parts.map(p => p.charAt(0).toUpperCase()).join('') || '?';
+  }
+  function avatarColor(u) {
+    const palette = ['#1F6080', '#8EC73C', '#F59E0B', '#DC2626', '#7C3AED', '#0891B2', '#16A34A', '#DB2777'];
+    const id = (u && u.id) || 0;
+    return palette[Math.abs(id) % palette.length];
+  }
+  function avatarSrc(photoUrl) {
+    if (!photoUrl) return '';
+    // photo_url is stored as '/storage/avatars/{uuid}.jpg' relative to api host.
+    // The app.kiddietrac.com host doesn't have /storage, so prefix with api host.
+    if (/^https?:\/\//i.test(photoUrl)) return photoUrl;
+    const base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    const apiHost = base.replace(/\/api\/v1\/?$/, '');
+    return apiHost + photoUrl;
+  }
+
   function statusBadge(status) {
     const colors = {
       active: ['#DCFCE7', '#166534'],

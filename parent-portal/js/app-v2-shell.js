@@ -448,7 +448,23 @@
     const navAvatar = Dom.$('#navAvatar');
     const navName   = Dom.$('#navName');
     const navRole   = Dom.$('#navRole');
-    if (navAvatar) navAvatar.textContent = Fmt.initials(user.name);
+    if (navAvatar) {
+      // v22p3.2: render photo if user.photo_url is set, fallback to initials.
+      if (user && user.photo_url) {
+        navAvatar.textContent = '';
+        const apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+        const apiHost = apiBase.replace(/\/api\/v1\/?$/, '');
+        const src = /^https?:\/\//i.test(user.photo_url) ? user.photo_url : (apiHost + user.photo_url);
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = user.name || '';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;';
+        img.onerror = () => { navAvatar.removeChild(img); navAvatar.textContent = Fmt.initials(user.name); };
+        navAvatar.appendChild(img);
+      } else {
+        navAvatar.textContent = Fmt.initials(user.name);
+      }
+    }
     if (navName)   navName.textContent   = user.name?.split(' ').slice(0, 2).join(' ') || 'You';
     if (navRole && role) {
       const roleLabel = {

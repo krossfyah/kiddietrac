@@ -85,6 +85,22 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
 
+        // v22p3.2: self-service avatar upload (any authenticated user)
+        Route::post('/auth/me/avatar', function (\Illuminate\Http\Request $request) {
+            $request->validate([
+                'avatar' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            ]);
+            $file = $request->file('avatar');
+            $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+            $name = (string) \Illuminate\Support\Str::uuid() . '.' . $ext;
+            $file->storeAs('public/avatars', $name);
+            $publicPath = '/storage/avatars/' . $name;
+            \Illuminate\Support\Facades\DB::table('users')
+                ->where('id', $request->user()->id)
+                ->update(['photo_url' => $publicPath, 'updated_at' => now()]);
+            return response()->json(['photo_url' => $publicPath, 'message' => 'Avatar updated']);
+        });
+
         // ─── Help (available to all authenticated users) ───
         Route::get('/help', [HelpController::class, 'index']);
         Route::get('/help/{slug}', [HelpController::class, 'show']);
@@ -302,6 +318,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::delete('/users/{user}', [AdminController::class, 'destroyUser']);
         Route::post('/users/{user}/reset-password', [AdminController::class, 'resetUserPassword']);
         Route::post('/users/{user}/resend-welcome', [AdminController::class, 'resendWelcome']);
+        // v22p3.2: avatars
+        Route::post('/users/{user}/avatar', [AdminController::class, 'uploadAvatar']);
     
         Route::get('/families', [AdminController::class, 'listFamilies']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);

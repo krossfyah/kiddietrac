@@ -294,6 +294,7 @@ final class AdminController extends Controller
                 'last_name' => $u->last_name,
                 'name' => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')),
                 'phone' => $u->phone,
+                'photo_url' => $u->photo_url,
                 'status' => $u->status,
                 'last_login_at' => $u->last_login_at,
                 'roles' => $roles,
@@ -747,6 +748,42 @@ final class AdminController extends Controller
             'message'       => $emailed ? 'Welcome email sent.' : 'Welcome email failed to send (saved temp password — share manually).',
             'temp_password' => $tempPassword,
             'email_sent'    => $emailed,
+        ]);
+    }
+
+    /**
+     * POST /admin/users/{user}/avatar
+     * Upload an avatar image (jpg/png/webp, max 2 MB) and persist photo_url.
+     * v22p3.2.
+     */
+    public function uploadAvatar(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
+
+        $request->validate([
+            'avatar' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        $file = $request->file('avatar');
+        $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $name = (string) Str::uuid() . '.' . $ext;
+        $file->storeAs('public/avatars', $name);
+
+        $publicPath = '/storage/avatars/' . $name;
+        DB::table('users')->where('id', $userId)->update([
+            'photo_url'  => $publicPath,
+            'updated_at' => now(),
+        ]);
+
+        $this->audit($request->user()->id, 'user.avatar_updated', 'user', $userId, ['path' => $publicPath]);
+
+        return response()->json([
+            'photo_url' => $publicPath,
+            'message'   => 'Avatar updated',
         ]);
     }
 
