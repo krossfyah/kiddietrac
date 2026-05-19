@@ -363,6 +363,9 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         // v22p4.6: global portal search (FQN inline, no import needed)
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);
+        // v22p11: agency_admin family CRUD
+        Route::post('/families', [AdminController::class, 'createFamily']);
+        Route::patch('/families/{family}', [AdminController::class, 'updateFamily']);
     
         Route::get('/analytics', [AdminController::class, 'analytics']);
     

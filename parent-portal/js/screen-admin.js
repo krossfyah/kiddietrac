@@ -825,9 +825,12 @@
     Dom.clear(content);
     content.appendChild(loading('Loading families...'));
 
-    let data;
+    let data, centresData;
     try {
-      data = await Api.get('/admin/families');
+      [data, centresData] = await Promise.all([
+        Api.get('/admin/families'),
+        Api.get('/admin/centres'),
+      ]);
     } catch (e) {
       Dom.clear(content);
       content.appendChild(errorBox('Could not load families: ' + (e.message || 'error')));
@@ -836,18 +839,35 @@
 
     Dom.clear(content);
 
-    content.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 14px; margin-bottom: 16px;' },
+    // v22p11: action bar with count on the left + Add button on the right
+    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 14px;' },
       data.families.length + ' famil' + (data.families.length === 1 ? 'y' : 'ies')));
+    const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add family');
+    addBtn.addEventListener('click', () => showFamilyModal(null, centresData.centres, content));
+    bar.appendChild(addBtn);
+    content.appendChild(bar);
 
     if (data.families.length === 0) {
-      content.appendChild(emptyMsg('No families enrolled yet.'));
+      content.appendChild(emptyMsg('No families enrolled yet. Click + Add family to create the first one.'));
       return;
     }
 
     const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px;' });
     data.families.forEach(f => {
-      const card = Dom.el('div', { style: 'background: white; padding: 18px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer;' });
-      card.appendChild(Dom.el('div', { style: 'font-size: 17px; font-weight: 700; margin-bottom: 4px;' }, f.family_name));
+      const card = Dom.el('div', { style: 'background: white; padding: 18px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer; position: relative;' });
+
+      // v22p11: Edit button in top-right corner, stops card-click propagation.
+      const editBtn = Dom.el('button', {
+        style: 'position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--ink-300); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--ink-700);',
+      }, 'Edit');
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showFamilyModal(f, centresData.centres, content);
+      });
+      card.appendChild(editBtn);
+
+      card.appendChild(Dom.el('div', { style: 'font-size: 17px; font-weight: 700; margin-bottom: 4px; padding-right: 60px;' }, f.family_name));
       card.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; margin-bottom: 12px;' }, f.centre_name || '—'));
 
       const stats = Dom.el('div', { style: 'display: flex; gap: 16px; font-size: 13px; color: var(--ink-700);' });
@@ -864,6 +884,135 @@
       grid.appendChild(card);
     });
     content.appendChild(grid);
+  }
+
+  // v22p11: shared add/edit modal for families. centres = array of {id, name} for the picker.
+  function showFamilyModal(family, centres, content) {
+    const isEdit = !!family;
+    const inputs = {};
+    const form = Dom.el('form', {});
+
+    function field(key, label, options) {
+      options = options || {};
+      const wrap = Dom.el('div', { style: 'margin-bottom: 14px;' });
+      wrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, label));
+      let input;
+      if (options.select) {
+        input = Dom.el('select', { style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px; background: white;' });
+        options.select.forEach(opt => {
+          const o = Dom.el('option', { value: opt.value }, opt.label);
+          if (family && String(family[key]) === String(opt.value)) o.selected = true;
+          else if (!family && opt.value === options.default) o.selected = true;
+          input.appendChild(o);
+        });
+      } else if (options.textarea) {
+        input = Dom.el('textarea', { style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px; min-height: 60px; font-family: inherit; box-sizing: border-box;' });
+        input.value = family ? (family[key] || '') : '';
+      } else {
+        input = Dom.el('input', {
+          type: options.type || 'text',
+          style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px; box-sizing: border-box;',
+        });
+        if (options.placeholder) input.placeholder = options.placeholder;
+        input.value = family ? (family[key] || '') : '';
+      }
+      inputs[key] = input;
+      wrap.appendChild(input);
+      form.appendChild(wrap);
+    }
+
+    // Required fields
+    field('centre_id', 'Centre *', {
+      select: (centres || []).map(c => ({ value: c.id, label: c.name })),
+      default: centres && centres[0] ? centres[0].id : null,
+    });
+    field('family_name', 'Family name *', { placeholder: 'e.g. The Patel family' });
+
+    // Two-column row: phone + email
+    const row1 = Dom.el('div', { style: 'display: grid; grid-template-columns: 1fr 1fr; gap: 12px;' });
+    [['primary_phone', 'Primary phone'], ['primary_email', 'Primary email', 'email']].forEach(([key, label, type]) => {
+      const cell = Dom.el('div');
+      cell.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, label));
+      const input = Dom.el('input', {
+        type: type || 'text',
+        style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px; box-sizing: border-box;',
+      });
+      input.value = family ? (family[key] || '') : '';
+      inputs[key] = input;
+      cell.appendChild(input);
+      row1.appendChild(cell);
+    });
+    form.appendChild(row1);
+    form.appendChild(Dom.el('div', { style: 'margin-bottom: 14px;' }));
+
+    field('address_line1', 'Street address');
+    const row2 = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;' });
+    [['city', 'City'], ['province', 'Province'], ['postal_code', 'Postal code']].forEach(([key, label]) => {
+      const cell = Dom.el('div');
+      cell.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, label));
+      const input = Dom.el('input', {
+        type: 'text',
+        style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px; box-sizing: border-box;',
+      });
+      input.value = family ? (family[key] || '') : '';
+      inputs[key] = input;
+      cell.appendChild(input);
+      row2.appendChild(cell);
+    });
+    form.appendChild(row2);
+    form.appendChild(Dom.el('div', { style: 'margin-bottom: 14px;' }));
+
+    field('billing_split', 'Billing split', {
+      select: [
+        { value: 'single', label: 'Single payer' },
+        { value: 'split_50_50', label: 'Split 50 / 50 between guardians' },
+        { value: 'custom', label: 'Custom split' },
+      ],
+      default: 'single',
+    });
+    field('notes', 'Internal notes', { textarea: true, placeholder: 'Anything billing or office staff should know (not visible to parents).' });
+
+    const status = Dom.el('div', { style: 'min-height: 20px; color: #DC2626; font-size: 13px; margin: 8px 0;' });
+    form.appendChild(status);
+
+    Shell.Modal.open({
+      title: isEdit ? 'Edit ' + family.family_name : 'New family',
+      body: form,
+      large: true,
+      actions: [{
+        label: isEdit ? 'Save changes' : 'Create family',
+        primary: true,
+        onClick: async () => {
+          status.style.color = '#DC2626';
+          status.textContent = '';
+          if (!inputs.family_name.value.trim()) { status.textContent = 'Family name is required.'; return; }
+          if (!inputs.centre_id.value) { status.textContent = 'Centre is required.'; return; }
+          const payload = {};
+          Object.keys(inputs).forEach(k => {
+            let v = inputs[k].value;
+            if (k === 'centre_id') v = parseInt(v, 10);
+            else if (typeof v === 'string') v = v.trim();
+            payload[k] = v === '' ? null : v;
+          });
+          status.style.color = '#1F6080';
+          status.textContent = isEdit ? 'Saving…' : 'Creating…';
+          try {
+            if (isEdit) {
+              await Api.patch('/admin/families/' + family.id, payload);
+            } else {
+              await Api.post('/admin/families', payload);
+            }
+            if (Dom.toast) Dom.toast(isEdit ? 'Family updated' : 'Family created', 'success');
+            await renderFamiliesTab(content);
+            Shell.Modal.close();
+          } catch (e) {
+            status.style.color = '#DC2626';
+            status.textContent = (e.message || 'Save failed')
+              + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '');
+          }
+        },
+      }],
+    });
   }
 
   async function showFamilyDetail(familyId) {

@@ -531,6 +531,106 @@ final class AdminController extends Controller
         ]);
     }
 
+    /**
+     * v22p11 — agency_admin can create a family at any centre in their agency.
+     */
+    public function createFamily(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return response()->json(['message' => 'No agency context'], 403);
+
+        $data = $request->validate([
+            'family_name' => ['required', 'string', 'max:120'],
+            'centre_id' => ['required', 'integer'],
+            'primary_email' => ['nullable', 'email', 'max:180'],
+            'primary_phone' => ['nullable', 'string', 'max:40'],
+            'address_line1' => ['nullable', 'string', 'max:200'],
+            'address_line2' => ['nullable', 'string', 'max:200'],
+            'city' => ['nullable', 'string', 'max:80'],
+            'province' => ['nullable', 'string', 'max:40'],
+            'postal_code' => ['nullable', 'string', 'max:12'],
+            'preferred_lang' => ['nullable', 'string', 'max:10'],
+            'billing_split' => ['nullable', 'in:single,split_50_50,custom'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        // Centre must belong to this agency.
+        $centreOwned = DB::table('centres')
+            ->where('id', $data['centre_id'])
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->exists();
+        if (! $centreOwned) {
+            return response()->json([
+                'message' => 'Centre not in your agency.',
+                'errors' => ['centre_id' => ['You do not have access to that centre.']],
+            ], 422);
+        }
+
+        $id = DB::table('families')->insertGetId(array_merge($data, [
+            'preferred_lang' => $data['preferred_lang'] ?? 'en-CA',
+            'billing_split' => $data['billing_split'] ?? 'single',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]));
+
+        $this->audit($request->user()->id, 'create_family', 'family', $id, ['centre_id' => $data['centre_id']]);
+
+        return response()->json([
+            'family' => DB::table('families')->where('id', $id)->first(),
+            'message' => 'Family created',
+        ], 201);
+    }
+
+    /**
+     * v22p11 — agency_admin can edit any family in their agency.
+     */
+    public function updateFamily(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        $centreIds = $this->getCentreIds($agencyId);
+
+        $family = DB::table('families')
+            ->whereIn('centre_id', $centreIds ?: [0])
+            ->where('id', $familyId)
+            ->whereNull('deleted_at')
+            ->first();
+        if (! $family) return response()->json(['message' => 'Not found'], 404);
+
+        $data = $request->validate([
+            'family_name' => ['sometimes', 'string', 'max:120'],
+            'centre_id' => ['sometimes', 'integer'],
+            'primary_email' => ['sometimes', 'nullable', 'email', 'max:180'],
+            'primary_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'address_line1' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'address_line2' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'city' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'province' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'postal_code' => ['sometimes', 'nullable', 'string', 'max:12'],
+            'preferred_lang' => ['sometimes', 'nullable', 'string', 'max:10'],
+            'billing_split' => ['sometimes', 'in:single,split_50_50,custom'],
+            'notes' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        // If centre is being moved, verify the new centre is in this agency too.
+        if (isset($data['centre_id']) && ! in_array((int) $data['centre_id'], $centreIds, true)) {
+            return response()->json([
+                'message' => 'Cannot move family to a centre outside your agency.',
+                'errors' => ['centre_id' => ['Centre not in your agency.']],
+            ], 422);
+        }
+
+        $data['updated_at'] = now();
+        DB::table('families')->where('id', $familyId)->update($data);
+
+        $this->audit($request->user()->id, 'update_family', 'family', $familyId, array_keys($data));
+
+        return response()->json([
+            'family' => DB::table('families')->where('id', $familyId)->first(),
+            'message' => 'Family updated',
+        ]);
+    }
+
     // ════════════════════════════════════════════════════════════════
     //   AGENCY ANALYTICS (richer than dashboard)
     // ════════════════════════════════════════════════════════════════
