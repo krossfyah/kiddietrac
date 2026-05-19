@@ -87,6 +87,11 @@
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
           { hash: 'admin-billing',    label: 'Billing',          icon: '💳' },
         ]},
+        { label: 'Settings', items: [
+          { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
+          { hash: 'sibling-discounts',  label: 'Sibling discounts',   icon: '👨‍👩‍👧' },
+          { hash: 'mfa',                label: 'Two-factor (MFA)',    icon: '🔐' },
+        ]},
       ];
     }
     if (role === 'centre_director') {
@@ -116,6 +121,9 @@
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
+        ]},
+        { label: 'Settings', items: [
+          { hash: 'mfa',              label: 'Two-factor (MFA)', icon: '🔐' },
         ]},
       ];
     }

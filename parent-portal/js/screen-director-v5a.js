@@ -446,8 +446,24 @@
       const sidebar = document.querySelector('.kt-sidebar, .sidebar, [class*="sidebar"]');
       if (!sidebar || sidebar.querySelector('.kt-v5a-actions')) return false;
 
-      const section = Dom.el('div', { class: 'kt-v5a-actions', style: 'padding: 16px; border-top: 1px solid var(--ink-200); margin-top: 16px;' });
-      section.appendChild(Dom.el('div', { style: 'font-size: 11px; font-weight: 700; color: var(--ink-500); letter-spacing: 1px; margin-bottom: 8px;' }, 'QUICK ADD'));
+      const section = Dom.el('div', { class: 'kt-v5a-actions', style: 'padding: 10px 14px; border-top: 1px solid var(--ink-200); margin-top: 12px;' });
+
+      // v22p10: collapsible header — defaults to COLLAPSED so the panel only
+      // claims ~32px of sidebar real estate. State persisted in localStorage.
+      const COLLAPSED_KEY = 'kt_quick_add_collapsed';
+      var isCollapsed = localStorage.getItem(COLLAPSED_KEY) !== '0'; // default true on first load
+
+      const header = Dom.el('button', {
+        type: 'button',
+        style: 'display:flex;align-items:center;justify-content:space-between;width:100%;padding:6px 8px;background:none;border:none;cursor:pointer;font-size:11px;font-weight:700;color:var(--ink-500);letter-spacing:1px;text-transform:uppercase;border-radius:6px;',
+      });
+      header.appendChild(Dom.el('span', {}, '⚡ Quick add'));
+      const chevron = Dom.el('span', { style: 'font-size:10px;color:var(--ink-500);transition:transform .15s;' }, '▼');
+      header.appendChild(chevron);
+      section.appendChild(header);
+
+      const buttonsWrap = Dom.el('div', { style: 'margin-top:4px;' });
+      section.appendChild(buttonsWrap);
 
       [
         ['🏫 New room', () => showAddRoomModal(() => window.location.reload())],
@@ -457,13 +473,27 @@
         ['👨‍🏫 Invite staff', () => showInviteStaffModal()],
       ].forEach(([label, handler]) => {
         const btn = Dom.el('button', {
-          style: 'display: block; width: 100%; text-align: left; background: none; border: none; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: var(--ink-700); cursor: pointer; margin-bottom: 2px;',
+          style: 'display: block; width: 100%; text-align: left; background: none; border: none; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--ink-700); cursor: pointer; margin-bottom: 1px;',
         }, label);
         btn.addEventListener('mouseenter', () => btn.style.background = 'var(--ink-50)');
         btn.addEventListener('mouseleave', () => btn.style.background = 'none');
         btn.addEventListener('click', handler);
-        section.appendChild(btn);
+        buttonsWrap.appendChild(btn);
       });
+
+      function applyCollapsed() {
+        buttonsWrap.style.display = isCollapsed ? 'none' : 'block';
+        chevron.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+        section.style.background = isCollapsed ? 'transparent' : '#FAFAFA';
+      }
+      applyCollapsed();
+      header.addEventListener('click', function () {
+        isCollapsed = !isCollapsed;
+        localStorage.setItem(COLLAPSED_KEY, isCollapsed ? '1' : '0');
+        applyCollapsed();
+      });
+      header.addEventListener('mouseenter', function () { header.style.background = 'var(--ink-50)'; });
+      header.addEventListener('mouseleave', function () { header.style.background = 'none'; });
 
       // v22p1.1: insert ABOVE the .nav-user pill so QUICK ADD stays in view, instead of
       // falling off-screen at the very bottom of a tall sidebar. Anchor on navUser's actual
