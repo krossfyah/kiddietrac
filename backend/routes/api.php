@@ -352,6 +352,13 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::get('/families', [AdminController::class, 'listFamilies']);
         // v22p9: sibling discount tiers (per-agency)
         Route::get('/sibling-discounts', [\App\Http\Controllers\Api\SiblingDiscountController::class, 'show']);
+        // v22p8 Phase A: custom roles CRUD
+        Route::get('/permission-keys', [\App\Http\Controllers\Api\RoleController::class, 'permissionCatalog']);
+        Route::get('/roles', [\App\Http\Controllers\Api\RoleController::class, 'index']);
+        Route::post('/roles', [\App\Http\Controllers\Api\RoleController::class, 'store']);
+        Route::get('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'show']);
+        Route::patch('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'update']);
+        Route::delete('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'destroy']);
         Route::patch('/sibling-discounts', [\App\Http\Controllers\Api\SiblingDiscountController::class, 'update']);
         // v22p4.6: global portal search (FQN inline, no import needed)
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
