@@ -1,0 +1,192 @@
+/* ============================================================
+   KIDDIETRAC v22p19 — Login page pop polish
+   Loaded only by index.html — overlays on top of styles.css +
+   kt-login-v22.css. Adds animated background, floating SVG
+   accents, gradient text on the welcome heading, and richer
+   button + card micro-interactions.
+   ============================================================ */
+
+@keyframes kt-login-fade {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes kt-login-float {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50%      { transform: translateY(-12px) rotate(2deg); }
+}
+@keyframes kt-login-float-slow {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-18px); }
+}
+@keyframes kt-login-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+@keyframes kt-login-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* ── Page background — soft animated gradient ────────────────── */
+body.auth-body {
+  background: linear-gradient(135deg, #F6F8FA 0%, #E8F1F5 35%, #EAF9E1 100%);
+  position: relative;
+  overflow-x: hidden;
+}
+body.auth-body::before {
+  /* Decorative radial dots scattered across the page */
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(31, 96, 128, 0.06) 6px, transparent 7px),
+    radial-gradient(circle at 78% 32%, rgba(142, 199, 60, 0.05) 8px, transparent 9px),
+    radial-gradient(circle at 22% 78%, rgba(255, 138, 101, 0.05) 7px, transparent 8px),
+    radial-gradient(circle at 88% 84%, rgba(31, 96, 128, 0.05) 5px, transparent 6px);
+  background-size: cover;
+  pointer-events: none;
+  z-index: 0;
+}
+.auth-page { position: relative; z-index: 1; }
+
+/* ── Auth card — pop in + soft glow shadow ───────────────────── */
+.auth-card {
+  animation: kt-login-fade 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  position: relative;
+}
+.auth-card::before {
+  /* Subtle gradient halo behind the form */
+  content: '';
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(circle, rgba(31, 96, 128, 0.06), transparent 60%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ── Logo gets a gentle pulse ────────────────────────────────── */
+.auth-logo img,
+.auth-card img[alt*="KiddieTrac" i] {
+  animation: kt-login-pulse 4s ease-in-out infinite;
+}
+
+/* ── Welcome heading — animated gradient text ────────────────── */
+.auth-title {
+  background: linear-gradient(90deg, #1F6080, #2C8AAC, #8EC73C, #2C8AAC, #1F6080);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: kt-login-shimmer 6s linear infinite;
+  font-weight: 800;
+}
+
+/* ── Primary button — gradient + lift + shimmer on hover ─────── */
+.btn-primary.btn-block,
+.auth-card .btn-primary {
+  background: linear-gradient(135deg, #1F6080 0%, #2C8AAC 60%, #8EC73C 200%);
+  background-size: 200% auto;
+  border: none;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              background-position 0.4s ease;
+  box-shadow: 0 4px 14px rgba(31, 96, 128, 0.25);
+}
+.btn-primary.btn-block:hover:not(:disabled),
+.auth-card .btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(31, 96, 128, 0.35);
+  background-position: right center;
+}
+.btn-primary.btn-block:active:not(:disabled),
+.auth-card .btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+/* ── Input focus — animated glow ─────────────────────────────── */
+.auth-form input[type="email"]:focus,
+.auth-form input[type="password"]:focus,
+.auth-form input[type="text"]:focus {
+  border-color: #2C8AAC;
+  box-shadow: 0 0 0 3px rgba(44, 138, 172, 0.18),
+              0 1px 2px rgba(0, 0, 0, 0.04);
+  outline: none;
+}
+
+/* ── Marketing column — richer background + floating SVGs ────── */
+.auth-marketing {
+  background: linear-gradient(135deg, #1F6080 0%, #2C8AAC 50%, #16637A 100%);
+  position: relative;
+  overflow: hidden;
+}
+.auth-marketing::before {
+  /* Decorative radial glow top-right */
+  content: '';
+  position: absolute;
+  top: -180px; right: -180px;
+  width: 480px; height: 480px;
+  background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+.auth-marketing::after {
+  /* Decorative glow bottom-left */
+  content: '';
+  position: absolute;
+  bottom: -200px; left: -120px;
+  width: 420px; height: 420px;
+  background: radial-gradient(circle, rgba(142, 199, 60, 0.18) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+/* Floating animation classes for inline SVGs in the marketing column */
+.kt-login-svg-float {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+  animation: kt-login-float 6s ease-in-out infinite;
+}
+.kt-login-svg-float-slow {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+  animation: kt-login-float-slow 9s ease-in-out infinite;
+}
+
+.marketing-content { position: relative; z-index: 2; }
+
+/* Feature rows lift slightly on hover */
+.marketing-feature {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.marketing-feature:hover {
+  transform: translateX(4px);
+}
+
+/* Trust stats — subtle pop */
+.trust-stat {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.trust-stat:hover {
+  transform: scale(1.06);
+}
+
+/* Marketing badge — soft glow on hover */
+.marketing-badge {
+  transition: background 0.25s, transform 0.25s, box-shadow 0.25s;
+}
+.marketing-badge:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Forgot-password + signup links — subtle underline lift ──── */
+.forgot-link, .auth-foot a {
+  position: relative;
+  transition: color 0.2s;
+}
+.forgot-link:hover, .auth-foot a:hover { color: #16637A; }
+
+@media (max-width: 920px) {
+  .kt-login-svg-float, .kt-login-svg-float-slow { display: none; }
+}
