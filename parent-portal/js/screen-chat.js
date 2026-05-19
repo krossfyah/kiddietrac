@@ -71,11 +71,13 @@
       const newChatBtnHtml = isProvider
         ? `<button id="kt-new-chat-btn" style="background:#1F6080;color:white;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">+ New chat</button>`
         : '';
+      // v22p16: notifications-enable button for any role that hasn't subscribed yet.
+      const notifBtnHtml = `<button id="kt-notif-btn" style="background:white;color:#1F6080;border:1px solid #1F6080;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:none;" title="Get an OS notification when a new message arrives, even when this tab is closed.">🔔 Enable notifications</button>`;
       if (convs.length === 0) {
         container.innerHTML = `
           <div class="kt-chat-header" style="padding:16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;">
             <h2 style="font-size:20px;margin:0;">💬 Messages</h2>
-            ${newChatBtnHtml}
+            <div style="display:flex;gap:8px;align-items:center;">${notifBtnHtml}${newChatBtnHtml}</div>
           </div>
           <div style="text-align:center;padding:48px 16px;color:#6B7280;">
             <div style="font-size:48px;margin-bottom:12px;">💬</div>
@@ -84,6 +86,7 @@
           </div>`;
         var b = $('#kt-new-chat-btn', container);
         if (b) b.addEventListener('click', function () { openNewChatModal(container); });
+        wireNotifBtn(container);
         return;
       }
       const myId = getUser().id;
@@ -126,9 +129,55 @@
       // v22p15.1: hook the New chat button (only present for providers)
       var newBtn = $('#kt-new-chat-btn', container);
       if (newBtn) newBtn.addEventListener('click', function () { openNewChatModal(container); });
+      wireNotifBtn(container);
     } catch (e) {
       container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load conversations: ' + escapeHtml(e.message) + '</div>';
     }
+  }
+
+  // v22p16: wire up the Enable notifications button — only shown when push is
+  // supported AND the user hasn't subscribed yet AND permission isn't denied.
+  async function wireNotifBtn(container) {
+    var btn = $('#kt-notif-btn', container);
+    if (!btn) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return; // unsupported
+    if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
+
+    try {
+      var status = (window.KT && KT.Push && KT.Push.status) ? await KT.Push.status() : 'unknown';
+      if (status === 'subscribed') return; // already on; keep hidden
+    } catch (e) { /* fall through and show */ }
+
+    btn.style.display = 'inline-flex';
+    btn.addEventListener('click', async function () {
+      btn.disabled = true;
+      btn.textContent = '⏳ Asking…';
+      try {
+        var r = (window.KT && KT.Push && KT.Push.subscribe) ? await KT.Push.subscribe(true) : { status: 'error', detail: 'Push client not loaded' };
+        if (r.status === 'subscribed') {
+          btn.textContent = '✓ Notifications on';
+          btn.style.background = '#16A34A';
+          btn.style.color = 'white';
+          btn.style.borderColor = '#16A34A';
+          setTimeout(function () { btn.style.display = 'none'; }, 2400);
+        } else if (r.status === 'denied') {
+          btn.textContent = 'Browser blocked notifications';
+          btn.style.background = '#FEE2E2';
+          btn.style.color = '#991B1B';
+        } else if (r.status === 'not_configured') {
+          btn.textContent = 'Push not set up on server';
+          btn.disabled = true;
+        } else {
+          btn.disabled = false;
+          btn.textContent = '🔔 Enable notifications';
+          alert('Could not enable notifications: ' + (r.detail || r.status));
+        }
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '🔔 Enable notifications';
+        alert('Could not enable notifications: ' + e.message);
+      }
+    });
   }
 
   // v22p15.1: provider-side "Start a new chat" modal.
