@@ -75,14 +75,27 @@
       const data = await Api.get('/director/dashboard');
       Dom.clear(content);
 
-      // Header
-      content.appendChild(Dom.el('div', { class: 'section-header' },
-        Dom.el('div', {},
-          Dom.el('h2', {}, data.centre?.name || 'Dashboard'),
-          Dom.el('p', { style: 'color: var(--kt-text-muted); margin-top: 4px;' },
-            (data.centre?.address || '') + (data.centre?.license_number ? ' · License ' + data.centre.license_number : ''))
-        )
-      ));
+      // v22p12.1: hero card with greeting + centre name + clouds illustration.
+      let firstName = '';
+      try {
+        var stored = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
+        firstName = (stored.first_name || stored.name || '').split(' ')[0];
+      } catch (e) { /* noop */ }
+      var greet = (window.KT && window.KT.greetingForNow)
+        ? window.KT.greetingForNow(firstName)
+        : 'Welcome' + (firstName ? ', ' + firstName : '');
+      var clouds = (window.KT && window.KT.Illustrations && window.KT.Illustrations.cloudsAndStars)
+        ? window.KT.Illustrations.cloudsAndStars() : '';
+      var heroSubBits = [];
+      if (data.centre?.address) heroSubBits.push(data.centre.address);
+      if (data.centre?.license_number) heroSubBits.push('License ' + data.centre.license_number);
+      var hero = Dom.el('div', { class: 'kt-hero' });
+      hero.innerHTML =
+        '<div class="kt-hero-greet">' + greet.replace(/[<>&]/g, function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}) + ' 👋</div>' +
+        '<h1>' + (data.centre?.name || 'Dashboard').replace(/[<>&]/g, function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}) + '</h1>' +
+        (heroSubBits.length ? '<div class="kt-hero-sub">' + heroSubBits.join(' · ').replace(/[<>&]/g, function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}) + '</div>' : '') +
+        '<div class="kt-hero-svg">' + clouds + '</div>';
+      content.appendChild(hero);
 
       // Stats tiles
       const stats = data.stats;

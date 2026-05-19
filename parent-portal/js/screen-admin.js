@@ -98,16 +98,26 @@
 
     Dom.clear(content);
 
+    // v22p12.1: tab hero
+    content.appendChild(tabHero(
+      '🏫 Centres',
+      data.centres.length + ' centre' + (data.centres.length === 1 ? '' : 's') + ' in your agency. Click any row to edit branding, kiosk, or status.',
+      'cloudsAndStars'
+    ));
+
     // Action bar
-    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; margin-bottom: 16px;' });
-    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 14px;' }, data.centres.length + ' centre' + (data.centres.length === 1 ? '' : 's')));
+    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'All your locations'));
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add centre');
     addBtn.addEventListener('click', () => showCentreModal(null, content));
     bar.appendChild(addBtn);
     content.appendChild(bar);
 
     if (data.centres.length === 0) {
-      content.appendChild(emptyMsg('No centres yet. Click + Add centre to create your first one.'));
+      content.appendChild(emptyMsg(
+        'Click + Add centre to create your first location. You can configure rooms, staff, and the parent-facing kiosk from there.',
+        { title: 'No centres yet', illustration: 'emptyFamilies' }
+      ));
       return;
     }
 
@@ -463,8 +473,15 @@
 
     Dom.clear(content);
 
-    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; margin-bottom: 16px;' });
-    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 14px;' }, data.users.length + ' user' + (data.users.length === 1 ? '' : 's')));
+    // v22p12.1: tab hero
+    content.appendChild(tabHero(
+      '👥 User management',
+      data.users.length + ' active user' + (data.users.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.',
+      'bear'
+    ));
+
+    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'All accounts in your agency'));
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Invite user');
     addBtn.addEventListener('click', () => showInviteModal(content));
     bar.appendChild(addBtn);
@@ -839,17 +856,26 @@
 
     Dom.clear(content);
 
+    // v22p12.1: tab hero
+    content.appendChild(tabHero(
+      '👪 Families',
+      data.families.length + ' famil' + (data.families.length === 1 ? 'y' : 'ies') + ' across your centres. Click any card to see children, guardians, and balances.',
+      'familyGroup'
+    ));
+
     // v22p11: action bar with count on the left + Add button on the right
     const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
-    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 14px;' },
-      data.families.length + ' famil' + (data.families.length === 1 ? 'y' : 'ies')));
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'All enrolled families'));
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add family');
     addBtn.addEventListener('click', () => showFamilyModal(null, centresData.centres, content));
     bar.appendChild(addBtn);
     content.appendChild(bar);
 
     if (data.families.length === 0) {
-      content.appendChild(emptyMsg('No families enrolled yet. Click + Add family to create the first one.'));
+      content.appendChild(emptyMsg(
+        'Click + Add family to register the first one. You can attach children, set the billing split, and invite guardians from the card afterward.',
+        { title: 'No families enrolled yet', illustration: 'emptyFamilies' }
+      ));
       return;
     }
 
@@ -1334,8 +1360,32 @@
   function errorBox(text) {
     return Dom.el('div', { style: 'padding: 24px; background: #FEF2F2; color: #991B1B; border-radius: 8px;' }, text);
   }
-  function emptyMsg(text) {
-    return Dom.el('div', { style: 'padding: 40px; text-align: center; color: var(--ink-500); background: white; border-radius: 12px;' }, text);
+  function emptyMsg(text, opts) {
+    // v22p12.1: optional illustration on empty states.
+    opts = opts || {};
+    var wrap = Dom.el('div', { class: 'kt-empty', style: 'background: white; border-radius: 14px;' });
+    if (opts.illustration && window.KT && window.KT.Illustrations && window.KT.Illustrations[opts.illustration]) {
+      var svgHolder = Dom.el('div', { class: 'kt-empty-svg' });
+      svgHolder.innerHTML = window.KT.Illustrations[opts.illustration]();
+      wrap.appendChild(svgHolder);
+    }
+    if (opts.title) wrap.appendChild(Dom.el('h3', {}, opts.title));
+    wrap.appendChild(Dom.el('p', {}, text));
+    return wrap;
+  }
+
+  // v22p12.1: shared tab hero — gradient strip with title + subtitle.
+  // Pass illustration: name of a KT.Illustrations function (optional).
+  function tabHero(title, subtitle, illustration) {
+    var wrap = Dom.el('div', { class: 'kt-hero', style: 'padding: 24px 28px; margin-bottom: 20px;' });
+    wrap.appendChild(Dom.el('h1', { style: 'font-size: 24px; margin: 0 0 4px;' }, title));
+    if (subtitle) wrap.appendChild(Dom.el('div', { class: 'kt-hero-sub', style: 'font-size: 14px;' }, subtitle));
+    if (illustration && window.KT && window.KT.Illustrations && window.KT.Illustrations[illustration]) {
+      var svgHolder = Dom.el('div', { class: 'kt-hero-svg', style: 'width: 180px; height: 140px; right: 16px; bottom: -4px;' });
+      svgHolder.innerHTML = window.KT.Illustrations[illustration]();
+      wrap.appendChild(svgHolder);
+    }
+    return wrap;
   }
   function btnPrimary() {
     return 'background: var(--brand-blue, #1F6080); color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px;';
