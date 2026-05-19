@@ -75,14 +75,15 @@ final class ChatController extends Controller
     {
         $user = $request->user();
         $data = $request->validate([
-            'body' => ['required', 'string', 'max:5000'],
+            'body' => ['required_without:attachment', 'nullable', 'string', 'max:5000'],
         ]);
 
         if (! $this->parentCanAccess($user->id, $conversationId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        return response()->json($this->insertMessage($conversationId, $user->id, $data['body']));
+        $attachments = $this->extractAttachment($request);
+        return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments));
     }
 
     /**
@@ -185,14 +186,15 @@ final class ChatController extends Controller
     {
         $user = $request->user();
         $data = $request->validate([
-            'body' => ['required', 'string', 'max:5000'],
+            'body' => ['required_without:attachment', 'nullable', 'string', 'max:5000'],
         ]);
 
         if (! $this->providerCanAccess($user->id, $conversationId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        return response()->json($this->insertMessage($conversationId, $user->id, $data['body']));
+        $attachments = $this->extractAttachment($request);
+        return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments));
     }
 
     /**
@@ -363,6 +365,7 @@ final class ChatController extends Controller
             return [
                 'id' => $m->id,
                 'body' => $m->body,
+                'attachments' => $m->attachments ? (json_decode($m->attachments, true) ?: []) : [],
                 'sender_id' => $m->sender_id,
                 'sender_name' => $s ? trim(($s->first_name ?? '').' '.($s->last_name ?? '')) : 'Unknown',
                 'is_me' => $m->sender_id == $userId,
@@ -391,13 +394,14 @@ final class ChatController extends Controller
         ];
     }
 
-    private function insertMessage(int $conversationId, int $senderId, string $body): array
+    private function insertMessage(int $conversationId, int $senderId, string $body, array $attachments = []): array
     {
         $now = now();
         $msgId = DB::table('messages')->insertGetId([
             'conversation_id' => $conversationId,
             'sender_id' => $senderId,
             'body' => $body,
+            'attachments' => $attachments ? json_encode($attachments) : null,
             'created_at' => $now,
         ]);
                     // v15-push:chat — fire push (silent no-op if not configured)
@@ -439,8 +443,30 @@ final class ChatController extends Controller
             'conversation_id' => $conversationId,
             'sender_id' => $senderId,
             'body' => $body,
+            'attachments' => $attachments,
             'created_at' => $now->toDateTimeString(),
         ];
+    }
+
+    /**
+     * v22p17 — extract an optional image attachment from the request.
+     * Returns array of {url, mime, name, size} or empty array.
+     * Throws ValidationException on bad input.
+     */
+    private function extractAttachment(Request $request): array
+    {
+        if (! $request->hasFile('attachment')) return [];
+        $request->validate([
+            'attachment' => ['file', 'image', 'max:5120', 'mimes:jpg,jpeg,png,webp,gif'],
+        ]);
+        $file = $request->file('attachment');
+        $path = $file->store('chat-attachments', 'public');
+        return [[
+            'url' => '/storage/' . $path,
+            'mime' => $file->getMimeType(),
+            'name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+        ]];
     }
 
     private function markRead(int $conversationId, int $userId): void

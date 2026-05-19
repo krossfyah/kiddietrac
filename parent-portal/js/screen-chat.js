@@ -301,7 +301,15 @@
         <div class="kt-thread-body" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;">
           ${messages.map(m => bubble(m)).join('')}
         </div>
-        <div class="kt-thread-compose" style="padding:12px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:8px;flex-shrink:0;">
+        <div class="kt-attach-preview" style="display:none;padding:8px 12px;border-top:1px solid #E5E7EB;background:#F9FAFB;flex-shrink:0;">
+          <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;background:white;border:1px solid #E5E7EB;border-radius:10px;font-size:12px;">
+            <span class="kt-attach-name" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            <button class="kt-attach-remove" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>
+          </div>
+        </div>
+        <div class="kt-thread-compose" style="padding:12px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:8px;flex-shrink:0;align-items:center;">
+          <input class="kt-attach-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display:none;" />
+          <button class="kt-attach-btn" type="button" title="Attach an image" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:22px;padding:4px 8px;">📎</button>
           <input class="kt-compose-input" type="text" placeholder="Type a message…" style="flex:1;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;font-family:inherit;" />
           <button class="kt-send-btn" style="background:#1F6080;color:white;border:none;padding:0 18px;border-radius:24px;font-weight:700;cursor:pointer;font-size:15px;">Send</button>
         </div>
@@ -317,19 +325,68 @@
 
     const input = $('.kt-compose-input', container);
     const send = $('.kt-send-btn', container);
+    const attachBtn = $('.kt-attach-btn', container);
+    const attachInput = $('.kt-attach-input', container);
+    const attachPreview = $('.kt-attach-preview', container);
+    const attachName = $('.kt-attach-name', container);
+    const attachRemove = $('.kt-attach-remove', container);
+    let pendingFile = null;
+
+    function setPending(file) {
+      pendingFile = file;
+      if (file) {
+        attachName.textContent = '📎 ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+        attachPreview.style.display = 'block';
+      } else {
+        attachPreview.style.display = 'none';
+        attachName.textContent = '';
+        attachInput.value = '';
+      }
+    }
+    attachBtn.addEventListener('click', () => attachInput.click());
+    attachInput.addEventListener('change', () => {
+      const f = attachInput.files && attachInput.files[0];
+      if (!f) return;
+      if (f.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB.'); attachInput.value = ''; return; }
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(f.type)) { alert('Only JPG, PNG, WEBP, or GIF.'); attachInput.value = ''; return; }
+      setPending(f);
+    });
+    attachRemove.addEventListener('click', () => setPending(null));
+
     const doSend = async () => {
       const body = input.value.trim();
-      if (!body) return;
+      if (!body && !pendingFile) return;
       send.disabled = true;
       input.disabled = true;
+      attachBtn.disabled = true;
       try {
-        const msg = await api('POST', endpointBase() + '/' + c.id + '/send', { body: body });
+        let msg;
+        if (pendingFile) {
+          // v22p17: multipart submission when an attachment is attached
+          const fd = new FormData();
+          fd.append('body', body);
+          fd.append('attachment', pendingFile);
+          const res = await fetch(apiBase() + endpointBase() + '/' + c.id + '/send', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
+            body: fd,
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || ('Upload failed (HTTP ' + res.status + ')'));
+          }
+          msg = await res.json();
+        } else {
+          msg = await api('POST', endpointBase() + '/' + c.id + '/send', { body: body });
+        }
         input.value = '';
+        setPending(null);
         // Append optimistically; re-fetch on next poll for read receipts etc
         const bodyEl = $('.kt-thread-body', container);
         bodyEl.insertAdjacentHTML('beforeend', bubble({
           id: msg.id,
           body: msg.body,
+          attachments: msg.attachments || [],
           sender_id: msg.sender_id,
           sender_name: getUser().first_name || 'You',
           is_me: true,
@@ -341,6 +398,7 @@
       } finally {
         send.disabled = false;
         input.disabled = false;
+        attachBtn.disabled = false;
         input.focus();
       }
     };
@@ -351,11 +409,21 @@
 
   function bubble(m) {
     const mine = m.is_me;
+    const attachments = Array.isArray(m.attachments) ? m.attachments : [];
+    const attachmentsHtml = attachments.map(a => {
+      if (a.mime && a.mime.indexOf('image/') === 0) {
+        // Image attachment — render inline as a click-to-zoom thumbnail
+        return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="display:block;"><img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name || 'image')}" style="max-width:100%;max-height:280px;border-radius:10px;display:block;background:rgba(0,0,0,.04);"></a></div>`;
+      }
+      // Non-image fallback (future: pdf, etc.)
+      return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:${mine ? 'white' : '#1F6080'};text-decoration:underline;font-size:13px;">📎 ${escapeHtml(a.name || 'attachment')}</a></div>`;
+    }).join('');
     return `
       <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};">
         <div style="max-width:75%;padding:10px 14px;border-radius:18px;background:${mine ? '#1F6080' : 'white'};color:${mine ? 'white' : '#111827'};box-shadow:0 1px 2px rgba(0,0,0,0.05);">
           ${!mine ? `<div style="font-size:11px;font-weight:700;color:#6B7280;margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
-          <div style="font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(m.body)}</div>
+          ${attachmentsHtml}
+          ${m.body ? `<div style="font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(m.body)}</div>` : ''}
           <div style="font-size:10px;opacity:0.7;margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}</div>
         </div>
       </div>
