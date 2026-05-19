@@ -93,6 +93,15 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         // v22p20: multi-agency admin switcher
         Route::get('/auth/agencies', [AuthController::class, 'myAgencies']);
         Route::post('/auth/active-agency', [AuthController::class, 'setActiveAgency']);
+
+        // v22p22: platform_admin cross-agency routes
+        Route::prefix('platform')->middleware('role:platform_admin')->group(function () {
+            Route::get('/overview', [\App\Http\Controllers\Api\PlatformController::class, 'overview']);
+            Route::get('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'listAgencies']);
+            Route::post('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'createAgency']);
+            Route::post('/agencies/{agency}/suspend', [\App\Http\Controllers\Api\PlatformController::class, 'suspendAgency']);
+            Route::post('/agencies/{agency}/resume', [\App\Http\Controllers\Api\PlatformController::class, 'resumeAgency']);
+        });
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);

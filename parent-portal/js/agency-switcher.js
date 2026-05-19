@@ -28,15 +28,34 @@
 
   async function fetchAgencies() {
     var t = token();
-    if (!t) return [];
+    if (!t) return { agencies: [], is_platform_admin: false };
     try {
       var res = await fetch(apiBase() + '/auth/agencies', {
         headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' },
       });
-      if (!res.ok) return [];
+      if (!res.ok) return { agencies: [], is_platform_admin: false };
       var data = await res.json();
-      return data.agencies || [];
-    } catch (e) { return []; }
+      return { agencies: data.agencies || [], is_platform_admin: !!data.is_platform_admin };
+    } catch (e) { return { agencies: [], is_platform_admin: false }; }
+  }
+
+  // v22p22: inject a "Platform" sidebar section for platform_admin.
+  function injectPlatformNav() {
+    var navLinks = document.getElementById('navLinks');
+    if (! navLinks || navLinks.querySelector('[data-platform-section]')) return;
+    var section = document.createElement('div');
+    section.className = 'sidebar-section';
+    section.setAttribute('data-platform-section', '1');
+    section.style.marginTop = '12px';
+    section.innerHTML =
+      '<div class="sidebar-section-label" style="color:#7C3AED;">🌐 Platform</div>' +
+      '<a href="#platform-overview" class="nav-link" data-hash="platform-overview">' +
+        '<span class="nav-icon">🌐</span><span class="nav-label">Platform overview</span>' +
+      '</a>' +
+      '<a href="#platform-agencies" class="nav-link" data-hash="platform-agencies">' +
+        '<span class="nav-icon">🏢</span><span class="nav-label">All agencies</span>' +
+      '</a>';
+    navLinks.insertBefore(section, navLinks.firstChild);
   }
 
   async function setActiveServer(agencyId) {
@@ -56,7 +75,7 @@
     } catch (e) { return false; }
   }
 
-  function buildWidget(agencies, activeId) {
+  function buildWidget(agencies, activeId, isPlatformAdmin) {
     var active = agencies.find(function (a) { return String(a.id) === String(activeId); }) || agencies[0];
 
     var wrap = document.createElement('div');
@@ -86,8 +105,12 @@
       'text-align:left',
       'transition:background .15s',
     ].join(';'));
+    var badge = isPlatformAdmin
+      ? '<span style="font-size:9px;background:#7C3AED;color:white;padding:1px 5px;border-radius:4px;letter-spacing:0.5px;font-weight:700;margin-right:4px;">PLAT</span>'
+      : '';
     btn.innerHTML =
       '<span style="font-size:14px;">🏢</span>' +
+      badge +
       '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(active.name) + '</span>' +
       '<span style="font-size:10px;color:#6B7280;">▾</span>';
 
@@ -167,11 +190,17 @@
     }
     if (document.getElementById('kt-agency-switcher')) return; // already mounted
 
-    var agencies = await fetchAgencies();
-    if (! agencies || agencies.length < 2) return; // only one (or zero) → nothing to switch
+    var resp = await fetchAgencies();
+    var agencies = resp.agencies || [];
+    var isPlatformAdmin = !!resp.is_platform_admin;
+    sessionStorage.setItem('kt_is_platform_admin', isPlatformAdmin ? '1' : '0');
+
+    // v22p22: inject the Platform sidebar section for platform_admin.
+    if (isPlatformAdmin) injectPlatformNav();
+
+    if (! agencies.length || (! isPlatformAdmin && agencies.length < 2)) return;
 
     var activeId = sessionStorage.getItem(STORAGE_KEY) || agencies[0].id;
-    // If the stored id isn't in the user's list anymore (revoked?), fall back.
     if (! agencies.find(function (a) { return String(a.id) === String(activeId); })) {
       activeId = agencies[0].id;
       sessionStorage.setItem(STORAGE_KEY, String(activeId));
@@ -181,7 +210,7 @@
       if (a0) sessionStorage.setItem(ACTIVE_NAME, a0.name);
     }
 
-    var widget = buildWidget(agencies, activeId);
+    var widget = buildWidget(agencies, activeId, isPlatformAdmin);
     navUser.parentNode.insertBefore(widget, navUser);
   }
 
