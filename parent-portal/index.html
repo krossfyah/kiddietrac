@@ -46,6 +46,15 @@
 
         <div id="errorMsg" class="form-error" hidden></div>
 
+        <!-- v22p7.2: MFA code row, shown only after the backend responds mfa_required -->
+        <div id="mfaRow" class="form-row" hidden>
+          <label for="mfaCode">Authenticator code
+            <span style="font-weight:400;font-size:12px;color:#6B7280;">(6 digits, or a 10-char recovery code)</span>
+          </label>
+          <input type="text" id="mfaCode" name="code" autocomplete="one-time-code"
+                 inputmode="numeric" maxlength="14" pattern="[0-9A-Z\-]+">
+        </div>
+
         <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
           Sign in
         </button>
@@ -123,6 +132,12 @@
         device_platform: 'web',
       };
 
+      // v22p7.2: include MFA code on the second-stage submit
+      const mfaInput = document.getElementById('mfaCode');
+      if (mfaInput && !document.getElementById('mfaRow').hidden && mfaInput.value.trim()) {
+        data.code = mfaInput.value.trim().toUpperCase();
+      }
+
       try {
         const res = await fetch(API_BASE + '/auth/login', {
           method: 'POST',
@@ -139,6 +154,21 @@
         }
 
         const body = await res.json();
+
+        // v22p7.2: server returned 200 + mfa_required but no token — show the
+        // code row, lock the email/password values, relabel the submit button.
+        if (body.mfa_required) {
+          document.getElementById('mfaRow').hidden = false;
+          document.getElementById('email').readOnly = true;
+          document.getElementById('password').readOnly = true;
+          errorMsg.textContent = body.message || 'Enter your 6-digit authenticator code to complete sign-in.';
+          errorMsg.style.color = '#1F6080';
+          errorMsg.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Verify code';
+          setTimeout(function () { mfaInput.focus(); }, 50);
+          return;
+        }
 
         // Store securely — use httpOnly cookies in production; for SPA we use sessionStorage + short-lived token
         sessionStorage.setItem('kt_token', body.token);
