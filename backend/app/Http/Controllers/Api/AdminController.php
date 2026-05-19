@@ -110,6 +110,9 @@ final class AdminController extends Controller
                 'brand_color'  => $c->brand_color ?? null,
                 'accent_color' => $c->accent_color ?? null,
                 'tagline'      => $c->tagline ?? null,
+                // v22p5.1: kiosk state surface in admin centres list
+                'kiosk_enabled' => (bool) ($c->kiosk_enabled ?? false),
+                'kiosk_token'   => $c->kiosk_token ?? null,
                 'enrolled_count' => $childrenCount,
                 'family_count' => $familyCount,
                 'staff_count' => $staffCount,

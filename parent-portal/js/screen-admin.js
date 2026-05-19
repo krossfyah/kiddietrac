@@ -273,6 +273,118 @@
       form.appendChild(tagWrap);
     }
 
+    // v22p5.1: kiosk mode section — visible only when editing an existing centre.
+    if (isEdit) {
+      form.appendChild(Dom.el('div', {
+        style: 'font-size:11px;font-weight:800;color:var(--ink-500);letter-spacing:1px;text-transform:uppercase;margin:18px 0 6px;padding-top:14px;border-top:1px solid var(--ink-100,#E5E7EB);',
+      }, '🛡 Kiosk mode'));
+
+      const kioskState = { enabled: !!centre.kiosk_enabled, token: centre.kiosk_token || '' };
+
+      const kioskUrlFor = function (token) {
+        return token ? (window.location.origin + '/kiosk.html?token=' + token) : '';
+      };
+
+      // Toggle row
+      const togRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:10px;' });
+      const togIn = Dom.el('input', { type: 'checkbox' });
+      togIn.checked = kioskState.enabled;
+      const togLabel = Dom.el('label', { style: 'font-size:13px;color:var(--ink-700,#374151);user-select:none;cursor:pointer;' });
+      togLabel.textContent = 'Enable kiosk for this centre';
+      const togWrap = Dom.el('span', { style: 'display:flex;align-items:center;gap:6px;cursor:pointer;' });
+      togWrap.appendChild(togIn);
+      togWrap.appendChild(togLabel);
+      togRow.appendChild(togWrap);
+      const togMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);' });
+      togRow.appendChild(togMsg);
+      form.appendChild(togRow);
+
+      // URL + actions row (rebuilt on every state change)
+      const kioskActions = Dom.el('div');
+      form.appendChild(kioskActions);
+
+      const renderKioskActions = function () {
+        Dom.clear(kioskActions);
+        if (!kioskState.enabled) {
+          kioskActions.appendChild(Dom.el('p', {
+            style: 'font-size:12px;color:var(--ink-500);margin:4px 0 12px;',
+          }, 'When enabled, parents can sign children in or out via a tablet at the centre door using their 4-6 digit PIN.'));
+          return;
+        }
+        const urlVal = kioskUrlFor(kioskState.token);
+        const urlInput = Dom.el('input', {
+          type: 'text', readonly: 'readonly', value: urlVal,
+          placeholder: 'No token — click Rotate to generate one',
+          style: 'flex:1;padding:7px 9px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;font-family:ui-monospace,monospace;background:#F9FAFB;',
+        });
+        const urlRow = Dom.el('div', { style: 'display:flex;gap:6px;margin-bottom:8px;' });
+        urlRow.appendChild(urlInput);
+        const copyBtn = Dom.el('button', {
+          type: 'button',
+          style: 'padding:7px 12px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;',
+        }, 'Copy URL');
+        copyBtn.addEventListener('click', function () {
+          if (!urlVal) return;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(urlVal).then(function () { copyBtn.textContent = '✓ Copied'; setTimeout(function () { copyBtn.textContent = 'Copy URL'; }, 1500); });
+          } else {
+            urlInput.select(); document.execCommand('copy');
+            copyBtn.textContent = '✓ Copied'; setTimeout(function () { copyBtn.textContent = 'Copy URL'; }, 1500);
+          }
+        });
+        urlRow.appendChild(copyBtn);
+        const rotBtn = Dom.el('button', {
+          type: 'button',
+          style: 'padding:7px 12px;background:#FEF3C7;color:#92400E;border:1.5px solid #FCD34D;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;',
+        }, kioskState.token ? '↻ Rotate token' : 'Generate token');
+        rotBtn.addEventListener('click', function () {
+          if (kioskState.token && !window.confirm('Rotate the kiosk token? The current URL will stop working immediately — any tablet using the old link will need the new one.')) return;
+          rotBtn.disabled = true; rotBtn.textContent = 'Rotating…';
+          Api.post('/director/centres/' + centre.id + '/kiosk-token', {}).then(function (r) {
+            kioskState.token = r.kiosk_token;
+            renderKioskActions();
+            if (Dom.toast) Dom.toast('Kiosk token rotated', 'success');
+          }).catch(function (e) {
+            rotBtn.disabled = false;
+            rotBtn.textContent = '↻ Rotate token';
+            alert('Could not rotate: ' + (e.message || 'server error'));
+          });
+        });
+        urlRow.appendChild(rotBtn);
+        kioskActions.appendChild(urlRow);
+        kioskActions.appendChild(Dom.el('p', {
+          style: 'font-size:11px;color:var(--ink-500);margin:4px 0 12px;line-height:1.4;',
+        }, 'Open this URL on the tablet at your centre entrance. Parents tap their child + enter their PIN to sign in or out. Set per-guardian PINs from the family detail (or via API).'));
+      };
+
+      togIn.addEventListener('change', function () {
+        const desired = togIn.checked;
+        togIn.disabled = true;
+        togMsg.textContent = desired ? 'enabling…' : 'disabling…';
+        Api.post('/director/centres/' + centre.id + '/kiosk-toggle', { enabled: desired }).then(function () {
+          kioskState.enabled = desired;
+          togMsg.textContent = '';
+          togIn.disabled = false;
+          // Auto-rotate to mint a token if enabling and none exists yet
+          if (desired && !kioskState.token) {
+            Api.post('/director/centres/' + centre.id + '/kiosk-token', {}).then(function (r) {
+              kioskState.token = r.kiosk_token;
+              renderKioskActions();
+            });
+          } else {
+            renderKioskActions();
+          }
+        }).catch(function (e) {
+          togIn.checked = !desired;
+          togMsg.textContent = 'failed';
+          togIn.disabled = false;
+          alert('Could not toggle kiosk: ' + (e.message || 'server error'));
+        });
+      });
+
+      renderKioskActions();
+    }
+
     if (isEdit) {
       const statusWrap = Dom.el('div', { style: 'margin: 12px 0;' });
       statusWrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, 'Status'));
