@@ -212,6 +212,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::post('/families', [FamilyController::class, 'store']);
             Route::get('/families/{family}', [FamilyController::class, 'show']);
             Route::post('/families/{family}/invite', [FamilyController::class, 'invite']);
+            // v22p5: kiosk management (director surface)
+            Route::post('/centres/{centre}/kiosk-token', [\App\Http\Controllers\Api\KioskController::class, 'rotateToken']);
+            Route::post('/centres/{centre}/kiosk-toggle', [\App\Http\Controllers\Api\KioskController::class, 'toggleEnabled']);
+            Route::post('/guardians/{guardian}/kiosk-pin', [\App\Http\Controllers\Api\KioskController::class, 'setGuardianPin']);
+
 
             Route::get('/staff', [StaffController::class, 'index']);
             Route::post('/staff/invite', [StaffController::class, 'invite']);
@@ -461,4 +466,10 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
     Route::get   ('/invoices/{id}/preview',            [InvoicePreviewController::class, 'previewExisting']);
     Route::get   ('/invoices/preview-sample',          [InvoicePreviewController::class, 'previewSample']);
 });
+});
+
+// v22p5: kiosk mode — public endpoints (no auth; centre token in URL)
+Route::prefix('kiosk')->group(function () {
+    Route::get('/{token}', [\App\Http\Controllers\Api\KioskController::class, 'lookup']);
+    Route::post('/{token}/check-event', [\App\Http\Controllers\Api\KioskController::class, 'checkEvent']);
 });

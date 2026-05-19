@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#1F6080">
+  <title>Kiddietrac Kiosk</title>
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    :root {
+      --kt-blue: #1F6080;
+      --kt-green: #8EC73C;
+      --kt-bg: #F6F8FA;
+      --kt-card: #FFFFFF;
+      --kt-text: #111827;
+      --kt-faint: #6B7280;
+      --kt-border: #E5E7EB;
+      --kt-red: #DC2626;
+      --kt-amber: #F59E0B;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; min-height: 100vh; background: var(--kt-bg); color: var(--kt-text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { padding: 16px; max-width: 1400px; margin: 0 auto; }
+    .kiosk-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; padding: 14px 18px; background: white; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    .kiosk-title { display: flex; align-items: center; gap: 14px; }
+    .kiosk-title img { width: 44px; height: 44px; border-radius: 9px; object-fit: contain; }
+    .kiosk-title-text h1 { font-size: 20px; margin: 0; font-weight: 700; }
+    .kiosk-title-text small { font-size: 12px; color: var(--kt-faint); }
+    .kiosk-clock { font-variant-numeric: tabular-nums; font-size: 18px; color: var(--kt-faint); font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+    .card { background: var(--kt-card); border-radius: 16px; padding: 18px; cursor: pointer; transition: transform .1s, box-shadow .15s; min-height: 220px; display: flex; flex-direction: column; align-items: center; text-align: center; user-select: none; border: 2px solid transparent; }
+    .card:active { transform: scale(0.97); }
+    .card.in-centre { border-color: var(--kt-green); background: #F0FDF4; }
+    .card .avatar { width: 90px; height: 90px; border-radius: 50%; background: linear-gradient(135deg, var(--kt-blue), #2c8aac); display: flex; align-items: center; justify-content: center; color: white; font-size: 38px; font-weight: 700; margin-bottom: 12px; }
+    .card .avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .card .name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .card .room { font-size: 12px; color: var(--kt-faint); }
+    .card .status { margin-top: auto; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+    .status-in { background: var(--kt-green); color: white; }
+    .status-out { background: #F3F4F6; color: var(--kt-faint); }
+    /* Modal */
+    .overlay { position: fixed; inset: 0; background: rgba(15,23,42,.6); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .modal { background: white; border-radius: 20px; padding: 28px; max-width: 480px; width: 100%; text-align: center; }
+    .modal h2 { font-size: 22px; margin: 0 0 6px; }
+    .modal p { color: var(--kt-faint); margin: 0 0 20px; font-size: 14px; }
+    .pin-display { display: flex; justify-content: center; gap: 10px; margin: 12px 0 16px; }
+    .pin-dot { width: 18px; height: 18px; border-radius: 50%; background: #E5E7EB; }
+    .pin-dot.filled { background: var(--kt-blue); }
+    .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 320px; margin: 0 auto 16px; }
+    .key { background: #F9FAFB; border: none; border-radius: 14px; padding: 22px; font-size: 24px; font-weight: 700; cursor: pointer; transition: background .1s; user-select: none; }
+    .key:active { background: #E5E7EB; }
+    .key.action { background: var(--kt-blue); color: white; }
+    .key.action:active { background: #154663; }
+    .key.del { background: #FEE2E2; color: var(--kt-red); }
+    .modal-action { display: flex; gap: 10px; margin-top: 4px; }
+    .btn { flex: 1; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .btn-primary { background: var(--kt-blue); color: white; }
+    .btn-success { background: var(--kt-green); color: white; }
+    .btn-danger { background: var(--kt-red); color: white; }
+    .btn-cancel { background: #F3F4F6; color: var(--kt-text); }
+    .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: var(--kt-text); color: white; padding: 14px 22px; border-radius: 999px; font-weight: 600; z-index: 10000; box-shadow: 0 8px 22px rgba(0,0,0,.2); }
+    .toast.success { background: var(--kt-green); }
+    .toast.error { background: var(--kt-red); }
+    .splash { padding: 60px 20px; text-align: center; color: var(--kt-faint); }
+    .splash h1 { font-size: 20px; color: var(--kt-text); }
+    @media (max-width: 600px) { .grid { grid-template-columns: repeat(2, 1fr); } .card { min-height: 180px; padding: 14px; } .card .avatar { width: 64px; height: 64px; font-size: 26px; } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="splash"><h1>Loading kiosk…</h1></div>
+  </div>
+
+  <script>
+    (function () {
+      var qs = new URLSearchParams(window.location.search);
+      var TOKEN = qs.get('token') || '';
+      var app = document.getElementById('app');
+      var centre = null;
+      var children = [];
+
+      function esc(s) {
+        return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function toast(msg, kind) {
+        var t = document.createElement('div');
+        t.className = 'toast ' + (kind || '');
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(function () { t.remove(); }, 2600);
+      }
+
+      function fetchRoster() {
+        if (!TOKEN) {
+          app.innerHTML = '<div class="splash"><h1>Missing kiosk token</h1><p>This kiosk URL is invalid. Ask your director for the link.</p></div>';
+          return;
+        }
+        fetch('/api/kiosk/' + encodeURIComponent(TOKEN))
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function (data) { centre = data.centre; children = data.children || []; render(); })
+          .catch(function (e) {
+            app.innerHTML = '<div class="splash"><h1>Kiosk unavailable</h1><p>' + esc(e.message) + '. The director may need to enable the kiosk or rotate the token.</p></div>';
+          });
+      }
+
+      function render() {
+        var html = '';
+        html += '<div class="kiosk-header">';
+        html += '  <div class="kiosk-title">';
+        if (centre.logo_url) html += '    <img src="' + esc(centre.logo_url) + '" alt="">';
+        html += '    <div class="kiosk-title-text"><h1>' + esc(centre.name) + '</h1><small>Tap your child to sign in or out</small></div>';
+        html += '  </div>';
+        html += '  <div class="kiosk-clock" id="clock"></div>';
+        html += '</div>';
+        if (children.length === 0) {
+          html += '<div class="splash"><h1>No enrolled children yet</h1></div>';
+        } else {
+          html += '<div class="grid">';
+          children.forEach(function (c) {
+            html += '<div class="card ' + (c.is_at_centre ? 'in-centre' : '') + '" data-child-id="' + c.id + '">';
+            html += '  <div class="avatar"' + (c.room_color ? ' style="background:linear-gradient(135deg, ' + esc(c.room_color) + ', #1F6080);"' : '') + '>';
+            if (c.photo_url) html += '<img src="' + esc(c.photo_url) + '" alt="">';
+            else html += esc((c.display_name || '?').charAt(0).toUpperCase());
+            html += '  </div>';
+            html += '  <div class="name">' + esc(c.display_name) + '</div>';
+            html += '  <div class="room">' + esc(c.room_name || '') + '</div>';
+            html += '  <div class="status ' + (c.is_at_centre ? 'status-in' : 'status-out') + '">' + (c.is_at_centre ? 'AT CENTRE' : 'NOT IN') + '</div>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        app.innerHTML = html;
+        startClock();
+        attachCardHandlers();
+      }
+
+      function startClock() {
+        var el = document.getElementById('clock');
+        function tick() {
+          if (!el) return;
+          var d = new Date();
+          el.textContent = d.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
+        }
+        tick();
+        setInterval(tick, 30000);
+      }
+
+      function attachCardHandlers() {
+        Array.prototype.forEach.call(document.querySelectorAll('.card'), function (card) {
+          card.addEventListener('click', function () {
+            var id = parseInt(card.getAttribute('data-child-id'), 10);
+            var c = children.find(function (x) { return x.id === id; });
+            if (c) openPinModal(c);
+          });
+        });
+      }
+
+      function openPinModal(child) {
+        var pinChars = [];
+        var eventType = child.is_at_centre ? 'check_out' : 'check_in';
+        var overlay = document.createElement('div');
+        overlay.className = 'overlay';
+        var modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML =
+          '<h2>' + esc(child.display_name) + '</h2>' +
+          '<p>Enter your 4-digit PIN to ' + (eventType === 'check_in' ? '<strong>sign in</strong>' : '<strong>sign out</strong>') + '</p>' +
+          '<div class="pin-display" id="pinDisplay">' +
+            '<div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>' +
+          '</div>' +
+          '<div class="keypad" id="keypad">' +
+            ['1','2','3','4','5','6','7','8','9','del','0','ok'].map(function (k) {
+              if (k === 'del') return '<button class="key del" data-key="del">⌫</button>';
+              if (k === 'ok')  return '<button class="key action" data-key="ok">✓</button>';
+              return '<button class="key" data-key="' + k + '">' + k + '</button>';
+            }).join('') +
+          '</div>' +
+          '<div class="modal-action"><button class="btn btn-cancel" id="cancelBtn">Cancel</button></div>';
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        function refreshDots() {
+          var dots = document.querySelectorAll('#pinDisplay .pin-dot');
+          dots.forEach(function (d, i) {
+            d.classList.toggle('filled', i < pinChars.length);
+          });
+        }
+
+        function submit() {
+          if (pinChars.length < 4) return;
+          var pin = pinChars.join('');
+          overlay.style.pointerEvents = 'none';
+          fetch('/api/kiosk/' + encodeURIComponent(TOKEN) + '/check-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ child_id: child.id, pin: pin, event_type: eventType }),
+          }).then(function (r) {
+            return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+          }).then(function (out) {
+            overlay.remove();
+            if (out.ok) {
+              toast('✓ ' + child.display_name + ' ' + (eventType === 'check_in' ? 'signed in' : 'signed out'), 'success');
+              fetchRoster();
+            } else {
+              toast(out.j.message || 'Failed', 'error');
+            }
+          }).catch(function (e) {
+            overlay.style.pointerEvents = 'auto';
+            toast('Network error', 'error');
+          });
+        }
+
+        document.getElementById('keypad').addEventListener('click', function (e) {
+          var k = e.target.getAttribute('data-key');
+          if (!k) return;
+          if (k === 'del') { pinChars.pop(); refreshDots(); return; }
+          if (k === 'ok')  { submit(); return; }
+          if (pinChars.length < 4) { pinChars.push(k); refreshDots(); if (pinChars.length === 4) setTimeout(submit, 200); }
+        });
+        document.getElementById('cancelBtn').addEventListener('click', function () { overlay.remove(); });
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+      }
+
+      fetchRoster();
+      // Auto-refresh the roster every 30s so the at-centre badges stay live.
+      setInterval(fetchRoster, 30000);
+    })();
+  </script>
+</body>
+</html>
