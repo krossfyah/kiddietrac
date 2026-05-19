@@ -894,9 +894,35 @@
 
       body.appendChild(Dom.el('h4', { style: 'font-size: 14px; font-weight: 700; margin: 16px 0 8px; letter-spacing: 0.5px; color: var(--ink-700);' }, 'GUARDIANS'));
       data.guardians.forEach(g => {
-        const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px;' });
-        row.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, g.first_name + ' ' + g.last_name + (g.is_primary ? ' (primary)' : '')));
-        row.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, g.email + ' · ' + g.relationship));
+        const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;' });
+        const info = Dom.el('div', { style: 'flex: 1; min-width: 0;' });
+        info.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, g.first_name + ' ' + g.last_name + (g.is_primary ? ' (primary)' : '')));
+        info.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, g.email + ' · ' + g.relationship));
+        row.appendChild(info);
+        // v22p5.2: per-guardian kiosk PIN setter (gates parent sign-in on the kiosk)
+        if (g.can_pickup && g.id) {
+          const pinBtn = Dom.el('button', {
+            type: 'button',
+            style: 'padding: 6px 10px; background: white; color: #1F6080; border: 1px solid #1F6080; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;',
+          }, '🔐 Set kiosk PIN');
+          pinBtn.addEventListener('click', function () {
+            const pin = window.prompt('Enter a 4-6 digit kiosk PIN for ' + g.first_name + ' ' + g.last_name + '.\n\nThis PIN lets them sign children in/out at the centre kiosk. Share it with the guardian out-of-band (e.g. text, in person).');
+            if (pin == null) return; // cancelled
+            if (!/^\d{4,6}$/.test(pin)) { alert('PIN must be 4–6 digits.'); return; }
+            pinBtn.disabled = true;
+            pinBtn.textContent = 'Saving…';
+            Api.post('/director/guardians/' + g.id + '/kiosk-pin', { pin: pin }).then(function () {
+              pinBtn.textContent = '✓ PIN set';
+              setTimeout(function () { pinBtn.disabled = false; pinBtn.textContent = '🔐 Update PIN'; }, 1500);
+              if (Dom.toast) Dom.toast('Kiosk PIN updated for ' + g.first_name, 'success');
+            }).catch(function (e) {
+              pinBtn.disabled = false;
+              pinBtn.textContent = '🔐 Set kiosk PIN';
+              alert('Could not save PIN: ' + (e.message || 'server error'));
+            });
+          });
+          row.appendChild(pinBtn);
+        }
         body.appendChild(row);
       });
 
