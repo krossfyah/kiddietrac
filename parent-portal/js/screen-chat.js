@@ -135,46 +135,87 @@
     }
   }
 
-  // v22p16: wire up the Enable notifications button — only shown when push is
-  // supported AND the user hasn't subscribed yet AND permission isn't denied.
+  // v22p16/17.1: notification status indicator — ALWAYS visible, showing the
+  // current state so the user is never in the dark. Three states:
+  //   unsubscribed → 🔔 "Enable notifications" (clickable)
+  //   subscribed   → ✓ "Notifications on" (clickable to disable)
+  //   denied       → 🚫 "Notifications blocked" (read-only with hint)
+  //   unsupported  → hidden entirely (browser too old)
   async function wireNotifBtn(container) {
     var btn = $('#kt-notif-btn', container);
     if (!btn) return;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return; // unsupported
-    if (typeof Notification === 'undefined' || Notification.permission === 'denied') return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') {
+      return; // browser doesn't support push at all — hide silently
+    }
 
+    // Determine current state
+    var status = 'unknown';
     try {
-      var status = (window.KT && KT.Push && KT.Push.status) ? await KT.Push.status() : 'unknown';
-      if (status === 'subscribed') return; // already on; keep hidden
-    } catch (e) { /* fall through and show */ }
+      status = (window.KT && KT.Push && KT.Push.status) ? await KT.Push.status() : 'unknown';
+    } catch (e) { status = 'unknown'; }
 
-    btn.style.display = 'inline-flex';
+    var apply = function (state) {
+      btn.style.display = 'inline-flex';
+      btn.disabled = false;
+      if (state === 'subscribed') {
+        btn.textContent = '✓ Notifications on';
+        btn.title = 'OS notifications are enabled. Click to disable.';
+        btn.style.background = '#ECFDF5';
+        btn.style.color = '#065F46';
+        btn.style.borderColor = '#16A34A';
+      } else if (state === 'denied') {
+        btn.textContent = '🚫 Notifications blocked';
+        btn.title = 'Your browser blocks notifications for this site. Click the lock icon in the address bar to allow them.';
+        btn.style.background = '#FEF2F2';
+        btn.style.color = '#991B1B';
+        btn.style.borderColor = '#FCA5A5';
+        btn.disabled = true;
+      } else if (state === 'not_configured') {
+        btn.textContent = 'Push not configured';
+        btn.style.background = '#F3F4F6';
+        btn.style.color = '#6B7280';
+        btn.disabled = true;
+      } else {
+        btn.textContent = '🔔 Enable notifications';
+        btn.title = 'Get an OS notification when a new message arrives, even when this tab is closed.';
+        btn.style.background = 'white';
+        btn.style.color = '#1F6080';
+        btn.style.borderColor = '#1F6080';
+      }
+    };
+
+    if (Notification.permission === 'denied') {
+      apply('denied');
+      return;
+    }
+    apply(status);
+
     btn.addEventListener('click', async function () {
-      btn.disabled = true;
-      btn.textContent = '⏳ Asking…';
+      if (btn.disabled) return;
+      var current = btn.textContent;
       try {
-        var r = (window.KT && KT.Push && KT.Push.subscribe) ? await KT.Push.subscribe(true) : { status: 'error', detail: 'Push client not loaded' };
-        if (r.status === 'subscribed') {
-          btn.textContent = '✓ Notifications on';
-          btn.style.background = '#16A34A';
-          btn.style.color = 'white';
-          btn.style.borderColor = '#16A34A';
-          setTimeout(function () { btn.style.display = 'none'; }, 2400);
-        } else if (r.status === 'denied') {
-          btn.textContent = 'Browser blocked notifications';
-          btn.style.background = '#FEE2E2';
-          btn.style.color = '#991B1B';
-        } else if (r.status === 'not_configured') {
-          btn.textContent = 'Push not set up on server';
-          btn.disabled = true;
-        } else {
-          btn.disabled = false;
-          btn.textContent = '🔔 Enable notifications';
+        // If already subscribed, treat click as Disable
+        var s = await KT.Push.status();
+        if (s === 'subscribed') {
+          if (!window.confirm('Turn off browser notifications? You will only see new messages when the dashboard tab is open.')) return;
+          btn.disabled = true; btn.textContent = '⏳ …';
+          await KT.Push.unsubscribe();
+          apply('unsubscribed');
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Notifications turned off', 'success');
+          return;
+        }
+        // Otherwise subscribe
+        btn.disabled = true; btn.textContent = '⏳ Asking…';
+        var r = await KT.Push.subscribe(true);
+        if (r.status === 'subscribed')        apply('subscribed');
+        else if (r.status === 'denied')       apply('denied');
+        else if (r.status === 'not_configured') apply('not_configured');
+        else {
+          btn.disabled = false; btn.textContent = current;
           alert('Could not enable notifications: ' + (r.detail || r.status));
         }
       } catch (e) {
-        btn.disabled = false;
-        btn.textContent = '🔔 Enable notifications';
+        btn.disabled = false; btn.textContent = current;
         alert('Could not enable notifications: ' + e.message);
       }
     });
