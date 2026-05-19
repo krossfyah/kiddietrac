@@ -85,6 +85,7 @@
           { hash: 'admin-users',      label: 'User management',  icon: '👥' },
           { hash: 'admin-centres',    label: 'Centres',          icon: '🏫' },
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
+          { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
           { hash: 'admin-billing',    label: 'Billing',          icon: '💳' },
         ]},
         { label: 'Settings', items: [
