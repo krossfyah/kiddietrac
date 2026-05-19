@@ -110,6 +110,45 @@ final class AuthController extends Controller
         return response()->json($this->formatUser($request->user()));
     }
 
+    /**
+     * v22p20 — list every agency this user has agency_admin access to.
+     * Used by the frontend to populate the agency switcher.
+     */
+    public function myAgencies(Request $request): JsonResponse
+    {
+        $rows = DB::table('role_assignments')
+            ->join('agencies', 'agencies.id', '=', 'role_assignments.agency_id')
+            ->where('role_assignments.user_id', $request->user()->id)
+            ->where('role_assignments.role', 'agency_admin')
+            ->where('role_assignments.active', true)
+            ->whereNull('agencies.deleted_at')
+            ->select('agencies.id', 'agencies.name', 'agencies.slug', 'agencies.logo_url')
+            ->distinct()
+            ->orderBy('agencies.name')
+            ->get();
+        return response()->json(['agencies' => $rows]);
+    }
+
+    /**
+     * v22p20 — validate that the caller has access to the target agency.
+     * Frontend stores it in sessionStorage and sends as X-Active-Agency-Id.
+     */
+    public function setActiveAgency(Request $request): JsonResponse
+    {
+        $data = $request->validate(['agency_id' => ['required', 'integer']]);
+        $ok = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'agency_admin')
+            ->where('agency_id', $data['agency_id'])
+            ->where('active', true)
+            ->exists();
+        if (! $ok) {
+            return response()->json(['message' => 'You do not have access to that agency.'], 403);
+        }
+        $agency = DB::table('agencies')->where('id', $data['agency_id'])->first(['id', 'name', 'slug']);
+        return response()->json(['active' => $agency]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()?->delete();

@@ -150,6 +150,16 @@ final class SearchController extends Controller
 
     private function resolveAgencyId(Request $request): ?int
     {
+        // v22p20: honor X-Active-Agency-Id header for multi-agency admins.
+        $activeId = (int) $request->header('X-Active-Agency-Id');
+        if ($activeId && DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)
+                ->where('role', 'agency_admin')
+                ->where('agency_id', $activeId)
+                ->where('active', true)
+                ->exists()) {
+            return $activeId;
+        }
         return DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('role', 'agency_admin')

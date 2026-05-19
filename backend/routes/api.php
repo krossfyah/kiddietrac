@@ -90,6 +90,9 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
 
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        // v22p20: multi-agency admin switcher
+        Route::get('/auth/agencies', [AuthController::class, 'myAgencies']);
+        Route::post('/auth/active-agency', [AuthController::class, 'setActiveAgency']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);

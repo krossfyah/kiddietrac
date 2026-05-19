@@ -26,6 +26,10 @@
       const headers = { 'Accept': 'application/json' };
       const token = getToken();
       if (token) headers['Authorization'] = 'Bearer ' + token;
+      // v22p20: scope every request to the active agency when the user has
+      // multi-agency admin access and has flipped the sidebar switcher.
+      const activeAgencyId = sessionStorage.getItem('kt_active_agency_id');
+      if (activeAgencyId) headers['X-Active-Agency-Id'] = activeAgencyId;
 
       const init = { method, headers };
       if (body !== undefined && body !== null) {
