@@ -404,34 +404,60 @@ final class ChatController extends Controller
             'attachments' => $attachments ? json_encode($attachments) : null,
             'created_at' => $now,
         ]);
-                    // v15-push:chat — fire push (silent no-op if not configured)
-                    try {
-                        $pushRecipient = null;
-                    if (isset($thread) && isset($thread->id)) {
-                        $threadId = $thread->id;
-                    } elseif (isset($threadId)) {
-                        // already set
-                    } else {
-                        $threadId = null;
-                    }
-                    if ($threadId) {
-                        $pushRecipients = DB::table('chat_thread_participants')
-                            ->where('thread_id', $threadId)
-                            ->where('user_id', '!=', $request->user()->id)
-                            ->pluck('user_id')->all();
-                    } else {
-                        $pushRecipients = [];
-                    }
-                        if (!empty($pushRecipients)) {
-                            app(\App\Services\WebPushService::class)->sendToUsers($pushRecipients, [
-                                'title' => '💬 ' . "Someone",
-                                'body'  => mb_substr((string) $body, 0, 120),
-                                'url'   => '/dashboard.html#messages',
-                                'tag'   => 'chat-' . (isset($threadId) ? $threadId : ''),
-                            ]);
-                        }
-                    } catch (\Throwable $e) {
-                        \Illuminate\Support\Facades\Log::warning('Push from chat failed', ['error' => $e->getMessage()]);
+        // v22p17.2: rewritten push for the conversations data model.
+        // The previous block queried a chat_thread_participants table that
+        // does not exist in this schema, so chat messages were never actually
+        // triggering OS notifications even when the sender's pipeline worked.
+        // Recipients = every user who can see this conversation EXCEPT the sender:
+        //   - All guardians on the family
+        //   - All active staff (centre_director / educator) at the centre
+        //   - All agency_admins of the centre's agency
+        try {
+            $conv = DB::table('conversations')->where('id', $conversationId)->first();
+            if ($conv) {
+                $centreId = (int) $conv->centre_id;
+                $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+
+                $guardianIds = DB::table('guardians')
+                    ->where('family_id', $conv->family_id)
+                    ->pluck('user_id')
+                    ->all();
+
+                $staffIds = DB::table('role_assignments')
+                    ->where('active', true)
+                    ->where(function ($q) use ($centreId, $agencyId) {
+                        $q->where('centre_id', $centreId)
+                          ->orWhere(function ($w) use ($agencyId) {
+                              $w->where('role', 'agency_admin')
+                                ->where('agency_id', $agencyId);
+                          });
+                    })
+                    ->pluck('user_id')
+                    ->all();
+
+                $recipients = array_values(array_diff(
+                    array_unique(array_merge($guardianIds, $staffIds)),
+                    [$senderId]
+                ));
+
+                if (! empty($recipients)) {
+                    $sender = DB::table('users')->where('id', $senderId)->first(['first_name', 'last_name']);
+                    $senderName = $sender ? trim(($sender->first_name ?? '').' '.($sender->last_name ?? '')) : 'Someone';
+                    $preview = $body !== ''
+                        ? mb_substr($body, 0, 120)
+                        : (! empty($attachments) ? '📎 sent an image' : 'New message');
+
+                    app(\App\Services\WebPushService::class)->sendToUsers($recipients, [
+                        'title' => '💬 ' . $senderName,
+                        'body'  => $preview,
+                        'icon'  => '/icon-192.png',
+                        'url'   => '/dashboard.html#chat',
+                        'tag'   => 'chat-' . $conversationId,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Push from chat failed', ['error' => $e->getMessage()]);
                     }
 
         DB::table('conversations')->where('id', $conversationId)->update([
