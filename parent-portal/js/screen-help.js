@@ -17,7 +17,7 @@
   async function renderHelp(main) {
     Dom.clear(main);
 
-    const wrap = Dom.el('div', { style: 'max-width: 1100px; margin: 0 auto; padding: 24px;' });
+    const wrap = Dom.el('div', { style: 'max-width: 1800px; margin: 0 auto; padding: 24px;' });
     main.appendChild(wrap);
 
     // Header with title and Ask button

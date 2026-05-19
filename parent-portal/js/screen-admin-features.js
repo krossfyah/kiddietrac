@@ -63,7 +63,7 @@
     const preselectId = hashParts[1] ? parseInt(hashParts[1], 10) : (ags[0] && ags[0].id);
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:1100px;">
+      <div style="padding:24px;max-width:1800px;">
         <h2 style="font-size:24px;margin:0 0 4px;">⚙️ Feature Flags & Plans</h2>
         <p style="color:#6B7280;font-size:13px;margin:0 0 18px;">Per-agency overrides. Plan sets the default tier; flags override individual features. Default behaviour when a flag is unset = allow.</p>
 

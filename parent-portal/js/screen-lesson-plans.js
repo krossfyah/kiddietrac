@@ -86,7 +86,7 @@
     currentTheme = plan.theme || '';
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:1200px;">
+      <div style="padding:24px;max-width:1800px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
           <div>
             <h2 style="font-size:24px;margin:0;">📚 Lesson Plans</h2>
@@ -227,7 +227,7 @@
       return;
     }
 
-    container.innerHTML = '<div style="padding:24px;max-width:1100px;"><h2 style="font-size:24px;margin:0 0 16px;">📚 This Week\'s Activities</h2><div id="kt-kids-plans"></div></div>';
+    container.innerHTML = '<div style="padding:24px;max-width:1800px;"><h2 style="font-size:24px;margin:0 0 16px;">📚 This Week\'s Activities</h2><div id="kt-kids-plans"></div></div>';
     const mount = $('#kt-kids-plans', container);
 
     for (const child of kids) {

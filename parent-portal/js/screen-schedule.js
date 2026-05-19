@@ -58,7 +58,7 @@
     }
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:1300px;">
+      <div style="padding:24px;max-width:1800px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
           <div>
             <h2 style="font-size:24px;margin:0;">📅 Staff Schedule</h2>

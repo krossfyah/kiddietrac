@@ -91,7 +91,7 @@ img { display: block; max-width: 100%; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   min-height: 100vh;
-  max-width: 1280px;
+  max-width: 1800px;
   margin: 0 auto;
 }
 
@@ -410,7 +410,7 @@ img { display: block; max-width: 100%; }
 .avatar.sm { width: 28px; height: 28px; font-size: 12px; }
 
 .app-main {
-  max-width: 1280px;
+  max-width: 1800px;
   margin: 0 auto;
   padding: 32px;
   width: 100%;

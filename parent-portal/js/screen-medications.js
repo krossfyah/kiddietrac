@@ -74,7 +74,7 @@
     var meds = resp.medications || [];
 
     container.innerHTML =
-      '<div style="padding:24px;max-width:1100px;">' +
+      '<div style="padding:24px;max-width:1800px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px;">' +
           '<div>' +
             '<h2 style="font-size:24px;margin:0;">Medications</h2>' +

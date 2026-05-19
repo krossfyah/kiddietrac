@@ -41,7 +41,7 @@
     (data.certifications || []).forEach(c => { (groups[c.status] || groups.ok).push(c); });
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:1100px;">
+      <div style="padding:24px;max-width:1800px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
           <div>
             <h2 style="font-size:24px;margin:0;">🎓 Staff Certifications</h2>
@@ -125,7 +125,7 @@
     catch (e) { container.innerHTML = '<div style="padding:24px;color:#DC2626;">' + esc(e.message) + '</div>'; return; }
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:1200px;">
+      <div style="padding:24px;max-width:1800px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
           <div>
             <h2 style="font-size:24px;margin:0;">📊 Timesheets</h2>

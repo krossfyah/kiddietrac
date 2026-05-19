@@ -51,7 +51,7 @@
 
     const brand = data.branding || {};
     container.innerHTML = `
-      <div style="padding:24px;max-width:1100px;">
+      <div style="padding:24px;max-width:1800px;">
         <h2 style="font-size:24px;margin:0 0 4px;">🎨 White-Label Branding</h2>
         <p style="color:#6B7280;font-size:13px;margin:0 0 20px;">Customize how invoices and parent-facing screens appear to your families.</p>
 

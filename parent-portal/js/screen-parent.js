@@ -18,7 +18,7 @@
   async function renderParent(main, ctx) {
     Dom.clear(main);
 
-    const wrap = Dom.el('div', { style: 'max-width: 1280px; margin: 0 auto; padding: 24px;' });
+    const wrap = Dom.el('div', { style: 'max-width: 1800px; margin: 0 auto; padding: 24px;' });
     main.appendChild(wrap);
 
     if (state.children.length === 0) {
