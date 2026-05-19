@@ -42,7 +42,21 @@ final class StripeBillingController extends Controller
     private function getAgencyId(Request $request): ?int
     {
         // v22p20: honor X-Active-Agency-Id header for multi-agency admins.
+        // v22p21: platform_admin trumps tenant scope — they can target ANY agency.
+        $isPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')
+            ->where('active', true)
+            ->exists();
         $activeId = (int) $request->header('X-Active-Agency-Id');
+        if ($isPlatformAdmin) {
+            if ($activeId && DB::table('agencies')->where('id', $activeId)->whereNull('deleted_at')->exists()) {
+                return $activeId;
+            }
+            // platform_admin without header — default to the first agency.
+            $first = DB::table('agencies')->whereNull('deleted_at')->orderBy('id')->value('id');
+            if ($first) return (int) $first;
+        }
         if ($activeId && DB::table('role_assignments')
                 ->where('user_id', $request->user()->id)
                 ->where('role', 'agency_admin')

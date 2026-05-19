@@ -31,6 +31,13 @@ final class EnsureRole
             ->unique()
             ->all();
 
+        // v22p21: platform_admin is above all standard tenant roles.
+        // It passes any role check, no matter what is listed in the
+        // middleware string. Use it sparingly — it bypasses agency scoping.
+        if (in_array('platform_admin', $userRoles, true)) {
+            return $next($request);
+        }
+
         foreach ($roles as $required) {
             if (in_array($required, $userRoles, true)) {
                 return $next($request);

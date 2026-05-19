@@ -116,6 +116,20 @@ final class AuthController extends Controller
      */
     public function myAgencies(Request $request): JsonResponse
     {
+        // v22p21: platform_admin sees all agencies; agency_admin sees only theirs.
+        $isPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')
+            ->where('active', true)
+            ->exists();
+        if ($isPlatformAdmin) {
+            $rows = DB::table('agencies')
+                ->whereNull('deleted_at')
+                ->select('id', 'name', 'slug', 'logo_url')
+                ->orderBy('name')
+                ->get();
+            return response()->json(['agencies' => $rows, 'is_platform_admin' => true]);
+        }
         $rows = DB::table('role_assignments')
             ->join('agencies', 'agencies.id', '=', 'role_assignments.agency_id')
             ->where('role_assignments.user_id', $request->user()->id)
@@ -136,12 +150,20 @@ final class AuthController extends Controller
     public function setActiveAgency(Request $request): JsonResponse
     {
         $data = $request->validate(['agency_id' => ['required', 'integer']]);
-        $ok = DB::table('role_assignments')
+        // v22p21: platform_admin can switch to ANY active agency.
+        $isPlatformAdmin = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
-            ->where('role', 'agency_admin')
-            ->where('agency_id', $data['agency_id'])
+            ->where('role', 'platform_admin')
             ->where('active', true)
             ->exists();
+        $ok = $isPlatformAdmin
+            ? DB::table('agencies')->where('id', $data['agency_id'])->whereNull('deleted_at')->exists()
+            : DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)
+                ->where('role', 'agency_admin')
+                ->where('agency_id', $data['agency_id'])
+                ->where('active', true)
+                ->exists();
         if (! $ok) {
             return response()->json(['message' => 'You do not have access to that agency.'], 403);
         }
