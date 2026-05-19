@@ -209,7 +209,7 @@
     try { children = await api('GET', '/parent/children'); }
     catch (e) { container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>'; return; }
     var kids = (children && children.children) || [];
-    var html = '<div style="padding:24px;max-width:900px;">' +
+    var html = '<div style="padding:24px;max-width:1800px;">' +
       '<h2 style="font-size:24px;margin:0 0 4px;">Immunization records</h2>' +
       '<p style="color:#6B7280;margin:0 0 18px;font-size:13px;">Records on file at the centre for your children.</p>';
     if (kids.length === 0) html += '<p style="color:#6B7280;">No children on record.</p>';

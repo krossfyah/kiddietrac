@@ -75,7 +75,7 @@
 
   function renderMfa(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:900px;margin:0 auto;' });
+    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
 
     wrap.appendChild(Dom.el('h1', {

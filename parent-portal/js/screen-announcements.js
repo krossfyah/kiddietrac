@@ -40,7 +40,7 @@
     const items = data.announcements || [];
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:900px;">
+      <div style="padding:24px;max-width:1800px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
           <div>
             <h2 style="font-size:24px;margin:0;">📢 Announcements</h2>
@@ -165,7 +165,7 @@
     const items = data.announcements || [];
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:800px;">
+      <div style="padding:24px;max-width:1800px;">
         <h2 style="font-size:24px;margin:0 0 16px;">📢 Announcements</h2>
         ${items.length === 0
           ? `<div style="text-align:center;padding:48px;background:white;border-radius:14px;color:#6B7280;">

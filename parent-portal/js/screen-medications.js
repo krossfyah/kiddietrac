@@ -352,7 +352,7 @@
     }
     var meds = resp.medications || [];
     container.innerHTML =
-      '<div style="padding:24px;max-width:900px;">' +
+      '<div style="padding:24px;max-width:1800px;">' +
         '<h2 style="font-size:24px;margin:0 0 4px;">Medications to administer</h2>' +
         '<p style="color:#6B7280;margin:0 0 18px;font-size:13px;">Active standing orders. Tap "+ Log dose" after administering.</p>' +
         (meds.length === 0
@@ -379,7 +379,7 @@
       return;
     }
     var kids = (children && children.children) || [];
-    var html = '<div style="padding:24px;max-width:900px;">' +
+    var html = '<div style="padding:24px;max-width:1800px;">' +
       '<h2 style="font-size:24px;margin:0 0 4px;">Medications</h2>' +
       '<p style="color:#6B7280;margin:0 0 18px;font-size:13px;">Active medications recorded at the centre for your children.</p>';
     if (kids.length === 0) {
