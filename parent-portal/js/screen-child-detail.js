@@ -277,6 +277,21 @@
       headerActions.appendChild(btn('✏️ Edit', btnPrimary(), function () {
         showEditModal(child, function () { renderChildDetail(container); });
       }));
+      headerActions.appendChild(btn('🚨 Emergency card', btnSecondary(), function () {
+        var token = sessionStorage.getItem('kt_token');
+        fetch('/api/v1/director/children/' + child.id + '/emergency-card', {
+          headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'text/html' },
+        }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        }).then(function (html) {
+          var w = window.open('', '_blank');
+          if (!w) { alert('Pop-up blocked. Allow pop-ups to view the emergency card.'); return; }
+          w.document.open();
+          w.document.write(html);
+          w.document.close();
+        }).catch(function (e) { alert('Could not load emergency card: ' + e.message); });
+      }));
       headerActions.appendChild(btn('🗄️ Archive', btnDanger(), function () {
         showArchiveConfirm(child, function () {
           window.location.hash = backHash(params);

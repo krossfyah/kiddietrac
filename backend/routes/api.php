@@ -216,6 +216,9 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::post('/centres/{centre}/kiosk-token', [\App\Http\Controllers\Api\KioskController::class, 'rotateToken']);
             Route::post('/centres/{centre}/kiosk-toggle', [\App\Http\Controllers\Api\KioskController::class, 'toggleEnabled']);
             Route::post('/guardians/{guardian}/kiosk-pin', [\App\Http\Controllers\Api\KioskController::class, 'setGuardianPin']);
+            // v22p6: emergency cards (print-optimised HTML, browser Print/Save-PDF)
+            Route::get('/children/{child}/emergency-card', [\App\Http\Controllers\Api\EmergencyCardController::class, 'forChild']);
+            Route::get('/rooms/{room}/emergency-cards', [\App\Http\Controllers\Api\EmergencyCardController::class, 'forRoom']);
 
 
             Route::get('/staff', [StaffController::class, 'index']);
