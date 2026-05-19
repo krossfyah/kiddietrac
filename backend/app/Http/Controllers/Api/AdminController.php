@@ -361,15 +361,30 @@ final class AdminController extends Controller
             'first_name' => ['required', 'string', 'max:80'],
             'last_name' => ['required', 'string', 'max:80'],
             'phone' => ['nullable', 'string', 'max:40'],
-            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor'],
+            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor,platform_admin'],
             'centre_id' => ['nullable', 'integer'],
             'send_invite' => ['nullable', 'boolean'],
         ]);
 
+        // v22p23: only platform_admin can mint another platform_admin.
+        if ($data['role'] === 'platform_admin') {
+            $callerIsPlatform = DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)
+                ->where('role', 'platform_admin')
+                ->where('active', true)
+                ->exists();
+            if (! $callerIsPlatform) {
+                return response()->json([
+                    'message' => 'Only platform admins can create platform admins.',
+                    'errors' => ['role' => ['Insufficient privilege for that role.']],
+                ], 403);
+            }
+        }
+
         // v22p18: non-admin roles MUST be tied to a specific centre — otherwise
         // the role_assignment row has no scope and the user becomes invisible
         // in listUsers (its WHERE clause requires agency_id OR centre_id).
-        if ($data['role'] !== 'agency_admin' && empty($data['centre_id'])) {
+        if (! in_array($data['role'], ['agency_admin', 'platform_admin'], true) && empty($data['centre_id'])) {
             return response()->json([
                 'message' => 'Centre is required for this role.',
                 'errors' => ['centre_id' => ['Please pick a centre for centre directors, educators, and auditors.']],
@@ -396,14 +411,18 @@ final class AdminController extends Controller
             'updated_at' => now(),
         ]);
 
-        // v22p18: ALWAYS stamp agency_id so the user is discoverable in
-        // listUsers even if the centre_id is later cleared. agency_admin gets
-        // the agency directly; non-admin roles get agency_id + centre_id BOTH.
+        // v22p18 + v22p23: stamp agency_id so the user is discoverable in
+        // listUsers (filter requires agency_id OR centre_id). platform_admin
+        // is exempt and gets both NULL since it spans the entire platform.
+        $assignmentAgencyId = $data['role'] === 'platform_admin' ? null : $agencyId;
+        $assignmentCentreId = (! in_array($data['role'], ['agency_admin', 'platform_admin'], true))
+            ? ($data['centre_id'] ?? null)
+            : null;
         DB::table('role_assignments')->insert([
             'user_id' => $userId,
             'role' => $data['role'],
-            'agency_id' => $agencyId,
-            'centre_id' => $data['role'] !== 'agency_admin' ? ($data['centre_id'] ?? null) : null,
+            'agency_id' => $assignmentAgencyId,
+            'centre_id' => $assignmentCentreId,
             'active' => 1,
             'created_at' => now(),
         ]);
@@ -460,22 +479,44 @@ final class AdminController extends Controller
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $data = $request->validate([
-            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor'],
+            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor,platform_admin'],
             'centre_id' => ['nullable', 'integer'],
             'active' => ['nullable', 'boolean'],
         ]);
+
+        // v22p23: platform_admin role can only be granted by a platform_admin.
+        if ($data['role'] === 'platform_admin') {
+            $callerIsPlatform = DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)
+                ->where('role', 'platform_admin')
+                ->where('active', true)
+                ->exists();
+            if (! $callerIsPlatform) {
+                return response()->json([
+                    'message' => 'Only platform admins can grant the platform_admin role.',
+                    'errors' => ['role' => ['Insufficient privilege.']],
+                ], 403);
+            }
+        }
 
         if (!empty($data['centre_id'])) {
             $centre = DB::table('centres')->where('id', $data['centre_id'])->where('agency_id', $agencyId)->first();
             if (!$centre) return response()->json(['message' => 'Invalid centre'], 422);
         }
 
+        // v22p23: scope handling mirrors createUser — platform_admin spans all
+        // (both NULL); agency_admin scopes by agency only; others by centre too.
+        $assignmentAgencyId = $data['role'] === 'platform_admin' ? null : $agencyId;
+        $assignmentCentreId = (! in_array($data['role'], ['agency_admin', 'platform_admin'], true))
+            ? ($data['centre_id'] ?? null)
+            : null;
+
         DB::table('role_assignments')->updateOrInsert(
             [
                 'user_id' => $userId,
                 'role' => $data['role'],
-                'agency_id' => $data['role'] === 'agency_admin' ? $agencyId : null,
-                'centre_id' => $data['role'] !== 'agency_admin' ? ($data['centre_id'] ?? null) : null,
+                'agency_id' => $assignmentAgencyId,
+                'centre_id' => $assignmentCentreId,
             ],
             ['active' => $data['active'] ?? true]
         );

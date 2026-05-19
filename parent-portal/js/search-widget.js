@@ -50,11 +50,19 @@
   function buildWidget() {
     var wrap = document.createElement('div');
     wrap.id = 'kt-search-widget';
+    // v22p23: sticky at top of the scrolling sidebar so it never disappears
+    // when the nav list overflows. The parent #navLinks already has
+    // overflow-y:auto from kt-sidebar-v22.css, so position:sticky is
+    // anchored to that scroll container.
     wrap.setAttribute('style', [
-      'position:relative',
-      'padding:12px 12px 6px',
-      'border-bottom:1px solid rgba(0,0,0,.06)',
-      'margin-bottom:8px',
+      'position:sticky',
+      'top:0',
+      'z-index:5',
+      'background:white',
+      'padding:10px 12px 8px',
+      'border-bottom:1px solid rgba(0,0,0,.08)',
+      'margin:0 -1px 6px',
+      'box-shadow:0 2px 4px rgba(0,0,0,.02)',
     ].join(';'));
 
     var input = document.createElement('input');

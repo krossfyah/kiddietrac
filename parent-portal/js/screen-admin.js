@@ -562,12 +562,17 @@
     const roleWrap = Dom.el('div', { style: 'margin-bottom: 12px;' });
     roleWrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, 'Role *'));
     const roleSelect = Dom.el('select', { style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px;' });
-    [
+    // v22p23: platform_admin only listed when caller is platform_admin.
+    var inviteRoleOpts = [
       { v: 'centre_director', l: 'Centre director' },
       { v: 'educator', l: 'Educator' },
       { v: 'agency_admin', l: 'Agency admin' },
       { v: 'auditor', l: 'Auditor (read-only)' },
-    ].forEach(r => {
+    ];
+    if (sessionStorage.getItem('kt_is_platform_admin') === '1') {
+      inviteRoleOpts.push({ v: 'platform_admin', l: '🌐 Platform admin (cross-agency)' });
+    }
+    inviteRoleOpts.forEach(r => {
       const opt = Dom.el('option', { value: r.v }, r.l);
       roleSelect.appendChild(opt);
     });
@@ -664,7 +669,97 @@
     avatarRow.appendChild(avatarSide);
     body.appendChild(avatarRow);
 
-    body.appendChild(Dom.el('div', { style: 'margin-bottom: 16px;' }, 'Roles: ' + user.roles.join(', ')));
+    // v22p23: role section — show current roles as pills + a "Change role" form.
+    const roleSection = Dom.el('div', {
+      style: 'margin-bottom: 18px; padding: 14px 16px; background: #F9FAFB; border-radius: 10px; border: 1px solid #E5E7EB;',
+    });
+    roleSection.appendChild(Dom.el('div', {
+      style: 'font-size: 11px; font-weight: 800; color: #6B7280; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;',
+    }, 'Roles'));
+    const pillsWrap = Dom.el('div', { style: 'display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;' });
+    var roleLabels = {
+      agency_admin: 'Agency admin', centre_director: 'Centre director',
+      educator: 'Educator', guardian: 'Parent / guardian',
+      auditor: 'Auditor', platform_admin: '🌐 Platform admin',
+    };
+    (user.roles || []).forEach(function (r) {
+      var bg = r === 'platform_admin' ? '#7C3AED' : (r === 'agency_admin' ? '#1F6080' : '#374151');
+      pillsWrap.appendChild(Dom.el('span', {
+        style: 'padding: 3px 10px; border-radius: 999px; background: ' + bg + '; color: white; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;',
+      }, (roleLabels[r] || r).toUpperCase()));
+    });
+    if (!user.roles || user.roles.length === 0) {
+      pillsWrap.appendChild(Dom.el('span', { style: 'font-size: 12px; color: #6B7280;' }, 'No roles assigned'));
+    }
+    roleSection.appendChild(pillsWrap);
+
+    // Change-role form
+    const changeBox = Dom.el('div', { style: 'display: flex; gap: 8px; align-items: center; flex-wrap: wrap;' });
+    changeBox.appendChild(Dom.el('span', { style: 'font-size: 12px; color: #6B7280; font-weight: 600;' }, 'Add / set role:'));
+    const newRoleSelect = Dom.el('select', {
+      style: 'padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; background: white;',
+    });
+    var changeRoleOpts = [
+      { v: 'centre_director', l: 'Centre director' },
+      { v: 'educator', l: 'Educator' },
+      { v: 'agency_admin', l: 'Agency admin' },
+      { v: 'auditor', l: 'Auditor' },
+    ];
+    if (sessionStorage.getItem('kt_is_platform_admin') === '1') {
+      changeRoleOpts.push({ v: 'platform_admin', l: '🌐 Platform admin' });
+    }
+    changeRoleOpts.forEach(function (r) {
+      newRoleSelect.appendChild(Dom.el('option', { value: r.v }, r.l));
+    });
+    changeBox.appendChild(newRoleSelect);
+
+    // Optional centre picker for non-admin roles
+    const newCentreSelect = Dom.el('select', {
+      style: 'padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; background: white;',
+    });
+    newCentreSelect.appendChild(Dom.el('option', { value: '' }, 'No centre'));
+    if (state.centres && state.centres.centres) {
+      state.centres.centres.forEach(function (c) {
+        newCentreSelect.appendChild(Dom.el('option', { value: String(c.id) }, c.name));
+      });
+    }
+    changeBox.appendChild(newCentreSelect);
+
+    const applyRoleBtn = Dom.el('button', {
+      type: 'button',
+      style: 'background: #1F6080; color: white; border: none; padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;',
+    }, 'Apply');
+    const roleStatus = Dom.el('span', { style: 'font-size: 12px; color: #6B7280; margin-left: 8px;' });
+    applyRoleBtn.addEventListener('click', async function () {
+      var payload = { role: newRoleSelect.value };
+      if (newCentreSelect.value) payload.centre_id = parseInt(newCentreSelect.value, 10);
+      applyRoleBtn.disabled = true;
+      applyRoleBtn.textContent = 'Saving…';
+      roleStatus.style.color = '#1F6080';
+      roleStatus.textContent = '';
+      try {
+        await Api.post('/admin/users/' + user.id + '/role', payload);
+        roleStatus.style.color = '#16A34A';
+        roleStatus.textContent = '✓ Saved — close + reopen to refresh';
+        // Refresh user list in background
+        renderUsersTab(content);
+      } catch (e) {
+        roleStatus.style.color = '#DC2626';
+        roleStatus.textContent = e.message || 'Failed';
+      } finally {
+        applyRoleBtn.disabled = false;
+        applyRoleBtn.textContent = 'Apply';
+      }
+    });
+    changeBox.appendChild(applyRoleBtn);
+    changeBox.appendChild(roleStatus);
+    roleSection.appendChild(changeBox);
+
+    roleSection.appendChild(Dom.el('div', {
+      style: 'font-size: 11px; color: #6B7280; margin-top: 8px; line-height: 1.4;',
+    }, 'Adding a role is additive — existing roles stay active. To revoke, contact support.'));
+
+    body.appendChild(roleSection);
 
     // v22p3.4: surface onboarding-wizard role_extras (RECE #, first aid expiry,
     // specialty, etc.) inline so admins can verify educator credentials.
