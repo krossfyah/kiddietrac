@@ -155,6 +155,19 @@ final class InvoiceController extends Controller
         $issueDate = Carbon::createFromDate($year, $month, 1);
         $dueDate = $issueDate->copy()->addDays(15);
 
+        // v22p9: load sibling-discount tiers from agency settings.
+        $agencyId = DB::table("centres")->where("id", $centreId)->value("agency_id");
+        $siblingTiers = [];
+        if ($agencyId) {
+            $rawSettings = DB::table("agencies")->where("id", $agencyId)->value("settings");
+            $settings = $rawSettings ? json_decode($rawSettings, true) : [];
+            $siblingTiers = collect($settings["sibling_discounts"] ?? [])
+                ->sortBy("rank")
+                ->values()
+                ->all();
+        }
+
+
         // Get all enrolled children at this centre with their families
         $enrollments = DB::table('enrollments')
             ->join('children', 'children.id', '=', 'enrollments.child_id')
@@ -217,7 +230,40 @@ final class InvoiceController extends Controller
                     ];
                 }
 
-                $total = $subtotal - $subsidyTotal;
+                // v22p9: sibling discounts — apply per child by enrollment rank.
+                $discountTotal = 0.0;
+                $discountLines = [];
+                if (! empty($siblingTiers) && $childEnrollments->count() > 1) {
+                    // Rank by enrollment start_date asc (oldest = rank 1, no discount)
+                    $ranked = DB::table("enrollments")
+                        ->join("children", "children.id", "=", "enrollments.child_id")
+                        ->where("children.family_id", $familyId)
+                        ->whereNull("enrollments.end_date")
+                        ->orderBy("enrollments.start_date")
+                        ->select("children.id as child_id", "children.first_name", "enrollments.monthly_fee")
+                        ->get();
+                    $pos = 1;
+                    foreach ($ranked as $r) {
+                        $rank = $pos++;
+                        if ($rank <= 1) continue;
+                        // Pick the highest matching tier (rank >= tier.rank)
+                        $appliedTier = null;
+                        foreach ($siblingTiers as $t) {
+                            if ((int) $t["rank"] <= $rank) $appliedTier = $t;
+                        }
+                        if (! $appliedTier) continue;
+                        $pct = (float) $appliedTier["percent"];
+                        $disc = round((float) $r->monthly_fee * ($pct / 100), 2);
+                        $discountTotal += $disc;
+                        $discountLines[] = [
+                            "child_id" => $r->child_id,
+                            "description" => "Sibling discount (".$pct."%) — ".$r->first_name,
+                            "amount" => -$disc,
+                        ];
+                    }
+                }
+
+                $total = $subtotal - $subsidyTotal - $discountTotal;
                 $invoiceNumber = 'INV-'.now()->format('Ym').'-'.str_pad((string) $familyId, 4, '0', STR_PAD_LEFT);
 
                 $invoiceId = DB::table('invoices')->insertGetId([
@@ -243,6 +289,19 @@ final class InvoiceController extends Controller
                         'subsidy_amount' => $line['subsidy'],
                         'net_amount' => $line['net'],
                         'created_at' => now(),
+                    ]);
+                }
+
+                // v22p9: also insert each sibling-discount line.
+                foreach ($discountLines as $dl) {
+                    DB::table("invoice_lines")->insert([
+                        "invoice_id" => $invoiceId,
+                        "child_id" => $dl["child_id"],
+                        "description" => $dl["description"],
+                        "line_type" => "adjustment",
+                        "quantity" => 1,
+                        "unit_amount" => $dl["amount"],
+                        "amount" => $dl["amount"],
                     ]);
                 }
 
