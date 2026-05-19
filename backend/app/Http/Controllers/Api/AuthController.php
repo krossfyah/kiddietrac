@@ -27,6 +27,7 @@ final class AuthController extends Controller
             'password' => ['required', 'string'],
             'device_name' => ['required', 'string', 'max:120'],
             'device_platform' => ['required', 'string', 'in:ios,android,web,unknown'],
+            'code' => ['nullable', 'string', 'min:6', 'max:14'],
         ]);
 
         $user = User::where('email', $data['email'])->first();
@@ -41,6 +42,42 @@ final class AuthController extends Controller
 
         if (in_array($user->status, ['suspended', 'inactive'], true)) {
             return response()->json(['message' => 'Account is not active.'], 403);
+        }
+
+        // v22p7.1: TOTP gate — block token issue if MFA is enabled and the
+        // provided code is missing or invalid. Accepts a 6-digit TOTP
+        // or a one-time recovery code; consumes the recovery code if used.
+        if ($user->two_factor_enabled && $user->two_factor_secret) {
+            $code = $data['code'] ?? null;
+            if (! $code) {
+                return response()->json([
+                    'mfa_required' => true,
+                    'message' => 'Enter your 6-digit authenticator code to complete sign-in.',
+                ], 200);
+            }
+            $secret = decrypt($user->two_factor_secret);
+            $valid = \App\Support\Totp::verify($secret, $code);
+            if (! $valid) {
+                $raw = DB::table('users')->where('id', $user->id)->value('two_factor_recovery_codes');
+                $hashes = $raw ? (json_decode($raw, true) ?: []) : [];
+                foreach ($hashes as $i => $h) {
+                    if (Hash::check($code, $h)) {
+                        $valid = true;
+                        unset($hashes[$i]);
+                        DB::table('users')->where('id', $user->id)->update([
+                            'two_factor_recovery_codes' => json_encode(array_values($hashes)),
+                        ]);
+                        break;
+                    }
+                }
+            }
+            if (! $valid) {
+                $this->audit($request, $user->id, 'mfa_failed', 'user', $user->id);
+                return response()->json([
+                    'message' => 'Invalid authenticator code.',
+                    'errors' => ['code' => ['Code did not match.']],
+                ], 422);
+            }
         }
 
         $tokenObj = $user->createToken(
