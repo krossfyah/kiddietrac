@@ -195,6 +195,72 @@ final class ChatController extends Controller
         return response()->json($this->insertMessage($conversationId, $user->id, $data['body']));
     }
 
+    /**
+     * v22p15 — POST /api/v1/provider/chats/start
+     * Allow agency_admin / centre_director / educator to initiate a chat
+     * with a family they have provider access to (mirror of parentStart).
+     * Body: family_id (req) + child_id? + subject? + body (req).
+     */
+    public function providerStart(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate([
+            'family_id' => ['required', 'integer'],
+            'child_id' => ['nullable', 'integer'],
+            'subject' => ['nullable', 'string', 'max:200'],
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $family = DB::table('families')->where('id', $data['family_id'])->whereNull('deleted_at')->first();
+        if (! $family) return response()->json(['message' => 'Family not found'], 404);
+
+        // Provider must have a role_assignment that grants access to this family's centre.
+        $hasAccess = DB::table('role_assignments')
+            ->where('user_id', $user->id)
+            ->where('active', true)
+            ->where(function ($q) use ($family) {
+                $q->where('centre_id', $family->centre_id)
+                  ->orWhereExists(function ($w) use ($family) {
+                      $w->select(DB::raw(1))->from('centres')
+                        ->whereColumn('centres.agency_id', 'role_assignments.agency_id')
+                        ->where('centres.id', $family->centre_id);
+                  });
+            })
+            ->exists();
+        if (! $hasAccess) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Find-or-create conversation for this (family, child) pair — same dedupe
+        // semantics as parentStart so a parent-initiated thread and a provider-
+        // initiated thread on the same child collapse into one.
+        $query = DB::table('conversations')
+            ->where('family_id', $data['family_id'])
+            ->where('centre_id', $family->centre_id);
+        if (isset($data['child_id'])) {
+            $query->where('child_id', $data['child_id']);
+        } else {
+            $query->whereNull('child_id');
+        }
+        $conv = $query->first();
+
+        if (! $conv) {
+            $convId = DB::table('conversations')->insertGetId([
+                'centre_id' => $family->centre_id,
+                'family_id' => $data['family_id'],
+                'child_id' => $data['child_id'] ?? null,
+                'subject' => $data['subject'] ?? null,
+                'last_message_at' => now(),
+                'created_at' => now(),
+            ]);
+        } else {
+            $convId = $conv->id;
+        }
+
+        $msg = $this->insertMessage($convId, $user->id, $data['body']);
+        return response()->json(['conversation_id' => $convId, 'message' => $msg], 201);
+    }
+
     /* ─── SHARED ENDPOINTS ─────────────────────────────────────── */
 
     /**

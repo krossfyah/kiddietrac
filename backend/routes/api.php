@@ -395,6 +395,7 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::get('/chats',                       [ChatController::class, 'providerList']);
         Route::get('/chats/{conversation}',        [ChatController::class, 'providerShow']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'providerSend']);
+        Route::post('/chats/start',                [ChatController::class, 'providerStart']);
     });
     
     // Shared: unread badge (any authenticated user)
