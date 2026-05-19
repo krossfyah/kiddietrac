@@ -17,7 +17,13 @@ final class ChildController extends Controller
 
     public function enrollmentList(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
+        // v22p5: allow agency_admin to scope to any centre they own via ?centre_id=
+        $requestedCentre = $request->integer("centre_id");
+        if ($requestedCentre && $this->authorizeCentreAccess($request->user(), $requestedCentre)) {
+            $centreId = $requestedCentre;
+        } else {
+            $centreId = $this->resolveCentreId($request->user());
+        }
 
         if (! $centreId) {
             return response()->json(['children' => []]);
@@ -255,6 +261,74 @@ final class ChildController extends Controller
         return response()->json([
             'waitlist' => $children->map(fn ($c) => $this->formatChildListItem($c, false))->all(),
         ]);
+    }
+
+    public function update(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table("children")->where("id", $childId)->whereNull("deleted_at")->first();
+        if (! $child) {
+            return response()->json(["message" => "Not found"], 404);
+        }
+
+        $family = DB::table("families")->where("id", $child->family_id)->first();
+        if (! $family || ! $this->authorizeCentreAccess($request->user(), (int) $family->centre_id)) {
+            return response()->json(["message" => "Forbidden"], 403);
+        }
+
+        $data = $request->validate([
+            "first_name" => ["sometimes", "string", "max:80"],
+            "last_name" => ["sometimes", "string", "max:80"],
+            "preferred_name" => ["sometimes", "nullable", "string", "max:80"],
+            "pronouns" => ["sometimes", "nullable", "string", "max:40"],
+            "date_of_birth" => ["sometimes", "date", "before:today"],
+            "gender" => ["sometimes", "nullable", "in:female,male,non_binary,prefer_not_to_say,other"],
+            "photo_url" => ["sometimes", "nullable", "string", "max:255"],
+            "health_card_last4" => ["sometimes", "nullable", "string", "size:4"],
+            "doctor_name" => ["sometimes", "nullable", "string", "max:120"],
+            "doctor_phone" => ["sometimes", "nullable", "string", "max:40"],
+            "medical_notes" => ["sometimes", "nullable", "string"],
+            "dietary_notes" => ["sometimes", "nullable", "string"],
+            "cultural_notes" => ["sometimes", "nullable", "string"],
+            "preferred_lang" => ["sometimes", "nullable", "string", "max:10"],
+            "enrollment_status" => ["sometimes", "in:enrolled,withdrawn,waitlist,inactive"],
+        ]);
+
+        if (empty($data)) {
+            return response()->json(["message" => "No changes"], 200);
+        }
+
+        $data["updated_at"] = now();
+        DB::table("children")->where("id", $childId)->update($data);
+
+        return response()->json(["message" => "Child updated", "id" => $childId]);
+    }
+
+    public function destroy(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table("children")->where("id", $childId)->whereNull("deleted_at")->first();
+        if (! $child) {
+            return response()->json(["message" => "Not found"], 404);
+        }
+
+        $family = DB::table("families")->where("id", $child->family_id)->first();
+        if (! $family || ! $this->authorizeCentreAccess($request->user(), (int) $family->centre_id)) {
+            return response()->json(["message" => "Forbidden"], 403);
+        }
+
+        DB::transaction(function () use ($childId) {
+            DB::table("enrollments")
+                ->where("child_id", $childId)
+                ->whereNull("end_date")
+                ->update(["end_date" => now()->toDateString()]);
+            DB::table("children")->where("id", $childId)->update([
+                "deleted_at" => now(),
+                "enrollment_status" => "withdrawn",
+                "withdrawn_at" => now()->toDateString(),
+                "updated_at" => now(),
+            ]);
+        });
+
+        return response()->json(["message" => "Child archived", "id" => $childId]);
     }
 
     // ─── helpers ────────────────────────────────────────────────────

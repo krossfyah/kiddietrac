@@ -204,6 +204,9 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::get('/waitlist', [ChildController::class, 'waitlist']);
 
             Route::get('/children/{child}', [ChildController::class, 'show']);
+            // v22p5: full CRUD on child record (separate from enrollment updates)
+            Route::patch('/children/{child}', [ChildController::class, 'update']);
+            Route::delete('/children/{child}', [ChildController::class, 'destroy']);
 
             Route::get('/families', [FamilyController::class, 'index']);
             Route::post('/families', [FamilyController::class, 'store']);
