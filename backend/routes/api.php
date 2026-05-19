@@ -333,6 +333,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::post('/users/{user}/reopen-onboarding', [AdminController::class, 'reopenOnboarding']);
     
         Route::get('/families', [AdminController::class, 'listFamilies']);
+        // v22p4.6: global portal search (FQN inline, no import needed)
+        Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);
     
         Route::get('/analytics', [AdminController::class, 'analytics']);
