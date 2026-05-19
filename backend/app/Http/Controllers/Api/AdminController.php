@@ -342,6 +342,16 @@ final class AdminController extends Controller
             'send_invite' => ['nullable', 'boolean'],
         ]);
 
+        // v22p18: non-admin roles MUST be tied to a specific centre — otherwise
+        // the role_assignment row has no scope and the user becomes invisible
+        // in listUsers (its WHERE clause requires agency_id OR centre_id).
+        if ($data['role'] !== 'agency_admin' && empty($data['centre_id'])) {
+            return response()->json([
+                'message' => 'Centre is required for this role.',
+                'errors' => ['centre_id' => ['Please pick a centre for centre directors, educators, and auditors.']],
+            ], 422);
+        }
+
         // Validate centre belongs to this agency if provided
         if (!empty($data['centre_id'])) {
             $centre = DB::table('centres')->where('id', $data['centre_id'])->where('agency_id', $agencyId)->first();
@@ -362,10 +372,13 @@ final class AdminController extends Controller
             'updated_at' => now(),
         ]);
 
+        // v22p18: ALWAYS stamp agency_id so the user is discoverable in
+        // listUsers even if the centre_id is later cleared. agency_admin gets
+        // the agency directly; non-admin roles get agency_id + centre_id BOTH.
         DB::table('role_assignments')->insert([
             'user_id' => $userId,
             'role' => $data['role'],
-            'agency_id' => $data['role'] === 'agency_admin' ? $agencyId : null,
+            'agency_id' => $agencyId,
             'centre_id' => $data['role'] !== 'agency_admin' ? ($data['centre_id'] ?? null) : null,
             'active' => 1,
             'created_at' => now(),
