@@ -99,6 +99,7 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             Route::get('/overview', [\App\Http\Controllers\Api\PlatformController::class, 'overview']);
             Route::get('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'listAgencies']);
             Route::post('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'createAgency']);
+            Route::patch('/agencies/{agency}', [\App\Http\Controllers\Api\PlatformController::class, 'updateAgency']);
             Route::post('/agencies/{agency}/suspend', [\App\Http\Controllers\Api\PlatformController::class, 'suspendAgency']);
             Route::post('/agencies/{agency}/resume', [\App\Http\Controllers\Api\PlatformController::class, 'resumeAgency']);
         });

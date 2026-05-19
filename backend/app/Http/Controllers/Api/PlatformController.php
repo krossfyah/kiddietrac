@@ -107,12 +107,18 @@ final class PlatformController extends Controller
                 'id' => $a->id,
                 'name' => $a->name,
                 'slug' => $a->slug,
+                'contact_email' => $a->contact_email,
                 'billing_status' => $a->billing_status,
                 'plan_code' => $a->plan_code,
                 'plan_amount_cents' => $a->plan_amount_cents,
                 'centre_count' => (int) ($centresPerAgency[$a->id] ?? 0),
                 'family_count' => $familyCount,
                 'child_count' => $childCount,
+                // v22p24: white-label branding fields for the Edit modal
+                'brand_logo_url' => $a->brand_logo_url,
+                'brand_primary_color' => $a->brand_primary_color,
+                'brand_support_email' => $a->brand_support_email,
+                'powered_by_visible' => (int) $a->powered_by_visible,
                 'created_at' => $a->created_at,
                 'cancelled_at' => $a->cancelled_at,
             ];
@@ -136,6 +142,12 @@ final class PlatformController extends Controller
             'timezone' => ['nullable', 'string', 'max:60'],
             'plan_code' => ['nullable', 'string', 'max:40'],
             'plan_amount_cents' => ['nullable', 'integer', 'min:0'],
+            // v22p24: white-label branding (chargeable add-on; price baked into plan_amount_cents)
+            'white_label_enabled' => ['nullable', 'boolean'],
+            'brand_logo_url' => ['nullable', 'string', 'max:500'],
+            'brand_primary_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'brand_support_email' => ['nullable', 'email', 'max:160'],
+            'brand_bank_info' => ['nullable', 'string'],
         ]);
 
         $slug = $data['slug'] ?? Str::slug($data['name']);
@@ -145,6 +157,10 @@ final class PlatformController extends Controller
         while (DB::table('agencies')->where('slug', $slug)->exists()) {
             $slug = $base.'-'.(++$i);
         }
+
+        // v22p24: when white-label is enabled, powered_by_visible is hidden so
+        // end users see only the agency's brand, not "Powered by Kiddietrac".
+        $whiteLabel = ! empty($data['white_label_enabled']);
 
         $id = DB::table('agencies')->insertGetId([
             'name' => $data['name'],
@@ -158,14 +174,56 @@ final class PlatformController extends Controller
             'plan_amount_cents' => $data['plan_amount_cents'] ?? 0,
             'plan_currency' => 'CAD',
             'trial_ends_at' => now()->addDays(30),
+            'brand_logo_url' => $data['brand_logo_url'] ?? null,
+            'brand_primary_color' => $data['brand_primary_color'] ?? null,
+            'brand_support_email' => $data['brand_support_email'] ?? null,
+            'brand_bank_info' => $data['brand_bank_info'] ?? null,
+            'powered_by_visible' => $whiteLabel ? 0 : 1,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
         return response()->json([
             'agency' => DB::table('agencies')->where('id', $id)->first(),
+            'white_label_enabled' => $whiteLabel,
             'message' => 'Agency created. Invite the first agency_admin via /admin/users while X-Active-Agency-Id is set to '.$id.'.',
         ], 201);
+    }
+
+    /**
+     * v22p24 — PATCH /api/v1/platform/agencies/{agency}
+     * Update tenant settings including white-label branding.
+     */
+    public function updateAgency(Request $request, int $agencyId): JsonResponse
+    {
+        $exists = DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists();
+        if (! $exists) return response()->json(['message' => 'Not found'], 404);
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:180'],
+            'contact_email' => ['sometimes', 'nullable', 'email', 'max:180'],
+            'contact_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'plan_code' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'plan_amount_cents' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'white_label_enabled' => ['sometimes', 'boolean'],
+            'brand_logo_url' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'brand_primary_color' => ['sometimes', 'nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'brand_support_email' => ['sometimes', 'nullable', 'email', 'max:160'],
+            'brand_bank_info' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        // white_label_enabled maps to powered_by_visible (inverse).
+        if (array_key_exists('white_label_enabled', $data)) {
+            $data['powered_by_visible'] = $data['white_label_enabled'] ? 0 : 1;
+            unset($data['white_label_enabled']);
+        }
+        $data['updated_at'] = now();
+        DB::table('agencies')->where('id', $agencyId)->update($data);
+
+        return response()->json([
+            'agency' => DB::table('agencies')->where('id', $agencyId)->first(),
+            'message' => 'Agency updated.',
+        ]);
     }
 
     /**

@@ -152,6 +152,14 @@
           window.location.reload();
         });
         actionsTd.appendChild(switchBtn);
+        // v22p24: edit branding / plan / white-label
+        var editBtn = Dom.el('button', {
+          style: 'background:transparent;color:#7C3AED;border:1px solid #7C3AED;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-right:4px;',
+        }, 'Edit');
+        editBtn.addEventListener('click', function () {
+          showAgencyModal(a, container);
+        });
+        actionsTd.appendChild(editBtn);
         var toggleBtn = Dom.el('button', {
           style: 'background:transparent;border:1px solid ' + (a.billing_status === 'suspended' ? '#16A34A' : '#FCA5A5') + ';color:' + (a.billing_status === 'suspended' ? '#16A34A' : '#DC2626') + ';padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;',
         }, a.billing_status === 'suspended' ? 'Resume' : 'Suspend');
@@ -173,51 +181,99 @@
     });
   }
 
-  function showCreateAgencyModal(container) {
-    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;' });
-    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;padding:24px;max-width:520px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);' });
+  // v22p24: shared modal for both Create and Edit agency.
+  // existing = null for create, or the agency row for edit (pre-fills inputs).
+  function showAgencyModal(existing, container) {
+    var isEdit = !!existing;
+    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto;' });
+    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;padding:24px;max-width:580px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);' });
+    function v(key, fallback) {
+      if (! existing) return fallback || '';
+      return (existing[key] === null || existing[key] === undefined) ? (fallback || '') : existing[key];
+    }
+    var whiteLabelChecked = isEdit && existing.powered_by_visible === 0;
+    var primaryColor = v('brand_primary_color', '#1F6080');
     modal.innerHTML =
-      '<h3 style="margin:0 0 14px;font-size:18px;">🌐 Create new customer agency</h3>' +
-      '<p style="font-size:13px;color:#6B7280;margin:0 0 16px;">Provisions a brand-new tenant on the platform. Starts on a 30-day trial. You can invite the first agency_admin afterwards via the User management tab once you switch into the new agency.</p>' +
-      '<div style="margin-bottom:12px;"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Agency name *</label><input id="np-name" type="text" placeholder="e.g. Tiny Steps Daycare" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
-      '<div style="margin-bottom:12px;"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Contact email</label><input id="np-email" type="email" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
-      '<div style="margin-bottom:12px;"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan code</label><input id="np-plan" type="text" placeholder="e.g. starter, growth, enterprise" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
-      '<div style="margin-bottom:14px;"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Monthly amount (CAD)</label><input id="np-amount" type="number" min="0" step="1" placeholder="e.g. 149" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
-      '<div id="np-err" style="color:#DC2626;font-size:13px;min-height:18px;margin-bottom:8px;"></div>' +
+      '<h3 style="margin:0 0 14px;font-size:18px;">' + (isEdit ? '✏️ Edit agency' : '🌐 Create new customer agency') + '</h3>' +
+      (isEdit ? '' : '<p style="font-size:13px;color:#6B7280;margin:0 0 16px;">Provisions a brand-new tenant on the platform. Starts on a 30-day trial. You can invite the first agency_admin afterwards via the User management tab once you switch into the new agency.</p>') +
+      '<div style="margin-bottom:12px;"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Agency name *</label><input id="ag-name" type="text" placeholder="e.g. Tiny Steps Daycare" value="' + esc(v('name')) + '" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
+      '<div style="margin-bottom:12px;"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Contact email</label><input id="ag-email" type="email" value="' + esc(v('contact_email')) + '" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">' +
+        '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan code</label><input id="ag-plan" type="text" placeholder="starter, growth, enterprise" value="' + esc(v('plan_code')) + '" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
+        '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Monthly CAD</label><input id="ag-amount" type="number" min="0" step="1" placeholder="149" value="' + (existing && existing.plan_amount_cents ? Math.round(existing.plan_amount_cents / 100) : '') + '" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
+      '</div>' +
+      // ── White-label section ────────────────────────────────────────
+      '<div style="border-top:1px solid #E5E7EB;padding-top:14px;margin-bottom:12px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
+          '<div><div style="font-size:14px;font-weight:700;">🎨 White-label branding</div>' +
+            '<div style="font-size:11px;color:#6B7280;">Chargeable add-on. When enabled, the agency shows its own logo + colours and the "Powered by Kiddietrac" footer is hidden. Price baked into the monthly amount above (suggest +$50/mo).</div>' +
+          '</div>' +
+          '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">' +
+            '<input id="ag-wl" type="checkbox" ' + (whiteLabelChecked ? 'checked' : '') + '> Enable' +
+          '</label>' +
+        '</div>' +
+        '<div id="ag-wl-fields" style="margin-top:10px;' + (whiteLabelChecked ? '' : 'opacity:0.4;') + '">' +
+          '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Logo URL (PNG/SVG, max 200×60)</label>' +
+            '<input id="ag-logo" type="text" placeholder="https://customer.com/logo.png" value="' + esc(v('brand_logo_url')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:ui-monospace,monospace;"></div>' +
+          '<div style="display:grid;grid-template-columns:120px 1fr;gap:10px;margin-bottom:10px;">' +
+            '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Primary colour</label><input id="ag-color" type="color" value="' + esc(primaryColor) + '" style="width:100%;height:36px;border:1px solid #D1D5DB;border-radius:6px;padding:2px;cursor:pointer;"></div>' +
+            '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Support email</label><input id="ag-support" type="email" placeholder="support@customer.com" value="' + esc(v('brand_support_email')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div id="ag-err" style="color:#DC2626;font-size:13px;min-height:18px;margin-bottom:8px;"></div>' +
       '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
-        '<button id="np-cancel" style="background:white;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>' +
-        '<button id="np-save" style="background:#7C3AED;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Create agency</button>' +
+        '<button id="ag-cancel" style="background:white;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>' +
+        '<button id="ag-save" style="background:#7C3AED;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">' + (isEdit ? 'Save changes' : 'Create agency') + '</button>' +
       '</div>';
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
-    modal.querySelector('#np-cancel').addEventListener('click', function () { overlay.remove(); });
-    modal.querySelector('#np-save').addEventListener('click', async function () {
-      var name = modal.querySelector('#np-name').value.trim();
-      var email = modal.querySelector('#np-email').value.trim();
-      var plan  = modal.querySelector('#np-plan').value.trim();
-      var amount = parseInt(modal.querySelector('#np-amount').value, 10);
-      var errBox = modal.querySelector('#np-err');
+    modal.querySelector('#ag-cancel').addEventListener('click', function () { overlay.remove(); });
+
+    // White-label toggle dims the section when off (for UX clarity).
+    var wlBox = modal.querySelector('#ag-wl');
+    var wlFields = modal.querySelector('#ag-wl-fields');
+    wlBox.addEventListener('change', function () {
+      wlFields.style.opacity = wlBox.checked ? '1' : '0.4';
+    });
+
+    modal.querySelector('#ag-save').addEventListener('click', async function () {
+      var payload = {
+        name: modal.querySelector('#ag-name').value.trim(),
+        contact_email: modal.querySelector('#ag-email').value.trim() || null,
+        plan_code: modal.querySelector('#ag-plan').value.trim() || null,
+        plan_amount_cents: (function () { var n = parseInt(modal.querySelector('#ag-amount').value, 10); return isNaN(n) ? 0 : n * 100; })(),
+        white_label_enabled: wlBox.checked,
+        brand_logo_url: modal.querySelector('#ag-logo').value.trim() || null,
+        brand_primary_color: modal.querySelector('#ag-color').value || null,
+        brand_support_email: modal.querySelector('#ag-support').value.trim() || null,
+      };
+      var errBox = modal.querySelector('#ag-err');
       errBox.textContent = '';
-      if (!name) { errBox.textContent = 'Agency name is required.'; return; }
-      var saveBtn = modal.querySelector('#np-save');
+      if (! payload.name) { errBox.textContent = 'Agency name is required.'; return; }
+      var saveBtn = modal.querySelector('#ag-save');
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Creating…';
+      saveBtn.textContent = isEdit ? 'Saving…' : 'Creating…';
       try {
-        await Api.post('/platform/agencies', {
-          name: name,
-          contact_email: email || null,
-          plan_code: plan || null,
-          plan_amount_cents: isNaN(amount) ? 0 : amount * 100,
-        });
+        if (isEdit) {
+          await Api.patch('/platform/agencies/' + existing.id, payload);
+        } else {
+          await Api.post('/platform/agencies', payload);
+        }
         overlay.remove();
         renderAgencies(container);
       } catch (e) {
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Create agency';
-        errBox.textContent = e.message || 'Could not create.';
+        saveBtn.textContent = isEdit ? 'Save changes' : 'Create agency';
+        errBox.textContent = e.message || 'Could not save.';
       }
     });
+  }
+
+  // Backwards-compatible name still used by existing render path.
+  function showCreateAgencyModal(container) {
+    return showAgencyModal(null, container);
   }
 
   if (Shell && Shell.registerScreen) {
