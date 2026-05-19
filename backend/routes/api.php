@@ -80,6 +80,15 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
     Route::middleware('auth:sanctum')->group(function () {
 
+    // v22p7: MFA (TOTP) enrolment endpoints — Phase A
+    Route::prefix('auth/mfa')->group(function () {
+        Route::get('/status', [\App\Http\Controllers\Api\MfaController::class, 'status']);
+        Route::post('/setup', [\App\Http\Controllers\Api\MfaController::class, 'setup']);
+        Route::post('/confirm', [\App\Http\Controllers\Api\MfaController::class, 'confirm']);
+        Route::post('/disable', [\App\Http\Controllers\Api\MfaController::class, 'disable']);
+    });
+
+
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
