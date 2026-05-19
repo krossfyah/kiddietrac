@@ -393,17 +393,32 @@
     const totalEnrolled = data.totals?.enrolled ?? 0;
     const centreCount   = data.agency?.centre_count ?? (data.centres?.length || 0);
 
+    // v22p12: hero card with gradient + cloud illustration + time-of-day greeting.
+    let firstName = '';
+    try {
+      var stored = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
+      firstName = (stored.first_name || stored.name || '').split(' ')[0];
+    } catch (e) { /* noop */ }
+    const greet = (window.KT && window.KT.greetingForNow)
+      ? window.KT.greetingForNow(firstName)
+      : 'Welcome' + (firstName ? ', ' + firstName : '');
+    const cloudsSvg = (window.KT && window.KT.Illustrations && window.KT.Illustrations.cloudsAndStars)
+      ? window.KT.Illustrations.cloudsAndStars() : '';
+
     wrap.insertAdjacentHTML('beforeend', `
-      <div class="page-header-v17">
-        <div>
-          <div class="crumbs"><span>Home</span><span class="sep">›</span><span style="color:var(--kt-text-muted);">Agency overview</span></div>
-          <h1>${esc(data.agency?.name || 'Agency overview')}</h1>
-          <div class="sub">${centreCount} centre${centreCount === 1 ? '' : 's'} · ${totalEnrolled} enrolled · last updated just now</div>
+      <div class="kt-hero">
+        <div class="kt-hero-greet">${esc(greet)} 👋</div>
+        <h1>${esc(data.agency?.name || 'Agency overview')}</h1>
+        <div class="kt-hero-sub">
+          <strong>${centreCount}</strong> centre${centreCount === 1 ? '' : 's'} ·
+          <strong>${totalEnrolled}</strong> children enrolled ·
+          last updated just now
         </div>
-        <div class="actions">
-          <button class="btn btn-secondary" id="kt-refresh-btn" title="Refresh">↻</button>
-          <button class="btn btn-primary" id="kt-add-centre-btn">+ Add centre</button>
+        <div class="kt-hero-actions">
+          <button class="kt-hero-btn primary" id="kt-add-centre-btn">+ Add centre</button>
+          <button class="kt-hero-btn" id="kt-refresh-btn" title="Refresh">↻ Refresh</button>
         </div>
+        <div class="kt-hero-svg">${cloudsSvg}</div>
       </div>
     `);
 

@@ -1,0 +1,248 @@
+/* ============================================================
+   KIDDIETRAC v22p12 — visual polish + motion
+   Loaded after kt-sidebar-v22.css and before any screen-specific
+   inline styles. Adds: hover lifts, fade-ins, gradient hero, button
+   feedback, refined empty states. Token-driven so brand changes
+   cascade.
+   ============================================================ */
+
+:root {
+  --kt-hero-grad: linear-gradient(135deg, #1F6080 0%, #2C8AAC 55%, #8EC73C 130%);
+  --kt-hero-grad-warm: linear-gradient(135deg, #FF8A65 0%, #F9A26C 50%, #FFC07A 100%);
+  --kt-elev-1: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kt-elev-2: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.05);
+  --kt-elev-3: 0 12px 28px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(15, 23, 42, 0.06);
+  --kt-radius-lg: 18px;
+  --kt-easing: cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* ── Page-level fade-in for screen mounts ──────────────────── */
+@keyframes kt-fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes kt-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes kt-pulse-soft {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+@keyframes kt-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+#appMain > * { animation: kt-fade-in-up 0.35s var(--kt-easing) both; }
+
+/* ── Hero card (used on agency overview, centres list, etc.) ─ */
+.kt-hero {
+  position: relative;
+  background: var(--kt-hero-grad);
+  color: white;
+  border-radius: var(--kt-radius-lg);
+  padding: 32px 36px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: var(--kt-elev-2);
+  isolation: isolate;
+}
+.kt-hero::before {
+  /* decorative gradient orb top-right */
+  content: '';
+  position: absolute;
+  top: -120px; right: -120px;
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(255,255,255,.18) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+.kt-hero > * { position: relative; z-index: 1; }
+.kt-hero .kt-hero-greet {
+  font-size: 13px; font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; opacity: 0.85; margin-bottom: 4px;
+}
+.kt-hero h1 {
+  font-size: 32px; font-weight: 800; margin: 0 0 8px;
+  line-height: 1.15; letter-spacing: -0.5px;
+}
+.kt-hero .kt-hero-sub {
+  font-size: 15px; opacity: 0.9; max-width: 640px; line-height: 1.5;
+}
+.kt-hero .kt-hero-svg {
+  position: absolute; right: 24px; bottom: -12px; pointer-events: none;
+  width: 240px; height: 200px; opacity: 0.9;
+  animation: kt-float 6s var(--kt-easing) infinite;
+}
+.kt-hero .kt-hero-actions {
+  display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap;
+}
+.kt-hero .kt-hero-btn {
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s var(--kt-easing);
+}
+.kt-hero .kt-hero-btn:hover {
+  background: rgba(255,255,255,0.28);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.kt-hero .kt-hero-btn.primary {
+  background: white;
+  color: #1F6080;
+  border-color: white;
+}
+.kt-hero .kt-hero-btn.primary:hover {
+  background: #F9FAFB;
+}
+
+@media (max-width: 920px) {
+  .kt-hero { padding: 24px; }
+  .kt-hero h1 { font-size: 24px; }
+  .kt-hero .kt-hero-svg { display: none; }
+}
+
+/* ── Universal card lift on hover ──────────────────────────── */
+.kt-lift,
+.dashboard-card,
+[class*="centre-card"],
+[class*="family-card"] {
+  transition: transform 0.18s var(--kt-easing),
+              box-shadow  0.18s var(--kt-easing),
+              border-color 0.18s var(--kt-easing);
+}
+.kt-lift:hover,
+.dashboard-card:hover,
+[class*="centre-card"]:hover,
+[class*="family-card"]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--kt-elev-2);
+}
+
+/* Tables: subtle row highlight */
+table tbody tr {
+  transition: background 0.15s var(--kt-easing);
+}
+table tbody tr:hover {
+  background: #F9FAFB !important;
+}
+
+/* Buttons: press feedback */
+button:not(:disabled):active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Better focus rings — visible but not ugly */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #2C8AAC;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Stat callouts (numbers in cards) get a tiny pulse on load ── */
+.kt-stat-value {
+  display: inline-block;
+  animation: kt-pulse-soft 1.2s var(--kt-easing) 1;
+}
+
+/* ── Empty state illustration container ────────────────────── */
+.kt-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--kt-text-muted, #6B7280);
+}
+.kt-empty .kt-empty-svg {
+  width: 180px; height: 180px;
+  margin: 0 auto 16px;
+  opacity: 0.85;
+}
+.kt-empty h3 {
+  font-size: 18px; color: #111827;
+  margin: 0 0 6px;
+}
+.kt-empty p {
+  font-size: 14px;
+  max-width: 380px;
+  margin: 0 auto 16px;
+  line-height: 1.5;
+}
+
+/* ── Subtle gradient accents on section headers ────────────── */
+.kt-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #6B7280;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 12px;
+}
+.kt-section-title::before {
+  content: '';
+  display: inline-block;
+  width: 4px; height: 18px;
+  background: linear-gradient(180deg, #1F6080, #8EC73C);
+  border-radius: 2px;
+}
+
+/* ── Family card gets a colour accent strip + better hover ── */
+.family-card-v22 {
+  position: relative;
+  overflow: hidden;
+}
+.family-card-v22::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #1F6080, #8EC73C);
+  transition: width 0.18s var(--kt-easing);
+}
+.family-card-v22:hover::before {
+  width: 6px;
+}
+
+/* ── Sidebar nav links: smoother hover + active state glow ── */
+.app-sidebar .nav-link {
+  transition: background 0.15s var(--kt-easing),
+              color 0.15s var(--kt-easing),
+              padding-left 0.18s var(--kt-easing);
+}
+.app-sidebar .nav-link:hover {
+  padding-left: 18px;
+}
+.app-sidebar .nav-link.active {
+  box-shadow: inset 3px 0 0 currentColor;
+}
+
+/* ── Modal entry animation ─────────────────────────────────── */
+.modal,
+[class*="modal-body"] {
+  animation: kt-fade-in-up 0.22s var(--kt-easing) both;
+}
+
+/* ── Toast pop ─────────────────────────────────────────────── */
+.toast,
+[class*="toast"] {
+  animation: kt-fade-in 0.2s var(--kt-easing) both;
+}
+
+/* ── Accent dots for stats grid (decorative) ───────────────── */
+.kt-dotted-bg {
+  background-image: radial-gradient(circle at 1px 1px, rgba(31, 96, 128, 0.08) 1px, transparent 0);
+  background-size: 16px 16px;
+}
