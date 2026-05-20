@@ -2,7 +2,7 @@
    KIDDIETRAC service worker v14
    v11: caching + offline; v14: + Web Push support
    =================================================================== */
-const CACHE = 'kt-v22p42-1';
+const CACHE = 'kt-v22p43-1';
 const ASSETS = ['/', '/index.html', '/dashboard.html', '/manifest.json'];
 
 self.addEventListener('install', (e) => {

@@ -106,6 +106,7 @@
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
           { hash: 'admin-billing',    label: 'Billing (Stripe)', icon: '💳' },
           { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
+          { hash: 'admin-forms',      label: 'Custom forms',     icon: '📝' },
           { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
         ]},
         { label: 'Settings', items: [

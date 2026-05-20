@@ -1219,7 +1219,7 @@ final class AdminController extends Controller
         $file = $request->file('logo');
         $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
         $name = (string) Str::uuid() . '.' . $ext;
-        $file->storeAs('public/centre-logos', $name);
+        $file->storeAs('centre-logos', $name, 'public');
 
         $publicPath = '/storage/centre-logos/' . $name;
         DB::table('centres')->where('id', $centreId)->update([
@@ -1255,7 +1255,7 @@ final class AdminController extends Controller
         $file = $request->file('avatar');
         $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
         $name = (string) Str::uuid() . '.' . $ext;
-        $file->storeAs('public/avatars', $name);
+        $file->storeAs('avatars', $name, 'public');
 
         $publicPath = '/storage/avatars/' . $name;
         DB::table('users')->where('id', $userId)->update([

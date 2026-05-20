@@ -229,7 +229,7 @@ final class MarketingController extends Controller
         $file = $request->file('image');
         $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
         $name = (string) Str::uuid() . '.' . $ext;
-        $file->storeAs('public/marketing', $name);
+        $file->storeAs('marketing', $name, 'public');
         $url = '/storage/marketing/' . $name;
         return response()->json(['url' => $url, 'message' => 'Image uploaded']);
     }

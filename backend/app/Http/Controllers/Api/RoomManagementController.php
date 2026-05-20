@@ -160,7 +160,7 @@ final class RoomManagementController extends Controller
         $file = $request->file('logo');
         $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
         $name = (string) \Illuminate\Support\Str::uuid() . '.' . $ext;
-        $file->storeAs('public/room-logos', $name);
+        $file->storeAs('room-logos', $name, 'public');
         $publicPath = '/storage/room-logos/' . $name;
         DB::table('rooms')->where('id', $roomId)->update([
             'logo_url'   => $publicPath,

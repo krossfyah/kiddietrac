@@ -117,7 +117,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
             $file = $request->file('avatar');
             $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
             $name = (string) \Illuminate\Support\Str::uuid() . '.' . $ext;
-            $file->storeAs('public/avatars', $name);
+            // v22p43: Laravel 11 changed the local-disk root to storage/app/private,
+            // so 'public/avatars' now writes to storage/app/private/public/avatars/
+            // which isn't reachable via the /storage symlink. Use the public disk
+            // so the file lands at storage/app/public/avatars/.
+            $file->storeAs('avatars', $name, 'public');
             $publicPath = '/storage/avatars/' . $name;
             \Illuminate\Support\Facades\DB::table('users')
                 ->where('id', $request->user()->id)
@@ -398,6 +402,14 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::get('/presence', [AdminController::class, 'presence']);
         // v22p42: bulk invoice generation by centre (extends director endpoint with centre_id arg)
         Route::post('/invoices/generate-batch', [\App\Http\Controllers\Api\InvoiceController::class, 'generateBatchByCentre']);
+
+        // v22p43: custom forms builder — admin side (CRUD + responses)
+        Route::get('/forms', [\App\Http\Controllers\Api\FormsController::class, 'index']);
+        Route::post('/forms', [\App\Http\Controllers\Api\FormsController::class, 'store']);
+        Route::get('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'show']);
+        Route::patch('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'update']);
+        Route::delete('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'destroy']);
+        Route::get('/forms/{form}/responses', [\App\Http\Controllers\Api\FormsController::class, 'listResponses']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);
         // v22p11: agency_admin family CRUD
         Route::post('/families', [AdminController::class, 'createFamily']);
@@ -425,6 +437,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::get('/chats/{conversation}',        [ChatController::class, 'parentShow']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'parentSend']);
     });
+
+    // v22p43: parent-facing form endpoints (any authenticated user can submit;
+    // the controller filters by guardian->family->centre->agency).
+    Route::get('/forms', [\App\Http\Controllers\Api\FormsController::class, 'publishedForUser']);
+    Route::post('/forms/{form}/submit', [\App\Http\Controllers\Api\FormsController::class, 'submit']);
     
     // v22p42: global search for both agency_admin AND centre_director.
     // SearchController::resolveAgencyId now walks director.centre_id ->

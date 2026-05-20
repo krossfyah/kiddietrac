@@ -168,13 +168,19 @@
         dropdown.style.display = 'none';
         return;
       }
-      fetch('/api/v1/admin/search?q=' + encodeURIComponent(q), {
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Accept': 'application/json',
-        },
-        credentials: 'same-origin',
-      }).then(function (r) {
+      // v22p43: was a relative '/api/v1/...' which resolves against the
+      // PORTAL host (app.kiddietrac.com) and 404s because the SPA only
+      // serves static assets. Use the absolute API host so the request
+      // reaches Laravel. Also forward the X-Active-Agency-Id header so
+      // multi-agency platform admins get results from their current tenant.
+      var apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var activeAgencyId = sessionStorage.getItem('kt_active_agency_id') || '';
+      var headers = {
+        'Authorization': 'Bearer ' + token,
+        'Accept': 'application/json',
+      };
+      if (activeAgencyId) headers['X-Active-Agency-Id'] = activeAgencyId;
+      fetch(apiBase + '/admin/search?q=' + encodeURIComponent(q), { headers: headers }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }).then(function (data) {
