@@ -247,6 +247,111 @@ final class AdminController extends Controller
     }
 
     // ════════════════════════════════════════════════════════════════
+    //   AUDIT LOG VIEWER — v22p39
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * GET /api/v1/admin/audit-logs
+     *
+     * Filterable, paginated audit-log viewer for agency admins. Each row
+     * is enriched with the actor's name / email so the UI doesn't need
+     * separate lookups.
+     *
+     * Scope: by default returns logs where the actor's role_assignment OR
+     * the entity itself is within the caller's agency. platform_admin sees
+     * every row across the platform.
+     *
+     * Query params:
+     *   entity_type — filter to one type (user, centre, agency, invoice, ...)
+     *   action      — filter to a single action (user.created, ...)
+     *   user_id     — filter to events by this actor
+     *   since       — ISO datetime, lower bound on created_at
+     *   until       — ISO datetime, upper bound on created_at
+     *   q           — free-text match on action or payload
+     *   limit       — page size (default 50, max 200)
+     *   offset      — pagination offset
+     */
+    public function auditLogs(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['logs' => [], 'total' => 0]);
+
+        $callerIsPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+
+        $entityType = $request->input('entity_type');
+        $action     = $request->input('action');
+        $userId     = (int) $request->input('user_id');
+        $since      = $request->input('since');
+        $until      = $request->input('until');
+        $q          = trim((string) $request->input('q', ''));
+        $limit      = min(200, max(1, (int) $request->input('limit', 50)));
+        $offset     = max(0, (int) $request->input('offset', 0));
+
+        // Build agency-scoped user id list (actors who belong to this agency)
+        $scopedUserIds = null;
+        if (!$callerIsPlatformAdmin) {
+            $centreIds = $this->getCentreIds($agencyId);
+            $scopedUserIds = DB::table('role_assignments')
+                ->where('active', true)
+                ->where(function ($x) use ($agencyId, $centreIds) {
+                    $x->where('agency_id', $agencyId);
+                    if (!empty($centreIds)) $x->orWhereIn('centre_id', $centreIds);
+                })
+                ->pluck('user_id')->unique()->values()->all();
+            // Also include guardian users in the agency
+            $guardianIds = DB::table('guardians as g')
+                ->join('families as f', 'f.id', '=', 'g.family_id')
+                ->whereIn('f.centre_id', $centreIds ?: [0])
+                ->pluck('g.user_id')->all();
+            $scopedUserIds = array_values(array_unique(array_merge($scopedUserIds, $guardianIds)));
+        }
+
+        $base = DB::table('audit_logs as al')
+            ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
+            ->orderByDesc('al.created_at');
+
+        if ($scopedUserIds !== null) {
+            $base->whereIn('al.user_id', $scopedUserIds ?: [0]);
+        }
+        if ($entityType) $base->where('al.entity_type', $entityType);
+        if ($action)     $base->where('al.action', $action);
+        if ($userId)     $base->where('al.user_id', $userId);
+        if ($since)      $base->where('al.created_at', '>=', $since);
+        if ($until)      $base->where('al.created_at', '<=', $until);
+        if ($q !== '')   $base->where(function ($x) use ($q) {
+            $x->where('al.action', 'like', "%{$q}%")
+              ->orWhere('al.payload', 'like', "%{$q}%");
+        });
+
+        $total = (clone $base)->count('al.id');
+
+        $rows = $base->limit($limit)->offset($offset)->get([
+            'al.id', 'al.action', 'al.entity_type', 'al.entity_id',
+            'al.payload', 'al.ip_address', 'al.created_at',
+            'al.user_id',
+            DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, 'system') as actor_name"),
+            'u.email as actor_email',
+        ]);
+
+        // Distinct values for the UI filter dropdowns (capped at 60 each)
+        $distinctActions = (clone $base)->distinct()->limit(60)->pluck('al.action');
+        $distinctEntities = (clone $base)->distinct()->limit(40)->pluck('al.entity_type')->filter()->values();
+
+        return response()->json([
+            'logs' => $rows,
+            'total' => $total,
+            'limit' => $limit,
+            'offset' => $offset,
+            'filters' => [
+                'actions' => $distinctActions,
+                'entity_types' => $distinctEntities,
+            ],
+        ]);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //   USERS
     // ════════════════════════════════════════════════════════════════
 

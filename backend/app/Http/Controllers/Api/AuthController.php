@@ -86,6 +86,14 @@ final class AuthController extends Controller
             now()->addDays(30)
         );
 
+        // v22p39: stamp last login so the admin Users tab can surface
+        // 'last seen' next to each user.
+        DB::table('users')->where('id', $user->id)->update([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+            'updated_at' => now(),
+        ]);
+
         DB::table('device_tokens')->updateOrInsert(
             ['user_id' => $user->id, 'device_name' => $data['device_name']],
             [
@@ -445,8 +453,16 @@ final class AuthController extends Controller
 
     private function pickPrimaryRole(array $roles): ?string
     {
+        // v22p39: platform_admin gets the agency_admin shell so users who
+        // hold only the platform role still render a nav and a dashboard.
+        // Before this fix, Safia Ali (platform_admin only) hit
+        // primary_role=null on login and the shell hung on 'Loading your
+        // workspace…'. Mapping to agency_admin works because the v17 nav
+        // already includes the platform-overview / all-agencies links
+        // via agency-switcher injection.
         return match (true) {
             in_array('agency_admin', $roles, true) => 'agency_admin',
+            in_array('platform_admin', $roles, true) => 'agency_admin',
             in_array('centre_director', $roles, true) => 'centre_director',
             in_array('educator', $roles, true) => 'educator',
             in_array('guardian', $roles, true) => 'guardian',

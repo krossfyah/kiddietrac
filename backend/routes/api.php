@@ -367,6 +367,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
     
         Route::get('/users', [AdminController::class, 'listUsers']);
         Route::post('/users', [AdminController::class, 'createUser']);
+        // v22p39: audit-log viewer for agency admins (+ platform_admin sees all)
+        Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
         Route::post('/users/{user}/role', [AdminController::class, 'setUserRole']);
         // v22p1.2: user lifecycle

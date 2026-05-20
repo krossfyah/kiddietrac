@@ -21,11 +21,18 @@
   const Roles = {
     primaryRoleOf(user) {
       if (!user || !user.roles) return null;
-      // Priority order: agency_admin > centre_director > educator > guardian
-      const order = ['agency_admin', 'centre_director', 'educator', 'guardian', 'auditor'];
-      for (const r of order) {
-        if (user.roles.includes(r)) return r;
-      }
+      // v22p39: platform_admin gets routed through the agency_admin shell
+      // so a user who holds ONLY the platform role still gets a nav and
+      // dashboard rendered. Previously primary_role came back as null and
+      // the shell hung on 'Loading your workspace…' indefinitely. The
+      // platform-overview + all-agencies links are injected separately
+      // by agency-switcher.js, so nothing is lost.
+      if (user.roles.includes('agency_admin'))    return 'agency_admin';
+      if (user.roles.includes('platform_admin'))  return 'agency_admin';
+      if (user.roles.includes('centre_director')) return 'centre_director';
+      if (user.roles.includes('educator'))        return 'educator';
+      if (user.roles.includes('guardian'))        return 'guardian';
+      if (user.roles.includes('auditor'))         return 'auditor';
       return null;
     },
 
@@ -98,6 +105,7 @@
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
           { hash: 'admin-billing',    label: 'Billing',          icon: '💳' },
+          { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
         ]},
         { label: 'Settings', items: [
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
