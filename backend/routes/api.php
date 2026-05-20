@@ -703,14 +703,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
     // Branded XLSX exports (replaces CSV)
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
-        Route::get('/admin/users/xlsx',                   [\App\Http\Controllers\Api\ExportsController::class, 'users']);
-        Route::get('/admin/families/xlsx',                [\App\Http\Controllers\Api\ExportsController::class, 'families']);
-        Route::get('/admin/audit-logs/xlsx',              [\App\Http\Controllers\Api\ExportsController::class, 'auditLogs']);
-        Route::get('/admin/children/xlsx',                [\App\Http\Controllers\Api\ExportsController::class, 'children']);
-        Route::get('/admin/payroll/xlsx',                 [\App\Http\Controllers\Api\ExportsController::class, 'payroll']);
-        Route::get('/admin/background-checks/xlsx',       [\App\Http\Controllers\Api\ExportsController::class, 'backgroundChecks']);
-        Route::get('/compliance/cwelcc/monthly/xlsx',     [\App\Http\Controllers\Api\ExportsController::class, 'cwelccMonthly']);
-        Route::get('/admin/forms/{id}/responses/xlsx',    [\App\Http\Controllers\Api\ExportsController::class, 'formResponses']);
+        Route::get('/exports/users',                   [\App\Http\Controllers\Api\ExportsController::class, 'users']);
+        Route::get('/exports/families',                [\App\Http\Controllers\Api\ExportsController::class, 'families']);
+        Route::get('/exports/audit-logs',              [\App\Http\Controllers\Api\ExportsController::class, 'auditLogs']);
+        Route::get('/exports/children',                [\App\Http\Controllers\Api\ExportsController::class, 'children']);
+        Route::get('/exports/payroll',                 [\App\Http\Controllers\Api\ExportsController::class, 'payroll']);
+        Route::get('/exports/background-checks',       [\App\Http\Controllers\Api\ExportsController::class, 'backgroundChecks']);
+        Route::get('/exports/cwelcc-monthly',     [\App\Http\Controllers\Api\ExportsController::class, 'cwelccMonthly']);
+        Route::get('/exports/forms/{id}/responses',    [\App\Http\Controllers\Api\ExportsController::class, 'formResponses']);
     });
 
     // Bulk import: templates + file upload

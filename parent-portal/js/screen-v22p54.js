@@ -112,13 +112,13 @@
   function mapHashToExportType(hash) {
     const today = new Date().toISOString().slice(0, 10);
     const map = {
-      'admin-users': { path: '/admin/users/xlsx', filename: `users-${today}.xlsx`, importType: 'users', label: 'Users' },
-      'admin-families': { path: '/admin/families/xlsx', filename: `families-${today}.xlsx`, importType: 'families', label: 'Families' },
-      'admin-children': { path: '/admin/children/xlsx', filename: `children-${today}.xlsx`, importType: 'children', label: 'Children' },
-      'audit-logs': { path: '/admin/audit-logs/xlsx', filename: `audit-log-${today}.xlsx` },
-      'payroll': { path: '/admin/payroll/xlsx', filename: `payroll-${today}.xlsx` },
-      'background-checks': { path: '/admin/background-checks/xlsx', filename: `background-checks-${today}.xlsx` },
-      'cwelcc': { path: '/compliance/cwelcc/monthly/xlsx', filename: `CWELCC-${today.substring(0, 7)}.xlsx` },
+      'admin-users': { path: '/exports/users', filename: `users-${today}.xlsx`, importType: 'users', label: 'Users' },
+      'admin-families': { path: '/exports/families', filename: `families-${today}.xlsx`, importType: 'families', label: 'Families' },
+      'admin-children': { path: '/exports/children', filename: `children-${today}.xlsx`, importType: 'children', label: 'Children' },
+      'audit-logs': { path: '/exports/audit-logs', filename: `audit-log-${today}.xlsx` },
+      'payroll': { path: '/exports/payroll', filename: `payroll-${today}.xlsx` },
+      'background-checks': { path: '/exports/background-checks', filename: `background-checks-${today}.xlsx` },
+      'cwelcc': { path: '/exports/cwelcc-monthly', filename: `CWELCC-${today.substring(0, 7)}.xlsx` },
       'menu': { importType: 'menu', label: 'Menu items' },
       'inspection': { importType: 'inspection', label: 'Inspection items' },
     };
