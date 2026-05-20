@@ -857,6 +857,24 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/compliance/retention',               [\App\Http\Controllers\Api\ComplianceController::class, 'retentionReport']);
         Route::get ('/compliance/expiry-calendar',         [\App\Http\Controllers\Api\ComplianceController::class, 'expiryCalendar']);
     });
+    // v22p63
+    Route::post('/chatbot/ask',                  [\App\Http\Controllers\Api\ChatbotController::class, 'ask']);
+    Route::get ('/chatbot/history',              [\App\Http\Controllers\Api\ChatbotController::class, 'history']);
+    Route::post('/chat/voice',                   [\App\Http\Controllers\Api\VoiceMessageController::class, 'send']);
+    Route::get ('/wellness/today/{childId}',     [\App\Http\Controllers\Api\WellnessController::class, 'todayForChild']);
+    Route::post('/wellness/screening',           [\App\Http\Controllers\Api\WellnessController::class, 'submit']);
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/wellness/digest',          [\App\Http\Controllers\Api\WellnessController::class, 'todayDigest']);
+        Route::get ('/payment-plans/family/{id}',[\App\Http\Controllers\Api\PaymentPlanController::class, 'listForFamily']);
+        Route::post('/payment-plans',            [\App\Http\Controllers\Api\PaymentPlanController::class, 'create']);
+        Route::post('/payment-plans/{id}/cancel',[\App\Http\Controllers\Api\PaymentPlanController::class, 'cancel']);
+    });
+    Route::get ('/payment-plans/mine',           [\App\Http\Controllers\Api\PaymentPlanController::class, 'myPlans']);
+    Route::get ('/doc-workflows',                [\App\Http\Controllers\Api\DocumentWorkflowController::class, 'listMine']);
+    Route::post('/doc-workflows',                [\App\Http\Controllers\Api\DocumentWorkflowController::class, 'create']);
+    Route::get ('/doc-workflows/{id}',           [\App\Http\Controllers\Api\DocumentWorkflowController::class, 'show']);
+    Route::post('/doc-workflows/{id}/sign',      [\App\Http\Controllers\Api\DocumentWorkflowController::class, 'sign']);
+
 
     // AI v2: tagging, translation, auto-link, forecast, anomalies
     Route::middleware('role:centre_director,agency_admin,platform_admin,educator')->group(function () {
@@ -937,3 +955,10 @@ Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController:
 
 Route::post('/kiosk/{token}/signature', [\App\Http\Controllers\Api\OperationsController::class, 'captureSignature']);
 
+
+
+// v22p63 public routes
+Route::get ('/sso/providers',                    [\App\Http\Controllers\Api\SsoController::class, 'providers']);
+Route::get ('/sso/{provider}',                   [\App\Http\Controllers\Api\SsoController::class, 'redirect']);
+Route::get ('/sso/{provider}/callback',          [\App\Http\Controllers\Api\SsoController::class, 'callback']);
+Route::post('/kiosk/{token}/temperature',        [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record']);

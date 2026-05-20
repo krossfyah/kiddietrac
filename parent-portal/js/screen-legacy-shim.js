@@ -224,4 +224,17 @@
     Shell.registerScreen(r + ':photo-tagging',     bridge('KT.V22p59', 'renderPhotoTagging'));
   });
 
+
+  // v22p63
+  ['guardian'].forEach(function (r) {
+    Shell.registerScreen(r + ':wellness',      bridge('KT.V22p63', 'renderWellness'));
+    Shell.registerScreen(r + ':payment-plans', bridge('KT.V22p63', 'renderPaymentPlans'));
+    Shell.registerScreen(r + ':doc-workflows', bridge('KT.V22p63', 'renderDocWorkflows'));
+  });
+  ['agency_admin','centre_director','educator','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':wellness-digest', bridge('KT.V22p63', 'renderWellnessDigest'));
+    Shell.registerScreen(r + ':payment-plans',   bridge('KT.V22p63', 'renderPaymentPlans'));
+    Shell.registerScreen(r + ':doc-workflows',   bridge('KT.V22p63', 'renderDocWorkflows'));
+  });
+
 })(window);
