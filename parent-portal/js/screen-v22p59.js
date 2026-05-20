@@ -215,7 +215,7 @@
           days[d] = document.querySelector(`input[data-day="${d}"]`).checked;
         });
         await Api.post(`/attendance/pattern/${cid}`, { ...days, effective_from: document.getElementById('ap-from').value });
-        alert('Saved.');
+        (window.KT && window.KT.toast) ? KT.toast('Saved.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Saved.') ? 'success' : 'info') : alert('Saved.');
       };
     };
     document.getElementById('ap-child').onchange = (e) => load(+e.target.value);
@@ -242,7 +242,7 @@
     document.getElementById('rc-gen').onclick = async () => {
       const cid = +document.getElementById('rc-cid').value;
       const term = document.getElementById('rc-term').value;
-      if (!cid || !term) { alert('Child ID + term required'); return; }
+      if (!cid || !term) { (window.KT && window.KT.toast) ? KT.toast('Child ID + term required', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Child ID + term required') ? 'success' : 'info') : alert('Child ID + term required'); return; }
       const btn = document.getElementById('rc-gen');
       btn.disabled = true; btn.textContent = 'Generating… (15-30 sec)';
       try {
@@ -265,13 +265,13 @@
             next_steps: document.getElementById('rc-next').value,
             status: 'reviewed',
           });
-          alert('Saved.');
+          (window.KT && window.KT.toast) ? KT.toast('Saved.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Saved.') ? 'success' : 'info') : alert('Saved.');
         };
         document.getElementById('rc-send').onclick = async () => {
           await Api.post(`/report-cards/${r.id}/send`, {});
-          alert('Sent. Family was notified.');
+          (window.KT && window.KT.toast) ? KT.toast('Sent. Family was notified.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Sent. Family was notified.') ? 'success' : 'info') : alert('Sent. Family was notified.');
         };
-      } catch (e) { alert('AI failed: ' + (e.message || e)); }
+      } catch (e) { (window.KT && window.KT.toast) ? KT.toast('AI failed: ' + (e.message || e, /save|sent|added|created|approved|deleted|removed|done|charged/i.test('AI failed: ' + (e.message || e) ? 'success' : 'info') : alert('AI failed: ' + (e.message || e)); }
       finally { btn.disabled = false; btn.textContent = 'Generate via AI'; }
     };
   }

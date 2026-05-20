@@ -75,7 +75,7 @@
     document.body.appendChild(m);
     m.querySelector('#pa-cancel').onclick = () => m.remove();
     m.querySelector('#pa-save').onclick = async () => {
-      if (!m.querySelector('#pa-name').value.trim()) { alert('Name is required'); return; }
+      if (!m.querySelector('#pa-name').value.trim()) { (window.KT && window.KT.toast) ? KT.toast('Name is required', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Name is required') ? 'success' : 'info') : alert('Name is required'); return; }
       await Api.post('/family/pickup-auth', {
         child_id: childId,
         full_name: m.querySelector('#pa-name').value,
@@ -370,7 +370,7 @@
     document.getElementById('cl-new').onclick = () => openCurriculumModal();
     main.querySelectorAll('button[data-use]').forEach(b => b.onclick = async () => {
       const r = await Api.post(`/curriculum/${b.dataset.use}/use`, {});
-      alert(`Loaded "${r.data.title}". Use it as a starting point for a new lesson plan.`);
+      (window.KT && window.KT.toast) ? KT.toast(`Loaded "${r.data.title}". Use it as a starting point for a new lesson plan.`, /save|sent|added|created|approved|deleted|removed|done|charged/i.test(`Loaded "${r.data.title}". Use it as a starting point for a new lesson plan.`) ? 'success' : 'info') : alert(`Loaded "${r.data.title}". Use it as a starting point for a new lesson plan.`);
     });
   }
   function openCurriculumModal() {
@@ -457,7 +457,7 @@
       await new Promise(r => s.onload = r);
     }
     const intent = await Api.post('/parent/billing/ach-setup-intent', {});
-    if (!intent.publishable_key) { alert('Stripe not configured.'); return; }
+    if (!intent.publishable_key) { (window.KT && window.KT.toast) ? KT.toast('Stripe not configured.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Stripe not configured.') ? 'success' : 'info') : alert('Stripe not configured.'); return; }
     const stripe = window.Stripe(intent.publishable_key);
     const { setupIntent, error } = await stripe.collectBankAccountForSetup({
       clientSecret: intent.client_secret,
@@ -471,7 +471,7 @@
         },
       },
     });
-    if (error) { alert(error.message); return; }
+    if (error) { (window.KT && window.KT.toast) ? KT.toast(error.message, /save|sent|added|created|approved|deleted|removed|done|charged/i.test(error.message) ? 'success' : 'info') : alert(error.message); return; }
     await Api.post('/parent/billing/ach-save', { payment_method: setupIntent.payment_method });
     renderAch(document.querySelector('main'));
   }

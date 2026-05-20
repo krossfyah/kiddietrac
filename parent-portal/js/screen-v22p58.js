@@ -12,7 +12,7 @@
 
   async function downloadAuthed(path, filename) {
     const r = await fetch(apiBase() + path, { headers: { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token') } });
-    if (!r.ok) { alert('Download failed: ' + r.status); return; }
+    if (!r.ok) { (window.KT && window.KT.toast) ? KT.toast('Download failed: ' + r.status, /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Download failed: ' + r.status) ? 'success' : 'info') : alert('Download failed: ' + r.status); return; }
     const blob = await r.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   }
@@ -107,7 +107,7 @@
           },
         },
       });
-      if (error) { alert(error.message); return; }
+      if (error) { (window.KT && window.KT.toast) ? KT.toast(error.message, /save|sent|added|created|approved|deleted|removed|done|charged/i.test(error.message) ? 'success' : 'info') : alert(error.message); return; }
       await Api.post('/parent/wallet', { payment_method: setupIntent.payment_method });
       renderWallet(document.querySelector('main'));
     }
@@ -200,7 +200,7 @@
       `;
       document.getElementById('rf-go').onclick = async () => {
         const amt = parseFloat(document.getElementById('rf-amt').value);
-        if (!amt) return alert('Amount required');
+        if (!amt) return (window.KT && window.KT.toast) ? KT.toast('Amount required', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Amount required') ? 'success' : 'info') : alert('Amount required');
         try {
           const out = await Api.post('/refunds', {
             payment_id: pid, amount: amt,
@@ -373,7 +373,7 @@
     m.querySelector('#v-cancel').onclick = () => m.remove();
     m.querySelector('#v-go').onclick = async () => {
       const f = m.querySelector('#v-file').files[0];
-      if (!f) { alert('Pick a video'); return; }
+      if (!f) { (window.KT && window.KT.toast) ? KT.toast('Pick a video', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Pick a video') ? 'success' : 'info') : alert('Pick a video'); return; }
       const fd = new FormData(); fd.append('video', f); fd.append('caption', m.querySelector('#v-cap').value);
       try {
         const r = await fetch(apiBase() + '/videos', {
@@ -392,7 +392,7 @@
         m.remove();
         if (window.KT && window.KT.toast) window.KT.toast('Video uploaded', 'success');
         renderVideoFeed(document.querySelector('main'));
-      } catch (e) { if (window.KT && window.KT.toast) window.KT.toast(e.message || 'Upload failed', 'error', 7000); else alert(e.message); }
+      } catch (e) { if (window.KT && window.KT.toast) window.KT.toast(e.message || 'Upload failed', 'error', 7000); else (window.KT && window.KT.toast) ? KT.toast(e.message, /save|sent|added|created|approved|deleted|removed|done|charged/i.test(e.message) ? 'success' : 'info') : alert(e.message); }
     };
   }
 
