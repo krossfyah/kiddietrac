@@ -230,7 +230,7 @@
   // ─── Portfolio — chronological observations + milestone progress ──
   function renderPortfolio(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:980px;margin:0 auto;' });
+    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1400px;margin:0 auto;' });
     container.appendChild(wrap);
     var childId = paramId();
     if (!childId) { wrap.appendChild(Dom.el('div', { style: 'color:#DC2626;padding:24px;' }, 'Missing child id — open from a child detail page.')); return; }
@@ -293,7 +293,7 @@
   // ─── Milestones checklist ─────────────────────────────────────────
   function renderMilestones(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:980px;margin:0 auto;' });
+    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1400px;margin:0 auto;' });
     container.appendChild(wrap);
     var childId = paramId();
     if (!childId) { wrap.appendChild(Dom.el('div', { style: 'color:#DC2626;padding:24px;' }, 'Missing child id.')); return; }

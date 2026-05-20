@@ -88,9 +88,15 @@
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',   icon: '📣' },
           { hash: 'tours',               label: 'Tours',       icon: '🚪' },
+          { hash: 'sms',                 label: 'SMS broadcast', icon: '📱' },
+          { hash: 'ai-churn',            label: 'Churn risk',  icon: '📉' },
+          { hash: 'ai-docs',             label: 'AI doc extract', icon: '🪄' },
         ]},
         { label: 'Staff', items: [
-          { hash: 'staff-calendar',  label: 'Calendar',         icon: '📅' },
+          { hash: 'staff-calendar',     label: 'Calendar',           icon: '📅' },
+          { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
+          { hash: 'background-checks',  label: 'Background checks',  icon: '🛡' },
+          { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Reseller', items: [
           { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
@@ -116,6 +122,8 @@
         { label: 'Settings', items: [
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'sibling-discounts',  label: 'Sibling discounts',   icon: '👨‍👩‍👧' },
+          { hash: 'agency-billing',     label: 'Billing settings',    icon: '⚙️' },
+          { hash: 'language',           label: 'Language',            icon: '🌐' },
 
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
@@ -154,10 +162,16 @@
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📣' },
           { hash: 'tours',              label: 'Tours',       icon: '🚪' },
+          { hash: 'sms',                label: 'SMS broadcast', icon: '📱' },
+          { hash: 'ai-churn',           label: 'Churn risk',  icon: '📉' },
+          { hash: 'ai-docs',            label: 'AI doc extract', icon: '🪄' },
         ]},
         { label: 'Staff', items: [
-          { hash: 'staff-calendar', label: 'Calendar',         icon: '📅' },
-          { hash: 'time-clock',     label: 'Time clock',       icon: '⏱' },
+          { hash: 'staff-calendar',    label: 'Calendar',           icon: '📅' },
+          { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
+          { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
+          { hash: 'background-checks', label: 'Background checks',  icon: '🛡' },
+          { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
@@ -169,6 +183,7 @@
 
 
           { hash: 'mfa',              label: 'Two-factor (MFA)', icon: '🔐' },
+          { hash: 'language',         label: 'Language',         icon: '🌐' },
           { hash: 'help',             label: 'Help & guides',    icon: '📖' },
         ]},
       ];
@@ -191,6 +206,8 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
 
+          { hash: 'time-off',      label: 'My time off',      icon: '🌴' },
+          { hash: 'language',      label: 'Language',         icon: '🌐' },
           { hash: 'mfa',           label: 'Two-factor (MFA)', icon: '🔐' },
           { hash: 'help',          label: 'Help & guides',    icon: '📖' },
         ]},
@@ -217,6 +234,7 @@
       { label: 'Settings', items: [
         { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
+        { hash: 'language',      label: 'Language',         icon: '🌐' },
         { hash: 'mfa',           label: 'Two-factor (MFA)', icon: '🔐' },
         { hash: 'help',          label: 'Help & guides',    icon: '📖' },
       ]},

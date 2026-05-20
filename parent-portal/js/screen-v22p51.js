@@ -20,7 +20,7 @@
     ]);
     main.innerHTML = '';
     main.appendChild(html(`
-      <div style="padding:24px;max-width:1100px;margin:0 auto;">
+      <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 16px;color:#1F6080;">Time off</h2>
         <button id="tor-new" class="btn btn-primary" style="padding:10px 18px;border-radius:6px;background:#1F6080;color:#fff;border:0;font-weight:600;cursor:pointer;">+ Request time off</button>
         <h3 style="margin-top:32px;font-size:16px;color:#374151;">Your requests</h3>
@@ -100,7 +100,7 @@
     const res = await Api.get('/admin/background-checks').catch(() => ({ data: [] }));
     main.innerHTML = '';
     const root = html(`
-      <div style="padding:24px;max-width:1100px;margin:0 auto;">
+      <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h2 style="margin:0;color:#1F6080;">Background checks</h2>
           <div>
@@ -185,7 +185,7 @@
   // ============================ Payroll ============================
   async function renderPayroll(main) {
     main.innerHTML = `
-      <div style="padding:24px;max-width:1100px;margin:0 auto;">
+      <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 16px;color:#1F6080;">Payroll report</h2>
         <div style="display:flex;gap:12px;margin-bottom:18px;align-items:end;">
           <label style="font-size:13px;color:#374151;">From <input id="pr-from" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
@@ -358,7 +358,7 @@
     const rows = res.data || [];
     const hi = rows.filter(r => r.bucket === 'high').length;
     const md = rows.filter(r => r.bucket === 'medium').length;
-    main.innerHTML = `<div style="padding:24px;max-width:1100px;margin:0 auto;">
+    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <h2 style="margin:0 0 8px;color:#1F6080;">Churn risk</h2>
       <p style="color:#6B7280;font-size:14px;">Heuristic score per family based on observation activity, sign-in attendance, and payment status. Updated each time you load this page.</p>
       <div style="display:flex;gap:12px;margin:20px 0;">
