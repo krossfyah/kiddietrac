@@ -60,6 +60,35 @@
       }
       link.href = branding.favicon_url;
     }
+
+    // v22p29: "Powered by Kiddietrac" footer is hidden when tenant pays for white-label
+    if (typeof branding.powered_by_visible !== 'undefined') {
+      var poweredBy = document.querySelectorAll('.kt-powered-by, [data-powered-by]');
+      poweredBy.forEach(function (el) {
+        el.style.display = branding.powered_by_visible ? '' : 'none';
+      });
+    }
+  }
+
+  // v22p29: which agency should the loader brand for?
+  // Priority: sessionStorage.kt_active_agency_id (set by agency-switcher after multi-agency users pick)
+  //          -> first agency on the user record (if logged in)
+  //          -> URL ?slug= or hostname-based fallback
+  function activeAgencyHint() {
+    var hint = {};
+    try {
+      var aid = sessionStorage.getItem('kt_active_agency_id');
+      if (aid) { hint.agency_id = aid; return hint; }
+    } catch (e) {}
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || 'null');
+      if (u && u.agency_id) { hint.agency_id = String(u.agency_id); return hint; }
+    } catch (e) {}
+    // URL slug override (e.g. ?tenant=acme on the public login page)
+    var qs = new URLSearchParams(window.location.search);
+    var slug = qs.get('tenant') || qs.get('slug');
+    if (slug) hint.slug = slug;
+    return hint;
   }
 
   async function load() {
@@ -74,10 +103,13 @@
       }
     } catch (e) { /* ignore */ }
 
-    // Fetch fresh
+    // Fetch fresh — include agency hint so multi-tenant + multi-agency users see the
+    // right branding for the agency they're currently logged into
     try {
       const apiBase = (window.KT && window.KT.Api && window.KT.Api.base) || 'https://api.kiddietrac.com/api/v1';
-      const res = await fetch(apiBase + '/branding');
+      const hint = activeAgencyHint();
+      const qs = new URLSearchParams(hint).toString();
+      const res = await fetch(apiBase + '/branding' + (qs ? '?' + qs : ''));
       if (!res.ok) return;
       const data = await res.json();
       if (data.branding) {
@@ -98,6 +130,13 @@
   window.KT = window.KT || {};
   window.KT.applyBranding = apply;
   window.KT.reloadBranding = load;
+
+  // Re-fire on agency switch (some flows reload the page; others dispatch the event)
+  window.addEventListener('kt:agency-switched', function () {
+    // Drop the cached branding for the previous agency so the new one applies cleanly
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    load();
+  });
 
   // Run on page load
   if (document.readyState === 'loading') {

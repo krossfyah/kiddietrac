@@ -32,28 +32,58 @@ final class BrandingController extends Controller
 
     /**
      * Public — used by login page + every screen to apply branding
-     * GET /api/v1/branding?slug=acme  (slug optional; falls back to first agency)
+     * GET /api/v1/branding
+     *   ?agency_id=N   (preferred — used by the in-app loader after the user has picked
+     *                   an active agency; honored regardless of auth)
+     *   ?slug=acme     (used by the login page when only the URL is known)
+     *   no params      (falls back to first non-deleted agency by id)
+     *
+     * Merge order (later wins):
+     *   DEFAULT_BRANDING  <  settings.branding.* (legacy)  <  agencies.brand_* columns
+     *
+     * The column-based fields (brand_logo_url, brand_primary_color, brand_support_email,
+     * powered_by_visible) are the new source of truth as of v22p24 — PlatformController
+     * writes there. The legacy settings.branding.* path is still honored so older saves
+     * keep applying, but column values override when both exist.
      */
     public function show(Request $request): JsonResponse
     {
+        $agencyId = $request->input('agency_id');
         $slug = $request->input('slug');
         $agency = null;
 
-        if ($slug) {
+        if ($agencyId) {
+            $agency = DB::table('agencies')->where('id', (int) $agencyId)->whereNull('deleted_at')->first();
+        }
+        if (!$agency && $slug) {
             $agency = DB::table('agencies')->where('slug', $slug)->whereNull('deleted_at')->first();
         }
-
         if (!$agency) {
-            // No slug or not found — use first/default agency
+            // No usable hint — use first/default agency
             $agency = DB::table('agencies')->whereNull('deleted_at')->orderBy('id')->first();
         }
 
         if (!$agency) {
-            return response()->json(['branding' => self::DEFAULT_BRANDING]);
+            return response()->json([
+                'branding' => self::DEFAULT_BRANDING + ['powered_by_visible' => true],
+            ]);
         }
 
         $settings = json_decode($agency->settings ?? '{}', true) ?: [];
         $branding = array_merge(self::DEFAULT_BRANDING, $settings['branding'] ?? []);
+
+        // v22p29: column-based brand fields override legacy settings.branding.*
+        if (!empty($agency->brand_logo_url)) {
+            $branding['logo_url'] = $agency->brand_logo_url;
+        }
+        if (!empty($agency->brand_primary_color)) {
+            $branding['primary_color'] = $agency->brand_primary_color;
+        }
+        if (!empty($agency->brand_support_email)) {
+            $branding['support_email'] = $agency->brand_support_email;
+        }
+        // Tenant may opt out of "Powered by Kiddietrac" footer (white-label add-on)
+        $branding['powered_by_visible'] = (bool) ($agency->powered_by_visible ?? 1);
 
         // Always include the agency name as fallback for product_name
         if (empty($branding['product_name']) || $branding['product_name'] === 'Kiddietrac') {
