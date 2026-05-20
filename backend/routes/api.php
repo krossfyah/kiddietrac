@@ -580,6 +580,75 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // White-label invoice preview (returns text/html)
     Route::get   ('/invoices/{id}/preview',            [InvoicePreviewController::class, 'previewExisting']);
     Route::get   ('/invoices/preview-sample',          [InvoicePreviewController::class, 'previewSample']);
+
+    // ---- PDF exports ----
+    Route::get('/families/{family}/t4a/{year}', [\App\Http\Controllers\Api\PdfController::class, 't4a']);
+    Route::get('/care/portfolio/{child}/pdf',   [\App\Http\Controllers\Api\PdfController::class, 'portfolio']);
+
+    // ---- Time-off ----
+    Route::get   ('/time-off/mine',            [\App\Http\Controllers\Api\TimeOffController::class, 'mine']);
+    Route::post  ('/time-off',                 [\App\Http\Controllers\Api\TimeOffController::class, 'create']);
+    Route::post  ('/time-off/{id}/cancel',     [\App\Http\Controllers\Api\TimeOffController::class, 'cancel']);
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get  ('/admin/time-off',        [\App\Http\Controllers\Api\TimeOffController::class, 'listAgency']);
+        Route::patch('/admin/time-off/{id}',   [\App\Http\Controllers\Api\TimeOffController::class, 'decide']);
+    });
+
+    // ---- Background checks ----
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get   ('/admin/background-checks',          [\App\Http\Controllers\Api\BackgroundCheckController::class, 'listAgency']);
+        Route::post  ('/admin/background-checks',          [\App\Http\Controllers\Api\BackgroundCheckController::class, 'upsert']);
+        Route::delete('/admin/background-checks/{id}',     [\App\Http\Controllers\Api\BackgroundCheckController::class, 'destroy']);
+    });
+
+    // ---- Payroll ----
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get('/admin/payroll', [\App\Http\Controllers\Api\PayrollController::class, 'summary']);
+    });
+
+    // ---- Agency billing config (late-fee + SMS + locale) ----
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get  ('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'show']);
+        Route::patch('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'update']);
+    });
+
+    // ---- Stripe parent-pay (family-facing) ----
+    Route::get  ('/parent/billing/status',         [\App\Http\Controllers\Api\StripeParentPayController::class, 'status']);
+    Route::post ('/parent/billing/setup-intent',   [\App\Http\Controllers\Api\StripeParentPayController::class, 'setupIntent']);
+    Route::post ('/parent/billing/save-card',      [\App\Http\Controllers\Api\StripeParentPayController::class, 'saveCard']);
+    Route::post ('/parent/billing/autopay',        [\App\Http\Controllers\Api\StripeParentPayController::class, 'toggleAutopay']);
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::post('/invoices/{id}/charge',       [\App\Http\Controllers\Api\StripeParentPayController::class, 'chargeInvoice']);
+    });
+
+    // ---- SMS ----
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::post('/admin/sms/broadcast', [\App\Http\Controllers\Api\SmsController::class, 'broadcast']);
+        Route::get ('/admin/sms/messages',  [\App\Http\Controllers\Api\SmsController::class, 'listMessages']);
+    });
+
+    // ---- AI features ----
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/ai/churn-risk',                [\App\Http\Controllers\Api\AiController::class, 'churnRisk']);
+        Route::post('/ai/doc-extract',               [\App\Http\Controllers\Api\AiController::class, 'docExtract']);
+    });
+    Route::get('/ai/weekly-recap/{child}', [\App\Http\Controllers\Api\AiController::class, 'weeklyRecap']);
+
+    // ---- QBO ----
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get ('/qbo/connect',                [\App\Http\Controllers\Api\QboController::class, 'connect']);
+        Route::get ('/qbo/status',                 [\App\Http\Controllers\Api\QboController::class, 'status']);
+        Route::post('/qbo/disconnect',             [\App\Http\Controllers\Api\QboController::class, 'disconnect']);
+        Route::post('/qbo/sync/invoice/{id}',      [\App\Http\Controllers\Api\QboController::class, 'syncInvoice']);
+    });
+
+    // ---- Locale ----
+    Route::get ('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'current']);
+    Route::post('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'set']);
+    Route::get ('/locale/strings/{lang}',   [\App\Http\Controllers\Api\LocaleController::class, 'strings']);
+
+
+
 });
 });
 
@@ -588,3 +657,19 @@ Route::prefix('kiosk')->group(function () {
     Route::get('/{token}', [\App\Http\Controllers\Api\KioskController::class, 'lookup']);
     Route::post('/{token}/check-event', [\App\Http\Controllers\Api\KioskController::class, 'checkEvent']);
 });
+
+// ===== v22p51 PUBLIC ROUTES =====
+
+
+// v22p51 — Stripe parent-pay webhook (no auth; signature-verified inside)
+Route::post('/stripe/parent-webhook', [\App\Http\Controllers\Api\StripeParentPayController::class, 'webhook']);
+
+// v22p51 — Public agency landing pages (HTML)
+Route::get('/public/landing/{slug}', [\App\Http\Controllers\Api\LandingController::class, 'landing']);
+
+// v22p51 — QBO OAuth callback (no auth — state cookie identifies agency)
+Route::get('/qbo/callback', [\App\Http\Controllers\Api\QboController::class, 'callback']);
+
+// v22p51 — public locale bundles (no auth required so the login page can localize too)
+Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController::class, 'strings']);
+

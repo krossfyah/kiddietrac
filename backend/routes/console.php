@@ -63,3 +63,9 @@ Schedule::command('kiddietrac:late-fees')
     ->withoutOverlapping(60)
     ->runInBackground()
     ->onOneServer();
+
+// v22p51 — append these inside the closure in routes/console.php
+
+Schedule::command('invoices:autopay-charge')->dailyAt('03:00');
+Schedule::command('expiry:warn')->dailyAt('08:00');
+

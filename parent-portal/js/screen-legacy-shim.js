@@ -100,4 +100,28 @@
   Shell.registerScreen('guardian:autopay',       bridge('KT.Autopay', 'render'));
   Shell.registerScreen('guardian:announcements', bridge('KT.Announcements', 'render'));
   Shell.registerScreen('guardian:lesson-plans',  bridge('KT.LessonPlans', 'render'));
+
+// v22p51 — paste BEFORE the closing })(window) in screen-legacy-shim.js
+
+  // v22p51: time off (every staff role + parent submits / staff approve)
+  ['agency_admin','centre_director','educator','guardian'].forEach(function (r) {
+    Shell.registerScreen(r + ':time-off', bridge('KT.V22p51', 'renderTimeOff'));
+  });
+  // background checks, payroll, agency-billing config, SMS, AI tools — admin+director
+  ['agency_admin','centre_director'].forEach(function (r) {
+    Shell.registerScreen(r + ':background-checks', bridge('KT.V22p51', 'renderBackgroundChecks'));
+    Shell.registerScreen(r + ':payroll',           bridge('KT.V22p51', 'renderPayroll'));
+    Shell.registerScreen(r + ':sms',               bridge('KT.V22p51', 'renderSms'));
+    Shell.registerScreen(r + ':ai-churn',          bridge('KT.V22p51', 'renderAiChurn'));
+    Shell.registerScreen(r + ':ai-docs',           bridge('KT.V22p51', 'renderAiDocs'));
+  });
+  // agency-billing settings — agency_admin only
+  Shell.registerScreen('agency_admin:agency-billing', bridge('KT.V22p51', 'renderAgencyBilling'));
+  // parent autopay
+  Shell.registerScreen('guardian:autopay-card', bridge('KT.V22p51', 'renderAutopay'));
+  // locale picker - everyone
+  ['agency_admin','centre_director','educator','guardian','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':language', bridge('KT.V22p51', 'renderLocale'));
+  });
+
 })(window);
