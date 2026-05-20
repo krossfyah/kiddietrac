@@ -33,6 +33,8 @@
       <h1 class="auth-title">Welcome back</h1>
       <p class="auth-sub">Sign in to see how your little one's day is going.</p>
 
+      <div id="signedOutBanner" hidden style="background:#FEF3C7;color:#92400E;border:1px solid #FBBF24;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.4;margin-bottom:14px;"></div>
+
       <form id="loginForm" class="auth-form" novalidate>
         <div class="form-row">
           <label for="email">Email</label>
@@ -143,6 +145,20 @@
     const errorMsg = document.getElementById('errorMsg');
     const submitBtn = document.getElementById('submitBtn');
 
+    // v22p31: surface why the user was bounced here when session-timeout
+    // (or 401 elsewhere) appended ?signed_out=… to the URL.
+    (function () {
+      var reason = new URLSearchParams(window.location.search).get('signed_out');
+      if (!reason) return;
+      var banner = document.getElementById('signedOutBanner');
+      var msg = {
+        idle: 'You were signed out after a period of inactivity. Sign in again to continue.',
+        absolute: 'For security, sessions are capped at 12 hours. Please sign in again.',
+        'signed out': 'You signed out. See you next time!',
+      }[reason] || 'Your session ended. Please sign in again.';
+      if (banner) { banner.textContent = msg; banner.hidden = false; }
+    })();
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorMsg.hidden = true;
@@ -198,6 +214,14 @@
         sessionStorage.setItem('kt_token', body.token);
         sessionStorage.setItem('kt_user', JSON.stringify(body.user));
 
+        // v22p31: stamp session start so idle+absolute timers kick in
+        if (window.KT && window.KT.SessionTimeout) window.KT.SessionTimeout.stampLogin();
+        else {
+          var nowMs = String(Date.now());
+          sessionStorage.setItem('kt_login_at', nowMs);
+          sessionStorage.setItem('kt_last_activity', nowMs);
+        }
+
         // Redirect based on role
         if (body.user.roles.includes('guardian')) {
           window.location.href = '/dashboard.html';
@@ -218,6 +242,7 @@
     });
   </script>
   <script src="/js/login-v7.js" defer></script>
+  <script src="/js/session-timeout.js" defer></script>
   <script src="/js/branding-loader.js" defer></script>
   <script src="/js/api-helpers-v10.js" defer></script>
   <script src="/js/mobile-helper-v11.js" defer></script>

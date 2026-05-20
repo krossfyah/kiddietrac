@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Admin controller: agency-admin level CRUD for centres, users, families, children.
@@ -375,7 +376,11 @@ final class AdminController extends Controller
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $data = $request->validate([
-            'email' => ['required', 'email', 'max:180', 'unique:users,email'],
+            // v22p31: uniqueness check ignores soft-deleted rows so re-creating
+            // a previously-deleted user reuses the same record (see revive
+            // block below). Without this rule, the previous Safia Ali deletion
+            // would 422 'email already taken' on every recreate attempt.
+            'email' => ['required', 'email', 'max:180', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'first_name' => ['required', 'string', 'max:80'],
             'last_name' => ['required', 'string', 'max:80'],
             'phone' => ['nullable', 'string', 'max:40'],
@@ -418,16 +423,40 @@ final class AdminController extends Controller
         // Random temporary password (user resets via invite email or forgot-password)
         $tempPassword = Str::random(24);
 
-        $userId = DB::table('users')->insertGetId([
-            'email' => $data['email'],
-            'password' => Hash::make($tempPassword),
-            'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
-            'phone' => $data['phone'] ?? null,
-            'status' => 'invited',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // v22p31: if a soft-deleted user with this email already exists, revive
+        // it rather than creating a duplicate row. Re-create-after-delete is the
+        // most natural admin workflow for fixing a misadded user, and persisting
+        // a stable user.id keeps audit logs, payments, and message history
+        // attached to the same person on re-add.
+        $existing = DB::table('users')->where('email', $data['email'])->whereNotNull('deleted_at')->first();
+        $isRevive = (bool) $existing;
+        if ($isRevive) {
+            $userId = (int) $existing->id;
+            DB::table('users')->where('id', $userId)->update([
+                'deleted_at' => null,
+                'password' => Hash::make($tempPassword),
+                'first_name' => $data['first_name'],
+                'last_name' => $data['last_name'],
+                'phone' => $data['phone'] ?? null,
+                'status' => 'invited',
+                'updated_at' => now(),
+            ]);
+            // Drop the old (deactivated) role_assignment rows for this user; a
+            // fresh one is inserted below. This avoids a recreated educator
+            // accidentally inheriting a stale platform_admin row.
+            DB::table('role_assignments')->where('user_id', $userId)->delete();
+        } else {
+            $userId = DB::table('users')->insertGetId([
+                'email' => $data['email'],
+                'password' => Hash::make($tempPassword),
+                'first_name' => $data['first_name'],
+                'last_name' => $data['last_name'],
+                'phone' => $data['phone'] ?? null,
+                'status' => 'invited',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
 
         // v22p18 + v22p23: stamp agency_id so the user is discoverable in
         // listUsers (filter requires agency_id OR centre_id). platform_admin
@@ -445,7 +474,7 @@ final class AdminController extends Controller
             'created_at' => now(),
         ]);
 
-        $this->audit($request->user()->id, 'user.created', 'user', $userId, [
+        $this->audit($request->user()->id, $isRevive ? 'user.revived' : 'user.created', 'user', $userId, [
             'email' => $data['email'],
             'role' => $data['role'],
         ]);
@@ -455,7 +484,10 @@ final class AdminController extends Controller
 
         return response()->json([
             'id' => $userId,
-            'message' => 'User created',
+            'message' => $isRevive
+                ? 'User restored — they previously existed and have been reinstated with the role you selected.'
+                : 'User created',
+            'revived' => $isRevive,
             'note' => 'Have the user click "Forgot password" on the login page to set their password.',
         ], 201);
     }
