@@ -174,9 +174,30 @@ final class OperationsController extends Controller
         $rows = $q->get();
         $rows->transform(function ($r) {
             $tags = [];
-            if (!empty($r->allergies)) $tags[] = 'allergy:' . $r->allergies;
-            if (!empty($r->health_alerts)) $tags[] = 'health:' . $r->health_alerts;
-            if (!empty($r->dietary_restrictions)) $tags[] = 'diet:' . $r->dietary_restrictions;
+            $decode = function ($raw, $kind) {
+                if (empty($raw)) return [];
+                if (is_array($raw)) $arr = $raw;
+                else { $arr = json_decode($raw, true); if (!is_array($arr)) return [['kind' => $kind, 'label' => (string) $raw, 'severity' => 'note']]; }
+                $out = [];
+                foreach ($arr as $entry) {
+                    if (is_string($entry)) { $out[] = ['kind' => $kind, 'label' => $entry, 'severity' => 'note']; continue; }
+                    $label = $entry['allergen'] ?? $entry['restriction'] ?? $entry['alert'] ?? '';
+                    $sev = $entry['severity'] ?? 'note';
+                    $reaction = $entry['reaction'] ?? null;
+                    $epipen = !empty($entry['epipen_required']) ? ' (EpiPen' . (!empty($entry['epipen_location']) ? ' @ ' . $entry['epipen_location'] : '') . ')' : '';
+                    $out[] = [
+                        'kind' => $kind,
+                        'label' => $label . ($reaction ? ' — ' . $reaction : '') . $epipen,
+                        'severity' => $sev,
+                    ];
+                }
+                return $out;
+            };
+            $tags = array_merge(
+                $decode($r->allergies, 'allergy'),
+                $decode($r->health_alerts, 'health'),
+                $decode($r->dietary_restrictions, 'dietary')
+            );
             $r->tags = $tags;
             return $r;
         });

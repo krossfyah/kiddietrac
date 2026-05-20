@@ -29,9 +29,18 @@
   // ============================ Meal planning ============================
   async function renderMenu(main) {
     main.innerHTML = '<div style="padding:24px;">Loading menu…</div>';
-    // resolve a centre for the user
-    const centres = await Api.get('/director/centres').catch(() => ({ data: [] }));
-    const centreList = centres.data || centres || [];
+    // resolve a centre for the user; try director endpoint first, then admin endpoint
+    let centreList = [];
+    try {
+      const r1 = await Api.get('/director/centres');
+      centreList = r1.data || r1 || [];
+    } catch (e) { /* fall through */ }
+    if (!centreList.length) {
+      try {
+        const r2 = await Api.get('/admin/centres');
+        centreList = r2.data || r2 || [];
+      } catch (e) {}
+    }
     if (!centreList.length) { main.innerHTML = '<div style="padding:24px;color:#9CA3AF;">No centres found for your role.</div>'; return; }
     const cid = centreList[0].id;
     const weekStart = new Date(); const dow = (weekStart.getDay() + 6) % 7; weekStart.setDate(weekStart.getDate() - dow);
@@ -106,7 +115,13 @@
         ${(r.data || []).map(c => `<div style="border-left:4px solid #B91C1C;background:#FEF2F2;padding:14px 18px;margin-bottom:10px;border-radius:0 8px 8px 0;">
           <strong style="color:#991B1B;font-size:16px;">${esc(c.first_name)} ${esc(c.last_name)}</strong>
           <div style="margin-top:6px;font-size:13px;color:#374151;">
-            ${(c.tags || []).map(t => `<span style="background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:4px;margin-right:6px;font-size:12px;">${esc(t)}</span>`).join('')}
+            ${(c.tags || []).map(t => {
+              const colors = { allergy: { bg: '#FEE2E2', fg: '#991B1B' }, health: { bg: '#FEF3C7', fg: '#92400E' }, dietary: { bg: '#DBEAFE', fg: '#1E40AF' } };
+              const sev = t.severity || 'note';
+              const sevDot = sev === 'anaphylactic' ? '🚨' : sev === 'severe' ? '⚠' : '';
+              const c = colors[t.kind] || { bg: '#F3F4F6', fg: '#374151' };
+              return `<span style="background:${c.bg};color:${c.fg};padding:4px 10px;border-radius:6px;margin-right:6px;margin-bottom:4px;font-size:13px;display:inline-block;font-weight:600;">${sevDot} ${esc((t.kind || '').toUpperCase())}: ${esc(t.label || '')}</span>`;
+            }).join('')}
           </div></div>`).join('') || '<div style="color:#9CA3AF;padding:20px;">No active allergy or dietary alerts.</div>'}
       </div>
     </div>`;

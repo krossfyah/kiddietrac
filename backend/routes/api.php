@@ -701,6 +701,30 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     });
 
 
+    // Branded XLSX exports (replaces CSV)
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get('/admin/users/xlsx',                   [\App\Http\Controllers\Api\ExportsController::class, 'users']);
+        Route::get('/admin/families/xlsx',                [\App\Http\Controllers\Api\ExportsController::class, 'families']);
+        Route::get('/admin/audit-logs/xlsx',              [\App\Http\Controllers\Api\ExportsController::class, 'auditLogs']);
+        Route::get('/admin/children/xlsx',                [\App\Http\Controllers\Api\ExportsController::class, 'children']);
+        Route::get('/admin/payroll/xlsx',                 [\App\Http\Controllers\Api\ExportsController::class, 'payroll']);
+        Route::get('/admin/background-checks/xlsx',       [\App\Http\Controllers\Api\ExportsController::class, 'backgroundChecks']);
+        Route::get('/compliance/cwelcc/monthly/xlsx',     [\App\Http\Controllers\Api\ExportsController::class, 'cwelccMonthly']);
+        Route::get('/admin/forms/{id}/responses/xlsx',    [\App\Http\Controllers\Api\ExportsController::class, 'formResponses']);
+    });
+
+    // Bulk import: templates + file upload
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get ('/import/templates/{type}',           [\App\Http\Controllers\Api\ImportController::class, 'template']);
+        Route::post('/import/users',                      [\App\Http\Controllers\Api\ImportController::class, 'importUsers']);
+        Route::post('/import/children',                   [\App\Http\Controllers\Api\ImportController::class, 'importChildren']);
+        Route::post('/import/families',                   [\App\Http\Controllers\Api\ImportController::class, 'importFamilies']);
+        Route::post('/import/menu',                       [\App\Http\Controllers\Api\ImportController::class, 'importMenu']);
+        Route::post('/import/inspection',                 [\App\Http\Controllers\Api\ImportController::class, 'importInspection']);
+    });
+
+
+
 
 
 

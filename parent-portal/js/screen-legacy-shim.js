@@ -104,11 +104,11 @@
 // v22p51 — paste BEFORE the closing })(window) in screen-legacy-shim.js
 
   // v22p51: time off (every staff role + parent submits / staff approve)
-  ['agency_admin','centre_director','educator','guardian'].forEach(function (r) {
+  ['agency_admin','centre_director','educator','guardian','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':time-off', bridge('KT.V22p51', 'renderTimeOff'));
   });
   // background checks, payroll, agency-billing config, SMS, AI tools — admin+director
-  ['agency_admin','centre_director'].forEach(function (r) {
+  ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':background-checks', bridge('KT.V22p51', 'renderBackgroundChecks'));
     Shell.registerScreen(r + ':payroll',           bridge('KT.V22p51', 'renderPayroll'));
     Shell.registerScreen(r + ':sms',               bridge('KT.V22p51', 'renderSms'));
@@ -116,6 +116,7 @@
     Shell.registerScreen(r + ':ai-docs',           bridge('KT.V22p51', 'renderAiDocs'));
   });
   // agency-billing settings — agency_admin only
+  Shell.registerScreen('platform_admin:agency-billing', bridge('KT.V22p51', 'renderAgencyBilling'));
   Shell.registerScreen('agency_admin:agency-billing', bridge('KT.V22p51', 'renderAgencyBilling'));
   // parent autopay
   Shell.registerScreen('guardian:autopay-card', bridge('KT.V22p51', 'renderAutopay'));
@@ -126,7 +127,7 @@
 
 
   // v22p53: operations + compliance + AI v2
-  ['agency_admin','centre_director'].forEach(function (r) {
+  ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':menu',            bridge('KT.V22p53', 'renderMenu'));
     Shell.registerScreen(r + ':allergy-alerts',  bridge('KT.V22p53', 'renderAllergyAlerts'));
     Shell.registerScreen(r + ':field-trips',     bridge('KT.V22p53', 'renderFieldTrips'));
