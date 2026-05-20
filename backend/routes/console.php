@@ -43,3 +43,13 @@ Schedule::command('kiddietrac:campaigns-mail')
     ->withoutOverlapping(10)
     ->runInBackground()
     ->onOneServer();
+
+// v22p40: missed-chat email notifications — every 15 minutes. Picks up
+// messages older than 30 minutes that have not been read and not yet
+// emailed. Groups by recipient+conversation so each user gets ONE
+// summary email per thread (not one per message).
+Schedule::command('kiddietrac:chat-emails')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(20)
+    ->runInBackground()
+    ->onOneServer();
