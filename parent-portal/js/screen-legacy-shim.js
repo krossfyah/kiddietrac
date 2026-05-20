@@ -124,4 +124,18 @@
     Shell.registerScreen(r + ':language', bridge('KT.V22p51', 'renderLocale'));
   });
 
+
+  // v22p53: operations + compliance + AI v2
+  ['agency_admin','centre_director'].forEach(function (r) {
+    Shell.registerScreen(r + ':menu',            bridge('KT.V22p53', 'renderMenu'));
+    Shell.registerScreen(r + ':allergy-alerts',  bridge('KT.V22p53', 'renderAllergyAlerts'));
+    Shell.registerScreen(r + ':field-trips',     bridge('KT.V22p53', 'renderFieldTrips'));
+    Shell.registerScreen(r + ':substitutes',     bridge('KT.V22p53', 'renderSubstitutes'));
+    Shell.registerScreen(r + ':inspection',      bridge('KT.V22p53', 'renderInspection'));
+    Shell.registerScreen(r + ':cwelcc',          bridge('KT.V22p53', 'renderCwelcc'));
+    Shell.registerScreen(r + ':retention',       bridge('KT.V22p53', 'renderRetention'));
+    Shell.registerScreen(r + ':forecast',        bridge('KT.V22p53', 'renderForecast'));
+    Shell.registerScreen(r + ':anomalies',       bridge('KT.V22p53', 'renderAnomalies'));
+    Shell.registerScreen(r + ':renewals',        bridge('KT.V22p53', 'renderExpiryCalendar'));
+  });
 })(window);

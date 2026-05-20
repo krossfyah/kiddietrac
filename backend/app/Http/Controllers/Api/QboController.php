@@ -155,6 +155,31 @@ final class QboController extends Controller
         ]);
     }
 
+
+    /**
+     * v22p53 — bulk push a list of invoices to QBO. Returns per-id status.
+     */
+    public function bulkSyncInvoices(Request $request): JsonResponse
+    {
+        abort_unless(env('QBO_CLIENT_ID'), 503);
+        $data = $request->validate([
+            'invoice_ids' => 'required|array|min:1|max:100',
+            'invoice_ids.*' => 'integer',
+        ]);
+        $results = [];
+        foreach ($data['invoice_ids'] as $iid) {
+            try {
+                $res = $this->syncInvoice($request, (int) $iid);
+                $payload = json_decode($res->getContent(), true);
+                $results[] = ['invoice_id' => $iid, 'status' => $res->status() === 200 ? 'ok' : 'fail', 'detail' => $payload];
+            } catch (\Throwable $e) {
+                $results[] = ['invoice_id' => $iid, 'status' => 'fail', 'detail' => $e->getMessage()];
+            }
+        }
+        $ok = count(array_filter($results, fn ($r) => $r['status'] === 'ok'));
+        return response()->json(['results' => $results, 'ok' => $ok, 'failed' => count($results) - $ok]);
+    }
+
     private function ensureFreshToken($agency): string
     {
         if (!empty($agency->qbo_token_expires_at) && now()->lt($agency->qbo_token_expires_at)) {

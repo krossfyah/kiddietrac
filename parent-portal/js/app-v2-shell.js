@@ -91,12 +91,26 @@
           { hash: 'sms',                 label: 'SMS broadcast', icon: '📱' },
           { hash: 'ai-churn',            label: 'Churn risk',  icon: '📉' },
           { hash: 'ai-docs',             label: 'AI doc extract', icon: '🪄' },
+          { hash: 'forecast',            label: 'Enrolment forecast', icon: '📈' },
+        ]},
+        { label: 'Programs', items: [
+          { hash: 'menu',                label: 'Weekly menu',     icon: '🍽' },
+          { hash: 'field-trips',         label: 'Field trips',     icon: '🚐' },
+          { hash: 'allergy-alerts',      label: 'Allergy alerts',  icon: '⚠' },
         ]},
         { label: 'Staff', items: [
           { hash: 'staff-calendar',     label: 'Calendar',           icon: '📅' },
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🛡' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
+          { hash: 'substitutes',        label: 'Substitutes',        icon: '🔄' },
+        ]},
+        { label: 'Compliance', items: [
+          { hash: 'inspection',         label: 'Inspection checklist', icon: '✅' },
+          { hash: 'renewals',           label: 'Renewals calendar',    icon: '📅' },
+          { hash: 'cwelcc',             label: 'CWELCC subsidies',    icon: '💵' },
+          { hash: 'retention',          label: 'Retention',          icon: '📊' },
+          { hash: 'anomalies',          label: 'Anomalies',          icon: '🔍' },
         ]},
         { label: 'Reseller', items: [
           { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
@@ -172,6 +186,20 @@
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks', label: 'Background checks',  icon: '🛡' },
           { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
+          { hash: 'substitutes',       label: 'Substitutes',        icon: '🔄' },
+        ]},
+        { label: 'Programs', items: [
+          { hash: 'menu',              label: 'Weekly menu',     icon: '🍽' },
+          { hash: 'field-trips',       label: 'Field trips',     icon: '🚐' },
+          { hash: 'allergy-alerts',    label: 'Allergy alerts',  icon: '⚠' },
+        ]},
+        { label: 'Compliance', items: [
+          { hash: 'inspection',        label: 'Inspection checklist', icon: '✅' },
+          { hash: 'renewals',          label: 'Renewals calendar',    icon: '📅' },
+          { hash: 'cwelcc',            label: 'CWELCC subsidies',  icon: '💵' },
+          { hash: 'retention',         label: 'Retention',        icon: '📊' },
+          { hash: 'forecast',          label: 'Enrolment forecast',icon: '📈' },
+          { hash: 'anomalies',         label: 'Anomalies',        icon: '🔍' },
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },

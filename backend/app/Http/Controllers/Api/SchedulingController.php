@@ -439,4 +439,29 @@ final class SchedulingController extends Controller
             })
             ->exists();
     }
+
+    /**
+     * v22p53 — return approved time-off windows so the calendar can
+     * render a blocked overlay + the New Shift modal can validate.
+     * GET /director/schedule/time-off-blocks?start=YYYY-MM-DD&end=YYYY-MM-DD
+     */
+    public function timeOffBlocks(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
+    {
+        $start = $request->query('start');
+        $end = $request->query('end');
+        abort_unless($start && $end, 400);
+        $agencyId = (int) ($request->header('X-Active-Agency-Id')
+            ?: \Illuminate\Support\Facades\DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)->where('active', 1)->value('agency_id'));
+        $rows = \Illuminate\Support\Facades\DB::table('time_off_requests as tor')
+            ->join('users as u', 'u.id', '=', 'tor.user_id')
+            ->where('tor.agency_id', $agencyId)
+            ->where('tor.status', 'approved')
+            ->where('tor.start_at', '<=', $end)
+            ->where('tor.end_at', '>=', $start)
+            ->select('tor.id', 'tor.user_id', 'tor.start_at', 'tor.end_at', 'tor.request_type',
+                \Illuminate\Support\Facades\DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"))
+            ->get();
+        return response()->json(['data' => $rows]);
+    }
 }

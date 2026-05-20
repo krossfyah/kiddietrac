@@ -647,6 +647,62 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'set']);
     Route::get ('/locale/strings/{lang}',   [\App\Http\Controllers\Api\LocaleController::class, 'strings']);
 
+    // Operations: meals, allergies, field trips, substitutes, inspection
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get  ('/operations/menu',              [\App\Http\Controllers\Api\OperationsController::class, 'getMenuWeek']);
+        Route::post ('/operations/menu',              [\App\Http\Controllers\Api\OperationsController::class, 'saveMenuWeek']);
+        Route::get  ('/operations/allergy-alerts',    [\App\Http\Controllers\Api\OperationsController::class, 'allergyAlerts']);
+        Route::get  ('/operations/field-trips',       [\App\Http\Controllers\Api\OperationsController::class, 'listFieldTrips']);
+        Route::post ('/operations/field-trips',       [\App\Http\Controllers\Api\OperationsController::class, 'createFieldTrip']);
+        Route::get  ('/operations/field-trips/{id}/permissions', [\App\Http\Controllers\Api\OperationsController::class, 'listPermissionsForTrip']);
+        Route::get  ('/operations/substitutes',       [\App\Http\Controllers\Api\OperationsController::class, 'listSubstitutes']);
+        Route::post ('/operations/substitutes',       [\App\Http\Controllers\Api\OperationsController::class, 'upsertSubstitute']);
+        Route::get  ('/operations/sub-requests',      [\App\Http\Controllers\Api\OperationsController::class, 'listSubRequests']);
+        Route::post ('/operations/sub-requests',      [\App\Http\Controllers\Api\OperationsController::class, 'createSubRequest']);
+        Route::get  ('/operations/inspection',        [\App\Http\Controllers\Api\OperationsController::class, 'getInspectionChecklist']);
+        Route::patch('/operations/inspection/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'updateChecklistItem']);
+        Route::get  ('/operations/signatures/{child}', [\App\Http\Controllers\Api\OperationsController::class, 'listSignatures']);
+    });
+    // parent claims open sub request
+    Route::post('/operations/sub-requests/{id}/claim', [\App\Http\Controllers\Api\OperationsController::class, 'claimSubRequest']);
+    // parent responds to permission slip
+    Route::patch('/operations/permissions/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'respondToPermission']);
+
+    // Compliance: CWELCC, retention, cert/check renewal calendar
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/compliance/cwelcc/families',         [\App\Http\Controllers\Api\ComplianceController::class, 'cwelccFamilies']);
+        Route::patch('/compliance/cwelcc/families/{id}',   [\App\Http\Controllers\Api\ComplianceController::class, 'setCwelccEnrolment']);
+        Route::get ('/compliance/cwelcc/monthly',          [\App\Http\Controllers\Api\ComplianceController::class, 'cwelccMonthlyReport']);
+        Route::get ('/compliance/cwelcc/monthly/pdf',      [\App\Http\Controllers\Api\ComplianceController::class, 'cwelccMonthlyPdf']);
+        Route::get ('/compliance/cwelcc/monthly/csv',      [\App\Http\Controllers\Api\ComplianceController::class, 'cwelccMonthlyCsv']);
+        Route::get ('/compliance/retention',               [\App\Http\Controllers\Api\ComplianceController::class, 'retentionReport']);
+        Route::get ('/compliance/expiry-calendar',         [\App\Http\Controllers\Api\ComplianceController::class, 'expiryCalendar']);
+    });
+
+    // AI v2: tagging, translation, auto-link, forecast, anomalies
+    Route::middleware('role:centre_director,agency_admin,platform_admin,educator')->group(function () {
+        Route::post('/ai/tag-observation',                 [\App\Http\Controllers\Api\AiV2Controller::class, 'tagObservation']);
+        Route::post('/ai/translate-message',               [\App\Http\Controllers\Api\AiV2Controller::class, 'translateMessage']);
+    });
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::post('/ai/doc-extract/{id}/auto-link',      [\App\Http\Controllers\Api\AiV2Controller::class, 'autoLinkExtraction']);
+        Route::get ('/ai/enrollment-forecast',             [\App\Http\Controllers\Api\AiV2Controller::class, 'enrollmentForecast']);
+        Route::get ('/ai/attendance-anomalies',            [\App\Http\Controllers\Api\AiV2Controller::class, 'attendanceAnomalies']);
+    });
+
+    // QBO bulk push
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::post('/qbo/sync/invoices/bulk',             [\App\Http\Controllers\Api\QboController::class, 'bulkSyncInvoices']);
+    });
+
+    // Time-off calendar block read endpoint
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get('/director/schedule/time-off-blocks',   [\App\Http\Controllers\Api\SchedulingController::class, 'timeOffBlocks']);
+    });
+
+
+
+
 
 
 });
@@ -672,4 +728,9 @@ Route::get('/qbo/callback', [\App\Http\Controllers\Api\QboController::class, 'ca
 
 // v22p51 — public locale bundles (no auth required so the login page can localize too)
 Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController::class, 'strings']);
+
+
+// ===== v22p53 PUBLIC =====
+
+Route::post('/kiosk/{token}/signature', [\App\Http\Controllers\Api\OperationsController::class, 'captureSignature']);
 
