@@ -741,6 +741,61 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/curriculum/{id}/use',    [\App\Http\Controllers\Api\GrowthController::class, 'useCurriculum']);
     });
 
+    // v22p58 — Procare-gap features
+    // Wallet
+    Route::get   ('/parent/wallet',                 [\App\Http\Controllers\Api\PaymentMethodsController::class, 'list']);
+    Route::post  ('/parent/wallet',                 [\App\Http\Controllers\Api\PaymentMethodsController::class, 'add']);
+    Route::post  ('/parent/wallet/{id}/default',    [\App\Http\Controllers\Api\PaymentMethodsController::class, 'setDefault']);
+    Route::delete('/parent/wallet/{id}',            [\App\Http\Controllers\Api\PaymentMethodsController::class, 'remove']);
+    Route::post  ('/parent/wallet/setup-intent',    [\App\Http\Controllers\Api\PaymentMethodsController::class, 'setupIntent']);
+    // Refunds (admin)
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+        Route::get ('/refunds/payment/{paymentId}', [\App\Http\Controllers\Api\RefundsController::class, 'listForPayment']);
+        Route::post('/refunds',                     [\App\Http\Controllers\Api\RefundsController::class, 'create']);
+    });
+    // Ledger
+    Route::get('/parent/ledger',                    [\App\Http\Controllers\Api\LedgerController::class, 'myLedger']);
+    Route::get('/parent/ledger/pdf',                [\App\Http\Controllers\Api\LedgerController::class, 'familyLedgerPdf']);
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+        Route::get('/families/{familyId}/ledger',        [\App\Http\Controllers\Api\LedgerController::class, 'familyLedger']);
+        Route::get('/families/{familyId}/ledger/pdf',    [\App\Http\Controllers\Api\LedgerController::class, 'familyLedgerPdf']);
+    });
+    // Reports
+    Route::get   ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'listMine']);
+    Route::post  ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'create']);
+    Route::patch ('/reports/{id}',                  [\App\Http\Controllers\Api\ReportsController::class, 'update']);
+    Route::delete('/reports/{id}',                  [\App\Http\Controllers\Api\ReportsController::class, 'destroy']);
+    Route::get   ('/reports/{id}/run',              [\App\Http\Controllers\Api\ReportsController::class, 'run']);
+    Route::post  ('/reports/preview',               [\App\Http\Controllers\Api\ReportsController::class, 'preview']);
+    // Reactions + video
+    Route::get   ('/reactions/{type}/{id}',         [\App\Http\Controllers\Api\MediaController::class, 'listReactions']);
+    Route::post  ('/reactions',                     [\App\Http\Controllers\Api\MediaController::class, 'addReaction']);
+    Route::delete('/reactions',                     [\App\Http\Controllers\Api\MediaController::class, 'removeReaction']);
+    Route::get   ('/videos/feed',                   [\App\Http\Controllers\Api\MediaController::class, 'videoFeed']);
+    Route::post  ('/videos',                        [\App\Http\Controllers\Api\MediaController::class, 'uploadVideo']);
+    // Immunization schedule
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+        Route::get   ('/immunization/schedule',           [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'listSchedule']);
+        Route::post  ('/immunization/schedule',           [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'upsertSchedule']);
+        Route::delete('/immunization/schedule/{id}',      [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'removeSchedule']);
+        Route::get   ('/immunization/due-report',         [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'agencyDueReport']);
+    });
+    Route::get('/immunization/child/{childId}/status',    [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'childStatus']);
+    // CACFP
+    Route::middleware('role:agency_admin,centre_director,educator,platform_admin')->group(function () {
+        Route::get ('/cacfp/roster',           [\App\Http\Controllers\Api\CacfpController::class, 'dailyRoster']);
+        Route::post('/cacfp/meal',             [\App\Http\Controllers\Api\CacfpController::class, 'setMeal']);
+        Route::get ('/cacfp/monthly',          [\App\Http\Controllers\Api\CacfpController::class, 'monthlyReport']);
+        Route::patch('/cacfp/family/{familyId}', [\App\Http\Controllers\Api\CacfpController::class, 'setFamilyTier']);
+    });
+    // Billing schedule
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+        Route::get   ('/billing/schedule/{familyId}',   [\App\Http\Controllers\Api\BillingScheduleController::class, 'get']);
+        Route::post  ('/billing/schedule',              [\App\Http\Controllers\Api\BillingScheduleController::class, 'set']);
+        Route::delete('/billing/schedule/{familyId}',   [\App\Http\Controllers\Api\BillingScheduleController::class, 'disable']);
+    });
+
+
     // parent responds to permission slip
     Route::patch('/operations/permissions/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'respondToPermission']);
 

@@ -189,4 +189,20 @@
     Shell.registerScreen(r + ':trends',         bridge('KT.V22p57', 'renderTrends'));
   });
 
+
+  // v22p58 — Procare-gap features
+  ['guardian'].forEach(function (r) {
+    Shell.registerScreen(r + ':wallet', bridge('KT.V22p58', 'renderWallet'));
+    Shell.registerScreen(r + ':ledger', bridge('KT.V22p58', 'renderLedger'));
+    Shell.registerScreen(r + ':videos', bridge('KT.V22p58', 'renderVideoFeed'));
+  });
+  ['agency_admin','centre_director','platform_admin','educator'].forEach(function (r) {
+    Shell.registerScreen(r + ':refunds',         bridge('KT.V22p58', 'renderRefunds'));
+    Shell.registerScreen(r + ':reports',         bridge('KT.V22p58', 'renderReports'));
+    Shell.registerScreen(r + ':videos',          bridge('KT.V22p58', 'renderVideoFeed'));
+    Shell.registerScreen(r + ':immun-schedule',  bridge('KT.V22p58', 'renderImmunSchedule'));
+    Shell.registerScreen(r + ':cacfp',           bridge('KT.V22p58', 'renderCacfp'));
+    Shell.registerScreen(r + ':billing-schedule',bridge('KT.V22p58', 'renderBillingSchedule'));
+  });
+
 })(window);

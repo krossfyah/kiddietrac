@@ -139,6 +139,11 @@
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'bus-routes',       label: 'Bus routes',       icon: '🚐' },
           { hash: 'room-rotations',   label: 'Room rotations',   icon: '🔄' },
+          { hash: 'reports',          label: 'Reports',          icon: '📋' },
+          { hash: 'refunds',          label: 'Refunds',          icon: '↩' },
+          { hash: 'immun-schedule',   label: 'Immunization due', icon: '💉' },
+          { hash: 'cacfp',            label: 'CACFP meals',      icon: '🍽' },
+          { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
         ]},
         { label: 'Engagement', items: [
           { hash: 'reenrollment',     label: 'Re-enrollment',  icon: '🔁' },
@@ -148,6 +153,7 @@
           { hash: 'drip-campaigns',   label: 'Drip campaigns',  icon: '💧' },
           { hash: 'curriculum',       label: 'Curriculum',      icon: '📚' },
           { hash: 'hdlh-gaps',        label: 'HDLH gaps',       icon: '🎯' },
+          { hash: 'videos',           label: 'Video feed',      icon: '🎬' },
         ]},
         { label: 'Settings', items: [
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -262,6 +268,7 @@
       { label: 'Your child', items: [
         { hash: 'today',          label: 'Today',          icon: '✨' },
         { hash: 'photos',         label: 'Photos',         icon: '📸' },
+        { hash: 'videos',         label: 'Videos',         icon: '🎬' },
         { hash: 'vacation-holds', label: 'Vacation hold',  icon: '🏖' },
         { hash: 'signed-docs',    label: 'Signed documents', icon: '✍' },
         { hash: 'lesson-plans',   label: 'This week',      icon: '📚' },
@@ -274,6 +281,8 @@
       { label: 'Account', items: [
         { hash: 'billing',        label: 'Billing',        icon: '💳' },
         { hash: 'autopay',        label: 'Autopay',        icon: '🔁' },
+        { hash: 'wallet',         label: 'Wallet',         icon: '💳' },
+        { hash: 'ledger',         label: 'Account ledger', icon: '📒' },
         { hash: 'ach-pay',        label: 'Bank autopay',   icon: '🏦' },
         { hash: 'referrals',      label: 'Refer a friend', icon: '🎁' },
         { hash: 'announcements',  label: 'Announcements',  icon: '📢' },
