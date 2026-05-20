@@ -379,10 +379,20 @@
         const r = await fetch(apiBase() + '/videos', {
           method: 'POST', headers: { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token') }, body: fd,
         });
-        if (!r.ok) throw new Error('upload ' + r.status);
+        if (!r.ok) {
+          let detail = 'Upload failed (' + r.status + ')';
+          try {
+            const j = await r.json();
+            if (j.message) detail = j.message;
+            if (j.errors) detail = Object.values(j.errors).flat().join('. ');
+            if (r.status === 413) detail = 'File too large. Max video size is 50MB.';
+          } catch (e) {}
+          throw new Error(detail);
+        }
         m.remove();
+        if (window.KT && window.KT.toast) window.KT.toast('Video uploaded', 'success');
         renderVideoFeed(document.querySelector('main'));
-      } catch (e) { alert(e.message); }
+      } catch (e) { if (window.KT && window.KT.toast) window.KT.toast(e.message || 'Upload failed', 'error', 7000); else alert(e.message); }
     };
   }
 
