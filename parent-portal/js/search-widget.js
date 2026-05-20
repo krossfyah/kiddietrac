@@ -50,19 +50,15 @@
   function buildWidget() {
     var wrap = document.createElement('div');
     wrap.id = 'kt-search-widget';
-    // v22p23: sticky at top of the scrolling sidebar so it never disappears
-    // when the nav list overflows. The parent #navLinks already has
-    // overflow-y:auto from kt-sidebar-v22.css, so position:sticky is
-    // anchored to that scroll container.
+    // v22p25: mounted OUTSIDE #navLinks now — fixed slot between the brand
+    // and the nav list, so position:relative is enough. flex:0 0 auto means
+    // the search row never participates in the nav-list scroll.
     wrap.setAttribute('style', [
-      'position:sticky',
-      'top:0',
-      'z-index:5',
+      'position:relative',
+      'flex:0 0 auto',
       'background:white',
-      'padding:10px 12px 8px',
+      'padding:8px 12px 10px',
       'border-bottom:1px solid rgba(0,0,0,.08)',
-      'margin:0 -1px 6px',
-      'box-shadow:0 2px 4px rgba(0,0,0,.02)',
     ].join(';'));
 
     var input = document.createElement('input');
@@ -215,15 +211,19 @@
     var role = getRole();
     if (!isStaffSidebarRole(role)) return; // not a sidebar role; never mount
 
+    // v22p25: mount OUTSIDE #navLinks so the search bar is permanently visible
+    // at the top of the sidebar, never scrolling away. Anchor between
+    // .nav-brand (logo) and #navLinks (scrollable nav list).
+    var sidebar = document.getElementById('appSidebar');
     var navLinks = document.getElementById('navLinks');
-    if (!navLinks) {
+    if (!sidebar || !navLinks) {
       setTimeout(tryMount, 100);
       return;
     }
     if (document.getElementById('kt-search-widget')) return; // already mounted
 
     var widget = buildWidget();
-    navLinks.insertBefore(widget.wrap, navLinks.firstChild);
+    sidebar.insertBefore(widget.wrap, navLinks);
     attachHandlers(widget);
   }
 

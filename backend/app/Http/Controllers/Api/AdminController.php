@@ -258,7 +258,10 @@ final class AdminController extends Controller
         $roleFilter = $request->input('role');
         $searchQuery = $request->input('q');
 
-        // Find all user_ids that have any role at this agency or its centres
+        // v22p25: also surface platform_admin users — they have NULL agency_id
+        // and NULL centre_id by design, so the regular WHERE filter excludes
+        // them. Without this branch, creating a platform_admin succeeds but
+        // the row never appears in the list — looked like the save was broken.
         $userIdsQuery = DB::table('role_assignments')
             ->where('active', true)
             ->where(function ($q) use ($agencyId, $centreIds) {
@@ -266,6 +269,7 @@ final class AdminController extends Controller
                 if (!empty($centreIds)) {
                     $q->orWhereIn('centre_id', $centreIds);
                 }
+                $q->orWhere('role', 'platform_admin');
             });
 
         if ($roleFilter) {

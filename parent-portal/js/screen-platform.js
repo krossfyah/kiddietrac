@@ -185,8 +185,11 @@
   // existing = null for create, or the agency row for edit (pre-fills inputs).
   function showAgencyModal(existing, container) {
     var isEdit = !!existing;
-    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto;' });
-    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;padding:24px;max-width:580px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);' });
+    // v22p25: centered overlay with internal scroll on the modal so tall
+    // content (with white-label section) doesnt get clipped on shorter
+    // viewports.
+    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;' });
+    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;padding:24px;max-width:580px;width:100%;max-height:calc(100vh - 48px);overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);' });
     function v(key, fallback) {
       if (! existing) return fallback || '';
       return (existing[key] === null || existing[key] === undefined) ? (fallback || '') : existing[key];
@@ -212,7 +215,8 @@
             '<input id="ag-wl" type="checkbox" ' + (whiteLabelChecked ? 'checked' : '') + '> Enable' +
           '</label>' +
         '</div>' +
-        '<div id="ag-wl-fields" style="margin-top:10px;' + (whiteLabelChecked ? '' : 'opacity:0.4;') + '">' +
+        // v22p25: stay fully visible on Edit so the fields are obvious; checkbox alone signals state.
+        '<div id="ag-wl-fields" style="margin-top:10px;">' +
           '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Logo URL (PNG/SVG, max 200×60)</label>' +
             '<input id="ag-logo" type="text" placeholder="https://customer.com/logo.png" value="' + esc(v('brand_logo_url')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:ui-monospace,monospace;"></div>' +
           '<div style="display:grid;grid-template-columns:120px 1fr;gap:10px;margin-bottom:10px;">' +
@@ -231,12 +235,8 @@
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
     modal.querySelector('#ag-cancel').addEventListener('click', function () { overlay.remove(); });
 
-    // White-label toggle dims the section when off (for UX clarity).
+    // v22p25: section stays fully visible — checkbox alone signals on/off state.
     var wlBox = modal.querySelector('#ag-wl');
-    var wlFields = modal.querySelector('#ag-wl-fields');
-    wlBox.addEventListener('change', function () {
-      wlFields.style.opacity = wlBox.checked ? '1' : '0.4';
-    });
 
     modal.querySelector('#ag-save').addEventListener('click', async function () {
       var payload = {
