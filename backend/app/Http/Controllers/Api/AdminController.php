@@ -258,19 +258,31 @@ final class AdminController extends Controller
         $roleFilter = $request->input('role');
         $searchQuery = $request->input('q');
 
-        // v22p25: also surface platform_admin users — they have NULL agency_id
-        // and NULL centre_id by design, so the regular WHERE filter excludes
-        // them. Without this branch, creating a platform_admin succeeds but
-        // the row never appears in the list — looked like the save was broken.
-        $userIdsQuery = DB::table('role_assignments')
+        // v22p27: when the caller is a platform_admin, drop the agency filter
+        // entirely — they manage every tenant on the platform and should see
+        // every user with an active role_assignment, regardless of which
+        // agency the row belongs to. Anthony reported adding Safia Ali (iLearn
+        // agency_admin) and not seeing her while his active agency was
+        // Kiddietrac. Platform admins now bypass that scoping.
+        $callerIsPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')
             ->where('active', true)
-            ->where(function ($q) use ($agencyId, $centreIds) {
+            ->exists();
+
+        $userIdsQuery = DB::table('role_assignments')->where('active', true);
+        if (! $callerIsPlatformAdmin) {
+            // v22p25: surface platform_admin users for everyone — they have
+            // NULL agency_id + NULL centre_id by design, so the regular WHERE
+            // would otherwise exclude them.
+            $userIdsQuery->where(function ($q) use ($agencyId, $centreIds) {
                 $q->where('agency_id', $agencyId);
                 if (!empty($centreIds)) {
                     $q->orWhereIn('centre_id', $centreIds);
                 }
                 $q->orWhere('role', 'platform_admin');
             });
+        }
 
         if ($roleFilter) {
             $userIdsQuery->where('role', $roleFilter);
@@ -279,12 +291,14 @@ final class AdminController extends Controller
         $userIds = $userIdsQuery->pluck('user_id')->unique()->all();
 
         // Also include guardians of families at this agency's centres
+        // (platform_admin sees every guardian on the platform).
         if ($roleFilter === null || $roleFilter === 'guardian') {
-            $guardianUserIds = DB::table('guardians')
-                ->join('families', 'families.id', '=', 'guardians.family_id')
-                ->whereIn('families.centre_id', $centreIds ?: [0])
-                ->pluck('guardians.user_id')
-                ->all();
+            $guardianQuery = DB::table('guardians')
+                ->join('families', 'families.id', '=', 'guardians.family_id');
+            if (! $callerIsPlatformAdmin) {
+                $guardianQuery->whereIn('families.centre_id', $centreIds ?: [0]);
+            }
+            $guardianUserIds = $guardianQuery->pluck('guardians.user_id')->all();
             $userIds = array_unique(array_merge($userIds, $guardianUserIds));
         }
 
