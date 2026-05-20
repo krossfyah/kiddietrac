@@ -1,0 +1,410 @@
+/* v22p64 — design refresh
+   Loaded AFTER kt-design-v22p55.css so these rules override.
+   Goals: typography, animated gradient hero, glassmorphism cards,
+   smooth page transitions, vibrant accent palette, refined buttons,
+   better focus rings, premium feel.
+*/
+
+/* ============================ Typography ============================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Sans:wght@500;700&display=swap');
+
+[data-kt-pretty],
+[data-kt-pretty] *,
+[data-kt-pretty] input,
+[data-kt-pretty] select,
+[data-kt-pretty] textarea,
+[data-kt-pretty] button {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  letter-spacing: -0.011em;
+}
+
+[data-kt-pretty] h1, [data-kt-pretty] h2, [data-kt-pretty] h3,
+[data-kt-pretty] .kt-page-hero h2,
+[data-kt-pretty] .kt-card-title {
+  font-family: 'DM Sans', 'Inter', sans-serif !important;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
+[data-kt-pretty] .kt-kpi-value {
+  font-feature-settings: "tnum";
+  letter-spacing: -0.035em;
+}
+
+/* ============================ Refined palette ============================ */
+:root {
+  --kt-brand: #1F6080;
+  --kt-brand-light: #4A90B8;
+  --kt-brand-dark: #0F4258;
+  --kt-brand-vibrant: #2D7BA8;
+  --kt-accent: #F97316;
+  --kt-accent-hover: #EA580C;
+  --kt-success: #059669;
+  --kt-warning: #D97706;
+  --kt-danger: #DC2626;
+  --kt-info: #4F46E5;
+  --kt-purple: #9333EA;
+  --kt-pink: #DB2777;
+  --kt-bg: #F7F9FC;
+  --kt-bg-elevated: #FFFFFF;
+  --kt-text: #0F172A;
+  --kt-text-muted: #475569;
+  --kt-text-subtle: #94A3B8;
+  --kt-border: #E2E8F0;
+  --kt-border-light: #F1F5F9;
+  --kt-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kt-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kt-shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
+  --kt-shadow-lg: 0 20px 40px -12px rgba(15, 23, 42, 0.12), 0 8px 16px -8px rgba(15, 23, 42, 0.08);
+  --kt-shadow-glow: 0 0 0 4px rgba(74, 144, 184, 0.12);
+}
+
+[data-kt-pretty] {
+  background:
+    radial-gradient(ellipse at top right, rgba(74, 144, 184, 0.06) 0%, transparent 45%),
+    radial-gradient(ellipse at bottom left, rgba(249, 115, 22, 0.04) 0%, transparent 45%),
+    linear-gradient(180deg, #FAFBFD 0%, #F4F6F9 100%) !important;
+  min-height: 100vh;
+}
+
+/* ============================ Hero — animated gradient + floating orb ============================ */
+[data-kt-pretty] .kt-page-hero {
+  background: linear-gradient(125deg, #1F6080 0%, #2D7BA8 35%, #4A90B8 70%, #2D7BA8 100%) !important;
+  background-size: 200% 200% !important;
+  animation: kt-hero-shift 18s ease-in-out infinite;
+  border-radius: 20px !important;
+  padding: 32px 36px !important;
+  margin-bottom: 28px !important;
+  box-shadow:
+    0 10px 30px -8px rgba(31, 96, 128, 0.35),
+    0 4px 8px -2px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes kt-hero-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+[data-kt-pretty] .kt-page-hero::before {
+  content: '';
+  position: absolute;
+  top: -30%; right: -8%;
+  width: 320px; height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.02) 60%, transparent 80%);
+  filter: blur(8px);
+  animation: kt-orb-float 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+[data-kt-pretty] .kt-page-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -40%; left: 8%;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.15) 0%, transparent 65%);
+  filter: blur(12px);
+  animation: kt-orb-float 10s ease-in-out -3s infinite;
+  pointer-events: none;
+}
+
+@keyframes kt-orb-float {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-15px, -25px); }
+}
+
+[data-kt-pretty] .kt-page-hero h2 {
+  font-size: 30px !important;
+  font-weight: 800 !important;
+  margin: 0 0 8px !important;
+  color: #fff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  letter-spacing: -0.025em;
+}
+
+[data-kt-pretty] .kt-page-hero p {
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-size: 15px !important;
+  margin: 0 !important;
+  max-width: 680px;
+  line-height: 1.55;
+}
+
+[data-kt-pretty] .kt-page-hero .kt-hero-actions {
+  margin-top: 22px !important;
+}
+
+[data-kt-pretty] .kt-page-hero .kt-btn-ghost {
+  background: rgba(255, 255, 255, 0.18) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.32) !important;
+  color: #fff !important;
+  padding: 11px 22px !important;
+  font-weight: 600 !important;
+  transition: all 0.18s ease !important;
+}
+
+[data-kt-pretty] .kt-page-hero .kt-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.28) !important;
+  transform: translateY(-1px);
+}
+
+/* ============================ KPI tiles — glassmorphism ============================ */
+[data-kt-pretty] .kt-kpi {
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border-radius: 16px !important;
+  padding: 24px !important;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: var(--kt-shadow-sm);
+}
+
+[data-kt-pretty] .kt-kpi::after {
+  width: 5px !important;
+  border-radius: 16px 0 0 16px;
+}
+
+[data-kt-pretty] .kt-kpi:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: var(--kt-shadow-md);
+  border-color: rgba(74, 144, 184, 0.3) !important;
+}
+
+[data-kt-pretty] .kt-kpi .kt-kpi-label {
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  color: var(--kt-text-muted) !important;
+}
+
+[data-kt-pretty] .kt-kpi .kt-kpi-value {
+  font-size: 34px !important;
+  font-weight: 800 !important;
+  color: var(--kt-text) !important;
+  background: linear-gradient(180deg, #0F172A 0%, #1F6080 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============================ Cards ============================ */
+[data-kt-pretty] .kt-card {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.7) !important;
+  border-radius: 16px !important;
+  padding: 26px 28px !important;
+  box-shadow: var(--kt-shadow-sm);
+  margin-bottom: 20px !important;
+  transition: box-shadow 0.18s ease;
+}
+
+[data-kt-pretty] .kt-card-header {
+  margin-bottom: 20px !important;
+  padding-bottom: 16px !important;
+  border-bottom: 1px solid var(--kt-border-light) !important;
+}
+
+[data-kt-pretty] .kt-card-title {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: var(--kt-text) !important;
+}
+
+/* ============================ Tables ============================ */
+[data-kt-pretty] table thead th {
+  background: linear-gradient(180deg, #F8FAFC 0%, #EEF2F7 100%) !important;
+  color: var(--kt-text-muted) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  padding: 14px 16px !important;
+  border-bottom: 2px solid #E2E8F0 !important;
+}
+
+[data-kt-pretty] table tbody td {
+  padding: 14px 16px !important;
+  border-bottom: 1px solid var(--kt-border-light) !important;
+  font-size: 13.5px !important;
+  color: var(--kt-text) !important;
+}
+
+[data-kt-pretty] table tbody tr {
+  transition: background 0.12s ease;
+}
+
+[data-kt-pretty] table tbody tr:hover {
+  background: rgba(74, 144, 184, 0.04) !important;
+}
+
+/* ============================ Buttons ============================ */
+[data-kt-pretty] .kt-btn {
+  font-weight: 600 !important;
+  letter-spacing: -0.005em;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+[data-kt-pretty] .kt-btn-primary {
+  background: linear-gradient(135deg, #1F6080 0%, #2D7BA8 100%) !important;
+  box-shadow:
+    var(--kt-shadow-sm),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+[data-kt-pretty] .kt-btn-primary:hover {
+  background: linear-gradient(135deg, #154057 0%, #1F6080 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--kt-shadow-md), 0 0 0 4px rgba(31, 96, 128, 0.1);
+}
+
+[data-kt-pretty] .kt-btn-primary:active {
+  transform: translateY(0);
+}
+
+[data-kt-pretty] .kt-btn-success {
+  background: linear-gradient(135deg, #059669 0%, #10B981 100%) !important;
+  box-shadow: var(--kt-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+[data-kt-pretty] .kt-btn-success:hover { transform: translateY(-1px); box-shadow: var(--kt-shadow-md); }
+
+[data-kt-pretty] .kt-btn-danger {
+  background: linear-gradient(135deg, #DC2626 0%, #EF4444 100%) !important;
+  box-shadow: var(--kt-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+[data-kt-pretty] .kt-btn-danger:hover { transform: translateY(-1px); box-shadow: var(--kt-shadow-md); }
+
+/* ============================ Focus rings (a11y) ============================ */
+[data-kt-pretty] input:focus,
+[data-kt-pretty] select:focus,
+[data-kt-pretty] textarea:focus {
+  outline: none;
+  border-color: var(--kt-brand-vibrant) !important;
+  box-shadow: var(--kt-shadow-glow);
+}
+
+[data-kt-pretty] button:focus-visible {
+  outline: none;
+  box-shadow: var(--kt-shadow-glow);
+}
+
+/* ============================ Pills ============================ */
+[data-kt-pretty] .kt-pill {
+  font-weight: 700 !important;
+  letter-spacing: 0.05em;
+  font-size: 11px !important;
+  padding: 4px 11px !important;
+  border-radius: 999px;
+}
+
+/* ============================ Smooth page transitions ============================ */
+[data-kt-pretty] {
+  animation: kt-page-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes kt-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================ Refined navigation (sidebar) ============================ */
+.sidebar, .kt-sidebar, #sidebar {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFD 100%) !important;
+}
+
+.sidebar a, .kt-sidebar a, #sidebar a, .sidebar .sidebar-section a {
+  border-radius: 10px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.005em;
+  transition: all 0.15s ease !important;
+}
+
+.sidebar a.active, .kt-sidebar a.active, #sidebar a.active {
+  background: linear-gradient(135deg, rgba(31, 96, 128, 0.10), rgba(74, 144, 184, 0.08)) !important;
+  color: var(--kt-brand) !important;
+  font-weight: 700 !important;
+  box-shadow: inset 3px 0 0 var(--kt-brand);
+}
+
+.sidebar a:hover, .kt-sidebar a:hover, #sidebar a:hover {
+  background: rgba(74, 144, 184, 0.06) !important;
+}
+
+.sidebar-section-label {
+  color: var(--kt-text-subtle) !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase;
+  margin-top: 18px !important;
+}
+
+/* ============================ Chatbot FAB refinement ============================ */
+#kt-chatbot-fab {
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%) !important;
+  box-shadow:
+    0 10px 24px -4px rgba(249, 115, 22, 0.42),
+    0 4px 8px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+#kt-chatbot-fab:hover {
+  transform: scale(1.08) rotate(-4deg);
+}
+
+/* ============================ Loading skeleton ============================ */
+@keyframes kt-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ============================ Settings + form screens stay compact ============================ */
+[data-kt-pretty][data-kt-narrow] > div {
+  max-width: 640px !important;
+}
+
+/* ============================ Notification pill on bell ============================ */
+.kt-notif-badge {
+  background: linear-gradient(135deg, #DC2626 0%, #F97316 100%);
+  animation: kt-pulse 2s ease-in-out infinite;
+}
+
+@keyframes kt-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* ============================ Mobile polish ============================ */
+@media (max-width: 768px) {
+  [data-kt-pretty] .kt-page-hero {
+    padding: 22px 20px !important;
+    border-radius: 14px !important;
+  }
+  [data-kt-pretty] .kt-page-hero h2 {
+    font-size: 22px !important;
+  }
+  [data-kt-pretty] .kt-card {
+    padding: 18px 18px !important;
+    border-radius: 12px !important;
+  }
+  [data-kt-pretty] .kt-kpi {
+    padding: 16px !important;
+  }
+}

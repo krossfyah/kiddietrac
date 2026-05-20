@@ -358,14 +358,11 @@
     if (prettyHashes.includes(hash)) {
       main.setAttribute('data-kt-pretty', '1');
       main.setAttribute('data-kt-screen', hash);
-      // Force wide containers
-      const innerDivs = main.querySelectorAll('div[style*="max-width"]');
-      innerDivs.forEach(d => {
-        const s = d.getAttribute('style') || '';
-        if (/max-width\s*:\s*\d+px/.test(s) && !/max-width\s*:\s*1800px/.test(s)) {
-          d.setAttribute('style', s.replace(/max-width\s*:\s*\d+px/g, 'max-width: 1800px'));
-        }
-      });
+      // v22p64: do not force max-width — let each screen decide its own width
+      // Narrow form-style screens get a marker so CSS can keep them compact
+      const narrowScreens = ['language', 'autopay-card', 'agency-billing', 'ach-pay'];
+      if (narrowScreens.includes(hash)) main.setAttribute('data-kt-narrow', '1');
+      else main.removeAttribute('data-kt-narrow');
     }
   }
   window.addEventListener('hashchange', () => setTimeout(applyPrettyClass, 250));
