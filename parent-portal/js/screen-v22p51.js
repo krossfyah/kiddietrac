@@ -285,8 +285,8 @@
       await new Promise(r => s.onload = r);
     }
     const intent = await Api.post('/parent/billing/setup-intent', {});
-    const pubKey = window.KT_STRIPE_PUBKEY || ''; // injected at boot
-    if (!pubKey) { alert('Stripe not configured for this site.'); return; }
+    const pubKey = intent.publishable_key || '';
+    if (!pubKey) { alert('Stripe not configured for this agency.'); return; }
     const stripe = window.Stripe(pubKey);
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
@@ -424,11 +424,11 @@
   function fmtDate(s) { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
   function isStaffOrAdmin() {
     const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
-    return ['agency_admin', 'centre_director', 'platform_admin'].includes(u.primary_role);
+    return Array.isArray(u.roles) && u.roles.some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
   }
   async function downloadAuthed(path, filename) {
     const tok = sessionStorage.getItem('kt_token');
-    const r = await fetch(window.KT_API_BASE + path, { headers: { Authorization: 'Bearer ' + tok } });
+    const r = await fetch(((window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1') + path, { headers: { Authorization: 'Bearer ' + tok } });
     const blob = await r.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = filename;

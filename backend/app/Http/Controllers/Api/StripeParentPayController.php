@@ -72,7 +72,10 @@ final class StripeParentPayController extends Controller
             'usage'    => 'off_session',
             'payment_method_types' => ['card'],
         ]);
-        return response()->json(['client_secret' => $si->client_secret]);
+        return response()->json([
+            'client_secret' => $si->client_secret,
+            'publishable_key' => env('STRIPE_KEY'),
+        ]);
     }
 
     public function saveCard(Request $request): JsonResponse
