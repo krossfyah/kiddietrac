@@ -273,6 +273,17 @@ final class PlatformController extends Controller
                 'brand_primary_color' => $a->brand_primary_color,
                 'brand_support_email' => $a->brand_support_email,
                 'powered_by_visible' => (int) $a->powered_by_visible,
+                // v22p36: per-agency SMTP settings — password is masked in the
+                // response so a leaked /platform/agencies dump doesn't leak the
+                // mailbox password. The Edit modal sends an empty value to mean
+                // 'keep existing' and a non-empty value to replace.
+                'email_smtp_host' => $a->email_smtp_host ?? null,
+                'email_smtp_port' => $a->email_smtp_port ?? null,
+                'email_smtp_user' => $a->email_smtp_user ?? null,
+                'email_smtp_pass_set' => !empty($a->email_smtp_pass),
+                'email_smtp_encryption' => $a->email_smtp_encryption ?? 'tls',
+                'email_from_address' => $a->email_from_address ?? null,
+                'email_from_name' => $a->email_from_name ?? null,
                 'created_at' => $a->created_at,
                 'cancelled_at' => $a->cancelled_at,
             ];
@@ -364,12 +375,25 @@ final class PlatformController extends Controller
             'brand_primary_color' => ['sometimes', 'nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'brand_support_email' => ['sometimes', 'nullable', 'email', 'max:160'],
             'brand_bank_info' => ['sometimes', 'nullable', 'string'],
+            // v22p36: per-agency email settings
+            'email_smtp_host' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'email_smtp_port' => ['sometimes', 'nullable', 'integer', 'between:1,65535'],
+            'email_smtp_user' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'email_smtp_pass' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'email_smtp_encryption' => ['sometimes', 'nullable', 'in:tls,ssl,none'],
+            'email_from_address' => ['sometimes', 'nullable', 'email', 'max:160'],
+            'email_from_name' => ['sometimes', 'nullable', 'string', 'max:160'],
         ]);
 
         // white_label_enabled maps to powered_by_visible (inverse).
         if (array_key_exists('white_label_enabled', $data)) {
             $data['powered_by_visible'] = $data['white_label_enabled'] ? 0 : 1;
             unset($data['white_label_enabled']);
+        }
+        // Treat an empty/missing email_smtp_pass as 'keep existing' so the admin
+        // doesn't have to retype the mailbox password every time they edit.
+        if (array_key_exists('email_smtp_pass', $data) && ($data['email_smtp_pass'] === null || $data['email_smtp_pass'] === '')) {
+            unset($data['email_smtp_pass']);
         }
         $data['updated_at'] = now();
         DB::table('agencies')->where('id', $agencyId)->update($data);

@@ -400,6 +400,38 @@
           '</div>' +
         '</div>' +
       '</div>' +
+
+      // v22p36 ── Email settings ─────────────────────────────────────
+      '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:14px 16px;margin-bottom:16px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+          '<div><div style="font-size:14px;font-weight:700;">✉️ Email settings (per-agency SMTP)</div>' +
+          '<div style="font-size:11px;color:#6B7280;">When set, outbound mail for this tenant — digests, marketing, invoices, password resets — goes via these credentials. Leave blank to use the platform default.</div></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">SMTP host</label>' +
+            '<input id="ag-smtp-host" type="text" placeholder="smtp.gmail.com / smtp.office365.com / mail.yourcentre.com" value="' + esc(v('email_smtp_host')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:ui-monospace,monospace;"></div>' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Port</label>' +
+            '<input id="ag-smtp-port" type="number" min="1" max="65535" placeholder="587" value="' + esc(v('email_smtp_port')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px;">' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">SMTP username</label>' +
+            '<input id="ag-smtp-user" type="text" placeholder="noreply@yourcentre.com" autocomplete="off" value="' + esc(v('email_smtp_user')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Encryption</label>' +
+            '<select id="ag-smtp-enc" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;background:white;">' +
+              '<option value="tls"' + (v('email_smtp_encryption', 'tls') === 'tls' ? ' selected' : '') + '>TLS (port 587)</option>' +
+              '<option value="ssl"' + (v('email_smtp_encryption') === 'ssl' ? ' selected' : '') + '>SSL (port 465)</option>' +
+              '<option value="none"' + (v('email_smtp_encryption') === 'none' ? ' selected' : '') + '>None</option>' +
+            '</select></div>' +
+        '</div>' +
+        '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">SMTP password ' + (v('email_smtp_pass_set') ? '<span style="color:#16A34A;font-weight:normal;font-size:11px;">(saved · leave blank to keep)</span>' : '') + '</label>' +
+          '<input id="ag-smtp-pass" type="password" placeholder="' + (v('email_smtp_pass_set') ? '••••••••••' : 'Mailbox password or app token') + '" autocomplete="new-password" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">From address</label>' +
+            '<input id="ag-from-addr" type="email" placeholder="noreply@yourcentre.com" value="' + esc(v('email_from_address')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">From name</label>' +
+            '<input id="ag-from-name" type="text" placeholder="' + esc(v('name', 'Agency')) + '" value="' + esc(v('email_from_name')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+        '</div>' +
+      '</div>' +
       '<div id="ag-err" style="color:#DC2626;font-size:13px;min-height:18px;margin-bottom:8px;"></div>' +
       '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
         '<button id="ag-cancel" style="background:white;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>' +
@@ -414,6 +446,10 @@
     var wlBox = modal.querySelector('#ag-wl');
 
     modal.querySelector('#ag-save').addEventListener('click', async function () {
+      // v22p36: collect per-agency email settings too. Password field empty =
+      // 'keep existing' (server unsets the key in that case).
+      var portRaw = modal.querySelector('#ag-smtp-port').value;
+      var port = portRaw ? parseInt(portRaw, 10) : null;
       var payload = {
         name: modal.querySelector('#ag-name').value.trim(),
         contact_email: modal.querySelector('#ag-email').value.trim() || null,
@@ -423,6 +459,13 @@
         brand_logo_url: modal.querySelector('#ag-logo').value.trim() || null,
         brand_primary_color: modal.querySelector('#ag-color').value || null,
         brand_support_email: modal.querySelector('#ag-support').value.trim() || null,
+        email_smtp_host: modal.querySelector('#ag-smtp-host').value.trim() || null,
+        email_smtp_port: (port && !isNaN(port)) ? port : null,
+        email_smtp_user: modal.querySelector('#ag-smtp-user').value.trim() || null,
+        email_smtp_pass: modal.querySelector('#ag-smtp-pass').value || null,
+        email_smtp_encryption: modal.querySelector('#ag-smtp-enc').value,
+        email_from_address: modal.querySelector('#ag-from-addr').value.trim() || null,
+        email_from_name: modal.querySelector('#ag-from-name').value.trim() || null,
       };
       var errBox = modal.querySelector('#ag-err');
       errBox.textContent = '';
