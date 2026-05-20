@@ -665,6 +665,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     });
     // parent claims open sub request
     Route::post('/operations/sub-requests/{id}/claim', [\App\Http\Controllers\Api\OperationsController::class, 'claimSubRequest']);
+
+    // v22p55 photo feed + feedback + doc extractions list
+    Route::get ('/photos/feed',        [\App\Http\Controllers\Api\PhotoFeedController::class, 'feed']);
+    Route::post('/photos',             [\App\Http\Controllers\Api\PhotoFeedController::class, 'upload']);
+    Route::get ('/feedback',           [\App\Http\Controllers\Api\FeedbackController::class, 'index']);
+    Route::get ('/feedback/mine',      [\App\Http\Controllers\Api\FeedbackController::class, 'mine']);
+    Route::post('/feedback',           [\App\Http\Controllers\Api\FeedbackController::class, 'submit']);
+    Route::get ('/ai/doc-extractions', function (\Illuminate\Http\Request $r) {
+        $agency = (int) ($r->header('X-Active-Agency-Id') ?: \Illuminate\Support\Facades\DB::table('role_assignments')->where('user_id', $r->user()->id)->where('active', 1)->value('agency_id'));
+        return ['data' => \Illuminate\Support\Facades\DB::table('ai_doc_extractions')->where('agency_id', $agency)->orderByDesc('created_at')->limit(50)->get()];
+    });
     // parent responds to permission slip
     Route::patch('/operations/permissions/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'respondToPermission']);
 

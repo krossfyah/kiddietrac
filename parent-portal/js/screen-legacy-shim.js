@@ -139,4 +139,18 @@
     Shell.registerScreen(r + ':anomalies',       bridge('KT.V22p53', 'renderAnomalies'));
     Shell.registerScreen(r + ':renewals',        bridge('KT.V22p53', 'renderExpiryCalendar'));
   });
+
+  // v22p55 — rewrite + new screens
+  ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':allergy-alerts', bridge('KT.V22p55', 'renderAllergyAlerts'));
+    Shell.registerScreen(r + ':forecast',       bridge('KT.V22p55', 'renderForecast'));
+    Shell.registerScreen(r + ':ai-churn',       bridge('KT.V22p55', 'renderAiChurn'));
+    Shell.registerScreen(r + ':retention',      bridge('KT.V22p55', 'renderRetention'));
+    Shell.registerScreen(r + ':doc-autolink',   bridge('KT.V22p55', 'renderDocAutolink'));
+    Shell.registerScreen(r + ':feedback',       bridge('KT.V22p55', 'renderFeedback'));
+  });
+  ['agency_admin','centre_director','educator','guardian','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':photos', bridge('KT.V22p55', 'renderPhotoFeed'));
+  });
+
 })(window);

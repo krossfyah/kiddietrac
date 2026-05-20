@@ -41,13 +41,37 @@ final class XlsxExportService
         $colCount = count($columns);
         $lastCol = $this->colLetter($colCount);
 
+        // Logo (if agency has brand_logo_url that resolves to a local file)
+        $logoPath = null;
+        if (!empty($agency->brand_logo_url)) {
+            $rel = ltrim(parse_url($agency->brand_logo_url, PHP_URL_PATH) ?: $agency->brand_logo_url, '/');
+            $candidate = storage_path('app/public/' . preg_replace('#^storage/#', '', $rel));
+            if (file_exists($candidate)) $logoPath = $candidate;
+        }
+        if (!$logoPath) {
+            $default = storage_path('app/public/logo-wordmark.png');
+            if (file_exists($default)) $logoPath = $default;
+        }
+        if ($logoPath) {
+            $drawing = new Drawing();
+            $drawing->setName('Logo');
+            $drawing->setDescription($agency->name ?? 'KiddieTrac');
+            $drawing->setPath($logoPath);
+            $drawing->setHeight(46);
+            $drawing->setCoordinates('A1');
+            $drawing->setOffsetX(8);
+            $drawing->setOffsetY(6);
+            $drawing->setWorksheet($sheet);
+            $sheet->getRowDimension(1)->setRowHeight(58);
+            $sheet->getColumnDimension('A')->setWidth(max(22, $columns[0]['width'] ?? 18));
+        }
         // Title row
-        $sheet->setCellValue('A1', $title);
+        $sheet->setCellValue('A1', '   ' . $title);
         $sheet->mergeCells("A1:{$lastCol}1");
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(18)->getColor()->setRGB('FFFFFF');
         $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($primary);
         $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
-        $sheet->getRowDimension(1)->setRowHeight(36);
+        if (!$logoPath) $sheet->getRowDimension(1)->setRowHeight(36);
 
         // Subtitle row
         $subtitle = ($agency->name ?? 'KiddieTrac') . ' · Generated ' . now()->format('F j, Y \a\t g:i A');
