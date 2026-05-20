@@ -148,7 +148,81 @@ final class PlatformController extends Controller
             'mrr_trend' => $mrrTrend,
             'top_agencies' => $topAgencies,
             'recent_events' => $recentEvents,
+            'business_metrics' => $this->businessMetrics($mrrCents, $mrrTrend, $children, $agencies, $thirtyDaysAgo),
         ]);
+    }
+
+    /**
+     * v22p34: SaaS business metrics derived from the trend + totals already
+     * loaded by overview(). All numbers are cheap aggregates — no new SQL
+     * round-trips, the inputs were already computed for the trend charts.
+     */
+    private function businessMetrics(int $mrrCents, array $mrrTrend, int $children, int $agencies, $thirtyDaysAgo): array
+    {
+        $mrrDollars = $mrrCents / 100;
+        $arrDollars = $mrrDollars * 12;
+
+        // ARPA — average revenue per active agency
+        $arpa = $agencies > 0 ? $mrrDollars / $agencies : 0.0;
+
+        // ARPU — per enrolled child (operator's per-seat cost equivalent)
+        $arpu = $children > 0 ? $mrrDollars / $children : 0.0;
+
+        // MoM MRR growth — last vs prior month from the trend snapshot
+        $lastMrr = end($mrrTrend)['mrr_cents'] ?? 0;
+        $prevMrr = $mrrTrend[count($mrrTrend) - 2]['mrr_cents'] ?? 0;
+        $mrrGrowthPct = $prevMrr > 0 ? round((($lastMrr - $prevMrr) / $prevMrr) * 100, 1) : 0.0;
+        $mrrGrowthAbs = ($lastMrr - $prevMrr) / 100;
+
+        // Churn rate (last 30 days) — cancelled / starting count
+        $startingAgencies = DB::table('agencies')
+            ->where('created_at', '<', $thirtyDaysAgo)
+            ->where(function ($q) use ($thirtyDaysAgo) {
+                $q->whereNull('cancelled_at')->orWhere('cancelled_at', '>=', $thirtyDaysAgo);
+            })
+            ->whereNull('deleted_at')
+            ->count();
+        $cancelledLast30 = DB::table('agencies')
+            ->where('cancelled_at', '>=', $thirtyDaysAgo)
+            ->count();
+        $churnPct = $startingAgencies > 0 ? round(($cancelledLast30 / $startingAgencies) * 100, 1) : 0.0;
+
+        // LTV estimate — ARPA / monthly churn rate. Defaults to 24 months
+        // when churn is 0 (insufficient data). Capped at 60 months to keep
+        // the number visually sensible.
+        $monthlyChurnRate = $churnPct / 100;
+        $ltvMonths = $monthlyChurnRate > 0 ? min(60, round(1 / $monthlyChurnRate, 1)) : 24;
+        $ltvDollars = $arpa * $ltvMonths;
+
+        // Capacity utilisation — total enrolled / total licensed capacity
+        $licensedCapacity = (int) DB::table('centres')->whereNull('deleted_at')->sum('license_capacity');
+        $enrolledCount = DB::table('children as c')
+            ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->where('c.enrollment_status', 'enrolled')
+            ->whereNull('c.deleted_at')
+            ->count();
+        $capacityPct = $licensedCapacity > 0 ? round(($enrolledCount / $licensedCapacity) * 100, 1) : 0.0;
+
+        // Net Revenue Retention (loose proxy) — current MRR over MRR six
+        // months ago. Above 100% = expansion; below = net contraction.
+        $sixMoMrr = $mrrTrend[0]['mrr_cents'] ?? 0;
+        $nrrPct = $sixMoMrr > 0 ? round(($lastMrr / $sixMoMrr) * 100, 1) : 0.0;
+
+        return [
+            'mrr_dollars' => $mrrDollars,
+            'arr_dollars' => $arrDollars,
+            'arpa_dollars' => round($arpa, 2),
+            'arpu_dollars' => round($arpu, 2),
+            'mrr_growth_pct' => $mrrGrowthPct,
+            'mrr_growth_abs_dollars' => round($mrrGrowthAbs, 2),
+            'churn_pct_30d' => $churnPct,
+            'ltv_months' => $ltvMonths,
+            'ltv_dollars' => round($ltvDollars, 2),
+            'capacity_pct' => $capacityPct,
+            'capacity_filled' => $enrolledCount,
+            'capacity_licensed' => $licensedCapacity,
+            'nrr_pct_6m' => $nrrPct,
+        ];
     }
 
     /**

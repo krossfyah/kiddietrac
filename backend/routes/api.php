@@ -133,6 +133,19 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         // v22p33 — Per-role dashboard widget data
         Route::get('/widgets/me', [\App\Http\Controllers\Api\WidgetsController::class, 'me']);
 
+        // v22p34 — Marketing campaigns (directors + agency_admin + platform_admin).
+        // Route-level role gate kept lenient; controller does the agency-scope check
+        // via getAgencyId() so platform_admin in a tenant context Just Works.
+        Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+            Route::get   ('/marketing/campaigns',           [\App\Http\Controllers\Api\MarketingController::class, 'index']);
+            Route::post  ('/marketing/campaigns',           [\App\Http\Controllers\Api\MarketingController::class, 'store']);
+            Route::get   ('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'show']);
+            Route::patch ('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'update']);
+            Route::delete('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'destroy']);
+            Route::post  ('/marketing/campaigns/{id}/send', [\App\Http\Controllers\Api\MarketingController::class, 'sendNow']);
+            Route::post  ('/marketing/images',              [\App\Http\Controllers\Api\MarketingController::class, 'uploadImage']);
+        });
+
         Route::prefix('parent')->group(function () {
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
             Route::get('/children', [FamilyController::class, 'myChildren']);

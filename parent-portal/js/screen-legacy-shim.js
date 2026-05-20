@@ -54,6 +54,9 @@
   reg(allStaff,  'announcements',  'KT.Announcements');
   reg(allStaff,  'lesson-plans',   'KT.LessonPlans');
 
+  // v22p34: marketing campaigns — directors + agency admins
+  reg(directors, 'marketing-campaigns', 'KT.Marketing');
+
   // Chat exposes mount(container), not render
   ['agency_admin', 'centre_director', 'educator'].forEach(function (r) {
     Shell.registerScreen(r + ':chat', bridge('KT.Chat', 'mount'));

@@ -127,6 +127,40 @@
     return box;
   }
 
+  // v22p34: SaaS business metrics row — ARR, ARPA, churn, LTV, growth %,
+  // capacity utilisation, net revenue retention. Numbers come pre-computed
+  // from PlatformController::businessMetrics so the JS just paints tiles.
+  function renderBusinessMetricsSection(bm) {
+    var section = Dom.el('div', { style: 'margin-top:18px;background:linear-gradient(135deg,#0F172A 0%,#1F2937 60%,#16637A 100%);border-radius:16px;padding:24px 28px;color:white;box-shadow:0 6px 18px rgba(15,23,42,.18);' });
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;' });
+    head.appendChild(Dom.el('div', {}, '<h3 style="margin:0;font-size:18px;letter-spacing:0.3px;">📊 Business metrics</h3><div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;">SaaS KPIs · CAD · derived from current MRR + trend</div>'));
+    section.appendChild(head);
+
+    function tile(label, value, hint, accent) {
+      var t = Dom.el('div', { style: 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;border-left:4px solid ' + accent + ';' });
+      t.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,.6);text-transform:uppercase;' }, label));
+      t.appendChild(Dom.el('div', { style: 'font-size:26px;font-weight:800;color:white;line-height:1.1;margin:4px 0 2px;' }, String(value)));
+      if (hint) t.appendChild(Dom.el('div', { style: 'font-size:12px;color:rgba(255,255,255,.65);' }, hint));
+      return t;
+    }
+    function money(n) { return '$' + Number(n || 0).toLocaleString('en-CA', { maximumFractionDigits: 0 }); }
+    function moneyDecimals(n) { return '$' + Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function pct(n) { return (Number(n) >= 0 ? '+' : '') + Number(n || 0).toFixed(1) + '%'; }
+
+    var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;' });
+    grid.appendChild(tile('ARR', money(bm.arr_dollars), 'Annualised recurring revenue', '#16A34A'));
+    grid.appendChild(tile('ARPA', moneyDecimals(bm.arpa_dollars), 'Per active agency / month', '#8EC73C'));
+    grid.appendChild(tile('ARPU', moneyDecimals(bm.arpu_dollars), 'Per enrolled child / month', '#FF8A65'));
+    grid.appendChild(tile('MRR growth', pct(bm.mrr_growth_pct), 'Month over month · ' + moneyDecimals(bm.mrr_growth_abs_dollars), bm.mrr_growth_pct >= 0 ? '#16A34A' : '#DC2626'));
+    grid.appendChild(tile('Churn (30d)', (bm.churn_pct_30d || 0).toFixed(1) + '%', 'Agencies lost vs starting count', bm.churn_pct_30d >= 5 ? '#DC2626' : '#F59E0B'));
+    grid.appendChild(tile('LTV', money(bm.ltv_dollars), 'Est. ' + bm.ltv_months + ' month lifetime', '#7C3AED'));
+    grid.appendChild(tile('NRR (6m)', (bm.nrr_pct_6m || 0).toFixed(1) + '%', '>100% = net expansion', bm.nrr_pct_6m >= 100 ? '#16A34A' : '#F59E0B'));
+    grid.appendChild(tile('Capacity', (bm.capacity_pct || 0).toFixed(1) + '%', bm.capacity_filled + ' / ' + bm.capacity_licensed + ' licensed seats', bm.capacity_pct >= 80 ? '#16A34A' : '#F59E0B'));
+    section.appendChild(grid);
+
+    return section;
+  }
+
   function renderRecentEventsCard(events) {
     var box = cardShell('Recent platform activity', 'Last 10 events across all agencies');
     if (!events.length) { box.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-style:italic;padding:20px 0;' }, 'No activity recorded')); return box; }
@@ -212,6 +246,11 @@
       trends.appendChild(renderMrrTrendCard(data.mrr_trend || []));
       trends.appendChild(renderAgencyGrowthCard(data.agency_growth || []));
       wrap.appendChild(trends);
+
+      // v22p34: SaaS business metrics section
+      if (data.business_metrics) {
+        wrap.appendChild(renderBusinessMetricsSection(data.business_metrics));
+      }
 
       // v22p32: insight row — top agencies (left) + recent events (right)
       var bottom = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-top:14px;' });

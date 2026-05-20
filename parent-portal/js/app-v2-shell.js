@@ -52,11 +52,16 @@
   // Each section: { label, items: [{ hash, label, icon, badgeKey? }] }
   function navItemsForRole(role) {
     if (role === 'agency_admin') {
+      // v22p34: hide legacy 'Agencies' entry for callers who are ALSO platform_admin
+      // — they already get a richer 'All agencies' link from agency-switcher.js,
+      // and the legacy '/admin/agencies' route shows essentially the same data
+      // with fewer SaaS-level controls (no suspend/resume, no white-label edit).
+      var u_v22p34 = (function () { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } })();
+      var isPlatformAdmin_v22p34 = Array.isArray(u_v22p34.roles) && u_v22p34.roles.indexOf('platform_admin') !== -1;
+      var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }];
+      if (!isPlatformAdmin_v22p34) overviewItems.push({ hash: 'agencies', label: 'Agencies', icon: '🏢' });
       return [
-        { label: 'Overview', items: [
-          { hash: 'dashboard',      label: 'Agency overview', icon: '🏠' },
-          { hash: 'agencies',       label: 'Agencies',         icon: '🏢' },
-        ]},
+        { label: 'Overview', items: overviewItems },
         { label: 'Operations', items: [
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
@@ -70,6 +75,9 @@
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
+        ]},
+        { label: 'Growth', items: [
+          { hash: 'marketing-campaigns', label: 'Marketing',   icon: '📣' },
         ]},
         { label: 'Reseller', items: [
           { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
@@ -119,6 +127,9 @@
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
+        ]},
+        { label: 'Growth', items: [
+          { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📣' },
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },

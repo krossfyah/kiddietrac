@@ -53,9 +53,16 @@
       extra.appendChild(makeNavBtn('chat', '💬 Messages', true));
     }
 
-    // Agency admin only: Agencies nav
+    // Agency admin only: Agencies nav.
+    // v22p34: platform_admin already gets a richer "All agencies" link (with
+    // suspend/resume/branding) injected by agency-switcher.js. Skip the
+    // legacy entry for callers who have both roles to avoid the duplicate.
     if (role === 'agency_admin') {
-      extra.appendChild(makeNavBtn('agencies', '🏢 Agencies'));
+      var u = getUser();
+      var alsoPlatformAdmin = Array.isArray(u.roles) && u.roles.indexOf('platform_admin') !== -1;
+      if (!alsoPlatformAdmin) {
+        extra.appendChild(makeNavBtn('agencies', '🏢 Agencies'));
+      }
     }
 
     // After injection, fetch unread count
