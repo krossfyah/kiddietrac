@@ -272,7 +272,7 @@ final class AdminController extends Controller
      *   limit       — page size (default 50, max 200)
      *   offset      — pagination offset
      */
-    public function auditLogs(Request $request): JsonResponse
+    public function auditLogs(Request $request)
     {
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['logs' => [], 'total' => 0]);
@@ -339,6 +339,24 @@ final class AdminController extends Controller
         // Distinct values for the UI filter dropdowns (capped at 60 each)
         $distinctActions = (clone $base)->distinct()->limit(60)->pluck('al.action');
         $distinctEntities = (clone $base)->distinct()->limit(40)->pluck('al.entity_type')->filter()->values();
+
+        // v22p46: CSV export — pulls up to 5000 rows (above the 200 default)
+        // so a date-range export can produce a full history slice in one shot.
+        if (strtolower((string) $request->query('format', '')) === 'csv') {
+            $csvRows = (clone $base)->limit(5000)->offset(0)->get([
+                'al.id', 'al.action', 'al.entity_type', 'al.entity_id',
+                'al.payload', 'al.ip_address', 'al.created_at', 'al.user_id',
+                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, 'system') as actor_name"),
+                'u.email as actor_email',
+            ]);
+            return $this->streamCsv('audit-log', [
+                'When', 'Action', 'Entity type', 'Entity ID',
+                'Actor', 'Email', 'IP', 'Payload',
+            ], $csvRows->map(fn ($r) => [
+                $r->created_at, $r->action, $r->entity_type, $r->entity_id,
+                $r->actor_name, $r->actor_email, $r->ip_address, $r->payload,
+            ])->all());
+        }
 
         return response()->json([
             'logs' => $rows,
@@ -973,6 +991,42 @@ final class AdminController extends Controller
             'family' => DB::table('families')->where('id', $familyId)->first(),
             'message' => 'Family updated',
         ]);
+    }
+
+    /**
+     * v22p46 — DELETE /api/v1/admin/families/{family}
+     * Soft-deletes the family row. Children + guardian links stay intact so
+     * historical reports and audit logs keep working. Caller must own the
+     * family's centre via the existing agency_admin / platform_admin gates.
+     */
+    public function destroyFamily(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+
+        $callerIsPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+
+        $family = DB::table('families')->where('id', $familyId)->whereNull('deleted_at')->first();
+        if (!$family) return response()->json(['message' => 'Not found'], 404);
+
+        if (!$callerIsPlatformAdmin) {
+            $centreIds = $this->getCentreIds($agencyId);
+            if (!in_array($family->centre_id, $centreIds, true)) {
+                return response()->json(['message' => 'Family not in your agency'], 403);
+            }
+        }
+
+        DB::table('families')->where('id', $familyId)->update([
+            'deleted_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->audit($request->user()->id, 'family.deleted', 'family', $familyId, [
+            'family_name' => $family->family_name,
+        ]);
+
+        return response()->json(['message' => 'Family deleted', 'id' => $familyId]);
     }
 
     // ════════════════════════════════════════════════════════════════

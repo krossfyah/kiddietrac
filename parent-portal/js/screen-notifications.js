@@ -94,7 +94,7 @@
           // Optimistic update
           n.read_at = new Date().toISOString();
           paint();
-          Api.patch('/parent/notifications/' + n.id + '/read', {})
+          Api.patch('/notifications/' + n.id + '/read', {})
             .catch(function () { n.read_at = null; paint(); });
         }
         // Deep-link: try data.url if present
@@ -116,7 +116,7 @@
       markAll.disabled = true; markAll.textContent = 'Marking…';
       var done = 0;
       unread.forEach(function (n) {
-        Api.patch('/parent/notifications/' + n.id + '/read', {})
+        Api.patch('/notifications/' + n.id + '/read', {})
           .catch(function () {})
           .finally(function () {
             n.read_at = new Date().toISOString();
@@ -133,7 +133,7 @@
     // v22p45: notifications live under /parent/* in the current routes
     // (NotificationController::mine is gated for guardian only). Future
     // ships should extend this to staff via a new endpoint.
-    Api.get('/parent/notifications').then(function (data) {
+    Api.get('/notifications').then(function (data) {
       cache = (data && data.notifications) ? data.notifications : (Array.isArray(data) ? data : []);
       paint();
     }).catch(function (e) {

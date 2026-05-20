@@ -130,6 +130,11 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         });
 
         // ─── Help (available to all authenticated users) ───
+        // v22p46: notifications inbox for ALL authenticated users (was
+        // previously gated to guardian-only under /parent/notifications).
+        Route::get('/notifications', [NotificationController::class, 'mine']);
+        Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+
         Route::get('/help', [HelpController::class, 'index']);
         Route::get('/help/{slug}', [HelpController::class, 'show']);
         Route::post('/help/ask', [HelpController::class, 'ask'])->middleware('throttle:30,1');
@@ -414,6 +419,8 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         // v22p11: agency_admin family CRUD
         Route::post('/families', [AdminController::class, 'createFamily']);
         Route::patch('/families/{family}', [AdminController::class, 'updateFamily']);
+        // v22p46: family delete (soft) — keeps children + audit history intact
+        Route::delete('/families/{family}', [AdminController::class, 'destroyFamily']);
     
         Route::get('/analytics', [AdminController::class, 'analytics']);
     

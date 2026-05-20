@@ -119,14 +119,39 @@
       }));
 
       // Reset
-      var resetWrap = Dom.el('div', { style: 'display:flex;align-items:flex-end;' });
-      var resetBtn = Dom.el('button', { style: 'background:white;border:1px solid #D1D5DB;color:#374151;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;width:100%;' }, 'Reset filters');
+      var resetWrap = Dom.el('div', { style: 'display:flex;align-items:flex-end;gap:6px;' });
+      var resetBtn = Dom.el('button', { style: 'background:white;border:1px solid #D1D5DB;color:#374151;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;flex:1;' }, 'Reset');
       resetBtn.addEventListener('click', function () {
         state.filters = { entity_type: '', action: '', q: '', since: '', until: '' };
         state.offset = 0;
         buildToolbar(); reload();
       });
       resetWrap.appendChild(resetBtn);
+
+      // v22p46: CSV download — same filters apply to the export
+      var csvBtn = Dom.el('button', { style: 'background:white;border:1px solid #16A34A;color:#16A34A;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;', title: 'Export filtered audit log to CSV' }, '⤓ CSV');
+      csvBtn.addEventListener('click', function () {
+        var qs = new URLSearchParams();
+        Object.keys(state.filters).forEach(function (k) { if (state.filters[k]) qs.set(k, state.filters[k]); });
+        qs.set('format', 'csv');
+        var apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+        var token = sessionStorage.getItem('kt_token');
+        var activeAgencyId = sessionStorage.getItem('kt_active_agency_id') || '';
+        var headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'text/csv' };
+        if (activeAgencyId) headers['X-Active-Agency-Id'] = activeAgencyId;
+        csvBtn.disabled = true; csvBtn.textContent = '…';
+        fetch(apiBase + '/admin/audit-logs?' + qs.toString(), { headers: headers })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+          .then(function (blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a'); a.href = url; a.download = 'audit-log.csv';
+            document.body.appendChild(a); a.click();
+            setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
+          })
+          .catch(function (e) { alert('CSV failed: ' + e.message); })
+          .finally(function () { csvBtn.disabled = false; csvBtn.textContent = '⤓ CSV'; });
+      });
+      resetWrap.appendChild(csvBtn);
       toolbar.appendChild(resetWrap);
     }
 

@@ -1214,9 +1214,51 @@
 
   // v22p26: families table view.
   function renderFamiliesTable(families, centres, content) {
+    // v22p46: bulk delete via multi-select. Same UX as the Users tab.
+    var wrap = Dom.el('div');
+    var selectedIds = new Set();
+    var bulkBar = Dom.el('div', { style: 'display:none;align-items:center;gap:10px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:10px 14px;margin-bottom:12px;' });
+    var bulkCount = Dom.el('div', { style: 'flex:1;font-size:13px;color:#92400E;font-weight:600;' }, '0 selected');
+    var bulkDelete = Dom.el('button', { style: 'background:white;color:#DC2626;border:1px solid #FCA5A5;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;' }, 'Delete');
+    bulkBar.appendChild(bulkCount);
+    bulkBar.appendChild(bulkDelete);
+    wrap.appendChild(bulkBar);
+
+    var rowCbs = [];
+    function refreshBulkBar() {
+      bulkBar.style.display = selectedIds.size > 0 ? 'flex' : 'none';
+      bulkCount.textContent = selectedIds.size + ' selected';
+    }
+    bulkDelete.addEventListener('click', async function () {
+      var ids = Array.from(selectedIds);
+      if (!ids.length) return;
+      if (!confirm('Delete ' + ids.length + ' family record(s)? Children + audit history are preserved; only the family-level row is removed.')) return;
+      bulkDelete.disabled = true;
+      var ok = 0, fail = 0;
+      for (const id of ids) { try { await Api.delete('/admin/families/' + id); ok++; } catch (e) { fail++; } }
+      bulkDelete.disabled = false;
+      alert('Deleted ' + ok + ' family record(s), ' + fail + ' failed.');
+      selectedIds.clear();
+      await renderFamiliesTab(content);
+    });
+
     var table = Dom.el('table', { style: 'width:100%;background:white;border-radius:12px;overflow:hidden;border-collapse:collapse;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
     var thead = Dom.el('thead', { style: 'background:#F9FAFB;' });
     var headRow = Dom.el('tr');
+
+    // v22p46: select-all checkbox
+    var headCheck = Dom.el('th', { style: 'padding:11px 8px 11px 14px;width:32px;' });
+    var selectAll = Dom.el('input', { type: 'checkbox', style: 'cursor:pointer;width:16px;height:16px;', title: 'Select all on this page' });
+    selectAll.addEventListener('change', function () {
+      rowCbs.forEach(function (rc) {
+        rc.cb.checked = selectAll.checked;
+        if (selectAll.checked) selectedIds.add(rc.id); else selectedIds.delete(rc.id);
+      });
+      refreshBulkBar();
+    });
+    headCheck.appendChild(selectAll);
+    headRow.appendChild(headCheck);
+
     ['Family', 'Centre', 'Children', 'Guardians', 'Outstanding', ''].forEach(function (h) {
       headRow.appendChild(Dom.el('th', {
         style: 'text-align:left;padding:11px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;',
@@ -1228,6 +1270,19 @@
     var tbody = Dom.el('tbody');
     families.forEach(function (f) {
       var tr = Dom.el('tr', { style: 'border-top:1px solid #E5E7EB;cursor:pointer;' });
+
+      // v22p46: per-row checkbox
+      var ckTd = Dom.el('td', { style: 'padding:11px 8px 11px 14px;' });
+      var cb = Dom.el('input', { type: 'checkbox', style: 'cursor:pointer;width:16px;height:16px;' });
+      cb.addEventListener('click', function (e) { e.stopPropagation(); });
+      cb.addEventListener('change', function () {
+        if (cb.checked) selectedIds.add(f.id); else selectedIds.delete(f.id);
+        refreshBulkBar();
+      });
+      ckTd.appendChild(cb);
+      tr.appendChild(ckTd);
+      rowCbs.push({ cb: cb, id: f.id });
+
       tr.addEventListener('click', function () { showFamilyDetail(f.id); });
 
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-weight:600;' }, f.family_name));
@@ -1251,7 +1306,8 @@
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    return table;
+    wrap.appendChild(table);
+    return wrap;
   }
 
   // v22p11: shared add/edit modal for families. centres = array of {id, name} for the picker.

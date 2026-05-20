@@ -62,7 +62,7 @@ final class InvoiceController extends Controller
     /**
      * GET /api/v1/director/invoices
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request)
     {
         $centreId = $this->resolveCentreId($request->user());
         if (!$centreId) {
@@ -80,6 +80,37 @@ final class InvoiceController extends Controller
 
         if ($statusFilter = $request->input('status')) {
             $q->where('invoices.status', $statusFilter);
+        }
+
+        // v22p46: CSV export — ?format=csv streams all matching invoices
+        // (capped at 2000 rows to keep memory in check) without the stats
+        // payload.
+        if (strtolower((string) $request->query('format', '')) === 'csv') {
+            $rows = $q->limit(2000)->get();
+            $filename = 'invoices-' . now()->format('Y-m-d') . '.csv';
+            return new \Symfony\Component\HttpFoundation\StreamedResponse(function () use ($rows) {
+                $out = fopen('php://output', 'w');
+                fwrite($out, "\xEF\xBB\xBF");
+                fputcsv($out, [
+                    'Invoice #', 'Family', 'Status', 'Period start', 'Period end',
+                    'Issued', 'Due', 'Subtotal', 'Subsidy', 'Discount', 'Tax',
+                    'Total', 'Paid', 'Balance due',
+                ]);
+                foreach ($rows as $i) {
+                    fputcsv($out, [
+                        $i->invoice_number, $i->family_name, $i->status,
+                        $i->period_start, $i->period_end,
+                        $i->issued_at, $i->due_at,
+                        $i->subtotal, $i->subsidy_amount, $i->discount_amount ?? 0, $i->tax_amount ?? 0,
+                        $i->total, $i->amount_paid, $i->balance_due,
+                    ]);
+                }
+                fclose($out);
+            }, 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Cache-Control' => 'no-store',
+            ]);
         }
 
         $invoices = $q->limit(100)->get();
