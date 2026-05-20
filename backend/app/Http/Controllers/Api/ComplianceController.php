@@ -193,17 +193,8 @@ final class ComplianceController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $days = (int) $request->query('within_days', 180);
         $cutoff = Carbon::now()->addDays($days);
-        // pull from certifications + background_checks unified
-        $certs = DB::table('certifications as ct')
-            ->join('users as u', 'u.id', '=', 'ct.user_id')
-            ->leftJoin('role_assignments as ra', function ($j) use ($agencyId) {
-                $j->on('ra.user_id', '=', 'ct.user_id')->where('ra.agency_id', $agencyId)->where('ra.active', 1);
-            })
-            ->whereNotNull('ra.id')
-            ->where('ct.expires_at', '<=', $cutoff)
-            ->select('ct.id', DB::raw("'certification' as source"), 'ct.cert_type as type', 'ct.expires_at',
-                DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"), 'u.email as user_email')
-            ->get();
+        // background_checks is the unified source (no certifications table on this DB).
+        $certs = collect();
         $bgcs = DB::table('background_checks as bc')
             ->join('users as u', 'u.id', '=', 'bc.user_id')
             ->where('bc.agency_id', $agencyId)
@@ -211,7 +202,7 @@ final class ComplianceController extends Controller
             ->select('bc.id', DB::raw("'background_check' as source"), 'bc.check_type as type', 'bc.expires_at',
                 DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"), 'u.email as user_email')
             ->get();
-        $all = $certs->merge($bgcs)->sortBy('expires_at')->values();
+        $all = $bgcs->sortBy('expires_at')->values();
         $all->transform(function ($r) {
             $exp = Carbon::parse($r->expires_at);
             $r->days_until = (int) $exp->diffInDays(Carbon::now(), false) * ($exp->isPast() ? -1 : 1);
