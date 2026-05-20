@@ -429,6 +429,172 @@ final class AdminController extends Controller
     }
 
     // ════════════════════════════════════════════════════════════════
+    //   COMPLIANCE — v22p47
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * GET /api/v1/admin/compliance
+     *
+     * Aggregates three of the most-asked-for compliance signals into one
+     * payload so the admin dashboard can render a single 'what needs
+     * attention' surface without firing N requests.
+     *
+     *   expired_certs[]      — staff_certifications.expires_at past or
+     *                          within 30 days, joined to user + cert_type
+     *   mfa_laggards[]       — agency_admin + centre_director users in this
+     *                          agency without two_factor_secret set
+     *   centre_ratios[]      — for every centre: licensed capacity vs
+     *                          enrolled headcount and a status pill
+     *
+     * Scoped to the caller's agency. platform_admin sees every agency-
+     * filtered slice for whichever X-Active-Agency-Id is set (same
+     * pattern as the rest of AdminController).
+     */
+    public function compliance(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+
+        $centreIds = $this->getCentreIds($agencyId);
+        $now = now();
+        $soon = $now->copy()->addDays(30);
+
+        // Staff users whose role is pinned to this agency or one of its centres
+        $staffUserIds = DB::table('role_assignments')
+            ->where('active', true)
+            ->whereIn('role', ['agency_admin', 'centre_director', 'educator'])
+            ->where(function ($q) use ($agencyId, $centreIds) {
+                $q->where('agency_id', $agencyId);
+                if (!empty($centreIds)) $q->orWhereIn('centre_id', $centreIds);
+            })
+            ->pluck('user_id')->unique()->all();
+
+        // Expired or expiring certs
+        $expiredCerts = empty($staffUserIds) ? collect() : DB::table('staff_certifications as c')
+            ->join('users as u', 'u.id', '=', 'c.user_id')
+            ->whereIn('c.user_id', $staffUserIds)
+            ->where('c.active', true)
+            ->whereNotNull('c.expires_at')
+            ->where('c.expires_at', '<=', $soon->toDateString())
+            ->orderBy('c.expires_at')
+            ->limit(200)
+            ->get([
+                'c.id', 'c.cert_type', 'c.certifier', 'c.issued_at', 'c.expires_at',
+                'c.user_id',
+                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email) as user_name"),
+                'u.email as user_email',
+                DB::raw("CASE WHEN c.expires_at < '{$now->toDateString()}' THEN 'expired' ELSE 'expiring_soon' END as status"),
+            ]);
+
+        // MFA laggards — directors + agency admins without two_factor_secret
+        $mfaLaggards = empty($staffUserIds) ? collect() : DB::table('users as u')
+            ->whereIn('u.id', function ($q) use ($agencyId, $centreIds) {
+                $q->select('user_id')->from('role_assignments')
+                    ->whereIn('role', ['agency_admin', 'centre_director'])
+                    ->where('active', true)
+                    ->where(function ($x) use ($agencyId, $centreIds) {
+                        $x->where('agency_id', $agencyId);
+                        if (!empty($centreIds)) $x->orWhereIn('centre_id', $centreIds);
+                    });
+            })
+            ->whereNull('u.two_factor_secret')
+            ->whereNull('u.deleted_at')
+            ->orderBy('u.first_name')
+            ->limit(200)
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.last_login_at']);
+
+        // Centre capacity vs enrolled
+        $centreRatios = empty($centreIds) ? collect() : collect($centreIds)->map(function ($cid) {
+            $centre = DB::table('centres')->where('id', $cid)->first();
+            if (!$centre) return null;
+            $enrolled = DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->where('f.centre_id', $cid)
+                ->where('c.enrollment_status', 'enrolled')
+                ->whereNull('c.deleted_at')
+                ->count();
+            $cap = (int) ($centre->license_capacity ?? 0);
+            $pct = $cap > 0 ? round(($enrolled / $cap) * 100, 1) : 0;
+            $status = $pct >= 100 ? 'over_capacity' : ($pct >= 95 ? 'tight' : 'ok');
+            return [
+                'centre_id' => $centre->id,
+                'centre_name' => $centre->name,
+                'enrolled' => $enrolled,
+                'license_capacity' => $cap,
+                'pct' => $pct,
+                'status' => $status,
+            ];
+        })->filter()->values();
+
+        return response()->json([
+            'expired_certs' => $expiredCerts,
+            'mfa_laggards' => $mfaLaggards,
+            'centre_ratios' => $centreRatios,
+            'summary' => [
+                'expired_certs' => $expiredCerts->where('status', 'expired')->count(),
+                'expiring_soon' => $expiredCerts->where('status', 'expiring_soon')->count(),
+                'mfa_laggards' => $mfaLaggards->count(),
+                'over_capacity' => $centreRatios->where('status', 'over_capacity')->count(),
+                'tight' => $centreRatios->where('status', 'tight')->count(),
+            ],
+        ]);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //   AGENCY-WIDE CHILDREN — v22p47
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * GET /api/v1/admin/children
+     *
+     * Cross-centre list of every child in the agency. Same enrolled /
+     * waitlist / withdrawn filter as the per-centre director endpoint,
+     * but agency-scoped so admins don't have to drill into a centre to
+     * see (or export) the full roster. Supports ?format=csv.
+     */
+    public function listAgencyChildren(Request $request)
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['children' => []]);
+        $centreIds = $this->getCentreIds($agencyId);
+        if (empty($centreIds)) return response()->json(['children' => []]);
+
+        $q = DB::table('children as c')
+            ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->whereIn('f.centre_id', $centreIds)
+            ->whereNull('c.deleted_at')
+            ->orderBy('c.last_name')->orderBy('c.first_name');
+
+        if ($status = $request->input('status')) {
+            $q->where('c.enrollment_status', $status);
+        }
+
+        $rows = $q->limit(2000)->get([
+            'c.id', 'c.first_name', 'c.last_name', 'c.preferred_name',
+            'c.date_of_birth', 'c.enrollment_status', 'c.enrolled_at',
+            'c.allergies', 'c.health_alerts',
+            'f.id as family_id', 'f.family_name',
+            'ce.id as centre_id', 'ce.name as centre_name',
+        ])->all();
+
+        if (strtolower((string) $request->query('format', '')) === 'csv') {
+            return $this->streamCsv('children', [
+                'ID', 'First name', 'Last name', 'Preferred', 'Date of birth',
+                'Status', 'Enrolled', 'Family', 'Centre',
+                'Allergies', 'Health alerts',
+            ], array_map(fn ($r) => [
+                $r->id, $r->first_name, $r->last_name, $r->preferred_name,
+                $r->date_of_birth, $r->enrollment_status, $r->enrolled_at,
+                $r->family_name, $r->centre_name,
+                $r->allergies, $r->health_alerts,
+            ], $rows));
+        }
+
+        return response()->json(['children' => $rows]);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //   USERS
     // ════════════════════════════════════════════════════════════════
 

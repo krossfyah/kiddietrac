@@ -74,6 +74,9 @@
   // staff can use the same UI.
   reg(allRoles, 'notifications', 'KT.Notifications');
 
+  // v22p47: compliance dashboard — directors + admins
+  reg(directors, 'compliance', 'KT.Compliance');
+
   // Chat exposes mount(container), not render
   ['agency_admin', 'centre_director', 'educator'].forEach(function (r) {
     Shell.registerScreen(r + ':chat', bridge('KT.Chat', 'mount'));

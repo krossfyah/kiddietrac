@@ -405,6 +405,9 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         // group near end of this file.
         // v22p42: presence (online users via personal_access_tokens.last_used_at)
         Route::get('/presence', [AdminController::class, 'presence']);
+        // v22p47: compliance dashboard + agency-wide children list (+ CSV)
+        Route::get('/compliance', [AdminController::class, 'compliance']);
+        Route::get('/children', [AdminController::class, 'listAgencyChildren']);
         // v22p42: bulk invoice generation by centre (extends director endpoint with centre_id arg)
         Route::post('/invoices/generate-batch', [\App\Http\Controllers\Api\InvoiceController::class, 'generateBatchByCentre']);
 

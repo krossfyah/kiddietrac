@@ -454,6 +454,27 @@ final class ChatController extends Controller
                         'url'   => '/dashboard.html#chat',
                         'tag'   => 'chat-' . $conversationId,
                     ]);
+
+                    // v22p47: also persist a notifications row per recipient
+                    // so the in-portal inbox shows the message even after the
+                    // OS push notification has disappeared. Same payload shape
+                    // as web push so the inbox renderer can lean on data.url.
+                    $nowTs = $now;
+                    $rows = [];
+                    foreach ($recipients as $rid) {
+                        $rows[] = [
+                            'user_id' => $rid,
+                            'type' => 'chat',
+                            'title' => 'New message from ' . $senderName,
+                            'body' => $preview,
+                            'data' => json_encode([
+                                'url' => '/dashboard.html#chat',
+                                'conversation_id' => $conversationId,
+                            ]),
+                            'created_at' => $nowTs,
+                        ];
+                    }
+                    if (!empty($rows)) DB::table('notifications')->insert($rows);
                 }
             }
         } catch (\Throwable $e) {

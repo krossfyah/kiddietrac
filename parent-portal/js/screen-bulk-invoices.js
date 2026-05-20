@@ -41,6 +41,29 @@
     picker.appendChild(monthSel);
     picker.appendChild(yearSel);
 
+    // v22p47: export all invoices as CSV (no per-centre filter on the
+    // existing endpoint, so this dumps the agency-wide list)
+    var csvBtn = Dom.el('button', { style: 'background:white;color:#16A34A;border:1px solid #16A34A;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-left:auto;' }, '⤓ Export invoices CSV');
+    csvBtn.addEventListener('click', function () {
+      var apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var token = sessionStorage.getItem('kt_token');
+      var activeAgencyId = sessionStorage.getItem('kt_active_agency_id') || '';
+      var headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'text/csv' };
+      if (activeAgencyId) headers['X-Active-Agency-Id'] = activeAgencyId;
+      csvBtn.disabled = true; csvBtn.textContent = 'Preparing…';
+      fetch(apiBase + '/director/invoices?format=csv', { headers: headers })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+        .then(function (blob) {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a'); a.href = url; a.download = 'invoices-' + (new Date()).toISOString().slice(0,10) + '.csv';
+          document.body.appendChild(a); a.click();
+          setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
+        })
+        .catch(function (e) { alert('CSV failed: ' + e.message); })
+        .finally(function () { csvBtn.disabled = false; csvBtn.textContent = '⤓ Export invoices CSV'; });
+    });
+    picker.appendChild(csvBtn);
+
     var centresWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(centresWrap);
     centresWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'Loading centres…'));
