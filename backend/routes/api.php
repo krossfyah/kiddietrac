@@ -965,3 +965,13 @@ Route::prefix('v1')->group(function () {
     Route::get ('/sso/{provider}/callback',      [\App\Http\Controllers\Api\SsoController::class, 'callback']);
     Route::post('/kiosk/{token}/temperature',    [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record']);
 });
+
+/* v22p68 help routes */
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    Route::get('help/dashboard', [App\Http\Controllers\Api\HelpController::class, 'dashboard']);
+    Route::get('help/analytics', [App\Http\Controllers\Api\HelpController::class, 'analytics']);
+    Route::post('help/featured', [App\Http\Controllers\Api\HelpController::class, 'pinFeatured']);
+    Route::delete('help/featured/{slug}', [App\Http\Controllers\Api\HelpController::class, 'unpinFeatured']);
+    Route::post('help/{slug}/view', [App\Http\Controllers\Api\HelpController::class, 'trackView']);
+    Route::post('help/{slug}/feedback', [App\Http\Controllers\Api\HelpController::class, 'feedback']);
+});

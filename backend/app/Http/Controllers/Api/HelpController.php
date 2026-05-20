@@ -196,4 +196,193 @@ PROMPT;
             default => 'guardian',
         };
     }
+
+    /**
+     * GET /api/v1/help/dashboard
+     * Featured + popular for the help-home panels.
+     */
+    public function dashboard(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
+    {
+        $role = $this->resolveRole($request->user());
+        $agencyId = optional($request->user())->agency_id ?? null;
+
+        // Featured: from help_article_featured (agency-specific or global)
+        $featuredSlugs = \Illuminate\Support\Facades\DB::table('help_article_featured')
+            ->where(function ($q) use ($agencyId) {
+                $q->whereNull('agency_id')->orWhere('agency_id', $agencyId);
+            })
+            ->orderBy('sort')
+            ->limit(6)
+            ->pluck('slug')
+            ->toArray();
+
+        $featured = collect($featuredSlugs)->map(function ($slug) use ($role) {
+            $a = $this->help->getArticle($slug, $role);
+            return $a ? ['slug' => $slug, 'title' => $a['title'], 'category' => $a['category']] : null;
+        })->filter()->values();
+
+        // Popular: most viewed in last 30 days, scoped by agency if available
+        $popularRows = \Illuminate\Support\Facades\DB::table('help_article_views')
+            ->select('slug', \Illuminate\Support\Facades\DB::raw('COUNT(*) as views'))
+            ->where('viewed_at', '>=', now()->subDays(30))
+            ->when($agencyId, fn($q) => $q->where('agency_id', $agencyId))
+            ->groupBy('slug')
+            ->orderByDesc('views')
+            ->limit(6)
+            ->get();
+
+        $popular = $popularRows->map(function ($row) use ($role) {
+            $a = $this->help->getArticle($row->slug, $role);
+            return $a ? ['slug' => $row->slug, 'title' => $a['title'], 'category' => $a['category'], 'views' => (int) $row->views] : null;
+        })->filter()->values();
+
+        return response()->json([
+            'featured' => $featured,
+            'popular' => $popular,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/help/{slug}/view
+     */
+    public function trackView(\Illuminate\Http\Request $request, string $slug): \Illuminate\Http\JsonResponse
+    {
+        $user = $request->user();
+        \Illuminate\Support\Facades\DB::table('help_article_views')->insert([
+            'slug' => $slug,
+            'user_id' => optional($user)->id,
+            'role' => $this->resolveRole($user),
+            'agency_id' => optional($user)->agency_id,
+            'viewed_at' => now(),
+            'ip' => $request->ip(),
+        ]);
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * POST /api/v1/help/{slug}/feedback  { helpful: bool, comment?: string }
+     */
+    public function feedback(\Illuminate\Http\Request $request, string $slug): \Illuminate\Http\JsonResponse
+    {
+        $data = $request->validate([
+            'helpful' => ['required', 'boolean'],
+            'comment' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $user = $request->user();
+        \Illuminate\Support\Facades\DB::table('help_article_feedback')->insert([
+            'slug' => $slug,
+            'user_id' => optional($user)->id,
+            'role' => $this->resolveRole($user),
+            'helpful' => $data['helpful'],
+            'comment' => $data['comment'] ?? null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * GET /api/v1/help/analytics  (admin only)
+     */
+    public function analytics(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
+    {
+        $user = $request->user();
+        $role = $this->resolveRole($user);
+        if (!in_array($role, ['agency_admin', 'platform_admin', 'centre_director'])) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $agencyId = $user->agency_id ?? null;
+        $isPlatform = $role === 'platform_admin';
+
+        // Top viewed (30d)
+        $topViews = \Illuminate\Support\Facades\DB::table('help_article_views')
+            ->select('slug', \Illuminate\Support\Facades\DB::raw('COUNT(*) as views'))
+            ->where('viewed_at', '>=', now()->subDays(30))
+            ->when(!$isPlatform && $agencyId, fn($q) => $q->where('agency_id', $agencyId))
+            ->groupBy('slug')
+            ->orderByDesc('views')
+            ->limit(20)
+            ->get();
+
+        // Helpful vs not (per article)
+        $feedback = \Illuminate\Support\Facades\DB::table('help_article_feedback')
+            ->select('slug',
+                \Illuminate\Support\Facades\DB::raw('SUM(CASE WHEN helpful = 1 THEN 1 ELSE 0 END) as yes'),
+                \Illuminate\Support\Facades\DB::raw('SUM(CASE WHEN helpful = 0 THEN 1 ELSE 0 END) as no')
+            )
+            ->groupBy('slug')
+            ->get()
+            ->mapWithKeys(fn ($row) => [$row->slug => ['yes' => (int) $row->yes, 'no' => (int) $row->no]]);
+
+        // Comments (negative only — actionable)
+        $negComments = \Illuminate\Support\Facades\DB::table('help_article_feedback')
+            ->where('helpful', false)
+            ->whereNotNull('comment')
+            ->orderByDesc('created_at')
+            ->limit(20)
+            ->get(['slug', 'comment', 'created_at']);
+
+        // Totals
+        $totalViews30 = \Illuminate\Support\Facades\DB::table('help_article_views')
+            ->where('viewed_at', '>=', now()->subDays(30))
+            ->when(!$isPlatform && $agencyId, fn($q) => $q->where('agency_id', $agencyId))
+            ->count();
+
+        $askedCount30 = 0;  // TODO: track AI asks separately
+
+        return response()->json([
+            'totals' => [
+                'views_30d' => $totalViews30,
+                'feedback_count' => $feedback->sum(fn($v) => $v['yes'] + $v['no']),
+                'helpful_pct' => $feedback->sum(fn($v) => $v['yes']) + $feedback->sum(fn($v) => $v['no']) > 0
+                    ? round(100 * $feedback->sum(fn($v) => $v['yes']) / ($feedback->sum(fn($v) => $v['yes']) + $feedback->sum(fn($v) => $v['no'])))
+                    : null,
+            ],
+            'top_views' => $topViews->map(fn ($row) => [
+                'slug' => $row->slug,
+                'views' => (int) $row->views,
+                'feedback' => $feedback[$row->slug] ?? ['yes' => 0, 'no' => 0],
+            ]),
+            'negative_comments' => $negComments,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/help/featured  (admin) { slug, sort? }
+     * DELETE /api/v1/help/featured/{slug}  (admin)
+     */
+    public function pinFeatured(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
+    {
+        $user = $request->user();
+        $role = $this->resolveRole($user);
+        if (!in_array($role, ['agency_admin', 'platform_admin'])) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $data = $request->validate([
+            'slug' => ['required', 'string'],
+            'sort' => ['nullable', 'integer'],
+        ]);
+        \Illuminate\Support\Facades\DB::table('help_article_featured')->updateOrInsert(
+            ['agency_id' => $role === 'platform_admin' ? null : $user->agency_id, 'slug' => $data['slug']],
+            ['sort' => $data['sort'] ?? 0, 'updated_at' => now(), 'created_at' => now()],
+        );
+        return response()->json(['ok' => true]);
+    }
+
+    public function unpinFeatured(\Illuminate\Http\Request $request, string $slug): \Illuminate\Http\JsonResponse
+    {
+        $user = $request->user();
+        $role = $this->resolveRole($user);
+        if (!in_array($role, ['agency_admin', 'platform_admin'])) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        \Illuminate\Support\Facades\DB::table('help_article_featured')
+            ->where('slug', $slug)
+            ->where(function ($q) use ($user, $role) {
+                if ($role === 'platform_admin') $q->whereNull('agency_id');
+                else $q->where('agency_id', $user->agency_id);
+            })
+            ->delete();
+        return response()->json(['ok' => true]);
+    }
 }
