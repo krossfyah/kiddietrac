@@ -72,6 +72,11 @@ Route::any('/login', function () { return response()->json(['message' => 'Unauth
 Route::get('/branding', [BrandingController::class, 'show']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
+// v22p49 — Public tour booking. Throttled aggressively because the public
+// endpoint is the most-likely target for spam — 8 requests per hour per IP.
+Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, 'publicTourBook'])
+    ->middleware('throttle:8,60');
+
     
 
     // v14 fix: push/public-key must be publicly accessible (called before subscription)
@@ -141,6 +146,19 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
         // v22p33 — Per-role dashboard widget data
         Route::get('/widgets/me', [\App\Http\Controllers\Api\WidgetsController::class, 'me']);
+
+        // v22p49 — Daily care logs, milestones, portfolio, time clock
+        Route::post  ('/care/logs',                 [\App\Http\Controllers\Api\CareController::class, 'logCare']);
+        Route::get   ('/care/logs/child/{child}',   [\App\Http\Controllers\Api\CareController::class, 'logsForChild']);
+        Route::get   ('/care/milestones/catalog',   [\App\Http\Controllers\Api\CareController::class, 'milestoneCatalog']);
+        Route::get   ('/care/milestones/child/{child}', [\App\Http\Controllers\Api\CareController::class, 'milestonesForChild']);
+        Route::post  ('/care/milestones',           [\App\Http\Controllers\Api\CareController::class, 'recordMilestone']);
+        Route::get   ('/care/portfolio/{child}',    [\App\Http\Controllers\Api\CareController::class, 'portfolio']);
+        Route::post  ('/staff/punch',               [\App\Http\Controllers\Api\CareController::class, 'punch']);
+        Route::get   ('/staff/punches/me',          [\App\Http\Controllers\Api\CareController::class, 'myPunches']);
+        Route::get   ('/staff/punches/centre',      [\App\Http\Controllers\Api\CareController::class, 'centrePunches']);
+        Route::get   ('/admin/tours',               [\App\Http\Controllers\Api\CareController::class, 'listTours']);
+        Route::patch ('/admin/tours/{id}',          [\App\Http\Controllers\Api\CareController::class, 'updateTour']);
 
         // v22p34 — Marketing campaigns (directors + agency_admin + platform_admin).
         // Route-level role gate kept lenient; controller does the agency-scope check

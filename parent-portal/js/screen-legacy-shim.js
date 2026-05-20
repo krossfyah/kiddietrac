@@ -77,6 +77,20 @@
   // v22p47: compliance dashboard — directors + admins
   reg(directors, 'compliance', 'KT.Compliance');
 
+  // v22p49: care logs, time clock, milestones, portfolio, tours
+  ['agency_admin','centre_director','educator'].forEach(function (r) {
+    Shell.registerScreen(r + ':time-clock', bridge('KT.Care', 'renderTimeClock'));
+    Shell.registerScreen(r + ':care-log',   bridge('KT.Care', 'renderCareLog'));
+  });
+  Shell.registerScreen('guardian:care-log', bridge('KT.Care', 'renderCareLog'));
+  ['agency_admin','centre_director','educator','guardian'].forEach(function (r) {
+    Shell.registerScreen(r + ':portfolio',  bridge('KT.Care', 'renderPortfolio'));
+    Shell.registerScreen(r + ':milestones', bridge('KT.Care', 'renderMilestones'));
+  });
+  ['agency_admin','centre_director'].forEach(function (r) {
+    Shell.registerScreen(r + ':tours', bridge('KT.Care', 'renderTours'));
+  });
+
   // Chat exposes mount(container), not render
   ['agency_admin', 'centre_director', 'educator'].forEach(function (r) {
     Shell.registerScreen(r + ':chat', bridge('KT.Chat', 'mount'));

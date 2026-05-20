@@ -53,3 +53,13 @@ Schedule::command('kiddietrac:chat-emails')
     ->withoutOverlapping(20)
     ->runInBackground()
     ->onOneServer();
+
+// v22p49 — apply late fees once per day at 02:00 Toronto time. Idempotent
+// per (invoice, period) so a missed run catches up on the next day with
+// no duplicates.
+Schedule::command('kiddietrac:late-fees')
+    ->dailyAt('02:00')
+    ->timezone('America/Toronto')
+    ->withoutOverlapping(60)
+    ->runInBackground()
+    ->onOneServer();

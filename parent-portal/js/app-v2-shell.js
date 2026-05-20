@@ -70,6 +70,8 @@
       return [
         { label: 'Overview', items: overviewItems },
         { label: 'Operations', items: [
+          { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
+
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -85,6 +87,7 @@
         ]},
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',   icon: '📣' },
+          { hash: 'tours',               label: 'Tours',       icon: '🚪' },
         ]},
         { label: 'Staff', items: [
           { hash: 'staff-calendar',  label: 'Calendar',         icon: '📅' },
@@ -132,6 +135,8 @@
         ]},
         { label: 'Operations', items: [
           { hash: 'today',          label: 'Today',            icon: '✨' },
+          { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
+
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -148,9 +153,11 @@
         ]},
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📣' },
+          { hash: 'tours',              label: 'Tours',       icon: '🚪' },
         ]},
         { label: 'Staff', items: [
           { hash: 'staff-calendar', label: 'Calendar',         icon: '📅' },
+          { hash: 'time-clock',     label: 'Time clock',       icon: '⏱' },
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
@@ -173,6 +180,8 @@
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢' },
+          { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
+
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
