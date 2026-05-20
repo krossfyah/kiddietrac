@@ -156,7 +156,7 @@
       var miniLogo = Dom.el('div', {
         style: 'flex-shrink:0;width:32px;height:32px;border-radius:7px;overflow:hidden;background:' + accent + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;',
       });
-      if (c.logo_url) {
+      if (isUsableLogoUrl(c.logo_url)) {
         var miniImg = Dom.el('img', { src: avatarSrc(c.logo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:contain;background:white;' });
         miniImg.addEventListener('error', function () { miniImg.remove(); miniLogo.textContent = (c.name || '?').charAt(0).toUpperCase(); });
         miniLogo.appendChild(miniImg);
@@ -219,7 +219,7 @@
       var logo = Dom.el('div', {
         style: 'flex-shrink:0;width:44px;height:44px;border-radius:10px;overflow:hidden;background:' + accent + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;',
       });
-      if (c.logo_url) {
+      if (isUsableLogoUrl(c.logo_url)) {
         var img = Dom.el('img', { src: avatarSrc(c.logo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:contain;background:white;' });
         img.addEventListener('error', function () { img.remove(); logo.textContent = (c.name || '?').charAt(0).toUpperCase(); });
         logo.appendChild(img);
@@ -1817,12 +1817,21 @@
   function btnSecondary() {
     return 'background: transparent; color: #DC2626; border: 1px solid #DC2626; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;';
   }
+  // v22p48: hard guard against rendering a user-avatar URL where a centre
+  // logo is expected. If centre.logo_url ever picks up a /storage/avatars/
+  // path (data contamination, browser cache, etc.) we discard it and fall
+  // back to the placeholder initial rather than showing the wrong identity.
+  function isUsableLogoUrl(url) {
+    if (!url) return false;
+    return !/\/storage\/avatars\//i.test(String(url));
+  }
+
   // v22p3.4: 64px centre logo preview (image if logo_url set, else placeholder)
   function renderCentreLogoPreview(centre) {
     var wrap = Dom.el('div', {
       style: 'flex-shrink:0;width:64px;height:64px;border-radius:12px;overflow:hidden;background:' + (centre && centre.brand_color || '#E5E7EB') + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);',
     });
-    if (centre && centre.logo_url) {
+    if (centre && isUsableLogoUrl(centre.logo_url)) {
       var img = Dom.el('img', {
         src: avatarSrc(centre.logo_url),
         alt: centre.name || '',

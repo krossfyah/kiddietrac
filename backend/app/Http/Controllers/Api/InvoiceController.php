@@ -466,6 +466,44 @@ final class InvoiceController extends Controller
                 'status' => $newStatus,
                 'updated_at' => now(),
             ]);
+
+            // v22p48: notify the family + recording staff member when an
+            // invoice is paid off. Insert one notifications row per guardian
+            // on the family + a single row for the recording user as a
+            // receipt acknowledgement.
+            if ($newStatus === 'paid') {
+                $guardianIds = DB::table('guardians')->where('family_id', $invoice->family_id)->pluck('user_id')->all();
+                $rows = [];
+                $title = 'Invoice ' . $invoice->invoice_number . ' paid in full';
+                $bodyPreview = '$' . number_format((float) $invoice->total, 2) . ' · receipt available in your billing tab';
+                $now = now();
+                foreach ($guardianIds as $gid) {
+                    $rows[] = [
+                        'user_id' => (int) $gid,
+                        'type' => 'payment',
+                        'title' => $title,
+                        'body' => $bodyPreview,
+                        'data' => json_encode([
+                            'url' => '/dashboard.html#billing',
+                            'invoice_id' => (int) $invoiceId,
+                        ]),
+                        'created_at' => $now,
+                    ];
+                }
+                // Also notify the staff member who recorded the payment
+                $rows[] = [
+                    'user_id' => (int) $request->user()->id,
+                    'type' => 'invoice',
+                    'title' => 'Payment recorded · ' . $invoice->invoice_number,
+                    'body' => 'Marked paid in full. ' . $bodyPreview,
+                    'data' => json_encode([
+                        'url' => '/dashboard.html#admin-billing',
+                        'invoice_id' => (int) $invoiceId,
+                    ]),
+                    'created_at' => $now,
+                ];
+                if (!empty($rows)) DB::table('notifications')->insert($rows);
+            }
         });
 
         return response()->json(['message' => 'Payment recorded'], 201);

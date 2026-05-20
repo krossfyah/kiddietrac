@@ -126,6 +126,31 @@ final class SendCampaignEmailsCommand extends Command
                 'created_at' => $now,
             ]);
 
+            // v22p48: insert a notifications row per recipient so the
+            // in-portal inbox shows the campaign even if the email lands
+            // in spam or the user prefers to read inside the portal.
+            $notifRows = [];
+            $bodyPreview = mb_strimwidth(strip_tags($c->body_html ?? ''), 0, 200, '…');
+            foreach ($recipients as $r) {
+                $notifRows[] = [
+                    'user_id' => (int) $r->id,
+                    'type' => 'marketing',
+                    'title' => $c->title,
+                    'body' => $bodyPreview,
+                    'data' => json_encode([
+                        'url' => '/dashboard.html#announcements',
+                        'campaign_id' => (int) $c->id,
+                    ]),
+                    'created_at' => $now,
+                ];
+            }
+            if (!empty($notifRows)) {
+                // Chunk to keep INSERT statements bounded
+                foreach (array_chunk($notifRows, 500) as $chunk) {
+                    DB::table('notifications')->insert($chunk);
+                }
+            }
+
             $this->info("Campaign #{$c->id}: emailed $delivered / " . count($recipients) . " (failed: $failed)");
         }
         return self::SUCCESS;
