@@ -957,8 +957,11 @@ Route::post('/kiosk/{token}/signature', [\App\Http\Controllers\Api\OperationsCon
 
 
 
-// v22p63 public routes
-Route::get ('/sso/providers',                    [\App\Http\Controllers\Api\SsoController::class, 'providers']);
-Route::get ('/sso/{provider}',                   [\App\Http\Controllers\Api\SsoController::class, 'redirect']);
-Route::get ('/sso/{provider}/callback',          [\App\Http\Controllers\Api\SsoController::class, 'callback']);
-Route::post('/kiosk/{token}/temperature',        [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record']);
+
+// v22p63 SSO (public, /api/v1 prefix)
+Route::prefix('v1')->group(function () {
+    Route::get ('/sso/providers',                [\App\Http\Controllers\Api\SsoController::class, 'providers']);
+    Route::get ('/sso/{provider}',               [\App\Http\Controllers\Api\SsoController::class, 'redirect']);
+    Route::get ('/sso/{provider}/callback',      [\App\Http\Controllers\Api\SsoController::class, 'callback']);
+    Route::post('/kiosk/{token}/temperature',    [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record']);
+});

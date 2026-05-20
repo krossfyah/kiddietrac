@@ -34,7 +34,7 @@ final class ChatbotController extends Controller
                 ->join('families', 'families.id', '=', 'guardians.family_id')
                 ->join('centres', 'centres.id', '=', 'families.centre_id')
                 ->value('centres.agency_id'));
-        $sessionId = $data['session_id'] ?: Str::uuid()->toString();
+        $sessionId = ($data['session_id'] ?? null) ?: Str::uuid()->toString();
 
         // Pull help articles as context
         $helpDir = base_path('resources/help/director');
@@ -85,7 +85,11 @@ final class ChatbotController extends Controller
                 'system' => $sys,
                 'messages' => $messages,
             ]);
-            if (!$res->ok()) return response()->json(['error' => 'AI request failed', 'status' => $res->status()], 502);
+            if (!$res->ok()) {
+                $b = $res->json();
+                $msg = $b['error']['message'] ?? $b['message'] ?? 'AI request failed';
+                return response()->json(['error' => $msg, 'upstream_status' => $res->status()], 502);
+            }
             $answer = trim($res->json('content.0.text') ?? '');
             DB::table('chatbot_messages')->insert([
                 'user_id' => $u->id, 'agency_id' => $agencyId, 'session_id' => $sessionId,
