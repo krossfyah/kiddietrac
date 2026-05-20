@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\AgencyMailer;
+use App\Services\EmailTemplate;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -154,47 +155,38 @@ final class DailyDigestCommand extends Command
 
     private function renderHtml(object $agency, array $s, Carbon $today): string
     {
-        $brand  = $agency->brand_primary_color ?: '#1F6080';
-        $name   = htmlspecialchars($agency->name);
-        $date   = $today->format('l, F j, Y');
-        $pct    = $s['enrolled'] > 0 ? round(($s['checked_in'] / $s['enrolled']) * 100) : 0;
-        $bal    = number_format($s['open_balance'], 2);
-        $mfaWarn = $s['mfa_not_enrolled'] > 0;
+        // v22p38: render via the EmailTemplate service so every agency gets
+        // its own logo + brand colours + white-label-aware footer.
+        $pct = $s['enrolled'] > 0 ? round(($s['checked_in'] / $s['enrolled']) * 100) : 0;
+        $bal = number_format($s['open_balance'], 2);
 
-        $html  = '<div style="font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif; max-width:620px; margin:0 auto; color:#0F172A;">';
-        $html .= '<div style="background:linear-gradient(135deg,' . $brand . ' 0%, #16637A 100%); color:white; padding:24px 28px; border-radius:14px 14px 0 0;">';
-        $html .= '<div style="font-size:11px; font-weight:700; letter-spacing:2px;">DAILY DIGEST</div>';
-        $html .= '<div style="font-size:22px; font-weight:800; margin-top:4px;">' . $name . '</div>';
-        $html .= '<div style="font-size:13px; opacity:.8;">' . $date . '</div>';
-        $html .= '</div>';
-        $html .= '<div style="background:white; padding:24px 28px; border:1px solid #E5E7EB; border-top:none; border-radius:0 0 14px 14px;">';
-        $html .= '<h3 style="margin:0 0 14px; font-size:14px; color:#6B7280; text-transform:uppercase; letter-spacing:1.2px;">Today\'s headline</h3>';
-        $html .= '<table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">';
-        $html .= '<tr><td>' . $this->stat('Signed in', $s['checked_in'] . ' / ' . $s['enrolled'], $pct . '% present', '#16A34A') . '</td>';
-        $html .=    '<td style="width:14px;"></td>';
-        $html .=    '<td>' . $this->stat('Open invoices', '$' . $bal, $s['open_invoices'] . ' open', '#DC2626') . '</td></tr>';
-        $html .= '<tr><td style="height:12px;"></td></tr>';
-        $html .= '<tr><td>' . $this->stat('Meds today', (string) $s['meds_today'], 'doses logged so far', '#F59E0B') . '</td>';
-        $html .=    '<td style="width:14px;"></td>';
-        $html .=    '<td>' . $this->stat('Observations yesterday', (string) $s['observations_yesterday'], 'notes + photos', '#7C3AED') . '</td></tr>';
-        $html .= '</table>';
-        if ($mfaWarn) {
-            $html .= '<div style="margin-top:18px; padding:12px 14px; background:#FEF3C7; border-left:4px solid #F59E0B; border-radius:8px; font-size:13px; color:#78350F;">';
-            $html .= '<strong>' . $s['mfa_not_enrolled'] . ' staff still need to set up MFA.</strong> Visit Settings → Two-factor (MFA) to enable it.';
-            $html .= '</div>';
+        $body  = '<h3 style="margin:0 0 14px;font-size:13px;font-weight:700;color:#64748B;letter-spacing:1px;text-transform:uppercase;">Today\'s headline</h3>';
+
+        $body .= EmailTemplate::statRow(
+            EmailTemplate::statTile('Signed in', $s['checked_in'] . ' / ' . $s['enrolled'], $pct . '% present', '#16A34A'),
+            EmailTemplate::statTile('Open invoices', '$' . $bal, $s['open_invoices'] . ' open', '#DC2626')
+        );
+        $body .= EmailTemplate::statRow(
+            EmailTemplate::statTile('Meds today', (string) $s['meds_today'], 'doses logged so far', '#F59E0B'),
+            EmailTemplate::statTile('Observations yesterday', (string) $s['observations_yesterday'], 'notes + photos', '#7C3AED')
+        );
+
+        if ($s['mfa_not_enrolled'] > 0) {
+            $body .= EmailTemplate::calloutBox(
+                '<strong>' . $s['mfa_not_enrolled'] . ' staff still need to set up MFA.</strong><br>Visit Settings → Two-factor (MFA) to enable it.',
+                'warning'
+            );
         }
-        $html .= '<p style="font-size:12px; color:#9CA3AF; margin-top:24px;">You\'re receiving this because you are a director or admin at ' . $name . '. <a href="https://app.kiddietrac.com/#help" style="color:' . $brand . '; text-decoration:none;">Manage notifications</a> in the portal.</p>';
-        $html .= '</div></div>';
-        return $html;
-    }
 
-    private function stat(string $label, string $value, string $hint, string $accent): string
-    {
-        return '<table cellpadding="0" cellspacing="0" style="width:100%; background:#F8FAFC; border-radius:12px; border-left:4px solid ' . $accent . ';">'
-            . '<tr><td style="padding:14px 16px;">'
-            . '<div style="font-size:11px; font-weight:700; color:#6B7280; letter-spacing:1px; text-transform:uppercase;">' . $label . '</div>'
-            . '<div style="font-size:24px; font-weight:800; color:#0F172A; margin-top:4px;">' . $value . '</div>'
-            . '<div style="font-size:12px; color:#6B7280;">' . $hint . '</div>'
-            . '</td></tr></table>';
+        $body .= EmailTemplate::button('Open dashboard', 'https://app.kiddietrac.com/dashboard.html#dashboard', $agency->brand_primary_color ?: '#1F6080');
+
+        return EmailTemplate::wrap((int) $agency->id, $body, [
+            'eyebrow'   => 'DAILY DIGEST',
+            'title'     => $agency->name,
+            'subtitle'  => $today->format('l, F j, Y'),
+            'preheader' => $s['checked_in'] . ' of ' . $s['enrolled'] . ' children signed in · $' . $bal . ' outstanding · ' . $s['meds_today'] . ' meds today',
+            'footer_note' => 'Daily summary sent every morning at 7:00 AM. ' .
+                'You are receiving this because you have a director or admin role at this agency.',
+        ]);
     }
 }

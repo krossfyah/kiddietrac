@@ -34,3 +34,12 @@ Schedule::command('kiddietrac:digest-weekly')
     ->withoutOverlapping(60)
     ->runInBackground()
     ->onOneServer();
+
+// v22p38: marketing-campaign email sender — every 5 min so scheduled
+// campaigns are delivered within ~5 min of their scheduled_for. In-portal
+// 'both' campaigns get their email follow-up on the same tick.
+Schedule::command('kiddietrac:campaigns-mail')
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10)
+    ->runInBackground()
+    ->onOneServer();

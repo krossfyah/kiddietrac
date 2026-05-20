@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\AgencyMailer;
+use App\Services\EmailTemplate;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -104,43 +105,30 @@ final class WeeklyDigestCommand extends Command
 
     private function renderHtml(object $agency, array $s, Carbon $start, Carbon $end): string
     {
-        $brand = $agency->brand_primary_color ?: '#7C3AED';
-        $name = htmlspecialchars($agency->name);
+        // v22p38: routed through EmailTemplate for branded shell + white-label.
         $weekLabel = $start->format('M j') . ' – ' . $end->copy()->subDay()->format('M j');
         $net = $s['new_enrolments'] - $s['withdrawn'];
         $netColor = $net >= 0 ? '#16A34A' : '#DC2626';
         $billedFmt = '$' . number_format($s['billed'], 2);
         $paidFmt = '$' . number_format($s['paid'], 2);
 
-        $html  = '<div style="font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif; max-width:620px; margin:0 auto; color:#0F172A;">';
-        $html .= '<div style="background:linear-gradient(135deg,' . $brand . ' 0%, #16637A 100%); color:white; padding:24px 28px; border-radius:14px 14px 0 0;">';
-        $html .= '<div style="font-size:11px; font-weight:700; letter-spacing:2px;">WEEKLY DIGEST</div>';
-        $html .= '<div style="font-size:22px; font-weight:800; margin-top:4px;">' . $name . '</div>';
-        $html .= '<div style="font-size:13px; opacity:.8;">Week of ' . $weekLabel . '</div>';
-        $html .= '</div>';
-        $html .= '<div style="background:white; padding:24px 28px; border:1px solid #E5E7EB; border-top:none; border-radius:0 0 14px 14px;">';
-        $html .= '<h3 style="margin:0 0 14px; font-size:14px; color:#6B7280; text-transform:uppercase; letter-spacing:1.2px;">Last week\'s movement</h3>';
-        $html .= '<table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">';
-        $html .= '<tr><td>' . $this->stat('Net enrolment', ($net >= 0 ? '+' : '') . $net, $s['new_enrolments'] . ' added · ' . $s['withdrawn'] . ' withdrew', $netColor) . '</td>';
-        $html .=    '<td style="width:14px;"></td>';
-        $html .=    '<td>' . $this->stat('Billed last week', $billedFmt, $paidFmt . ' paid so far', '#16A34A') . '</td></tr>';
-        $html .= '<tr><td style="height:12px;"></td></tr>';
-        $html .= '<tr><td>' . $this->stat('Observations', (string) $s['observations'], 'logged in HDLH / ELECT', '#7C3AED') . '</td>';
-        $html .=    '<td style="width:14px;"></td>';
-        $html .=    '<td>' . $this->stat('Incidents', (string) $s['incidents'], 'recorded by educators', $s['incidents'] > 0 ? '#F59E0B' : '#16A34A') . '</td></tr>';
-        $html .= '</table>';
-        $html .= '<p style="font-size:12px; color:#9CA3AF; margin-top:24px;">You\'re receiving this because you are a director or admin at ' . $name . '. <a href="https://app.kiddietrac.com/#help" style="color:' . $brand . '; text-decoration:none;">Manage notifications</a> in the portal.</p>';
-        $html .= '</div></div>';
-        return $html;
-    }
+        $body  = '<h3 style="margin:0 0 14px;font-size:13px;font-weight:700;color:#64748B;letter-spacing:1px;text-transform:uppercase;">Last week\'s movement</h3>';
+        $body .= EmailTemplate::statRow(
+            EmailTemplate::statTile('Net enrolment', ($net >= 0 ? '+' : '') . $net, $s['new_enrolments'] . ' added · ' . $s['withdrawn'] . ' withdrew', $netColor),
+            EmailTemplate::statTile('Billed last week', $billedFmt, $paidFmt . ' paid so far', '#16A34A')
+        );
+        $body .= EmailTemplate::statRow(
+            EmailTemplate::statTile('Observations', (string) $s['observations'], 'logged in HDLH / ELECT', '#7C3AED'),
+            EmailTemplate::statTile('Incidents', (string) $s['incidents'], 'recorded by educators', $s['incidents'] > 0 ? '#F59E0B' : '#16A34A')
+        );
+        $body .= EmailTemplate::button('Open dashboard', 'https://app.kiddietrac.com/dashboard.html#dashboard', $agency->brand_primary_color ?: '#7C3AED');
 
-    private function stat(string $label, string $value, string $hint, string $accent): string
-    {
-        return '<table cellpadding="0" cellspacing="0" style="width:100%; background:#F8FAFC; border-radius:12px; border-left:4px solid ' . $accent . ';">'
-            . '<tr><td style="padding:14px 16px;">'
-            . '<div style="font-size:11px; font-weight:700; color:#6B7280; letter-spacing:1px; text-transform:uppercase;">' . $label . '</div>'
-            . '<div style="font-size:24px; font-weight:800; color:#0F172A; margin-top:4px;">' . $value . '</div>'
-            . '<div style="font-size:12px; color:#6B7280;">' . $hint . '</div>'
-            . '</td></tr></table>';
+        return EmailTemplate::wrap((int) $agency->id, $body, [
+            'eyebrow'   => 'WEEKLY DIGEST',
+            'title'     => $agency->name,
+            'subtitle'  => 'Week of ' . $weekLabel,
+            'preheader' => ($net >= 0 ? '+' : '') . $net . ' net enrolment · ' . $billedFmt . ' billed · ' . $s['observations'] . ' observations',
+            'footer_note' => 'Weekly summary sent every Monday at 7:05 AM, covering the prior week.',
+        ]);
     }
 }

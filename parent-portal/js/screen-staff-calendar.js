@@ -54,8 +54,10 @@
     var calRoot = Dom.el('div', { id: 'kt-cal-root' });
     wrap.appendChild(calRoot);
 
-    // Load centres for the filter
-    Api.get('/admin/centres').then(function (r) {
+    // v22p38: was /admin/centres (agency_admin-only) which 403'd for directors.
+    // /director/centres works for both roles — agency_admin via the route-level
+    // role gate, director via the controller's role-aware myCentres().
+    Api.get('/director/centres').then(function (r) {
       state.centres = r.centres || [];
       if (!state.centreId && state.centres.length) state.centreId = state.centres[0].id;
       buildToolbar(toolbar, calRoot);
