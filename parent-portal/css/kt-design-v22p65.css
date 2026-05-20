@@ -1,0 +1,472 @@
+/* v22p65 — design polish 3
+   Outlined inputs, animated KPI counters' base, refined empty states,
+   consistency tokens, refined modals + section dividers.
+   Loads AFTER kt-design-v22p64.css so these rules win.
+*/
+
+/* ============================ Design tokens ============================ */
+:root {
+  /* Spacing scale (4px grid) */
+  --kt-space-1: 4px;
+  --kt-space-2: 8px;
+  --kt-space-3: 12px;
+  --kt-space-4: 16px;
+  --kt-space-5: 20px;
+  --kt-space-6: 24px;
+  --kt-space-8: 32px;
+  --kt-space-10: 40px;
+  --kt-space-14: 56px;
+
+  /* Border radius scale */
+  --kt-r-sm: 6px;
+  --kt-r-md: 10px;
+  --kt-r-lg: 14px;
+  --kt-r-xl: 18px;
+
+  /* Input states */
+  --kt-input-border: #CBD5E1;
+  --kt-input-border-hover: #94A3B8;
+  --kt-input-border-focus: #1F6080;
+  --kt-input-bg: #FDFEFF;
+  --kt-input-bg-focus: #FFFFFF;
+  --kt-input-shadow-focus: 0 0 0 4px rgba(31, 96, 128, 0.14), 0 1px 4px rgba(31, 96, 128, 0.06);
+
+  /* Smooth scroll */
+}
+html { scroll-behavior: smooth; }
+::selection { background: rgba(31, 96, 128, 0.18); color: #0F172A; }
+
+/* ============================ STRONG OUTLINED INPUTS ============================ */
+[data-kt-pretty] input[type="text"],
+[data-kt-pretty] input[type="email"],
+[data-kt-pretty] input[type="number"],
+[data-kt-pretty] input[type="tel"],
+[data-kt-pretty] input[type="url"],
+[data-kt-pretty] input[type="password"],
+[data-kt-pretty] input[type="date"],
+[data-kt-pretty] input[type="datetime-local"],
+[data-kt-pretty] input[type="time"],
+[data-kt-pretty] input[type="month"],
+[data-kt-pretty] input[type="search"],
+[data-kt-pretty] input[type="color"],
+[data-kt-pretty] input:not([type]),
+[data-kt-pretty] select,
+[data-kt-pretty] textarea {
+  border: 2px solid var(--kt-input-border) !important;
+  background: var(--kt-input-bg) !important;
+  border-radius: var(--kt-r-md) !important;
+  padding: 11px 14px !important;
+  font-size: 14.5px !important;
+  font-weight: 500 !important;
+  color: #0F172A !important;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease !important;
+  width: 100%;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.02);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+[data-kt-pretty] input[type="color"] {
+  padding: 4px !important;
+  height: 44px;
+  cursor: pointer;
+}
+
+[data-kt-pretty] select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%231F6080' stroke-width='2' fill='none' stroke-linecap='round'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 14px center !important;
+  background-size: 12px !important;
+  padding-right: 38px !important;
+}
+
+[data-kt-pretty] input:hover,
+[data-kt-pretty] select:hover,
+[data-kt-pretty] textarea:hover {
+  border-color: var(--kt-input-border-hover) !important;
+  background: var(--kt-input-bg-focus) !important;
+}
+
+[data-kt-pretty] input:focus,
+[data-kt-pretty] select:focus,
+[data-kt-pretty] textarea:focus {
+  border-color: var(--kt-input-border-focus) !important;
+  background: var(--kt-input-bg-focus) !important;
+  box-shadow: var(--kt-input-shadow-focus) !important;
+  outline: none !important;
+}
+
+[data-kt-pretty] input:disabled,
+[data-kt-pretty] select:disabled,
+[data-kt-pretty] textarea:disabled {
+  background: #F1F5F9 !important;
+  color: #94A3B8 !important;
+  cursor: not-allowed !important;
+}
+
+[data-kt-pretty] input::placeholder,
+[data-kt-pretty] textarea::placeholder {
+  color: #94A3B8 !important;
+  opacity: 1;
+}
+
+[data-kt-pretty] input[type="checkbox"],
+[data-kt-pretty] input[type="radio"] {
+  width: 20px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  margin: 0 8px 0 0 !important;
+  border-width: 2px !important;
+  cursor: pointer;
+  accent-color: var(--kt-brand);
+}
+
+[data-kt-pretty] input[type="file"] {
+  border: 2px dashed var(--kt-input-border) !important;
+  background: var(--kt-input-bg) !important;
+  padding: 18px !important;
+  cursor: pointer;
+  font-weight: 500 !important;
+  transition: all 0.18s ease;
+}
+[data-kt-pretty] input[type="file"]:hover {
+  border-color: var(--kt-brand-vibrant) !important;
+  background: rgba(74, 144, 184, 0.04) !important;
+}
+
+[data-kt-pretty] input[type="range"] {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  height: 6px;
+  accent-color: var(--kt-brand);
+}
+
+/* Labels above inputs */
+[data-kt-pretty] label {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  letter-spacing: 0.002em !important;
+}
+
+/* Required indicator */
+[data-kt-pretty] label.required::after,
+[data-kt-pretty] label[data-required]::after {
+  content: ' *';
+  color: var(--kt-danger);
+  font-weight: 800;
+}
+
+/* Help text below inputs */
+[data-kt-pretty] .kt-input-help {
+  display: block;
+  font-size: 12px;
+  color: #64748B;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+[data-kt-pretty] .kt-input-error {
+  display: block;
+  font-size: 12.5px;
+  color: var(--kt-danger);
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+/* Field group with floating-style improvement */
+[data-kt-pretty] .kt-field {
+  margin-bottom: var(--kt-space-5);
+}
+
+/* ============================ Buttons consistency ============================ */
+[data-kt-pretty] button:not(.kt-row-check):not(.kt-pager-input) {
+  font-weight: 600 !important;
+  border-radius: var(--kt-r-md) !important;
+  letter-spacing: -0.005em !important;
+}
+
+[data-kt-pretty] .kt-btn {
+  padding: 11px 22px !important;
+  font-size: 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+[data-kt-pretty] .kt-btn-sm {
+  padding: 7px 14px !important;
+  font-size: 12.5px !important;
+}
+
+/* ============================ Cards — refined hover ============================ */
+[data-kt-pretty] .kt-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease !important;
+}
+
+[data-kt-pretty] .kt-card:hover {
+  box-shadow: var(--kt-shadow-md) !important;
+  border-color: rgba(74, 144, 184, 0.2) !important;
+}
+
+[data-kt-pretty] .kt-card .kt-card-header h3 {
+  font-size: 16.5px !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+}
+
+/* Section dividers — gradient line */
+[data-kt-pretty] .kt-card-header {
+  position: relative;
+}
+[data-kt-pretty] .kt-card-header::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #E2E8F0 12%, #E2E8F0 88%, transparent);
+}
+
+/* ============================ KPI animated counter base ============================ */
+[data-kt-pretty] .kt-kpi-value {
+  font-variant-numeric: tabular-nums;
+  position: relative;
+}
+
+/* When animating, JS will set data-kt-animating="1" — give a subtle scale */
+[data-kt-pretty] .kt-kpi[data-kt-animating="1"] .kt-kpi-value {
+  animation: kt-counter-pop 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes kt-counter-pop {
+  0% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+
+/* ============================ Empty state polish ============================ */
+[data-kt-pretty] .kt-empty {
+  text-align: center;
+  padding: 56px 24px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 2px dashed #E2E8F0;
+  border-radius: var(--kt-r-lg);
+  color: #64748B;
+}
+[data-kt-pretty] .kt-empty-icon {
+  font-size: 56px !important;
+  opacity: 0.4 !important;
+  margin-bottom: var(--kt-space-3);
+  filter: grayscale(0.3);
+  animation: kt-float-soft 4s ease-in-out infinite;
+}
+@keyframes kt-float-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+[data-kt-pretty] .kt-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 6px;
+}
+[data-kt-pretty] .kt-empty-desc {
+  font-size: 13.5px;
+  max-width: 360px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+/* ============================ Pills, refined per kind ============================ */
+[data-kt-pretty] .kt-pill {
+  background: linear-gradient(180deg, currentColor 0%, currentColor 100%);
+}
+[data-kt-pretty] .kt-pill-success {
+  background: linear-gradient(135deg, #DCFCE7, #BBF7D0) !important;
+  color: #15803D !important;
+  border: 1px solid rgba(21, 128, 61, 0.16);
+}
+[data-kt-pretty] .kt-pill-warning {
+  background: linear-gradient(135deg, #FEF3C7, #FDE68A) !important;
+  color: #92400E !important;
+  border: 1px solid rgba(146, 64, 14, 0.16);
+}
+[data-kt-pretty] .kt-pill-danger {
+  background: linear-gradient(135deg, #FEE2E2, #FECACA) !important;
+  color: #B91C1C !important;
+  border: 1px solid rgba(185, 28, 28, 0.16);
+}
+[data-kt-pretty] .kt-pill-info {
+  background: linear-gradient(135deg, #DBEAFE, #BFDBFE) !important;
+  color: #1E40AF !important;
+  border: 1px solid rgba(30, 64, 175, 0.16);
+}
+[data-kt-pretty] .kt-pill-purple {
+  background: linear-gradient(135deg, #F3E8FF, #E9D5FF) !important;
+  color: #7E22CE !important;
+  border: 1px solid rgba(126, 34, 206, 0.16);
+}
+
+/* ============================ Modal polish ============================ */
+.kt-modal-overlay,
+[style*="position:fixed"][style*="rgba(15,23,42"],
+[style*="position:fixed"][style*="rgba(0,0,0"] {
+  /* Modal backdrop refinement — only applies when the inline style matches */
+}
+
+/* Modal content — when matched, apply refined styles via the dialog itself */
+[data-kt-pretty] ~ * div[style*="background:#fff"][style*="border-radius"]:not(.kt-card) {
+  /* Specific to dynamically-created modals */
+}
+
+/* ============================ Refined section / page headers ============================ */
+[data-kt-pretty] h3 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  color: #0F172A;
+  margin: 24px 0 12px;
+}
+
+[data-kt-pretty] h4 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748B;
+  margin: 18px 0 10px;
+}
+
+/* ============================ Better link styling ============================ */
+[data-kt-pretty] a:not(.kt-btn):not(button) {
+  color: var(--kt-brand);
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+[data-kt-pretty] a:not(.kt-btn):not(button):hover {
+  color: var(--kt-brand-vibrant);
+  border-bottom-color: var(--kt-brand-vibrant);
+}
+
+/* ============================ Table search input refined ============================ */
+[data-kt-pretty] .kt-table-filter-input {
+  border: 2px solid var(--kt-input-border) !important;
+  background: var(--kt-input-bg) !important;
+  border-radius: var(--kt-r-md) !important;
+  padding: 10px 14px 10px 36px !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><path d='m21 21-4.3-4.3'/></svg>") !important;
+  background-repeat: no-repeat !important;
+  background-position: 12px center !important;
+}
+
+[data-kt-pretty] .kt-table-filter-input::placeholder {
+  color: #94A3B8 !important;
+}
+
+[data-kt-pretty] .kt-table-filter-input:focus {
+  border-color: var(--kt-input-border-focus) !important;
+  box-shadow: var(--kt-input-shadow-focus) !important;
+}
+
+/* Strip the duplicate 🔍 emoji that the JS already adds */
+[data-kt-pretty] .kt-table-filter-input::placeholder { content: attr(placeholder); }
+
+/* ============================ Toggle / switch (CSS-only) for any input[role="switch"] ============================ */
+[data-kt-pretty] .kt-switch input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px !important;
+  height: 24px !important;
+  background: #CBD5E1 !important;
+  border: none !important;
+  border-radius: 999px !important;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s ease;
+  padding: 0 !important;
+}
+[data-kt-pretty] .kt-switch input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  top: 3px;
+  left: 3px;
+  transition: left 0.2s ease;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+}
+[data-kt-pretty] .kt-switch input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, var(--kt-brand), var(--kt-brand-vibrant)) !important;
+}
+[data-kt-pretty] .kt-switch input[type="checkbox"]:checked::after {
+  left: 23px;
+}
+
+/* ============================ Tooltips (CSS-only via .kt-tooltip attribute) ============================ */
+[data-kt-tooltip] {
+  position: relative;
+}
+[data-kt-tooltip]:hover::after {
+  content: attr(data-kt-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0F172A;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+  z-index: 9999;
+  animation: kt-tip-in .12s ease-out;
+}
+@keyframes kt-tip-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ============================ Refined hover for table rows + zebra ============================ */
+[data-kt-pretty] table tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, 0.5);
+}
+
+[data-kt-pretty] table tbody tr {
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+/* ============================ Success checkmark animation ============================ */
+.kt-check-anim {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10B981, #059669);
+  color: #fff;
+  font-size: 24px;
+  animation: kt-check-bounce 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes kt-check-bounce {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+/* ============================ Final responsive touches ============================ */
+@media (max-width: 768px) {
+  [data-kt-pretty] input,
+  [data-kt-pretty] select,
+  [data-kt-pretty] textarea {
+    font-size: 16px !important; /* prevents iOS zoom on focus */
+    padding: 10px 12px !important;
+  }
+}
