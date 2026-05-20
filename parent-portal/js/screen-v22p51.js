@@ -26,7 +26,7 @@
         <h3 style="margin-top:32px;font-size:16px;color:#374151;">Your requests</h3>
         <div id="tor-mine"></div>
         ${isStaffOrAdmin() ? '<h3 style="margin-top:32px;font-size:16px;color:#374151;">Pending team requests</h3><div id="tor-pending"></div>' : ''}
-      </div>`).firstChild);
+      </div>`).firstElementChild);
 
     renderTorList(document.getElementById('tor-mine'), mine.data || [], false);
     if (isStaffOrAdmin()) renderTorList(document.getElementById('tor-pending'), pending.data || [], true);
@@ -109,7 +109,7 @@
           </div>
         </div>
         <div id="bgc-list" style="margin-top:18px;"></div>
-      </div>`).firstChild;
+      </div>`).firstElementChild;
     main.appendChild(root);
     renderBgcList(root.querySelector('#bgc-list'), res.data || []);
     root.querySelector('#bgc-csv').onclick = () => downloadAuthed('/admin/background-checks?format=csv', 'background-checks.csv');
