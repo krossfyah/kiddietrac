@@ -79,6 +79,9 @@
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',   icon: '📣' },
         ]},
+        { label: 'Staff', items: [
+          { hash: 'staff-calendar',  label: 'Calendar',         icon: '📅' },
+        ]},
         { label: 'Reseller', items: [
           { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
           { hash: 'admin-features', label: 'Feature flags',    icon: '⚙️' },
@@ -130,6 +133,9 @@
         ]},
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📣' },
+        ]},
+        { label: 'Staff', items: [
+          { hash: 'staff-calendar', label: 'Calendar',         icon: '📅' },
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },

@@ -482,6 +482,7 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
     
     Route::middleware('role:centre_director,agency_admin')->prefix('director')->group(function () {
         Route::get('/schedule',                  [SchedulingController::class, 'week']);
+        Route::get('/schedule/range',            [SchedulingController::class, 'range']);
         Route::get('/schedule/staff',            [SchedulingController::class, 'staffList']);
         Route::post('/schedule/shift',           [SchedulingController::class, 'createShift']);
         Route::patch('/schedule/shift/{id}',     [SchedulingController::class, 'updateShift']);

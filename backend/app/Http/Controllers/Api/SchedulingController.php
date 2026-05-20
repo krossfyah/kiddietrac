@@ -91,6 +91,82 @@ final class SchedulingController extends Controller
     }
 
     /**
+     * v22p37 — GET /api/v1/director/schedule/range?centre_id=X&start=YYYY-MM-DD&end=YYYY-MM-DD
+     * Arbitrary date range — used by the calendar (week + month views).
+     * Returns shifts grouped by ISO date so the frontend can paint cells.
+     */
+    public function range(Request $request): JsonResponse
+    {
+        $centreId = (int) $request->input('centre_id');
+        $start = Carbon::parse($request->input('start', Carbon::now()->startOfMonth()->toDateString()))->startOfDay();
+        $end   = Carbon::parse($request->input('end',   Carbon::now()->endOfMonth()->toDateString()))->endOfDay();
+        // Hard cap at 100 days to keep the response bounded
+        if ($start->diffInDays($end) > 100) {
+            $end = $start->copy()->addDays(100);
+        }
+        if (! $this->hasCentreAccess($request->user()->id, $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $rooms = DB::table('rooms')->where('centre_id', $centreId)->pluck('id')->all();
+        if (empty($rooms)) {
+            return response()->json(['centre_id' => $centreId, 'start' => $start->toDateString(), 'end' => $end->toDateString(), 'days' => new \stdClass(), 'total_shifts' => 0]);
+        }
+        $shifts = DB::table('shifts')
+            ->whereIn('room_id', $rooms)
+            ->where('starts_at', '>=', $start->toDateTimeString())
+            ->where('starts_at', '<=', $end->toDateTimeString())
+            ->orderBy('starts_at')
+            ->get();
+        $userIds = $shifts->pluck('user_id')->unique()->all();
+        $users = !empty($userIds) ? DB::table('users')->whereIn('id', $userIds)->get()->keyBy('id') : collect();
+        $roomMeta = DB::table('rooms')->whereIn('id', $rooms)->get()->keyBy('id');
+
+        $byDay = [];
+        $cursor = $start->copy();
+        while ($cursor <= $end) {
+            $byDay[$cursor->toDateString()] = ['day_name' => $cursor->format('l'), 'shifts' => []];
+            $cursor->addDay();
+        }
+        foreach ($shifts as $s) {
+            $u = $users[$s->user_id] ?? null;
+            $r = $roomMeta[$s->room_id] ?? null;
+            $date = Carbon::parse($s->starts_at)->toDateString();
+            if (!isset($byDay[$date])) continue;
+            $byDay[$date]['shifts'][] = [
+                'id' => $s->id,
+                'user_id' => $s->user_id,
+                'user_name' => $u ? trim($u->first_name . ' ' . $u->last_name) : 'Unknown',
+                'room_id' => $s->room_id,
+                'room_name' => $r->name ?? 'Room',
+                'starts_at' => $s->starts_at,
+                'ends_at' => $s->ends_at,
+                'starts_hm' => Carbon::parse($s->starts_at)->format('H:i'),
+                'ends_hm' => Carbon::parse($s->ends_at)->format('H:i'),
+                'role' => $s->role,
+                'status' => $s->status,
+            ];
+        }
+
+        // v22p37: bundle rooms so the calendar's New shift modal can populate
+        // the room dropdown without a separate /director/rooms call (that
+        // endpoint scopes to the caller's primary centre, breaking the
+        // agency_admin picker).
+        $roomsList = DB::table('rooms')
+            ->where('centre_id', $centreId)
+            ->orderBy('age_min_months')
+            ->get(['id', 'name', 'age_group']);
+
+        return response()->json([
+            'centre_id' => $centreId,
+            'start' => $start->toDateString(),
+            'end' => $end->toDateString(),
+            'days' => $byDay,
+            'rooms' => $roomsList,
+            'total_shifts' => $shifts->count(),
+        ]);
+    }
+
+    /**
      * POST /api/v1/director/schedule/shift
      */
     public function createShift(Request $request): JsonResponse

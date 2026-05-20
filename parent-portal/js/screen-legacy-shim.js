@@ -57,6 +57,9 @@
   // v22p34: marketing campaigns — directors + agency admins
   reg(directors, 'marketing-campaigns', 'KT.Marketing');
 
+  // v22p37: staff calendar — directors + agency admins
+  reg(directors, 'staff-calendar', 'KT.StaffCalendar');
+
   // Chat exposes mount(container), not render
   ['agency_admin', 'centre_director', 'educator'].forEach(function (r) {
     Shell.registerScreen(r + ':chat', bridge('KT.Chat', 'mount'));
