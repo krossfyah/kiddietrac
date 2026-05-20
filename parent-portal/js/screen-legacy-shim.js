@@ -153,4 +153,24 @@
     Shell.registerScreen(r + ':photos', bridge('KT.V22p55', 'renderPhotoFeed'));
   });
 
+
+  // v22p56 — Procare-parity screens
+  ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':closures',          bridge('KT.V22p56', 'renderClosures'));
+    Shell.registerScreen(r + ':late-pickups',      bridge('KT.V22p56', 'renderLatePickup'));
+    Shell.registerScreen(r + ':room-ratios',       bridge('KT.V22p56', 'renderRoomRatios'));
+    Shell.registerScreen(r + ':vacation-holds',    bridge('KT.V22p56', 'renderVacationHolds'));
+    Shell.registerScreen(r + ':tuition-increases', bridge('KT.V22p56', 'renderTuitionIncreases'));
+    Shell.registerScreen(r + ':reenrollment',      bridge('KT.V22p56', 'renderReenrollment'));
+    Shell.registerScreen(r + ':engagement',        bridge('KT.V22p56', 'renderEngagement'));
+    Shell.registerScreen(r + ':nps',               bridge('KT.V22p56', 'renderNps'));
+    Shell.registerScreen(r + ':signed-docs',       bridge('KT.V22p56', 'renderSignedDocs'));
+    Shell.registerScreen(r + ':bus-routes',        bridge('KT.V22p56', 'renderBusRoutes'));
+    Shell.registerScreen(r + ':room-rotations',    bridge('KT.V22p56', 'renderRoomRotations'));
+  });
+  ['guardian'].forEach(function (r) {
+    Shell.registerScreen(r + ':vacation-holds', bridge('KT.V22p56', 'renderVacationHolds'));
+    Shell.registerScreen(r + ':signed-docs',    bridge('KT.V22p56', 'renderSignedDocs'));
+  });
+
 })(window);

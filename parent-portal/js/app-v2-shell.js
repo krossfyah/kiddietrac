@@ -132,6 +132,19 @@
           { hash: 'admin-forms',      label: 'Custom forms',     icon: '📝' },
           { hash: 'compliance',       label: 'Compliance',       icon: '✅' },
           { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
+          { hash: 'closures',         label: 'Closures',         icon: '🗓' },
+          { hash: 'late-pickups',     label: 'Late pickups',     icon: '⏰' },
+          { hash: 'room-ratios',      label: 'Room ratios',      icon: '👥' },
+          { hash: 'vacation-holds',   label: 'Vacation holds',   icon: '🏖' },
+          { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
+          { hash: 'bus-routes',       label: 'Bus routes',       icon: '🚐' },
+          { hash: 'room-rotations',   label: 'Room rotations',   icon: '🔄' },
+        ]},
+        { label: 'Engagement', items: [
+          { hash: 'reenrollment',     label: 'Re-enrollment',  icon: '🔁' },
+          { hash: 'engagement',       label: 'Engagement score', icon: '💚' },
+          { hash: 'nps',              label: 'NPS', icon: '📊' },
+          { hash: 'signed-docs',      label: 'Signed documents', icon: '✍' },
         ]},
         { label: 'Settings', items: [
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -246,6 +259,8 @@
       { label: 'Your child', items: [
         { hash: 'today',          label: 'Today',          icon: '✨' },
         { hash: 'photos',         label: 'Photos',         icon: '📸' },
+        { hash: 'vacation-holds', label: 'Vacation hold',  icon: '🏖' },
+        { hash: 'signed-docs',    label: 'Signed documents', icon: '✍' },
         { hash: 'lesson-plans',   label: 'This week',      icon: '📚' },
         { hash: 'messages',       label: 'Messages',       icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'parent-forms',   label: 'Forms',          icon: '📝' },

@@ -676,6 +676,38 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         $agency = (int) ($r->header('X-Active-Agency-Id') ?: \Illuminate\Support\Facades\DB::table('role_assignments')->where('user_id', $r->user()->id)->where('active', 1)->value('agency_id'));
         return ['data' => \Illuminate\Support\Facades\DB::table('ai_doc_extractions')->where('agency_id', $agency)->orderByDesc('created_at')->limit(50)->get()];
     });
+
+    // v22p56 — Procare-parity routes
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get   ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'closures']);
+        Route::post  ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'addClosure']);
+        Route::delete('/operations/closures/{id}',     [\App\Http\Controllers\Api\OperationsV2Controller::class, 'removeClosure']);
+        Route::post  ('/operations/late-pickup',       [\App\Http\Controllers\Api\OperationsV2Controller::class, 'logLatePickup']);
+        Route::get   ('/operations/late-pickups',      [\App\Http\Controllers\Api\OperationsV2Controller::class, 'lateHistory']);
+        Route::get   ('/operations/ratio-status',      [\App\Http\Controllers\Api\OperationsV2Controller::class, 'ratioStatus']);
+        Route::get   ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'busRoutes']);
+        Route::post  ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'createBusRoute']);
+        Route::get   ('/operations/bus-routes/{id}/children', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'routeChildren']);
+        Route::post  ('/operations/bus-routes/{id}/children', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'addChildToRoute']);
+        Route::get   ('/operations/rotation-candidates', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'rotationCandidates']);
+        Route::post  ('/operations/room-rotations',    [\App\Http\Controllers\Api\OperationsV2Controller::class, 'planRotation']);
+        Route::get   ('/billing/vacation-holds',       [\App\Http\Controllers\Api\BillingV2Controller::class, 'listHolds']);
+        Route::patch ('/billing/vacation-holds/{id}',  [\App\Http\Controllers\Api\BillingV2Controller::class, 'decideHold']);
+        Route::get   ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'listIncreases']);
+        Route::post  ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'scheduleIncrease']);
+        Route::post  ('/billing/prorate-preview',      [\App\Http\Controllers\Api\BillingV2Controller::class, 'proratePreview']);
+        Route::get   ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'listCampaigns']);
+        Route::post  ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'createCampaign']);
+        Route::get   ('/engagement/scores',            [\App\Http\Controllers\Api\EngagementController::class, 'engagementScores']);
+        Route::get   ('/engagement/nps',               [\App\Http\Controllers\Api\EngagementController::class, 'npsSummary']);
+    });
+    // Parent-side
+    Route::post('/billing/vacation-holds',           [\App\Http\Controllers\Api\BillingV2Controller::class, 'requestHold']);
+    Route::post('/engagement/reenrollment/{id}/respond', [\App\Http\Controllers\Api\EngagementController::class, 'respondCampaign']);
+    Route::post('/engagement/nps',                   [\App\Http\Controllers\Api\EngagementController::class, 'submitNps']);
+    Route::post('/engagement/sign-document',         [\App\Http\Controllers\Api\EngagementController::class, 'signDocument']);
+    Route::get ('/engagement/signed-documents',      [\App\Http\Controllers\Api\EngagementController::class, 'listSignedDocs']);
+
     // parent responds to permission slip
     Route::patch('/operations/permissions/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'respondToPermission']);
 

@@ -57,20 +57,29 @@ final class XlsxExportService
             $drawing->setName('Logo');
             $drawing->setDescription($agency->name ?? 'KiddieTrac');
             $drawing->setPath($logoPath);
-            $drawing->setHeight(46);
+            $drawing->setHeight(50);
             $drawing->setCoordinates('A1');
-            $drawing->setOffsetX(8);
-            $drawing->setOffsetY(6);
+            $drawing->setOffsetX(10);
+            $drawing->setOffsetY(8);
             $drawing->setWorksheet($sheet);
-            $sheet->getRowDimension(1)->setRowHeight(58);
-            $sheet->getColumnDimension('A')->setWidth(max(22, $columns[0]['width'] ?? 18));
+            $sheet->getRowDimension(1)->setRowHeight(66);
+            $sheet->getColumnDimension('A')->setWidth(28);
+            // Title goes to B1+ (brand-color band beside the white logo cell)
+            $sheet->setCellValue('B1', $title);
+            $sheet->mergeCells("B1:{$lastCol}1");
+            $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFFFFF');
+            $sheet->getStyle("B1:{$lastCol}1")->getFont()->setBold(true)->setSize(18)->getColor()->setRGB('FFFFFF');
+            $sheet->getStyle("B1:{$lastCol}1")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($primary);
+            $sheet->getStyle("B1:{$lastCol}1")->getAlignment()->setVertical(Alignment::VERTICAL_CENTER)->setIndent(1);
+        } else {
+            $sheet->setCellValue('A1', $title);
+            $sheet->mergeCells("A1:{$lastCol}1");
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(18)->getColor()->setRGB('FFFFFF');
+            $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($primary);
+            $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
         }
-        // Title row
-        $sheet->setCellValue('A1', '   ' . $title);
-        $sheet->mergeCells("A1:{$lastCol}1");
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(18)->getColor()->setRGB('FFFFFF');
-        $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($primary);
-        $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+        // (legacy title-row block below is now skipped)
+        $_skip_legacy_title = true;
         if (!$logoPath) $sheet->getRowDimension(1)->setRowHeight(36);
 
         // Subtitle row

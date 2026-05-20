@@ -188,9 +188,9 @@ final class EmailTemplate
         $initial = strtoupper(mb_substr($name, 0, 1));
         if (!empty($brand['logo_url'])) {
             $url = self::absoluteUrl($brand['logo_url']);
-            return '<img src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($name) . '" height="36" style="height:36px;max-height:36px;border:0;display:block;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:8px;">';
+            return '<table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td style="background:#FFFFFF;padding:10px 16px;border-radius:10px;box-shadow:0 2px 6px rgba(15,23,42,.10);"><img src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($name) . '" height="40" style="height:40px;max-height:40px;border:0;display:block;"></td></tr></table>';
         }
-        return '<div style="display:inline-block;background:rgba(255,255,255,.16);color:#FFFFFF;font-weight:800;font-size:18px;width:36px;height:36px;line-height:36px;text-align:center;border-radius:10px;">' . htmlspecialchars($initial) . '</div>';
+        return '<div style="display:inline-block;background:#FFFFFF;color:' . $brand['primary'] . ';font-weight:800;font-size:20px;width:44px;height:44px;line-height:44px;text-align:center;border-radius:12px;box-shadow:0 2px 6px rgba(15,23,42,.10);">' . htmlspecialchars($initial) . '</div>';
     }
 
     private static function footer(?object $agency, array $brand, string $note): string
