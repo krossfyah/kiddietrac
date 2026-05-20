@@ -130,6 +130,9 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::get('/help/{slug}', [HelpController::class, 'show']);
         Route::post('/help/ask', [HelpController::class, 'ask'])->middleware('throttle:30,1');
 
+        // v22p33 — Per-role dashboard widget data
+        Route::get('/widgets/me', [\App\Http\Controllers\Api\WidgetsController::class, 'me']);
+
         Route::prefix('parent')->group(function () {
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
             Route::get('/children', [FamilyController::class, 'myChildren']);
