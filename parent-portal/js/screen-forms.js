@@ -293,6 +293,58 @@
       optWrap.appendChild(optIn);
       card.appendChild(optWrap);
     }
+
+    // v22p44: conditional visibility — show this field only when another
+    // field equals a specific value (or has a non-empty value).
+    var visWrap = Dom.el('div', { style: 'margin-top:10px;padding:10px 12px;background:#FFFBEB;border:1px dashed #FCD34D;border-radius:8px;' });
+    var visToggle = Dom.el('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12px;color:#92400E;cursor:pointer;font-weight:600;' });
+    var visEnabled = Dom.el('input', { type: 'checkbox' });
+    if (field.visible_if && field.visible_if.field_id) visEnabled.checked = true;
+    visToggle.appendChild(visEnabled);
+    visToggle.appendChild(Dom.el('span', {}, '🔀 Show only when another field has a specific value'));
+    visWrap.appendChild(visToggle);
+
+    var visBody = Dom.el('div', { style: 'margin-top:8px;display:' + (visEnabled.checked ? 'grid' : 'none') + ';grid-template-columns:1fr 1fr;gap:8px;' });
+    // Field id picker — only fields BEFORE this one are valid (no forward refs)
+    var depSel = Dom.el('select', { style: inputStyle() });
+    depSel.appendChild(Dom.el('option', { value: '' }, '— pick a field —'));
+    for (var i = 0; i < idx; i++) {
+      var other = schema[i];
+      var opt = Dom.el('option', { value: other.id }, '#' + (i + 1) + ' · ' + (other.label || other.id));
+      if (field.visible_if && field.visible_if.field_id === other.id) opt.selected = true;
+      depSel.appendChild(opt);
+    }
+    depSel.addEventListener('change', function () {
+      field.visible_if = field.visible_if || {};
+      field.visible_if.field_id = depSel.value;
+    });
+    visBody.appendChild(depSel);
+
+    var equalsIn = Dom.el('input', { type: 'text', placeholder: 'equals (leave blank = any non-empty)', style: inputStyle() });
+    if (field.visible_if && field.visible_if.equals !== undefined) equalsIn.value = field.visible_if.equals;
+    equalsIn.addEventListener('input', function () {
+      field.visible_if = field.visible_if || {};
+      if (equalsIn.value === '') {
+        delete field.visible_if.equals;
+        field.visible_if.equals_truthy = true;
+      } else {
+        field.visible_if.equals = equalsIn.value;
+        delete field.visible_if.equals_truthy;
+      }
+    });
+    visBody.appendChild(equalsIn);
+    visWrap.appendChild(visBody);
+
+    visEnabled.addEventListener('change', function () {
+      visBody.style.display = visEnabled.checked ? 'grid' : 'none';
+      if (!visEnabled.checked) {
+        delete field.visible_if;
+      } else if (!field.visible_if) {
+        field.visible_if = { field_id: '' };
+      }
+    });
+    if (idx > 0) card.appendChild(visWrap);
+
     return card;
   }
 
@@ -302,8 +354,37 @@
     var modal = Dom.el('div', { style: 'background:white;border-radius:14px;max-width:920px;width:100%;max-height:calc(100vh - 48px);overflow-y:auto;box-shadow:0 12px 36px rgba(0,0,0,.25);' });
     overlay.appendChild(modal);
 
-    var header = Dom.el('div', { style: 'padding:18px 24px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:2;' });
-    header.appendChild(Dom.el('h2', { style: 'margin:0;font-size:18px;' }, 'Responses · ' + form.title));
+    var header = Dom.el('div', { style: 'padding:18px 24px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:2;gap:10px;' });
+    header.appendChild(Dom.el('h2', { style: 'margin:0;font-size:18px;flex:1;' }, 'Responses · ' + form.title));
+
+    // v22p44: CSV download. Anchor href pulls the token from sessionStorage
+    // through a tiny redirect helper so the browser handles the download as
+    // a regular GET (the route accepts ?format=csv).
+    var csvBtn = Dom.el('button', {
+      style: 'background:#16A34A;color:white;border:none;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;',
+    }, '⤓ Download CSV');
+    csvBtn.addEventListener('click', function () {
+      var apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var token = sessionStorage.getItem('kt_token');
+      var activeAgencyId = sessionStorage.getItem('kt_active_agency_id') || '';
+      var headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'text/csv' };
+      if (activeAgencyId) headers['X-Active-Agency-Id'] = activeAgencyId;
+      csvBtn.disabled = true; csvBtn.textContent = 'Preparing…';
+      fetch(apiBase + '/admin/forms/' + form.id + '/responses?format=csv', { headers: headers })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+        .then(function (blob) {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = (form.title || 'form').replace(/[^a-z0-9\-]+/gi, '-').toLowerCase() + '-responses.csv';
+          document.body.appendChild(a); a.click();
+          setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
+        })
+        .catch(function (e) { alert('CSV failed: ' + e.message); })
+        .finally(function () { csvBtn.disabled = false; csvBtn.textContent = '⤓ Download CSV'; });
+    });
+    header.appendChild(csvBtn);
+
     var x = Dom.el('button', { style: 'background:transparent;border:none;font-size:22px;color:#6B7280;cursor:pointer;' }, '×');
     x.addEventListener('click', function () { overlay.remove(); });
     header.appendChild(x);

@@ -181,6 +181,7 @@
         { hash: 'photos',         label: 'Photos',         icon: '📸' },
         { hash: 'lesson-plans',   label: 'This week',      icon: '📚' },
         { hash: 'messages',       label: 'Messages',       icon: '💬', badgeKey: 'chat_unread' },
+        { hash: 'parent-forms',   label: 'Forms',          icon: '📝' },
       ]},
       { label: 'Account', items: [
         { hash: 'billing',        label: 'Billing',        icon: '💳' },

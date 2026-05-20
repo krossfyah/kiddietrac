@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * v22p43 — Custom forms builder.
@@ -144,7 +145,7 @@ final class FormsController extends Controller
         return response()->json(['message' => 'Form deleted']);
     }
 
-    public function listResponses(Request $request, int $id): JsonResponse
+    public function listResponses(Request $request, int $id)
     {
         $agencyId = $this->getAgencyId($request);
         $form = DB::table('custom_forms')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
@@ -153,16 +154,60 @@ final class FormsController extends Controller
             ->leftJoin('users as u', 'u.id', '=', 'r.submitted_by_user_id')
             ->where('r.form_id', $id)
             ->orderByDesc('r.submitted_at')
-            ->limit(500)
+            ->limit(2000)
             ->get([
                 'r.id', 'r.response_json', 'r.submitted_at',
                 DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, 'unknown') as submitter_name"),
                 'u.email as submitter_email',
             ]);
+
+        // v22p44: CSV export — &format=csv streams an Excel-friendly file
+        // with one column per schema field plus submitter / timestamp.
+        if (strtolower((string) $request->query('format', '')) === 'csv') {
+            return $this->streamCsv($form, $rows);
+        }
+
         return response()->json([
             'form' => $form,
             'responses' => $rows,
             'count' => $rows->count(),
+        ]);
+    }
+
+    /**
+     * Stream responses as RFC 4180 CSV. Field order matches the schema's
+     * order so columns are consistent run-to-run.
+     */
+    private function streamCsv(object $form, $rows): StreamedResponse
+    {
+        $schema = json_decode((string) $form->schema_json, true) ?: [];
+        $fieldIds = array_map(fn ($f) => $f['id'] ?? '', $schema);
+        $fieldLabels = array_map(fn ($f) => $f['label'] ?? $f['id'] ?? '', $schema);
+
+        $filename = preg_replace('/[^a-z0-9\-]+/i', '-', strtolower($form->title ?: 'form'));
+        $filename = trim($filename, '-') . '-responses-' . date('Y-m-d') . '.csv';
+
+        return new StreamedResponse(function () use ($rows, $fieldIds, $fieldLabels) {
+            $out = fopen('php://output', 'w');
+            // UTF-8 BOM so Excel opens special characters cleanly
+            fwrite($out, "\xEF\xBB\xBF");
+            $header = array_merge(['Submitted at', 'Submitter', 'Email'], $fieldLabels);
+            fputcsv($out, $header);
+            foreach ($rows as $r) {
+                $resp = json_decode((string) $r->response_json, true) ?: [];
+                $line = [$r->submitted_at, $r->submitter_name, $r->submitter_email];
+                foreach ($fieldIds as $fid) {
+                    $v = $resp[$fid] ?? '';
+                    if (is_array($v)) $v = implode(', ', $v);
+                    $line[] = (string) $v;
+                }
+                fputcsv($out, $line);
+            }
+            fclose($out);
+        }, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
         ]);
     }
 
