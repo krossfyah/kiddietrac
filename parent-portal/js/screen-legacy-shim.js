@@ -69,6 +69,11 @@
   // v22p43: custom forms builder — directors + admins
   reg(directors, 'admin-forms', 'KT.Forms');
 
+  // v22p45: notifications inbox — guardians only for now (the backend
+  // /parent/notifications endpoint is role:guardian gated). Other roles
+  // get a later expansion.
+  Shell.registerScreen('guardian:notifications', bridge('KT.Notifications', 'render'));
+
   // Chat exposes mount(container), not render
   ['agency_admin', 'centre_director', 'educator'].forEach(function (r) {
     Shell.registerScreen(r + ':chat', bridge('KT.Chat', 'mount'));

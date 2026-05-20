@@ -565,12 +565,50 @@
       'bear'
     ));
 
-    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
-    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'All accounts in your agency'));
+    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;' });
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, 'All accounts in your agency'));
+
+    // v22p45: CSV download
+    const csvBtn = Dom.el('button', { style: 'background: white; color: #16A34A; border: 1px solid #16A34A; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, '⤓ CSV');
+    csvBtn.addEventListener('click', () => downloadCsv('/admin/users', 'users.csv', csvBtn));
+    bar.appendChild(csvBtn);
+
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Invite user');
     addBtn.addEventListener('click', () => showInviteModal(content));
     bar.appendChild(addBtn);
     content.appendChild(bar);
+
+    // v22p45: bulk-action bar (hidden until a checkbox is ticked)
+    const selectedIds = new Set();
+    const bulkBar = Dom.el('div', { style: 'display: none; align-items: center; gap: 10px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;' });
+    const bulkCount = Dom.el('div', { style: 'flex: 1; font-size: 13px; color: #1E40AF; font-weight: 600;' }, '0 selected');
+    bulkBar.appendChild(bulkCount);
+    const bulkResend = Dom.el('button', { style: 'background: white; color: #1E40AF; border: 1px solid #BFDBFE; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, 'Resend welcome');
+    const bulkDelete = Dom.el('button', { style: 'background: white; color: #DC2626; border: 1px solid #FCA5A5; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, 'Delete');
+    bulkBar.appendChild(bulkResend);
+    bulkBar.appendChild(bulkDelete);
+    content.appendChild(bulkBar);
+
+    function refreshBulkBar() {
+      const n = selectedIds.size;
+      bulkBar.style.display = n > 0 ? 'flex' : 'none';
+      bulkCount.textContent = n + ' selected';
+    }
+
+    async function bulkRun(label, fn) {
+      const ids = Array.from(selectedIds);
+      if (!ids.length) return;
+      if (!confirm(label + ' for ' + ids.length + ' user' + (ids.length === 1 ? '' : 's') + '?')) return;
+      bulkResend.disabled = true; bulkDelete.disabled = true;
+      let ok = 0, fail = 0;
+      for (const id of ids) { try { await fn(id); ok++; } catch (e) { fail++; } }
+      bulkResend.disabled = false; bulkDelete.disabled = false;
+      alert(label + ' done: ' + ok + ' succeeded, ' + fail + ' failed.');
+      selectedIds.clear();
+      await renderUsersTab(content);
+    }
+    bulkResend.addEventListener('click', () => bulkRun('Resend welcome', (id) => Api.post('/admin/users/' + id + '/resend-welcome', {})));
+    bulkDelete.addEventListener('click', () => bulkRun('Delete', (id) => Api.delete('/admin/users/' + id)));
 
     if (data.users.length === 0) {
       content.appendChild(emptyMsg('No users yet.'));
@@ -580,6 +618,13 @@
     const table = Dom.el('table', { style: 'width: 100%; background: white; border-radius: 12px; overflow: hidden; border-collapse: collapse; box-shadow: 0 1px 3px rgba(0,0,0,0.04);' });
     const thead = Dom.el('thead', { style: 'background: var(--ink-50, #F9FAFB);' });
     const headRow = Dom.el('tr', {});
+
+    // v22p45: select-all checkbox
+    const headCheck = Dom.el('th', { style: 'padding: 12px 8px 12px 16px; width: 32px;' });
+    const selectAll = Dom.el('input', { type: 'checkbox', style: 'cursor: pointer; width: 16px; height: 16px;', title: 'Select all on this page' });
+    headCheck.appendChild(selectAll);
+    headRow.appendChild(headCheck);
+
     ['Name', 'Email', 'Roles', 'Status', 'Last login', ''].forEach(h => {
       headRow.appendChild(Dom.el('th', { style: 'text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.5px;' }, h));
     });
@@ -587,8 +632,34 @@
     table.appendChild(thead);
 
     const tbody = Dom.el('tbody', {});
+
+    // v22p45: track per-row checkboxes so select-all can flip them all
+    const rowCheckboxes = [];
+    selectAll.addEventListener('change', () => {
+      rowCheckboxes.forEach(({ cb, id }) => {
+        cb.checked = selectAll.checked;
+        if (selectAll.checked) selectedIds.add(id); else selectedIds.delete(id);
+      });
+      refreshBulkBar();
+    });
+
     data.users.forEach(u => {
       const row = Dom.el('tr', { style: 'border-top: 1px solid var(--ink-100, #E5E7EB);' });
+
+      // v22p45: per-row checkbox (skip the caller's own user so admins can't
+      // accidentally delete themselves in a bulk op)
+      const checkCell = Dom.el('td', { style: 'padding: 14px 8px 14px 16px;' });
+      const cb = Dom.el('input', { type: 'checkbox', style: 'cursor: pointer; width: 16px; height: 16px;' });
+      const me = (function () { try { return (JSON.parse(sessionStorage.getItem('kt_user') || '{}')).id; } catch (e) { return null; } })();
+      if (u.id === me) { cb.disabled = true; cb.title = "Can't bulk-act on yourself"; }
+      cb.addEventListener('click', (e) => e.stopPropagation());
+      cb.addEventListener('change', () => {
+        if (cb.checked) selectedIds.add(u.id); else selectedIds.delete(u.id);
+        refreshBulkBar();
+      });
+      checkCell.appendChild(cb);
+      row.appendChild(checkCell);
+      rowCheckboxes.push({ cb, id: u.id });
       // v22p3.2: name cell now includes a 32px avatar circle (image or initials)
       const nameCell = Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' });
       const nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
@@ -1053,15 +1124,21 @@
     ));
 
     // v22p11: action bar with count on the left + Add button on the right
-    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
-    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'All enrolled families'));
+    const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;' });
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, 'All enrolled families'));
+
+    // v22p45: CSV download
+    const famCsvBtn = Dom.el('button', { style: 'background: white; color: #16A34A; border: 1px solid #16A34A; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, '⤓ CSV');
+    famCsvBtn.addEventListener('click', () => downloadCsv('/admin/families', 'families.csv', famCsvBtn));
+    bar.appendChild(famCsvBtn);
+
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add family');
     addBtn.addEventListener('click', () => showFamilyModal(null, centresData.centres, content));
     bar.appendChild(addBtn);
 
     // v22p26: card/table view toggle remembered per-list in localStorage.
     const toggle = viewToggle('kt_view_families', function () { renderFamiliesTab(content); });
-    bar.insertBefore(toggle, addBtn);
+    bar.insertBefore(toggle, famCsvBtn);
     content.appendChild(bar);
 
     if (data.families.length === 0) {
@@ -1621,6 +1698,32 @@
   // ════════════════════════════════════════════════════════════════
   function loading(text) {
     return Dom.el('div', { style: 'padding: 40px; text-align: center; color: var(--ink-500);' }, text);
+  }
+
+  // v22p45: bearer-token CSV downloader. Pulls via fetch so we can attach
+  // the auth header + X-Active-Agency-Id, then triggers an anchor click
+  // for the blob download.
+  function downloadCsv(path, filename, btn) {
+    const apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    const token = sessionStorage.getItem('kt_token');
+    const activeAgencyId = sessionStorage.getItem('kt_active_agency_id') || '';
+    const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'text/csv' };
+    if (activeAgencyId) headers['X-Active-Agency-Id'] = activeAgencyId;
+    const original = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+    const sep = path.includes('?') ? '&' : '?';
+    fetch(apiBase + path + sep + 'format=csv', { headers })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+      })
+      .catch(e => alert('CSV failed: ' + e.message))
+      .finally(() => { if (btn) { btn.disabled = false; btn.textContent = original; } });
   }
   function errorBox(text) {
     return Dom.el('div', { style: 'padding: 24px; background: #FEF2F2; color: #991B1B; border-radius: 8px;' }, text);

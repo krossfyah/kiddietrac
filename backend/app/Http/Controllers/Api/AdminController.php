@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Admin controller: agency-admin level CRUD for centres, users, families, children.
@@ -413,7 +414,7 @@ final class AdminController extends Controller
     //   USERS
     // ════════════════════════════════════════════════════════════════
 
-    public function listUsers(Request $request): JsonResponse
+    public function listUsers(Request $request)
     {
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
@@ -530,7 +531,41 @@ final class AdminController extends Controller
             ];
         });
 
-        return response()->json(['users' => $result->all()]);
+        $rows = $result->all();
+
+        // v22p45: CSV export — ?format=csv streams an Excel-friendly file
+        if (strtolower((string) $request->query('format', '')) === 'csv') {
+            return $this->streamCsv('users', [
+                'ID', 'Name', 'Email', 'Phone', 'Status', 'Roles', 'Last login', 'Created',
+            ], array_map(fn ($u) => [
+                $u['id'], $u['name'], $u['email'], $u['phone'] ?? '',
+                $u['status'], implode(' / ', $u['roles']),
+                $u['last_login_at'] ?? '', $u['created_at'],
+            ], $rows));
+        }
+
+        return response()->json(['users' => $rows]);
+    }
+
+    /**
+     * v22p45 — shared CSV streamer. Used by listUsers + listFamilies and
+     * any future list endpoint that wants a download. UTF-8 BOM so Excel
+     * opens special characters cleanly.
+     */
+    private function streamCsv(string $label, array $header, array $rows): StreamedResponse
+    {
+        $filename = $label . '-' . now()->format('Y-m-d') . '.csv';
+        return new StreamedResponse(function () use ($header, $rows) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, $header);
+            foreach ($rows as $r) fputcsv($out, $r);
+            fclose($out);
+        }, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
     public function createUser(Request $request): JsonResponse
@@ -739,7 +774,7 @@ final class AdminController extends Controller
     //   FAMILIES
     // ════════════════════════════════════════════════════════════════
 
-    public function listFamilies(Request $request): JsonResponse
+    public function listFamilies(Request $request)
     {
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
@@ -785,7 +820,28 @@ final class AdminController extends Controller
             ];
         });
 
-        return response()->json(['families' => $result->all()]);
+        $rows = $result->all();
+
+        // v22p45: CSV export — ?format=csv
+        if (strtolower((string) $request->query('format', '')) === 'csv') {
+            return $this->streamCsv('families', [
+                'ID', 'Family name', 'Centre', 'Primary email', 'Primary phone',
+                'Address', 'City', 'Children', 'Guardians', 'Outstanding balance',
+            ], array_map(fn ($f) => [
+                $f['id'] ?? '',
+                $f['family_name'] ?? '',
+                $f['centre_name'] ?? '',
+                $f['primary_email'] ?? '',
+                $f['primary_phone'] ?? '',
+                $f['address_line1'] ?? '',
+                $f['city'] ?? '',
+                $f['child_count'] ?? 0,
+                $f['guardian_count'] ?? 0,
+                $f['outstanding_balance'] ?? 0,
+            ], $rows));
+        }
+
+        return response()->json(['families' => $rows]);
     }
 
     public function showFamily(Request $request, int $familyId): JsonResponse

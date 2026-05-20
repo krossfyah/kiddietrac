@@ -112,6 +112,7 @@
         { label: 'Settings', items: [
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'sibling-discounts',  label: 'Sibling discounts',   icon: '👨‍👩‍👧' },
+
           { hash: 'mfa',                label: 'Two-factor (MFA)',    icon: '🔐' },
           { hash: 'help',               label: 'Help & guides',       icon: '📖' },
         ]},
@@ -152,6 +153,7 @@
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
         ]},
         { label: 'Settings', items: [
+
           { hash: 'mfa',              label: 'Two-factor (MFA)', icon: '🔐' },
           { hash: 'help',             label: 'Help & guides',    icon: '📖' },
         ]},
@@ -169,6 +171,7 @@
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
         ]},
         { label: 'Settings', items: [
+
           { hash: 'mfa',           label: 'Two-factor (MFA)', icon: '🔐' },
           { hash: 'help',          label: 'Help & guides',    icon: '📖' },
         ]},
@@ -193,6 +196,8 @@
         { hash: 'edocuments',    label: 'Documents',      icon: '📄' },
       ]},
       { label: 'Settings', items: [
+        { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+
         { hash: 'mfa',           label: 'Two-factor (MFA)', icon: '🔐' },
         { hash: 'help',          label: 'Help & guides',    icon: '📖' },
       ]},
