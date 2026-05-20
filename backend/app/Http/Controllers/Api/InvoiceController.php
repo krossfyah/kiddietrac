@@ -140,12 +140,55 @@ final class InvoiceController extends Controller
     }
 
     /**
+     * v22p42 — POST /api/v1/admin/invoices/generate-batch
+     *   { centre_id, month?, year? }
+     *
+     * Lets an agency_admin / platform_admin run the monthly invoicing
+     * for a specific centre in their agency (without first impersonating
+     * the centre director). Body re-uses generateBatch() but threads the
+     * caller-supplied centre_id into the resolver via a synthetic input
+     * field. Safer than overriding $this->resolveCentreId because the
+     * existing director path keeps working unchanged.
+     */
+    public function generateBatchByCentre(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'centre_id' => ['required', 'integer'],
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'year'  => ['nullable', 'integer', 'between:2020,2100'],
+        ]);
+
+        // Re-use the inheritance path via a synthetic-input forward.
+        $request->merge(['_centre_id_override' => (int) $data['centre_id']]);
+        return $this->generateBatch($request);
+    }
+
+    /**
      * POST /api/v1/director/invoices/generate
      * Generate invoices for the current month for every enrolled family.
      */
     public function generateBatch(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
+        // v22p42: allow an agency_admin caller to target a specific centre
+        // by setting _centre_id_override (forwarded by generateBatchByCentre()).
+        // Validates ownership before honouring the override.
+        $override = (int) $request->input('_centre_id_override');
+        if ($override > 0) {
+            $callerAgencyId = DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)
+                ->whereIn('role', ['agency_admin', 'platform_admin'])
+                ->where('active', true)
+                ->value('agency_id');
+            $centreAgencyId = (int) DB::table('centres')->where('id', $override)->value('agency_id');
+            $isPlatform = DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)
+                ->where('role', 'platform_admin')->where('active', true)->exists();
+            $ok = $isPlatform || ($callerAgencyId && $callerAgencyId === $centreAgencyId);
+            if (!$ok) return response()->json(['message' => 'Centre not in your agency'], 403);
+            $centreId = $override;
+        } else {
+            $centreId = $this->resolveCentreId($request->user());
+        }
         if (!$centreId) {
             return response()->json(['message' => 'No centre access'], 403);
         }
@@ -266,10 +309,19 @@ final class InvoiceController extends Controller
                 $total = $subtotal - $subsidyTotal - $discountTotal;
                 $invoiceNumber = 'INV-'.now()->format('Ym').'-'.str_pad((string) $familyId, 4, '0', STR_PAD_LEFT);
 
+                // v22p42: invoices schema requires period_start + period_end NOT NULL.
+                // Pre-existing bug — generateBatch never set these so the first call
+                // 500'd with 'Field period_start doesn't have a default value'. Derive
+                // them from the issue date (= first of the billed month).
+                $periodStart = $issueDate->copy()->startOfMonth();
+                $periodEnd   = $issueDate->copy()->endOfMonth();
+
                 $invoiceId = DB::table('invoices')->insertGetId([
                     'centre_id' => $centreId,
                     'family_id' => $familyId,
                     'invoice_number' => $invoiceNumber,
+                    'period_start' => $periodStart,
+                    'period_end' => $periodEnd,
                     'issued_at' => $issueDate,
                     'due_at' => $dueDate,
                     'subtotal' => $subtotal,
@@ -281,15 +333,30 @@ final class InvoiceController extends Controller
                     'updated_at' => now(),
                 ]);
 
+                // v22p42: actual invoice_lines schema uses line_type +
+                // unit_amount + amount (no subsidy_amount/net_amount columns
+                // on the line itself — those aggregate up to the invoice).
+                // Emit two lines per family: gross tuition, and a separate
+                // subsidy adjustment row (negative-sign described).
                 foreach ($lineItems as $line) {
                     DB::table('invoice_lines')->insert([
                         'invoice_id' => $invoiceId,
                         'description' => $line['description'],
-                        'amount' => $line['amount'],
-                        'subsidy_amount' => $line['subsidy'],
-                        'net_amount' => $line['net'],
-                        'created_at' => now(),
+                        'line_type'   => 'tuition',
+                        'quantity'    => 1,
+                        'unit_amount' => $line['amount'],
+                        'amount'      => $line['amount'],
                     ]);
+                    if (!empty($line['subsidy']) && (float) $line['subsidy'] > 0) {
+                        DB::table('invoice_lines')->insert([
+                            'invoice_id' => $invoiceId,
+                            'description' => 'CWELCC subsidy — ' . $line['description'],
+                            'line_type'   => 'subsidy',
+                            'quantity'    => 1,
+                            'unit_amount' => -1 * abs((float) $line['subsidy']),
+                            'amount'      => -1 * abs((float) $line['subsidy']),
+                        ]);
+                    }
                 }
 
                 // v22p9: also insert each sibling-discount line.

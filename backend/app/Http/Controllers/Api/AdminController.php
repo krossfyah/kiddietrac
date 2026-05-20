@@ -352,6 +352,64 @@ final class AdminController extends Controller
     }
 
     // ════════════════════════════════════════════════════════════════
+    //   PRESENCE — v22p42
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * GET /api/v1/admin/presence
+     *
+     * Returns the list of currently-online user_ids in the agency, derived
+     * from personal_access_tokens.last_used_at within the last 5 minutes.
+     * Cheap proxy for 'who is in the portal right now' without needing a
+     * websocket or a dedicated presence table.
+     *
+     * platform_admin sees everyone; agency_admin sees only their agency.
+     */
+    public function presence(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['online' => [], 'window_minutes' => 5]);
+
+        $callerIsPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+
+        $cutoff = now()->subMinutes(5);
+        $base = DB::table('personal_access_tokens as t')
+            ->where('t.tokenable_type', \App\Models\User::class)
+            ->whereNotNull('t.last_used_at')
+            ->where('t.last_used_at', '>=', $cutoff)
+            ->groupBy('t.tokenable_id');
+
+        if (!$callerIsPlatformAdmin) {
+            $centreIds = $this->getCentreIds($agencyId);
+            $scoped = DB::table('role_assignments')
+                ->where('active', true)
+                ->where(function ($x) use ($agencyId, $centreIds) {
+                    $x->where('agency_id', $agencyId);
+                    if (!empty($centreIds)) $x->orWhereIn('centre_id', $centreIds);
+                })
+                ->pluck('user_id')->unique()->values()->all();
+            $guardianIds = DB::table('guardians as g')
+                ->join('families as f', 'f.id', '=', 'g.family_id')
+                ->whereIn('f.centre_id', $centreIds ?: [0])
+                ->pluck('g.user_id')->all();
+            $scoped = array_values(array_unique(array_merge($scoped, $guardianIds)));
+            $base->whereIn('t.tokenable_id', $scoped ?: [0]);
+        }
+
+        $rows = $base->get(['t.tokenable_id', DB::raw('MAX(t.last_used_at) as last_seen')]);
+
+        return response()->json([
+            'online' => $rows->map(fn ($r) => [
+                'user_id' => (int) $r->tokenable_id,
+                'last_seen_at' => $r->last_seen,
+            ])->values(),
+            'window_minutes' => 5,
+        ]);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //   USERS
     // ════════════════════════════════════════════════════════════════
 

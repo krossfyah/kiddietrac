@@ -174,10 +174,26 @@ final class SearchController extends Controller
                 ->exists()) {
             return $activeId;
         }
-        return DB::table('role_assignments')
+        $byAgencyAdmin = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('role', 'agency_admin')
             ->where('active', true)
             ->value('agency_id');
+        if ($byAgencyAdmin) return (int) $byAgencyAdmin;
+
+        // v22p42: director path — walk role_assignment.centre_id -> centres.agency_id
+        // so directors get the same agency-scoped search as their agency_admin.
+        // Note: this still returns the agency's centres in the result set; if
+        // sharper director-only scoping is required (one centre), refactor the
+        // controller's $centreIds resolution to filter by director's centre_id.
+        $directorCentreId = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'centre_director')
+            ->where('active', true)
+            ->value('centre_id');
+        if ($directorCentreId) {
+            return (int) DB::table('centres')->where('id', $directorCentreId)->value('agency_id');
+        }
+        return null;
     }
 }

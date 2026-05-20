@@ -63,6 +63,9 @@
   // v22p39: audit log viewer — agency_admin + platform_admin
   reg(adminOnly, 'audit-logs', 'KT.AuditLogs');
 
+  // v22p42: bulk invoice run — agency_admin
+  reg(adminOnly, 'bulk-invoices', 'KT.BulkInvoices');
+
   // Chat exposes mount(container), not render
   ['agency_admin', 'centre_director', 'educator'].forEach(function (r) {
     Shell.registerScreen(r + ':chat', bridge('KT.Chat', 'mount'));

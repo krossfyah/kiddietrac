@@ -391,8 +391,13 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::patch('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'update']);
         Route::delete('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'destroy']);
         Route::patch('/sibling-discounts', [\App\Http\Controllers\Api\SiblingDiscountController::class, 'update']);
-        // v22p4.6: global portal search (FQN inline, no import needed)
-        Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
+        // v22p4.6: global portal search — moved out of this group in v22p42 so
+        // centre_director can use the Cmd-K palette too. See director-search
+        // group near end of this file.
+        // v22p42: presence (online users via personal_access_tokens.last_used_at)
+        Route::get('/presence', [AdminController::class, 'presence']);
+        // v22p42: bulk invoice generation by centre (extends director endpoint with centre_id arg)
+        Route::post('/invoices/generate-batch', [\App\Http\Controllers\Api\InvoiceController::class, 'generateBatchByCentre']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);
         // v22p11: agency_admin family CRUD
         Route::post('/families', [AdminController::class, 'createFamily']);
@@ -421,6 +426,13 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'parentSend']);
     });
     
+    // v22p42: global search for both agency_admin AND centre_director.
+    // SearchController::resolveAgencyId now walks director.centre_id ->
+    // centres.agency_id so directors get correctly scoped results.
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->prefix('admin')->group(function () {
+        Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
+    });
+
     // PROVIDER chat routes (educator + centre_director + agency_admin)
     Route::middleware('role:educator,centre_director,agency_admin')->prefix('provider')->group(function () {
         Route::get('/chats',                       [ChatController::class, 'providerList']);

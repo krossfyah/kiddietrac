@@ -104,7 +104,8 @@
           { hash: 'admin-centres',    label: 'Centres',          icon: '🏫' },
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
-          { hash: 'admin-billing',    label: 'Billing',          icon: '💳' },
+          { hash: 'admin-billing',    label: 'Billing (Stripe)', icon: '💳' },
+          { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
           { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
         ]},
         { label: 'Settings', items: [

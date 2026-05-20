@@ -541,8 +541,15 @@
     content.appendChild(loading('Loading users...'));
 
     let data;
+    let presenceSet = new Set();
     try {
       data = await Api.get('/admin/users');
+      // v22p42: presence is a best-effort enrichment — if it 403s for a non-admin
+      // we still render the user list without dots.
+      try {
+        const pres = await Api.get('/admin/presence');
+        (pres.online || []).forEach(o => presenceSet.add(o.user_id));
+      } catch (_) {}
     } catch (e) {
       Dom.clear(content);
       content.appendChild(errorBox('Could not load users: ' + (e.message || 'error')));
@@ -585,7 +592,16 @@
       // v22p3.2: name cell now includes a 32px avatar circle (image or initials)
       const nameCell = Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' });
       const nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
-      nameWrap.appendChild(avatarCircle(u, 32));
+      // v22p42: avatar with a presence indicator dot (online in last 5 min)
+      const avatarWrap = Dom.el('div', { style: 'position:relative;display:inline-block;' });
+      avatarWrap.appendChild(avatarCircle(u, 32));
+      if (presenceSet.has(u.id)) {
+        avatarWrap.appendChild(Dom.el('span', {
+          title: 'Online now',
+          style: 'position:absolute;bottom:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:#16A34A;border:2px solid white;box-shadow:0 0 0 1px rgba(0,0,0,.05);',
+        }));
+      }
+      nameWrap.appendChild(avatarWrap);
       nameWrap.appendChild(Dom.el('span', {}, u.name));
       nameCell.appendChild(nameWrap);
       row.appendChild(nameCell);

@@ -38,6 +38,87 @@
 
   var ROLE_COLORS = { lead: '#7C3AED', support: '#1F6080', floater: '#F59E0B', volunteer: '#8EC73C' };
 
+  // v22p42: drag-select across day cells.
+  // Mousedown on a cell hint -> remember its data-date.
+  // Mousemove updates the highlighted range using elementFromPoint().
+  // Mouseup with a range > 1 day -> open the New shift modal with a dateRange
+  // prefill. The modal then loops to create one shift per day on save.
+  function installDragSelect(grid, calRoot) {
+    var anchor = null;     // start date (string YYYY-MM-DD)
+    var current = null;    // hover date (string)
+    var startEl = null;    // the cell node we started on (for visual highlight)
+    var armed = false;
+
+    function dateUnderPoint(x, y) {
+      var el = document.elementFromPoint(x, y);
+      while (el && el !== document.body) {
+        if (el.dataset && el.dataset.date) return { date: el.dataset.date, el: el };
+        el = el.parentElement;
+      }
+      return null;
+    }
+
+    function clearHighlights() {
+      grid.querySelectorAll('[data-drag-active="1"]').forEach(function (n) {
+        n.removeAttribute('data-drag-active');
+        n.style.background = '';
+        n.style.outline = '';
+      });
+    }
+
+    function highlightRange(a, b) {
+      if (!a || !b) return;
+      var lo = a < b ? a : b;
+      var hi = a < b ? b : a;
+      grid.querySelectorAll('[data-date]').forEach(function (n) {
+        var d = n.dataset.date;
+        if (d >= lo && d <= hi) {
+          n.dataset.dragActive = '1';
+          n.style.background = 'rgba(31,96,128,.10)';
+          n.style.outline = '2px solid rgba(31,96,128,.42)';
+          n.style.outlineOffset = '-2px';
+        }
+      });
+    }
+
+    grid.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      var hit = dateUnderPoint(e.clientX, e.clientY);
+      if (!hit) return;
+      // Don't start drag when clicking ON a shift pill/chip
+      var t = e.target;
+      if (t.closest && (t.closest('[data-shift-id]'))) return;
+      // Only arm AFTER a real movement so single click still opens modal
+      anchor = hit.date; current = hit.date; startEl = hit.el; armed = false;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function (e) {
+      if (!anchor) return;
+      var hit = dateUnderPoint(e.clientX, e.clientY);
+      if (!hit) return;
+      if (hit.date !== current) {
+        current = hit.date;
+        armed = true;
+        clearHighlights();
+        highlightRange(anchor, current);
+      }
+    });
+
+    document.addEventListener('mouseup', function (e) {
+      if (!anchor) return;
+      var a = anchor, c = current, didDrag = armed;
+      anchor = null; current = null; startEl = null; armed = false;
+      clearHighlights();
+      if (didDrag && a && c && a !== c) {
+        var lo = a < c ? a : c;
+        var hi = a < c ? c : a;
+        openShiftModal({ dateRange: { start: lo, end: hi } }, calRoot);
+      }
+      // Single-click case is handled by the cell's own click handler.
+    });
+  }
+
   // ─── Bootstrap ─────────────────────────────────────────────────────
   function render(container) {
     Dom.clear(container);
@@ -198,6 +279,7 @@
     // Body — single day-cell per column with shifts stacked
     var body = Dom.el('div', { style: 'display:grid;grid-template-columns:64px repeat(7,1fr);min-height:480px;' });
     body.appendChild(Dom.el('div', { style: 'border-right:1px solid #F3F4F6;background:#FAFBFC;font-size:10px;color:#9CA3AF;padding:6px;text-align:right;line-height:1.4;' }, ' '));
+    installDragSelect(body, calRoot);
     for (var j = 0; j < 7; j++) {
       var dj = addDays(start, j);
       var key = ymd(dj);
@@ -231,6 +313,7 @@
     grid.appendChild(header);
 
     var body = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);' });
+    installDragSelect(body, calRoot);
     var cursor = new Date(start);
     while (cursor <= end) {
       var key = ymd(cursor);
@@ -281,9 +364,13 @@
   // ─── Shift modal (create/edit) ─────────────────────────────────────
   function openShiftModal(prefill, calRoot) {
     var isEdit = prefill && prefill.id;
-    var defaultDate = prefill && prefill.date ? prefill.date : (prefill && prefill.starts_at ? prefill.starts_at.slice(0, 10) : ymd(new Date()));
+    var hasRange = prefill && prefill.dateRange && prefill.dateRange.start && prefill.dateRange.end;
+    var defaultDate = hasRange
+      ? prefill.dateRange.start
+      : (prefill && prefill.date ? prefill.date : (prefill && prefill.starts_at ? prefill.starts_at.slice(0, 10) : ymd(new Date())));
     var defaultStart = prefill && prefill.starts_hm ? prefill.starts_hm : '09:00';
     var defaultEnd   = prefill && prefill.ends_hm   ? prefill.ends_hm   : '17:00';
+    var rangeDays = hasRange ? (Math.round((new Date(prefill.dateRange.end) - new Date(prefill.dateRange.start)) / 86400000) + 1) : 1;
 
     var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;' });
     var modal = Dom.el('div', { style: 'background:white;border-radius:14px;max-width:520px;width:100%;padding:24px;box-shadow:0 12px 36px rgba(0,0,0,.25);max-height:calc(100vh - 48px);overflow-y:auto;' });
@@ -306,6 +393,14 @@
     modal.appendChild(staffSel);
     modal.appendChild(labelEl('Room'));
     modal.appendChild(roomSel);
+
+    // v22p42: drag-selected multi-day banner
+    if (hasRange && rangeDays > 1) {
+      var rangeBanner = Dom.el('div', {
+        style: 'background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px;',
+      }, '📅 Creating ' + rangeDays + ' shifts (' + prefill.dateRange.start + ' → ' + prefill.dateRange.end + ') with the same staff, room, time, and role.');
+      modal.appendChild(rangeBanner);
+    }
 
     var dateRow = Dom.el('div', { style: 'display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin-bottom:14px;' });
     var dIn = Dom.el('input', { type: 'date', value: defaultDate, style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;' });
@@ -346,19 +441,55 @@
 
     save.addEventListener('click', function () {
       if (!staffSel.value || !roomSel.value) { alert('Pick a staff member and a room.'); return; }
-      var payload = {
+      var common = {
         user_id: parseInt(staffSel.value, 10),
         room_id: parseInt(roomSel.value, 10),
-        starts_at: dIn.value + ' ' + sIn.value + ':00',
-        ends_at:   dIn.value + ' ' + eIn.value + ':00',
         role: roleSel.value,
       };
       save.disabled = true; save.textContent = 'Saving…';
-      var promise = isEdit
-        ? Api.patch('/director/schedule/shift/' + prefill.id, payload)
-        : Api.post('/director/schedule/shift', payload);
-      promise.then(function () { overlay.remove(); reload(calRoot); })
-        .catch(function (e) { alert('Save failed: ' + e.message); save.disabled = false; save.textContent = isEdit ? 'Save changes' : 'Create shift'; });
+
+      // v22p42: when the modal was opened via a drag across multiple cells,
+      // loop and create one shift per day in the range. Single-day flow
+      // unchanged.
+      var dates = [];
+      if (hasRange) {
+        var d = new Date(prefill.dateRange.start);
+        var endD = new Date(prefill.dateRange.end);
+        while (d <= endD) { dates.push(ymd(d)); d = addDays(d, 1); }
+      } else {
+        dates.push(dIn.value);
+      }
+
+      if (isEdit) {
+        var payload = Object.assign({}, common, {
+          starts_at: dIn.value + ' ' + sIn.value + ':00',
+          ends_at:   dIn.value + ' ' + eIn.value + ':00',
+        });
+        Api.patch('/director/schedule/shift/' + prefill.id, payload)
+          .then(function () { overlay.remove(); reload(calRoot); })
+          .catch(function (e) { alert('Save failed: ' + e.message); save.disabled = false; save.textContent = 'Save changes'; });
+        return;
+      }
+
+      // Create N shifts sequentially so a partial failure doesn't lose the rest
+      var i = 0, ok = 0, fail = 0;
+      function next() {
+        if (i >= dates.length) {
+          overlay.remove();
+          reload(calRoot);
+          if (fail) alert(ok + ' shift(s) created, ' + fail + ' failed.');
+          return;
+        }
+        var d = dates[i++];
+        var payload = Object.assign({}, common, {
+          starts_at: d + ' ' + sIn.value + ':00',
+          ends_at:   d + ' ' + eIn.value + ':00',
+        });
+        Api.post('/director/schedule/shift', payload)
+          .then(function () { ok++; next(); })
+          .catch(function () { fail++; next(); });
+      }
+      next();
     });
 
     // Load staff + rooms in parallel
