@@ -768,11 +768,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get   ('/reports/{id}/run',              [\App\Http\Controllers\Api\ReportsController::class, 'run']);
     Route::post  ('/reports/preview',               [\App\Http\Controllers\Api\ReportsController::class, 'preview']);
     // Reactions + video
-    Route::get   ('/reactions/{type}/{id}',         [\App\Http\Controllers\Api\MediaController::class, 'listReactions']);
-    Route::post  ('/reactions',                     [\App\Http\Controllers\Api\MediaController::class, 'addReaction']);
-    Route::delete('/reactions',                     [\App\Http\Controllers\Api\MediaController::class, 'removeReaction']);
-    Route::get   ('/videos/feed',                   [\App\Http\Controllers\Api\MediaController::class, 'videoFeed']);
-    Route::post  ('/videos',                        [\App\Http\Controllers\Api\MediaController::class, 'uploadVideo']);
+    Route::get   ('/reactions/{type}/{id}',         [\App\Http\Controllers\Api\MediaV2Controller::class, 'listReactions']);
+    Route::post  ('/reactions',                     [\App\Http\Controllers\Api\MediaV2Controller::class, 'addReaction']);
+    Route::delete('/reactions',                     [\App\Http\Controllers\Api\MediaV2Controller::class, 'removeReaction']);
+    Route::get   ('/videos/feed',                   [\App\Http\Controllers\Api\MediaV2Controller::class, 'videoFeed']);
+    Route::post  ('/videos',                        [\App\Http\Controllers\Api\MediaV2Controller::class, 'uploadVideo']);
     // Immunization schedule
     Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
         Route::get   ('/immunization/schedule',           [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'listSchedule']);
