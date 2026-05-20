@@ -34,4 +34,4 @@ Click whichever you want. Your choice persists in your browser's storage and app
 
 ## Centres tab
 
-The Centres tab already uses table view by design — the column-heavy data (capacity %, enrolled count, staff count, etc.) reads better in a grid. There's no card option there currently.
+The Centres tab also has a toggle. The default is **Table** because each row carries a lot of comparable numbers (capacity %, enrolled count, family count, staff count). Switch to **Cards** when you want a more visual at-a-glance view — each card shows the centre logo, name, status badge, capacity bar coloured by how full the centre is (green / amber / red), and a 3-up stat panel along the bottom. Best on tablets, or when you only have a handful of centres.

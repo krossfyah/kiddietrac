@@ -465,17 +465,14 @@ final class AdminController extends Controller
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
-        // Verify this user belongs to the admin's agency
-        $belongs = DB::table('role_assignments')
-            ->where('user_id', $userId)
-            ->where(function ($q) use ($agencyId) {
-                $centreIds = $this->getCentreIds($agencyId);
-                $q->where('agency_id', $agencyId);
-                if (!empty($centreIds)) $q->orWhereIn('centre_id', $centreIds);
-            })
-            ->exists();
-
-        if (!$belongs) return response()->json(['message' => 'User not in your agency'], 403);
+        // v22p30: route the tenancy check through the shared helper so platform_admin
+        // gets the same cross-agency bypass as destroyUser/resetUserPassword/etc.
+        // Helper also covers the guardian path (families.centre_id), which the prior
+        // inline check missed — agency_admins can now also update guardians via this
+        // endpoint, matching the rest of the surface.
+        if (!$this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
 
         $data = $request->validate([
             'first_name' => ['sometimes', 'string', 'max:80'],
@@ -802,9 +799,27 @@ final class AdminController extends Controller
     /**
      * Verify a target user is within the admin's agency (staff via role_assignments,
      * or guardian via families.centre_id).
+     *
+     * v22p30: platform_admin trumps tenancy and is allowed to act on any user in
+     * the system regardless of which agency context they are currently viewing.
+     * Without this short-circuit, mutating endpoints (delete user, reset password,
+     * resend welcome, reopen onboarding, upload avatar) would 403 for cross-agency
+     * targets — e.g. a platform_admin viewing Kiddietrac context could not delete
+     * an iLearn user. Mirrors the same bypass applied to listUsers in v22p27 and
+     * getAgencyId in v22p21.
      */
     private function userBelongsToAgency(int $userId, int $agencyId): bool
     {
+        $caller = auth()->user();
+        if ($caller) {
+            $isPlatformAdmin = DB::table('role_assignments')
+                ->where('user_id', $caller->id)
+                ->where('role', 'platform_admin')
+                ->where('active', true)
+                ->exists();
+            if ($isPlatformAdmin) return true;
+        }
+
         $centreIds = $this->getCentreIds($agencyId);
 
         $hasStaffRole = DB::table('role_assignments')

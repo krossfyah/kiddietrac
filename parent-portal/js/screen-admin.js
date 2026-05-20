@@ -110,6 +110,12 @@
     bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'All your locations'));
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add centre');
     addBtn.addEventListener('click', () => showCentreModal(null, content));
+
+    // v22p30: card/table view toggle, mirrors Families + Children. Default 'table'
+    // for centres because the column-dense data (capacity %, enrolled, families,
+    // staff) reads better in a grid.
+    const toggle = viewToggle('kt_view_centres', function () { renderCentresTab(content); }, 'table');
+    bar.appendChild(toggle);
     bar.appendChild(addBtn);
     content.appendChild(bar);
 
@@ -118,6 +124,13 @@
         'Click + Add centre to create your first location. You can configure rooms, staff, and the parent-facing kiosk from there.',
         { title: 'No centres yet', illustration: 'emptyFamilies' }
       ));
+      return;
+    }
+
+    var view = localStorage.getItem('kt_view_centres') || 'table';
+    if (view === 'cards') {
+      content.appendChild(renderCentresCards(data.centres, content));
+      maybeAutoOpenCentre(data.centres, content);
       return;
     }
 
@@ -171,15 +184,80 @@
     table.appendChild(tbody);
     content.appendChild(table);
 
-    // v22p4.1: if the agency overview routed here with kt_admin_open_centre
-    // set, auto-open the centre's edit modal. Consume + clear the flag so
-    // it only fires once.
+    maybeAutoOpenCentre(data.centres, content);
+  }
+
+  // v22p4.1 (extracted v22p30): if the agency overview routed here with
+  // kt_admin_open_centre set, auto-open the centre's edit modal. Consume + clear
+  // the flag so it only fires once. Lifted into a helper so both the table and
+  // the new card view can call it.
+  function maybeAutoOpenCentre(centres, content) {
     var autoOpen = sessionStorage.getItem('kt_admin_open_centre');
-    if (autoOpen) {
-      sessionStorage.removeItem('kt_admin_open_centre');
-      var target = data.centres.find(function (c) { return String(c.id) === String(autoOpen); });
-      if (target) setTimeout(function () { showCentreModal(target, content); }, 50);
-    }
+    if (!autoOpen) return;
+    sessionStorage.removeItem('kt_admin_open_centre');
+    var target = centres.find(function (c) { return String(c.id) === String(autoOpen); });
+    if (target) setTimeout(function () { showCentreModal(target, content); }, 50);
+  }
+
+  // v22p30: card-grid alternative to the table. Same data, larger touch targets,
+  // brand colour as the card's left rail. Best on tablets and for at-a-glance
+  // visual scanning when you have fewer than ~12 centres.
+  function renderCentresCards(centres, content) {
+    var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;' });
+    centres.forEach(function (c) {
+      var accent = c.brand_color || '#1F6080';
+      var card = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;cursor:pointer;border-left:6px solid ' + accent + ';position:relative;' });
+
+      var editBtn = Dom.el('button', {
+        style: 'position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--ink-300);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--ink-700);z-index:2;',
+      }, 'Edit');
+      editBtn.addEventListener('click', function (e) { e.stopPropagation(); showCentreModal(c, content); });
+      card.appendChild(editBtn);
+
+      // header — logo + name + city
+      var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:16px 16px 10px;padding-right:70px;' });
+      var logo = Dom.el('div', {
+        style: 'flex-shrink:0;width:44px;height:44px;border-radius:10px;overflow:hidden;background:' + accent + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;',
+      });
+      if (c.logo_url) {
+        var img = Dom.el('img', { src: avatarSrc(c.logo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:contain;background:white;' });
+        img.addEventListener('error', function () { img.remove(); logo.textContent = (c.name || '?').charAt(0).toUpperCase(); });
+        logo.appendChild(img);
+      } else {
+        logo.textContent = (c.name || '?').charAt(0).toUpperCase();
+      }
+      head.appendChild(logo);
+      var stack = Dom.el('div');
+      stack.appendChild(Dom.el('div', { style: 'font-size:16px;font-weight:700;line-height:1.2;' }, c.name));
+      stack.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-top:3px;' }, c.city || '—'));
+      head.appendChild(stack);
+      card.appendChild(head);
+
+      // status + capacity strip
+      var strip = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;padding:0 16px 12px;flex-wrap:wrap;' });
+      strip.appendChild(statusBadge(c.status));
+      var pct = Number(c.capacity_pct || 0);
+      var pctColor = pct >= 95 ? '#DC2626' : (pct >= 80 ? '#F59E0B' : '#16A34A');
+      strip.appendChild(Dom.el('span', { style: 'font-size:12px;font-weight:700;color:' + pctColor + ';' }, pct + '% full'));
+      card.appendChild(strip);
+
+      // stats grid
+      var stats = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);gap:0;border-top:1px solid var(--ink-100,#E5E7EB);background:#FAFBFC;' });
+      function statCell(label, value) {
+        var cell = Dom.el('div', { style: 'padding:10px 8px;text-align:center;' });
+        cell.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:var(--ink-700);' }, String(value)));
+        cell.appendChild(Dom.el('div', { style: 'font-size:10px;color:var(--ink-500);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;' }, label));
+        return cell;
+      }
+      stats.appendChild(statCell('Enrolled', (c.enrolled_count || 0) + ' / ' + (c.license_capacity || 0)));
+      stats.appendChild(statCell('Families', c.family_count || 0));
+      stats.appendChild(statCell('Staff', c.staff_count || 0));
+      card.appendChild(stats);
+
+      card.addEventListener('click', function () { showCentreModal(c, content); });
+      grid.appendChild(card);
+    });
+    return grid;
   }
 
   function showCentreModal(centre, content) {
@@ -1018,8 +1096,11 @@
   }
 
   // v22p26: small toggle for cards/table view, persisted in localStorage.
-  function viewToggle(storageKey, onChange) {
-    var current = localStorage.getItem(storageKey) || 'cards';
+  // v22p30: third arg `defaultView` lets a list pick which view to use when the
+  // user has never set a preference. Families + Children default to 'cards';
+  // Centres defaults to 'table' (more columns to compare at a glance).
+  function viewToggle(storageKey, onChange, defaultView) {
+    var current = localStorage.getItem(storageKey) || defaultView || 'cards';
     var wrap = Dom.el('div', { style: 'display:inline-flex;background:#F3F4F6;border-radius:8px;padding:2px;margin-right:8px;' });
     function btn(view, label, icon) {
       var b = Dom.el('button', {
