@@ -141,6 +141,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
 
         Route::get('/help', [HelpController::class, 'index']);
+        /* v22p69: must precede /help/{slug} */
+        Route::get('/help/dashboard', [HelpController::class, 'dashboard']);
+        Route::get('/help/analytics', [HelpController::class, 'analytics']);
+        Route::post('/help/featured', [HelpController::class, 'pinFeatured']);
+        Route::delete('/help/featured/{slug}', [HelpController::class, 'unpinFeatured']);
+        Route::post('/help/{slug}/view', [HelpController::class, 'trackView']);
+        Route::post('/help/{slug}/feedback', [HelpController::class, 'feedback']);
         Route::get('/help/{slug}', [HelpController::class, 'show']);
         Route::post('/help/ask', [HelpController::class, 'ask'])->middleware('throttle:30,1');
 

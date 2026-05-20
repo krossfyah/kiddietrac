@@ -52,26 +52,51 @@ final class PhotoTagController extends Controller
             . "\n\nEnrolled children at this centre:\n{$childList}";
 
         try {
-            // We need a fully qualified URL for Claude to fetch
-            $imageUrl = $photo->url;
-            if (!str_starts_with($imageUrl, 'http')) {
-                $imageUrl = rtrim(env('APP_URL', 'https://api.kiddietrac.com'), '/') . '/' . ltrim($imageUrl, '/');
+            /* v22p69 base64 fix */
+            // Read image from disk and send as base64 (more reliable than URL-fetch).
+            $relPath = ltrim($photo->url, '/');
+            // Path may be /storage/photos/... which is a public symlink — strip /storage/ and read from storage/app/public/
+            if (str_starts_with($relPath, 'storage/')) {
+                $diskPath = storage_path('app/public/' . substr($relPath, 8));
+            } else {
+                $diskPath = public_path($relPath);
             }
+            if (!is_file($diskPath)) {
+                return response()->json(['error' => 'Image file not found on server', 'path' => $diskPath], 500);
+            }
+            $bytes = file_get_contents($diskPath);
+            $mime = mime_content_type($diskPath) ?: 'image/jpeg';
+            // Anthropic accepts: image/jpeg, image/png, image/gif, image/webp
+            $supported = ['image/jpeg' => 1, 'image/png' => 1, 'image/gif' => 1, 'image/webp' => 1];
+            if (!isset($supported[$mime])) {
+                return response()->json(['error' => "Image type {$mime} not supported by Claude vision (jpeg/png/gif/webp only)"], 415);
+            }
+            $b64 = base64_encode($bytes);
+
             $res = Http::withHeaders([
                 'x-api-key' => $key,
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
-            ])->timeout(45)->post('https://api.anthropic.com/v1/messages', [
+            ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
                 'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
                 'max_tokens' => 600,
                 'messages' => [[
                     'role' => 'user',
                     'content' => [
-                        ['type' => 'image', 'source' => ['type' => 'url', 'url' => $imageUrl]],
+                        ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mime, 'data' => $b64]],
                         ['type' => 'text', 'text' => $prompt],
                     ],
                 ]],
             ]);
+
+            if ($res->status() === 400) {
+                // Surface the actual Anthropic error for debugging
+                \Illuminate\Support\Facades\Log::warning('Claude vision 400', ['body' => $res->body()]);
+                return response()->json([
+                    'error' => 'AI rejected the image',
+                    'detail' => $res->json('error.message') ?? $res->body(),
+                ], 502);
+            }
             if (!$res->ok()) {
                 DB::table('photos')->where('id', $photoId)->update([
                     'ai_status' => 'failed', 'ai_classified_at' => now(),
