@@ -132,8 +132,15 @@
   // from PlatformController::businessMetrics so the JS just paints tiles.
   function renderBusinessMetricsSection(bm) {
     var section = Dom.el('div', { style: 'margin-top:18px;background:linear-gradient(135deg,#0F172A 0%,#1F2937 60%,#16637A 100%);border-radius:16px;padding:24px 28px;color:white;box-shadow:0 6px 18px rgba(15,23,42,.18);' });
+    // v22p35: previous version passed an HTML string as Dom.el's third argument,
+    // which text-escapes the content — so users saw the literal <h3> tag.
+    // Build the heading via innerHTML on a real element instead.
     var head = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;' });
-    head.appendChild(Dom.el('div', {}, '<h3 style="margin:0;font-size:18px;letter-spacing:0.3px;">📊 Business metrics</h3><div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;">SaaS KPIs · CAD · derived from current MRR + trend</div>'));
+    var heading = Dom.el('div');
+    heading.innerHTML =
+      '<h3 style="margin:0;font-size:18px;letter-spacing:0.3px;">📊 Business metrics</h3>' +
+      '<div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;">SaaS KPIs · CAD · derived from current MRR + trend</div>';
+    head.appendChild(heading);
     section.appendChild(head);
 
     function tile(label, value, hint, accent) {

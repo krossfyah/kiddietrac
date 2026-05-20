@@ -256,30 +256,115 @@
     var wrap = Dom.el('div', { style: 'border:1px solid #D1D5DB;border-radius:10px;overflow:hidden;margin-bottom:14px;background:white;' });
     var toolbar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;padding:8px;border-bottom:1px solid #E5E7EB;background:#FAFBFC;' });
 
-    function btn(label, title, action) {
-      var b = Dom.el('button', { type: 'button', title: title, style: 'background:white;border:1px solid #E5E7EB;border-radius:6px;padding:5px 9px;font-size:13px;cursor:pointer;color:#374151;min-width:30px;' }, label);
+    function btn(label, title, action, extraStyle) {
+      var b = Dom.el('button', { type: 'button', title: title, style: 'background:white;border:1px solid #E5E7EB;border-radius:6px;padding:5px 9px;font-size:13px;cursor:pointer;color:#374151;min-width:30px;transition:background .12s,border-color .12s;' + (extraStyle || '') }, label);
       b.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep focus on editor
       b.addEventListener('click', action);
+      b.addEventListener('mouseenter', function () { b.style.background = '#F3F4F6'; b.style.borderColor = '#D1D5DB'; });
+      b.addEventListener('mouseleave', function () { b.style.background = 'white'; b.style.borderColor = '#E5E7EB'; });
       return b;
     }
-    function exec(cmd, val) { document.execCommand(cmd, false, val || null); editor.focus(); }
+    function selectStyle() { return 'background:white;border:1px solid #E5E7EB;border-radius:6px;padding:4px 6px;font-size:12px;color:#374151;cursor:pointer;'; }
+    // v22p35: enable styleWithCSS so foreColor/hiliteColor produce inline-style
+    // spans the sanitiser allows, rather than deprecated <font> tags. Also try
+    // both hiliteColor (Chrome / Webkit) and backColor (Firefox) so highlight
+    // works across browsers.
+    function exec(cmd, val) {
+      try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+      if (cmd === 'hiliteColor') {
+        if (!document.execCommand('hiliteColor', false, val || null)) {
+          document.execCommand('backColor', false, val || null);
+        }
+      } else {
+        document.execCommand(cmd, false, val == null ? null : val);
+      }
+      editor.focus();
+    }
 
-    toolbar.appendChild(btn('B', 'Bold (Ctrl/Cmd+B)', function () { exec('bold'); }));
-    toolbar.appendChild(btn('I', 'Italic', function () { exec('italic'); }));
-    toolbar.appendChild(btn('U', 'Underline', function () { exec('underline'); }));
+    // ── Font family ───────────────────────────────────────────────
+    var fontSel = Dom.el('select', { title: 'Font family', style: selectStyle() });
+    var fonts = [
+      ['', 'Default'],
+      ['Inter, system-ui, sans-serif', 'Inter (clean)'],
+      ['Georgia, "Times New Roman", serif', 'Georgia (serif)'],
+      ['"Helvetica Neue", Arial, sans-serif', 'Helvetica'],
+      ['"Courier New", monospace', 'Courier (mono)'],
+      ['"Comic Sans MS", "Comic Sans", cursive', 'Comic Sans'],
+      ['Verdana, sans-serif', 'Verdana'],
+      ['"Trebuchet MS", sans-serif', 'Trebuchet'],
+    ];
+    fonts.forEach(function (f) { var o = Dom.el('option', { value: f[0] }, f[1]); fontSel.appendChild(o); });
+    fontSel.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    fontSel.addEventListener('change', function () { if (fontSel.value) { exec('fontName', fontSel.value); } fontSel.selectedIndex = 0; });
+    toolbar.appendChild(fontSel);
+
+    // ── Font size (1=8px ... 7=36px in execCommand) ───────────────
+    var sizeSel = Dom.el('select', { title: 'Text size', style: selectStyle() });
+    [['', 'Size'], ['1', 'Tiny'], ['2', 'Small'], ['3', 'Normal'], ['4', 'Medium'], ['5', 'Large'], ['6', 'X-large'], ['7', 'Huge']].forEach(function (s) {
+      sizeSel.appendChild(Dom.el('option', { value: s[0] }, s[1]));
+    });
+    sizeSel.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    sizeSel.addEventListener('change', function () { if (sizeSel.value) exec('fontSize', sizeSel.value); sizeSel.selectedIndex = 0; });
+    toolbar.appendChild(sizeSel);
     toolbar.appendChild(divider());
+
+    // ── Bold / italic / underline / strike ────────────────────────
+    toolbar.appendChild(btn('B', 'Bold (Ctrl/Cmd+B)', function () { exec('bold'); }, 'font-weight:800;'));
+    toolbar.appendChild(btn('I', 'Italic (Ctrl/Cmd+I)', function () { exec('italic'); }, 'font-style:italic;'));
+    toolbar.appendChild(btn('U', 'Underline (Ctrl/Cmd+U)', function () { exec('underline'); }, 'text-decoration:underline;'));
+    toolbar.appendChild(btn('S', 'Strikethrough', function () { exec('strikeThrough'); }, 'text-decoration:line-through;'));
+    toolbar.appendChild(divider());
+
+    // ── Text colour + highlight (background) ──────────────────────
+    var fgInput = Dom.el('input', { type: 'color', title: 'Text colour', value: '#1F6080', style: 'width:34px;height:30px;padding:0;border:1px solid #E5E7EB;border-radius:6px;background:white;cursor:pointer;' });
+    fgInput.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    fgInput.addEventListener('input', function () { exec('foreColor', fgInput.value); });
+    toolbar.appendChild(fgInput);
+    var bgInput = Dom.el('input', { type: 'color', title: 'Highlight colour', value: '#FEF3C7', style: 'width:34px;height:30px;padding:0;border:1px solid #E5E7EB;border-radius:6px;background:white;cursor:pointer;' });
+    bgInput.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    bgInput.addEventListener('input', function () { exec('hiliteColor', bgInput.value); });
+    toolbar.appendChild(bgInput);
+    toolbar.appendChild(divider());
+
+    // ── Headings + paragraph ──────────────────────────────────────
     toolbar.appendChild(btn('H1', 'Heading 1', function () { exec('formatBlock', '<h1>'); }));
     toolbar.appendChild(btn('H2', 'Heading 2', function () { exec('formatBlock', '<h2>'); }));
+    toolbar.appendChild(btn('H3', 'Heading 3', function () { exec('formatBlock', '<h3>'); }));
     toolbar.appendChild(btn('P', 'Paragraph', function () { exec('formatBlock', '<p>'); }));
     toolbar.appendChild(divider());
-    toolbar.appendChild(btn('• List', 'Bulleted list', function () { exec('insertUnorderedList'); }));
-    toolbar.appendChild(btn('1. List', 'Numbered list', function () { exec('insertOrderedList'); }));
-    toolbar.appendChild(btn('❝', 'Block quote', function () { exec('formatBlock', '<blockquote>'); }));
+
+    // ── Alignment ─────────────────────────────────────────────────
+    toolbar.appendChild(btn('⬱', 'Align left',    function () { exec('justifyLeft'); }));
+    toolbar.appendChild(btn('☰', 'Align centre',  function () { exec('justifyCenter'); }));
+    toolbar.appendChild(btn('⬲', 'Align right',   function () { exec('justifyRight'); }));
+    toolbar.appendChild(btn('☷', 'Justify',       function () { exec('justifyFull'); }));
     toolbar.appendChild(divider());
+
+    // ── Lists + quote ─────────────────────────────────────────────
+    toolbar.appendChild(btn('•', 'Bulleted list', function () { exec('insertUnorderedList'); }));
+    toolbar.appendChild(btn('1.', 'Numbered list', function () { exec('insertOrderedList'); }));
+    toolbar.appendChild(btn('❝', 'Block quote', function () { exec('formatBlock', '<blockquote>'); }));
+    toolbar.appendChild(btn('⇥', 'Indent', function () { exec('indent'); }));
+    toolbar.appendChild(btn('⇤', 'Outdent', function () { exec('outdent'); }));
+    toolbar.appendChild(divider());
+
+    // ── Line break + horizontal rule ──────────────────────────────
+    toolbar.appendChild(btn('↵', 'Soft line break (no paragraph)', function () {
+      editor.focus();
+      document.execCommand('insertHTML', false, '<br />');
+    }));
+    toolbar.appendChild(btn('─', 'Horizontal rule', function () {
+      editor.focus();
+      document.execCommand('insertHTML', false, '<hr style="border:none;border-top:1px solid #E5E7EB;margin:14px 0;" />');
+    }));
+    toolbar.appendChild(divider());
+
+    // ── Link + image ──────────────────────────────────────────────
     toolbar.appendChild(btn('🔗', 'Insert link', function () {
       var url = prompt('Link URL (https://…):');
       if (url) exec('createLink', url);
     }));
+    toolbar.appendChild(btn('🚫🔗', 'Remove link', function () { exec('unlink'); }));
     var imgBtn = btn('🖼 Image', 'Insert image', function () { fileIn.click(); });
     toolbar.appendChild(imgBtn);
     var fileIn = Dom.el('input', { type: 'file', accept: 'image/*', style: 'display:none;' });
@@ -296,6 +381,8 @@
     });
     toolbar.appendChild(fileIn);
     toolbar.appendChild(divider());
+
+    // ── Undo / redo / clear ───────────────────────────────────────
     toolbar.appendChild(btn('↶', 'Undo', function () { exec('undo'); }));
     toolbar.appendChild(btn('↷', 'Redo', function () { exec('redo'); }));
     toolbar.appendChild(btn('clear', 'Remove formatting', function () { exec('removeFormat'); }));
