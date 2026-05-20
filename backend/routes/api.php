@@ -708,6 +708,39 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/engagement/sign-document',         [\App\Http\Controllers\Api\EngagementController::class, 'signDocument']);
     Route::get ('/engagement/signed-documents',      [\App\Http\Controllers\Api\EngagementController::class, 'listSignedDocs']);
 
+    // v22p57 — combined features routes
+    // Chat enhancements
+    Route::post('/chat/conversations/{id}/read',   [\App\Http\Controllers\Api\ChatV2Controller::class, 'markRead']);
+    Route::get ('/chat/conversations/{id}/state',  [\App\Http\Controllers\Api\ChatV2Controller::class, 'state']);
+    Route::post('/chat/conversations/{id}/typing', [\App\Http\Controllers\Api\ChatV2Controller::class, 'ping']);
+    // ACH
+    Route::get ('/parent/billing/ach-status',        [\App\Http\Controllers\Api\BillingV3Controller::class, 'achStatus']);
+    Route::post('/parent/billing/ach-setup-intent',  [\App\Http\Controllers\Api\BillingV3Controller::class, 'achSetupIntent']);
+    Route::post('/parent/billing/ach-save',          [\App\Http\Controllers\Api\BillingV3Controller::class, 'saveAch']);
+    // Pickup auth
+    Route::get   ('/family/pickup-auth/{childId}',   [\App\Http\Controllers\Api\FamilyOperationsController::class, 'listAuth']);
+    Route::post  ('/family/pickup-auth',             [\App\Http\Controllers\Api\FamilyOperationsController::class, 'addAuth']);
+    Route::delete('/family/pickup-auth/{id}',        [\App\Http\Controllers\Api\FamilyOperationsController::class, 'removeAuth']);
+    // Daily check-in
+    Route::get ('/family/checkin/today/{childId}',   [\App\Http\Controllers\Api\FamilyOperationsController::class, 'todayCheckin']);
+    Route::get ('/family/checkin/recent/{childId}',  [\App\Http\Controllers\Api\FamilyOperationsController::class, 'recentCheckins']);
+    Route::post('/family/checkin',                   [\App\Http\Controllers\Api\FamilyOperationsController::class, 'submitCheckin']);
+    // Referrals
+    Route::get ('/family/referrals',                 [\App\Http\Controllers\Api\FamilyOperationsController::class, 'listReferrals']);
+    Route::post('/family/referrals',                 [\App\Http\Controllers\Api\FamilyOperationsController::class, 'submitReferral']);
+    // Analytics
+    Route::get('/analytics/trends/{childId}',        [\App\Http\Controllers\Api\AnalyticsController::class, 'childTrends']);
+    Route::get('/analytics/hdlh-gaps/{childId}',     [\App\Http\Controllers\Api\AnalyticsController::class, 'hdlhGaps']);
+    // Drip + curriculum (admin)
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/marketing/drip',         [\App\Http\Controllers\Api\GrowthController::class, 'listDrip']);
+        Route::post('/marketing/drip',         [\App\Http\Controllers\Api\GrowthController::class, 'createDrip']);
+        Route::get ('/marketing/drip/stats',   [\App\Http\Controllers\Api\GrowthController::class, 'dripStats']);
+        Route::get ('/curriculum',             [\App\Http\Controllers\Api\GrowthController::class, 'listCurriculum']);
+        Route::post('/curriculum',             [\App\Http\Controllers\Api\GrowthController::class, 'createCurriculum']);
+        Route::post('/curriculum/{id}/use',    [\App\Http\Controllers\Api\GrowthController::class, 'useCurriculum']);
+    });
+
     // parent responds to permission slip
     Route::patch('/operations/permissions/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'respondToPermission']);
 

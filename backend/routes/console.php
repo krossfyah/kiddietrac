@@ -69,3 +69,6 @@ Schedule::command('kiddietrac:late-fees')
 Schedule::command('invoices:autopay-charge')->dailyAt('03:00');
 Schedule::command('expiry:warn')->dailyAt('08:00');
 
+
+Schedule::command('drip:dispatch')->hourly();
+Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');

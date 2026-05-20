@@ -173,4 +173,20 @@
     Shell.registerScreen(r + ':signed-docs',    bridge('KT.V22p56', 'renderSignedDocs'));
   });
 
+
+  // v22p57 — combined features
+  ['guardian'].forEach(function (r) {
+    Shell.registerScreen(r + ':pickup-auth', bridge('KT.V22p57', 'renderPickupAuth'));
+    Shell.registerScreen(r + ':checkin',     bridge('KT.V22p57', 'renderCheckin'));
+    Shell.registerScreen(r + ':trends',      bridge('KT.V22p57', 'renderTrends'));
+    Shell.registerScreen(r + ':referrals',   bridge('KT.V22p57', 'renderReferrals'));
+    Shell.registerScreen(r + ':ach-pay',     bridge('KT.V22p57', 'renderAch'));
+  });
+  ['agency_admin','centre_director','platform_admin','educator'].forEach(function (r) {
+    Shell.registerScreen(r + ':drip-campaigns', bridge('KT.V22p57', 'renderDrip'));
+    Shell.registerScreen(r + ':curriculum',     bridge('KT.V22p57', 'renderCurriculum'));
+    Shell.registerScreen(r + ':hdlh-gaps',      bridge('KT.V22p57', 'renderHdlhGaps'));
+    Shell.registerScreen(r + ':trends',         bridge('KT.V22p57', 'renderTrends'));
+  });
+
 })(window);
