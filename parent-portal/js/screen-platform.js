@@ -36,6 +36,122 @@
     return '<span style="padding:3px 10px;border-radius:999px;background:' + m.bg + ';color:' + m.fg + ';font-size:10px;font-weight:700;letter-spacing:0.5px;">' + m.t + '</span>';
   }
 
+  // ── v22p32: widgets for the platform overview ────────────────────
+  function cardShell(title, subtitle) {
+    var box = Dom.el('div', { style: 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-height:240px;' });
+    box.appendChild(Dom.el('h3', { style: 'margin:0 0 4px;font-size:14px;color:#6B7280;letter-spacing:0.5px;text-transform:uppercase;' }, title));
+    if (subtitle) box.appendChild(Dom.el('div', { style: 'font-size:12px;color:#9CA3AF;margin-bottom:14px;' }, subtitle));
+    return box;
+  }
+
+  // Compact bar chart using divs — no chart library needed
+  function renderBarChart(rows, colorFn, formatFn) {
+    var max = 0;
+    rows.forEach(function (r) { if (r.value > max) max = r.value; });
+    if (max === 0) max = 1;
+    var wrap = Dom.el('div', { style: 'display:flex;align-items:flex-end;gap:10px;height:140px;padding:8px 0;' });
+    rows.forEach(function (r) {
+      var col = Dom.el('div', { style: 'flex:1;display:flex;flex-direction:column;align-items:stretch;height:100%;' });
+      var spacer = Dom.el('div', { style: 'flex:1;display:flex;align-items:flex-end;' });
+      var heightPct = Math.max((r.value / max) * 100, 2);
+      var bar = Dom.el('div', {
+        style: 'width:100%;height:' + heightPct + '%;background:' + colorFn(r) + ';border-radius:6px 6px 0 0;position:relative;transition:opacity .15s;',
+        title: r.label + ': ' + (formatFn ? formatFn(r.value) : r.value),
+      });
+      // Value label above bar (only if there's room)
+      var lbl = Dom.el('div', { style: 'font-size:10px;font-weight:700;color:#374151;text-align:center;padding:2px;margin-top:-18px;' }, formatFn ? formatFn(r.value) : String(r.value));
+      bar.appendChild(lbl);
+      spacer.appendChild(bar);
+      col.appendChild(spacer);
+      col.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;text-align:center;margin-top:6px;' }, r.label));
+      wrap.appendChild(col);
+    });
+    return wrap;
+  }
+
+  function renderMrrTrendCard(mrrTrend) {
+    var box = cardShell('MRR trend', 'Last 6 months · Canadian dollars');
+    var bars = mrrTrend.map(function (m) { return { label: m.label, value: m.mrr_cents / 100 }; });
+    box.appendChild(renderBarChart(
+      bars,
+      function () { return 'linear-gradient(180deg,#16A34A 0%,#15803D 100%)'; },
+      function (v) { return '$' + Math.round(v).toLocaleString(); }
+    ));
+    return box;
+  }
+
+  function renderAgencyGrowthCard(growth) {
+    var box = cardShell('Agency growth', 'Signups vs cancellations · last 6 months');
+    var bars = growth.map(function (g) { return { label: g.label, value: g.signups, cancelled: g.cancelled }; });
+    box.appendChild(renderBarChart(
+      bars,
+      function (r) {
+        if (r.cancelled > r.value) return 'linear-gradient(180deg,#DC2626 0%,#991B1B 100%)';
+        if (r.cancelled > 0) return 'linear-gradient(180deg,#F59E0B 0%,#B45309 100%)';
+        return 'linear-gradient(180deg,#7C3AED 0%,#5B21B6 100%)';
+      },
+      null
+    ));
+    // Legend
+    var legend = Dom.el('div', { style: 'display:flex;gap:14px;font-size:11px;color:#6B7280;margin-top:8px;flex-wrap:wrap;' });
+    legend.innerHTML =
+      '<span><span style="display:inline-block;width:10px;height:10px;background:#7C3AED;border-radius:2px;vertical-align:middle;margin-right:5px;"></span>Net positive month</span>' +
+      '<span><span style="display:inline-block;width:10px;height:10px;background:#F59E0B;border-radius:2px;vertical-align:middle;margin-right:5px;"></span>Had cancellations</span>' +
+      '<span><span style="display:inline-block;width:10px;height:10px;background:#DC2626;border-radius:2px;vertical-align:middle;margin-right:5px;"></span>Net negative</span>';
+    box.appendChild(legend);
+    return box;
+  }
+
+  function renderTopAgenciesCard(rows) {
+    var box = cardShell('Top agencies by enrolment', 'Five largest by children on roll');
+    if (!rows.length) { box.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-style:italic;padding:20px 0;' }, 'No agencies yet')); return box; }
+    var list = Dom.el('div', {});
+    var maxChildren = Math.max.apply(null, rows.map(function (r) { return r.children; })) || 1;
+    rows.forEach(function (a) {
+      var pct = Math.max((a.children / maxChildren) * 100, 4);
+      var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #F3F4F6;' });
+      var swatch = Dom.el('div', { style: 'width:8px;height:36px;border-radius:4px;background:' + (a.accent || '#1F6080') + ';flex-shrink:0;' });
+      var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      var line1 = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;' });
+      line1.appendChild(Dom.el('div', { style: 'font-weight:600;font-size:14px;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, a.name));
+      line1.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#1F6080;flex-shrink:0;' }, a.children + ' kids'));
+      body.appendChild(line1);
+      var track = Dom.el('div', { style: 'height:6px;border-radius:3px;background:#F3F4F6;overflow:hidden;' });
+      track.appendChild(Dom.el('div', { style: 'height:100%;width:' + pct + '%;background:' + (a.accent || '#1F6080') + ';' }));
+      body.appendChild(track);
+      row.appendChild(swatch);
+      row.appendChild(body);
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+    return box;
+  }
+
+  function renderRecentEventsCard(events) {
+    var box = cardShell('Recent platform activity', 'Last 10 events across all agencies');
+    if (!events.length) { box.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-style:italic;padding:20px 0;' }, 'No activity recorded')); return box; }
+    var list = Dom.el('div', {});
+    var actionIcons = {
+      'user.created': '👤', 'user.revived': '♻️', 'user.deleted': '✖',
+      'user.updated': '✏', 'centre.created': '🏫', 'centre.updated': '🔧',
+      'agency.created': '🏛', 'agency.updated': '🔧', 'agency.suspended': '⏸',
+      'agency.resumed': '▶', 'family.created': '👪', 'invoice.created': '💸',
+      'invoice.paid': '✅', 'branding.updated': '🎨',
+    };
+    events.forEach(function (ev) {
+      var row = Dom.el('div', { style: 'display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:13px;' });
+      row.appendChild(Dom.el('div', { style: 'font-size:18px;width:28px;text-align:center;' }, actionIcons[ev.action] || '•'));
+      var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      body.appendChild(Dom.el('div', { style: 'color:#111827;font-weight:600;' }, ev.action.replace(/[._]/g, ' ')));
+      var meta = ev.actor + (ev.entity_type ? (' · ' + ev.entity_type + (ev.entity_id ? (' #' + ev.entity_id) : '')) : '');
+      body.appendChild(Dom.el('div', { style: 'color:#6B7280;font-size:11px;margin-top:2px;' }, meta + ' · ' + fmtDate(ev.created_at)));
+      row.appendChild(body);
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+    return box;
+  }
+
   // ── Platform Overview ───────────────────────────────────────────
   function renderOverview(container) {
     Dom.clear(container);
@@ -67,6 +183,7 @@
         { label: 'Families', value: t.families, hint: 'on platform', accent: '#FF8A65' },
         { label: 'Staff',    value: t.staff,    hint: 'active users', accent: '#2C8AAC' },
         { label: 'MRR',      value: fmtMoney(t.mrr_cents || 0), hint: 'monthly recurring', accent: '#16A34A' },
+        { label: 'Sessions', value: (t.active_sessions_24h || 0), hint: 'active last 24h', accent: '#F59E0B' },
       ];
       var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:18px 0;' });
       kpis.forEach(function (k) {
@@ -89,6 +206,18 @@
           '<div><div style="font-size:13px;color:#6B7280;">Net change</div><div style="font-size:24px;font-weight:800;color:#1F6080;">' + (r.net >= 0 ? '+' : '') + (r.net || 0) + '</div></div>' +
         '</div>';
       wrap.appendChild(recent);
+
+      // v22p32: trend widget row — MRR + agency growth side by side
+      var trends = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-top:14px;' });
+      trends.appendChild(renderMrrTrendCard(data.mrr_trend || []));
+      trends.appendChild(renderAgencyGrowthCard(data.agency_growth || []));
+      wrap.appendChild(trends);
+
+      // v22p32: insight row — top agencies (left) + recent events (right)
+      var bottom = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-top:14px;' });
+      bottom.appendChild(renderTopAgenciesCard(data.top_agencies || []));
+      bottom.appendChild(renderRecentEventsCard(data.recent_events || []));
+      wrap.appendChild(bottom);
     }).catch(function (e) {
       Dom.clear(wrap);
       wrap.appendChild(hero);

@@ -51,6 +51,81 @@ final class PlatformController extends Controller
             ->where('cancelled_at', '>=', $thirtyDaysAgo)
             ->count();
 
+        // v22p32: widget data ------------------------------------------------
+
+        // Agency growth — last 6 calendar months
+        $agencyGrowth = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $start = now()->startOfMonth()->subMonths($i);
+            $end   = (clone $start)->endOfMonth();
+            $signups = DB::table('agencies')
+                ->whereBetween('created_at', [$start, $end])
+                ->whereNull('deleted_at')
+                ->count();
+            $cancelled = DB::table('agencies')
+                ->whereBetween('cancelled_at', [$start, $end])
+                ->count();
+            $agencyGrowth[] = [
+                'label' => $start->format('M'),
+                'period' => $start->format('Y-m'),
+                'signups' => $signups,
+                'cancelled' => $cancelled,
+            ];
+        }
+
+        // MRR trend — snapshot active agencies at the END of each of the last 6 months
+        $mrrTrend = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $monthEnd = now()->startOfMonth()->subMonths($i)->endOfMonth();
+            $rows = DB::table('agencies')
+                ->where('created_at', '<=', $monthEnd)
+                ->where(function ($q) use ($monthEnd) {
+                    $q->whereNull('cancelled_at')->orWhere('cancelled_at', '>', $monthEnd);
+                })
+                ->whereNull('deleted_at')
+                ->where('billing_status', 'active')
+                ->sum('plan_amount_cents');
+            $mrrTrend[] = [
+                'label' => $monthEnd->format('M'),
+                'period' => $monthEnd->format('Y-m'),
+                'mrr_cents' => (int) $rows,
+            ];
+        }
+
+        // Top agencies by child enrolment. children link to a family (no direct
+        // agency_id), so walk children -> families -> centres -> agencies.
+        $topAgencies = DB::table('agencies as a')
+            ->leftJoin('centres as ce', function ($j) {
+                $j->on('ce.agency_id', '=', 'a.id')->whereNull('ce.deleted_at');
+            })
+            ->leftJoin('families as f', function ($j) {
+                $j->on('f.centre_id', '=', 'ce.id')->whereNull('f.deleted_at');
+            })
+            ->leftJoin('children as c', function ($j) {
+                $j->on('c.family_id', '=', 'f.id')->whereNull('c.deleted_at');
+            })
+            ->whereNull('a.deleted_at')
+            ->groupBy('a.id', 'a.name', 'a.brand_primary_color', 'a.billing_status')
+            ->orderByRaw('COUNT(DISTINCT c.id) DESC')
+            ->limit(5)
+            ->get(['a.id', 'a.name', 'a.brand_primary_color as accent', 'a.billing_status as status', DB::raw('COUNT(DISTINCT c.id) as children')]);
+
+        // Recent platform events from audit_logs
+        $recentEvents = DB::table('audit_logs as al')
+            ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
+            ->orderByDesc('al.created_at')
+            ->limit(10)
+            ->get([
+                'al.id', 'al.action', 'al.entity_type', 'al.entity_id', 'al.created_at',
+                DB::raw("COALESCE(CONCAT(u.first_name, ' ', u.last_name), 'system') as actor"),
+            ]);
+
+        // Active sessions in the last 24 hours — distinct users with a recently-used token
+        $sessionsToday = DB::table('personal_access_tokens')
+            ->where('last_used_at', '>=', now()->subDay())
+            ->distinct()
+            ->count('tokenable_id');
+
         return response()->json([
             'totals' => [
                 'agencies' => $agencies,
@@ -62,12 +137,17 @@ final class PlatformController extends Controller
                 'guardians' => $guardians,
                 'mrr_cents' => $mrrCents,
                 'mrr_dollars' => $mrrCents / 100,
+                'active_sessions_24h' => $sessionsToday,
             ],
             'recent_30d' => [
                 'new_agencies' => $newAgencies30d,
                 'cancelled_agencies' => $cancelledAgencies30d,
                 'net' => $newAgencies30d - $cancelledAgencies30d,
             ],
+            'agency_growth' => $agencyGrowth,
+            'mrr_trend' => $mrrTrend,
+            'top_agencies' => $topAgencies,
+            'recent_events' => $recentEvents,
         ]);
     }
 
