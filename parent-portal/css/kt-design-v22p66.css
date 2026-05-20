@@ -1,0 +1,340 @@
+/* v22p66 — cards POP + mobile redesign
+   Loads AFTER v22p65 so these rules win.
+*/
+
+/* ============================ CARDS THAT POP ============================ */
+[data-kt-pretty] .kt-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(252, 253, 255, 0.94) 100%) !important;
+  border: 1px solid rgba(74, 144, 184, 0.10) !important;
+  border-radius: 18px !important;
+  padding: 30px 32px !important;
+  margin-bottom: 22px !important;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px -8px rgba(31, 96, 128, 0.10),
+    0 24px 56px -20px rgba(31, 96, 128, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.22s ease !important;
+}
+
+/* Top accent stripe — multi-stop brand gradient */
+[data-kt-pretty] .kt-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #1F6080 0%, #4A90B8 35%, #2D7BA8 70%, #F97316 100%);
+  border-radius: 18px 18px 0 0;
+  z-index: 1;
+  opacity: 0.92;
+}
+
+/* Decorative corner orb */
+[data-kt-pretty] .kt-card::after {
+  content: '';
+  position: absolute;
+  top: -120px; right: -120px;
+  width: 280px; height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74, 144, 184, 0.10) 0%, rgba(74, 144, 184, 0.02) 50%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Card content needs to be above ::after */
+[data-kt-pretty] .kt-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Hover — dramatic */
+[data-kt-pretty] .kt-card:hover {
+  transform: translateY(-3px) !important;
+  border-color: rgba(74, 144, 184, 0.28) !important;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 18px 40px -12px rgba(31, 96, 128, 0.20),
+    0 36px 80px -24px rgba(31, 96, 128, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+}
+[data-kt-pretty] .kt-card:hover::before {
+  height: 5px;
+  opacity: 1;
+}
+
+/* ============================ Variant cards ============================ */
+[data-kt-pretty] .kt-card-vibrant {
+  background:
+    linear-gradient(135deg, #FFF7ED 0%, #FED7AA 100%) !important;
+  border-color: rgba(249, 115, 22, 0.25) !important;
+}
+[data-kt-pretty] .kt-card-vibrant::before {
+  background: linear-gradient(90deg, #F97316, #EA580C, #C2410C) !important;
+}
+
+[data-kt-pretty] .kt-card-elevated {
+  box-shadow:
+    0 4px 8px rgba(15, 23, 42, 0.06),
+    0 16px 40px -8px rgba(31, 96, 128, 0.16),
+    0 40px 80px -16px rgba(31, 96, 128, 0.12) !important;
+}
+
+[data-kt-pretty] .kt-card-featured {
+  background:
+    linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%) !important;
+  border: 2px solid rgba(31, 96, 128, 0.18) !important;
+}
+
+/* ============================ KPI tiles — also pop more ============================ */
+[data-kt-pretty] .kt-kpi {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(252, 253, 255, 0.92) 100%) !important;
+  border: 1px solid rgba(74, 144, 184, 0.12) !important;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 20px -8px rgba(31, 96, 128, 0.10) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+[data-kt-pretty] .kt-kpi::before {
+  /* decorative corner gradient */
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent, rgba(74, 144, 184, 0.18)) 0%, transparent 65%);
+  pointer-events: none;
+}
+[data-kt-pretty] .kt-kpi::after {
+  /* keep the existing left stripe but make it more vivid */
+  width: 5px !important;
+  background: linear-gradient(180deg, var(--accent, var(--kt-brand)) 0%, transparent 100%);
+}
+
+[data-kt-pretty] .kt-kpi:hover {
+  transform: translateY(-4px) !important;
+  box-shadow:
+    0 4px 8px rgba(15, 23, 42, 0.06),
+    0 20px 40px -12px rgba(31, 96, 128, 0.22) !important;
+}
+
+[data-kt-pretty] .kt-kpi.kt-kpi-success { --accent: #10B981; }
+[data-kt-pretty] .kt-kpi.kt-kpi-warning { --accent: #F59E0B; }
+[data-kt-pretty] .kt-kpi.kt-kpi-danger  { --accent: #EF4444; }
+[data-kt-pretty] .kt-kpi.kt-kpi-info    { --accent: #4F46E5; }
+[data-kt-pretty] .kt-kpi.kt-kpi-purple  { --accent: #A855F7; }
+[data-kt-pretty] .kt-kpi.kt-kpi-pink    { --accent: #EC4899; }
+
+/* ============================ Hero — even more dramatic ============================ */
+[data-kt-pretty] .kt-page-hero {
+  box-shadow:
+    0 12px 36px -10px rgba(31, 96, 128, 0.42),
+    0 6px 12px -2px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20) !important;
+}
+
+/* ============================ MOBILE REDESIGN ============================ */
+@media (max-width: 768px) {
+  /* Bottom nav (injected by JS) */
+  .kt-mobile-bottom-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(252, 253, 255, 0.98));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(15, 23, 42, 0.06);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 4px max(8px, env(safe-area-inset-bottom));
+    z-index: 99998;
+  }
+  .kt-mobile-bottom-nav a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+    padding: 8px 4px;
+    color: #94A3B8;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border-radius: 10px;
+    transition: all 0.18s ease;
+    position: relative;
+  }
+  .kt-mobile-bottom-nav a:hover { background: rgba(74, 144, 184, 0.06); }
+  .kt-mobile-bottom-nav a.kt-mobile-active {
+    color: var(--kt-brand, #1F6080);
+  }
+  .kt-mobile-bottom-nav a.kt-mobile-active::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #1F6080, #F97316);
+  }
+  .kt-mobile-bottom-nav .kt-mob-icon {
+    font-size: 22px;
+    margin-bottom: 3px;
+    line-height: 1;
+  }
+  body, main { padding-bottom: 88px !important; }
+  #kt-chatbot-fab {
+    bottom: 96px !important;
+    right: 16px !important;
+    width: 52px !important;
+    height: 52px !important;
+    font-size: 24px !important;
+  }
+  #kt-mobile-toggle {
+    top: 12px !important;
+    left: 12px !important;
+  }
+
+  /* Hide desktop sidebar entirely; rely on bottom nav + drawer */
+  /* Wait — they still want hamburger drawer for "More" — keep both */
+
+  /* Tighter hero on mobile */
+  [data-kt-pretty] .kt-page-hero {
+    padding: 20px 18px !important;
+    border-radius: 14px !important;
+    margin-bottom: 16px !important;
+  }
+  [data-kt-pretty] .kt-page-hero h2 {
+    font-size: 22px !important;
+  }
+  [data-kt-pretty] .kt-page-hero p {
+    font-size: 13.5px !important;
+  }
+  [data-kt-pretty] .kt-page-hero .kt-hero-actions {
+    margin-top: 14px !important;
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+
+  /* KPI grid: 2 columns on mobile */
+  [data-kt-pretty] .kt-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  [data-kt-pretty] .kt-kpi {
+    padding: 16px 14px !important;
+    border-radius: 12px !important;
+  }
+  [data-kt-pretty] .kt-kpi .kt-kpi-label {
+    font-size: 10px !important;
+  }
+  [data-kt-pretty] .kt-kpi .kt-kpi-value {
+    font-size: 24px !important;
+  }
+
+  /* Cards full-width with tighter padding */
+  [data-kt-pretty] .kt-card {
+    padding: 20px 18px !important;
+    border-radius: 14px !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Tables → card stack on mobile */
+  [data-kt-pretty] table thead { display: none; }
+  [data-kt-pretty] table tbody,
+  [data-kt-pretty] table tr,
+  [data-kt-pretty] table td { display: block; }
+  [data-kt-pretty] table {
+    border-collapse: separate;
+  }
+  [data-kt-pretty] table tbody tr {
+    background: linear-gradient(180deg, #fff 0%, rgba(252,253,255,0.95) 100%) !important;
+    border: 1px solid rgba(74, 144, 184, 0.1);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
+    position: relative;
+  }
+  [data-kt-pretty] table tbody tr:hover {
+    background: linear-gradient(180deg, #fff 0%, rgba(248, 250, 252, 0.95) 100%) !important;
+  }
+  [data-kt-pretty] table tbody tr:nth-child(even) {
+    background: linear-gradient(180deg, #fff 0%, rgba(252,253,255,0.95) 100%) !important;
+  }
+  [data-kt-pretty] table tbody td {
+    padding: 6px 0 !important;
+    border: 0 !important;
+    font-size: 13.5px !important;
+  }
+  [data-kt-pretty] table tbody td::before {
+    content: attr(data-kt-label);
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #64748B;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  /* Hide the first checkbox column on mobile (bulk select) — too cramped */
+  [data-kt-pretty] table tbody td:first-child .kt-row-check { display: none; }
+  [data-kt-pretty] table tbody td:first-child:has(.kt-row-check) { display: none; }
+
+  /* Filter input + pager full width on mobile */
+  [data-kt-pretty] .kt-table-filter {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  [data-kt-pretty] .kt-table-filter > div:first-child {
+    max-width: 100% !important;
+  }
+
+  /* Form modals — bottom sheet style */
+  [style*="position:fixed"][style*="rgba(15"] > div {
+    align-self: flex-end !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 18px 18px 0 0 !important;
+    max-height: 86vh !important;
+  }
+
+  /* Stack the filter pager on mobile */
+  [data-kt-pretty] .kt-pager {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch !important;
+  }
+
+  /* Larger tap targets */
+  [data-kt-pretty] .kt-btn,
+  [data-kt-pretty] button {
+    min-height: 44px !important;
+    padding: 12px 18px !important;
+  }
+
+  /* Bigger headings */
+  [data-kt-pretty] h2 { font-size: 20px !important; }
+  [data-kt-pretty] h3 { font-size: 16px !important; }
+}
+
+/* Tablet (768-1024) — 3-column KPI grid */
+@media (min-width: 769px) and (max-width: 1024px) {
+  [data-kt-pretty] .kt-kpi-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* Hide bottom nav above mobile */
+@media (min-width: 769px) {
+  .kt-mobile-bottom-nav { display: none !important; }
+}
