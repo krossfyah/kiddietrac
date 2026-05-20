@@ -964,6 +964,10 @@
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add family');
     addBtn.addEventListener('click', () => showFamilyModal(null, centresData.centres, content));
     bar.appendChild(addBtn);
+
+    // v22p26: card/table view toggle remembered per-list in localStorage.
+    const toggle = viewToggle('kt_view_families', function () { renderFamiliesTab(content); });
+    bar.insertBefore(toggle, addBtn);
     content.appendChild(bar);
 
     if (data.families.length === 0) {
@@ -971,6 +975,12 @@
         'Click + Add family to register the first one. You can attach children, set the billing split, and invite guardians from the card afterward.',
         { title: 'No families enrolled yet', illustration: 'emptyFamilies' }
       ));
+      return;
+    }
+
+    var view = localStorage.getItem('kt_view_families') || 'cards';
+    if (view === 'table') {
+      content.appendChild(renderFamiliesTable(data.families, centresData.centres, content));
       return;
     }
 
@@ -1005,6 +1015,69 @@
       grid.appendChild(card);
     });
     content.appendChild(grid);
+  }
+
+  // v22p26: small toggle for cards/table view, persisted in localStorage.
+  function viewToggle(storageKey, onChange) {
+    var current = localStorage.getItem(storageKey) || 'cards';
+    var wrap = Dom.el('div', { style: 'display:inline-flex;background:#F3F4F6;border-radius:8px;padding:2px;margin-right:8px;' });
+    function btn(view, label, icon) {
+      var b = Dom.el('button', {
+        type: 'button',
+        style: 'background:' + (current === view ? 'white' : 'transparent') + ';color:' + (current === view ? '#1F6080' : '#6B7280') + ';border:none;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;' + (current === view ? 'box-shadow:0 1px 2px rgba(0,0,0,.08);' : ''),
+      }, icon + ' ' + label);
+      b.addEventListener('click', function () {
+        if (current === view) return;
+        localStorage.setItem(storageKey, view);
+        if (onChange) onChange(view);
+      });
+      return b;
+    }
+    wrap.appendChild(btn('cards', 'Cards', '▦'));
+    wrap.appendChild(btn('table', 'Table', '☰'));
+    return wrap;
+  }
+
+  // v22p26: families table view.
+  function renderFamiliesTable(families, centres, content) {
+    var table = Dom.el('table', { style: 'width:100%;background:white;border-radius:12px;overflow:hidden;border-collapse:collapse;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
+    var thead = Dom.el('thead', { style: 'background:#F9FAFB;' });
+    var headRow = Dom.el('tr');
+    ['Family', 'Centre', 'Children', 'Guardians', 'Outstanding', ''].forEach(function (h) {
+      headRow.appendChild(Dom.el('th', {
+        style: 'text-align:left;padding:11px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;',
+      }, h));
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = Dom.el('tbody');
+    families.forEach(function (f) {
+      var tr = Dom.el('tr', { style: 'border-top:1px solid #E5E7EB;cursor:pointer;' });
+      tr.addEventListener('click', function () { showFamilyDetail(f.id); });
+
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-weight:600;' }, f.family_name));
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;color:#6B7280;font-size:13px;' }, f.centre_name || '—'));
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' }, '👶 ' + f.child_count));
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' }, '👤 ' + f.guardian_count));
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' + (f.outstanding_balance > 0 ? 'color:#DC2626;font-weight:600;' : 'color:#6B7280;') },
+        f.outstanding_balance > 0 ? ('$' + f.outstanding_balance.toFixed(2)) : '—'));
+
+      var actionsTd = Dom.el('td', { style: 'padding:11px 14px;text-align:right;white-space:nowrap;' });
+      var editBtn = Dom.el('button', {
+        type: 'button',
+        style: 'background:transparent;border:1px solid var(--ink-300);padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--ink-700);',
+      }, 'Edit');
+      editBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        showFamilyModal(f, centres, content);
+      });
+      actionsTd.appendChild(editBtn);
+      tr.appendChild(actionsTd);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    return table;
   }
 
   // v22p11: shared add/edit modal for families. centres = array of {id, name} for the picker.

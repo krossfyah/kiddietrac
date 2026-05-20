@@ -128,10 +128,20 @@
         return;
       }
 
-      // Count summary
-      resultsEl.appendChild(Dom.el('div', {
-        style: 'font-size:13px;color:#6B7280;margin-bottom:10px;',
+      // Count summary + view toggle
+      var summaryRow = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
+      summaryRow.appendChild(Dom.el('div', {
+        style: 'font-size:13px;color:#6B7280;',
       }, children.length + ' child' + (children.length === 1 ? '' : 'ren')));
+      summaryRow.appendChild(buildViewToggle('kt_view_children', function () { fetchAndRender(); }));
+      resultsEl.appendChild(summaryRow);
+
+      // v22p26: branch on card/table view preference
+      var view = localStorage.getItem('kt_view_children') || 'cards';
+      if (view === 'table') {
+        resultsEl.appendChild(renderChildrenTable(children, centreSelect.value));
+        return;
+      }
 
       // Grid of cards
       var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;' });
@@ -183,6 +193,83 @@
     searchInput.addEventListener('input', rerunDebounced);
 
     fetchAndRender();
+  }
+
+  // v22p26: small toggle widget — cards vs table, persisted in localStorage.
+  function buildViewToggle(storageKey, onChange) {
+    var current = localStorage.getItem(storageKey) || 'cards';
+    var wrap = Dom.el('div', { style: 'display:inline-flex;background:#F3F4F6;border-radius:8px;padding:2px;' });
+    function btn(view, label, icon) {
+      var b = Dom.el('button', {
+        type: 'button',
+        style: 'background:' + (current === view ? 'white' : 'transparent') + ';color:' + (current === view ? '#1F6080' : '#6B7280') + ';border:none;padding:5px 9px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:3px;' + (current === view ? 'box-shadow:0 1px 2px rgba(0,0,0,.08);' : ''),
+      }, icon + ' ' + label);
+      b.addEventListener('click', function () {
+        if (current === view) return;
+        localStorage.setItem(storageKey, view);
+        if (onChange) onChange(view);
+      });
+      return b;
+    }
+    wrap.appendChild(btn('cards', 'Cards', '▦'));
+    wrap.appendChild(btn('table', 'Table', '☰'));
+    return wrap;
+  }
+
+  // v22p26: children table view.
+  function renderChildrenTable(children, centreIdHint) {
+    var table = Dom.el('table', { style: 'width:100%;background:white;border-radius:12px;overflow:hidden;border-collapse:collapse;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
+    var thead = Dom.el('thead', { style: 'background:#F9FAFB;' });
+    var headRow = Dom.el('tr');
+    ['Child', 'Age', 'Room', 'Family', 'Status', 'Fee', ''].forEach(function (h) {
+      headRow.appendChild(Dom.el('th', {
+        style: 'text-align:left;padding:11px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;',
+      }, h));
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = Dom.el('tbody');
+    children.forEach(function (c) {
+      var tr = Dom.el('tr', { style: 'border-top:1px solid #E5E7EB;cursor:pointer;' });
+      tr.addEventListener('click', function () {
+        window.location.hash = '#child-detail?id=' + c.id + (centreIdHint ? '&centre_id=' + centreIdHint : '');
+      });
+
+      var nameCell = Dom.el('td', { style: 'padding:11px 14px;' });
+      var nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+      var swatch = Dom.el('div', { style: 'width:6px;height:24px;border-radius:3px;background:' + (c.room_color || '#1F6080') + ';flex-shrink:0;' });
+      nameWrap.appendChild(swatch);
+      nameWrap.appendChild(Dom.el('span', { style: 'font-weight:600;' }, c.full_name || (c.first_name + ' ' + c.last_name)));
+      nameCell.appendChild(nameWrap);
+      tr.appendChild(nameCell);
+
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#374151;' }, c.age && c.age.human ? c.age.human : '—'));
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#6B7280;' }, c.room_name || '—'));
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#6B7280;' }, c.family_name || '—'));
+
+      var statusTd = Dom.el('td', { style: 'padding:11px 14px;' });
+      statusTd.innerHTML = statusBadge(c.enrollment_status, c.is_at_centre);
+      tr.appendChild(statusTd);
+
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#374151;' }, c.monthly_fee ? '$' + c.monthly_fee : '—'));
+
+      var actTd = Dom.el('td', { style: 'padding:11px 14px;text-align:right;white-space:nowrap;' });
+      var viewBtn = Dom.el('button', {
+        type: 'button',
+        style: 'background:transparent;border:1px solid #D1D5DB;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:#374151;',
+      }, 'Open');
+      viewBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        window.location.hash = '#child-detail?id=' + c.id + (centreIdHint ? '&centre_id=' + centreIdHint : '');
+      });
+      actTd.appendChild(viewBtn);
+      tr.appendChild(actTd);
+
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    return table;
   }
 
   if (Shell && Shell.registerScreen) {
