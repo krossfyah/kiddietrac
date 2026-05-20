@@ -205,4 +205,23 @@
     Shell.registerScreen(r + ':billing-schedule',bridge('KT.V22p58', 'renderBillingSchedule'));
   });
 
+
+  // v22p59
+  ['guardian'].forEach(function (r) {
+    Shell.registerScreen(r + ':directory',         bridge('KT.V22p59', 'renderDirectory'));
+    Shell.registerScreen(r + ':conferences',       bridge('KT.V22p59', 'renderConferences'));
+    Shell.registerScreen(r + ':trip-gps',          bridge('KT.V22p59', 'renderTripGps'));
+    Shell.registerScreen(r + ':attendance-pattern',bridge('KT.V22p59', 'renderAttendancePattern'));
+    Shell.registerScreen(r + ':tickets',           bridge('KT.V22p59', 'renderTickets'));
+  });
+  ['agency_admin','centre_director','educator','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':conferences',       bridge('KT.V22p59', 'renderConferences'));
+    Shell.registerScreen(r + ':trip-gps',          bridge('KT.V22p59', 'renderTripGps'));
+    Shell.registerScreen(r + ':attendance-pattern',bridge('KT.V22p59', 'renderAttendancePattern'));
+    Shell.registerScreen(r + ':report-cards',      bridge('KT.V22p59', 'renderReportCards'));
+    Shell.registerScreen(r + ':zones',             bridge('KT.V22p59', 'renderZones'));
+    Shell.registerScreen(r + ':tickets',           bridge('KT.V22p59', 'renderTickets'));
+    Shell.registerScreen(r + ':photo-tagging',     bridge('KT.V22p59', 'renderPhotoTagging'));
+  });
+
 })(window);

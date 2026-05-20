@@ -72,3 +72,5 @@ Schedule::command('expiry:warn')->dailyAt('08:00');
 
 Schedule::command('drip:dispatch')->hourly();
 Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');
+
+Schedule::command('birthdays:celebrate')->dailyAt('07:30');

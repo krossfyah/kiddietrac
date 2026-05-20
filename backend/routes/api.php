@@ -795,6 +795,54 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/billing/schedule/{familyId}',   [\App\Http\Controllers\Api\BillingScheduleController::class, 'disable']);
     });
 
+    // v22p59 — long-tail features
+    // Photo tagging (AI)
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/photos/{id}/tags',          [\App\Http\Controllers\Api\PhotoTagController::class, 'listTags']);
+        Route::post('/photos/{id}/classify',      [\App\Http\Controllers\Api\PhotoTagController::class, 'classifyPhoto']);
+        Route::post('/photos/tag-confirm',        [\App\Http\Controllers\Api\PhotoTagController::class, 'confirmTag']);
+    });
+    // Family directory
+    Route::get ('/directory',                     [\App\Http\Controllers\Api\DirectoryController::class, 'listDirectory']);
+    Route::get ('/directory/me',                  [\App\Http\Controllers\Api\DirectoryController::class, 'myOptin']);
+    Route::post('/directory/me',                  [\App\Http\Controllers\Api\DirectoryController::class, 'setOptin']);
+    // Conferences
+    Route::get ('/conferences/slots',             [\App\Http\Controllers\Api\ConferenceController::class, 'listOpenSlots']);
+    Route::post('/conferences/slots',             [\App\Http\Controllers\Api\ConferenceController::class, 'createSlots']);
+    Route::post('/conferences/slots/{id}/book',   [\App\Http\Controllers\Api\ConferenceController::class, 'book']);
+    Route::post('/conferences/slots/{id}/cancel', [\App\Http\Controllers\Api\ConferenceController::class, 'cancel']);
+    // Field-trip GPS
+    Route::post('/field-trips/{id}/ping',         [\App\Http\Controllers\Api\FieldTripGpsController::class, 'ping']);
+    Route::get ('/field-trips/{id}/location',     [\App\Http\Controllers\Api\FieldTripGpsController::class, 'location']);
+    // Attendance pattern
+    Route::get ('/attendance/pattern/{childId}',  [\App\Http\Controllers\Api\AttendancePatternController::class, 'get']);
+    Route::post('/attendance/pattern/{childId}',  [\App\Http\Controllers\Api\AttendancePatternController::class, 'set']);
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get('/attendance/weekly-overview', [\App\Http\Controllers\Api\AttendancePatternController::class, 'weeklyOverview']);
+    });
+    // Report cards
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/report-cards/child/{childId}', [\App\Http\Controllers\Api\ReportCardController::class, 'listForChild']);
+        Route::post('/report-cards/generate',        [\App\Http\Controllers\Api\ReportCardController::class, 'generate']);
+        Route::patch('/report-cards/{id}',           [\App\Http\Controllers\Api\ReportCardController::class, 'update']);
+        Route::post('/report-cards/{id}/send',       [\App\Http\Controllers\Api\ReportCardController::class, 'send']);
+    });
+    Route::get('/report-cards/{id}/pdf',          [\App\Http\Controllers\Api\ReportCardController::class, 'pdf']);
+    // Activity zones
+    Route::get ('/zones',                         [\App\Http\Controllers\Api\ZonesController::class, 'listZones']);
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::post('/zones',                     [\App\Http\Controllers\Api\ZonesController::class, 'createZone']);
+        Route::post('/zones/visit',               [\App\Http\Controllers\Api\ZonesController::class, 'logVisit']);
+        Route::get ('/zones/daily-report',        [\App\Http\Controllers\Api\ZonesController::class, 'dailyReport']);
+    });
+    // Support tickets
+    Route::get ('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'listMine']);
+    Route::post('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'create']);
+    Route::get ('/tickets/{id}',                  [\App\Http\Controllers\Api\SupportTicketController::class, 'show']);
+    Route::post('/tickets/{id}/reply',            [\App\Http\Controllers\Api\SupportTicketController::class, 'reply']);
+    Route::patch('/tickets/{id}/status',          [\App\Http\Controllers\Api\SupportTicketController::class, 'updateStatus']);
+
+
 
     // parent responds to permission slip
     Route::patch('/operations/permissions/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'respondToPermission']);
