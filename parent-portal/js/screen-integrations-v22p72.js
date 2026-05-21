@@ -19,28 +19,23 @@
   /* ───────────── QuickBooks (Intuit) ───────────── */
   async function renderQuickbooks(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:24px;max-width:1800px;margin:0 auto;">Loading QuickBooks status…</div>';
-    var status;
+    main.innerHTML = '<div style="padding:24px;max-width:1800px;margin:0 auto;">Loading QuickBooks…</div>';
+    var status, cfg;
     try { status = await api().get('/qbo/status'); }
     catch (e) { status = { connected: false, configured: false, error: e.message }; }
+    try { cfg = await api().get('/admin/qbo-config'); }
+    catch (e) { cfg = { client_id: '', environment: 'production', has_secret: false, redirect_uri: '', configured: false }; }
 
     var inner = '<div style="padding:24px;max-width:1800px;margin:0 auto;">'
       + '<div class="kt-page-hero"><h2>📒 QuickBooks Online (Intuit)</h2>'
-      + '<p>Sync KiddieTrac invoices into your QuickBooks Online accounting.</p></div>';
+      + '<p>Connect your agency\'s QuickBooks Online to sync invoices. Configure your own Intuit app credentials below.</p></div>';
 
-    if (!status.configured) {
-      inner += card(
-        '<div style="text-align:center;padding:32px;">'
-        + '<div style="font-size:54px;">🔌</div>'
-        + '<h3 style="margin:12px 0 6px;">QuickBooks isn\'t enabled on this platform yet</h3>'
-        + '<p style="color:#64748B;max-width:520px;margin:0 auto;">QuickBooks integration requires platform-level Intuit API credentials '
-        + '(QBO_CLIENT_ID / QBO_REDIRECT_URI). Ask the platform admin to add these to enable one-click invoice sync.</p>'
-        + '</div>'
-      );
-    } else if (status.connected) {
+    // ── Connection state card ──
+    if (status.connected) {
       inner += card(
         '<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">'
         + '<span class="kt-pill kt-pill-success" style="font-size:13px;">✓ Connected</span>'
+        + '<span style="color:#64748B;font-size:13px;">' + esc(cfg.environment || 'production') + '</span>'
         + (status.expires_at ? '<span style="color:#64748B;font-size:13px;">Token valid until ' + esc(status.expires_at) + '</span>' : '')
         + '</div>'
         + '<p style="color:#475569;">Your KiddieTrac invoices can be pushed to QuickBooks Online.</p>'
@@ -50,18 +45,61 @@
         + '</div>'
         + '<div id="qbo-out" style="margin-top:14px;"></div>'
       );
-    } else {
+    } else if (cfg.configured) {
       inner += card(
-        '<div style="text-align:center;padding:24px;">'
-        + '<div style="font-size:54px;">📒</div>'
-        + '<h3 style="margin:12px 0 6px;">Connect your QuickBooks Online account</h3>'
-        + '<p style="color:#64748B;max-width:520px;margin:0 auto 18px;">You\'ll be redirected to Intuit to authorise KiddieTrac, then brought back here. Read-only of your chart of accounts; write access only for invoices.</p>'
+        '<div style="text-align:center;padding:18px;">'
+        + '<div style="font-size:48px;">📒</div>'
+        + '<h3 style="margin:10px 0 6px;">Ready to connect</h3>'
+        + '<p style="color:#64748B;max-width:520px;margin:0 auto 16px;">Your Intuit app credentials are set. Click below to authorise KiddieTrac against your QuickBooks company.</p>'
         + '<button id="qbo-connect" class="kt-btn kt-btn-primary" style="font-size:15px;padding:12px 28px;">Connect to QuickBooks →</button>'
         + '</div>'
       );
     }
+
+    // ── Per-agency credentials config card (always shown) ──
+    inner += card(
+      '<div class="kt-card-header"><h3 class="kt-card-title">⚙️ Intuit app credentials</h3></div>'
+      + '<p style="color:#64748B;font-size:13px;margin:0 0 14px;">Create an app at <a href="https://developer.intuit.com" target="_blank" rel="noopener" style="color:#1F6080;">developer.intuit.com</a>, then paste its keys here. '
+      + 'Set the redirect URI below in your Intuit app.</p>'
+      + (cfg.using_platform_fallback ? '<div style="background:#FEF3C7;color:#92400E;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px;">Currently using the platform\'s shared Intuit app. Enter your own credentials below to use your agency\'s app.</div>' : '')
+      + field('Client ID', 'qc-id', cfg.client_id || '', 'ABxxxxxxxxxxxxxxxxxxxx')
+      + field('Client Secret', 'qc-secret', '', cfg.has_secret ? '•••••••• (saved — leave blank to keep)' : 'Enter client secret', 'password')
+      + '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Environment</label>'
+      + '<select id="qc-env" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;">'
+      + '<option value="production"' + ((cfg.environment || 'production') === 'production' ? ' selected' : '') + '>Production</option>'
+      + '<option value="sandbox"' + (cfg.environment === 'sandbox' ? ' selected' : '') + '>Sandbox (testing)</option>'
+      + '</select>'
+      + '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Redirect URI (paste this into your Intuit app)</label>'
+      + '<input readonly value="' + esc(cfg.redirect_uri || '') + '" onclick="this.select()" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;background:#F8FAFC;box-sizing:border-box;font-family:monospace;font-size:12px;">'
+      + '<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">'
+      + '<button id="qc-save" class="kt-btn kt-btn-primary">Save credentials</button>'
+      + (cfg.client_id ? '<button id="qc-clear" class="kt-btn" style="background:#FEE2E2;color:#B91C1C;">Clear credentials</button>' : '')
+      + '</div>'
+      + '<div id="qc-out" style="margin-top:12px;"></div>'
+    );
+
     inner += '</div>';
     main.innerHTML = inner;
+
+    // Save credentials
+    var saveBtn = document.getElementById('qc-save');
+    if (saveBtn) saveBtn.onclick = async function () {
+      var body = {
+        client_id: document.getElementById('qc-id').value.trim(),
+        environment: document.getElementById('qc-env').value
+      };
+      var secret = document.getElementById('qc-secret').value.trim();
+      if (secret) body.client_secret = secret;
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+      try { await patch('/admin/qbo-config', body); toast('QuickBooks credentials saved.', 'success'); renderQuickbooks(main); }
+      catch (e) { toast(e.message || 'Save failed', 'error'); saveBtn.disabled = false; saveBtn.textContent = 'Save credentials'; }
+    };
+    var clearBtn = document.getElementById('qc-clear');
+    if (clearBtn) clearBtn.onclick = async function () {
+      if (!confirm('Clear your Intuit credentials and disconnect QuickBooks?')) return;
+      try { await del('/admin/qbo-config'); toast('Credentials cleared.', 'success'); renderQuickbooks(main); }
+      catch (e) { toast(e.message || 'Failed', 'error'); }
+    };
 
     var connectBtn = document.getElementById('qbo-connect');
     if (connectBtn) connectBtn.onclick = async function () {
@@ -147,15 +185,22 @@
     };
   }
 
-  // PATCH helper if Api.request isn't available
-  async function patch(path, body) {
-    var base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+  // PATCH/DELETE helpers (Api.request shape varies across builds)
+  function authHeaders() {
     var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + sessionStorage.getItem('kt_token') };
     var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) headers['X-Active-Agency-Id'] = aid;
-    var res = await fetch(base + path, { method: 'PATCH', headers: headers, body: JSON.stringify(body) });
-    if (!res.ok) { var t = await res.text(); throw new Error((function () { try { return JSON.parse(t).message; } catch (e) { return 'HTTP ' + res.status; } })()); }
-    return res.json();
+    return headers;
   }
+  function apiBaseUrl() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
+  async function reqJson(method, path, body) {
+    var opt = { method: method, headers: authHeaders() };
+    if (body !== undefined) opt.body = JSON.stringify(body);
+    var res = await fetch(apiBaseUrl() + path, opt);
+    if (!res.ok) { var t = await res.text(); throw new Error((function () { try { return JSON.parse(t).message; } catch (e) { return 'HTTP ' + res.status; } })()); }
+    var txt = await res.text(); return txt ? JSON.parse(txt) : {};
+  }
+  async function patch(path, body) { return reqJson('PATCH', path, body); }
+  async function del(path) { return reqJson('DELETE', path); }
 
   function card(html) { return '<div class="kt-card">' + html + '</div>'; }
   function field(label, id, val, ph, type) {

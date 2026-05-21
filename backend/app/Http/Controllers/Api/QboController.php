@@ -6,39 +6,127 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 /**
  * v22p51 — QuickBooks Online integration.
+ * v22p73 — credentials are now configurable PER AGENCY by the agency admin.
  *
- * Inert until env vars are set:
- *   QBO_CLIENT_ID
- *   QBO_CLIENT_SECRET
- *   QBO_REDIRECT_URI       e.g. https://api.kiddietrac.com/api/v1/qbo/callback
- *   QBO_ENV                'sandbox' or 'production'
- *
- * Flow:
- *   1. GET /qbo/connect    → returns OAuth authorize URL.
- *   2. (User authorises on Intuit.)
- *   3. GET /qbo/callback   → exchanges code for tokens; saves to agency row.
- *   4. POST /qbo/sync/invoice/{id}  → pushes one KiddieTrac invoice into QBO.
- *   5. POST /qbo/disconnect.
+ * Each agency can supply their own Intuit app credentials
+ * (qbo_client_id / qbo_client_secret / qbo_environment on the agencies row).
+ * If an agency hasn't set their own, the platform env() values are used as a
+ * fallback. The OAuth redirect URI is shared (our /qbo/callback) — each agency
+ * registers that URI in their own Intuit app.
  */
 final class QboController extends Controller
 {
-    public function connect(Request $request): JsonResponse
+    /** Resolve the effective QBO config for an agency (per-agency, env fallback). */
+    private function cfg($agency): array
     {
-        abort_unless(env('QBO_CLIENT_ID'), 503, 'QBO not configured');
+        $clientId = $agency->qbo_client_id ?? null;
+        $clientSecret = null;
+        if (!empty($agency->qbo_client_secret)) {
+            try { $clientSecret = Crypt::decryptString($agency->qbo_client_secret); }
+            catch (\Throwable $e) { $clientSecret = $agency->qbo_client_secret; }
+        }
+        if (!$clientId)     $clientId = env('QBO_CLIENT_ID');
+        if (!$clientSecret) $clientSecret = env('QBO_CLIENT_SECRET');
+
+        $env = $agency->qbo_environment ?? null ?: env('QBO_ENV', 'production');
+        $redirect = env('QBO_REDIRECT_URI') ?: (rtrim((string) config('app.url'), '/') . '/api/v1/qbo/callback');
+
+        return [
+            'client_id'     => $clientId,
+            'client_secret' => $clientSecret,
+            'redirect_uri'  => $redirect,
+            'env'           => $env === 'sandbox' ? 'sandbox' : 'production',
+        ];
+    }
+
+    private function apiBase(string $env, string $realmId): string
+    {
+        return ($env === 'sandbox')
+            ? 'https://sandbox-quickbooks.api.intuit.com/v3/company/' . $realmId
+            : 'https://quickbooks.api.intuit.com/v3/company/' . $realmId;
+    }
+
+    /* ───────────── Per-agency config (admin) ───────────── */
+
+    /** GET /admin/qbo-config */
+    public function showConfig(Request $request): JsonResponse
+    {
         $agencyId = $this->resolveAgencyId($request);
         $this->assertAgencyAdmin($request, $agencyId);
+        $a = DB::table('agencies')->where('id', $agencyId)->first();
+        $cfg = $this->cfg($a);
+        return response()->json([
+            'agency_id'    => $agencyId,
+            'client_id'    => $a->qbo_client_id ?? '',
+            'environment'  => $a->qbo_environment ?: 'production',
+            'has_secret'   => !empty($a->qbo_client_secret),
+            'redirect_uri' => $cfg['redirect_uri'],
+            'using_platform_fallback' => empty($a->qbo_client_id) && (bool) env('QBO_CLIENT_ID'),
+            'configured'   => (bool) $cfg['client_id'],
+            'connected'    => !empty($a->qbo_realm_id),
+        ]);
+    }
+
+    /** PATCH /admin/qbo-config { client_id, client_secret?, environment } */
+    public function saveConfig(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        $data = $request->validate([
+            'client_id'     => ['nullable', 'string', 'max:255'],
+            'client_secret' => ['nullable', 'string', 'max:255'],
+            'environment'   => ['nullable', 'in:sandbox,production'],
+        ]);
+
+        $update = [
+            'qbo_client_id'   => $data['client_id'] ?: null,
+            'qbo_environment' => $data['environment'] ?? 'production',
+            'updated_at'      => now(),
+        ];
+        // Only overwrite the secret when a new one is supplied
+        if (!empty($data['client_secret'])) {
+            $update['qbo_client_secret'] = Crypt::encryptString($data['client_secret']);
+        }
+        DB::table('agencies')->where('id', $agencyId)->update($update);
+        return response()->json(['ok' => true]);
+    }
+
+    /** DELETE /admin/qbo-config — clear agency credentials (and disconnect) */
+    public function clearConfig(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        DB::table('agencies')->where('id', $agencyId)->update([
+            'qbo_client_id' => null, 'qbo_client_secret' => null,
+            'qbo_realm_id' => null, 'qbo_access_token' => null,
+            'qbo_refresh_token' => null, 'qbo_token_expires_at' => null,
+            'updated_at' => now(),
+        ]);
+        return response()->json(['ok' => true]);
+    }
+
+    /* ───────────── OAuth flow ───────────── */
+
+    public function connect(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+        $cfg = $this->cfg($agency);
+        abort_unless($cfg['client_id'], 503, 'QuickBooks not configured for this agency');
 
         $state = bin2hex(random_bytes(16)) . '|' . $agencyId;
         $params = http_build_query([
-            'client_id'     => env('QBO_CLIENT_ID'),
+            'client_id'     => $cfg['client_id'],
             'response_type' => 'code',
             'scope'         => 'com.intuit.quickbooks.accounting',
-            'redirect_uri'  => env('QBO_REDIRECT_URI'),
+            'redirect_uri'  => $cfg['redirect_uri'],
             'state'         => $state,
         ]);
         return response()->json([
@@ -48,7 +136,6 @@ final class QboController extends Controller
 
     public function callback(Request $request)
     {
-        abort_unless(env('QBO_CLIENT_ID'), 503);
         $code = $request->query('code');
         $realmId = $request->query('realmId');
         $state = $request->query('state');
@@ -56,11 +143,16 @@ final class QboController extends Controller
         $agencyId = (int) ($parts[1] ?? 0);
         abort_unless($code && $realmId && $agencyId, 400, 'missing params');
 
-        $res = Http::asForm()->withBasicAuth(env('QBO_CLIENT_ID'), env('QBO_CLIENT_SECRET'))
+        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+        abort_unless($agency, 404);
+        $cfg = $this->cfg($agency);
+        abort_unless($cfg['client_id'], 503, 'QBO not configured');
+
+        $res = Http::asForm()->withBasicAuth($cfg['client_id'], $cfg['client_secret'])
             ->post('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', [
                 'grant_type'   => 'authorization_code',
                 'code'         => $code,
-                'redirect_uri' => env('QBO_REDIRECT_URI'),
+                'redirect_uri' => $cfg['redirect_uri'],
             ]);
         if (!$res->ok()) {
             return response()->json(['error' => 'token exchange failed', 'detail' => $res->body()], 502);
@@ -92,36 +184,33 @@ final class QboController extends Controller
     public function status(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $row = DB::table('agencies')->where('id', $agencyId)
-            ->select('qbo_realm_id', 'qbo_token_expires_at')->first();
+        $row = DB::table('agencies')->where('id', $agencyId)->first();
+        $cfg = $this->cfg($row);
         return response()->json([
-            'connected' => !empty($row->qbo_realm_id),
+            'connected'  => !empty($row->qbo_realm_id),
             'expires_at' => $row->qbo_token_expires_at ?? null,
-            'configured' => (bool) env('QBO_CLIENT_ID'),
+            'configured' => (bool) $cfg['client_id'],
+            'environment' => $cfg['env'],
+            'self_configured' => !empty($row->qbo_client_id),
         ]);
     }
 
-    /**
-     * Push a single invoice into QBO. Creates customer + invoice as needed.
-     */
     public function syncInvoice(Request $request, int $invoiceId): JsonResponse
     {
-        abort_unless(env('QBO_CLIENT_ID'), 503);
         $inv = DB::table('invoices')->where('id', $invoiceId)->first();
         abort_unless($inv, 404);
         $this->assertAgencyAdmin($request, (int) $inv->agency_id);
 
         $agency = DB::table('agencies')->where('id', $inv->agency_id)->first();
+        $cfg = $this->cfg($agency);
+        abort_unless($cfg['client_id'], 503, 'QBO not configured');
         if (empty($agency->qbo_access_token) || empty($agency->qbo_realm_id)) {
             return response()->json(['error' => 'agency not connected to QBO'], 422);
         }
-        $token = $this->ensureFreshToken($agency);
+        $token = $this->ensureFreshToken($agency, $cfg);
         $family = DB::table('families')->where('id', $inv->family_id)->first();
-        $base = (env('QBO_ENV') === 'sandbox')
-            ? 'https://sandbox-quickbooks.api.intuit.com/v3/company/' . $agency->qbo_realm_id
-            : 'https://quickbooks.api.intuit.com/v3/company/' . $agency->qbo_realm_id;
+        $base = $this->apiBase($cfg['env'], $agency->qbo_realm_id);
 
-        // upsert customer
         $custBody = ['DisplayName' => $family->family_name];
         $custRes = Http::withToken($token)->withHeaders(['Accept' => 'application/json'])
             ->post($base . '/customer', $custBody);
@@ -130,7 +219,6 @@ final class QboController extends Controller
         }
         $customerId = $custRes->json('Customer.Id');
 
-        // build invoice
         $lines = DB::table('invoice_lines')->where('invoice_id', $invoiceId)->get();
         $qboLines = $lines->map(function ($l) {
             return [
@@ -155,19 +243,23 @@ final class QboController extends Controller
         ]);
     }
 
-
-    /**
-     * v22p53 — bulk push a list of invoices to QBO. Returns per-id status.
-     */
     public function bulkSyncInvoices(Request $request): JsonResponse
     {
-        abort_unless(env('QBO_CLIENT_ID'), 503);
         $data = $request->validate([
-            'invoice_ids' => 'required|array|min:1|max:100',
+            'invoice_ids'   => 'nullable|array|max:500',
             'invoice_ids.*' => 'integer',
         ]);
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+
+        // If no explicit list, sync this agency's recent unsynced invoices
+        $ids = $data['invoice_ids'] ?? null;
+        if (!$ids) {
+            $ids = DB::table('invoices')->where('agency_id', $agencyId)
+                ->orderByDesc('id')->limit(100)->pluck('id')->all();
+        }
         $results = [];
-        foreach ($data['invoice_ids'] as $iid) {
+        foreach ($ids as $iid) {
             try {
                 $res = $this->syncInvoice($request, (int) $iid);
                 $payload = json_decode($res->getContent(), true);
@@ -177,15 +269,15 @@ final class QboController extends Controller
             }
         }
         $ok = count(array_filter($results, fn ($r) => $r['status'] === 'ok'));
-        return response()->json(['results' => $results, 'ok' => $ok, 'failed' => count($results) - $ok]);
+        return response()->json(['results' => $results, 'synced' => $ok, 'failed' => count($results) - $ok]);
     }
 
-    private function ensureFreshToken($agency): string
+    private function ensureFreshToken($agency, array $cfg): string
     {
         if (!empty($agency->qbo_token_expires_at) && now()->lt($agency->qbo_token_expires_at)) {
             return $agency->qbo_access_token;
         }
-        $res = Http::asForm()->withBasicAuth(env('QBO_CLIENT_ID'), env('QBO_CLIENT_SECRET'))
+        $res = Http::asForm()->withBasicAuth($cfg['client_id'], $cfg['client_secret'])
             ->post('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', [
                 'grant_type' => 'refresh_token',
                 'refresh_token' => $agency->qbo_refresh_token,

@@ -647,6 +647,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // ---- QBO ----
     Route::middleware('role:agency_admin,platform_admin')->group(function () {
         Route::get ('/qbo/connect',                [\App\Http\Controllers\Api\QboController::class, 'connect']);
+        Route::get   ('/admin/qbo-config', [\App\Http\Controllers\Api\QboController::class, 'showConfig']);
+        Route::patch ('/admin/qbo-config', [\App\Http\Controllers\Api\QboController::class, 'saveConfig']);
+        Route::delete('/admin/qbo-config', [\App\Http\Controllers\Api\QboController::class, 'clearConfig']);
         Route::get ('/qbo/status',                 [\App\Http\Controllers\Api\QboController::class, 'status']);
         Route::post('/qbo/disconnect',             [\App\Http\Controllers\Api\QboController::class, 'disconnect']);
         Route::post('/qbo/sync/invoice/{id}',      [\App\Http\Controllers\Api\QboController::class, 'syncInvoice']);
