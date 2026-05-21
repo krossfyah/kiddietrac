@@ -368,6 +368,12 @@ final class CareController extends Controller
 
     private function canSeeChild(int $userId, int $childId): bool
     {
+        // v22p77: admin access — platform_admin sees all children.
+        $isPlatform = DB::table('role_assignments')
+            ->where('user_id', $userId)->where('role', 'platform_admin')
+            ->where('active', true)->exists();
+        if ($isPlatform) return true;
+
         // Direct: a guardian on the child's family
         $isGuardian = DB::table('guardians as g')
             ->join('children as c', 'c.family_id', '=', 'g.family_id')
@@ -375,14 +381,29 @@ final class CareController extends Controller
             ->where('c.id', $childId)
             ->exists();
         if ($isGuardian) return true;
+
         // Staff: anyone with an active role at the child's centre
-        return DB::table('children as c')
+        $isCentreStaff = DB::table('children as c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->join('role_assignments as ra', function ($j) {
                 $j->on('ra.centre_id', '=', 'f.centre_id')->where('ra.active', '=', true);
             })
             ->where('c.id', $childId)
             ->where('ra.user_id', $userId)
+            ->exists();
+        if ($isCentreStaff) return true;
+
+        // v22p77: agency_admin whose agency owns the child's centre (admins have
+        // an agency-level role_assignment, not a centre-level one).
+        return DB::table('children as c')
+            ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->join('role_assignments as ra', function ($j) {
+                $j->on('ra.agency_id', '=', 'ce.agency_id')->where('ra.active', '=', true);
+            })
+            ->where('c.id', $childId)
+            ->where('ra.user_id', $userId)
+            ->whereIn('ra.role', ['agency_admin'])
             ->exists();
     }
 

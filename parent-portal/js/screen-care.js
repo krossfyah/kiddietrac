@@ -38,6 +38,13 @@
       return dt.toLocaleDateString('en-CA', { dateStyle: 'medium' });
     } catch (e) { return String(d); }
   }
+  // v22p77: safe Date parse for MySQL space-format datetimes (Safari/Firefox).
+  function parseDt(d) {
+    if (!d) return null;
+    var iso = (typeof d === 'string') ? d.replace(' ', 'T') : d;
+    var dt = new Date(iso);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
   function paramId() {
     var m = (window.location.hash || '').match(/[?&]id=(\d+)/);
     return m ? parseInt(m[1], 10) : 0;
@@ -188,8 +195,12 @@
       if (!childSel.value) return;
       Api.get('/care/logs/child/' + childSel.value).then(function (data) {
         Dom.clear(recent);
+        var todayStart = new Date(new Date().setHours(0, 0, 0, 0));
         var todayLogs = (data.logs || []).filter(function (l) {
-          return new Date(l.occurred_at) >= new Date(new Date().setHours(0,0,0,0));
+          // v22p77: normalise MySQL space-format datetime (Safari/Firefox parse
+          // "2026-05-20 15:30:00" as Invalid Date otherwise).
+          var dt = parseDt(l.occurred_at);
+          return !dt || dt >= todayStart;
         });
         if (!todayLogs.length) {
           recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#9CA3AF;font-size:13px;text-align:center;' }, 'Nothing logged today yet.'));
@@ -209,6 +220,9 @@
           row.appendChild(body);
           recent.appendChild(row);
         });
+      }).catch(function (e) {
+        Dom.clear(recent);
+        recent.appendChild(Dom.el('div', { style: 'padding:18px;color:#B91C1C;font-size:13px;text-align:center;' }, 'Could not load today’s log: ' + (e.message || 'error')));
       });
     }
 
