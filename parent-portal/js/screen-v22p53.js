@@ -39,12 +39,12 @@
     let centreList = [];
     try {
       const r1 = await Api.get('/director/centres');
-      centreList = r1.data || r1 || [];
+      centreList = r1.centres || r1.data || (Array.isArray(r1) ? r1 : []);
     } catch (e) { /* fall through */ }
     if (!centreList.length) {
       try {
         const r2 = await Api.get('/admin/centres');
-        centreList = r2.data || r2 || [];
+        centreList = r2.centres || r2.data || (Array.isArray(r2) ? r2 : []);
       } catch (e) {}
     }
     if (!centreList.length) { main.innerHTML = '<div style="padding:24px;color:#9CA3AF;">No centres found for your role.</div>'; return; }

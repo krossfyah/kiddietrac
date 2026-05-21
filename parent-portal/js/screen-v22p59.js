@@ -103,7 +103,7 @@
     });
   }
   async function openCreateSlotsModal() {
-    const centres = (await Api.get('/admin/centres').catch(() => ({ data: [] }))).data || [];
+    const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
     m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:460px;width:92%;">
@@ -286,7 +286,7 @@
   async function renderZones(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const centres = (await Api.get('/admin/centres').catch(() => ({ data: [] }))).data || [];
+    const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No centres.</div>'; return; }
     const cid = centres[0].id;
     const today = new Date().toISOString().slice(0, 10);

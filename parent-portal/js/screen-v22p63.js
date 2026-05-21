@@ -86,7 +86,7 @@
   async function renderWellnessDigest(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const centres = (await Api.get('/admin/centres').catch(() => ({ data: [] }))).data || [];
+    const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;padding:40px;text-align:center;color:#94A3B8;">No centres.</div>'; return; }
     const r = await Api.get(`/wellness/digest?centre_id=${centres[0].id}`);
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">

@@ -448,7 +448,7 @@
   async function renderCacfp(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading CACFP…</div>';
-    const centres = (await Api.get('/admin/centres').catch(() => ({ data: [] }))).data || [];
+    const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No centres.</div>'; return; }
     const centreId = centres[0].id;
     const date = new Date().toISOString().slice(0, 10);

@@ -48,7 +48,7 @@
     });
   }
   async function openClosureModal() {
-    const centres = (await Api.get('/admin/centres').catch(() => ({ data: [] }))).data || [];
+    const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
     m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:480px;width:92%;">
@@ -114,7 +114,7 @@
     document.getElementById('lp-new').onclick = () => openLatePickupModal();
   }
   async function openLatePickupModal() {
-    const centres = (await Api.get('/admin/centres').catch(() => ({ data: [] }))).data || [];
+    const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     const children = (await Api.get('/admin/children').catch(() => ({ data: [] }))).data || [];
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
