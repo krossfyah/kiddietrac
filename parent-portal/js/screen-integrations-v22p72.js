@@ -162,7 +162,32 @@
       + '<button id="es-test" class="kt-btn" style="background:#F1F5F9;color:#1F2937;">Send test email to me</button>'
       + '</div>'
       + '<div id="es-out" style="margin-top:14px;"></div>'
-      + '</div></div>';
+      + '</div>'
+      + '<div class="kt-card" style="max-width:680px;margin-top:18px;" id="cur-card">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">💱 Billing currency</h3></div>'
+      + '<p style="color:#64748B;font-size:13px;margin:0 0 12px;">Currency used for invoices and money amounts across the portal.</p>'
+      + '<select id="cur-sel" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;"><option>Loading…</option></select>'
+      + '<div style="margin-top:14px;"><button id="cur-save" class="kt-btn kt-btn-primary">Save currency</button></div>'
+      + '<div id="cur-out" style="margin-top:12px;"></div>'
+      + '</div>'
+      + '</div>';
+
+    // Currency card population
+    (async function () {
+      try {
+        var c = await api().get('/admin/currency');
+        var sel = document.getElementById('cur-sel');
+        sel.innerHTML = (c.supported || []).map(function (o) {
+          return '<option value="' + o.code + '"' + (o.code === c.currency ? ' selected' : '') + '>' + esc(o.code) + ' — ' + esc(o.label) + ' (' + esc(o.symbol) + ')</option>';
+        }).join('');
+        document.getElementById('cur-save').onclick = async function () {
+          try { await patch('/admin/currency', { currency: sel.value }); toast('Currency saved.', 'success'); if (window.KT) window.KT._currency = null; }
+          catch (e) { toast(e.message || 'Save failed', 'error'); }
+        };
+      } catch (e) {
+        document.getElementById('cur-card').style.display = 'none';
+      }
+    })();
 
     document.getElementById('es-save').onclick = async function () {
       var body = {

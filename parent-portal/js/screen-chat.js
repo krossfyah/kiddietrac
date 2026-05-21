@@ -448,6 +448,13 @@
     input.focus();
   }
 
+  // v22p74: read receipt — ✓ delivered, ✓✓ (blue) read
+  function readReceipt(m) {
+    if (m.pending) return ' <span style="opacity:.6;">⌁</span>';
+    if (m.read_at) return ' <span title="Seen ' + escapeHtml(formatTime(m.read_at)) + '" style="color:#7DD3FC;font-weight:700;">✓✓</span>';
+    return ' <span title="Delivered" style="opacity:.85;">✓</span>';
+  }
+
   function bubble(m) {
     const mine = m.is_me;
     const attachments = Array.isArray(m.attachments) ? m.attachments : [];
@@ -465,7 +472,7 @@
           ${!mine ? `<div style="font-size:11px;font-weight:700;color:#6B7280;margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
           ${attachmentsHtml}
           ${m.body ? `<div style="font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(m.body)}</div>` : ''}
-          <div style="font-size:10px;opacity:0.7;margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}</div>
+          <div style="font-size:10px;opacity:0.7;margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}</div>
         </div>
       </div>
     `;
