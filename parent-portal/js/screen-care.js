@@ -18,7 +18,26 @@
   var Shell = KT.Shell;
 
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function fmt(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return d; } }
+  function fmt(d) {
+    if (!d) return '—';
+    try {
+      // v22p75.1: MySQL datetimes use a space ("2026-06-15 10:00:00") which
+      // Safari/Firefox parse as Invalid Date. Normalise to ISO before parsing.
+      var iso = (typeof d === 'string') ? d.replace(' ', 'T') : d;
+      var dt = new Date(iso);
+      if (isNaN(dt.getTime())) return String(d);
+      return dt.toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch (e) { return String(d); }
+  }
+  function fmtDateOnly(d) {
+    if (!d) return '';
+    try {
+      var iso = (typeof d === 'string') ? d.replace(' ', 'T') : d;
+      var dt = new Date(iso);
+      if (isNaN(dt.getTime())) return String(d);
+      return dt.toLocaleDateString('en-CA', { dateStyle: 'medium' });
+    } catch (e) { return String(d); }
+  }
   function paramId() {
     var m = (window.location.hash || '').match(/[?&]id=(\d+)/);
     return m ? parseInt(m[1], 10) : 0;
@@ -438,10 +457,10 @@
 
     csvBtn.addEventListener('click', function () {
       if (!allTours.length) return;
-      var head = ['Parent', 'Email', 'Phone', 'Centre', 'Tour at', 'Child age (mo)', 'Status', 'Notes'];
+      var head = ['Parent', 'Email', 'Phone', 'Centre', 'Tour at', 'Preferred start', 'Child age (mo)', 'Status', 'Notes'];
       var lines = [head.join(',')];
       allTours.forEach(function (t) {
-        var cells = [t.parent_name, t.parent_email, t.parent_phone || '', t.centre_name || '', t.tour_at || '', t.child_age_months || '', t.status, (t.notes || '').replace(/\n/g, ' ')];
+        var cells = [t.parent_name, t.parent_email, t.parent_phone || '', t.centre_name || '', t.tour_at || '', t.preferred_start_date || '', t.child_age_months || '', t.status, (t.notes || '').replace(/\n/g, ' ')];
         lines.push(cells.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(','));
       });
       var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -457,9 +476,10 @@
     var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #F3F4F6;' });
     row.appendChild(Dom.el('div', { style: 'width:8px;height:48px;border-radius:4px;background:' + (statusColors[t.status] || '#E5E7EB') + ';flex-shrink:0;' }));
     var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
-    body.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#111827;' }, t.parent_name + ' · ' + (t.centre_name || '—')));
-    body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;' }, 'Tour ' + fmt(t.tour_at) + ' · ' + t.parent_email + (t.parent_phone ? ' · ' + t.parent_phone : '') + (t.child_age_months ? ' · child ' + t.child_age_months + ' mo' : '')));
-    if (t.notes) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#374151;margin-top:4px;' }, t.notes));
+    body.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#111827;' }, (t.parent_name || 'Unnamed') + ' · ' + (t.centre_name || '—')));
+    body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;' }, 'Tour ' + fmt(t.tour_at) + ' · ' + (t.parent_email || 'no email') + (t.parent_phone ? ' · ' + t.parent_phone : '') + (t.child_age_months ? ' · child ' + t.child_age_months + ' mo' : '')));
+    if (t.preferred_start_date) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#1F6080;margin-top:2px;font-weight:600;' }, '📅 Wants to start: ' + fmtDateOnly(t.preferred_start_date)));
+    if (t.notes) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#374151;margin-top:4px;' }, '“' + t.notes + '”'));
     row.appendChild(body);
     var sel = Dom.el('select', { style: 'padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;font-size:12px;background:white;' });
     ['requested','confirmed','completed','no_show','cancelled'].forEach(function (s) {
