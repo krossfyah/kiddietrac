@@ -230,7 +230,7 @@
   // ─── Portfolio — chronological observations + milestone progress ──
   function renderPortfolio(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1400px;margin:0 auto;' });
+    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
     var childId = paramId();
     if (!childId) { wrap.appendChild(Dom.el('div', { style: 'color:#DC2626;padding:24px;' }, 'Missing child id — open from a child detail page.')); return; }
@@ -293,7 +293,7 @@
   // ─── Milestones checklist ─────────────────────────────────────────
   function renderMilestones(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1400px;margin:0 auto;' });
+    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
     var childId = paramId();
     if (!childId) { wrap.appendChild(Dom.el('div', { style: 'color:#DC2626;padding:24px;' }, 'Missing child id.')); return; }
@@ -348,27 +348,107 @@
   // ─── Tour bookings (admin view) ───────────────────────────────────
   function renderTours(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1400px;margin:0 auto;' });
+    container.setAttribute('data-kt-pretty', '1');
+    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#FF8A65 0%,#7C3AED 60%,#1F6080 100%);' });
     hero.innerHTML = '<div class="kt-hero-greet">🚪 TOURS</div><h1>Tour bookings</h1><div class="kt-hero-sub">Prospective families that requested a centre tour through your public booking page. Confirm, complete, or cancel each one.</div>';
     wrap.appendChild(hero);
 
-    var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;margin-top:18px;' });
+    // v22p75: public booking link card
+    var agencyId = sessionStorage.getItem('kt_active_agency_id') || '';
+    var publicUrl = (window.location.origin || 'https://app.kiddietrac.com') + '/book-tour.html' + (agencyId ? ('?agency=' + agencyId) : '');
+    var linkCard = Dom.el('div', { class: 'kt-card', style: 'margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;' });
+    linkCard.appendChild(Dom.el('span', { style: 'font-size:13px;font-weight:700;color:#1F6080;' }, '🔗 Public booking link'));
+    var linkInput = Dom.el('input', { readonly: 'readonly', value: publicUrl, style: 'flex:1;min-width:240px;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-family:monospace;font-size:12px;background:#F8FAFC;' });
+    linkInput.addEventListener('click', function () { linkInput.select(); });
+    linkCard.appendChild(linkInput);
+    var copyBtn = Dom.el('button', { class: 'kt-btn kt-btn-primary', style: 'font-size:13px;' }, 'Copy');
+    copyBtn.addEventListener('click', function () {
+      try { navigator.clipboard.writeText(publicUrl); copyBtn.textContent = '✓ Copied'; setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1400); } catch (e) {}
+    });
+    linkCard.appendChild(copyBtn);
+    var csvBtn = Dom.el('button', { class: 'kt-btn', style: 'font-size:13px;background:#F1F5F9;color:#1F2937;' }, '⤓ Export CSV');
+    linkCard.appendChild(csvBtn);
+    wrap.appendChild(linkCard);
+
+    // Summary KPI row
+    var kpiRow = Dom.el('div', { class: 'kt-kpi-grid', style: 'margin-top:18px;' });
+    wrap.appendChild(kpiRow);
+
+    // Status filter
+    var filterBar = Dom.el('div', { style: 'margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;' });
+    wrap.appendChild(filterBar);
+
+    var listWrap = Dom.el('div', { class: 'kt-card', style: 'overflow:hidden;margin-top:14px;padding:0;' });
     wrap.appendChild(listWrap);
     listWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
 
-    Api.get('/admin/tours').then(function (data) {
+    var allTours = [];
+    var activeFilter = '';
+
+    function kpi(label, value, color) {
+      var k = Dom.el('div', { class: 'kt-kpi' });
+      k.appendChild(Dom.el('div', { class: 'kt-kpi-label', style: 'color:#6B7280;font-size:12px;font-weight:600;' }, label));
+      k.appendChild(Dom.el('div', { class: 'kt-kpi-value', style: 'font-size:26px;font-weight:800;color:' + (color || '#111827') + ';' }, String(value)));
+      return k;
+    }
+
+    function drawFilterBar() {
+      Dom.clear(filterBar);
+      [['', 'All'], ['requested', 'Requested'], ['confirmed', 'Confirmed'], ['completed', 'Completed'], ['no_show', 'No-show'], ['cancelled', 'Cancelled']].forEach(function (f) {
+        var fval = f[0];
+        var chip = Dom.el('button', {
+          class: 'kt-btn',
+          style: 'font-size:12px;padding:6px 14px;border-radius:16px;' + (activeFilter === fval ? 'background:#1F6080;color:white;' : 'background:#F1F5F9;color:#4B5563;')
+        }, f[1]);
+        chip.addEventListener('click', function () { activeFilter = fval; drawFilterBar(); drawList(); });
+        filterBar.appendChild(chip);
+      });
+    }
+
+    function drawList() {
       Dom.clear(listWrap);
-      if (!data.tours || !data.tours.length) {
-        listWrap.appendChild(Dom.el('div', { style: 'padding:48px;text-align:center;color:#6B7280;' }, 'No tour requests yet. Share your public link to start collecting bookings.'));
+      var rows = activeFilter ? allTours.filter(function (t) { return t.status === activeFilter; }) : allTours;
+      if (!rows.length) {
+        listWrap.appendChild(Dom.el('div', { style: 'padding:48px;text-align:center;color:#6B7280;' }, activeFilter ? ('No ' + activeFilter.replace('_', ' ') + ' tours.') : 'No tour requests yet. Share your public link above to start collecting bookings.'));
         return;
       }
-      data.tours.forEach(function (t) { listWrap.appendChild(renderTourRow(t, container)); });
+      rows.forEach(function (t) { listWrap.appendChild(renderTourRow(t, container)); });
+    }
+
+    Api.get('/admin/tours').then(function (data) {
+      allTours = (data && data.tours) || [];
+      // KPIs
+      Dom.clear(kpiRow);
+      var counts = { requested: 0, confirmed: 0, completed: 0, no_show: 0, cancelled: 0 };
+      allTours.forEach(function (t) { if (counts[t.status] != null) counts[t.status]++; });
+      kpiRow.appendChild(kpi('Total', allTours.length, '#1F6080'));
+      kpiRow.appendChild(kpi('Requested', counts.requested, '#F59E0B'));
+      kpiRow.appendChild(kpi('Confirmed', counts.confirmed, '#1F6080'));
+      kpiRow.appendChild(kpi('Completed', counts.completed, '#16A34A'));
+      kpiRow.appendChild(kpi('No-show', counts.no_show, '#DC2626'));
+      drawFilterBar();
+      drawList();
     }).catch(function (e) {
       Dom.clear(listWrap);
       listWrap.appendChild(Dom.el('div', { style: 'color:#DC2626;padding:24px;' }, 'Failed: ' + (e.message || 'error')));
+    });
+
+    csvBtn.addEventListener('click', function () {
+      if (!allTours.length) return;
+      var head = ['Parent', 'Email', 'Phone', 'Centre', 'Tour at', 'Child age (mo)', 'Status', 'Notes'];
+      var lines = [head.join(',')];
+      allTours.forEach(function (t) {
+        var cells = [t.parent_name, t.parent_email, t.parent_phone || '', t.centre_name || '', t.tour_at || '', t.child_age_months || '', t.status, (t.notes || '').replace(/\n/g, ' ')];
+        lines.push(cells.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(','));
+      });
+      var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'tour-bookings.csv';
+      a.click();
     });
   }
 
