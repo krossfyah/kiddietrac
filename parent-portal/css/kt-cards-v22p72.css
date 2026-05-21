@@ -1,0 +1,125 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KIDDIETRAC v22p72 — unified, modern "pop" card system
+   Loaded LAST. Brings every card variant (.card, .kt-card, .stat-tile,
+   .kt-kpi, child-card, widget) onto ONE consistent modern look:
+   • crisp white surface, soft layered shadow, 16px radius
+   • subtle top accent bar + lift-on-hover
+   • consistent padding + border
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --kt-card-radius: 16px;
+  --kt-card-border: 1px solid #EAEFF3;
+  --kt-card-shadow: 0 1px 2px rgba(16,40,64,.04), 0 6px 16px -8px rgba(16,40,64,.12);
+  --kt-card-shadow-hover: 0 4px 10px rgba(16,40,64,.08), 0 16px 32px -12px rgba(16,40,64,.22);
+  --kt-card-accent: linear-gradient(90deg, #1F6080 0%, #2D7BA8 45%, #4A90B8 70%, #F97316 100%);
+}
+
+/* Unified base for every card flavour in the content area */
+.app-main .card,
+.app-main .kt-card,
+.app-main .stat-tile,
+.app-main .child-card,
+.app-main .widget,
+.app-main .kt-kpi,
+.app-main .dash-card {
+  position: relative;
+  background: #FFFFFF;
+  border: var(--kt-card-border);
+  border-radius: var(--kt-card-radius);
+  box-shadow: var(--kt-card-shadow);
+  transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+  overflow: hidden;
+}
+
+/* Comfortable default padding (only if the card doesn't already set its own) */
+.app-main .card,
+.app-main .kt-card {
+  padding: 22px;
+}
+
+/* Lift + deepen shadow on hover for an interactive, modern feel */
+.app-main .card:hover,
+.app-main .kt-card:hover,
+.app-main .stat-tile:hover,
+.app-main .child-card:hover,
+.app-main .kt-kpi:hover,
+.app-main .widget:hover {
+  box-shadow: var(--kt-card-shadow-hover);
+  transform: translateY(-3px);
+  border-color: #D9E6EF;
+}
+
+/* Top accent bar — the "pop" signature, shared by all cards */
+.app-main .card::before,
+.app-main .kt-card::before,
+.app-main .stat-tile::before,
+.app-main .kt-kpi::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--kt-card-accent);
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.app-main .card:hover::before,
+.app-main .kt-card:hover::before,
+.app-main .stat-tile:hover::before,
+.app-main .kt-kpi:hover::before {
+  opacity: 1;
+}
+
+/* KPI / stat tiles: make the number pop */
+.app-main .kt-kpi .kt-kpi-value,
+.app-main .stat-tile .stat-value,
+.app-main .stat-tile .value {
+  font-family: var(--kt-font-display, 'DM Sans', sans-serif);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+/* Card titles consistent */
+.app-main .card h2, .app-main .card h3,
+.app-main .kt-card h2, .app-main .kt-card h3,
+.app-main .kt-card-title {
+  font-family: var(--kt-font-display, 'DM Sans', sans-serif);
+  letter-spacing: -0.3px;
+}
+
+/* Card headers get a subtle divider for structure */
+.app-main .kt-card-header,
+.app-main .card-header {
+  border-bottom: 1px solid #F1F5F9;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+/* KPI grids: even, breathing layout */
+.app-main .kt-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+/* Dark cards (hero/quickstart) keep their own look — don't override */
+.app-main .kt-page-hero,
+.app-main .kt-help-quickstart,
+.app-main .kt-help-hero {
+  box-shadow: 0 10px 30px -12px rgba(31,96,128,.45);
+}
+
+/* Respect reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .app-main .card, .app-main .kt-card, .app-main .stat-tile,
+  .app-main .child-card, .app-main .kt-kpi, .app-main .widget {
+    transition: none;
+  }
+  .app-main .card:hover, .app-main .kt-card:hover { transform: none; }
+}
+
+/* Mobile: slightly tighter padding + lighter shadow */
+@media (max-width: 768px) {
+  .app-main .card, .app-main .kt-card { padding: 16px; border-radius: 14px; }
+  .app-main .card:hover, .app-main .kt-card:hover { transform: none; }
+}

@@ -616,6 +616,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // ---- Agency billing config (late-fee + SMS + locale) ----
     Route::middleware('role:agency_admin,platform_admin')->group(function () {
         Route::get  ('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'show']);
+        Route::get('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'show']);
+        Route::patch('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'update']);
+        Route::post('/admin/email-settings/test', [\App\Http\Controllers\Api\EmailSettingsController::class, 'sendTest']);
         Route::patch('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'update']);
     });
 

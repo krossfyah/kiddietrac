@@ -169,6 +169,8 @@
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'sibling-discounts',  label: 'Sibling discounts',   icon: '👨‍👩‍👧' },
           { hash: 'agency-billing',     label: 'Billing settings',    icon: '⚙️' },
+          { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
+          { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
           { hash: 'language',           label: 'Language',            icon: '🌐' },
 
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },

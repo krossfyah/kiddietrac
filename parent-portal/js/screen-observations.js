@@ -158,8 +158,9 @@
           '<div style="font-size:11px; color:var(--kt-text-faint); margin-top:6px;">Tip: write what you saw, not how you felt about it. The AI will surface skills.</div>' +
         '</div>' +
 
-        '<div style="margin-top:18px; display:flex; gap:10px;">' +
+        '<div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">' +
           '<button class="btn btn-primary" id="kt-structure">Structure with AI</button>' +
+          '<button class="btn btn-secondary" id="kt-manual">Write manually (no AI)</button>' +
           '<button class="btn btn-ghost" id="kt-cancel">Cancel</button>' +
         '</div>' +
 
@@ -171,6 +172,20 @@
 
     wrap.querySelector('#kt-cancel').addEventListener('click', function () {
       window.location.hash = '#observations';
+    });
+
+    /* v22p72: manual fallback — save a moment without the AI structure step
+       (works even when Anthropic credits are exhausted) */
+    wrap.querySelector('#kt-manual').addEventListener('click', function () {
+      const childId = wrap.querySelector('#kt-child').value;
+      const rawText = wrap.querySelector('#kt-raw').value.trim();
+      const status = wrap.querySelector('#kt-status');
+      if (!childId) { status.innerHTML = '<span style="color:#DC2626;">Please select a child.</span>'; return; }
+      if (rawText.length < 10) { status.innerHTML = '<span style="color:#DC2626;">Need at least 10 characters.</span>'; return; }
+      renderStep2(wrap, {
+        structured: { domain: 'cognitive', hdlh_milestones: [], parent_summary: rawText },
+        meta: { model: 'manual (no AI)' }
+      }, childId, rawText);
     });
 
     wrap.querySelector('#kt-structure').addEventListener('click', async function () {
@@ -296,7 +311,7 @@
             parent_summary: summary,
           },
           shared_with_family: share,
-          ai_generated: true,
+          ai_generated: (meta.model || '').indexOf('manual') === -1,
           ai_model_used: meta.model,
           ai_tokens_used: meta.tokens_used,
         });

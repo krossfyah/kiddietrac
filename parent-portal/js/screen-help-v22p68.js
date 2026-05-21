@@ -99,6 +99,12 @@
       state.featured = extra.featured || [];
       state.popular = extra.popular || [];
 
+      /* v22p72: default-expand the first category so topics are visible on load */
+      if (!state.expandedCategory) {
+        const cats = Object.keys(state.categorized).sort();
+        if (cats.length) state.expandedCategory = cats[0];
+      }
+
       renderSidebar();
       renderMobileSelect();
 
