@@ -1,9 +1,15 @@
 /* v22p59 — 9 features, all hash-based screens. */
 (function (window) {
   'use strict';
-  const KT = window.KT || {};
-  const Api = KT.Api;
-  if (!Api) { console.warn('v22p59: KT.Api unavailable'); return; }
+  const KT = (window.KT = window.KT || {});
+  const Api = new Proxy({}, {
+    get(_, prop) {
+      const a = window.KT && window.KT.Api;
+      if (!a) throw new Error('KT.Api not loaded yet — call after app.js initialises');
+      const v = a[prop];
+      return typeof v === 'function' ? v.bind(a) : v;
+    }
+  });
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
@@ -271,7 +277,7 @@
           await Api.post(`/report-cards/${r.id}/send`, {});
           (window.KT && window.KT.toast) ? KT.toast('Sent. Family was notified.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Sent. Family was notified.') ? 'success' : 'info') : alert('Sent. Family was notified.');
         };
-      } catch (e) { (window.KT && window.KT.toast) ? KT.toast('AI failed: ' + (e.message || e, /save|sent|added|created|approved|deleted|removed|done|charged/i.test('AI failed: ' + (e.message || e) ? 'success' : 'info') : alert('AI failed: ' + (e.message || e)); }
+      } catch (e) { const _m = 'AI failed: ' + (e.message || e); (window.KT && window.KT.toast) ? KT.toast(_m, 'error') : alert(_m); }
       finally { btn.disabled = false; btn.textContent = 'Generate via AI'; }
     };
   }

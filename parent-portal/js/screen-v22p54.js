@@ -4,9 +4,15 @@
 */
 (function (window) {
   'use strict';
-  const KT = window.KT || {};
-  const Api = KT.Api;
-  if (!Api) { console.warn('v22p54: KT.Api unavailable'); return; }
+  const KT = (window.KT = window.KT || {});
+  const Api = new Proxy({}, {
+    get(_, prop) {
+      const a = window.KT && window.KT.Api;
+      if (!a) throw new Error('KT.Api not loaded yet — call after app.js initialises');
+      const v = a[prop];
+      return typeof v === 'function' ? v.bind(a) : v;
+    }
+  });
 
   const apiBase = () => (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

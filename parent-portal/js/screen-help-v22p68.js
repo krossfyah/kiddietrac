@@ -43,12 +43,11 @@
     hero.appendChild(askBtn);
     wrap.appendChild(hero);
 
-    // Search bar (sticky)
-    const searchWrap = Dom.el('div', { class: 'kt-help-search-wrap' });
+    /* v22p70: search lives inside sidebar — declare input here, attach inside renderSidebar */
     const searchInput = Dom.el('input', {
       class: 'kt-help-search',
       type: 'search',
-      placeholder: '🔍  Search help articles…',
+      placeholder: '\u{1F50D}  Search topics\u{2026}',
     });
     searchInput.addEventListener('input', (e) => {
       state.searchTerm = e.target.value.trim().toLowerCase();
@@ -61,8 +60,6 @@
         renderHomePanels();
       }
     });
-    searchWrap.appendChild(searchInput);
-    wrap.appendChild(searchWrap);
 
     // Mobile category select (hidden on desktop)
     const mobileSelect = Dom.el('select', { class: 'kt-help-mobile-select' });
@@ -114,6 +111,10 @@
 
     function renderSidebar() {
       Dom.clear(sidebar);
+      /* v22p70: search lives at top of sidebar */
+      const searchBox = Dom.el('div', { class: 'kt-help-search-box' });
+      searchBox.appendChild(searchInput);
+      sidebar.appendChild(searchBox);
       const allCats = Object.keys(state.categorized).sort();
 
       // Category pills (quick jump)
@@ -558,9 +559,10 @@
       .kt-help-ask-btn { background: rgba(255,255,255,0.18); backdrop-filter: blur(8px); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 12px 22px; border-radius: 28px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 15px; transition: background 0.15s; }
       .kt-help-ask-btn:hover { background: rgba(255,255,255,0.28); }
 
-      .kt-help-search-wrap { margin-bottom: 20px; position: sticky; top: 70px; z-index: 50; }
-      .kt-help-search { width: 100%; padding: 14px 20px; border: 2px solid #E5E7EB; border-radius: 14px; font-size: 16px; font-family: inherit; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: border-color 0.15s, box-shadow 0.15s; box-sizing: border-box; }
-      .kt-help-search:focus { outline: none; border-color: #1F6080; box-shadow: 0 4px 16px rgba(31, 96, 128, 0.15); }
+      /* v22p70: search now lives inside sidebar */
+      .kt-help-search-box { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #E5E7EB; }
+      .kt-help-search { width: 100%; padding: 10px 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; font-size: 14px; font-family: inherit; background: white; transition: border-color 0.15s, box-shadow 0.15s; box-sizing: border-box; }
+      .kt-help-search:focus { outline: none; border-color: #1F6080; box-shadow: 0 0 0 3px rgba(31, 96, 128, 0.12); }
 
       .kt-help-mobile-select { display: none; width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 14px; margin-bottom: 16px; }
 

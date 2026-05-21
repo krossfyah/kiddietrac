@@ -7,9 +7,15 @@
 */
 (function (window) {
   'use strict';
-  const KT = window.KT || {};
-  const Api = KT.Api;
-  if (!Api) { console.warn('v22p53: KT.Api unavailable'); return; }
+  const KT = (window.KT = window.KT || {});
+  const Api = new Proxy({}, {
+    get(_, prop) {
+      const a = window.KT && window.KT.Api;
+      if (!a) throw new Error('KT.Api not loaded yet — call after app.js initialises');
+      const v = a[prop];
+      return typeof v === 'function' ? v.bind(a) : v;
+    }
+  });
 
   const apiBase = () => (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -156,10 +162,11 @@
     main.querySelectorAll('button[data-ft-id]').forEach(b => b.onclick = () => openPermissionsModal(+b.dataset['ft-id']));
   }
   async function openFieldTripModal() {
-    const childrenRes = await Api.get('/admin/children').catch(() => ({ data: [] }));
-    const centresRes = await Api.get('/director/centres').catch(() => ({ data: [] }));
-    const children = childrenRes.data || [];
-    const centres = centresRes.data || centresRes || [];
+    /* v22p70: fix field-trip modal response keys */
+    const childrenRes = await Api.get('/admin/children').catch(() => ({ children: [] }));
+    const centresRes = await Api.get('/director/centres').catch(() => ({ centres: [] }));
+    const children = childrenRes.children || childrenRes.data || [];
+    const centres = centresRes.centres || centresRes.data || (Array.isArray(centresRes) ? centresRes : []);
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
     m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:560px;width:92%;max-height:88vh;overflow:auto;">

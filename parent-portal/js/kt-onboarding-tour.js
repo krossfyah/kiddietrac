@@ -29,13 +29,13 @@
     ],
     educator: [
       { icon: '👋', title: 'Welcome to KiddieTrac', body: 'You can log daily care, share photos, write observations, and message parents from any device.' },
-      { icon: '📋', title: 'Today screen', body: 'See your room, ratios, and today\\'s lesson plan from the Today tab.' },
+      { icon: '📋', title: 'Today screen', body: 'See your room, ratios, and today\'s lesson plan from the Today tab.' },
       { icon: '📷', title: 'Capture moments', body: 'Photo, video, and voice messages all upload from your phone. Tag children + add HDLH domain tags.' },
       { icon: '📖', title: 'Help & Guide', body: 'Sidebar → Help & Guide. Or click a ? badge on any screen for help right there.' },
     ],
     guardian: [
-      { icon: '👋', title: 'Welcome to KiddieTrac', body: 'See your child\\'s day in real-time: photos, videos, care logs, milestones, and direct messaging with staff.' },
-      { icon: '☀️', title: 'Today', body: 'The Today screen shows your child\\'s sign-in time, room, mood, and updates from staff.' },
+      { icon: '👋', title: 'Welcome to KiddieTrac', body: 'See your child\'s day in real-time: photos, videos, care logs, milestones, and direct messaging with staff.' },
+      { icon: '☀️', title: 'Today', body: 'The Today screen shows your child\'s sign-in time, room, mood, and updates from staff.' },
       { icon: '💳', title: 'Billing', body: 'Invoices, autopay, and account ledger live under Billing. Add cards or bank accounts in Wallet.' },
       { icon: '📖', title: 'Help anytime', body: 'Sidebar → Help & Guide. Or tap the ✨ button bottom-right to ask a question in plain English.' },
     ],

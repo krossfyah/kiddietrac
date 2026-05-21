@@ -1,9 +1,15 @@
 /* v22p57 — 8 new screens. Uses kt-design-v22p55.css conventions. */
 (function (window) {
   'use strict';
-  const KT = window.KT || {};
-  const Api = KT.Api;
-  if (!Api) { console.warn('v22p57: KT.Api unavailable'); return; }
+  const KT = (window.KT = window.KT || {});
+  const Api = new Proxy({}, {
+    get(_, prop) {
+      const a = window.KT && window.KT.Api;
+      if (!a) throw new Error('KT.Api not loaded yet — call after app.js initialises');
+      const v = a[prop];
+      return typeof v === 'function' ? v.bind(a) : v;
+    }
+  });
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };

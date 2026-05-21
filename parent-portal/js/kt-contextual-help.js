@@ -7,7 +7,7 @@
 
 (function (window) {
   'use strict';
-  const { Api } = window.KT;
+  function getApi() { return (window.KT && window.KT.Api) || null; }
 
   function attach(el) {
     if (el._ktHelpAttached) return;
@@ -114,7 +114,7 @@
       document.addEventListener('click', bgClick);
     }, 50);
 
-    Api.get('/help/' + slug)
+    getApi().get('/help/' + slug)
       .then(res => {
         const a = res.article;
         body.innerHTML = '';
