@@ -75,6 +75,8 @@
 
     // Layout: sidebar + content + TOC
     const layout = Dom.el('div', { class: 'kt-help-layout' });
+    /* v22p71: restore collapsed state from last session */
+    try { if (localStorage.getItem('kt_help_sidebar_collapsed') === '1') layout.classList.add('kt-help-sidebar-collapsed'); } catch (e) {}
     wrap.appendChild(layout);
 
     const sidebar = Dom.el('aside', { class: 'kt-help-sidebar' });
@@ -110,9 +112,21 @@
     }
 
     function renderSidebar() {
+      /* v22p71: preserve sidebar scroll position across re-render */
+      const prevScroll = sidebar.scrollTop;
       Dom.clear(sidebar);
       /* v22p70: search lives at top of sidebar */
       const searchBox = Dom.el('div', { class: 'kt-help-search-box' });
+      /* v22p71: collapse toggle */
+      const collapseBtn = Dom.el('button', { class: 'kt-help-collapse-btn', title: 'Collapse topics' }, '⟨⟨');
+      collapseBtn.addEventListener('click', () => {
+        layout.classList.toggle('kt-help-sidebar-collapsed');
+        const collapsed = layout.classList.contains('kt-help-sidebar-collapsed');
+        collapseBtn.textContent = collapsed ? '⟩⟩' : '⟨⟨';
+        collapseBtn.title = collapsed ? 'Show topics' : 'Collapse topics';
+        try { localStorage.setItem('kt_help_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+      });
+      searchBox.appendChild(collapseBtn);
       searchBox.appendChild(searchInput);
       sidebar.appendChild(searchBox);
       const allCats = Object.keys(state.categorized).sort();
@@ -179,6 +193,9 @@
       if (term && Object.keys(filtered).length === 0) {
         sidebar.appendChild(Dom.el('p', { class: 'kt-help-empty' }, 'No matches for "' + term + '"'));
       }
+
+      /* v22p71: restore sidebar scroll position so clicking a topic doesn't jump to top */
+      sidebar.scrollTop = prevScroll;
     }
 
     function renderMobileSelect() {
@@ -560,13 +577,24 @@
       .kt-help-ask-btn:hover { background: rgba(255,255,255,0.28); }
 
       /* v22p70: search now lives inside sidebar */
-      .kt-help-search-box { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #E5E7EB; }
+      .kt-help-search-box { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #E5E7EB; display: flex; align-items: center; gap: 8px; }
       .kt-help-search { width: 100%; padding: 10px 14px; border: 1.5px solid #E5E7EB; border-radius: 10px; font-size: 14px; font-family: inherit; background: white; transition: border-color 0.15s, box-shadow 0.15s; box-sizing: border-box; }
       .kt-help-search:focus { outline: none; border-color: #1F6080; box-shadow: 0 0 0 3px rgba(31, 96, 128, 0.12); }
+      /* v22p71: sidebar collapse toggle */
+      .kt-help-collapse-btn { flex: 0 0 auto; width: 30px; height: 36px; border: 1.5px solid #E5E7EB; border-radius: 8px; background: white; cursor: pointer; color: #4B5563; font-size: 12px; font-weight: 700; transition: all 0.12s; }
+      .kt-help-collapse-btn:hover { background: #1F6080; color: white; border-color: #1F6080; }
 
       .kt-help-mobile-select { display: none; width: 100%; padding: 12px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 14px; margin-bottom: 16px; }
 
-      .kt-help-layout { display: grid; grid-template-columns: 280px 1fr 220px; gap: 24px; align-items: flex-start; }
+      .kt-help-layout { display: grid; grid-template-columns: 280px 1fr 220px; gap: 24px; align-items: flex-start; transition: grid-template-columns 0.2s ease; }
+      /* v22p71: collapsed sidebar — hide topic list, keep a slim re-open rail */
+      .kt-help-layout.kt-help-sidebar-collapsed { grid-template-columns: 0 1fr 220px; }
+      .kt-help-layout.kt-help-sidebar-collapsed .kt-help-sidebar { padding: 0; overflow: visible; background: transparent; }
+      .kt-help-layout.kt-help-sidebar-collapsed .kt-help-sidebar > * { display: none; }
+      .kt-help-layout.kt-help-sidebar-collapsed .kt-help-sidebar > .kt-help-search-box { display: flex; position: absolute; }
+      .kt-help-layout.kt-help-sidebar-collapsed .kt-help-search-box { border: none; padding: 0; margin: 0; }
+      .kt-help-layout.kt-help-sidebar-collapsed .kt-help-search-box > .kt-help-search { display: none; }
+      .kt-help-layout.kt-help-sidebar-collapsed .kt-help-collapse-btn { display: block; }
 
       .kt-help-sidebar { background: #F9FAFB; padding: 16px; border-radius: 14px; position: sticky; top: 150px; max-height: calc(100vh - 180px); overflow-y: auto; }
       .kt-help-pills { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid #E5E7EB; margin-bottom: 12px; }

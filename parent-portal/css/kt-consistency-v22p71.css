@@ -1,0 +1,105 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KIDDIETRAC v22p71 — global consistency layer
+   Loaded LAST so it wins the cascade.
+
+   Fixes (user report):
+   • "various fonts being used"  → unify on Inter (body) + DM Sans (headings)
+   • "sections not utilizing the entire window space" → uniform full-width
+     content container across every screen (old + new design eras)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── 1) FONTS — one system everywhere ───────────────────────────────
+   styles.css used Baloo 2 / Plus Jakarta Sans; kt-design-v22p64 forced
+   Inter / DM Sans via !important on body+headings only. That left
+   buttons/inputs/cards on the old fonts → visible inconsistency.
+   We standardise EVERYTHING on Inter + DM Sans and align the CSS vars
+   so var-based rules match the !important rules. (Inter + DM Sans are
+   loaded via <link> in dashboard.html <head>.)                         */
+:root {
+  --kt-font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  --kt-font-display: 'DM Sans', 'Inter', -apple-system, sans-serif !important;
+  --kt-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Body / general text → Inter */
+body,
+.app-main, .app-main p, .app-main span, .app-main a, .app-main li,
+.app-main td, .app-main th, .app-main label,
+.app-main input, .app-main select, .app-main textarea, .app-main button,
+.app-main div {
+  font-family: var(--kt-font-body);
+}
+
+/* Headings + hero titles → DM Sans (display) */
+.app-main h1, .app-main h2, .app-main h3, .app-main h4, .app-main h5,
+.app-main .kt-page-hero h1, .app-main .kt-page-hero h2,
+.app-main .page-header-v17 h1,
+.app-main .kt-card-title, .app-main .kt-kpi-value {
+  font-family: var(--kt-font-display);
+}
+
+/* Code / monospace stays mono everywhere */
+.app-main code, .app-main pre, .app-main kbd, .app-main .mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace !important;
+}
+
+/* ─── 2) WIDTH — uniform full-width content container ─────────────────
+   #appMain is the single render target (max-width 1800, centred).
+   Make every screen's top-level wrapper fill it, regardless of which
+   design era built the screen. Old screens (incidents, observations,
+   care, chat, notifications…) had no width rule and could collapse
+   narrower than the modern data-kt-pretty screens.                     */
+#appMain {
+  max-width: 1800px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Direct content wrappers stretch to the full content width.
+   We DON'T touch elements that intentionally set their own max-width
+   inline (forms, narrow settings panels) — only un-constrained ones. */
+#appMain > div:not([style*="max-width"]):not([data-kt-narrow]),
+#appMain > section:not([style*="max-width"]) {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Modern pretty screens already cap their inner wrap at 1800; make sure
+   the cap is consistent (not a stray smaller value) and centred. */
+[data-kt-pretty] > div:not([style*="max-width"]) {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Tables + lists should always use the full width of their card */
+#appMain table { width: 100%; }
+
+/* Keep genuine FORMS readable (not stretched across an ultrawide screen),
+   but ONLY when they don't already set their own width and aren't marked
+   wide — so existing inline max-widths (e.g. incident form 760px) win. */
+#appMain form:not([style*="max-width"]):not([style*="width"]):not(.kt-form-wide):not(.kt-inline-form) {
+  max-width: 920px;
+}
+
+/* Respect the intentional compact-form screens from v22p64 (locale,
+   settings) — do NOT widen these; they opted in via data-kt-narrow. */
+[data-kt-pretty][data-kt-narrow] > div {
+  max-width: 640px !important;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ─── 3) Card consistency — old .card matches modern .kt-card ─────────
+   Align legacy cards to the modern surface so screens look uniform. */
+.app-main .card {
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+/* page-header-v17 (old screens) title sizing to match modern hero h2 */
+.app-main .page-header-v17 h1 {
+  font-size: 26px;
+  letter-spacing: -0.4px;
+}
