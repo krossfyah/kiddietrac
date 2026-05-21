@@ -155,7 +155,7 @@
     display: flex;
     justify-content: space-around;
     padding: 8px 4px max(8px, env(safe-area-inset-bottom));
-    z-index: 99998;
+    z-index: 900; /* v22p78: was 99998 — kept below modals/overlays so popups (waitlist, tours, etc.) are not covered on mobile */
   }
   .kt-mobile-bottom-nav a {
     flex: 1;
