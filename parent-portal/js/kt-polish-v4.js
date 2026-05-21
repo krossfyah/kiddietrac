@@ -49,12 +49,67 @@
     syncActive();
     window.addEventListener('hashchange', syncActive);
 
-    // "More" → open sidebar (toggle existing hamburger)
+    // v22p79: "More" → open a real slide-in drawer cloning the actual nav.
     nav.querySelector('a[data-mob-hash="more"]').onclick = (e) => {
       e.preventDefault();
-      const ss = document.querySelector('.sidebar, .kt-sidebar, #sidebar');
-      if (ss) ss.classList.toggle('kt-mobile-open');
+      openMoreDrawer();
     };
+  }
+
+  // v22p79: full-height drawer that mirrors the real sidebar nav (#navLinks).
+  function openMoreDrawer() {
+    var existing = document.getElementById('kt-more-drawer');
+    if (existing) { existing.remove(); return; }
+
+    var navLinks = document.getElementById('navLinks');
+    var overlay = document.createElement('div');
+    overlay.id = 'kt-more-drawer';
+    overlay.setAttribute('style', 'position:fixed;inset:0;z-index:10500;background:rgba(15,23,42,.5);display:flex;justify-content:flex-end;');
+
+    var panel = document.createElement('div');
+    panel.setAttribute('style', 'width:min(320px,86vw);height:100%;background:#fff;overflow-y:auto;box-shadow:-8px 0 32px rgba(0,0,0,.25);animation:kt-more-in .2s ease-out;');
+
+    var header = document.createElement('div');
+    header.setAttribute('style', 'display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #EEF2F6;position:sticky;top:0;background:#fff;');
+    header.innerHTML = '<span style="font-weight:800;font-size:16px;color:#1F6080;">Menu</span>';
+    var close = document.createElement('button');
+    close.textContent = '×';
+    close.setAttribute('style', 'background:#F1F5F9;border:none;width:34px;height:34px;border-radius:17px;font-size:22px;line-height:1;cursor:pointer;color:#475569;');
+    close.onclick = function () { overlay.remove(); };
+    header.appendChild(close);
+    panel.appendChild(header);
+
+    var body = document.createElement('div');
+    body.setAttribute('style', 'padding:10px 8px 30px;');
+    if (navLinks) {
+      var clone = navLinks.cloneNode(true);
+      clone.removeAttribute('id');
+      clone.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () { overlay.remove(); });
+      });
+      var ctl = clone.querySelector('#kt-nav-allctl, .kt-nav-allctl');
+      if (ctl) ctl.remove();
+      body.appendChild(clone);
+    } else {
+      body.innerHTML = '<div style="padding:24px;color:#94A3B8;">Menu unavailable.</div>';
+    }
+    panel.appendChild(body);
+    overlay.appendChild(panel);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+
+    if (!document.getElementById('kt-more-drawer-css')) {
+      var st = document.createElement('style');
+      st.id = 'kt-more-drawer-css';
+      st.textContent = '@keyframes kt-more-in{from{transform:translateX(100%);}to{transform:translateX(0);}}'
+        + '#kt-more-drawer .sidebar-section{display:block !important;margin:0 0 6px;}'
+        + '#kt-more-drawer .sidebar-section-label{display:block !important;font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;padding:10px 12px 4px;}'
+        + '#kt-more-drawer .nav-link{display:flex !important;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;color:#1F2937;font-size:14px;}'
+        + '#kt-more-drawer .nav-link:hover{background:#F1F5F9;}'
+        + '#kt-more-drawer .nav-link.active{background:rgba(31,96,128,.10);color:#1F6080;font-weight:700;}'
+        + '#kt-more-drawer .kt-nav-chev{display:none;}';
+      document.head.appendChild(st);
+    }
   }
   setTimeout(injectMobileBottomNav, 1000);
   window.addEventListener('resize', () => {

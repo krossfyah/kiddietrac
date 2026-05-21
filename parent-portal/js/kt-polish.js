@@ -292,27 +292,12 @@
 
   // ============================ Mobile sidebar toggle ============================
   function mobileSidebar() {
-    if (document.getElementById('kt-mobile-toggle')) return;
-    const sidebar = document.querySelector('.sidebar, .kt-sidebar, #sidebar, #navLinks');
-    if (!sidebar) return;
-    const isMobile = window.matchMedia('(max-width: 900px)').matches;
-    if (!isMobile) return;
-    const btn = document.createElement('button');
-    btn.id = 'kt-mobile-toggle';
-    btn.innerHTML = '☰';
-    btn.style.cssText = 'position:fixed;top:14px;left:14px;z-index:99999;background:#1F6080;color:#fff;border:0;width:44px;height:44px;border-radius:10px;font-size:22px;cursor:pointer;box-shadow:0 4px 12px rgba(15,23,42,.18);';
-    btn.onclick = () => {
-      const ss = document.querySelector('.sidebar, .kt-sidebar, #sidebar');
-      if (ss) ss.classList.toggle('kt-mobile-open');
-    };
-    document.body.appendChild(btn);
-    // CSS for the toggle behaviour
-    if (!document.getElementById('kt-mobile-css')) {
-      const s = document.createElement('style');
-      s.id = 'kt-mobile-css';
-      s.textContent = '@media (max-width: 900px) { .sidebar, .kt-sidebar, #sidebar { position:fixed !important; left:-280px !important; top:0; height:100vh; width:280px !important; transition:left .25s; z-index:99998; box-shadow: 6px 0 24px rgba(15,23,42,.2); } .sidebar.kt-mobile-open, .kt-sidebar.kt-mobile-open, #sidebar.kt-mobile-open { left:0 !important; } main { margin-left: 0 !important; padding-top: 60px !important; } }';
-      document.head.appendChild(s);
-    }
+    // v22p79: REMOVED. This top-left ☰ button (z-index 99999) covered the
+    // KiddieTrac logo, used a stale selector (.sidebar/#sidebar — the real
+    // element is #appSidebar) so it did nothing, and floated above modals.
+    // Mobile navigation is now the bottom-nav "More" drawer (kt-polish-v4.js).
+    var ex = document.getElementById('kt-mobile-toggle');
+    if (ex) ex.remove();
   }
   setTimeout(mobileSidebar, 1500);
   window.addEventListener('resize', () => setTimeout(mobileSidebar, 200));
