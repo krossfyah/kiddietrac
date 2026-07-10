@@ -45,27 +45,81 @@
     const items = data.announcements || [];
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:1800px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+      <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:20px 24px 0;box-sizing:border-box;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;flex:0 0 auto;">
           <div>
-            <h2 style="font-size:24px;margin:0;">📢 Announcements</h2>
-            <p style="color:#6B7280;font-size:14px;margin:4px 0 0;">Broadcast to your families</p>
+            <h2 style="font-size:22px;margin:0;">📢 Announcements</h2>
+            <p style="color:#6B7280;font-size:13px;margin:3px 0 0;">${items.length} sent · tap a row to read it</p>
           </div>
-          <button id="kt-new-ann" style="background:#1F6080;color:white;border:none;padding:12px 22px;border-radius:10px;font-weight:700;cursor:pointer;">+ New Announcement</button>
+          <button id="kt-new-ann" style="background:#1F6080;color:white;border:none;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;">+ New Announcement</button>
         </div>
         ${items.length === 0
           ? `<div style="text-align:center;padding:48px;background:white;border-radius:14px;color:#6B7280;">
               <div style="font-size:48px;margin-bottom:12px;">📭</div>
               No announcements sent yet.
             </div>`
-          : `<div data-kt-list="1" style="display:grid;gap:12px;">
-              ${items.map(a => annCard(a)).join('')}
+          : `<div style="flex:1 1 auto;min-height:0;max-height:calc(100vh - 210px);overflow-y:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">
+              <table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
+                <thead>
+                  <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
+                    <th style="text-align:left;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;width:170px;">Sent to</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;">Announcement</th>
+                    <th style="text-align:left;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;width:96px;">Channels</th>
+                    <th style="text-align:right;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;width:118px;">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${items.map((a, i) => annRow(a, i)).join('')}
+                </tbody>
+              </table>
             </div>`
         }
         <div id="kt-mount"></div>
       </div>
     `;
     $('#kt-new-ann', container).addEventListener('click', () => openComposer(container));
+    // Gmail-style: click a row to expand the full announcement inline.
+    container.querySelectorAll('.kt-ann-row').forEach((row) => {
+      row.addEventListener('mouseenter', () => { if (!row.dataset.open) row.style.background = '#F5F8FA'; });
+      row.addEventListener('mouseleave', () => { if (!row.dataset.open) row.style.background = ''; });
+      row.addEventListener('click', () => {
+        const idx = row.getAttribute('data-idx');
+        const det = container.querySelector('.kt-ann-detail[data-idx="' + idx + '"]');
+        const open = det && det.style.display !== 'none';
+        if (det) det.style.display = open ? 'none' : 'table-row';
+        row.dataset.open = open ? '' : '1';
+        row.style.background = open ? '' : '#EEF4F7';
+      });
+    });
+  }
+
+  function plainPreview(html, n) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = String(html == null ? '' : html);
+    var t = (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+    n = n || 90;
+    return t.length > n ? t.slice(0, n) + '…' : t;
+  }
+
+  function annRow(a, i) {
+    var scope = esc(a.centre_name || a.scope_type);
+    var chips = [a.send_email ? '📧' : '', a.send_push ? '🔔' : '', (a.scheduled_at && !a.sent_at) ? '⏱' : ''].filter(Boolean).join(' ');
+    return `
+      <tr class="kt-ann-row" data-idx="${i}" style="border-top:1px solid #F1F3F5;cursor:pointer;">
+        <td style="padding:11px 14px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📍 ${scope}</td>
+        <td style="padding:11px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          <span style="font-weight:600;color:#111827;">${esc(a.title)}</span>
+          <span style="color:#6B7280;"> — ${esc(plainPreview(a.body))}</span>
+        </td>
+        <td style="padding:11px 14px;color:#6B7280;white-space:nowrap;">${chips || '—'}</td>
+        <td style="padding:11px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;">${esc(fmtDate(a.sent_at || a.created_at))}</td>
+      </tr>
+      <tr class="kt-ann-detail" data-idx="${i}" style="display:none;background:#FAFCFD;">
+        <td colspan="4" style="padding:4px 18px 18px;">
+          <div style="font-size:12px;color:#9CA3AF;margin:0 0 8px;">— ${esc(a.sender)} · ${esc(a.scope_type)}${a.centre_name ? ' · ' + esc(a.centre_name) : ''}${a.scheduled_at && !a.sent_at ? ' · ⏱ scheduled' : ''}</div>
+          <div style="font-size:14px;color:#374151;line-height:1.6;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
+        </td>
+      </tr>`;
   }
 
   function annCard(a) {

@@ -132,15 +132,32 @@
   }
 
   function renderSetupInProgress(wrap, data) {
-    var c1 = card('Step 1 — Add the secret to your app', [
-      Dom.el('p', { style: 'font-size:14px;margin:0 0 12px;color:#374151;' },
-        'In your authenticator app, choose "Add account" → "Enter setup key" and paste the secret below. (QR code rendering coming soon.)'),
-      copyableRow('Secret', data.secret, true),
-      copyableRow('OTPAuth URI', data.otpauth_uri, true),
-      Dom.el('p', { style: 'font-size:12px;color:#6B7280;margin:8px 0 0;' },
-        'On a phone, you can also tap the OTPAuth URI link to launch your authenticator app directly.'),
+    var qrBox = Dom.el('div', { style: 'width:196px;height:196px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #E5E7EB;border-radius:12px;color:#94A3B8;font-size:12px;flex-shrink:0;' }, 'Generating QR…');
+    var c1 = card('Step 1 — Scan the QR code', [
+      Dom.el('p', { style: 'font-size:14px;margin:0 0 14px;color:#374151;line-height:1.55;' },
+        'In Microsoft Authenticator, tap ➕ → "Other account (Google, Facebook, etc.)" → "Scan a QR code", then point your camera here. (Google Authenticator, Authy and 1Password work the same way.)'),
+      Dom.el('div', { style: 'display:flex;gap:18px;align-items:center;flex-wrap:wrap;' }, [
+        qrBox,
+        Dom.el('div', { style: 'flex:1;min-width:210px;' }, [
+          Dom.el('p', { style: 'font-size:13px;color:#6B7280;margin:0 0 8px;line-height:1.5;' },
+            'Can\'t scan? In your app choose "Enter a setup key" and type this in manually:'),
+          copyableRow('Setup key', data.secret, true),
+        ]),
+      ]),
     ]);
     wrap.appendChild(c1);
+    // Render a scannable QR from the standard otpauth:// URI — Microsoft
+    // Authenticator, Google Authenticator, Authy and 1Password all read it.
+    if (window.KT && KT.qrImg) {
+      KT.qrImg(data.otpauth_uri, { size: 190, cell: 5, margin: 3 }).then(function (img) {
+        qrBox.textContent = ''; qrBox.style.color = ''; qrBox.appendChild(img);
+      }).catch(function () {
+        qrBox.textContent = '';
+        qrBox.appendChild(Dom.el('div', { style: 'font-size:12px;color:#DC2626;padding:10px;text-align:center;line-height:1.4;' }, 'Couldn\'t draw the QR — use the setup key instead.'));
+      });
+    } else {
+      qrBox.textContent = 'Use the setup key →';
+    }
 
     var codesBlock = Dom.el('div', { style: 'background:#FEF3C7;border-radius:10px;padding:14px 18px;margin:8px 0;' });
     codesBlock.appendChild(Dom.el('p', { style: 'margin:0 0 8px;font-size:13px;color:#92400E;font-weight:600;' },
