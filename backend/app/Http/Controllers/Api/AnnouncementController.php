@@ -325,19 +325,27 @@ final class AnnouncementController extends Controller
         // Best-effort email — rich HTML, white-labelled via the agency's mailer.
         if (! empty($data['send_email']) || $data['send_email'] === null) {
             $emails = DB::table('users')->whereIn('id', $userIds)->whereNotNull('email')->pluck('email')->all();
+            // Subject mirrors the in-app notification: "📢 Announcement · <Centre> — <title>".
+            $emailSubject = $notifTitle . (($data['title'] ?? '') !== '' ? ' — ' . $data['title'] : '');
+            $eyebrow = '<div style="font-size:12px;font-weight:700;color:#8EC73C;letter-spacing:.06em;text-transform:uppercase;margin:0 0 6px;">📢 Announcement · ' . e($scopeName) . '</div>';
+            // Signature shows the full name of the sender AND which centre it is from.
+            $sig = $senderName
+                ? '<p style="color:#6B7280;margin-top:22px;line-height:1.5;">— <strong style="color:#374151;">' . e($senderName) . '</strong><br><span style="font-size:13px;">' . e($scopeName) . '</span></p>'
+                : '<p style="color:#6B7280;margin-top:22px;font-size:13px;">— ' . e($scopeName) . '</p>';
             $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;color:#111827;">'
+                . $eyebrow
                 . '<h2 style="color:#1F6080;margin:0 0 12px;">' . e($data['title']) . '</h2>'
                 . '<div style="font-size:15px;line-height:1.6;">' . $data['body'] . '</div>'
-                . ($senderName ? '<p style="color:#6B7280;margin-top:18px;">— ' . e($senderName) . '</p>' : '')
+                . $sig
                 . '</div>';
             $mailerSvc = $agencyId ? \App\Services\AgencyMailer::forAgency($agencyId) : null;
             foreach ($emails as $email) {
                 try {
                     if ($mailerSvc) {
                         $m = $mailerSvc->mailer(); $from = $mailerSvc->fromAddress(); $fn = $mailerSvc->fromName();
-                        $m->html($html, function ($msg) use ($email, $from, $fn, $data) { $msg->to($email)->from($from, $fn)->subject($data['title']); });
+                        $m->html($html, function ($msg) use ($email, $from, $fn, $emailSubject) { $msg->to($email)->from($from, $fn)->subject($emailSubject); });
                     } else {
-                        Mail::html($html, function ($msg) use ($email, $data) { $msg->to($email)->from('noreply@kiddietrac.com', 'Kiddietrac')->subject($data['title']); });
+                        Mail::html($html, function ($msg) use ($email, $emailSubject) { $msg->to($email)->from('noreply@kiddietrac.com', 'Kiddietrac')->subject($emailSubject); });
                     }
                 } catch (\Throwable $e) {
                     Log::warning('Announcement email failed', ['email' => $email, 'error' => $e->getMessage()]);

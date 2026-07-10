@@ -808,11 +808,14 @@
     centreWrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, 'Centre'));
     const centreSelect = Dom.el('select', { style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px;' });
     centreSelect.appendChild(Dom.el('option', { value: '' }, 'No centre / agency-wide'));
-    if (state.centres) {
-      state.centres.centres.forEach(c => {
+    // Load centres for the picker (state.centres was never populated, so the
+    // dropdown only ever had "No centre" — educators/directors could not be
+    // assigned a centre). Fetch fresh; the global fetch shim adds the agency header.
+    Api.get('/admin/centres').then(function (r) {
+      (r && r.centres || []).forEach(function (c) {
         centreSelect.appendChild(Dom.el('option', { value: String(c.id) }, c.name));
       });
-    }
+    }).catch(function () {});
     inputs.centre_id = centreSelect;
     centreWrap.appendChild(centreSelect);
     body.appendChild(centreWrap);
@@ -1010,11 +1013,11 @@
       style: 'padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; background: white;',
     });
     newCentreSelect.appendChild(Dom.el('option', { value: '' }, 'No centre'));
-    if (state.centres && state.centres.centres) {
-      state.centres.centres.forEach(function (c) {
+    Api.get('/admin/centres').then(function (r) {
+      (r && r.centres || []).forEach(function (c) {
         newCentreSelect.appendChild(Dom.el('option', { value: String(c.id) }, c.name));
       });
-    }
+    }).catch(function () {});
     changeBox.appendChild(newCentreSelect);
 
     const applyRoleBtn = Dom.el('button', {
