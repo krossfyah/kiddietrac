@@ -136,7 +136,7 @@
             <div id="kt-status" style="min-height:20px;font-size:14px;"></div>
             <div style="display:flex;justify-content:flex-end;gap:8px;">
               <button type="button" id="kt-cancel" style="background:#F3F4F6;color:#374151;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer;">Cancel</button>
-              <button type="submit" id="kt-send" style="background:#1F6080;color:white;border:none;padding:10px 22px;border-radius:8px;font-weight:700;cursor:pointer;">Send</button>
+              <button type="button" id="kt-send" style="background:#1F6080;color:white;border:none;padding:10px 22px;border-radius:8px;font-weight:700;cursor:pointer;">Send</button>
             </div>
           </form>
         </div>
@@ -163,27 +163,35 @@
       });
     });
 
-    $('#kt-ann-form', mount).addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const f = e.target;
+    const formEl = $('#kt-ann-form', mount);
+    async function doSend() {
+      const f = formEl;
+      const statusEl = $('#kt-status', mount);
+      const sendBtn = $('#kt-send', mount);
       const scopeRaw = f.querySelector('[name="scope_id"]').value;
       if (!scopeRaw) {
-        $('#kt-status', mount).style.color = '#DC2626';
-        $('#kt-status', mount).textContent = '✗ Choose who to send to first';
+        statusEl.style.color = '#DC2626';
+        statusEl.textContent = '✗ Choose who to send to first';
         return;
       }
       const [scope_type, scope_id] = scopeRaw.split(':');
+      const titleVal = (f.querySelector('[name="title"]').value || '').trim();
+      if (!titleVal) {
+        statusEl.style.color = '#DC2626';
+        statusEl.textContent = '✗ Title is required';
+        return;
+      }
       const rteEl = f.querySelector('#kt-rte');
       const bodyHtml = (rteEl.innerHTML || '').trim();
       if (!bodyHtml || !rteEl.textContent.trim()) {
-        $('#kt-status', mount).style.color = '#DC2626';
-        $('#kt-status', mount).textContent = '✗ Body is required';
+        statusEl.style.color = '#DC2626';
+        statusEl.textContent = '✗ Body is required';
         return;
       }
       const data = {
         scope_type,
         scope_id: parseInt(scope_id, 10),
-        title: f.querySelector('[name="title"]').value,
+        title: titleVal,
         body: bodyHtml,
         send_email: f.querySelector('[name="send_email"]').checked,
         send_sms: f.querySelector('[name="send_sms"]').checked,
@@ -192,16 +200,27 @@
       const sched = f.querySelector('[name="scheduled_at"]').value;
       if (sched) data.scheduled_at = sched;
 
+      const orig = sendBtn ? sendBtn.textContent : 'Send';
+      if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+      statusEl.style.color = '#6B7280';
+      statusEl.textContent = 'Sending…';
       try {
         const res = await api('POST', '/provider/announcements', data);
-        $('#kt-status', mount).style.color = '#16A34A';
-        $('#kt-status', mount).textContent = '✓ Sent to ' + (res.delivered_to || 0) + ' recipient(s)';
+        statusEl.style.color = '#16A34A';
+        statusEl.textContent = res.scheduled ? '✓ Scheduled' : '✓ Sent to ' + (res.delivered_to || 0) + ' recipient(s)';
         setTimeout(() => { close(); renderProvider(container); }, 1200);
-      } catch (e) {
-        $('#kt-status', mount).style.color = '#DC2626';
-        $('#kt-status', mount).textContent = '✗ ' + e.message;
+      } catch (err) {
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = orig; }
+        statusEl.style.color = '#DC2626';
+        statusEl.textContent = '✗ ' + err.message;
       }
-    });
+    }
+    // Bind the send action to the button CLICK directly. Relying on implicit
+    // form submission (type=submit) was silently dropped inside the app shell —
+    // clicking Send fired no submit event at all — so "Send" did nothing with no
+    // error. The form 'submit' handler stays as an Enter-key fallback.
+    $('#kt-send', mount).addEventListener('click', (e) => { e.preventDefault(); doSend(); });
+    formEl.addEventListener('submit', (e) => { e.preventDefault(); doSend(); });
   }
 
   async function renderParent(container) {
