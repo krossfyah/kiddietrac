@@ -33,6 +33,15 @@
     const today = new Date().toDateString() === d.toDateString();
     return today ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   }
+  // Date AND time together, for the table Date column.
+  function fmtDateTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso.replace(' ', 'T') + 'Z');
+    const today = new Date().toDateString() === d.toDateString();
+    const day = today ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return day + ', ' + time;
+  }
 
   async function renderProvider(container) {
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading…</div>';
@@ -70,8 +79,8 @@
                   <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
                     ${th('scope', 'Sent to', { w: '180px' })}
                     ${th('title', 'Announcement')}
-                    ${th('channels', 'Channels', { w: '96px' })}
-                    ${th('date', 'Date', { w: '120px', right: true })}
+                    ${th('channels', 'Channels', { w: '90px' })}
+                    ${th('date', 'Date', { w: '150px', right: true })}
                   </tr>
                 </thead>
                 <tbody id="kt-ann-tbody"></tbody>
@@ -150,7 +159,7 @@
           <span style="color:#6B7280;"> — ${esc(plainPreview(a.body))}</span>
         </td>
         <td style="padding:11px 14px;color:#6B7280;white-space:nowrap;">${chips || '—'}</td>
-        <td style="padding:11px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;">${esc(fmtDate(a.sent_at || a.created_at))}</td>
+        <td style="padding:11px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;">${esc(fmtDateTime(a.sent_at || a.created_at))}</td>
       </tr>
       <tr class="kt-ann-detail" data-idx="${i}" style="display:none;background:#FAFCFD;">
         <td colspan="4" style="padding:4px 18px 18px;">

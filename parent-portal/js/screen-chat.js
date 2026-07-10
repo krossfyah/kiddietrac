@@ -93,6 +93,15 @@
     if (today) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
+  // Date AND time together, for the inbox Date column.
+  function formatDateTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso.replace(' ', 'T') + 'Z');
+    const today = new Date().toDateString() === d.toDateString();
+    const day = today ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return day + ', ' + time;
+  }
 
   /* ─── List view ─────────────────────────────────────────────── */
   async function renderList(container) {
@@ -139,9 +148,9 @@
             <table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
               <thead>
                 <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
-                  ${th('name', 'From', { w: '260px' })}
+                  ${th('name', 'From', { w: '250px' })}
                   ${th('preview', 'Message')}
-                  ${th('date', 'Date', { w: '120px', right: true })}
+                  ${th('date', 'Date', { w: '150px', right: true })}
                 </tr>
               </thead>
               <tbody id="kt-msg-tbody"></tbody>
@@ -168,7 +177,7 @@
             ${c.last_sender_id == myId ? '<span style="color:#9CA3AF;">You: </span>' : ''}${escapeHtml(c.preview || '(no messages yet)')}
             ${unread ? `<span style="background:#1F6080;color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;">${c.unread_count}</span>` : ''}
           </td>
-          <td style="padding:10px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatTime(c.last_message_at)}</td>
+          <td style="padding:10px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatDateTime(c.last_message_at)}</td>
         </tr>`;
       };
       const paint = () => {
@@ -430,11 +439,22 @@
     const body = $('.kt-thread-body', container);
     body.scrollTop = body.scrollHeight;
 
-    $('.kt-back', container).addEventListener('click', () => {
+    function leaveThread() {
       openThreadId = null;
       if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
       renderList(container);
-    });
+    }
+
+    // Register the open thread as a "back overlay" so the Android hardware /
+    // gesture back button (and the ← button) returns to the conversation LIST
+    // instead of exiting Messages to the previous screen. The thread root leaves
+    // the DOM when renderList runs, so kt-back auto-prunes this entry.
+    try {
+      var threadRoot = container.firstElementChild;
+      if (window.KT && KT.pushOverlay && threadRoot) KT.pushOverlay(threadRoot, leaveThread);
+    } catch (e) {}
+
+    $('.kt-back', container).addEventListener('click', leaveThread);
 
     const input = $('.kt-compose-input', container);
     const send = $('.kt-send-btn', container);
