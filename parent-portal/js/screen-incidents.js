@@ -79,15 +79,16 @@
     main.appendChild(wrap);
 
     wrap.insertAdjacentHTML('beforeend',
-      '<div class="page-header-v17">' +
+      // No page-header-v17 here — that class makes app-v2-shell skip its standard
+      // "Operations / Incidents" auto-banner, leaving this screen with the old,
+      // broken right-aligned header. Render a plain content header instead so the
+      // consistent shell banner shows above.
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 2px 10px;">' +
         '<div>' +
-          '<div class="crumbs"><span>Home</span><span class="sep">&gt;</span><span style="color:var(--kt-text-muted);">Incidents</span></div>' +
-          '<h1>Incident Reports</h1>' +
-          '<div class="sub">' + (isGuardian(role) ? 'Reports involving your child' : 'All reports') + '</div>' +
+          '<h2 style="font-size:20px;margin:0;color:#0F172A;">⚠️ Incident Reports</h2>' +
+          '<div style="color:var(--kt-text-muted);font-size:13px;margin-top:2px;">' + (isGuardian(role) ? 'Reports involving your child' : 'All reports') + '</div>' +
         '</div>' +
-        '<div class="actions">' +
-          ((isEducator(role) || isDirector(role)) ? '<button class="btn btn-primary" id="kt-new-incident">+ New report</button>' : '') +
-        '</div>' +
+        ((isEducator(role) || isDirector(role)) ? '<button class="btn btn-primary" id="kt-new-incident">+ New report</button>' : '') +
       '</div>' +
       (!isGuardian(role) ?
         '<div class="filter-bar" style="margin-bottom:16px;">' +
