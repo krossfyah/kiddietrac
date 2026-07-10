@@ -44,14 +44,20 @@
     }
     const items = data.announcements || [];
 
+    const state = { sort: 'date', dir: -1, q: '' };
+    const th = (key, label, extra) => `<th data-sort="${key}" class="kt-ann-th" style="text-align:${extra && extra.right ? 'right' : 'left'};padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;cursor:pointer;user-select:none;${extra && extra.w ? 'width:' + extra.w + ';' : ''}">${label} <span class="kt-ar" style="color:#94A3B8;"></span></th>`;
+
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:20px 24px 0;box-sizing:border-box;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;flex:0 0 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:12px;flex:0 0 auto;">
           <div>
             <h2 style="font-size:22px;margin:0;">📢 Announcements</h2>
             <p style="color:#6B7280;font-size:13px;margin:3px 0 0;">${items.length} sent · tap a row to read it</p>
           </div>
-          <button id="kt-new-ann" style="background:#1F6080;color:white;border:none;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;">+ New Announcement</button>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input id="kt-ann-filter" type="search" placeholder="🔍 Filter…" style="padding:9px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:13px;min-width:190px;">
+            <button id="kt-new-ann" style="background:#1F6080;color:white;border:none;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;">+ New Announcement</button>
+          </div>
         </div>
         ${items.length === 0
           ? `<div style="text-align:center;padding:48px;background:white;border-radius:14px;color:#6B7280;">
@@ -62,15 +68,13 @@
               <table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
                 <thead>
                   <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
-                    <th style="text-align:left;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;width:170px;">Sent to</th>
-                    <th style="text-align:left;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;">Announcement</th>
-                    <th style="text-align:left;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;width:96px;">Channels</th>
-                    <th style="text-align:right;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;width:118px;">Date</th>
+                    ${th('scope', 'Sent to', { w: '180px' })}
+                    ${th('title', 'Announcement')}
+                    ${th('channels', 'Channels', { w: '96px' })}
+                    ${th('date', 'Date', { w: '120px', right: true })}
                   </tr>
                 </thead>
-                <tbody>
-                  ${items.map((a, i) => annRow(a, i)).join('')}
-                </tbody>
+                <tbody id="kt-ann-tbody"></tbody>
               </table>
             </div>`
         }
@@ -78,19 +82,53 @@
       </div>
     `;
     $('#kt-new-ann', container).addEventListener('click', () => openComposer(container));
-    // Gmail-style: click a row to expand the full announcement inline.
-    container.querySelectorAll('.kt-ann-row').forEach((row) => {
-      row.addEventListener('mouseenter', () => { if (!row.dataset.open) row.style.background = '#F5F8FA'; });
-      row.addEventListener('mouseleave', () => { if (!row.dataset.open) row.style.background = ''; });
-      row.addEventListener('click', () => {
-        const idx = row.getAttribute('data-idx');
-        const det = container.querySelector('.kt-ann-detail[data-idx="' + idx + '"]');
-        const open = det && det.style.display !== 'none';
-        if (det) det.style.display = open ? 'none' : 'table-row';
-        row.dataset.open = open ? '' : '1';
-        row.style.background = open ? '' : '#EEF4F7';
+
+    if (items.length) {
+      const tbody = $('#kt-ann-tbody', container);
+      const sortVal = (a) => {
+        if (state.sort === 'scope') return (a.centre_name || a.scope_type || '').toLowerCase();
+        if (state.sort === 'title') return (a.title || '').toLowerCase();
+        if (state.sort === 'channels') return (a.send_email ? 1 : 0) + (a.send_push ? 2 : 0);
+        return new Date(String(a.sent_at || a.created_at || '').replace(' ', 'T')).getTime() || 0;
+      };
+      const paint = () => {
+        const q = state.q.trim().toLowerCase();
+        let list = items.map((a, i) => ({ a, i }));
+        if (q) list = list.filter(({ a }) => ((a.title || '') + ' ' + (a.centre_name || a.scope_type || '') + ' ' + plainPreview(a.body, 400)).toLowerCase().indexOf(q) !== -1);
+        list.sort((x, y) => { const va = sortVal(x.a), vb = sortVal(y.a); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
+        tbody.innerHTML = list.length ? list.map(({ a, i }) => annRow(a, i)).join('') : '<tr><td colspan="4" style="padding:26px;text-align:center;color:#9CA3AF;">No matching announcements.</td></tr>';
+        // Zebra striping + hover + click-to-expand, re-applied after each sort/filter.
+        let z = 0;
+        tbody.querySelectorAll('.kt-ann-row').forEach((row) => {
+          const base = (z++ % 2) ? '#F7F9FB' : '#FFFFFF';
+          row.dataset.base = base; row.style.background = base;
+          row.addEventListener('mouseenter', () => { if (!row.dataset.open) row.style.background = '#EEF4F7'; });
+          row.addEventListener('mouseleave', () => { if (!row.dataset.open) row.style.background = row.dataset.base; });
+          row.addEventListener('click', () => {
+            const idx = row.getAttribute('data-idx');
+            const det = tbody.querySelector('.kt-ann-detail[data-idx="' + idx + '"]');
+            const open = det && det.style.display !== 'none';
+            if (det) det.style.display = open ? 'none' : 'table-row';
+            row.dataset.open = open ? '' : '1';
+            row.style.background = open ? row.dataset.base : '#E4EEF3';
+          });
+        });
+        container.querySelectorAll('.kt-ann-th').forEach((h) => {
+          const ar = h.querySelector('.kt-ar'); if (!ar) return;
+          ar.textContent = (h.getAttribute('data-sort') === state.sort) ? (state.dir < 0 ? '▾' : '▴') : '';
+        });
+      };
+      container.querySelectorAll('.kt-ann-th').forEach((h) => {
+        h.addEventListener('click', () => {
+          const k = h.getAttribute('data-sort');
+          if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = (k === 'date') ? -1 : 1; }
+          paint();
+        });
       });
-    });
+      const fi = $('#kt-ann-filter', container);
+      if (fi) fi.addEventListener('input', () => { state.q = fi.value || ''; paint(); });
+      paint();
+    }
   }
 
   function plainPreview(html, n) {

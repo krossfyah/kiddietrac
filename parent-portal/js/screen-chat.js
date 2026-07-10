@@ -123,43 +123,78 @@
         return;
       }
       const myId = getUser().id;
+      const nameOf = (c) => (myRole === 'guardian' ? c.centre_name : c.family_name) || 'Conversation';
+      const state = { sort: 'date', dir: -1, q: '' };
+      const th = (key, label, extra) => `<th data-sort="${key}" class="kt-msg-th" style="text-align:${extra && extra.right ? 'right' : 'left'};padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;cursor:pointer;user-select:none;${extra && extra.w ? 'width:' + extra.w + ';' : ''}">${label} <span class="kt-ar" style="color:#94A3B8;"></span></th>`;
       container.innerHTML = `
-        <div class="kt-chat-header" style="padding:16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;">
-          <h2 style="font-size:20px;margin:0;">💬 Messages</h2>
-          ${newChatBtnHtml}
-        </div>
-        <div class="kt-chat-list">
-          ${convs.map(c => `
-            <div class="kt-chat-row" data-cid="${c.id}" style="padding:14px 16px;border-bottom:1px solid #F3F4F6;cursor:pointer;display:flex;gap:12px;align-items:flex-start;background:white;">
-              <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#1F6080,#8EC73C);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">
-                ${escapeHtml((myRole === 'guardian' ? c.centre_name : c.family_name).charAt(0))}
-              </div>
-              <div style="flex:1;min-width:0;">
-                <div style="display:flex;justify-content:space-between;gap:8px;">
-                  <div style="font-weight:${c.unread_count > 0 ? '700' : '600'};font-size:15px;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                    ${escapeHtml(myRole === 'guardian' ? c.centre_name : c.family_name)}
-                    ${c.child_name ? ` <span style="color:#6B7280;font-weight:400;">· ${escapeHtml(c.child_name)}</span>` : ''}
-                  </div>
-                  <div style="font-size:12px;color:#9CA3AF;flex-shrink:0;">${formatTime(c.last_message_at)}</div>
-                </div>
-                <div style="display:flex;justify-content:space-between;gap:8px;margin-top:2px;">
-                  <div style="font-size:14px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${c.unread_count > 0 ? '600' : '400'};">
-                    ${c.last_sender_id == myId ? '<span style="color:#9CA3AF;">You:</span> ' : ''}
-                    ${escapeHtml(c.preview || '(no messages yet)')}
-                  </div>
-                  ${c.unread_count > 0 ? `<div style="background:#1F6080;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;min-width:20px;text-align:center;flex-shrink:0;">${c.unread_count}</div>` : ''}
-                </div>
-              </div>
+        <div style="display:flex;flex-direction:column;">
+          <div class="kt-chat-header" style="padding:14px 16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <h2 style="font-size:20px;margin:0;">💬 Messages</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input id="kt-msg-filter" type="search" placeholder="🔍 Filter…" style="padding:8px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;min-width:180px;">
+              ${notifBtnHtml}${newChatBtnHtml}
             </div>
-          `).join('')}
+          </div>
+          <div style="max-height:calc(100vh - 150px);overflow-y:auto;background:#fff;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
+              <thead>
+                <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
+                  ${th('name', 'From', { w: '260px' })}
+                  ${th('preview', 'Message')}
+                  ${th('date', 'Date', { w: '120px', right: true })}
+                </tr>
+              </thead>
+              <tbody id="kt-msg-tbody"></tbody>
+            </table>
+          </div>
         </div>
       `;
-      $$('.kt-chat-row', container).forEach(row => {
-        row.addEventListener('click', () => {
-          openThread(parseInt(row.dataset.cid, 10), container);
+      const tbody = $('#kt-msg-tbody', container);
+      const sortVal = (c) => {
+        if (state.sort === 'name') return nameOf(c).toLowerCase();
+        if (state.sort === 'preview') return (c.preview || '').toLowerCase();
+        return new Date(String(c.last_message_at || '').replace(' ', 'T')).getTime() || 0;
+      };
+      const rowHtml = (c) => {
+        const nm = nameOf(c), unread = c.unread_count > 0;
+        return `<tr class="kt-msg-row" data-cid="${c.id}" style="border-top:1px solid #F1F3F5;cursor:pointer;">
+          <td style="padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            <span style="display:inline-flex;align-items:center;gap:9px;max-width:100%;">
+              <span style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#1F6080,#8EC73C);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">${escapeHtml(nm.charAt(0))}</span>
+              <span style="font-weight:${unread ? '800' : '600'};color:#111827;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(nm)}${c.child_name ? ` <span style="color:#9CA3AF;font-weight:400;">· ${escapeHtml(c.child_name)}</span>` : ''}</span>
+            </span>
+          </td>
+          <td style="padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6B7280;font-weight:${unread ? '600' : '400'};">
+            ${c.last_sender_id == myId ? '<span style="color:#9CA3AF;">You: </span>' : ''}${escapeHtml(c.preview || '(no messages yet)')}
+            ${unread ? `<span style="background:#1F6080;color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;">${c.unread_count}</span>` : ''}
+          </td>
+          <td style="padding:10px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatTime(c.last_message_at)}</td>
+        </tr>`;
+      };
+      const paint = () => {
+        const q = state.q.trim().toLowerCase();
+        let list = convs.slice();
+        if (q) list = list.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
+        list.sort((a, b) => { const va = sortVal(a), vb = sortVal(b); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
+        tbody.innerHTML = list.length ? list.map(rowHtml).join('') : '<tr><td colspan="3" style="padding:26px;text-align:center;color:#9CA3AF;">No matching conversations.</td></tr>';
+        let z = 0;
+        tbody.querySelectorAll('.kt-msg-row').forEach(row => {
+          const base = (z++ % 2) ? '#F7F9FB' : '#FFFFFF';
+          row.dataset.base = base; row.style.background = base;
+          row.addEventListener('mouseenter', () => { row.style.background = '#EEF4F7'; });
+          row.addEventListener('mouseleave', () => { row.style.background = row.dataset.base; });
+          row.addEventListener('click', () => openThread(parseInt(row.dataset.cid, 10), container));
         });
-      });
-      // v22p15.1: hook the New chat button (only present for providers)
+        container.querySelectorAll('.kt-msg-th').forEach(h => { const ar = h.querySelector('.kt-ar'); if (ar) ar.textContent = (h.getAttribute('data-sort') === state.sort) ? (state.dir < 0 ? '▾' : '▴') : ''; });
+      };
+      container.querySelectorAll('.kt-msg-th').forEach(h => h.addEventListener('click', () => {
+        const k = h.getAttribute('data-sort');
+        if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = (k === 'date') ? -1 : 1; }
+        paint();
+      }));
+      const fi = $('#kt-msg-filter', container);
+      if (fi) fi.addEventListener('input', () => { state.q = fi.value || ''; paint(); });
+      paint();
       var newBtn = $('#kt-new-chat-btn', container);
       if (newBtn) newBtn.addEventListener('click', function () { openNewChatModal(container); });
       wireNotifBtn(container);
