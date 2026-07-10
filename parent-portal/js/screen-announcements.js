@@ -11,6 +11,11 @@
 
   async function api(method, path, body) {
     const opts = { method, headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' } };
+    // Scope every call to the active agency. Without this, a platform_admin gets
+    // 403 on /admin/* — which left the composer's centre dropdown empty and made
+    // "Send" silently do nothing. Match the rest of the app's header + storage key.
+    var aid = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id');
+    if (aid) opts.headers['X-Active-Agency-Id'] = aid;
     if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     const res = await fetch(apiBase() + path, opts);
     const json = await res.json().catch(() => ({}));
@@ -87,6 +92,9 @@
     let centres = [];
     try { const r = await api('GET', '/admin/centres'); centres = r.centres || []; } catch (e) {}
 
+    // If no centres came back, the account can't broadcast (wrong role, or
+    // active-agency not set). Surface it instead of showing an empty dropdown.
+    const noCentres = centres.length === 0;
     const mount = $('#kt-mount', container);
     mount.innerHTML = `
       <div class="kt-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;">
@@ -100,7 +108,9 @@
                 <option value="">— Pick scope —</option>
                 ${centres.map(c => `<option value="centre:${c.id}">📍 Centre: ${esc(c.name)}</option>`).join('')}
               </select>
-              <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">All families with children at this centre will receive it.</div>
+              ${noCentres
+                ? `<div style="font-size:12px;color:#B91C1C;margin-top:4px;">⚠ No centres available for this account. Announcements can only be sent by a centre director or agency admin — check you're signed in with that role.</div>`
+                : `<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">All families with children at this centre will receive it.</div>`}
             </div>
             <input name="title" required placeholder="Title *" maxlength="200" style="${inp()}">
             <div>
@@ -157,6 +167,11 @@
       e.preventDefault();
       const f = e.target;
       const scopeRaw = f.querySelector('[name="scope_id"]').value;
+      if (!scopeRaw) {
+        $('#kt-status', mount).style.color = '#DC2626';
+        $('#kt-status', mount).textContent = '✗ Choose who to send to first';
+        return;
+      }
       const [scope_type, scope_id] = scopeRaw.split(':');
       const rteEl = f.querySelector('#kt-rte');
       const bodyHtml = (rteEl.innerHTML || '').trim();
