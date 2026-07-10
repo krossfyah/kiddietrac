@@ -85,11 +85,11 @@
     <p style="margin:0 0 6px;">
       <a href="https://kiddietrac.ca/privacy" style="margin-right:14px;">Privacy policy</a>
       <a href="https://kiddietrac.ca/terms"   style="margin-right:14px;">Terms of service</a>
-      <a href="mailto:support@kiddietrac.com">Contact support</a>
+      <a href="mailto:info@kiddietrac.com">Contact us</a>
     </p>
     <p style="margin:0;color:#8693A8;font-size:11px;">
-      KiddieTrac &middot; Smart Childcare Management Platform &middot; Ontario, Canada<br>
-      info@kiddietrac.com &middot; support@kiddietrac.com
+      Powered by KiddieTrac &mdash; The Smart Childcare Management Platform<br>
+      <span style="color:#9AA6B8;">noreply@kiddietrac.com is not monitored — contact your site administrator or info@kiddietrac.com</span>
     </p>
   </div>
 </div>

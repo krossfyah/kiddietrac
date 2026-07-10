@@ -38,9 +38,14 @@
     left.appendChild(Dom.el('p', { class: 'kt-help-sub' }, 'Find answers fast. 30+ articles, AI search, contextual hints.'));
     hero.appendChild(left);
 
+    const actions = Dom.el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;' });
+    const tourBtn = Dom.el('button', { class: 'kt-help-ask-btn', style: 'background:#7C3AED;' }, ['🎬', Dom.el('span', {}, 'Take the tour')]);
+    tourBtn.addEventListener('click', function () { if (window.KT && window.KT.showTour) window.KT.showTour(); });
+    actions.appendChild(tourBtn);
     const askBtn = Dom.el('button', { class: 'kt-help-ask-btn' }, ['✨', Dom.el('span', {}, 'Ask AI')]);
     askBtn.addEventListener('click', showAskModal);
-    hero.appendChild(askBtn);
+    actions.appendChild(askBtn);
+    hero.appendChild(actions);
     wrap.appendChild(hero);
 
     /* v22p70: search lives inside sidebar — declare input here, attach inside renderSidebar */
@@ -484,6 +489,9 @@
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Images — MUST run before the inline-link rule so ![alt](src) isn't caught
+    // by the [text](url) matcher. Used for annotated screenshots in guides.
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="kt-help-img" loading="lazy">');
     html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#help/$1" class="kt-help-wiki">$1</a>');
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
@@ -649,6 +657,7 @@
       .kt-help-markdown table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
       .kt-help-markdown th { background: #F9FAFB; padding: 10px 14px; text-align: left; border-bottom: 2px solid #E5E7EB; font-weight: 700; color: #1F2937; }
       .kt-help-markdown td { padding: 10px 14px; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
+      .kt-help-markdown img.kt-help-img { max-width: 100%; height: auto; display: block; margin: 16px 0; border: 1px solid #E5E7EB; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.07); }
       .kt-help-markdown a { color: #1F6080; text-decoration: underline; }
       .kt-help-markdown a.kt-help-wiki { background: rgba(31, 96, 128, 0.08); padding: 1px 6px; border-radius: 4px; text-decoration: none; font-weight: 600; }
       .kt-help-markdown a.kt-help-wiki:hover { background: rgba(31, 96, 128, 0.18); }
@@ -745,6 +754,8 @@
   Shell.registerScreen("guardian:help", renderHelp);
   Shell.registerScreen("educator:help", renderHelp);
   Shell.registerScreen("centre_director:help", renderHelp);
+  Shell.registerScreen("auditor:help", renderHelp);
+  Shell.registerScreen("agency_admin:help", renderHelp);
   Shell.registerScreen("agency_admin:help", renderHelp);
   Shell.registerScreen("platform_admin:help", renderHelp);
 })(window);

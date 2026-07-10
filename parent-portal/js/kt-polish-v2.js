@@ -45,6 +45,11 @@
     // Insert a checkbox column header
     const headerRow = thead.querySelector('tr');
     if (!headerRow) return;
+    // v22p83: Don't double-decorate. Some screens (e.g. User management's
+    // renderUsersTab) already render their own select-all column. Adding ours
+    // on top produced two side-by-side checkbox columns. Bail if the header
+    // already has a checkbox of its own.
+    if (headerRow.querySelector('input[type="checkbox"]')) return;
     const checkboxTh = document.createElement('th');
     checkboxTh.style.cssText = 'width:32px;padding:8px 0 8px 14px;';
     const headerCheckbox = document.createElement('input');
@@ -211,6 +216,13 @@
       if (!/save|submit|send|generate|upload|create|charge|refund|run|approve|deny|publish|sign|book|claim|add|delete|remove|sync|push|extract|tag/.test(text)) return;
       // Skip cancel-style buttons
       if (/cancel|close|back|×/i.test(text)) return;
+      // v22p87: do NOT spin buttons that merely OPEN a modal or toggle a panel.
+      // They stay in the DOM with no async work to finish, so the spinner used
+      // to run for the full 8s — the "circle keeps spinning" bug (e.g. Waitlist
+      // "+ Add", the sidebar "⚡ Quick add" header/items). Skip "+"-prefixed
+      // creation buttons and anything inside the sidebar / nav / quick-add menu.
+      if (/^[+＋➕]/.test((btn.textContent || '').trim())) return;
+      if (btn.closest('.app-sidebar, .kt-sidebar, nav, .kt-v5a-actions, .kt-quickadd-menu, .kt-qa-menu, #kt-quickadd-menu')) return;
 
       const original = btn.innerHTML;
       const wasDisabled = btn.disabled;
@@ -221,8 +233,10 @@
       btn.style.cursor = 'wait';
       btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:kt-spin .7s linear infinite;vertical-align:-2px;margin-right:8px;"></span>' + original;
 
-      // Restore after either: 8 sec timeout OR next DOM-change tick
+      let _restored = false;
       const restore = () => {
+        if (_restored) return;
+        _restored = true;
         btn.disabled = wasDisabled;
         btn.style.opacity = '';
         btn.style.cursor = '';
@@ -230,12 +244,24 @@
         delete btn.dataset.ktSpinning;
         delete btn.dataset.ktOriginal;
       };
-      setTimeout(restore, 8000);
-      // Also restore on next render — many actions re-render the screen and the button disappears
-      const observer = new MutationObserver(() => {
-        if (!document.body.contains(btn)) observer.disconnect();
+      // Restore when: the button is removed (re-render), a modal/overlay opens
+      // (the click's job was to open it), or a 2.5s safety timeout.
+      const observer = new MutationObserver((muts) => {
+        if (!document.body.contains(btn)) { restore(); observer.disconnect(); return; }
+        for (let i = 0; i < muts.length; i++) {
+          const added = muts[i].addedNodes;
+          for (let j = 0; j < added.length; j++) {
+            const n = added[j];
+            if (n.nodeType !== 1) continue;
+            if ((n.className && /overlay|backdrop|modal/i.test(String(n.className))) ||
+                (n.querySelector && n.querySelector('.modal, .modal-backdrop, [role="dialog"], .kt-qa-overlay'))) {
+              restore(); observer.disconnect(); return;
+            }
+          }
+        }
       });
       observer.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => { restore(); observer.disconnect(); }, 2500);
     }, true);
     if (!document.getElementById('kt-spin-css')) {
       const s = document.createElement('style');

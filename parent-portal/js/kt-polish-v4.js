@@ -7,6 +7,12 @@
 
   // ============================ Mobile bottom nav ============================
   function injectMobileBottomNav() {
+    // Superseded by kt-mobilenav.js (#kt-mobilenav). This legacy bar caused a
+    // second, overlapping bottom nav — disabled. Remove any stale instance too.
+    var _stale = document.getElementById('kt-mobile-bottom-nav');
+    if (_stale) _stale.remove();
+    return;
+    /* eslint-disable no-unreachable */
     if (document.getElementById('kt-mobile-bottom-nav')) return;
     if (!window.matchMedia('(max-width: 768px)').matches) return;
     if (!sessionStorage.getItem('kt_token')) return; // only when logged in

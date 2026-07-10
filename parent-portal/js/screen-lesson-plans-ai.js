@@ -67,6 +67,7 @@
     const rows = (data && data.plans) || [];
     const listEl = wrap.querySelector('#kt-list');
     Dom.clear(listEl);
+    listEl.setAttribute('data-kt-list', '1');
 
     if (rows.length === 0) {
       listEl.appendChild(emptyState('-', 'No plans yet', 'Click + Generate plan to create your first AI-drafted week.'));

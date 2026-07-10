@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Models\Incident;
 use App\Models\IncidentAcknowledgment;
@@ -33,6 +34,8 @@ use Illuminate\Support\Facades\Log;
  */
 class IncidentController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function __construct(protected WebPushService $push)
     {
     }
@@ -58,6 +61,8 @@ class IncidentController extends Controller
             'witnesses.*.role'      => 'nullable|string|max:60',
             'body_parts_affected'   => 'nullable|array',
         ]);
+        // SECURITY (v22p94): only the child's centre staff may file an incident.
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
 
         // Derive centre_id from child
         $child = Child::find($data['child_id']);
@@ -90,6 +95,7 @@ class IncidentController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $incident = Incident::findOrFail($id);
+        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
 
         if ($incident->status !== 'draft') {
             return response()->json([
@@ -164,8 +170,11 @@ class IncidentController extends Controller
     {
         $user = $request->user();
 
+        // NOTE (v22p98): users has no `name` column — select first_name/last_name
+        // (the old `recordedBy:id,name` / `reviewedBy:id,name` 500'd once incidents
+        // actually existed). A `name` accessor on User still derives from these.
         $q = Incident::query()
-            ->with(['child:id,first_name,last_name', 'recordedBy:id,name', 'reviewedBy:id,name'])
+            ->with(['child:id,first_name,last_name', 'recordedBy:id,first_name,last_name', 'reviewedBy:id,first_name,last_name'])
             ->orderByDesc('occurred_at');
 
         // Filter by status if provided
@@ -173,9 +182,13 @@ class IncidentController extends Controller
             $q->where('status', $status);
         }
 
-        // Filter by centre
+        // Filter by centre (incidents have no centre_id — scope via the child's family centre)
         if ($centreId = $request->query('centre_id')) {
-            $q->where('centre_id', (int) $centreId);
+            $centreChildIds = DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->where('f.centre_id', (int) $centreId)
+                ->pluck('c.id')->all();
+            $q->whereIn('child_id', $centreChildIds ?: [0]);
         }
 
         // Date range
@@ -203,6 +216,19 @@ class IncidentController extends Controller
                 ->all();
             $q->whereIn('child_id', $childIds);
             $q->whereIn('status', ['parent_notified', 'acknowledged', 'closed']);
+        } else {
+            // SECURITY (v22p96/98): staff/admin see only incidents in their active
+            // agency — a platform_admin is scoped to the agency they've switched
+            // into. NOTE: the `incidents` table has NO centre_id column (v22p96
+            // wrongly filtered on it → 500). Incidents link to a child, so scope
+            // by the children whose family belongs to a centre in the agency.
+            $agencyId = $this->resolveAgencyId($request);
+            $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+            $childIds = DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->whereIn('f.centre_id', $centreIds ?: [0])
+                ->pluck('c.id')->all();
+            $q->whereIn('child_id', $childIds ?: [0]);
         }
 
         $limit = min(100, max(5, (int) $request->query('limit', 30)));
@@ -214,13 +240,17 @@ class IncidentController extends Controller
      * ============================================================ */
     public function show(Request $request, int $id): JsonResponse
     {
+        // v22p98: users has no `name` column — select first_name/last_name.
         $incident = Incident::with([
             'child:id,first_name,last_name',
-            'recordedBy:id,name',
-            'reviewedBy:id,name',
-            'acknowledgments.user:id,name',
+            'recordedBy:id,first_name,last_name',
+            'reviewedBy:id,first_name,last_name',
+            'acknowledgments.user:id,first_name,last_name',
             'attachments',
         ])->findOrFail($id);
+
+        // SECURITY (v22p94): only the child's guardians/centre staff may read it.
+        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
 
         return response()->json(['data' => $incident]);
     }
@@ -231,6 +261,7 @@ class IncidentController extends Controller
     public function review(Request $request, int $id): JsonResponse
     {
         $incident = Incident::findOrFail($id);
+        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
 
         if ($incident->status !== 'submitted') {
             return response()->json(['error' => 'Only submitted incidents can be reviewed'], 409);
@@ -257,6 +288,7 @@ class IncidentController extends Controller
     public function notifyParent(Request $request, int $id): JsonResponse
     {
         $incident = Incident::findOrFail($id);
+        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
 
         if (! in_array($incident->status, ['director_reviewed', 'submitted'], true)) {
             return response()->json(['error' => 'Incident must be reviewed before notifying parent'], 409);
@@ -300,6 +332,9 @@ class IncidentController extends Controller
     {
         $incident = Incident::findOrFail($id);
 
+        // SECURITY (v22p94): only the child's guardians/centre staff may acknowledge.
+        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
+
         if (! $incident->canBeAcknowledged()) {
             return response()->json(['error' => 'Incident is not in a state where it can be acknowledged'], 409);
         }
@@ -335,6 +370,7 @@ class IncidentController extends Controller
     public function close(Request $request, int $id): JsonResponse
     {
         $incident = Incident::findOrFail($id);
+        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
 
         $data = $request->validate([
             'director_notes' => 'nullable|string|max:3000',

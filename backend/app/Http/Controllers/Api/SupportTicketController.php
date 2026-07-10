@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,6 +15,28 @@ use Illuminate\Support\Facades\DB;
  */
 final class SupportTicketController extends Controller
 {
+    use ResolvesCentreContext;
+
+    /**
+     * SECURITY (v22p96): a staff member may only act on a ticket that belongs to
+     * their OWN agency; a platform_admin only on tickets of the agency they've
+     * switched into (X-Active-Agency-Id). The prior global `$isStaff` check let
+     * any agency's staff — and a switched super-admin — read/reply/triage every
+     * agency's tickets (which carry billing/PII free-text). The raiser always
+     * keeps access to their own ticket.
+     */
+    private function staffMayAccessTicket(Request $request, object $ticket): bool
+    {
+        $u = $request->user();
+        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
+            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
+            ->where('active', 1)->exists();
+        if (! $isStaff) return false;
+        if ($this->isPlatformAdminUser($u)) {
+            return (int) $ticket->agency_id === (int) $this->resolveAgencyId($request);
+        }
+        return $this->userBelongsToAgency($u->id, (int) $ticket->agency_id);
+    }
     public function listMine(Request $request): JsonResponse
     {
         $u = $request->user();
@@ -28,8 +51,9 @@ final class SupportTicketController extends Controller
                 DB::raw("CONCAT(raised.first_name,' ',raised.last_name) as raised_by_name"),
                 DB::raw("CONCAT(assigned.first_name,' ',assigned.last_name) as assigned_name"));
         if ($isStaff) {
-            $agencyId = (int) ($request->header('X-Active-Agency-Id')
-                ?: DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id'));
+            // SECURITY (v22p96): resolve the active agency securely (honours the
+            // header only for members/platform_admin) — never trust it raw.
+            $agencyId = (int) $this->resolveAgencyId($request);
             $q->where('t.agency_id', $agencyId);
         } else {
             $q->where('t.raised_by_user_id', $u->id);
@@ -82,10 +106,7 @@ final class SupportTicketController extends Controller
         $ticket = DB::table('support_tickets')->where('id', $id)->first();
         abort_unless($ticket, 404);
         $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
-            ->where('active', 1)->exists();
-        abort_unless($ticket->raised_by_user_id === $u->id || $isStaff, 403);
+        abort_unless($ticket->raised_by_user_id === $u->id || $this->staffMayAccessTicket($request, $ticket), 403);
         $messages = DB::table('support_ticket_messages as m')
             ->leftJoin('users as u', 'u.id', '=', 'm.user_id')
             ->where('m.ticket_id', $id)
@@ -104,7 +125,8 @@ final class SupportTicketController extends Controller
         $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
             ->where('active', 1)->exists();
-        abort_unless($ticket->raised_by_user_id === $u->id || $isStaff, 403);
+        // v22p96: scoped — global staff role alone is not enough; must own the agency.
+        abort_unless($ticket->raised_by_user_id === $u->id || $this->staffMayAccessTicket($request, $ticket), 403);
         DB::table('support_ticket_messages')->insert([
             'ticket_id' => $id, 'user_id' => $u->id, 'body' => $data['body'],
             'created_at' => now(),
@@ -129,11 +151,11 @@ final class SupportTicketController extends Controller
 
     public function updateStatus(Request $request, int $id): JsonResponse
     {
-        $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
-            ->where('active', 1)->exists();
-        abort_unless($isStaff, 403);
+        $ticket = DB::table('support_tickets')->where('id', $id)->first();
+        abort_unless($ticket, 404);
+        // v22p96: must be staff of THIS ticket's agency (or platform_admin scoped
+        // to it) — not just any staff anywhere.
+        abort_unless($this->staffMayAccessTicket($request, $ticket), 403);
         $data = $request->validate([
             'status' => 'required|in:open,awaiting_user,resolved,closed',
             'assigned_user_id' => 'nullable|integer',

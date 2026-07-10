@@ -38,7 +38,7 @@
           <button class="kt-btn kt-btn-ghost" id="w-add-ach">+ Add bank account (ACH)</button>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+      <div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
         ${methods.map(m => `<div class="kt-card" style="position:relative;">
           ${m.is_default ? '<span class="kt-pill kt-pill-success" style="position:absolute;top:12px;right:12px;">DEFAULT</span>' : ''}
           <div style="font-size:36px;">${m.type === 'card' ? '💳' : '🏦'}</div>
@@ -163,16 +163,33 @@
         <p>Process partial or full refunds against any payment. Stripe payments are refunded automatically; manual ones are recorded for audit.</p>
       </div>
       <div class="kt-card">
-        <label style="font-size:13px;font-weight:600;">Payment ID to refund</label>
-        <div style="display:flex;gap:8px;margin-top:6px;">
-          <input id="rf-pid" type="number" placeholder="e.g. 1234" style="flex:1;padding:11px;border:1px solid #E2E8F0;border-radius:8px;">
+        <label style="font-size:13px;font-weight:600;">Select a payment to refund</label>
+        <select id="rf-picker" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
+          <option value="">Loading recent payments…</option>
+        </select>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:12px;color:#94A3B8;">or enter a Payment ID directly:</span>
+          <input id="rf-pid" type="number" placeholder="e.g. 1234" style="width:150px;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
           <button id="rf-load" class="kt-btn kt-btn-primary">Load</button>
         </div>
         <div id="rf-detail" style="margin-top:20px;"></div>
       </div>
     </div>`;
-    document.getElementById('rf-load').onclick = async () => {
-      const pid = +document.getElementById('rf-pid').value;
+    // v22p98: populate a picker of recent payments so no raw Payment ID is needed.
+    (async () => {
+      const sel = document.getElementById('rf-picker');
+      try {
+        const res = await Api.get('/refunds/recent-payments');
+        const pays = res.data || [];
+        sel.innerHTML = pays.length
+          ? '<option value="">— Select a payment —</option>' + pays.map(p =>
+              `<option value="${p.id}">${esc(p.family_name)} · ${fmtMoney(p.amount)} · ${fmtDate(p.date)}${p.refunded > 0 ? ' · ' + fmtMoney(p.refunded) + ' refunded' : ''} (#${p.id})</option>`).join('')
+          : '<option value="">No payments found for this agency</option>';
+        sel.onchange = () => { const pid = +sel.value; if (pid) { document.getElementById('rf-pid').value = pid; loadPayment(pid); } };
+      } catch (e) { sel.innerHTML = '<option value="">Could not load payments — enter an ID below</option>'; }
+    })();
+    document.getElementById('rf-load').onclick = () => loadPayment(+document.getElementById('rf-pid').value);
+    async function loadPayment(pid) {
       if (!pid) return;
       const r = await Api.get(`/refunds/payment/${pid}`);
       document.getElementById('rf-detail').innerHTML = `
@@ -188,6 +205,7 @@
           <td>${fmtMoney(rf.amount)}</td>
           <td>${esc(rf.reason || '')}</td>
           <td><span class="kt-pill ${rf.status === 'succeeded' ? 'kt-pill-success' : rf.status === 'failed' ? 'kt-pill-danger' : 'kt-pill-warning'}">${esc(rf.status)}</span></td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:24px;color:#94A3B8;">No prior refunds.</td></tr>'}</tbody></table>
+        <div style="max-width:440px;">
         <h3 style="margin-top:18px;font-size:15px;color:#0F172A;">Issue new refund</h3>
         <label style="font-size:13px;font-weight:600;">Amount</label>
         <input id="rf-amt" type="number" step="0.01" max="${r.remaining_refundable}" min="0.01" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
@@ -203,6 +221,7 @@
         <textarea id="rf-notes" rows="3" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
         <button id="rf-go" class="kt-btn kt-btn-danger" style="margin-top:14px;">Issue refund</button>
         <div id="rf-out" style="margin-top:10px;"></div>
+        </div>
       `;
       document.getElementById('rf-go').onclick = async () => {
         const amt = parseFloat(document.getElementById('rf-amt').value);
@@ -217,7 +236,7 @@
           setTimeout(() => document.getElementById('rf-load').click(), 1500);
         } catch (e) { document.getElementById('rf-out').innerHTML = `<div style="background:#FEE2E2;color:#991B1B;padding:14px;border-radius:8px;">${esc(e.message || 'Failed')}</div>`; }
       };
-    };
+    }
   }
 
   // ============================ Custom report builder ============================
@@ -340,7 +359,7 @@
         <p>${(r.data || []).length} video(s). React with a heart / smile / clap.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="v-upload">+ Upload video</button></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:18px;">
+      <div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:18px;">
         ${(r.data || []).map(v => {
           const reacts = v.reactions || {};
           return `<div class="kt-card" style="padding:0;overflow:hidden;">

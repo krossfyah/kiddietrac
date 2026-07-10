@@ -1,0 +1,218 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — login page redesign (2026-07-08).
+   Premium split screen: clean sign-in (left) + living brand showcase
+   (right) with animated mesh gradient + floating blobs + glass cards.
+   Loaded LAST so it wins over the legacy kt-login CSS. Preserves the
+   #loginForm structure + IDs the auth JS and kt-social-login.js rely on.
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  --ktl-navy: #0A1B3D;
+  --ktl-teal: #0FA3B1;
+  --ktl-blue: #1F6FB2;
+  --ktl-ink:  #0D1B2A;
+}
+
+html, body.auth-body { margin: 0; padding: 0; min-height: 100vh; background: #fff; }
+
+.ktl-wrap {
+  display: grid;
+  grid-template-columns: 46% 54%;
+  min-height: 100vh;
+  width: 100%;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  color: var(--ktl-ink);
+}
+
+/* ─────────────────── LEFT · sign-in ─────────────────── */
+.ktl-form-side {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 32px 56px;
+  background:
+    radial-gradient(1100px 420px at 50% -12%, #EAF5FA 0%, transparent 62%),
+    linear-gradient(180deg, #FFFFFF 0%, #F6FAFD 100%);
+}
+.ktl-form-inner {
+  width: 100%; max-width: 394px;
+  animation: ktl-rise .6s cubic-bezier(.2, .7, .2, 1) both;
+}
+.ktl-form-side .auth-logo { text-align: center; }
+.ktl-logo { height: 92px; width: auto; display: block; margin: 0 auto 20px; }
+.ktl-title {
+  font-family: 'Baloo 2', cursive, sans-serif;
+  font-size: 32px; font-weight: 800; letter-spacing: -.6px;
+  color: var(--ktl-ink); margin: 0 0 6px; text-align: center;
+}
+.ktl-sub { font-size: 14.5px; color: #64748B; margin: 0 0 22px; text-align: center; }
+
+/* Respect the [hidden] attribute — a legacy `.form-row { display }` rule was
+   overriding it, leaving the MFA code row + banners visible before they apply. */
+.ktl-wrap [hidden] { display: none !important; }
+
+/* fields */
+.ktl-wrap .auth-form { display: block; }
+.ktl-wrap .auth-form .form-row { margin-bottom: 15px; }
+.ktl-wrap .auth-form label {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12.5px; font-weight: 700; color: #334155; margin-bottom: 6px; letter-spacing: .2px;
+}
+.ktl-wrap .auth-form input {
+  width: 100%; box-sizing: border-box;
+  padding: 12px 14px; font-size: 14.5px; font-family: inherit;
+  border: 1.5px solid #E3EAF1; border-radius: 11px; background: #fff; color: var(--ktl-ink);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ktl-wrap .auth-form input::placeholder { color: #B6C2CE; }
+.ktl-wrap .auth-form input:focus {
+  outline: none; border-color: var(--ktl-teal);
+  box-shadow: 0 0 0 4px rgba(15, 163, 177, .15);
+}
+.ktl-wrap .forgot-link { font-size: 12px; font-weight: 600; color: var(--ktl-blue); text-decoration: none; }
+.ktl-wrap .forgot-link:hover { text-decoration: underline; }
+
+/* primary button */
+.ktl-wrap #submitBtn, .ktl-wrap .btn-primary {
+  width: 100%; border: 0; cursor: pointer; margin-top: 6px;
+  padding: 13px 18px; font-size: 15px; font-weight: 800; font-family: inherit; letter-spacing: .3px;
+  color: #fff; border-radius: 12px;
+  background: linear-gradient(135deg, var(--ktl-teal) 0%, var(--ktl-blue) 55%, #2456A6 100%);
+  box-shadow: 0 12px 24px -10px rgba(31, 111, 178, .65);
+  transition: transform .12s ease, box-shadow .2s ease, filter .2s ease;
+}
+.ktl-wrap #submitBtn:hover { transform: translateY(-1px); box-shadow: 0 16px 28px -10px rgba(31, 111, 178, .75); filter: brightness(1.05); }
+.ktl-wrap #submitBtn:active { transform: translateY(0); }
+.ktl-wrap #submitBtn:disabled { opacity: .68; cursor: default; transform: none; }
+
+.ktl-wrap .form-error { color: #B91C1C; font-size: 13px; margin: 2px 0 8px; line-height: 1.4; }
+
+.ktl-foot { font-size: 12.5px; color: #94A3B8; text-align: center; margin: 20px 0 0; line-height: 1.65; }
+.ktl-foot a { color: var(--ktl-blue); font-weight: 600; text-decoration: none; }
+.ktl-foot a:hover { text-decoration: underline; }
+.ktl-legal { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; font-size: 11.5px; color: #B6C2CE; }
+
+/* social buttons injected above the form by kt-social-login.js */
+.ktl-wrap #kt-social { margin: 2px 0 4px; }
+
+/* ─────────────────── RIGHT · brand showcase ─────────────────── */
+.ktl-brand-side {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  padding: 56px 60px;
+  background: linear-gradient(135deg, #0A1B3D 0%, #103867 44%, #0E7C90 100%);
+  background-size: 180% 180%;
+  animation: ktl-shift 20s ease-in-out infinite;
+}
+.ktl-blob { position: absolute; border-radius: 50%; filter: blur(64px); pointer-events: none; }
+.ktl-blob-1 { width: 440px; height: 440px; background: #13B7CC; top: -90px; right: -70px; opacity: .55; animation: ktl-float 15s ease-in-out infinite; }
+.ktl-blob-2 { width: 380px; height: 380px; background: #FF8A5B; bottom: -110px; left: -60px; opacity: .40; animation: ktl-float 19s ease-in-out infinite reverse; }
+.ktl-blob-3 { width: 300px; height: 300px; background: #8EC73C; top: 42%; left: 52%; opacity: .32; animation: ktl-float 22s ease-in-out infinite; }
+
+.ktl-brand-content { position: relative; z-index: 2; max-width: 528px; color: #fff; }
+.ktl-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 800; letter-spacing: 1.5px; color: #DBF4F8;
+  background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .24);
+  padding: 7px 15px; border-radius: 100px; backdrop-filter: blur(6px); margin-bottom: 22px;
+}
+.ktl-headline {
+  font-family: 'Baloo 2', cursive, sans-serif;
+  font-size: 46px; line-height: 1.08; font-weight: 800; letter-spacing: -1px;
+  margin: 0 0 18px; text-shadow: 0 6px 28px rgba(0, 0, 0, .22);
+}
+.ktl-hl {
+  background: linear-gradient(90deg, #FFD98A, #FF9F6B);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.ktl-lede { font-size: 16px; line-height: 1.62; color: rgba(255, 255, 255, .85); margin: 0 0 30px; max-width: 470px; }
+
+.ktl-features { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; }
+.ktl-feat {
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(255, 255, 255, .10); border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 15px; padding: 13px 16px; backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px -14px rgba(0, 0, 0, .5);
+  transition: transform .2s ease, background .2s ease;
+}
+.ktl-feat:hover { transform: translateX(5px); background: rgba(255, 255, 255, .15); }
+.ktl-feat .ic {
+  font-size: 22px; width: 46px; height: 46px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, .15); border-radius: 12px;
+}
+.ktl-feat h3 { margin: 0 0 2px; font-size: 14.5px; font-weight: 700; color: #fff; }
+.ktl-feat p { margin: 0; font-size: 12.5px; color: rgba(255, 255, 255, .74); line-height: 1.42; }
+
+.ktl-trust { display: flex; gap: 10px; flex-wrap: wrap; }
+.ktl-trust span {
+  font-size: 12px; font-weight: 700; color: #CFEDF2;
+  background: rgba(255, 255, 255, .10); border: 1px solid rgba(255, 255, 255, .20);
+  padding: 8px 16px; border-radius: 100px;
+}
+
+/* ─────────────────── animations ─────────────────── */
+@keyframes ktl-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes ktl-shift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes ktl-float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-26px, 26px) scale(1.08); } }
+@media (prefers-reduced-motion: reduce) {
+  .ktl-blob, .ktl-brand-side, .ktl-form-inner { animation: none !important; }
+}
+
+/* The mobile brand hero only exists on phones. */
+.ktl-mobile-hero { display: none; }
+
+/* ─────────────────── responsive ─────────────────── */
+/* Tablet: single column, hide the showcase, keep the light form. */
+@media (max-width: 940px) and (min-width: 601px) {
+  .ktl-wrap { grid-template-columns: 1fr; }
+  .ktl-brand-side { display: none; }
+  .ktl-form-side { background: radial-gradient(900px 380px at 50% -10%, #E4F1F7 0%, transparent 60%), linear-gradient(180deg, #F4FAFD, #FFFFFF 60%); }
+}
+
+/* ─────────── Phone (≤600): warm, friendly, light login ───────────
+   Soft sky gradient · real KiddieTrac logo · form in a clean white card.
+   Airy and welcoming — reads like a parent app, not a corporate portal. */
+@media (max-width: 600px) {
+  /* A clean, flat, native-app login: solid ground, logo, roomy filled fields,
+     a full-width primary button — no floating card, no decorative blobs. */
+  html, body.auth-body { background: #FFFFFF; }
+  .ktl-wrap { display: block; min-height: 100dvh; }
+  .ktl-brand-side { display: none; }
+
+  .ktl-form-side {
+    min-height: 100dvh; position: relative; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    padding: calc(env(safe-area-inset-top, 0px) + 44px) 28px calc(env(safe-area-inset-bottom, 0px) + 30px);
+    background: #FFFFFF;
+  }
+  .ktl-form-side::before, .ktl-form-side::after { display: none !important; }
+
+  /* Logo, centred, with breathing room above the form. */
+  .ktl-mobile-hero { display: block; position: relative; z-index: 2; text-align: center; margin-bottom: 38px; }
+  .ktl-mhero-card { display: inline-block; background: none; box-shadow: none; padding: 0; }
+  .ktl-mhero-card img { height: 62px; width: auto; display: block; margin: 0 auto; }
+  .ktl-mhero-tag { display: none; }
+
+  /* The form sits directly on the page (no card) — flatter and more app-like. */
+  .ktl-form-inner {
+    position: relative; z-index: 2; width: 100%; max-width: 400px; margin: 0;
+    background: transparent; border-radius: 0; padding: 0; box-shadow: none;
+  }
+  .ktl-form-side .auth-logo { display: none; }
+  .ktl-title { font-size: 26px; font-weight: 800; letter-spacing: -.5px; margin-bottom: 6px; text-align: center; color: #0D1B2A; }
+  .ktl-sub { font-size: 14px; margin-bottom: 30px; text-align: center; color: #8A99A8; }
+
+  .ktl-wrap .auth-form .form-row { margin-bottom: 13px; }
+  .ktl-wrap .auth-form label { font-size: 13px; font-weight: 600; color: #64748B; }
+  .ktl-wrap .auth-form input {
+    padding: 16px 16px; font-size: 16px; border-radius: 14px;      /* 16px = no iOS zoom */
+    background: #F4F7FA; border: 1px solid #E6EDF2; color: #0D1B2A;
+    transition: background .15s, border-color .15s, box-shadow .15s;
+  }
+  .ktl-wrap .auth-form input:focus { background: #fff; border-color: #13B7CC; box-shadow: 0 0 0 3px rgba(19,183,204,.16); outline: none; }
+  .ktl-wrap #submitBtn, .ktl-wrap .btn-primary {
+    width: 100%; padding: 16px 18px; font-size: 16px; font-weight: 800; border-radius: 14px; margin-top: 16px;
+  }
+
+  .ktl-foot { margin-top: 22px; text-align: center; }
+  .ktl-legal { position: static; margin-top: 30px; color: #B6C2CE; }
+}

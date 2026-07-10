@@ -272,6 +272,11 @@ final class OperationsV2Controller extends Controller
 
     public function routeChildren(Request $request, int $routeId): JsonResponse
     {
+        // SECURITY (v22p96): scope the bus roster to the caller's active agency
+        // (bus_routes.agency_id). Was readable by route id for any caller.
+        $routeAgency = (int) DB::table('bus_routes')->where('id', $routeId)->value('agency_id');
+        abort_unless($routeAgency, 404);
+        abort_unless($routeAgency === (int) $this->resolveAgencyId($request), 403);
         $rows = DB::table('bus_route_children as brc')
             ->join('children as c', 'c.id', '=', 'brc.child_id')
             ->where('brc.bus_route_id', $routeId)
@@ -390,7 +395,13 @@ final class OperationsV2Controller extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)
@@ -402,10 +413,16 @@ final class OperationsV2Controller extends Controller
     private function assertCentreAccess(Request $request, int $centreId): void
     {
         $u = $request->user();
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        abort_unless($agencyId, 404);
         $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)
             ->where('role', 'platform_admin')->where('active', true)->exists();
-        if ($isPlatform) return;
-        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        if ($isPlatform) {
+            // v22p98: scope to the agency they've switched into (was an unconditional
+            // grant that let a super-admin reach any centre in any tenant).
+            abort_unless($agencyId === (int) $request->header('X-Active-Agency-Id'), 403);
+            return;
+        }
         $hasRole = DB::table('role_assignments')->where('user_id', $u->id)
             ->where('agency_id', $agencyId)
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator'])

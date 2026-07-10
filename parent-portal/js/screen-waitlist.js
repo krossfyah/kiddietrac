@@ -80,7 +80,7 @@
               <div style="font-size:48px;margin-bottom:12px;">📋</div>
               No one on the waitlist for this centre.
             </div>`
-          : `<div style="background:white;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+          : `<div data-kt-list="1" style="background:white;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);">
               ${data.waitlist.map(w => waitlistRow(w)).join('')}
             </div>`
         }

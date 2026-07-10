@@ -1,8 +1,10 @@
 /* ===================================================================
-   KIDDIETRAC service worker v14
+   KIDDIETRAC service worker v15
    v11: caching + offline; v14: + Web Push support
+   v15: network-first for HTML so deploys show up without a cache trap
+        (the old cache-first served a stale dashboard.html forever).
    =================================================================== */
-const CACHE = 'kt-v22p79-1';
+const CACHE = 'kt-v22p98g-rt5';
 const ASSETS = ['/', '/index.html', '/dashboard.html', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -22,6 +24,26 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('/api/')) return; // Don't cache API
+
+  const accept = e.request.headers.get('accept') || '';
+  const isDoc = e.request.mode === 'navigate' || accept.includes('text/html');
+
+  if (isDoc) {
+    // Network-first for the app shell (HTML): always try the fresh page so a
+    // deploy is picked up immediately; fall back to cache only when offline.
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(e.request).then(c => c || caches.match('/dashboard.html')))
+    );
+    return;
+  }
+
+  // Other GETs (assets): cache-first, fall back to network.
   e.respondWith(
     caches.match(e.request).then(cached =>
       cached || fetch(e.request).catch(() => caches.match('/dashboard.html'))

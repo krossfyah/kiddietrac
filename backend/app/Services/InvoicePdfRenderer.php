@@ -42,7 +42,7 @@ final class InvoicePdfRenderer
         'primary_color'   => '#081C41',
         'support_email'   => 'support@kiddietrac.com',
         'bank_info'       => 'Payment instructions available on request.',
-        'powered_by'      => 'Kiddietrac — childcare management',
+        'powered_by'      => 'Powered by KiddieTrac — The Smart Childcare Management Platform',
     ];
 
     /**
@@ -63,6 +63,10 @@ final class InvoicePdfRenderer
         $logoUrl      = htmlspecialchars($brand['logo_url']);
         $supportEmail = htmlspecialchars($brand['support_email']);
         $issuerName   = htmlspecialchars($brand['issuer_name']);
+        $issuerAddress = !empty($brand['address']) ? nl2br(htmlspecialchars((string) $brand['address'])) : '';
+        $issuerPhone   = !empty($brand['phone']) ? htmlspecialchars((string) $brand['phone']) : '';
+        $issuerAddressBlock = $issuerAddress ? "<div class=\"detail\">{$issuerAddress}</div>" : '';
+        $issuerPhoneBlock   = $issuerPhone ? "<div class=\"detail\">☎ {$issuerPhone}</div>" : '';
         $bankInfo     = nl2br(htmlspecialchars($brand['bank_info']));
         $poweredBy    = $brand['powered_by'];
 
@@ -287,6 +291,8 @@ HTML
     <div class="party">
       <h3>From</h3>
       <div class="name">{$issuerName}</div>
+      {$issuerAddressBlock}
+      {$issuerPhoneBlock}
       <div class="detail">Support: {$supportEmail}</div>
     </div>
     <div class="party">
@@ -367,12 +373,23 @@ HTML;
         $get = fn (string $prop) => property_exists($a, $prop) ? ($a->$prop ?? null) : null;
         $name = $get('name') ?: 'Kiddietrac';
 
+        // v22p88: pull the agency's full info onto white-label invoices — the
+        // business address (stored in settings.brand_address) + phone.
+        $address = null;
+        $settingsRaw = $get('settings');
+        if ($settingsRaw) {
+            $s = json_decode((string) $settingsRaw, true);
+            if (is_array($s) && !empty($s['brand_address'])) $address = (string) $s['brand_address'];
+        }
+
         return [
             'logo_url'         => $get('brand_logo_url')      ?: $this->kt_defaults['logo_url'],
             'primary_color'    => $get('brand_primary_color') ?: $this->kt_defaults['primary_color'],
-            'support_email'    => $get('brand_support_email') ?: $this->kt_defaults['support_email'],
+            'support_email'    => $get('brand_support_email') ?: $get('contact_email') ?: $this->kt_defaults['support_email'],
             'bank_info'        => $get('brand_bank_info')     ?: $this->kt_defaults['bank_info'],
             'issuer_name'      => $name,
+            'address'          => $address,
+            'phone'            => $get('contact_phone'),
             'powered_by'       => $this->kt_defaults['powered_by'],
             'show_powered_by'  => (int) ($get('powered_by_visible') ?? 1) === 1,
         ];

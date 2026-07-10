@@ -139,7 +139,9 @@ final class SignupController extends Controller
                     'action' => 'centre_signup',
                     'entity_type' => 'centre',
                     'entity_id' => $centreId,
-                    'payload' => "Self-signup. Centre: {$data['centre_name']}. Director: {$data['director_email']}",
+                    // audit_logs.payload has a json_valid() CHECK — encode to JSON
+                    // (a bare string was silently rejected, dropping the signup audit).
+                    'payload' => json_encode(['centre_name' => $data['centre_name'], 'director_email' => $data['director_email'], 'source' => 'self-signup']),
                     'ip_address' => $request->ip(),
                     'user_agent' => substr((string) $request->userAgent(), 0, 500),
                     'created_at' => now(),

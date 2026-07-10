@@ -3,14 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- v22p98: ensure EVERY API call carries the active-agency header. Legacy
+       per-screen fetch wrappers (certifications, medications, schedule, etc.) omit
+       X-Active-Agency-Id; without it, a platform_admin now resolves to "no agency"
+       (the iLearn-leak fix) and those screens showed empty. This global fetch
+       shim injects the header for all api.kiddietrac.com requests that lack it. -->
+  <script>
+  (function(){
+    if (window.__ktAgencyHeaderShim) return; window.__ktAgencyHeaderShim = true;
+    var _fetch = window.fetch;
+    window.fetch = function(input, init){
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (url.indexOf('api.kiddietrac.com') !== -1) {
+          init = init || {};
+          var headers = new Headers(init.headers || (typeof input !== 'string' && input.headers) || {});
+          if (!headers.has('X-Active-Agency-Id')) {
+            var aid = null; try { aid = sessionStorage.getItem('kt_active_agency_id'); } catch(e){}
+            if (aid) headers.set('X-Active-Agency-Id', aid);
+          }
+          var va = null; try { va = sessionStorage.getItem('kt_view_as'); } catch(e){}
+          if (va && !headers.has('X-View-As-Role')) headers.set('X-View-As-Role', va);
+          init.headers = headers;
+        }
+      } catch(e){}
+      return _fetch.call(this, input, init);
+    };
+    // First-login default: a platform_admin sends no X-Active-Agency-Id until
+    // one is chosen, which made the first screen error with "no agency access".
+    // Seed it from the signed-in user's own agency so the first render works.
+    try {
+      if (!sessionStorage.getItem('kt_active_agency_id')) {
+        var _u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+        if (_u && _u.agency_id) sessionStorage.setItem('kt_active_agency_id', String(_u.agency_id));
+      }
+    } catch(e){}
+  })();
+  </script>
   <title>Kiddietrac</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/css/app-v2.css">
-  <link rel="stylesheet" href="/css/kt-sidebar-v22.css">
-  <link rel="stylesheet" href="/css/kt-polish-v22.css">
+  <link rel="stylesheet" href="/css/styles.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/app-v2.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-sidebar-v22.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-polish-v22.css?v=20260706p2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -21,17 +58,43 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Kiddietrac">
   <link rel="manifest" href="/manifest.json">
-<link rel="stylesheet" href="/css/kt-design-v22p55.css">
+<link rel="stylesheet" href="/css/kt-design-v22p55.css?v=20260706p2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="/css/kt-design-v22p64.css">
-  <link rel="stylesheet" href="/css/kt-design-v22p65.css">
-  <link rel="stylesheet" href="/css/kt-design-v22p66.css">
-  <link rel="stylesheet" href="/css/kt-consistency-v22p71.css">
-  <link rel="stylesheet" href="/css/kt-cards-v22p72.css">
+  <link rel="stylesheet" href="/css/kt-design-v22p64.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-design-v22p65.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-design-v22p66.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-consistency-v22p71.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-cards-v22p72.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-topnav-fix.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-sidebar-brand.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-hero-anim.css?v=20260706p2">
 
+  <link rel="stylesheet" href="/css/kt-fullwidth.css?v=20260708fw2">
+  <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20260709mob2">
+  <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20260711bio5">
+  <link rel="stylesheet" href="/css/kt-sidebar-compact.css?v=20260709sc3">
 </head>
 <body><!-- v17.2-shell -->
+<!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
+<div id="kt-splash"><div class="kt-splash-in"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="KiddieTrac"><div class="kt-splash-bar"><span></span></div></div></div>
+<style>
+#kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
+#kt-splash.kt-hide{opacity:0;pointer-events:none}
+#kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:26px;padding:0 28px}
+#kt-splash .kt-splash-logo{width:min(66vw,224px);height:auto;animation:kt-pulse 2.4s ease-in-out infinite}
+#kt-splash .kt-splash-bar{width:128px;height:3px;border-radius:99px;background:rgba(20,70,100,.13);overflow:hidden}
+#kt-splash .kt-splash-bar span{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,#13B7CC,#8EC73C);animation:kt-load 1.25s ease-in-out infinite}
+@keyframes kt-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes kt-load{0%{transform:translateX(-130%)}100%{transform:translateX(360%)}}
+@media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo,#kt-splash .kt-splash-bar span{animation:none}}
+</style>
+<script>
+(function(){function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
+var MIN=1200,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}
+if(document.readyState==='complete')go();else window.addEventListener('load',go);
+setTimeout(hide,6000);})();
+</script>
   <div class="app-shell app-shell--sidebar" id="appShell">
     <aside class="app-nav app-sidebar" id="appSidebar" aria-label="Main navigation">
       <a href="#" class="nav-brand" id="navBrand">
@@ -57,36 +120,48 @@
 
   <div id="modalRoot"></div>
 
-  <script src="/js/app.js" defer></script>
-  <script src="/js/session-timeout.js" defer></script>
-  <script src="/js/kt-illustrations.js" defer></script>
-  <script src="/js/app-v2-shell.js" defer></script>
-  <script src="/js/screen-parent.js" defer></script>
-  <script src="/js/screen-agency-admin.js" defer></script>
-  <script src="/js/screen-director.js" defer></script>
-  <script src="/js/screen-educator.js" defer></script>
-  <script src="/js/screen-educator-v4.js" defer></script>
-  <script src="/js/screen-director-v5a.js" defer></script>
-  <script src="/js/screen-help-v22p68.js" defer></script>
-    <script src="js/kt-contextual-help.js" defer></script>
-    <script src="js/kt-onboarding-tour.js" defer></script>
-  <script src="/js/tooltips-v6.js" defer></script>
-  <script src="/js/app-v2-init.js" defer></script>
-  <script src="/js/branding-loader.js" defer></script>
-  <script src="/js/api-helpers-v10.js" defer></script>
-  <script src="/js/screen-admin.js" defer></script>
-  <script src="/js/screen-marketing.js" defer></script>
-  <script src="/js/screen-staff-calendar.js" defer></script>
-  <script src="/js/screen-audit-logs.js" defer></script>
-  <script src="/js/screen-bulk-invoices.js" defer></script>
-  <script src="/js/screen-forms.js" defer></script>
-  <script src="/js/screen-parent-forms.js" defer></script>
-  <script src="/js/screen-notifications.js" defer></script>
-  <script src="/js/screen-compliance.js" defer></script>
-  <script src="/js/screen-care.js" defer></script>
-  <script src="/js/search-palette.js" defer></script>
-  <script src="/js/role-widgets.js" defer></script>
-  <script src="/js/mobile-helper-v11.js" defer></script>
+  <script src="/js/app.js?v=20260710chat1" defer></script>
+  <script src="/js/kt-back.js?v=20260710chat1" defer></script>
+  <script src="/js/session-timeout.js?v=20260706p2" defer></script>
+  <script src="/js/kt-illustrations.js?v=20260706p2" defer></script>
+  <script src="/js/app-v2-shell.js?v=20260711rt6" defer></script>
+  <script src="/js/screen-parent.js?v=20260711snd1" defer></script>
+  <script src="/js/kt-checkin-scan.js?v=20260710fix1" defer></script>
+  <script src="/js/screen-role-home.js?v=20260710chat1" defer></script>
+  <script src="/js/screen-support.js?v=20260709sup1" defer></script>
+  <script src="/js/screen-settings.js?v=20260711bio2" defer></script>
+  <script src="/js/screen-agency-admin.js?v=20260709cc1" defer></script>
+  <script src="/js/screen-dashboard-widgets.js?v=20260711snd1" defer></script>
+  <script src="/js/screen-email.js?v=20260709email" defer></script>
+  <script src="/js/screen-director.js?v=20260706p2" defer></script>
+  <script src="/js/screen-educator.js?v=20260706p2" defer></script>
+  <script src="/js/screen-educator-v4.js?v=20260706p2" defer></script>
+  <script src="/js/screen-director-v5a.js?v=20260706p2" defer></script>
+  <script src="/js/screen-help-v22p68.js?v=20260706p2" defer></script>
+    <script src="js/kt-contextual-help.js?v=20260706p2" defer></script>
+    <script src="js/kt-onboarding-tour.js?v=20260706p2" defer></script>
+  <script src="/js/tooltips-v6.js?v=20260706p2" defer></script>
+  <script src="/js/app-v2-init.js?v=20260706p2" defer></script>
+  <script src="/js/branding-loader.js?v=20260706p2" defer></script>
+  <script src="/js/api-helpers-v10.js?v=20260706p2" defer></script>
+  <script src="/js/screen-admin.js?v=20260710fw2" defer></script>
+  <script src="/js/screen-marketing.js?v=20260706p2" defer></script>
+  <script src="/js/screen-provider-map.js?v=20260708map" defer></script>
+  <script src="/js/screen-marketing-site.js?v=20260706p2" defer></script>
+  <script src="/js/screen-staff-calendar.js?v=20260706p2" defer></script>
+  <script src="/js/screen-audit-logs.js?v=20260709aud" defer></script>
+  <script src="/js/screen-bulk-invoices.js?v=20260706p2" defer></script>
+  <script src="/js/screen-forms.js?v=20260706p2" defer></script>
+  <script src="/js/screen-fee-plans.js?v=20260706p2" defer></script>
+  <script src="/js/screen-expenses.js?v=20260706list" defer></script>
+  <script src="/js/screen-billing-setup.js?v=20260708sw" defer></script>
+  <script src="/js/screen-parent-forms.js?v=20260706p2" defer></script>
+  <script src="/js/screen-notifications.js?v=20260706p2" defer></script>
+  <script src="/js/screen-compliance.js?v=20260706p2" defer></script>
+  <script src="/js/screen-care.js?v=20260706p2" defer></script>
+  <script src="/js/search-palette.js?v=20260706p2" defer></script>
+  <script src="/js/role-widgets.js?v=20260706p2" defer></script>
+  <script src="/js/mobile-helper-v11.js?v=20260706p2" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
@@ -94,58 +169,81 @@
       });
     }
   </script>
-  <script src="/js/screen-chat.js" defer></script>
-  <script src="/js/screen-agencies.js" defer></script>
-  <script src="/js/nav-additions-v12.js" defer></script>
-  <script src="/js/screen-waitlist.js" defer></script>
-  <script src="/js/screen-announcements.js" defer></script>
-  <script src="/js/screen-autopay.js" defer></script>
-  <script src="/js/nav-additions-v13.js" defer></script>
-  <script src="/js/screen-lesson-plans.js" defer></script>
-  <script src="/js/screen-schedule.js" defer></script>
-  <script src="/js/screen-certifications.js" defer></script>
-  <script src="/js/push-client.js" defer></script>
-  <script src="/js/nav-additions-v14.js" defer></script>
-  <script src="/js/screen-admin-mrr.js" defer></script>
-  <script src="/js/screen-admin-features.js" defer></script>
-  <script src="/js/screen-admin-branding.js" defer></script>
-  <script src="/js/screen-lesson-plans-ai.js" defer></script>
-  <script src="/js/screen-observations.js" defer></script>
-  <script src="/js/screen-incidents.js" defer></script>
-  <script src="/js/screen-child-detail.js" defer></script>
-  <script src="/js/search-widget.js" defer></script>
-  <script src="/js/screen-mfa.js" defer></script>
-  <script src="/js/screen-sibling-discounts.js" defer></script>
-  <script src="/js/screen-roles.js" defer></script>
-  <script src="/js/screen-admin-children.js" defer></script>
-  <script src="/js/agency-switcher.js" defer></script>
-  <script src="/js/screen-platform.js" defer></script>
-  <script src="/js/screen-digest-status.js" defer></script>
-  <script src="/js/nav-additions-v15.js" defer></script>
-  <script src="/js/screen-v22p51.js" defer></script>
-  <script src="/js/screen-v22p53.js" defer></script>
-  <script src="/js/screen-v22p54.js" defer></script>
-  <script src="/js/kt-table-filter.js" defer></script>
-  <script src="/js/kt-polish.js" defer></script>
-  <script src="/js/kt-polish-v2.js" defer></script>
-  <script src="/js/kt-polish-v3.js" defer></script>
-  <script src="/js/kt-polish-v4.js" defer></script>
-  <script src="/js/screen-v22p55.js" defer></script>
-  <script src="/js/screen-v22p56.js" defer></script>
-  <script src="/js/screen-v22p57.js" defer></script>
-  <script src="/js/screen-v22p58.js" defer></script>
-  <script src="/js/screen-v22p59.js" defer></script>
-    <script src="/js/fix-screen-v22p69.js" defer></script>
-  <script src="/js/screen-integrations-v22p72.js" defer></script>
-  <script src="/js/kt-nav-collapse-v22p72.js" defer></script>
-  <script src="/js/kt-quickadd-v22p72.js" defer></script>
-  <script src="/js/kt-money-v22p74.js" defer></script>
-  <script src="/js/screen-v22p63.js" defer></script>
-  <script src="/js/screen-legacy-shim.js" defer></script>
-  <script src="/js/screen-medications.js" defer></script>
-  <script src="/js/screen-immunizations.js" defer></script>
-  <script src="/js/screen-invitation-codes.js" defer></script>
-  <script src="/js/screen-edocuments.js" defer></script>
-  <script src="/js/screen-onboarding.js" defer></script>
+  <script src="/js/screen-chat.js?v=20260711snd1" defer></script>
+  <script src="/js/screen-agencies.js?v=20260706p2" defer></script>
+  <script src="/js/nav-additions-v12.js?v=20260706p2" defer></script>
+  <script src="/js/screen-waitlist.js?v=20260706p2" defer></script>
+  <script src="/js/screen-announcements.js?v=20260709pm4" defer></script>
+  <script src="/js/screen-autopay.js?v=20260709cc1" defer></script>
+  <script src="/js/nav-additions-v13.js?v=20260706p2" defer></script>
+  <script src="/js/screen-lesson-plans.js?v=20260706p2" defer></script>
+  <script src="/js/screen-schedule.js?v=20260706p2" defer></script>
+  <script src="/js/screen-certifications.js?v=20260706p2" defer></script>
+  <script src="/js/push-client.js?v=20260706p2" defer></script>
+  <script src="/js/nav-additions-v14.js?v=20260706p2" defer></script>
+  <script src="/js/screen-admin-mrr.js?v=20260706p2" defer></script>
+  <script src="/js/screen-admin-features.js?v=20260706p2" defer></script>
+  <script src="/js/screen-admin-branding.js?v=20260706p2" defer></script>
+  <script src="/js/screen-lesson-plans-ai.js?v=20260706p2" defer></script>
+  <script src="/js/screen-observations.js?v=20260706p2" defer></script>
+  <script src="/js/screen-incidents.js?v=20260706p2" defer></script>
+  <script src="/js/screen-child-detail.js?v=20260706p2" defer></script>
+  <script src="/js/search-widget.js?v=20260706p2" defer></script>
+  <script src="/js/screen-mfa.js?v=20260706p2" defer></script>
+  <script src="/js/screen-sibling-discounts.js?v=20260706p2" defer></script>
+  <script src="/js/screen-roles.js?v=20260706p2" defer></script>
+  <script src="/js/screen-admin-children.js?v=20260706p2" defer></script>
+  <script src="/js/agency-switcher.js?v=20260708b" defer></script>
+  <script src="/js/screen-platform.js?v=20260709act" defer></script>
+  <script src="/js/screen-digest-status.js?v=20260706p2" defer></script>
+  <script src="/js/nav-additions-v15.js?v=20260706p2" defer></script>
+  <script src="/js/screen-v22p51.js?v=20260706p2" defer></script>
+  <script src="/js/screen-v22p53.js?v=20260706fw" defer></script>
+  <script src="/js/screen-v22p54.js?v=20260708exp" defer></script>
+  <script src="/js/kt-table-filter.js?v=20260708fix" defer></script>
+  <script src="/js/kt-polish.js?v=20260708exp" defer></script>
+  <script src="/js/kt-list-controls.js?v=20260706p2" defer></script>
+  <script src="/js/kt-mfa-nudge.js?v=20260708mfa" defer></script>
+  <script src="/js/kt-topbar.js?v=20260709m2" defer></script>
+  <script src="/js/kt-biometric.js?v=20260711bio6" defer></script>
+  <script src="/js/kt-crash-report.js?v=20260711bio3" defer></script>
+  <script src="/js/kt-progress.js?v=20260709prog" defer></script>
+  <script src="/js/kt-mobilenav.js?v=20260711bio6" defer></script>
+  <script src="/js/kt-native-push.js?v=20260711bio6" defer></script>
+  <script src="/js/kt-appupdate.js?v=20260709ota" defer></script>
+  <script src="/js/kt-toasts.js?v=20260708rt" defer></script>
+  <script src="/js/kt-whatsnew.js?v=20260708wn" defer></script>
+  <script src="/js/kt-term.js?v=20260708loc" defer></script>
+  <script src="/js/kt-table-export.js?v=20260708c" defer></script>
+  <script src="/js/kt-banner-normalize.js?v=20260708art2" defer></script>
+  <script src="/js/kt-sidebar-collapse.js?v=20260711chat2" defer></script>
+  <script src="/js/kt-polish-v2.js?v=20260706p2" defer></script>
+  <script src="/js/kt-polish-v3.js?v=20260706p2" defer></script>
+  <script src="/js/kt-polish-v4.js?v=20260709x" defer></script>
+  <script src="/js/kt-mailto.js?v=20260706p2" defer></script>
+  <script src="/js/kt-hero-emoji.js?v=20260706p2" defer></script>
+  <script src="/js/kt-modal-guard.js?v=20260706p2" defer></script>
+  <script src="/js/kt-qr.js?v=20260706p2" defer></script>
+  <script src="/js/screen-v22p55.js?v=20260706p2" defer></script>
+  <script src="/js/screen-v22p56.js?v=20260706p2" defer></script>
+  <script src="/js/screen-v22p57.js?v=20260709pm4" defer></script>
+  <script src="/js/screen-v22p58.js?v=20260706p2" defer></script>
+  <script src="/js/screen-v22p59.js?v=20260709pm4" defer></script>
+    <script src="/js/fix-screen-v22p69.js?v=20260706p2" defer></script>
+  <script src="/js/screen-integrations-v22p72.js?v=20260709b" defer></script>
+  <script src="/js/kt-nav-collapse-v22p72.js?v=20260706p2" defer></script>
+  <script src="/js/kt-quickadd-v22p72.js?v=20260706p2" defer></script>
+  <script src="/js/kt-money-v22p74.js?v=20260706p2" defer></script>
+  <script src="/js/screen-v22p63.js?v=20260706p2" defer></script>
+  <script src="/js/screen-legacy-shim.js?v=20260709pm2" defer></script>
+  <script src="/js/screen-reports.js?v=20260708xlsx" defer></script>
+  <script src="/js/screen-social-settings.js?v=20260708ss" defer></script>
+  <script src="/js/screen-security-alerts.js?v=20260708sec" defer></script>
+  <script src="/js/screen-data-retention.js?v=20260708dr" defer></script>
+  <script src="/js/screen-medications.js?v=20260709pm4" defer></script>
+  <script src="/js/screen-immunizations.js?v=20260706p2" defer></script>
+  <script src="/js/screen-invitation-codes.js?v=20260706p2" defer></script>
+  <script src="/js/screen-edocuments.js?v=20260706p2" defer></script>
+  <script src="/js/screen-onboarding.js?v=20260706p2" defer></script>
 </body>
 </html>

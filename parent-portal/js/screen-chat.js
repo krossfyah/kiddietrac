@@ -10,9 +10,42 @@
   'use strict';
 
   const POLL_INTERVAL_MS = 15000;
+  const THREAD_POLL_MS = 4000;     // faster poll while a thread is open (realtime feel)
   let pollTimer = null;
+  let threadPollTimer = null;
   let openThreadId = null;
   let myRole = 'guardian';
+  let lastUnread = null;
+  let lastThreadMsgId = 0;
+
+  // Loud, bright two-note "ding-dong" chime (WebAudio) + vibration to grab
+  // attention on a new message — much louder + fuller than the old single beep.
+  function playPing() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        var ctx = playPing._ctx || (playPing._ctx = new Ctx());
+        if (ctx.state === 'suspended') { ctx.resume(); }
+        var master = ctx.createGain(); master.gain.value = 0.95; master.connect(ctx.destination);
+        var tone = function (freq, start, dur, peak) {
+          var o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = 'triangle'; o.frequency.value = freq;
+          var t = ctx.currentTime + start;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak, t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          o.connect(g); g.connect(master);
+          o.start(t); o.stop(t + dur + 0.03);
+        };
+        // E6+E5 then B5+B4 — a doorbell-like chime, played twice as loud as before.
+        tone(1318.5, 0.00, 0.36, 0.75); tone(659.3, 0.00, 0.36, 0.4);
+        tone(987.8, 0.19, 0.52, 0.75);  tone(493.9, 0.19, 0.52, 0.4);
+      }
+    } catch (e) {}
+    try { if (navigator.vibrate) navigator.vibrate([90, 50, 130]); } catch (e) {}
+  }
+  // Exposed so other screens (e.g. the parent chat) can play the same loud chime.
+  try { (window.KT = window.KT || {}).playPing = playPing; } catch (e) {}
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $$(sel, root = document) { return root.querySelectorAll(sel); }
@@ -348,11 +381,14 @@
             <button class="kt-attach-remove" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>
           </div>
         </div>
-        <div class="kt-thread-compose" style="padding:12px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:8px;flex-shrink:0;align-items:center;">
+        <div class="kt-thread-compose" style="padding:10px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:4px;flex-shrink:0;align-items:center;position:relative;">
           <input class="kt-attach-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display:none;" />
-          <button class="kt-attach-btn" type="button" title="Attach an image" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:22px;padding:4px 8px;">📎</button>
-          <input class="kt-compose-input" type="text" placeholder="Type a message…" style="flex:1;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;font-family:inherit;" />
-          <button class="kt-send-btn" style="background:#1F6080;color:white;border:none;padding:0 18px;border-radius:24px;font-weight:700;cursor:pointer;font-size:15px;">Send</button>
+          <button class="kt-attach-btn" type="button" title="Attach an image" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:22px;padding:4px 6px;">📎</button>
+          <button class="kt-emoji-btn" type="button" title="Emoji" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">😊</button>
+          <button class="kt-mic-btn" type="button" title="Record a voice note" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">🎤</button>
+          <input class="kt-compose-input" type="text" placeholder="Type a message…" style="flex:1;min-width:0;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;font-family:inherit;" />
+          <button class="kt-send-btn" style="background:#1F6080;color:white;border:none;padding:0 18px;height:44px;border-radius:24px;font-weight:700;cursor:pointer;font-size:15px;">Send</button>
+          <div class="kt-emoji-panel" style="display:none;position:absolute;bottom:58px;left:8px;background:white;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;width:280px;max-height:180px;overflow-y:auto;z-index:40;font-size:23px;line-height:1.5;"></div>
         </div>
       </div>
     `;
@@ -361,6 +397,7 @@
 
     $('.kt-back', container).addEventListener('click', () => {
       openThreadId = null;
+      if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
       renderList(container);
     });
 
@@ -434,6 +471,7 @@
           created_at: msg.created_at,
         }));
         bodyEl.scrollTop = bodyEl.scrollHeight;
+        if (msg && msg.id) lastThreadMsgId = Math.max(lastThreadMsgId, msg.id); // don't let the poll re-append
       } catch (e) {
         alert('Could not send: ' + e.message);
       } finally {
@@ -445,6 +483,74 @@
     };
     send.addEventListener('click', doSend);
     input.addEventListener('keypress', (e) => { if (e.key === 'Enter') doSend(); });
+
+    // ── Emoji picker ──────────────────────────────────────────
+    const emojiBtn = $('.kt-emoji-btn', container);
+    const emojiPanel = $('.kt-emoji-panel', container);
+    if (emojiBtn && emojiPanel) {
+      const EMOJIS = ('😀 😁 😂 🤣 😊 😍 😘 😉 😎 🥰 🤗 🤔 👍 👎 👏 🙏 💪 🎉 ❤️ 🧡 💛 💚 💙 💜 🔥 ⭐ ✨ 🌈 ☀️ 🌙 😢 😭 😴 🤒 🤕 🤧 😷 👶 🍼 🧸 🎈 🚌 🏫 📚 ✏️ 🍎 🥪 🧃 👌 🙌').split(' ');
+      emojiPanel.innerHTML = EMOJIS.map(e => '<span class="kt-emoji" role="button" style="cursor:pointer;display:inline-block;padding:2px 4px;">' + e + '</span>').join('');
+      emojiBtn.addEventListener('click', (ev) => { ev.stopPropagation(); emojiPanel.style.display = (emojiPanel.style.display === 'none' ? 'block' : 'none'); });
+      emojiPanel.addEventListener('click', (ev) => { const s = ev.target.closest('.kt-emoji'); if (!s) return; input.value += s.textContent; input.focus(); });
+      document.addEventListener('click', (ev) => { if (emojiPanel.style.display === 'block' && !ev.target.closest('.kt-emoji-panel') && !ev.target.closest('.kt-emoji-btn')) emojiPanel.style.display = 'none'; });
+    }
+
+    // ── Voice note recording (MediaRecorder → uploaded as an audio attachment) ──
+    const micBtn = $('.kt-mic-btn', container);
+    let mediaRec = null, recChunks = [], recStream = null, recording = false;
+    if (micBtn) {
+      micBtn.addEventListener('click', async () => {
+        if (recording) { try { mediaRec && mediaRec.stop(); } catch (e) {} return; }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+          alert('Voice recording is not supported on this device/browser.'); return;
+        }
+        try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { alert('Microphone permission was denied.'); return; }
+        recChunks = [];
+        const pref = (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm'
+                   : ((window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/mp4')) ? 'audio/mp4' : '');
+        try { mediaRec = pref ? new MediaRecorder(recStream, { mimeType: pref }) : new MediaRecorder(recStream); }
+        catch (e) { mediaRec = new MediaRecorder(recStream); }
+        mediaRec.ondataavailable = (ev) => { if (ev.data && ev.data.size) recChunks.push(ev.data); };
+        mediaRec.onstop = () => {
+          recording = false; micBtn.textContent = '🎤'; micBtn.style.color = ''; micBtn.title = 'Record a voice note';
+          try { recStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+          const type = (recChunks[0] && recChunks[0].type) || pref || 'audio/webm';
+          const blob = new Blob(recChunks, { type });
+          if (blob.size > 800) {
+            const ext = type.indexOf('mp4') >= 0 ? 'm4a' : 'webm';
+            setPending(new File([blob], 'voice-' + Date.now() + '.' + ext, { type }));
+            doSend(); // voice notes auto-send
+          }
+        };
+        mediaRec.start();
+        recording = true; micBtn.textContent = '⏹'; micBtn.style.color = '#DC2626'; micBtn.title = 'Tap to stop & send';
+      });
+    }
+
+    // ── Realtime: poll the OPEN thread, append new messages, alert on incoming ──
+    lastThreadMsgId = messages.length ? Math.max.apply(null, messages.map(m => m.id || 0)) : 0;
+    if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
+    threadPollTimer = setInterval(async () => {
+      if (openThreadId !== c.id) { clearInterval(threadPollTimer); threadPollTimer = null; return; }
+      try {
+        const fresh = await api('GET', endpointBase() + '/' + c.id);
+        const msgs = (fresh && fresh.messages) || [];
+        const bodyEl = $('.kt-thread-body', container);
+        if (!bodyEl) return;
+        let added = false, gotIncoming = false;
+        msgs.forEach(m => {
+          if ((m.id || 0) > lastThreadMsgId) {
+            bodyEl.insertAdjacentHTML('beforeend', bubble(m));
+            lastThreadMsgId = m.id; added = true;
+            if (!m.is_me) gotIncoming = true;
+          }
+        });
+        if (added) bodyEl.scrollTop = bodyEl.scrollHeight;
+        if (gotIncoming) { playPing(); if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge(); }
+      } catch (e) {}
+    }, THREAD_POLL_MS);
+
     input.focus();
   }
 
@@ -462,6 +568,10 @@
       if (a.mime && a.mime.indexOf('image/') === 0) {
         // Image attachment — render inline as a click-to-zoom thumbnail
         return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="display:block;"><img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name || 'image')}" style="max-width:100%;max-height:280px;border-radius:10px;display:block;background:rgba(0,0,0,.04);"></a></div>`;
+      }
+      if (a.mime && a.mime.indexOf('audio/') === 0) {
+        // Voice note — inline audio player.
+        return `<div style="margin:6px 0;">🎤 <audio controls preload="none" src="${escapeHtml(a.url)}" style="max-width:230px;height:38px;vertical-align:middle;"></audio></div>`;
       }
       // Non-image fallback (future: pdf, etc.)
       return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:${mine ? 'white' : '#1F6080'};text-decoration:underline;font-size:13px;">📎 ${escapeHtml(a.name || 'attachment')}</a></div>`;
@@ -483,6 +593,11 @@
     if (!token()) return;
     try {
       const data = await api('GET', '/chats/unread-count');
+      // Sound + vibrate alert when a new unread arrives (not on first load).
+      if (lastUnread !== null && typeof data.unread === 'number' && data.unread > lastUnread) {
+        playPing();
+      }
+      lastUnread = (typeof data.unread === 'number') ? data.unread : lastUnread;
       const badge = $('#kt-chat-nav-badge');
       if (badge) {
         if (data.unread > 0) {
@@ -504,6 +619,7 @@
   }
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
   }
 
   /* ─── Public mount API ─────────────────────────────────────── */

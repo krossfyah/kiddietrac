@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 final class ChildController extends Controller
 {
@@ -18,14 +19,29 @@ final class ChildController extends Controller
     public function enrollmentList(Request $request): JsonResponse
     {
         // v22p5: allow agency_admin to scope to any centre they own via ?centre_id=
+        // v22p88: agency_admin / platform_admin see EVERY child across ALL their
+        // agency's centres by default (was wrongly limited to one resolved centre,
+        // so most children were missing). Educators/directors stay scoped to their
+        // own centre. The centre filter still narrows when supplied.
+        $user = $request->user();
         $requestedCentre = $request->integer("centre_id");
-        if ($requestedCentre && $this->authorizeCentreAccess($request->user(), $requestedCentre)) {
-            $centreId = $requestedCentre;
+        $isAgencyLevel = DB::table('role_assignments')->where('user_id', $user->id)
+            ->where('active', 1)->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
+
+        if ($requestedCentre && $this->authorizeCentreAccess($user, $requestedCentre)) {
+            $centreIds = [$requestedCentre];
+        } elseif ($isAgencyLevel) {
+            // SECURITY (v22p94): resolve via the validated helper — never trust the
+            // raw X-Active-Agency-Id header, or an admin of one agency could list
+            // another agency's children by forging it.
+            $agencyId = $this->resolveAgencyId($request);
+            $centreIds = $agencyId ? DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() : [];
         } else {
-            $centreId = $this->resolveCentreId($request->user());
+            $cid = $this->resolveCentreId($user);
+            $centreIds = $cid ? [$cid] : [];
         }
 
-        if (! $centreId) {
+        if (empty($centreIds)) {
             return response()->json(['children' => []]);
         }
 
@@ -45,7 +61,7 @@ final class ChildController extends Controller
                 ->on('enrollments.child_id', '=', 'children.id')
                 ->whereNull('enrollments.end_date'))
             ->leftJoin('rooms', 'rooms.id', '=', 'enrollments.room_id')
-            ->where('families.centre_id', $centreId)
+            ->whereIn('families.centre_id', $centreIds)
             ->whereNull('children.deleted_at');
 
         if ($roomId = $request->input('room_id')) {
@@ -129,7 +145,22 @@ final class ChildController extends Controller
             ->first();
         $isAtCentre = $lastCheck && $lastCheck->event_type === 'check_in';
 
+        // v22p88: centre + agency + full enrollment history for the detail tabs.
+        $centre = $family ? DB::table('centres')->where('id', $family->centre_id)->first(['id', 'name', 'city', 'agency_id']) : null;
+        $agency = $centre ? DB::table('agencies')->where('id', $centre->agency_id)->first(['id', 'name']) : null;
+        $enrollmentHistory = DB::table('enrollments')
+            ->leftJoin('rooms', 'rooms.id', '=', 'enrollments.room_id')
+            ->where('enrollments.child_id', $childId)
+            ->orderByDesc('enrollments.start_date')
+            ->select('enrollments.id', 'enrollments.start_date', 'enrollments.end_date', 'enrollments.monthly_fee', 'rooms.name as room_name')
+            ->get();
+
         return response()->json([
+            'centre' => $centre,
+            'agency' => $agency,
+            'enrollment_history' => $enrollmentHistory,
+            'school_name' => property_exists($child, 'school_name') ? $child->school_name : null,
+            'school_grade' => property_exists($child, 'school_grade') ? $child->school_grade : null,
             'id' => $child->id,
             'first_name' => $child->first_name,
             'last_name' => $child->last_name,
@@ -228,6 +259,9 @@ final class ChildController extends Controller
         if (! $enrollment) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        // SECURITY (v22p94): a director may only edit enrollments for children at
+        // their own centre — not any enrollment id in any agency.
+        abort_unless($this->canAccessChildId($request->user(), (int) $enrollment->child_id), 403);
 
         $data = $request->validate([
             'room_id' => ['integer'],
@@ -332,6 +366,47 @@ final class ChildController extends Controller
     }
 
     // ─── helpers ────────────────────────────────────────────────────
+
+    /** v22p88: GET /director/children/{child}/daily-events — recent day events + check-ins. */
+    public function dailyEvents(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) return response()->json(['message' => 'Not found'], 404);
+        $this->authorizeChild($request->user(), $child);
+        $days = max(1, min(90, (int) $request->query('days', 14)));
+        $since = now()->subDays($days)->startOfDay();
+        $events = DB::table('daily_events')->where('child_id', $childId)->where('occurred_at', '>=', $since)->orderByDesc('occurred_at')->limit(200)->get();
+        $checks = DB::table('check_events')->where('child_id', $childId)->where('occurred_at', '>=', $since)->orderByDesc('occurred_at')->limit(200)->get();
+        return response()->json(['events' => $events, 'checks' => $checks]);
+    }
+
+    /** v22p88: GET /director/children/{child}/feed — photos/media + observations. */
+    public function feed(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) return response()->json(['message' => 'Not found'], 404);
+        $this->authorizeChild($request->user(), $child);
+        $media = [];
+        if (Schema::hasTable('media_child_tags')) {
+            $media = DB::table('media')
+                ->join('media_child_tags', 'media_child_tags.media_id', '=', 'media.id')
+                ->where('media_child_tags.child_id', $childId)
+                ->orderByDesc('media.created_at')->limit(60)->select('media.*')->get();
+        }
+        $observations = DB::table('observations')->where('child_id', $childId)->orderByDesc('created_at')->limit(40)->get();
+        return response()->json(['media' => $media, 'observations' => $observations]);
+    }
+
+    /** v22p88: GET /director/children/{child}/documents — attachments scoped to the child. */
+    public function documents(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) return response()->json(['message' => 'Not found'], 404);
+        $this->authorizeChild($request->user(), $child);
+        $docs = DB::table('documents')->where('scope_type', 'child')->where('scope_id', $childId)
+            ->orderByDesc('created_at')->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'created_at', 'expires_at']);
+        return response()->json(['documents' => $docs]);
+    }
 
     private function authorizeChild($user, object $child): void
     {

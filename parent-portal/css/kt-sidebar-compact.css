@@ -1,0 +1,39 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — compact left sidebar (2026-07-09).
+   Tighter nav rows + smaller text so the full nav fits without scrolling
+   on the desktop portal. Uses #appSidebar (id) selectors so it reliably
+   wins over styles.css / app-v2.css / kt-polish. Loaded last.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Brand: keep the header tidy but the logo prominent */
+#appSidebar .nav-brand { padding: 16px 18px 14px !important; }
+#appSidebar .nav-brand img { height: 44px !important; }
+
+/* Nav list: less outer padding */
+#appSidebar .sidebar-nav,
+#appSidebar .nav-links,
+#appSidebar #navLinks { padding: 8px 8px 12px !important; }
+
+/* Section groups: tighter gaps + smaller labels */
+#appSidebar .sidebar-section { margin-top: 9px !important; }
+#appSidebar .sidebar-section:first-child { margin-top: 0 !important; }
+#appSidebar .sidebar-section-label {
+  font-size: 9.5px !important;
+  letter-spacing: 1px !important;
+  padding: 3px 10px !important;
+  margin-bottom: 1px !important;
+}
+
+/* Nav rows: shorter + smaller text (the main scroll saver) */
+#appSidebar .nav-link {
+  padding: 5.5px 10px !important;
+  font-size: 12.5px !important;
+  gap: 9px !important;
+  border-radius: 8px !important;
+  line-height: 1.25 !important;
+}
+#appSidebar .nav-link .nav-icon { font-size: 14px !important; width: 18px !important; }
+
+/* Footer user row: slimmer */
+#appSidebar .nav-user { padding: 9px 14px !important; }
+#appSidebar .nav-user .avatar { width: 30px !important; height: 30px !important; }

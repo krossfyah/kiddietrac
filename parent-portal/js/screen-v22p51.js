@@ -194,9 +194,11 @@
           <button id="pr-csv" style="background:#059669;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">⤓ CSV</button>
         </div>
         <div id="pr-result"></div></div>`;
+    // v22p98: default to a trailing 30-day window (was first-of-month → today,
+    // a single empty day on the 1st, hiding the whole prior pay period).
     const today = new Date();
-    const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    document.getElementById('pr-from').valueAsDate = firstOfMonth;
+    const startWin = new Date(); startWin.setDate(today.getDate() - 30);
+    document.getElementById('pr-from').valueAsDate = startWin;
     document.getElementById('pr-to').valueAsDate = today;
     document.getElementById('pr-run').onclick = () => runPayroll();
     document.getElementById('pr-csv').onclick = () => {
@@ -407,10 +409,10 @@
   // ============================ Locale picker ============================
   async function renderLocale(main) {
     const res = await Api.get('/locale');
-    main.innerHTML = `<div style="padding:24px;max-width:520px;margin:0 auto;">
+    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <h2 style="margin:0 0 16px;color:#1F6080;">Language / Langue / Idioma</h2>
       <p style="color:#6B7280;font-size:14px;">Current: <strong>${res.locale}</strong></p>
-      <div style="margin-top:18px;">
+      <div style="margin-top:18px;max-width:520px;">
         ${['en', 'fr', 'es'].map(l => `<button data-loc="${l}" style="background:${res.locale === l ? '#1F6080' : '#F3F4F6'};color:${res.locale === l ? '#fff' : '#374151'};border:0;padding:14px 22px;border-radius:6px;margin-right:8px;cursor:pointer;font-weight:600;">${{ en: 'English', fr: 'Français', es: 'Español' }[l]}</button>`).join('')}
       </div></div>`;
     main.querySelectorAll('button[data-loc]').forEach(b => b.onclick = async () => {

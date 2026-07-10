@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,6 +35,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class CareController extends Controller
 {
+    use ResolvesCentreContext;
+
     // ── Daily care logs ─────────────────────────────────────────────────
 
     public function logCare(Request $request): JsonResponse
@@ -68,7 +71,7 @@ final class CareController extends Controller
     {
         // Parent-or-staff access check — guardian on the child's family, or
         // staff at the child's centre.
-        if (!$this->canSeeChild($request->user()->id, $child)) {
+        if (!$this->canSeeChild($request, $child)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -113,7 +116,7 @@ final class CareController extends Controller
 
     public function milestonesForChild(Request $request, int $child): JsonResponse
     {
-        if (!$this->canSeeChild($request->user()->id, $child)) {
+        if (!$this->canSeeChild($request, $child)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $rows = DB::table('milestone_records')
@@ -136,7 +139,7 @@ final class CareController extends Controller
             'observed_at' => ['required', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
-        if (!$this->canSeeChild($request->user()->id, (int) $data['child_id'])) {
+        if (!$this->canSeeChild($request, (int) $data['child_id'])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
         // Upsert — one row per (child, milestone_key)
@@ -160,7 +163,7 @@ final class CareController extends Controller
 
     public function portfolio(Request $request, int $child): JsonResponse
     {
-        if (!$this->canSeeChild($request->user()->id, $child)) {
+        if (!$this->canSeeChild($request, $child)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $childRow = DB::table('children')->where('id', $child)->whereNull('deleted_at')->first();
@@ -202,11 +205,13 @@ final class CareController extends Controller
     public function punch(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
-        $assignment = DB::table('role_assignments')
-            ->where('user_id', $userId)->where('active', true)
-            ->whereNotNull('centre_id')
-            ->orderByDesc('created_at')->first();
-        if (!$assignment) return response()->json(['message' => 'No centre assigned'], 422);
+        // v22p97: resolve the centre WITHIN the active agency (header-aware) so a
+        // multi-agency user clocks in at the agency they've switched into, and a
+        // super-admin testing Test Agency resolves to its centre instead of the
+        // bogus "no centre assigned" (which fired because their only role rows are
+        // agency/platform-level with no centre_id).
+        $centreId = $this->resolveCentreId($request->user());
+        if (!$centreId) return response()->json(['message' => 'No centre assigned'], 422);
 
         $open = DB::table('time_punches')
             ->where('user_id', $userId)
@@ -228,7 +233,7 @@ final class CareController extends Controller
 
         $id = DB::table('time_punches')->insertGetId([
             'user_id' => $userId,
-            'centre_id' => (int) $assignment->centre_id,
+            'centre_id' => (int) $centreId,
             'punched_in_at' => now(),
             'notes' => $request->input('notes') ?: null,
             'source' => $request->input('source') ?: 'web',
@@ -249,13 +254,14 @@ final class CareController extends Controller
 
     public function centrePunches(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
-        $assignment = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
-            ->whereIn('role', ['centre_director', 'agency_admin'])->whereNotNull('centre_id')->first();
-        if (!$assignment) return response()->json(['punches' => []]);
+        // v22p98: resolve the centre WITHIN the active agency (header-aware) so an
+        // agency_admin / platform_admin (who have no direct centre_id role) still
+        // see the centre's punches — the old direct-centre lookup returned [].
+        $centreId = $this->resolveCentreId($request->user());
+        if (!$centreId) return response()->json(['punches' => []]);
         $rows = DB::table('time_punches as t')
             ->leftJoin('users as u', 'u.id', '=', 't.user_id')
-            ->where('t.centre_id', $assignment->centre_id)
+            ->where('t.centre_id', $centreId)
             ->orderByDesc('t.punched_in_at')
             ->limit(200)
             ->get([
@@ -366,13 +372,26 @@ final class CareController extends Controller
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private function canSeeChild(int $userId, int $childId): bool
+    private function canSeeChild(Request $request, int $childId): bool
     {
-        // v22p77: admin access — platform_admin sees all children.
+        $userId = $request->user()->id;
+        // v22p96: a platform_admin's access is SCOPED to the agency they've
+        // switched into (X-Active-Agency-Id) — not every child on the platform.
+        // The prior unconditional `return true` leaked care logs / milestones /
+        // portfolios across all tenants for a switched super-admin.
         $isPlatform = DB::table('role_assignments')
             ->where('user_id', $userId)->where('role', 'platform_admin')
             ->where('active', true)->exists();
-        if ($isPlatform) return true;
+        if ($isPlatform) {
+            $activeId = (int) $request->header('X-Active-Agency-Id');
+            if (!$activeId) return false;
+            return DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+                ->where('c.id', $childId)
+                ->where('ce.agency_id', $activeId)
+                ->exists();
+        }
 
         // Direct: a guardian on the child's family
         $isGuardian = DB::table('guardians as g')

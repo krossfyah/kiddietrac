@@ -7,7 +7,7 @@
   function token() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
   function apiBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
   function getUser() { try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
-  function getRole() { const u = getUser(); return u.primary_role || (u.roles && u.roles[0]) || 'guest'; }
+  function getRole() { try { const v = sessionStorage.getItem('kt_view_as'); if (v) return v; } catch (e) {} const u = getUser(); return u.primary_role || (u.roles && u.roles[0]) || 'guest'; }
 
   async function api(method, path, body) {
     const opts = { method, headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' } };
@@ -53,7 +53,7 @@
               <div style="font-size:48px;margin-bottom:12px;">📭</div>
               No announcements sent yet.
             </div>`
-          : `<div style="display:grid;gap:12px;">
+          : `<div data-kt-list="1" style="display:grid;gap:12px;">
               ${items.map(a => annCard(a)).join('')}
             </div>`
         }
@@ -76,7 +76,7 @@
           ${a.send_push ? '<span>🔔 push</span>' : ''}
           ${a.scheduled_at && !a.sent_at ? '<span style="color:#F59E0B;">⏱ scheduled</span>' : ''}
         </div>
-        <div style="font-size:14px;color:#374151;white-space:pre-wrap;line-height:1.5;">${esc(a.body)}</div>
+        <div style="font-size:14px;color:#374151;line-height:1.5;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
         <div style="font-size:12px;color:#9CA3AF;margin-top:8px;">— ${esc(a.sender)}</div>
       </div>
     `;
@@ -103,9 +103,20 @@
               <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">All families with children at this centre will receive it.</div>
             </div>
             <input name="title" required placeholder="Title *" maxlength="200" style="${inp()}">
-            <textarea name="body" required placeholder="Body (parents will see this)" rows="6" maxlength="5000" style="${inp()};font-family:inherit;"></textarea>
-            <div style="display:flex;gap:16px;font-size:14px;">
+            <div>
+              <div id="kt-rte-tb" style="display:flex;gap:3px;border:1px solid #D1D5DB;border-bottom:none;border-radius:8px 8px 0 0;padding:6px;background:#F9FAFB;flex-wrap:wrap;">
+                <button type="button" data-cmd="bold"   style="${rteBtn()};font-weight:800;">B</button>
+                <button type="button" data-cmd="italic" style="${rteBtn()};font-style:italic;">I</button>
+                <button type="button" data-cmd="underline" style="${rteBtn()};text-decoration:underline;">U</button>
+                <button type="button" data-cmd="insertUnorderedList" style="${rteBtn()};">• List</button>
+                <button type="button" data-cmd="insertOrderedList" style="${rteBtn()};">1. List</button>
+                <button type="button" data-cmd="createLink" style="${rteBtn()};">🔗 Link</button>
+              </div>
+              <div id="kt-rte" contenteditable="true" data-ph="Body (parents will see this)" style="border:1px solid #D1D5DB;border-radius:0 0 8px 8px;min-height:120px;max-height:280px;overflow:auto;padding:10px 12px;font-size:14px;line-height:1.5;color:#111827;outline:none;background:white;"></div>
+            </div>
+            <div style="display:flex;gap:16px;font-size:14px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_email" checked> 📧 Send email</label>
+              <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_sms"> 📱 Send SMS</label>
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_push" checked> 🔔 In-app notification</label>
             </div>
             <details style="font-size:13px;">
@@ -126,17 +137,41 @@
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('#kt-cancel', mount).addEventListener('click', close);
 
+    // Rich-text editor wiring
+    const rte = $('#kt-rte', mount);
+    $('#kt-rte-tb', mount).querySelectorAll('button[data-cmd]').forEach((b) => {
+      b.addEventListener('mousedown', (e) => e.preventDefault()); // keep selection/focus
+      b.addEventListener('click', () => {
+        const cmd = b.getAttribute('data-cmd');
+        rte.focus();
+        if (cmd === 'createLink') {
+          const url = window.prompt('Link URL (https://…)');
+          if (url) document.execCommand('createLink', false, url);
+        } else {
+          document.execCommand(cmd, false, null);
+        }
+      });
+    });
+
     $('#kt-ann-form', mount).addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = e.target;
       const scopeRaw = f.querySelector('[name="scope_id"]').value;
       const [scope_type, scope_id] = scopeRaw.split(':');
+      const rteEl = f.querySelector('#kt-rte');
+      const bodyHtml = (rteEl.innerHTML || '').trim();
+      if (!bodyHtml || !rteEl.textContent.trim()) {
+        $('#kt-status', mount).style.color = '#DC2626';
+        $('#kt-status', mount).textContent = '✗ Body is required';
+        return;
+      }
       const data = {
         scope_type,
         scope_id: parseInt(scope_id, 10),
         title: f.querySelector('[name="title"]').value,
-        body: f.querySelector('[name="body"]').value,
+        body: bodyHtml,
         send_email: f.querySelector('[name="send_email"]').checked,
+        send_sms: f.querySelector('[name="send_sms"]').checked,
         send_push: f.querySelector('[name="send_push"]').checked,
       };
       const sched = f.querySelector('[name="scheduled_at"]').value;
@@ -172,14 +207,14 @@
               <div style="font-size:48px;margin-bottom:12px;">📭</div>
               Nothing here yet — when your centre sends an announcement, it'll appear here.
             </div>`
-          : `<div style="display:grid;gap:12px;">
+          : `<div data-kt-list="1" style="display:grid;gap:12px;">
               ${items.map(a => `
                 <div style="background:white;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.04);">
                   <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
                     <div style="font-weight:700;font-size:16px;">${esc(a.title)}</div>
                     <div style="font-size:12px;color:#9CA3AF;">${esc(fmtDate(a.sent_at))}</div>
                   </div>
-                  <div style="font-size:14px;color:#374151;white-space:pre-wrap;line-height:1.5;">${esc(a.body)}</div>
+                  <div style="font-size:14px;color:#374151;line-height:1.5;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
                 </div>
               `).join('')}
             </div>`
@@ -189,6 +224,32 @@
   }
 
   function inp() { return 'width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;'; }
+  function rteBtn() { return 'background:white;border:1px solid #D1D5DB;border-radius:6px;padding:4px 9px;font-size:13px;cursor:pointer;color:#374151;min-width:30px;'; }
+
+  // Allow only a safe subset of HTML from the rich-text editor / stored body.
+  function sanitizeHtml(html) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = String(html == null ? '' : html);
+    tmp.querySelectorAll('script,style,iframe,object,embed,link,meta,form,input').forEach(function (n) { n.remove(); });
+    tmp.querySelectorAll('*').forEach(function (el) {
+      Array.prototype.slice.call(el.attributes).forEach(function (at) {
+        var n = at.name.toLowerCase();
+        if (n.indexOf('on') === 0) el.removeAttribute(at.name);
+        if ((n === 'href' || n === 'src') && /^\s*javascript:/i.test(at.value)) el.removeAttribute(at.name);
+      });
+    });
+    tmp.querySelectorAll('a').forEach(function (a) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); });
+    return tmp.innerHTML;
+  }
+
+  (function injectRteCss() {
+    if (document.getElementById('kt-rte-css')) return;
+    var s = document.createElement('style');
+    s.id = 'kt-rte-css';
+    s.textContent = '#kt-rte:empty:before{content:attr(data-ph);color:#9CA3AF;pointer-events:none;}'
+      + '#kt-rte-tb button:hover{background:#EFF2F6;}#kt-rte a{color:#1F6080;}';
+    document.head.appendChild(s);
+  })();
 
   function render(container) {
     const role = getRole();

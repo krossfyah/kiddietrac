@@ -163,38 +163,74 @@
       + '</div>'
       + '<div id="es-out" style="margin-top:14px;"></div>'
       + '</div>'
-      + '<div class="kt-card" style="max-width:680px;margin-top:18px;" id="cur-card">'
-      + '<div class="kt-card-header"><h3 class="kt-card-title">💱 Billing currency</h3></div>'
-      + '<p style="color:#64748B;font-size:13px;margin:0 0 12px;">Currency used for invoices and money amounts across the portal.</p>'
-      + '<select id="cur-sel" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;"><option>Loading…</option></select>'
-      + '<div style="margin-top:14px;"><button id="cur-save" class="kt-btn kt-btn-primary">Save currency</button></div>'
-      + '<div id="cur-out" style="margin-top:12px;"></div>'
+      // ── Outbound SMTP — send via your own provider ──
+      + '<div class="kt-card" style="max-width:680px;margin-top:18px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">📤 Outbound email (SMTP)</h3></div>'
+      + '<p style="color:#64748B;font-size:13px;margin:0 0 12px;">Send the portal’s emails through your own <strong>Google</strong>, <strong>Microsoft 365</strong>, or any SMTP provider — better deliverability than the shared default.</p>'
+      + '<label style="display:block;font-size:13px;font-weight:600;margin:0 0 4px;">Sending method</label>'
+      + '<select id="es-mode" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;margin-bottom:12px;">'
+      + '<option value="default"' + (s.mode !== 'smtp' ? ' selected' : '') + '>Platform default</option>'
+      + '<option value="smtp"' + (s.mode === 'smtp' ? ' selected' : '') + '>My own SMTP server</option>'
+      + '</select>'
+      + '<div id="es-smtp-fields" style="' + (s.mode === 'smtp' ? '' : 'display:none;') + '">'
+      + '<div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">'
+      + '<button type="button" class="kt-btn es-preset" data-p="gmail" style="background:#F1F5F9;color:#1F2937;">Gmail</button>'
+      + '<button type="button" class="kt-btn es-preset" data-p="microsoft" style="background:#F1F5F9;color:#1F2937;">Microsoft 365</button>'
+      + '<button type="button" class="kt-btn es-preset" data-p="custom" style="background:#F1F5F9;color:#1F2937;">Custom</button>'
+      + '</div>'
+      + field('SMTP host', 'es-host', s.smtp_host || '', 'smtp.gmail.com')
+      + '<div style="display:flex;gap:10px;align-items:flex-end;">'
+      + '<div style="flex:1;">' + field('Port', 'es-port', s.smtp_port || 587, '587') + '</div>'
+      + '<div style="flex:1;"><label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Encryption</label>'
+      + '<select id="es-smtp-enc" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;">'
+      + ['tls', 'ssl', 'none'].map(function (o) { return '<option value="' + o + '"' + ((s.smtp_encryption || 'tls') === o ? ' selected' : '') + '>' + o.toUpperCase() + '</option>'; }).join('')
+      + '</select></div></div>'
+      + field('Username', 'es-user', s.smtp_username || '', 'you@gmail.com')
+      + field('Password' + (s.has_smtp_password ? ' (leave blank to keep)' : ''), 'es-pass', '', s.has_smtp_password ? '••••••••' : 'app password', 'password')
+      + '<p style="color:#94A3B8;font-size:12px;margin:8px 0 0;">Gmail &amp; Microsoft with 2-factor on need an <strong>app password</strong>, not your normal password.</p>'
+      + '</div>'
+      + '</div>'
+      // ── Microsoft 365 mailbox (Graph) — powers the in-portal Email client ──
+      + '<div class="kt-card" style="max-width:680px;margin-top:18px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">📬 Mailbox — Microsoft 365 (email client)</h3></div>'
+      + '<p style="color:#64748B;font-size:13px;margin:0 0 12px;">Connects the in-portal <strong>Email</strong> client to your Microsoft 365 mailboxes. Create an <strong>Azure AD app registration</strong> with Microsoft Graph Mail permissions, then paste its details here.</p>'
+      + field('Directory (tenant) ID', 'es-gt', s.graph_tenant_id || '', '00000000-0000-0000-0000-000000000000')
+      + field('Application (client) ID', 'es-gc', s.graph_client_id || '', '00000000-0000-0000-0000-000000000000')
+      + field('Client secret' + (s.has_graph_secret ? ' (leave blank to keep)' : ''), 'es-gs', '', s.has_graph_secret ? '••••••••' : 'secret value', 'password')
+      + '<p style="color:#94A3B8;font-size:12px;margin:8px 0 0;">Azure Portal → App registrations → Certificates &amp; secrets. Needs Graph <em>Mail.Read</em> / <em>Mail.Send</em>.</p>'
       + '</div>'
       + '</div>';
 
-    // Currency card population
-    (async function () {
-      try {
-        var c = await api().get('/admin/currency');
-        var sel = document.getElementById('cur-sel');
-        sel.innerHTML = (c.supported || []).map(function (o) {
-          return '<option value="' + o.code + '"' + (o.code === c.currency ? ' selected' : '') + '>' + esc(o.code) + ' — ' + esc(o.label) + ' (' + esc(o.symbol) + ')</option>';
-        }).join('');
-        document.getElementById('cur-save').onclick = async function () {
-          try { await patch('/admin/currency', { currency: sel.value }); toast('Currency saved.', 'success'); if (window.KT) window.KT._currency = null; }
-          catch (e) { toast(e.message || 'Save failed', 'error'); }
-        };
-      } catch (e) {
-        document.getElementById('cur-card').style.display = 'none';
-      }
-    })();
+
+    // SMTP: show/hide fields by mode + provider presets
+    var modeSel = document.getElementById('es-mode');
+    var smtpFields = document.getElementById('es-smtp-fields');
+    if (modeSel && smtpFields) modeSel.onchange = function () { smtpFields.style.display = modeSel.value === 'smtp' ? '' : 'none'; };
+    [].forEach.call(document.querySelectorAll('.es-preset'), function (b) {
+      b.onclick = function () {
+        var p = b.getAttribute('data-p'), h = document.getElementById('es-host'), pt = document.getElementById('es-port'), en = document.getElementById('es-smtp-enc');
+        if (p === 'gmail') { h.value = 'smtp.gmail.com'; pt.value = '587'; en.value = 'tls'; }
+        else if (p === 'microsoft') { h.value = 'smtp.office365.com'; pt.value = '587'; en.value = 'tls'; }
+        else { h.value = ''; pt.value = '587'; en.value = 'tls'; }
+      };
+    });
 
     document.getElementById('es-save').onclick = async function () {
+      var v = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
       var body = {
-        email_from_name: document.getElementById('es-name').value.trim() || null,
-        email_from_address: document.getElementById('es-addr').value.trim() || null,
-        email_smtp_encryption: document.getElementById('es-enc').value
+        email_from_name: v('es-name') || null,
+        email_from_address: v('es-addr') || null,
+        email_smtp_encryption: document.getElementById('es-enc').value,
+        mode: document.getElementById('es-mode').value,
+        smtp_host: v('es-host'),
+        smtp_port: parseInt(v('es-port'), 10) || 587,
+        smtp_encryption: document.getElementById('es-smtp-enc').value,
+        smtp_username: v('es-user'),
+        graph_tenant_id: v('es-gt'),
+        graph_client_id: v('es-gc')
       };
+      var pw = document.getElementById('es-pass').value; if (pw) body.smtp_password = pw;
+      var gs = document.getElementById('es-gs').value; if (gs) body.graph_client_secret = gs;
       try { await patch('/admin/email-settings', body); toast('Email settings saved.', 'success'); }
       catch (e) { toast(e.message || 'Save failed', 'error'); }
     };

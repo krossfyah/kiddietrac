@@ -28,7 +28,7 @@ final class HelpController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $role = $this->resolveRole($request->user());
+        $role = $this->resolveRole($request->user(), $request);
 
         return response()->json([
             'role' => $role,
@@ -41,7 +41,7 @@ final class HelpController extends Controller
      */
     public function show(Request $request, string $slug): JsonResponse
     {
-        $role = $this->resolveRole($request->user());
+        $role = $this->resolveRole($request->user(), $request);
         $article = $this->help->getArticle($slug, $role);
 
         if (!$article) {
@@ -61,7 +61,7 @@ final class HelpController extends Controller
             'question' => ['required', 'string', 'min:3', 'max:500'],
         ]);
 
-        $role = $this->resolveRole($request->user());
+        $role = $this->resolveRole($request->user(), $request);
 
         if (!$this->ai->isConfigured()) {
             return response()->json([
@@ -177,7 +177,7 @@ PROMPT;
         ];
     }
 
-    private function resolveRole($user): string
+    private function resolveRole($user, ?Request $request = null): string
     {
         if (!$user) return 'parent';
 
@@ -188,11 +188,28 @@ PROMPT;
             ->unique()
             ->all();
 
+        // Platform admins previewing a role via "View as" send X-View-As-Role, so
+        // Help shows THAT role's articles instead of the admin's own.
+        if ($request && in_array('platform_admin', $roles, true)) {
+            $map = [
+                'guardian' => 'guardian', 'parent' => 'guardian',
+                'educator' => 'educator',
+                'centre_director' => 'centre_director', 'director' => 'centre_director',
+                'agency_admin' => 'agency_admin',
+                'auditor' => 'auditor',
+            ];
+            $va = strtolower(trim((string) $request->header('X-View-As-Role')));
+            if (isset($map[$va])) {
+                return $map[$va];
+            }
+        }
+
         return match (true) {
             in_array('agency_admin', $roles, true) => 'agency_admin',
             in_array('centre_director', $roles, true) => 'centre_director',
             in_array('educator', $roles, true) => 'educator',
             in_array('guardian', $roles, true) => 'guardian',
+            in_array('auditor', $roles, true) => 'auditor',
             default => 'guardian',
         };
     }
@@ -203,7 +220,7 @@ PROMPT;
      */
     public function dashboard(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
     {
-        $role = $this->resolveRole($request->user());
+        $role = $this->resolveRole($request->user(), $request);
         $agencyId = optional($request->user())->agency_id ?? null;
 
         // Featured: from help_article_featured (agency-specific or global)

@@ -1,49 +1,57 @@
 ---
+roles: agency_admin, platform_admin
 title: Marketing campaigns
-category: Daily Operations
-order: 70
+category: Communications
+order: 36
 ---
 # Marketing campaigns
 
-Directors and agency admins can compose rich messages — newsletters, open-house invites, promotions — and send them to a chosen audience straight from Kiddietrac. Find it under **Growth → Marketing** in the sidebar.
+Compose rich newsletters, open-house invites and promotions, then send them to
+the families you choose. Sidebar → **Campaigns**.
 
-## Composing a campaign
+![Click + New campaign on the Campaigns screen](https://api.kiddietrac.com/help-img/campaigns.png)
 
-Click **+ New campaign**. You'll see one panel with everything you need:
+## Composing
 
-- **Campaign title** — internal label only. Families don't see this; it's how you find the draft later.
-- **Email subject** — used when the campaign goes by email. Keep it under 60 characters for mobile readability.
-- **Audience** — who receives it:
-  - *All families* — every family attached to your centre (or every centre in your agency, if you're an agency admin).
-  - *Currently enrolled* — only families with at least one enrolled child.
-  - *Waitlist* — families with waitlisted children.
-  - *Prospects* — families without any enrolled children yet.
-  - *Staff only* — directors + educators at your scope.
-- **Channel** — *In-portal* writes to the families' announcements feed, no email sent. *Email* queues to send via your configured mail driver (when v22p35 ships). *Both* does both.
-- **Hero image** — optional banner image (jpg / png / webp / gif, max 5 MB). Renders above the body in the announcement feed and in emails.
-- **Body** — a rich-text editor with the usual tools:
-  - **B / I / U** — bold, italic, underline
-  - **H1 / H2 / P** — heading levels and paragraph
-  - **List** buttons — bulleted and numbered lists
-  - **Block quote**
-  - **Link** — wraps the selection in an `<a href>`
-  - **Image** — uploads an inline image from your device and inserts it into the body
-  - **Undo / Redo / clear** — standard editing
-- **Schedule** — leave blank to send manually with **Send now**. Set a date+time to queue (the scheduler ships in v22p35; until then, scheduled campaigns sit as `scheduled` until you open them and press Send).
+1. Click **+ New campaign**.
+2. Fill in:
+   - **Campaign title** (internal) and **Email subject**.
+   - **Audience** — all families / currently enrolled / waitlist / prospects /
+     staff.
+   - **Channel** — in-portal, email, or both.
+   - **Hero image** (optional) — upload a banner shown at the top of the message.
+   - **Body** — use the rich-text editor (fonts, colours, headings, lists,
+     links, images).
+   - **Schedule** (optional) — leave blank to send manually.
+
+## White-label header
+
+White-label branding is **part of your plan** — it is not a per-campaign
+choice. When your agency is on a package that includes white-label, your
+**agency logo and details** (name, support email, business address) appear at
+the top of every campaign automatically, pulled from **Settings → Branding**.
+The composer shows a banner telling you whether it's active. Agencies without
+the add-on get a clean standard header. (White-label is available on the Growth
+plan and above; it's switched on when the agency is enrolled in that package.)
+
+## Preview before sending
+
+Click **👁 Preview** to see the campaign exactly as recipients will get it — the
+white-label header, your hero image and body, and the footer. Always preview
+before you send.
+
+## The footer
+
+Every campaign ends with a **"Powered by Kiddietrac"** footer. It also shows
+your agency's **Privacy policy** and **Terms & conditions** links — set those
+once under **Settings → Branding** (they're part of your agency setup) and they
+appear on every campaign automatically.
 
 ## Sending
 
-Two buttons:
+Use **Send now** (or schedule it). In-portal campaigns post to families' feeds
+immediately; emailed campaigns are queued for delivery. Sent campaigns are
+read-only.
 
-- **Save draft** — saves the campaign in `draft` status (or `scheduled` if you set a schedule). You can come back and edit it any time.
-- **Send now** — saves, then immediately sends to the resolved audience. Asks for confirmation first.
-
-After sending, the campaign moves to `sent` status and shows the recipient count + send timestamp on the list view. Sent campaigns are read-only — you can't edit a campaign that's already gone out (you can compose a new one).
-
-## What's saved, what's logged
-
-Every action writes to `audit_logs` and the campaign row stores the recipient count + delivery count. Open + click tracking will be added when the email channel goes live.
-
-## Security
-
-The body editor lets you paste HTML, but the backend strips anything dangerous (`<script>`, `<iframe>`, inline `on…` handlers, `javascript:` links) before saving — so a campaign can't run code in a recipient's portal.
+> Who can use this: **Centre director** (their centre), **Agency admin** (whole
+> agency).

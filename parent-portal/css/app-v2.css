@@ -300,12 +300,12 @@
 }
 
 .filter-select {
-  padding: 10px 14px;
+  padding: 5px 26px 5px 10px; /* v22p98: compact (was 10px 14px) */
   border: 1.5px solid var(--kt-border);
   border-radius: var(--kt-radius-sm);
   background: var(--kt-surface);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--kt-text);
 }
 
@@ -1015,20 +1015,27 @@ body.layout-sidebar .app-main {
   padding: 0 14px 14px;
   margin-top: auto;
 }
+/* v22p84: lighter, less heavy "Manage this centre" button — a subtle on-brand
+   ghost button instead of a full-width dark navy bar, so it reads as a quiet
+   secondary action that doesn't dominate each centre card. */
 .centre-card-v17 .footer .manage-btn {
   width: 100%;
-  background: var(--kt-blue);
-  color: white;
-  border: none;
-  padding: 10px;
+  background: #F1F8FA;
+  color: #1F6080;
+  border: 1px solid #CFE3EB;
+  padding: 8px 10px;
   border-radius: var(--kt-radius-sm);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
-  transition: background .15s;
+  transition: background .15s, border-color .15s, color .15s;
   font-family: inherit;
 }
-.centre-card-v17 .footer .manage-btn:hover { background: var(--kt-blue-dark); }
+.centre-card-v17 .footer .manage-btn:hover {
+  background: #1F6080;
+  border-color: #1F6080;
+  color: #ffffff;
+}
 
 /* ====================================================================
    v17 — Tag polish (status pills)

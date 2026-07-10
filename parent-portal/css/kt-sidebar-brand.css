@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac branded sidebar (v22p84)
+   A soft, light KiddieTrac teal tint — enough to set the navigation apart
+   from the content area without the heavy dark look. Text keeps its original
+   dark colours (legible on the light tint), and the logo plate + search box
+   are intentionally left untouched.
+   ═══════════════════════════════════════════════════════════════════ */
+
+aside.app-sidebar,
+.app-sidebar.app-nav {
+  background: linear-gradient(180deg, #F1F8FA 0%, #E7F1F4 100%) !important;
+  border-right: 1px solid #DBE8EC !important;
+}
+
+/* Nav links: rounded hover/active pills in soft teal with a green active accent */
+.app-sidebar .nav-link {
+  border-radius: 8px;
+  margin: 1px 8px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.app-sidebar .nav-link:hover {
+  background: #E1EEF2 !important;
+}
+.app-sidebar .nav-link.active {
+  background: #D7E9EF !important;
+  color: #16526E !important;
+  box-shadow: inset 3px 0 0 #8EC73C;
+  font-weight: 700;
+}
+
+/* "Collapse all" control reads as a subtle chip on the tint */
+.app-sidebar .kt-nav-allctl {
+  border-color: #CBDEE5 !important;
+}
+
+/* Quick Add block separator blends with the tint */
+.app-sidebar .kt-v5a-actions {
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-top: 1px solid #D5E5EA !important;
+}
+
+/* Slightly tinted scrollbar thumb */
+.app-sidebar .nav-links::-webkit-scrollbar-thumb,
+.app-sidebar #navLinks::-webkit-scrollbar-thumb {
+  background: rgba(31, 96, 128, 0.22) !important;
+}

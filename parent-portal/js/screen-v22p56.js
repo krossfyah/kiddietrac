@@ -347,10 +347,10 @@
       </div>
       <div class="kt-card">
         <h3 style="margin:0 0 14px;color:#0F172A;font-size:16px;font-weight:700;">Recent comments</h3>
-        ${(r.data || []).slice(0, 30).map(n => `<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;">
+        <div data-kt-list="1">${(r.data || []).slice(0, 30).map(n => `<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;">
           <div style="font-size:13px;color:#64748B;"><strong style="color:${n.score >= 9 ? '#10B981' : n.score >= 7 ? '#F59E0B' : '#EF4444'};">${n.score}/10</strong> · ${fmtDate(n.created_at)}</div>
           <div style="font-size:14px;color:#0F172A;margin-top:4px;">${esc(n.comment || '')}</div>
-        </div>`).join('') || '<div style="text-align:center;padding:30px;color:#94A3B8;">No responses yet.</div>'}
+        </div>`).join('') || '<div style="text-align:center;padding:30px;color:#94A3B8;">No responses yet.</div>'}</div>
       </div>
     </div>`;
   }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\Log;
  */
 final class AiController extends Controller
 {
+    use ResolvesCentreContext;
+
     /** Pure-SQL heuristic churn-risk — no AI key required. */
     public function churnRisk(Request $request): JsonResponse
     {
@@ -112,6 +115,8 @@ final class AiController extends Controller
         abort_unless($key, 503, 'AI not configured');
         $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
         abort_unless($child, 404);
+        // SECURITY (v22p94): only the child's guardians/centre staff.
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
 
         $weekStart = Carbon::now()->startOfWeek();
         $observations = DB::table('observations')
@@ -232,7 +237,13 @@ final class AiController extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)

@@ -32,11 +32,38 @@
     return json;
   }
 
+  // Agency-scoped calls (team invites, branding) need the active-agency header.
+  async function agencyReq(method, path, body, agencyId) {
+    var headers = { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json', 'Content-Type': 'application/json' };
+    if (agencyId) headers['X-Active-Agency-Id'] = String(agencyId);
+    var res = await fetch(apiBase() + path, { method: method, headers: headers, body: JSON.stringify(body || {}) });
+    var json = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      var m = json.message || ('API ' + res.status);
+      if (json.errors) { var f = Object.values(json.errors)[0]; if (f && f[0]) m = f[0]; }
+      throw new Error(m);
+    }
+    return json;
+  }
+  function agencyPost(path, body, agencyId) { return agencyReq('POST', path, body, agencyId); }
+  function agencyPatch(path, body, agencyId) { return agencyReq('PATCH', path, body, agencyId); }
+
   // ─── Field config per role ───────────────────────────────────────────
   var COMMON_STEPS = [
     { id: 'profile', title: 'Your profile', subtitle: 'Confirm the basics so people know who they are messaging.' },
     { id: 'address', title: 'Address & emergency contact', subtitle: 'Where you are and who to reach in an emergency.' },
     { id: 'role',    title: '',           subtitle: '' }, // populated per-role
+  ];
+
+  // v22p83: countries offered at onboarding. Selecting one applies the agency's
+  // currency, locale and compliance frameworks (see CurrencyController).
+  var ONBOARD_COUNTRIES = [
+    { code: 'CA', label: '🇨🇦 Canada' },
+    { code: 'US', label: '🇺🇸 United States' },
+    { code: 'GB', label: '🇬🇧 United Kingdom' },
+    { code: 'AU', label: '🇦🇺 Australia' },
+    { code: 'NZ', label: '🇳🇿 New Zealand' },
+    { code: 'IE', label: '🇮🇪 Ireland' },
   ];
 
   function roleStepConfig(r) {
@@ -45,8 +72,9 @@
         title: 'About your organization',
         subtitle: 'Quick details about your agency for billing and compliance.',
         fields: [
+          { k: 'country',                      label: 'Country (sets currency & childcare/PCI/privacy compliance)', type: 'select', options: ONBOARD_COUNTRIES.map(function (c) { return c.label; }) },
           { k: 'business_name',                label: 'Business / legal entity name', type: 'text', placeholder: 'KiddieTrac Inc.' },
-          { k: 'business_registration_number', label: 'Business number (HST / CRA)',  type: 'text', placeholder: '123456789RT0001' },
+          { k: 'business_registration_number', label: 'Business / tax registration number',  type: 'text', placeholder: 'e.g. HST/CRA, EIN, VAT' },
           { k: 'billing_email',                label: 'Billing email',                 type: 'email' },
           { k: 'target_centre_count',          label: 'Number of centres you operate', type: 'number' },
         ],
@@ -93,20 +121,46 @@
   }
 
   // ─── Wizard renderer ─────────────────────────────────────────────────
+  // v22p91: agency admins get two extra steps after the role step — "Invite
+  // your team" and (only if their plan includes it) "White-label branding".
+  // So the step list is built dynamically; we fetch the agency's feature flags
+  // first to decide whether the white-label step applies.
   function render(container, ctx) {
     var user = (ctx && ctx.user) || getUser();
     var r = role();
+    container.innerHTML = '<div style="max-width:760px;margin:48px auto;padding:40px;text-align:center;color:#64748B;font-size:14px;">Loading your setup…</div>';
+    (async function () {
+      var whiteLabel = false;
+      if (r === 'agency_admin' && user.agency_id) {
+        try {
+          var f = await api('GET', '/admin/agencies/' + user.agency_id + '/features');
+          whiteLabel = !!(f && f.flags && f.flags.white_label);
+        } catch (e) { /* default: no white-label step */ }
+      }
+      buildWizard(container, user, r, whiteLabel);
+    })();
+  }
+
+  function buildWizard(container, user, r, whiteLabel) {
     var roleStep = roleStepConfig(r);
     COMMON_STEPS[2].title = roleStep.title;
     COMMON_STEPS[2].subtitle = roleStep.subtitle;
 
+    var steps = COMMON_STEPS.slice();
+    if (r === 'agency_admin') {
+      steps.push({ id: 'team', title: 'Invite your team', subtitle: 'Add directors and educators (optional — you can do this anytime).' });
+      if (whiteLabel) steps.push({ id: 'whitelabel', title: 'Make it yours', subtitle: 'Your plan includes white-label branding — add your logo and colours.' });
+    }
+
     var state = {
       step: 0,
+      steps: steps,
       data: {
         first_name:    user.first_name || '',
         last_name:     user.last_name || '',
         preferred_name: user.preferred_name || '',
         phone:         user.phone || '',
+        photo_url:     user.photo_url || '',
       },
       role_extras: (user.profile_extras && user.profile_extras.role_extras) || {},
       address: (function () {
@@ -121,6 +175,9 @@
           emergency_contact_phone: pe.emergency_contact_phone || '',
         };
       })(),
+      team: [],
+      whitelabel: { brand_logo_url: '', brand_primary_color: '#1F6080', brand_support_email: user.email || '', brand_privacy_url: '', brand_terms_url: '' },
+      agencyId: user.agency_id,
     };
 
     container.innerHTML =
@@ -137,7 +194,7 @@
           '<div id="kt-step-msg" style="font-size:13px;min-height:20px;margin-top:12px;"></div>' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;padding-top:18px;border-top:1px solid #E5E7EB;">' +
             '<button id="kt-back" type="button" style="padding:10px 18px;background:white;color:#475569;border:1.5px solid #CBD5E1;border-radius:10px;font-weight:600;cursor:pointer;">Back</button>' +
-            '<div style="font-size:12px;color:#94A3B8;">Step <span id="kt-step-n">1</span> of ' + COMMON_STEPS.length + '</div>' +
+            '<div style="font-size:12px;color:#94A3B8;">Step <span id="kt-step-n">1</span> of ' + steps.length + '</div>' +
             '<button id="kt-next" type="button" style="padding:10px 24px;background:linear-gradient(135deg,#081C41,#1F6080);color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer;">Next</button>' +
           '</div>' +
         '</div>' +
@@ -146,7 +203,7 @@
     function drawBar() {
       var bar = container.querySelector('#kt-step-bar');
       bar.innerHTML = '';
-      for (var i = 0; i < COMMON_STEPS.length; i++) {
+      for (var i = 0; i < steps.length; i++) {
         var el = document.createElement('div');
         el.style.cssText = 'flex:1;height:6px;border-radius:3px;background:' + (i <= state.step ? '#1F6080' : '#E2E8F0') + ';transition:background 200ms ease;';
         bar.appendChild(el);
@@ -155,7 +212,7 @@
     }
 
     function drawTitle() {
-      var s = COMMON_STEPS[state.step];
+      var s = steps[state.step];
       container.querySelector('#kt-step-title').innerHTML =
         '<div style="font-size:22px;font-weight:800;color:#0F172A;margin-bottom:4px;font-family:\'Baloo 2\',system-ui,sans-serif;">' + esc(s.title) + '</div>' +
         '<div style="font-size:14px;color:#64748B;">' + esc(s.subtitle) + '</div>';
@@ -166,12 +223,15 @@
       drawTitle();
       var body = container.querySelector('#kt-step-body');
       body.innerHTML = '';
-      if (state.step === 0) body.appendChild(renderProfileStep(state));
-      else if (state.step === 1) body.appendChild(renderAddressStep(state));
-      else if (state.step === 2) body.appendChild(renderRoleStep(state, roleStep));
+      var id = steps[state.step].id;
+      if (id === 'profile') body.appendChild(renderProfileStep(state, container));
+      else if (id === 'address') body.appendChild(renderAddressStep(state));
+      else if (id === 'role') body.appendChild(renderRoleStep(state, roleStep));
+      else if (id === 'team') body.appendChild(renderTeamStep(state));
+      else if (id === 'whitelabel') body.appendChild(renderWhiteLabelStep(state, container));
 
       container.querySelector('#kt-back').style.visibility = state.step === 0 ? 'hidden' : 'visible';
-      container.querySelector('#kt-next').textContent = state.step === COMMON_STEPS.length - 1 ? 'Save and continue' : 'Next';
+      container.querySelector('#kt-next').textContent = state.step === steps.length - 1 ? 'Save and continue' : 'Next';
     }
 
     container.querySelector('#kt-back').addEventListener('click', function () {
@@ -179,7 +239,7 @@
     });
     container.querySelector('#kt-next').addEventListener('click', async function () {
       collectCurrentStep(state, container);
-      if (state.step < COMMON_STEPS.length - 1) {
+      if (state.step < steps.length - 1) {
         state.step++;
         drawStep();
       } else {
@@ -214,8 +274,20 @@
     return 'width:100%;padding:11px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;box-sizing:border-box;';
   }
 
-  function renderProfileStep(state) {
+  function renderProfileStep(state, container) {
     var box = document.createElement('div');
+
+    // Avatar uploader — uploads immediately to /auth/me/avatar.
+    var av = document.createElement('div');
+    av.style.cssText = 'display:flex;align-items:center;gap:16px;margin-bottom:18px;';
+    var prevBg = state.data.photo_url ? "background:#F1F5F9 url('" + absUrlO(state.data.photo_url) + "') center/cover no-repeat;" : 'background:#F1F5F9;';
+    av.innerHTML =
+      '<div id="kt-av-prev" style="width:72px;height:72px;border-radius:50%;' + prevBg + 'display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:26px;flex-shrink:0;border:2px solid #E2E8F0;">' + (state.data.photo_url ? '' : '👤') + '</div>' +
+      '<div><button type="button" id="kt-av-btn" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">Upload avatar</button>' +
+        '<input id="kt-av-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">' +
+        '<div id="kt-av-msg" style="font-size:11px;color:#94A3B8;margin-top:5px;">JPG/PNG, max 2 MB</div></div>';
+    box.appendChild(av);
+
     var row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
     row.appendChild(input('First name',    'first_name',     state.data.first_name));
@@ -223,6 +295,110 @@
     box.appendChild(row);
     box.appendChild(input('Preferred name (optional, what we call you)', 'preferred_name', state.data.preferred_name));
     box.appendChild(input('Phone (optional)', 'phone', state.data.phone, 'tel'));
+
+    setTimeout(function () {
+      var fileEl = box.querySelector('#kt-av-file');
+      var msg = box.querySelector('#kt-av-msg');
+      box.querySelector('#kt-av-btn').addEventListener('click', function () { fileEl.click(); });
+      fileEl.addEventListener('change', function () {
+        var f = fileEl.files[0]; if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { msg.textContent = 'Max 2 MB'; msg.style.color = '#DC2626'; return; }
+        msg.textContent = 'Uploading…'; msg.style.color = '#64748B';
+        var fd = new FormData(); fd.append('avatar', f);
+        fetch(apiBase() + '/auth/me/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token() }, body: fd })
+          .then(function (res) { return res.json().then(function (j) { if (!res.ok) throw new Error(j.message || ('HTTP ' + res.status)); return j; }); })
+          .then(function (j) {
+            state.data.photo_url = j.photo_url;
+            var prev = box.querySelector('#kt-av-prev');
+            prev.style.cssText = 'width:72px;height:72px;border-radius:50%;background:#F1F5F9 url(\'' + absUrlO(j.photo_url) + '\') center/cover no-repeat;border:2px solid #E2E8F0;';
+            prev.textContent = '';
+            msg.textContent = '✓ Looking good'; msg.style.color = '#16A34A';
+            try { var u = getUser(); u.photo_url = j.photo_url; setUser(u); } catch (e) {}
+          })
+          .catch(function (e) { msg.textContent = 'Upload failed: ' + (e.message || 'error'); msg.style.color = '#DC2626'; });
+      });
+    }, 0);
+    return box;
+  }
+
+  function absUrlO(p) {
+    if (!p) return '';
+    if (/^https?:\/\//i.test(p)) return p;
+    return apiBase().replace(/\/api\/v1\/?$/, '') + p;
+  }
+
+  // ── Agency-admin: invite team (directors / educators) ──────────────
+  function renderTeamStep(state) {
+    var box = document.createElement('div');
+    box.innerHTML = '<div id="kt-team-rows"></div>' +
+      '<button type="button" id="kt-team-add" style="margin-top:6px;background:white;color:#1F6080;border:1.5px dashed #1F6080;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;font-size:13px;">+ Add a team member</button>' +
+      '<div style="margin-top:16px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 14px;font-size:12px;color:#64748B;">Each person gets an email invite to set their password. <strong>Parents</strong> are added per family later under <strong>Families</strong> (once you’ve added children). This step is optional — skip it and add people anytime.</div>';
+    var rowsWrap = box.querySelector('#kt-team-rows');
+
+    function addRow(pre) {
+      pre = pre || {};
+      var row = document.createElement('div');
+      row.setAttribute('data-team-row', '1');
+      row.style.cssText = 'display:grid;grid-template-columns:150px 1fr 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:8px;';
+      row.innerHTML =
+        '<select data-tk="role" style="' + inputStyle() + 'background:white;padding:9px 10px;">' +
+          '<option value="centre_director"' + (pre.role === 'centre_director' ? ' selected' : '') + '>Centre director</option>' +
+          '<option value="educator"' + (!pre.role || pre.role === 'educator' ? ' selected' : '') + '>Educator</option>' +
+        '</select>' +
+        '<input data-tk="first_name" placeholder="First name" value="' + esc(pre.first_name || '') + '" style="' + inputStyle() + 'padding:9px 10px;">' +
+        '<input data-tk="last_name" placeholder="Last name" value="' + esc(pre.last_name || '') + '" style="' + inputStyle() + 'padding:9px 10px;">' +
+        '<input data-tk="email" type="email" placeholder="email@agency.com" value="' + esc(pre.email || '') + '" style="' + inputStyle() + 'padding:9px 10px;">' +
+        '<button type="button" data-tk-del style="background:white;border:1px solid #E2E8F0;border-radius:8px;color:#DC2626;cursor:pointer;height:38px;">×</button>';
+      row.querySelector('[data-tk-del]').addEventListener('click', function () { row.remove(); });
+      rowsWrap.appendChild(row);
+    }
+
+    (state.team && state.team.length ? state.team : [{}]).forEach(addRow);
+    box.querySelector('#kt-team-add').addEventListener('click', function () { addRow(); });
+    return box;
+  }
+
+  // ── Agency-admin: white-label branding (plan includes it) ──────────
+  function renderWhiteLabelStep(state, container) {
+    var box = document.createElement('div');
+    var wl = state.whitelabel;
+    var prevBg = wl.brand_logo_url ? "background:#F8FAFC url('" + absUrlO(wl.brand_logo_url) + "') center/contain no-repeat;" : 'background:#F8FAFC;';
+    box.innerHTML =
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">' +
+        '<div id="kt-wl-prev" style="width:120px;height:64px;border:1px solid #E2E8F0;border-radius:10px;' + prevBg + 'display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:22px;flex-shrink:0;">' + (wl.brand_logo_url ? '' : '🖼') + '</div>' +
+        '<div><button type="button" id="kt-wl-btn" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">Upload your logo</button>' +
+          '<input id="kt-wl-file" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">' +
+          '<div id="kt-wl-msg" style="font-size:11px;color:#94A3B8;margin-top:5px;">PNG/SVG, max 2 MB</div></div>' +
+      '</div>';
+    box.appendChild(input('Primary colour (hex)', 'brand_primary_color', wl.brand_primary_color, 'text', '#1F6080'));
+    box.appendChild(input('Support email', 'brand_support_email', wl.brand_support_email, 'email'));
+    var r2 = document.createElement('div');
+    r2.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
+    r2.appendChild(input('Privacy policy URL', 'brand_privacy_url', wl.brand_privacy_url, 'text', 'https://…/privacy'));
+    r2.appendChild(input('Terms & conditions URL', 'brand_terms_url', wl.brand_terms_url, 'text', 'https://…/terms'));
+    box.appendChild(r2);
+
+    setTimeout(function () {
+      var fileEl = box.querySelector('#kt-wl-file');
+      var msg = box.querySelector('#kt-wl-msg');
+      box.querySelector('#kt-wl-btn').addEventListener('click', function () { fileEl.click(); });
+      fileEl.addEventListener('change', function () {
+        var f = fileEl.files[0]; if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { msg.textContent = 'Max 2 MB'; msg.style.color = '#DC2626'; return; }
+        msg.textContent = 'Uploading…'; msg.style.color = '#64748B';
+        var fd = new FormData(); fd.append('image', f);
+        fetch(apiBase() + '/marketing/images', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token() }, body: fd })
+          .then(function (res) { return res.json().then(function (j) { if (!res.ok) throw new Error(j.message || ('HTTP ' + res.status)); return j; }); })
+          .then(function (j) {
+            wl.brand_logo_url = j.url || '';
+            var prev = box.querySelector('#kt-wl-prev');
+            prev.style.cssText = 'width:120px;height:64px;border:1px solid #E2E8F0;border-radius:10px;background:#F8FAFC url(\'' + absUrlO(wl.brand_logo_url) + '\') center/contain no-repeat;';
+            prev.textContent = '';
+            msg.textContent = '✓ Uploaded'; msg.style.color = '#16A34A';
+          })
+          .catch(function (e) { msg.textContent = 'Upload failed: ' + (e.message || 'error'); msg.style.color = '#DC2626'; });
+      });
+    }, 0);
     return box;
   }
   function renderAddressStep(state) {
@@ -252,14 +428,35 @@
   }
 
   function collectCurrentStep(state, container) {
+    var id = state.steps[state.step].id;
     var body = container.querySelector('#kt-step-body');
     body.querySelectorAll('[data-k]').forEach(function (el) {
       var k = el.dataset.k;
       var v = el.value;
-      if (state.step === 0) state.data[k] = v;
-      else if (state.step === 1) state.address[k] = v;
-      else if (state.step === 2) state.role_extras[k] = v;
+      if (id === 'profile') state.data[k] = v;
+      else if (id === 'address') state.address[k] = v;
+      else if (id === 'role') state.role_extras[k] = v;
+      else if (id === 'whitelabel') state.whitelabel[k] = v;
     });
+    if (id === 'team') collectTeam(state, body);
+  }
+
+  // Pull the team-invite rows out of the DOM into state.team.
+  function collectTeam(state, body) {
+    var rows = [];
+    body.querySelectorAll('[data-team-row]').forEach(function (row) {
+      var get = function (sel) { var el = row.querySelector(sel); return el ? el.value.trim() : ''; };
+      var email = get('[data-tk="email"]');
+      var first = get('[data-tk="first_name"]');
+      if (!email && !first) return; // skip empty rows
+      rows.push({
+        role: get('[data-tk="role"]') || 'educator',
+        first_name: first,
+        last_name: get('[data-tk="last_name"]'),
+        email: email,
+      });
+    });
+    state.team = rows;
   }
 
   async function submit(state, container) {
@@ -281,11 +478,44 @@
     try {
       var fresh = await api('PATCH', '/auth/me/onboarding', payload);
       setUser(fresh);
+      // v22p83: if an agency admin picked a country, apply its currency +
+      // compliance to the agency. Best-effort — never block onboarding on it.
+      if (state.role_extras && state.role_extras.country) {
+        var picked = ONBOARD_COUNTRIES.filter(function (c) { return c.label === state.role_extras.country; })[0];
+        if (picked) { try { await api('PATCH', '/admin/country', { country: picked.code }); } catch (e) { /* non-fatal */ } }
+      }
+
+      // v22p91 — agency-admin extras (best-effort; never block finishing).
+      var notes = [];
+      if (state.team && state.team.length) {
+        var invited = 0;
+        for (var i = 0; i < state.team.length; i++) {
+          var m = state.team[i];
+          if (!m.email || !m.first_name || !m.last_name) continue;
+          try { await agencyPost('/admin/users', { role: m.role, first_name: m.first_name, last_name: m.last_name, email: m.email, send_invite: true }, state.agencyId); invited++; }
+          catch (e) { /* skip this invite */ }
+        }
+        if (invited) notes.push(invited + ' invite' + (invited === 1 ? '' : 's') + ' sent');
+      }
+      var wl = state.whitelabel || {};
+      if (state.agencyId && (wl.brand_logo_url || wl.brand_privacy_url || wl.brand_terms_url || wl.brand_support_email)) {
+        try {
+          await agencyPatch('/admin/agencies/' + state.agencyId + '/features', {
+            brand_logo_url: wl.brand_logo_url || null,
+            brand_primary_color: /^#[0-9a-fA-F]{6}$/.test(wl.brand_primary_color || '') ? wl.brand_primary_color : null,
+            brand_support_email: wl.brand_support_email || null,
+            brand_privacy_url: wl.brand_privacy_url || null,
+            brand_terms_url: wl.brand_terms_url || null,
+          }, state.agencyId);
+          notes.push('branding saved');
+        } catch (e) { /* non-fatal */ }
+      }
+
       // Done! Redirect to the role's dashboard. Hashchange will trigger the
       // shell to render the proper screen.
-      msg.textContent = '✓ All set — taking you to your dashboard…';
+      msg.textContent = '✓ All set' + (notes.length ? ' — ' + notes.join(' · ') : '') + ' — taking you to your dashboard…';
       msg.style.color = '#16A34A';
-      setTimeout(function () { window.location.hash = '#dashboard'; }, 600);
+      setTimeout(function () { window.location.hash = '#dashboard'; }, 800);
     } catch (e) {
       msg.textContent = 'Could not save: ' + e.message;
       msg.style.color = '#DC2626';

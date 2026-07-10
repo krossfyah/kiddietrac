@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -17,6 +18,8 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class PdfController extends Controller
 {
+    use ResolvesCentreContext;
+
     /**
      * GET /api/v1/families/{family}/t4a/{year}
      * Returns a downloadable PDF tax receipt for the calendar year.
@@ -25,12 +28,16 @@ final class PdfController extends Controller
     {
         $family = DB::table('families')->where('id', $familyId)->whereNull('deleted_at')->first();
         abort_unless($family, 404);
-        $this->authorizeAgency($request, (int) $family->agency_id);
+        // SECURITY (v22p96): a T4A tax receipt is family-private — this family's
+        // guardians/centre staff, or a platform_admin scoped to the agency they've
+        // switched into (was a global platform bypass across all tenants).
+        abort_unless($this->canAccessFamilyScoped($request, $familyId), 403);
 
         $start = Carbon::create($year, 1, 1)->startOfDay();
         $end = Carbon::create($year, 12, 31)->endOfDay();
 
-        $agency = DB::table('agencies')->where('id', $family->agency_id)->first();
+        // v22p98: families have no agency_id — resolve the agency via the centre.
+        $agency = DB::table('agencies')->where('id', DB::table('centres')->where('id', $family->centre_id)->value('agency_id'))->first();
         $payments = DB::table('payments')
             ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
             ->where('invoices.family_id', $familyId)
@@ -68,9 +75,13 @@ final class PdfController extends Controller
         $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
         abort_unless($child, 404);
         $family = DB::table('families')->where('id', $child->family_id)->first();
-        $this->authorizeAgency($request, (int) $family->agency_id);
+        // SECURITY (v22p96): a child's portfolio is child-private — guardians of
+        // this child or its centre staff, or a platform_admin scoped to the agency
+        // they've switched into (was a global platform bypass across all tenants).
+        abort_unless($this->canAccessChildScoped($request, $childId), 403);
 
-        $agency = DB::table('agencies')->where('id', $family->agency_id)->first();
+        // v22p98: families have no agency_id — resolve the agency via the centre.
+        $agency = DB::table('agencies')->where('id', DB::table('centres')->where('id', $family->centre_id)->value('agency_id'))->first();
         $observations = DB::table('observations as o')
             ->leftJoin('users as u', 'u.id', '=', 'o.recorded_by_id')
             ->where('o.child_id', $childId)

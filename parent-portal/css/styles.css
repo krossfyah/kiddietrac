@@ -617,6 +617,19 @@ img { display: block; max-width: 100%; }
   margin-bottom: 24px;
   border-bottom: 1px solid var(--kt-border);
   overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Portal-wide guard: any element that scrolls horizontally must not also show a
+   stray vertical scrollbar. Per CSS spec, declaring overflow-x:auto while
+   overflow-y is 'visible' forces overflow-y to compute to 'auto', so a 1px
+   sub-pixel overflow (e.g. a tab strip's border-bottom) produces an up/down
+   scrollbar. Pin overflow-y:hidden wherever overflow-x is set inline. */
+[style*="overflow-x: auto"],
+[style*="overflow-x:auto"],
+[style*="overflow-x: scroll"],
+[style*="overflow-x:scroll"] {
+  overflow-y: hidden;
 }
 
 .child-tab {

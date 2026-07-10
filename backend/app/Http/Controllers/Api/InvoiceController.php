@@ -403,6 +403,22 @@ final class InvoiceController extends Controller
                     ]);
                 }
 
+                // Notify each guardian of the family that a new invoice is ready
+                // (drives the parent app's Billing badge + notifications inbox).
+                $invTitle = 'New invoice: ' . $invoiceNumber;
+                $invBody = 'Your invoice for $' . number_format($total, 2) . ' is ready. Due ' . $dueDate->format('M j, Y') . '.';
+                foreach (DB::table('guardians')->where('family_id', $familyId)->pluck('user_id') as $gid) {
+                    DB::table('notifications')->insert([
+                        'user_id' => $gid,
+                        'type' => 'invoice',
+                        'title' => $invTitle,
+                        'body' => $invBody,
+                        'data' => json_encode(['link' => '#billing', 'invoice_id' => $invoiceId]),
+                        'created_at' => now(),
+                    ]);
+                    try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, $invTitle, $invBody, '#billing'); } catch (\Throwable $e) {}
+                }
+
                 $generated++;
             });
         }

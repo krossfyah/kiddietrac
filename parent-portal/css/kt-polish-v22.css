@@ -246,3 +246,48 @@ textarea:focus-visible {
   background-image: radial-gradient(circle at 1px 1px, rgba(31, 96, 128, 0.08) 1px, transparent 0);
   background-size: 16px 16px;
 }
+
+/* ── Consistent section banners (2026-06): upgrade legacy page-header-v17 to the gradient hero look ── */
+.page-header-v17 {
+  background: var(--kt-hero-grad) !important; color: #fff !important;
+  border-radius: var(--kt-radius-lg, 18px); padding: 24px 28px !important; margin-bottom: 24px;
+  position: relative; overflow: hidden; box-shadow: var(--kt-elev-2);
+}
+.page-header-v17::before {
+  content: ''; position: absolute; top: -120px; right: -120px; width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(255,255,255,.18) 0%, transparent 60%); pointer-events: none; z-index: 0;
+}
+.page-header-v17 > * { position: relative; z-index: 1; }
+.page-header-v17 .crumbs, .page-header-v17 .crumbs span { color: rgba(255,255,255,.85) !important; }
+.page-header-v17 h1 { color: #fff !important; }
+.page-header-v17 .sub { color: rgba(255,255,255,.92) !important; }
+.page-header-v17 .actions .btn-primary { background: #fff !important; color: #1F6080 !important; border-color: #fff !important; }
+
+/* v22 (2026-06) — guarantee ALL form fields are clearly visible everywhere (incl. modals not under [data-kt-pretty]) */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="hidden"]),
+textarea,
+select {
+  border: 1.5px solid #CBD5E1 !important;
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-radius: 8px !important;
+  /* v22p98: compact dropdown/select bars system-wide (were bulky, e.g. the
+     Calendar's two filter bars). Tighter padding + room for the native arrow. */
+  padding: 5px 26px 5px 10px !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  background-position: right 8px center !important;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):focus,
+textarea:focus, select:focus {
+  border-color: #1F6080 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(31,96,128,0.14) !important;
+}
+input::placeholder, textarea::placeholder { color: #94A3B8 !important; opacity: 1 !important; }
+
+/* v22 (2026-06) — unique floating image (section emoji) on auto-injected banners */
+.kt-hero .kt-hero-emoji { position:absolute; right:30px; top:50%; transform:translateY(-50%); font-size:104px; line-height:1; opacity:.30; pointer-events:none; z-index:0; animation: kt-float 6s ease-in-out infinite; filter: drop-shadow(0 10px 18px rgba(0,0,0,.22)); }
+@media (max-width: 920px) { .kt-hero .kt-hero-emoji { display:none; } }

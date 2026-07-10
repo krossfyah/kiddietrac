@@ -1,0 +1,210 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — consistency + polish pass (2026-07-06). Loaded LAST.
+   Fixes: banners animate consistently, navigation feels instant (not like a
+   page refresh), and the layout is tighter (less dead white space).
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1) Banner shimmer on EVERY variant (kt-hero-anim.css only did .kt-hero,
+        leaving the 48 .kt-page-hero + 9 .page-header-v17 banners static). ── */
+.kt-hero,
+.kt-page-hero,
+.page-header-v17 {
+  background-size: 200% 200% !important;
+  animation: kt-hero-breathe 16s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kt-hero, .kt-page-hero, .page-header-v17 { animation: none !important; }
+}
+
+/* ── 2) Snappier navigation. Every screen replayed a 0.35s fade-in-UP (slide),
+        which read as the page "refreshing itself" on each click. Swap it for a
+        quick opacity-only fade so sections appear near-instantly. Opacity-only
+        also avoids the retained transform that could clip modal overlays. ── */
+#appMain > * {
+  animation: kt-fade-in 0.12s ease both !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  #appMain > * { animation: none !important; }
+}
+
+/* ── 2b) Banner normalizer (kt-banner-normalize.js) — guarantees EVERY banner
+        has the shimmer + a floating art icon, incl. class-less custom ones. ── */
+.kt-banner-fx {
+  background-size: 200% 200% !important;
+  animation: kt-hero-breathe 16s ease-in-out infinite;
+}
+/* Floating emoji art — identical to the native .kt-hero-emoji so EVERY banner's
+   art is the same size / transparency / float (was 54px + opacity .85 + a
+   different keyframe, which read as "not transparent/shimmering like others"). */
+.kt-banner-art,
+.kt-banner-fx .kt-hero-emoji {
+  position: absolute !important;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 104px;
+  line-height: 1;
+  opacity: 0.30 !important;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.22));
+  animation: kt-float 6s ease-in-out infinite;
+}
+@media (max-width: 920px) {
+  .kt-banner-art, .kt-banner-fx .kt-hero-emoji { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kt-banner-fx, .kt-banner-art, .kt-banner-fx .kt-hero-emoji { animation: none !important; }
+}
+
+/* ── 3) Tighter whitespace — trim the stacked outer paddings + banner margin. ── */
+.app-shell--sidebar .app-main { padding: 12px 20px !important; }
+#appMain > div[style*="padding:24px"],
+#appMain > div[style*="padding: 24px"] { padding: 14px 24px !important; }
+.kt-hero,
+.kt-page-hero,
+.page-header-v17 { margin-bottom: 14px !important; }
+
+/* ── 4) Bounded, Gmail-style data-table scroll. Long tables scroll WITHIN this
+        box (sticky header) instead of stretching the page down. The kt-table
+        toolbar (search + record count) is inserted ABOVE this box by
+        kt-table-filter, so the count is never clipped by table overflow. ── */
+.kt-tbl-scroll {
+  max-height: 62vh;
+  overflow: auto;
+  border: 1px solid #EAEEF3;
+  border-radius: 10px;
+  background: #fff;
+  overscroll-behavior: contain;
+}
+/* border-collapse:collapse breaks sticky <th> — use separate + spacing:0 so the
+   header actually freezes; give it an opaque bg so rows don't show through. */
+/* A rule elsewhere sets `overflow:hidden` on the table, which stole the sticky
+   context — force it visible so the header sticks to the SCROLL box, not the table. */
+.kt-tbl-scroll > table { margin: 0 !important; border-collapse: separate !important; border-spacing: 0 !important; overflow: visible !important; }
+.kt-tbl-scroll thead th { position: sticky; top: 0; z-index: 5; background-color: #F4F7FA; }
+
+/* ── 5) Collapsible sidebar → ICON RAIL (kt-sidebar-collapse.js). « collapses to
+        a slim rail that keeps every section's ICON (still clickable for quick
+        access); » expands it again. State persists in localStorage. ── */
+.app-shell.app-shell--sidebar { transition: grid-template-columns 0.22s ease; }
+body.kt-sidebar-collapsed .app-shell.app-shell--sidebar { grid-template-columns: 66px 1fr !important; }
+body.kt-sidebar-collapsed #appSidebar { overflow: visible; }
+/* Hide the chrome that can't shrink to a rail; keep the nav sections' icons. */
+body.kt-sidebar-collapsed #kt-search-widget,
+body.kt-sidebar-collapsed #kt-agency-switcher,
+body.kt-sidebar-collapsed #appSidebar .kt-v5a-actions,
+body.kt-sidebar-collapsed #navBrand,
+body.kt-sidebar-collapsed #navUser,
+body.kt-sidebar-collapsed #navLinks > *:not(.sidebar-section),
+body.kt-sidebar-collapsed #navLinks .sidebar-section-label,
+body.kt-sidebar-collapsed #navLinks .nav-label { display: none !important; }
+body.kt-sidebar-collapsed #navLinks { padding-top: 44px; }
+body.kt-sidebar-collapsed #navLinks .nav-link { justify-content: center !important; padding-left: 0 !important; padding-right: 0 !important; }
+body.kt-sidebar-collapsed #navLinks .nav-icon { margin: 0 !important; font-size: 19px; }
+body.kt-sidebar-collapsed #navLinks .sidebar-section { margin-top: 6px; }
+
+#kt-sb-collapse, #kt-sb-toggle {
+  position: fixed; top: 14px; z-index: 9002;
+  width: 32px; height: 32px; border-radius: 9px;
+  cursor: pointer; font-size: 17px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+  transition: left 0.22s ease, background 0.15s ease;
+}
+#kt-sb-collapse { left: 192px; border: 1px solid #E2E8F0; background: #fff; color: #64748B; }
+#kt-sb-collapse:hover { background: #F1F5F9; color: #1F6080; }
+#kt-sb-toggle { left: 17px; border: 0; background: #1F6080; color: #fff; display: none; }
+body.kt-sidebar-collapsed #kt-sb-collapse { display: none; }
+body.kt-sidebar-collapsed #kt-sb-toggle { display: flex; }
+@media (max-width: 920px) { #kt-sb-collapse, #kt-sb-toggle { display: none !important; } }
+
+/* ── 6) Bottom export bar on every data table (kt-table-export.js).
+      Buttons on the left, the live record count pinned bottom-right. ── */
+.kt-export-bar {
+  display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  padding: 10px 2px 4px; margin-bottom: 6px;
+}
+.kt-export-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.kt-export-count { color: #64748B; font-size: 13px; font-weight: 600; white-space: nowrap; margin-left: auto; }
+.kt-export-btn {
+  font-size: 12.5px; font-weight: 600; padding: 7px 13px; border-radius: 8px;
+  cursor: pointer; border: 1px solid #D6DEE7; background: #F3F6F9; color: #1E293B;
+  transition: background 0.15s ease;
+}
+.kt-export-btn:hover { background: #E9EEF3; }
+.kt-export-btn.kt-export-import { background: #EDE9FE; border-color: #DDD6FE; color: #5B21B6; }
+.kt-export-btn.kt-export-import:hover { background: #DDD6FE; }
+
+/* ── 8) Bottom-right FABs removed — their functions (quick-add, AI chat) now
+      live as icons in the top bar (kt-topbar.js). Kept in the DOM but hidden so
+      the top-bar icons can still trigger them; the quick-add menu drops from the
+      top-right instead of the old FAB position. ── */
+.kt-qa-fab, #kt-chatbot-fab, #kt-floating-help { display: none !important; }
+.kt-qa-menu { top: 58px !important; bottom: auto !important; right: 16px !important; }
+@media (max-width: 768px) { .kt-qa-menu { top: 58px !important; bottom: auto !important; right: 12px !important; } }
+/* "View as" is embedded in the sidebar now — hide it in the collapsed icon rail. */
+body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
+
+/* ── 7) Compact the big .kt-hero banner (agency overview + a few screens) so it
+      matches the slimmer .kt-page-hero used on every other page. ── */
+.kt-hero { padding: 13px 26px !important; position: relative !important; }
+.kt-hero h1 { font-size: 19px !important; margin: 1px 0 !important; line-height: 1.14 !important; }
+.kt-hero .kt-hero-greet { font-size: 10.5px !important; letter-spacing: 1px; margin-bottom: 2px !important; }
+.kt-hero .kt-hero-sub { font-size: 12px !important; margin-top: 2px !important; }
+/* Float the action buttons to the right so they add no vertical height. */
+.kt-hero .kt-hero-actions { position: absolute !important; top: 50% !important; right: 22px !important; transform: translateY(-50%) !important; margin: 0 !important; display: flex !important; gap: 8px !important; z-index: 2 !important; }
+.kt-hero .kt-hero-btn { padding: 7px 13px !important; font-size: 12px !important; }
+.kt-hero .kt-hero-svg { width: 92px !important; height: auto !important; opacity: .45 !important; }
+@media (max-width: 680px) {
+  .kt-hero .kt-hero-actions { position: static !important; transform: none !important; margin-top: 10px !important; flex-wrap: wrap; }
+  .kt-hero .kt-hero-svg { display: none !important; }
+}
+
+/* ── 9) UNIFORM BANNER SIZE across every section (2026-07-08) — match the Daily
+      Log banner (≈100px tall). Two variants broke it: .kt-page-hero (32px padding
+      → 140px) and .kt-hero-auto (auto → 66px). Force the same padding + min-height
+      and vertically centre the text, then scale the floating "moving image" so it
+      fits every banner (the injected emoji art was 104px and overflowed). ── */
+/* #appMain-scoped so we out-specify the [data-kt-pretty] .kt-page-hero rules
+   (which otherwise keep Reports at 32px padding / 140px). */
+#appMain .kt-hero, #appMain .kt-page-hero, #appMain .page-header-v17 {
+  padding: 13px 26px !important;
+  min-height: 100px !important;                /* border-box → a true, uniform 100px */
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+}
+#appMain .kt-page-hero h1, #appMain .kt-page-hero h2 { font-size: 19px !important; margin: 1px 0 !important; line-height: 1.14 !important; }
+#appMain .kt-page-hero .kt-hero-sub, #appMain .kt-page-hero > p { font-size: 12px !important; margin-top: 2px !important; }
+#appMain .kt-page-hero .kt-hero-greet { font-size: 10.5px !important; letter-spacing: 1px !important; margin-bottom: 2px !important; }
+
+/* One consistent floating art size on EVERY banner, sized to sit within the 100px box. */
+#appMain .kt-banner-art, #appMain .kt-banner-fx .kt-hero-emoji { font-size: 56px !important; right: 26px !important; }
+#appMain .kt-hero .kt-hero-svg, #appMain .kt-page-hero .kt-hero-svg, #appMain .page-header-v17 .kt-hero-svg, #appMain .kt-hero-svg {
+  width: 62px !important; height: 62px !important; max-height: 70px !important; opacity: .48 !important;
+}
+
+/* ── 10) MOBILE touch + density (2026-07-09) — phones only. Bigger tap targets,
+      a slimmer hero that doesn't eat the screen, and a readable minimum font. ── */
+@media (max-width: 600px) {
+  /* Tap targets — top-bar icons were 29px (below the 44px guideline). */
+  #kt-topbar .kt-tb-ico { width: 38px !important; height: 38px !important; font-size: 17px !important; }
+  #kt-topbar .kt-tb-right { gap: 5px !important; }
+  #kt-topbar { padding: 5px 9px !important; }
+  /* Reclaim vertical space: slim hero, drop the decorative art. */
+  #appMain .kt-hero, #appMain .kt-page-hero, #appMain .page-header-v17 {
+    min-height: 58px !important; padding: 10px 15px !important;
+  }
+  #appMain .kt-hero h1, #appMain .kt-page-hero h1, #appMain .kt-page-hero h2 { font-size: 17px !important; }
+  #appMain .kt-hero .kt-hero-sub, #appMain .kt-page-hero .kt-hero-sub { font-size: 12px !important; }
+  #appMain .kt-hero-svg, #appMain .kt-banner-art, #appMain .kt-banner-fx .kt-hero-emoji { display: none !important; }
+  /* Keep tiny meta text legible (was as small as 9–10px). */
+  #appMain [style*="font-size:10px"], #appMain [style*="font-size: 10px"],
+  #appMain [style*="font-size:9px"], #appMain [style*="font-size: 9px"],
+  #appMain .ilabel, #appMain .kt-tiny, #appMain .muted.small { font-size: 11.5px !important; }
+  /* Comfortable spacing + full-width action buttons in cards. */
+  .app-shell--sidebar .app-main { padding: 10px 14px !important; }
+}

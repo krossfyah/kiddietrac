@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,8 @@ use Stripe\Stripe;
  */
 final class RefundsController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function __construct()
     {
         if ($k = env('STRIPE_SECRET')) Stripe::setApiKey($k);
@@ -24,16 +27,53 @@ final class RefundsController extends Controller
 
     public function listForPayment(Request $request, int $paymentId): JsonResponse
     {
+        // SECURITY (v22p96): a payment's refunds are family-private — load the
+        // payment and gate on its family (staff of its centre, the family's
+        // guardians, or a platform_admin scoped to that agency). Was readable by
+        // payment id for any caller.
+        $payment = DB::table('payments')->where('id', $paymentId)->first();
+        abort_unless($payment, 404);
+        abort_unless($this->canAccessFamilyScoped($request, (int) $payment->family_id), 403);
         $rows = DB::table('payment_refunds')->where('payment_id', $paymentId)
             ->orderByDesc('created_at')->get();
         $totalRefunded = $rows->where('status', '!=', 'failed')->sum('amount');
-        $payment = DB::table('payments')->where('id', $paymentId)->first();
         return response()->json([
             'data' => $rows,
             'payment' => $payment,
             'total_refunded' => $totalRefunded,
             'remaining_refundable' => $payment ? max(0, (float) $payment->amount - (float) $totalRefunded) : 0,
         ]);
+    }
+
+    /**
+     * v22p98 — recent payments in the active agency, so the Refunds screen can
+     * offer a picker instead of forcing the admin to type a raw Payment ID.
+     * Scoped to the resolved (header-aware) agency's centres.
+     */
+    public function recentPayments(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        if (! $agencyId) return response()->json(['data' => []]);
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        $rows = DB::table('payments as p')
+            ->join('families as f', 'f.id', '=', 'p.family_id')
+            ->whereIn('f.centre_id', $centreIds ?: [0])
+            ->orderByDesc('p.created_at')
+            ->limit(60)
+            ->select('p.id', 'p.amount', 'p.created_at', 'p.method', 'p.family_id', 'f.family_name')
+            ->get();
+        $ids = $rows->pluck('id')->all();
+        $refunded = DB::table('payment_refunds')->whereIn('payment_id', $ids ?: [0])
+            ->where('status', '!=', 'failed')
+            ->groupBy('payment_id')->selectRaw('payment_id, SUM(amount) tot')->pluck('tot', 'payment_id');
+        return response()->json(['data' => $rows->map(function ($p) use ($refunded) {
+            $r = (float) ($refunded[$p->id] ?? 0);
+            return [
+                'id' => $p->id, 'amount' => (float) $p->amount, 'date' => $p->created_at,
+                'method' => $p->method, 'family_name' => $p->family_name,
+                'refunded' => $r, 'refundable' => max(0, (float) $p->amount - $r),
+            ];
+        })->values()]);
     }
 
     public function create(Request $request): JsonResponse
@@ -123,10 +163,11 @@ final class RefundsController extends Controller
 
     private function assertAccess(Request $request, int $familyId): void
     {
-        $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
-            ->where('active', 1)->exists();
-        abort_unless($isStaff, 403);
+        // SECURITY (v22p96): the prior check accepted ANY active staff role on the
+        // platform, so a director/admin of agency A — or a switched platform_admin —
+        // could refund agency B's payments. Now must be staff of THIS family's
+        // centre (or a platform_admin scoped to its agency). Route middleware
+        // already keeps guardians off the refund-create action.
+        abort_unless($this->canAccessFamilyScoped($request, $familyId), 403);
     }
 }

@@ -45,11 +45,12 @@ final class StorageQuotaService
      */
     public function recalculate(int $centreId): array
     {
-        // Sum media file sizes for all children at this centre
+        // v22p98: media has no child_id — it belongs to a ROOM (media.room_id).
+        // Sum media file sizes for all rooms at this centre.
         $row = DB::table('media')
-            ->join('children', 'children.id', '=', 'media.child_id')
-            ->join('families', 'families.id', '=', 'children.family_id')
-            ->where('families.centre_id', $centreId)
+            ->join('rooms', 'rooms.id', '=', 'media.room_id')
+            ->where('rooms.centre_id', $centreId)
+            ->whereNull('media.deleted_at')
             ->whereNotNull('media.size_bytes')
             ->selectRaw('COALESCE(SUM(media.size_bytes), 0) as total_bytes, COUNT(*) as total_files')
             ->first();

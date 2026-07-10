@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Public agency landing page
 category: Marketing
 order: 60

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class AttendancePatternController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function get(Request $request, int $childId): JsonResponse
     {
         $this->assertChildAccess($request, $childId);
@@ -59,8 +62,10 @@ final class AttendancePatternController extends Controller
     /** Get an overview of every enrolled child's expected days this week. */
     public function weeklyOverview(Request $request): JsonResponse
     {
-        $agencyId = (int) ($request->header('X-Active-Agency-Id')
-            ?: DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)->value('agency_id'));
+        // SECURITY (v22p96): resolve the active agency securely — the prior raw
+        // header let an agency_admin of A forge X-Active-Agency-Id=B and read
+        // agency B's full child roster + attendance patterns.
+        $agencyId = (int) $this->resolveAgencyId($request);
         $children = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
@@ -80,15 +85,10 @@ final class AttendancePatternController extends Controller
 
     private function assertChildAccess(Request $request, int $childId): void
     {
-        $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
-            ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'platform_admin'])
-            ->where('active', 1)->exists();
-        if ($isStaff) return;
-        // Parents on the child's family
-        $family = DB::table('children')->where('id', $childId)->value('family_id');
-        abort_unless($family, 404);
-        $hasFamily = DB::table('guardians')->where('user_id', $u->id)->where('family_id', $family)->exists();
-        abort_unless($hasFamily, 403);
+        // SECURITY (v22p96): the prior blanket `$isStaff` accepted any active staff
+        // role anywhere, so any agency's staff — or a switched platform_admin —
+        // could read/write any child's attendance pattern. Now guardian of the
+        // child, staff of its centre, or a platform_admin scoped to its agency.
+        abort_unless($this->canAccessChildScoped($request, $childId), 403);
     }
 }

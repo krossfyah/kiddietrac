@@ -1,0 +1,52 @@
+# KiddieTrac parent-portal (app.kiddietrac.com) — v22p84
+# Performance (compression + caching) and security headers.
+# Every block is guarded by <IfModule> so a missing module is a no-op, never a 500.
+
+# ─── Compression ────────────────────────────────────────────────────
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml
+  AddOutputFilterByType DEFLATE application/javascript application/x-javascript text/javascript
+  AddOutputFilterByType DEFLATE application/json application/xml image/svg+xml
+  AddOutputFilterByType DEFLATE application/manifest+json
+</IfModule>
+
+# ─── Caching ────────────────────────────────────────────────────────
+# HTML is the app shell — keep it fresh so deploys show up (the service worker
+# is already network-first for HTML). Versioned JS/CSS (?v=) cache for a day;
+# images/fonts longer. A day is short enough that an un-stamped change is picked
+# up quickly, long enough to avoid re-requesting on every navigation.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType text/css "access plus 1 day"
+  ExpiresByType application/javascript "access plus 1 day"
+  ExpiresByType text/javascript "access plus 1 day"
+  ExpiresByType image/png "access plus 7 days"
+  ExpiresByType image/jpeg "access plus 7 days"
+  ExpiresByType image/svg+xml "access plus 7 days"
+  ExpiresByType image/webp "access plus 7 days"
+  ExpiresByType image/x-icon "access plus 30 days"
+  ExpiresByType font/woff2 "access plus 30 days"
+  ExpiresByType application/manifest+json "access plus 1 day"
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Don't let the HTML shell get cached anywhere.
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # ─── Security headers ─────────────────────────────────────────────
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "geolocation=(self), microphone=(self), camera=(self), payment=(self)"
+  # Clickjacking defence-in-depth (complements X-Frame-Options). No script/style
+  # rules here — the SPA relies on inline scripts, so a full CSP needs a separate
+  # nonce refactor (tracked as a SOC 2 gap).
+  Header always set Content-Security-Policy "frame-ancestors 'self'"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
+  # HSTS — the portal is HTTPS-only. Scoped to this host (no includeSubDomains)
+  # so it can't affect other subdomains that may not be HTTPS. 1 year.
+  Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>

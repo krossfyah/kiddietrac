@@ -70,7 +70,7 @@
   }
 
   function cardShell(title, subtitle) {
-    var c = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:14px;' });
+    var c = Dom.el('div', { 'data-kt-list': '1', style: 'background:white;border-radius:14px;padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:14px;' });
     c.appendChild(Dom.el('h3', { style: 'margin:0;font-size:14px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:1px;' }, title));
     if (subtitle) c.appendChild(Dom.el('div', { style: 'font-size:12px;color:#9CA3AF;margin:4px 0 12px;' }, subtitle));
     return c;

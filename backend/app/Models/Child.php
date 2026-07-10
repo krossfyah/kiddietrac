@@ -19,7 +19,7 @@ class Child extends Model
         'date_of_birth', 'gender', 'photo_url', 'health_card_last4',
         'doctor_name', 'doctor_phone', 'medical_notes', 'dietary_notes',
         'cultural_notes', 'preferred_lang', 'enrollment_status',
-        'enrolled_at', 'withdrawn_at',
+        'enrolled_at', 'withdrawn_at', 'external_id', 'external_source',
     ];
 
     protected function casts(): array

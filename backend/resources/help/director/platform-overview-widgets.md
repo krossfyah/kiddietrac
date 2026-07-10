@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Platform overview widgets
 category: Administration
 order: 90

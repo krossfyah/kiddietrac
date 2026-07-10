@@ -21,6 +21,8 @@
   const Roles = {
     primaryRoleOf(user) {
       if (!user || !user.roles) return null;
+      var _va = null; try { _va = sessionStorage.getItem('kt_view_as'); } catch (e) {}
+      if (_va && user.roles.indexOf('platform_admin') !== -1 && ['agency_admin','centre_director','educator','guardian','auditor'].indexOf(_va) !== -1) return _va;
       // v22p39: platform_admin gets routed through the agency_admin shell
       // so a user who holds ONLY the platform role still gets a nav and
       // dashboard rendered. Previously primary_role came back as null and
@@ -64,8 +66,13 @@
       // and the legacy '/admin/agencies' route shows essentially the same data
       // with fewer SaaS-level controls (no suspend/resume, no white-label edit).
       var u_v22p34 = (function () { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } })();
-      var isPlatformAdmin_v22p34 = Array.isArray(u_v22p34.roles) && u_v22p34.roles.indexOf('platform_admin') !== -1;
-      var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }];
+      // v22p98: platform-only sections (Reseller, Website) must appear ONLY in the
+      // real "Super admin (default)" view — NOT while previewing as agency admin.
+      // The account holds both roles, so gate on the view-as selection too.
+      var viewAs_v22p98 = (function () { try { return sessionStorage.getItem('kt_view_as') || ''; } catch (e) { return ''; } })();
+      var isPlatformAdmin_v22p34 = Array.isArray(u_v22p34.roles) && u_v22p34.roles.indexOf('platform_admin') !== -1
+        && (viewAs_v22p98 === '' || viewAs_v22p98 === 'platform_admin');
+      var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }, { hash: 'provider-map', label: 'Provider map', icon: '🗺️' }];
       if (!isPlatformAdmin_v22p34) overviewItems.push({ hash: 'agencies', label: 'Agencies', icon: '🏢' });
       return [
         { label: 'Overview', items: overviewItems },
@@ -112,19 +119,25 @@
           { hash: 'retention',          label: 'Retention',          icon: '📊' },
           { hash: 'anomalies',          label: 'Anomalies',          icon: '🔍' },
         ]},
-        { label: 'Reseller', items: [
+        // v22p98: the Reseller section (MRR, feature flags, branding, platform
+        // tooling) is super-admin only — hide it from tenant agency admins.
+        ...(isPlatformAdmin_v22p34 ? [{ label: 'Reseller', items: [
           { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
           { hash: 'admin-features', label: 'Feature flags',    icon: '⚙️' },
           { hash: 'admin-branding', label: 'Branding',         icon: '🎨' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
-        ]},
+        ]}] : []),
+        ...(isPlatformAdmin_v22p34 ? [{ label: 'Website', items: [{ hash: 'marketing-site', label: 'Website', icon: '🌐' }] }] : []),
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
         ]},
+        { label: 'Finance', items: [
+          { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
+        ]},
         { label: 'Administration', items: [
           { hash: 'admin-users',      label: 'User management',  icon: '👥' },
-          { hash: 'admin-centres',    label: 'Centres',          icon: '🏫' },
+          { hash: 'admin-centres',    label: 'Centres / Rooms',  icon: '🏫' },
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
           { hash: 'admin-billing',    label: 'Billing (Stripe)', icon: '💳' },
@@ -168,7 +181,8 @@
         { label: 'Settings', items: [
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'sibling-discounts',  label: 'Sibling discounts',   icon: '👨‍👩‍👧' },
-          { hash: 'agency-billing',     label: 'Billing settings',    icon: '⚙️' },
+          { hash: 'tuition-plans',      label: 'Tuition plans',       icon: '💵' },
+          { hash: 'billing-setup',      label: 'Billing',             icon: '💳' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
           { hash: 'language',           label: 'Language',            icon: '🌐' },
@@ -176,9 +190,10 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
 
+          { hash: 'data-retention',     label: 'Data retention & compliance', icon: '🗄️' },
           { hash: 'mfa',                label: 'Two-factor (MFA)',    icon: '🔐' },
           { hash: 'help',               label: 'Help & guides',       icon: '📖' },
-        ]},
+        ].concat(isPlatformAdmin_v22p34 ? [{ hash: 'social-settings', label: 'Sign-in methods', icon: '🔑' }, { hash: 'security-alerts', label: 'Security alerts', icon: '🛡️' }] : []) },
       ];
     }
     if (role === 'centre_director') {
@@ -201,6 +216,7 @@
           { hash: 'schedule',       label: 'Schedule',         icon: '📅' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
+          { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
           { hash: 'waitlist',       label: 'Waitlist',         icon: '⏳' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
@@ -240,6 +256,7 @@
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
         ]},
         { label: 'Settings', items: [
+          { hash: 'billing-setup', label: 'Billing reminders', icon: '💳' },
 
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
@@ -251,72 +268,64 @@
       ];
     }
     if (role === 'educator') {
+      // Curated, classroom-relevant set (mirrors the icon-tile home). The long
+      // tail was removed to keep the educator view dead simple.
       return [
-        { label: 'Classroom', items: [
-          { hash: 'today',          label: 'Today',            icon: '✨' },
-          { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
-          { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
-          { hash: 'announcements',  label: 'Announcements',    icon: '📢' },
-          { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
-
-          { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
-          { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
-          { hash: 'medications',   label: 'Medications',      icon: '💊' },
+        { label: 'Menu', items: [
+          { hash: 'home',          label: 'Home',          icon: '🏠' },
+          { hash: 'today',         label: 'Today',         icon: '✨' },
+          // v22p98: educators clock in/out here — needed for ratio compliance,
+          // payroll and reporting. The time-clock screen was already built and
+          // registered for the educator role; it was just missing from this nav.
+          { hash: 'time-clock',    label: 'Clock in/out',  icon: '⏱' },
+          { hash: 'care-log',      label: 'Daily log',     icon: '✅' },
+          { hash: 'observations',  label: 'Observations',  icon: '👀' },
+          { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
+          { hash: 'chat',          label: 'Messages',      icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
+          { hash: 'medications',   label: 'Medications',   icon: '💊' },
+          { hash: 'announcements', label: 'News',          icon: '📢' },
+          { hash: 'time-off',      label: 'Time off',      icon: '🌴' },
         ]},
-        { label: 'Settings', items: [
-
+        { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
-
-
-          { hash: 'time-off',      label: 'My time off',      icon: '🌴' },
-          { hash: 'language',      label: 'Language',         icon: '🌐' },
-          { hash: 'mfa',           label: 'Two-factor (MFA)', icon: '🔐' },
-          { hash: 'help',          label: 'Help & guides',    icon: '📖' },
+          { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
+          { hash: 'help',          label: 'Help',          icon: '📖' },
         ]},
       ];
     }
-    // guardian (default)
+    if (role === 'auditor') {
+      // Read-only audit/compliance set (mirrors the icon-tile home).
+      return [
+        { label: 'Menu', items: [
+          { hash: 'home',       label: 'Home',       icon: '🏠' },
+          { hash: 'compliance', label: 'Compliance', icon: '✅' },
+          { hash: 'audit-logs', label: 'Audit logs', icon: '📋' },
+          { hash: 'children',   label: 'Children',   icon: '🧒' },
+          { hash: 'forms',      label: 'Forms',      icon: '📝' },
+          { hash: 'help',       label: 'Help',       icon: '📖' },
+        ]},
+      ];
+    }
+    // guardian (default) — curated, family-relevant set (mirrors the icon-tile
+    // home). The long tail lives behind the home screen's "More" tile.
     return [
-      { label: 'Your child', items: [
-        { hash: 'today',          label: 'Today',          icon: '✨' },
-        { hash: 'photos',         label: 'Photos',         icon: '📸' },
-        { hash: 'videos',         label: 'Videos',         icon: '🎬' },
-        { hash: 'directory',      label: 'Family directory', icon: '👪' },
-        { hash: 'conferences',    label: 'Conferences',    icon: '🗣' },
-        { hash: 'attendance-pattern', label: 'Attendance days', icon: '📅' },
-        { hash: 'trip-gps',       label: 'Field trip GPS', icon: '📍' },
-        { hash: 'vacation-holds', label: 'Vacation hold',  icon: '🏖' },
-        { hash: 'signed-docs',    label: 'Signed documents', icon: '✍' },
-        { hash: 'lesson-plans',   label: 'This week',      icon: '📚' },
-        { hash: 'messages',       label: 'Messages',       icon: '💬', badgeKey: 'chat_unread' },
-        { hash: 'parent-forms',   label: 'Forms',          icon: '📝' },
-        { hash: 'checkin',        label: 'Daily check-in', icon: '☀' },
-        { hash: 'wellness',       label: 'Wellness check', icon: '🩺' },
-        { hash: 'doc-workflows',  label: 'Documents to sign', icon: '📜' },
-        { hash: 'trends',         label: 'Trends',         icon: '📊' },
-        { hash: 'pickup-auth',    label: 'Pickup people',  icon: '🪪' },
+      { label: 'Menu', items: [
+        { hash: 'home',               label: 'Home',       icon: '🏠' },
+        { hash: 'today',              label: 'Today',      icon: '✨' },
+        { hash: 'photos',             label: 'Photos',     icon: '📸' },
+        { hash: 'messages',           label: 'Messages',   icon: '💬', badgeKey: 'chat_unread' },
+        { hash: 'checkin',            label: 'Check-in',   icon: '☀' },
+        { hash: 'parent-forms',       label: 'Forms',      icon: '📝' },
+        { hash: 'billing',            label: 'Billing',    icon: '💳' },
+        { hash: 'attendance-pattern', label: 'Attendance', icon: '📅' },
+        { hash: 'medications',        label: 'Health',     icon: '💊' },
+        { hash: 'announcements',      label: 'News',       icon: '📢' },
       ]},
       { label: 'Account', items: [
-        { hash: 'billing',        label: 'Billing',        icon: '💳' },
-        { hash: 'autopay',        label: 'Autopay',        icon: '🔁' },
-        { hash: 'wallet',         label: 'Wallet',         icon: '💳' },
-        { hash: 'payment-plans',  label: 'Payment plans',  icon: '📅' },
-        { hash: 'tickets',        label: 'Support',        icon: '🎫' },
-        { hash: 'ledger',         label: 'Account ledger', icon: '📒' },
-        { hash: 'ach-pay',        label: 'Bank autopay',   icon: '🏦' },
-        { hash: 'referrals',      label: 'Refer a friend', icon: '🎁' },
-        { hash: 'announcements',  label: 'Announcements',  icon: '📢' },
-        { hash: 'incidents',     label: 'Incidents',      icon: '⚠️' },
-        { hash: 'medications',   label: 'Medications',    icon: '💊' },
-        { hash: 'immunizations', label: 'Immunizations',  icon: '🩹' },
-        { hash: 'edocuments',    label: 'Documents',      icon: '📄' },
-      ]},
-      { label: 'Settings', items: [
         { hash: 'notifications', label: 'Notifications', icon: '🔔' },
-
-        { hash: 'language',      label: 'Language',         icon: '🌐' },
-        { hash: 'mfa',           label: 'Two-factor (MFA)', icon: '🔐' },
-        { hash: 'help',          label: 'Help & guides',    icon: '📖' },
+        { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
+        { hash: 'help',          label: 'Help',          icon: '📖' },
       ]},
     ];
   }
@@ -403,13 +412,107 @@
     screens[name] = screenFn;
   }
 
+  // The "home" screen for a role = the first item in its nav. Admin/director
+  // home is 'dashboard'; guardian/educator home is 'today'. Used so a role
+  // always lands on a screen it actually has (not a foreign #dashboard).
+  function homeHashForRole(role) {
+    var secs = navItemsForRole(role) || [];
+    if (secs[0] && secs[0].items && secs[0].items[0] && secs[0].items[0].hash) {
+      return secs[0].items[0].hash;
+    }
+    return 'dashboard';
+  }
+
+  function navItemFor(role, hash) {
+    var base = String(hash || '').split('/')[0];
+    var secs = navItemsForRole(role) || [];
+    for (var i = 0; i < secs.length; i++) {
+      var items = secs[i].items || [];
+      for (var j = 0; j < items.length; j++) {
+        if (items[j].hash === base) return { icon: items[j].icon || '', label: items[j].label || base, section: secs[i].label || '' };
+      }
+    }
+    return { icon: '', label: base.replace(/-/g, ' ').replace(/\w/g, function (c) { return c.toUpperCase(); }), section: '' };
+  }
+  function buildAutoHero(info) {
+    var b = document.createElement('div'); b.className = 'kt-hero kt-hero-auto';
+    var ic = info.icon ? info.icon + ' ' : '';
+    var top = String(info.section || info.label || '').replace(/[<>&]/g, '');
+    var lbl = String(info.label || '').replace(/[<>&]/g, '');
+    var emoji = String(info.icon || '\u2728').replace(/[<>&]/g, '');
+    b.innerHTML = '<div class="kt-hero-greet">' + ic + top + '</div><h1>' + lbl + '</h1>' + '<div class="kt-hero-emoji" aria-hidden="true">' + emoji + '</div>';
+    return b;
+  }
+
+  var _hashStack = [];
+  function _trackNav(h) {
+    if (_hashStack.length > 1 && _hashStack[_hashStack.length - 2] === h) { _hashStack.pop(); }
+    else if (_hashStack[_hashStack.length - 1] !== h) { _hashStack.push(h); }
+  }
+  window.ktBack = function () {
+    if (_hashStack.length > 1) { var prev = _hashStack[_hashStack.length - 2]; window.location.hash = (prev.charAt(0) === '#' ? prev : '#' + prev); }
+    else { try { window.location.hash = '#' + homeHashForRole(Roles.primaryRoleOf(Auth.user())); } catch (e) { window.location.hash = '#dashboard'; } }
+  };
+  document.addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('a,button,[data-back]') : null;
+    if (!el) return;
+    var t = (el.textContent || '').trim();
+    // Only treat a leading arrow as "back" when it's essentially the whole label
+    // (a ‹ / ← button) — not any button that happens to start with one.
+    if (el.hasAttribute('data-back') || (/^[←‹⟵⬅⭠]/.test(t) && t.length <= 8)) {
+      e.preventDefault(); e.stopPropagation();
+      // Overlay-aware: closes an open thread/compose/invoice back to the list
+      // it sits on, and only navigates the hash when nothing is stacked.
+      if (window.KT && KT.goBack) KT.goBack(); else window.ktBack();
+    }
+  }, true);
+
+  window.ktViewAs = function (role) {
+    try { if (role) sessionStorage.setItem('kt_view_as', role); else sessionStorage.removeItem('kt_view_as'); } catch (e) {}
+    // Drop the current hash so the new role lands on ITS home screen (e.g. a
+    // parent's "today") instead of the previous role's page or a bogus #dashboard.
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    location.reload();
+  };
+  function _injectViewAs(user) {
+    if (!user || !Array.isArray(user.roles) || user.roles.indexOf('platform_admin') === -1) return;
+    var cur = ''; try { cur = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    var old = document.getElementById('kt-view-as'); if (old) old.remove();
+    var roles = [['', 'Super admin (default)'], ['agency_admin', '\uD83C\uDFE2 Agency admin'], ['centre_director', '\uD83C\uDFEB Centre director'], ['educator', '\uD83C\uDF93 Educator'], ['guardian', '\uD83D\uDC6A Parent / guardian'], ['auditor', '\uD83D\uDD0D Auditor']];
+    var wrap = document.createElement('div'); wrap.id = 'kt-view-as';
+    // Embedded in the sidebar (not a floating overlay) so it never blocks content.
+    wrap.style.cssText = 'margin:10px 8px 8px;background:' + (cur ? '#7C3AED' : '#0f2233') + ';color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;display:flex;align-items:center;gap:8px;font-family:inherit;flex-wrap:wrap;';
+    var lab = document.createElement('span'); lab.textContent = cur ? '\uD83D\uDC41 Viewing as' : '\uD83D\uDC41 View as'; lab.style.cssText = 'font-weight:700;white-space:nowrap';
+    var sel = document.createElement('select'); sel.style.cssText = 'border-radius:7px;padding:4px 8px;font-size:12px;font-family:inherit;cursor:pointer;flex:1;min-width:118px;max-width:100%;';
+    roles.forEach(function (r) { var o = document.createElement('option'); o.value = r[0]; o.textContent = r[1]; if (r[0] === cur) o.selected = true; sel.appendChild(o); });
+    sel.addEventListener('change', function () { window.ktViewAs(sel.value); });
+    wrap.appendChild(lab); wrap.appendChild(sel);
+    var _sb = document.getElementById('appSidebar');
+    if (_sb) { var _nu = document.getElementById('navUser'); if (_nu && _nu.parentNode === _sb) _sb.insertBefore(wrap, _nu); else _sb.appendChild(wrap); }
+    else { wrap.style.position = 'fixed'; wrap.style.left = '14px'; wrap.style.bottom = '14px'; wrap.style.zIndex = '9000'; document.body.appendChild(wrap); }
+  }
+
   async function renderScreen() {
     const main = Dom.$('#appMain');
+    // Reset scroll to the top BEFORE we clear + render. If we only reset after
+    // render, the shell's hashchange listener (registered before kt-mobilenav's)
+    // paints the new, tall screen at the OLD scroll position for a frame first —
+    // that's the "shows the bottom, then jumps to the top" flash. Resetting here,
+    // while the old content is still in place, means the new screen paints at 0.
+    try {
+      window.scrollTo(0, 0);
+      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+      if (main) main.scrollTop = 0;
+    } catch (e) {}
     Dom.clear(main);
+    try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
 
     const user = Auth.user();
     const role = Roles.primaryRoleOf(user);
-    const hash = (window.location.hash || '#dashboard').replace('#', '').split('?')[0];
+    const hash = (window.location.hash || ('#' + homeHashForRole(role))).replace('#', '').split('?')[0];
+    _trackNav(hash);
 
     updateActiveNav();
 
@@ -426,6 +529,37 @@
 
     try {
       await fn(main, { user, role, params: parseParams() });
+      // Land every freshly-rendered screen at the very top. Doing it AFTER render
+      // (not just on hashchange, before the async content exists) is what stops the
+      // "shows the bottom, then scrolls to the top" flash on tall screens like Home.
+      try {
+        window.scrollTo(0, 0);
+        if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+        if (document.documentElement) document.documentElement.scrollTop = 0;
+        if (document.body) document.body.scrollTop = 0;
+        main.scrollTop = 0;
+        requestAnimationFrame(function () { try { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; } catch (e) {} });
+      } catch (e) {}
+      try {
+        var __info = navItemFor(role, hash);
+        // A section already has a banner if it uses a known hero class OR renders
+        // its own custom gradient banner near the top (some screens, e.g. Tours,
+        // build an inline-styled banner with no hero class). Detect both so we
+        // never stack a second auto-hero on top → no double banners anywhere.
+        var __hasHero = function () {
+          if (main.querySelector('.kt-hero, .kt-page-hero, .page-header-v17')) return true;
+          var f = main.firstElementChild;
+          var cands = [f, f && f.firstElementChild];
+          for (var ci = 0; ci < cands.length; ci++) {
+            var el = cands[ci]; if (!el || el.classList.contains('kt-hero-auto')) continue;
+            try { if ((getComputedStyle(el).backgroundImage || '').indexOf('gradient') !== -1 && el.getBoundingClientRect().height > 60) return true; } catch (e) {}
+          }
+          return false;
+        };
+        var __ensure = function () { if (!__hasHero()) { main.insertBefore(buildAutoHero(__info), main.firstChild); } };
+        __ensure();
+        if (window.MutationObserver) { var __obs = new MutationObserver(__ensure); window.__ktBannerObs = __obs; __obs.observe(main, { childList: true }); setTimeout(function () { __obs.disconnect(); }, 4000); }
+      } catch (e) {}
     } catch (e) {
       console.error('Screen render error:', e);
       Dom.clear(main);
@@ -651,6 +785,7 @@
     });
 
     buildNav(user);
+    try { _injectViewAs(user); } catch (e) {}
 
     window.addEventListener('hashchange', renderScreen);
     renderScreen();

@@ -192,6 +192,7 @@ final class AuthController extends Controller
             'last_name' => ['string', 'max:80'],
             'preferred_name' => ['nullable', 'string', 'max:80'],
             'phone' => ['nullable', 'string', 'max:40'],
+            'date_of_birth' => ['nullable', 'date'],
             'locale' => ['nullable', 'string', 'max:10'],
             'timezone' => ['nullable', 'string', 'max:60'],
         ]);
@@ -207,7 +208,7 @@ final class AuthController extends Controller
     {
         $data = $request->validate([
             'current_password' => ['required', 'string'],
-            'new_password' => ['required', 'string', 'min:8'],
+            'new_password' => ['required', 'string', \App\Services\PasswordPolicy::rule()],
         ]);
 
         $user = $request->user();
@@ -219,10 +220,13 @@ final class AuthController extends Controller
             ], 422);
         }
 
+        \App\Services\PasswordPolicy::assertNotRecentlyUsed($user->id, $data['new_password'], 'new_password');
+        $newHash = Hash::make($data['new_password']);
         DB::table('users')->where('id', $user->id)->update([
-            'password' => Hash::make($data['new_password']),
+            'password' => $newHash,
             'updated_at' => now(),
         ]);
+        \App\Services\PasswordPolicy::record($user->id, $newHash);
 
         $this->audit($request, $user->id, 'password_changed', 'user', $user->id);
 
@@ -255,9 +259,13 @@ final class AuthController extends Controller
                 'created_at' => now(),
             ]);
 
-            // Build reset URL — points at the SPA, which calls /auth/reset
-            $appUrl = config('app.url', 'https://app.kiddietrac.com');
-            $resetUrl = $appUrl.'/reset-password.html?token='.$token.'&email='.urlencode($data['email']);
+            // Build reset URL — the reset page is served by the SPA/portal at
+            // app.kiddietrac.com. The old link used config('app.url') = the API
+            // host (api.kiddietrac.com) → 404; config('app.frontend_url') is the
+            // unset dev default (localhost:3000). Use the production portal URL
+            // directly, matching the rest of the codebase. (v22p97)
+            $portalUrl = 'https://app.kiddietrac.com';
+            $resetUrl = $portalUrl.'/reset-password.html?token='.$token.'&email='.urlencode($data['email']);
 
             try {
                 Mail::to($data['email'])->send(new PasswordResetEmail(
@@ -286,7 +294,7 @@ final class AuthController extends Controller
         $data = $request->validate([
             'email' => ['required', 'email'],
             'token' => ['required', 'string'],
-            'new_password' => ['required', 'string', 'min:8'],
+            'new_password' => ['required', 'string', \App\Services\PasswordPolicy::rule()],
         ]);
 
         $hashedToken = hash('sha256', $data['token']);
@@ -308,12 +316,16 @@ final class AuthController extends Controller
             return response()->json(['message' => 'Account not found.'], 422);
         }
 
-        DB::transaction(function () use ($user, $data, $record): void {
+        \App\Services\PasswordPolicy::assertNotRecentlyUsed($user->id, $data['new_password'], 'new_password');
+        $newHash = Hash::make($data['new_password']);
+
+        DB::transaction(function () use ($user, $data, $newHash, $record): void {
             DB::table('users')->where('id', $user->id)->update([
-                'password' => Hash::make($data['new_password']),
+                'password' => $newHash,
                 'status' => 'active',
                 'updated_at' => now(),
             ]);
+            \App\Services\PasswordPolicy::record($user->id, $newHash);
 
             DB::table('password_resets')->where('id', $record->id)->update([
                 'used_at' => now(),
@@ -329,6 +341,67 @@ final class AuthController extends Controller
         $this->audit($request, $user->id, 'password_reset_completed', 'user', $user->id);
 
         return response()->json(['message' => 'Password updated. Please log in with your new password.']);
+    }
+
+    /**
+     * POST /api/v1/auth/set-password
+     * v22p93 — token-only set-password for invite links (no email required).
+     * Identifies the user from the token alone, sets the password, and returns
+     * an auth token so the user is signed in immediately (no second login).
+     */
+    public function setPasswordFromToken(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'token'    => ['required', 'string'],
+            'password' => ['required', 'string', \App\Services\PasswordPolicy::rule()],
+        ]);
+
+        // Accept either a plaintext token or its sha256 (invites store the hash).
+        $hashed = hash('sha256', $data['token']);
+        $record = DB::table('password_resets')
+            ->where(function ($q) use ($data, $hashed) {
+                $q->where('token', $data['token'])->orWhere('token', $hashed);
+            })
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $record) {
+            return response()->json(['message' => 'This link is invalid or has expired. Ask for a new invite.'], 422);
+        }
+
+        $user = User::where('email', $record->email)->first();
+        if (! $user) {
+            return response()->json(['message' => 'Account not found for this link.'], 422);
+        }
+
+        \App\Services\PasswordPolicy::assertNotRecentlyUsed($user->id, $data['password']);
+        $newHash = Hash::make($data['password']);
+
+        DB::transaction(function () use ($user, $newHash, $record): void {
+            DB::table('users')->where('id', $user->id)->update([
+                'password'   => $newHash,
+                'status'     => 'active',
+                'updated_at' => now(),
+            ]);
+            DB::table('password_resets')->where('id', $record->id)->update(['used_at' => now()]);
+            // Invalidate any other outstanding invite/reset tokens for this email.
+            DB::table('password_resets')->where('email', $record->email)->whereNull('used_at')->update(['used_at' => now()]);
+        });
+        \App\Services\PasswordPolicy::record($user->id, $newHash);
+
+        $tokenObj = $user->createToken('set-password', ['*'], now()->addDays(30));
+        DB::table('users')->where('id', $user->id)->update([
+            'last_login_at' => now(), 'last_login_ip' => $request->ip(), 'updated_at' => now(),
+        ]);
+        $this->audit($request, $user->id, 'password_set_via_invite', 'user', $user->id);
+
+        return response()->json([
+            'token'      => $tokenObj->plainTextToken,
+            'expires_at' => $tokenObj->accessToken->expires_at?->toIso8601String(),
+            'user'       => $this->formatUser($user),
+        ]);
     }
 
     public function register(Request $request): JsonResponse
@@ -480,7 +553,10 @@ final class AuthController extends Controller
                 'action' => $action,
                 'entity_type' => $targetType,
                 'entity_id' => $targetId,
-                'payload' => $details,
+                // audit_logs.payload has a json_valid() CHECK — a bare string
+                // (e.g. "email: x") violated it, so login_failed / mfa_failed were
+                // silently dropped. Encode to valid JSON so they're actually logged.
+                'payload' => $details === null ? null : json_encode($details),
                 'ip_address' => $request->ip(),
                 'user_agent' => substr((string) $request->userAgent(), 0, 500),
                 'created_at' => now(),

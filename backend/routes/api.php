@@ -55,10 +55,55 @@ Route::prefix('v1')->group(function () {
         'php' => PHP_VERSION,
     ]));
 
-    Route::post('/auth/login', [AuthController::class, 'login']);
+    // v22p84: throttle login to blunt brute-force / credential-stuffing
+    // (10 attempts/min per IP+route). Legitimate sign-ins never approach this.
+    // Public crash-report sink — the Android app POSTs its last captured native
+    // crash here on next launch so we can review it server-side (storage/app/crash-reports.log).
+    Route::post('/diag/crash', function (\Illuminate\Http\Request $r) {
+        $line = json_encode([
+            'at' => now()->toDateTimeString(),
+            'device' => mb_substr((string) $r->input('device'), 0, 200),
+            'os' => mb_substr((string) $r->input('os'), 0, 80),
+            'app' => mb_substr((string) $r->input('app'), 0, 80),
+            'trace' => mb_substr((string) $r->input('trace'), 0, 8000),
+            'ip' => $r->ip(),
+        ]);
+        try { \Illuminate\Support\Facades\Storage::append('crash-reports.log', $line); } catch (\Throwable $e) {}
+        // Email the crash to the team so it lands in the inbox, not just a log.
+        try {
+            $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;">'
+                . '<h2 style="color:#B91C1C;">KiddieTrac crash report</h2>'
+                . '<p><b>When:</b> ' . e($data['at']) . '<br><b>Device:</b> ' . e($data['device'])
+                . '<br><b>OS:</b> ' . e($data['os']) . '<br><b>App:</b> ' . e($data['app']) . '<br><b>IP:</b> ' . e($data['ip']) . '</p>'
+                . '<pre style="white-space:pre-wrap;word-break:break-word;background:#F1F5F9;padding:12px;border-radius:8px;font-size:12px;">'
+                . e($data['trace']) . '</pre></div>';
+            \App\Services\AgencyMailer::forAgency(null)->mailer()->html($body, function ($m) {
+                $m->to('info@kiddietrac.com')->subject('⚠️ KiddieTrac crash report');
+            });
+        } catch (\Throwable $e) {}
+        return response()->json(['ok' => true]);
+    })->middleware('throttle:30,1');
+
+    // Device-side scroll diagnostics (log only, no email) — lets us SEE the phone's
+    // real scroll timeline on a Home navigation, which the desktop browser can't reproduce.
+    Route::post('/diag/scroll', function (\Illuminate\Http\Request $r) {
+        try { \Illuminate\Support\Facades\Storage::append('scroll-diag.log', json_encode([
+            'at' => now()->toDateTimeString(), 'ua' => mb_substr((string) $r->userAgent(), 0, 120),
+            'data' => mb_substr((string) $r->input('data'), 0, 4000),
+        ])); } catch (\Throwable $e) {}
+        return response()->json(['ok' => true]);
+    })->middleware('throttle:60,1');
+
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
     Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
     Route::post('/auth/reset', [AuthController::class, 'resetPassword']);
+    Route::post('/auth/set-password', [AuthController::class, 'setPasswordFromToken'])->middleware('throttle:10,1');
+    Route::get('/auth/social/providers', [\App\Http\Controllers\Api\SocialAuthController::class, 'providers']);
+    Route::get('/auth/social/{provider}/redirect', [\App\Http\Controllers\Api\SocialAuthController::class, 'redirect'])->where('provider', '[a-z]+')->middleware('throttle:20,1');
+    Route::get('/auth/social/{provider}/callback', [\App\Http\Controllers\Api\SocialAuthController::class, 'callback'])->where('provider', '[a-z]+')->middleware('throttle:20,1');
+    // v22p93: email open-tracking pixel (public, no auth)
+    Route::get('/e/o/{token}', [\App\Http\Controllers\Api\PlatformController::class, 'trackOpen']);
 
     // ─── Public signup (rate-limited, v7) ───
     Route::post('/signup/centre', [SignupController::class, 'signup'])->middleware('throttle:3,60');
@@ -70,6 +115,11 @@ Route::prefix('v1')->group(function () {
 
 Route::any('/login', function () { return response()->json(['message' => 'Unauthenticated. Please sign in via the app.'], 401); })->name('login');
 Route::get('/branding', [BrandingController::class, 'show']);
+Route::get('/marketing-site/config', [\App\Http\Controllers\Api\MarketingSiteController::class, 'publicConfig']);
+Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead']);
+Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit']);
+Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat']);
+Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
 // v22p49 — Public tour booking. Throttled aggressively because the public
@@ -84,6 +134,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
 
     Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/agency/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'show']);
 
     // v22p7: MFA (TOTP) enrolment endpoints — Phase A
     Route::prefix('auth/mfa')->group(function () {
@@ -102,11 +153,25 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p22: platform_admin cross-agency routes
         Route::prefix('platform')->middleware('role:platform_admin')->group(function () {
             Route::get('/overview', [\App\Http\Controllers\Api\PlatformController::class, 'overview']);
+            Route::get('/social-config', [\App\Http\Controllers\Api\SocialAuthController::class, 'configGet']);
+            Route::post('/social-config', [\App\Http\Controllers\Api\SocialAuthController::class, 'configSave']);
+            Route::get('/security-alerts', [\App\Http\Controllers\Api\SecurityController::class, 'alerts']);
+            Route::post('/security-alerts/{id}/resolve', [\App\Http\Controllers\Api\SecurityController::class, 'resolveAlert'])->where('id', '[0-9]+');
             Route::get('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'listAgencies']);
             Route::post('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'createAgency']);
             Route::patch('/agencies/{agency}', [\App\Http\Controllers\Api\PlatformController::class, 'updateAgency']);
             Route::post('/agencies/{agency}/suspend', [\App\Http\Controllers\Api\PlatformController::class, 'suspendAgency']);
             Route::post('/agencies/{agency}/resume', [\App\Http\Controllers\Api\PlatformController::class, 'resumeAgency']);
+            Route::post('/agencies/{agency}/resend-invite', [\App\Http\Controllers\Api\PlatformController::class, 'resendInvite']);
+            Route::get('/email-logs', [\App\Http\Controllers\Api\PlatformController::class, 'emailLogs']);
+            Route::get('/marketing-site', [\App\Http\Controllers\Api\MarketingSiteController::class, 'get']);
+            Route::put('/marketing-site', [\App\Http\Controllers\Api\MarketingSiteController::class, 'save']);
+            Route::get('/marketing-site/leads', [\App\Http\Controllers\Api\MarketingSiteController::class, 'leads']);
+            Route::post('/marketing-site/leads/delete', [\App\Http\Controllers\Api\MarketingSiteController::class, 'deleteLead']);
+            Route::post('/marketing-site/leads/update', [\App\Http\Controllers\Api\MarketingSiteController::class, 'updateLead']);
+            Route::post('/marketing-site/leads', [\App\Http\Controllers\Api\MarketingSiteController::class, 'addLead']);
+            Route::get('/marketing-site/analytics', [\App\Http\Controllers\Api\MarketingSiteController::class, 'analytics']);
+            Route::get('/marketing-site/chats', [\App\Http\Controllers\Api\MarketingSiteController::class, 'chats']);
         });
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
@@ -180,7 +245,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post  ('/marketing/images',              [\App\Http\Controllers\Api\MarketingController::class, 'uploadImage']);
         });
 
-        Route::prefix('parent')->group(function () {
+        Route::prefix('parent')->middleware('role:guardian')->group(function () {
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
             Route::get('/children', [FamilyController::class, 'myChildren']);
             Route::get('/children/{child}', [ChildController::class, 'show']);
@@ -190,8 +255,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/children/{child}/photos', [MediaController::class, 'forChild']);
             Route::get('/children/{child}/observations', [MediaController::class, 'observationsForChild']);
             Route::get('/messages', [MessageController::class, 'myConversations']);
+            // These static paths MUST precede /messages/{conversation} or they'd bind as an id.
+            Route::get('/messages/unread-count', [MessageController::class, 'unreadCount']);
+            Route::post('/messages/nudge', [MessageController::class, 'nudge'])->middleware('throttle:6,1');
             Route::get('/messages/{conversation}', [MessageController::class, 'show']);
             Route::post('/messages', [MessageController::class, 'sendToRoom']);
+            Route::patch('/messages/{message}', [MessageController::class, 'editMessage']);
+            Route::delete('/messages/{message}', [MessageController::class, 'deleteMessage']);
             Route::get('/notifications', [NotificationController::class, 'mine']);
             Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
 
@@ -276,6 +346,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/waitlist', [ChildController::class, 'waitlist']);
 
             Route::get('/children/{child}', [ChildController::class, 'show']);
+            // v22p88: child-detail tabs
+            Route::get('/children/{child}/daily-events', [ChildController::class, 'dailyEvents']);
+            Route::get('/children/{child}/feed',         [ChildController::class, 'feed']);
+            Route::get('/children/{child}/documents',    [ChildController::class, 'documents']);
             // v22p5: full CRUD on child record (separate from enrollment updates)
             Route::patch('/children/{child}', [ChildController::class, 'update']);
             Route::delete('/children/{child}', [ChildController::class, 'destroy']);
@@ -358,19 +432,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             // ─── Storage quota & audit (v7) ───
             Route::get('/storage/usage', function (\Illuminate\Http\Request $request) {
-                $centreId = (new \App\Http\Concerns\ResolvesCentreContext)->resolveCentreId($request->user()) ?? 0;
+                // v22p98: ResolvesCentreContext is a TRAIT — cannot be `new`'d (fatal 500).
+                $ctx = new class { use \App\Http\Concerns\ResolvesCentreContext; public function centre($u){ return $this->resolveCentreId($u); } };
+                $centreId = $ctx->centre($request->user()) ?? 0;
                 if (!$centreId) return response()->json(['message' => 'No centre access'], 403);
                 $service = new \App\Services\StorageQuotaService();
                 return response()->json($service->getUsage($centreId));
             });
 
             Route::get('/audit-log', function (\Illuminate\Http\Request $request) {
-                $centreId = (new \App\Http\Concerns\ResolvesCentreContext)->resolveCentreId($request->user()) ?? 0;
+                // v22p98: ResolvesCentreContext is a TRAIT — cannot be `new`'d (fatal 500).
+                $ctx = new class { use \App\Http\Concerns\ResolvesCentreContext; public function centre($u){ return $this->resolveCentreId($u); } };
+                $centreId = $ctx->centre($request->user()) ?? 0;
                 if (!$centreId) return response()->json(['message' => 'No centre access'], 403);
+                // v22p98: audit_logs has NO centre_id column — scope by the users
+                // tied to this centre (staff + guardians) instead.
+                $userIds = \Illuminate\Support\Facades\DB::table('role_assignments')->where('centre_id', $centreId)->where('active', 1)->pluck('user_id')
+                    ->merge(\Illuminate\Support\Facades\DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')->where('f.centre_id', $centreId)->pluck('g.user_id'))
+                    ->unique()->values()->all();
                 $logs = \Illuminate\Support\Facades\DB::table('audit_logs')
                     ->leftJoin('users', 'users.id', '=', 'audit_logs.user_id')
-                    ->where('audit_logs.centre_id', $centreId)
-                    ->orWhereNull('audit_logs.centre_id') // global events (login, signup) without centre
+                    ->whereIn('audit_logs.user_id', $userIds ?: [0])
                     ->orderByDesc('audit_logs.created_at')
                     ->limit(100)
                     ->select('audit_logs.*', 'users.first_name', 'users.last_name', 'users.email')
@@ -392,18 +474,46 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // PUBLIC — Stripe webhook (for reseller subscriptions)
     // AGENCY-ADMIN ROUTES
     Route::prefix('admin')->middleware('role:agency_admin')->group(function () {
+        // ── v23 Expense management: suppliers / purchase orders / bills ──
+        Route::get('/suppliers', [\App\Http\Controllers\Api\SupplierController::class, 'index']);
+        Route::post('/suppliers', [\App\Http\Controllers\Api\SupplierController::class, 'store']);
+        Route::get('/suppliers/{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'show']);
+        Route::patch('/suppliers/{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'update']);
+        Route::delete('/suppliers/{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'destroy']);
+
+        Route::get('/purchase-orders', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'index']);
+        Route::post('/purchase-orders', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'store']);
+        Route::get('/purchase-orders/{po}', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'show']);
+        Route::patch('/purchase-orders/{po}', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'update']);
+        Route::post('/purchase-orders/{po}/status', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'updateStatus']);
+        Route::post('/purchase-orders/{po}/convert-to-bill', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'convertToBill']);
+        Route::delete('/purchase-orders/{po}', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'destroy']);
+
+        Route::get('/expenses/summary', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'summary']);
+        Route::get('/expense-invoices', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'index']);
+        Route::post('/expense-invoices', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'store']);
+        Route::get('/expense-invoices/{bill}', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'show']);
+        Route::patch('/expense-invoices/{bill}', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'update']);
+        Route::post('/expense-invoices/{bill}/approve', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'approve']);
+        Route::post('/expense-invoices/{bill}/payments', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'recordPayment']);
+        Route::post('/expense-invoices/{bill}/void', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'void']);
+        Route::delete('/expense-invoices/{bill}', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'destroy']);
+
         Route::get('/centres', [AdminController::class, 'listCentres']);
         Route::post('/centres', [AdminController::class, 'createCentre']);
         Route::patch('/centres/{centre}', [AdminController::class, 'updateCentre']);
         Route::delete('/centres/{centre}', [AdminController::class, 'archiveCentre']);
+        Route::delete('/centres/{centre}/permanent', [AdminController::class, 'permanentDeleteCentre']);
+        Route::post('/centres/{centre}/restore', [AdminController::class, 'restoreCentre']);
         // v22p3.4: per-centre branding logo upload
         Route::post('/centres/{centre}/logo', [AdminController::class, 'uploadCentreLogo']);
     
         Route::get('/users', [AdminController::class, 'listUsers']);
         Route::post('/users', [AdminController::class, 'createUser']);
-        // v22p39: audit-log viewer for agency admins (+ platform_admin sees all)
-        Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
+        Route::get('/users/{user}/profile', [AdminController::class, 'userProfile']);
+        Route::put('/users/{user}/profile', [AdminController::class, 'updateUserProfile']);
+        Route::post('/users/{user}/notes', [AdminController::class, 'addUserNote']);
         Route::post('/users/{user}/role', [AdminController::class, 'setUserRole']);
         // v22p1.2: user lifecycle
         Route::delete('/users/{user}', [AdminController::class, 'destroyUser']);
@@ -443,6 +553,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'update']);
         Route::delete('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'destroy']);
         Route::get('/forms/{form}/responses', [\App\Http\Controllers\Api\FormsController::class, 'listResponses']);
+        Route::post('/forms/{form}/email', [\App\Http\Controllers\Api\FormsController::class, 'emailToParents']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);
         // v22p11: agency_admin family CRUD
         Route::post('/families', [AdminController::class, 'createFamily']);
@@ -483,6 +594,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // centres.agency_id so directors get correctly scoped results.
     Route::middleware('role:agency_admin,centre_director,platform_admin')->prefix('admin')->group(function () {
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
+        // v22p47: audit trail — agency admins (whole agency) + directors (their centre)
+        Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
     });
 
     // PROVIDER chat routes (educator + centre_director + agency_admin)
@@ -565,6 +678,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // PUSH — any authenticated user
     Route::post('/push/subscribe',           [PushController::class, 'subscribe']);
     Route::post('/push/unsubscribe',         [PushController::class, 'unsubscribe']);
+        Route::post('/push/device',              [PushController::class, 'registerDevice']);
+        Route::post('/push/test-fcm',            [PushController::class, 'testFcm']);
+        Route::get ('/admin/upcoming-birthdays', ['App\Http\Controllers\Api\DashboardExtrasController','upcomingBirthdays']);
+        Route::get ('/admin/floor-staff',        ['App\Http\Controllers\Api\DashboardExtrasController','floorStaff']);
+        Route::post('/admin/quick-notify',       ['App\Http\Controllers\Api\DashboardExtrasController','quickNotify']);
+        Route::get ('/checkin/centre-code/{centreId}', [\App\Http\Controllers\Api\CheckinScanController::class, 'centreCode']);
+        Route::post('/parent/checkin/scan',            [\App\Http\Controllers\Api\CheckinScanController::class, 'scan']);
     Route::post('/push/test',                [PushController::class, 'test']);
     
     // NOTIFICATIONS — unread badge support
@@ -616,12 +736,32 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // ---- Agency billing config (late-fee + SMS + locale) ----
     Route::middleware('role:agency_admin,platform_admin')->group(function () {
         Route::get  ('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'show']);
+        // v22p87: combined guided billing setup (defaults + payment methods + autopay)
+        Route::get  ('/admin/billing-setup', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'showSetup']);
+        Route::patch('/admin/billing-setup', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'updateSetup']);
+        // v22p86: reusable tuition / fee plans
+        Route::get   ('/admin/fee-plans',        [\App\Http\Controllers\Api\FeePlanController::class, 'index']);
+        Route::post  ('/admin/fee-plans',        [\App\Http\Controllers\Api\FeePlanController::class, 'store']);
+        Route::patch ('/admin/fee-plans/{id}',   [\App\Http\Controllers\Api\FeePlanController::class, 'update']);
+        Route::delete('/admin/fee-plans/{id}',   [\App\Http\Controllers\Api\FeePlanController::class, 'destroy']);
+        Route::post  ('/admin/fee-plans/{id}/generate-invoices', [\App\Http\Controllers\Api\FeePlanController::class, 'generateInvoices']);
         Route::get  ('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'show']);
         Route::patch('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'update']);
+        Route::get  ('/admin/country', [\App\Http\Controllers\Api\CurrencyController::class, 'showCountry']);
+        Route::patch('/admin/country', [\App\Http\Controllers\Api\CurrencyController::class, 'updateCountry']);
         Route::get('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'show']);
         Route::patch('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'update']);
         Route::post('/admin/email-settings/test', [\App\Http\Controllers\Api\EmailSettingsController::class, 'sendTest']);
+        Route::get('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'show']);
+        Route::post('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'update']);
+        Route::post('/admin/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'set']);
         Route::patch('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'update']);
+    });
+
+    // Billing reminders — agency admins AND centre directors.
+    Route::middleware('role:agency_admin,platform_admin,centre_director')->group(function () {
+        Route::get('/admin/billing-reminders', [\App\Http\Controllers\Api\BillingRemindersController::class, 'show']);
+        Route::post('/admin/billing-reminders', [\App\Http\Controllers\Api\BillingRemindersController::class, 'update']);
     });
 
     // ---- Stripe parent-pay (family-facing) ----
@@ -688,7 +828,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get ('/feedback/mine',      [\App\Http\Controllers\Api\FeedbackController::class, 'mine']);
     Route::post('/feedback',           [\App\Http\Controllers\Api\FeedbackController::class, 'submit']);
     Route::get ('/ai/doc-extractions', function (\Illuminate\Http\Request $r) {
-        $agency = (int) ($r->header('X-Active-Agency-Id') ?: \Illuminate\Support\Facades\DB::table('role_assignments')->where('user_id', $r->user()->id)->where('active', 1)->value('agency_id'));
+        // SECURITY: staff-only + agency-membership check (was open to any authenticated
+        // user trusting X-Active-Agency-Id → cross-tenant document-data read).
+        $uid = $r->user()->id;
+        $ra = \Illuminate\Support\Facades\DB::table('role_assignments')->where('user_id', $uid)->where('active', 1);
+        $isStaff = (clone $ra)->whereIn('role', ['centre_director', 'agency_admin', 'platform_admin'])->exists();
+        if (!$isStaff) abort(403);
+        $isPlatform = (clone $ra)->where('role', 'platform_admin')->exists();
+        $hdr = (int) $r->header('X-Active-Agency-Id');
+        $allowed = $hdr && ($isPlatform || (clone $ra)->where('agency_id', $hdr)->exists());
+        $agency = $allowed ? $hdr : (int) (clone $ra)->value('agency_id');
         return ['data' => \Illuminate\Support\Facades\DB::table('ai_doc_extractions')->where('agency_id', $agency)->orderByDesc('created_at')->limit(50)->get()];
     });
 
@@ -765,6 +914,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post  ('/parent/wallet/setup-intent',    [\App\Http\Controllers\Api\PaymentMethodsController::class, 'setupIntent']);
     // Refunds (admin)
     Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+        Route::get ('/refunds/recent-payments',     [\App\Http\Controllers\Api\RefundsController::class, 'recentPayments']);
         Route::get ('/refunds/payment/{paymentId}', [\App\Http\Controllers\Api\RefundsController::class, 'listForPayment']);
         Route::post('/refunds',                     [\App\Http\Controllers\Api\RefundsController::class, 'create']);
     });
@@ -776,6 +926,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/families/{familyId}/ledger/pdf',    [\App\Http\Controllers\Api\LedgerController::class, 'familyLedgerPdf']);
     });
     // Reports
+    Route::get   ('/reports/canned',     [\App\Http\Controllers\Api\ReportsController::class, 'cannedList']);
+    Route::get   ('/reports/canned/run', [\App\Http\Controllers\Api\ReportsController::class, 'canned']);
+    Route::get   ('/reports/canned/pdf', [\App\Http\Controllers\Api\ReportsController::class, 'cannedPdf']);
+    Route::get   ('/reports/canned/xlsx', [\App\Http\Controllers\Api\ReportsController::class, 'cannedXlsx']);
     Route::get   ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'listMine']);
     Route::post  ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'create']);
     Route::patch ('/reports/{id}',                  [\App\Http\Controllers\Api\ReportsController::class, 'update']);
@@ -796,11 +950,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/immunization/due-report',         [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'agencyDueReport']);
     });
     Route::get('/immunization/child/{childId}/status',    [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'childStatus']);
-    // CACFP
+    // CACFP — educators log meals + view roster/monthly counts...
     Route::middleware('role:agency_admin,centre_director,educator,platform_admin')->group(function () {
         Route::get ('/cacfp/roster',           [\App\Http\Controllers\Api\CacfpController::class, 'dailyRoster']);
         Route::post('/cacfp/meal',             [\App\Http\Controllers\Api\CacfpController::class, 'setMeal']);
         Route::get ('/cacfp/monthly',          [\App\Http\Controllers\Api\CacfpController::class, 'monthlyReport']);
+    });
+    // ...but setting a family's subsidy tier is financial — directors/admins only (v22p95).
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
         Route::patch('/cacfp/family/{familyId}', [\App\Http\Controllers\Api\CacfpController::class, 'setFamilyTier']);
     });
     // Billing schedule
@@ -880,6 +1037,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/wellness/screening',           [\App\Http\Controllers\Api\WellnessController::class, 'submit']);
     Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/wellness/digest',          [\App\Http\Controllers\Api\WellnessController::class, 'todayDigest']);
+    });
+    // v22p94: payment plans are financial — NOT educators.
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/payment-plans/family/{id}',[\App\Http\Controllers\Api\PaymentPlanController::class, 'listForFamily']);
         Route::post('/payment-plans',            [\App\Http\Controllers\Api\PaymentPlanController::class, 'create']);
         Route::post('/payment-plans/{id}/cancel',[\App\Http\Controllers\Api\PaymentPlanController::class, 'cancel']);
@@ -915,6 +1075,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
     // Branded XLSX exports (replaces CSV)
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::post('/exports/table',                  [\App\Http\Controllers\Api\ReportsController::class, 'tableExport']);
         Route::get('/exports/users',                   [\App\Http\Controllers\Api\ExportsController::class, 'users']);
         Route::get('/exports/families',                [\App\Http\Controllers\Api\ExportsController::class, 'families']);
         Route::get('/exports/audit-logs',              [\App\Http\Controllers\Api\ExportsController::class, 'auditLogs']);
@@ -933,6 +1094,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/import/families',                   [\App\Http\Controllers\Api\ImportController::class, 'importFamilies']);
         Route::post('/import/menu',                       [\App\Http\Controllers\Api\ImportController::class, 'importMenu']);
         Route::post('/import/inspection',                 [\App\Http\Controllers\Api\ImportController::class, 'importInspection']);
+    });
+
+    // Generic agency-integration API (v1) — idempotent JSON upserts keyed by the
+    // caller's own external_id, scoped to the token's agency. Lets any external
+    // agency platform feed centres/families/children into KiddieTrac under its
+    // own agency. First consumer: iLearn. See docs/INTEGRATION_API.md.
+    Route::middleware('role:agency_admin,platform_admin')->prefix('integration')->group(function () {
+        Route::get ('/ping',     [\App\Http\Controllers\Api\IntegrationController::class, 'ping']);
+        Route::post('/centres',  [\App\Http\Controllers\Api\IntegrationController::class, 'upsertCentre']);
+        Route::post('/families', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertFamily']);
+        Route::post('/guardians', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertGuardian']);
+        Route::post('/children', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertChild']);
+        Route::post('/children/deactivate', [\App\Http\Controllers\Api\IntegrationController::class, 'deactivateChild']);
+        Route::post('/sync',     [\App\Http\Controllers\Api\IntegrationController::class, 'sync']);
     });
 
 

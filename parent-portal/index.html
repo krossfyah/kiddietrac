@@ -21,120 +21,148 @@
   <link rel="stylesheet" href="/css/kt-brand-v16.css">
   <link rel="stylesheet" href="/css/kt-login-v22.css">
   <link rel="stylesheet" href="/css/kt-login-pop.css">
+  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260711rt4">
 </head>
 <body class="auth-body">
-  <div class="auth-page">
-    <div class="auth-card">
-      <div class="auth-logo">
-        <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" style="height:120px;width:auto;display:block;margin-bottom:8px;" onerror="this.style.display='none'">
+<!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
+<div id="kt-splash"><div class="kt-splash-in"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="KiddieTrac"><div class="kt-splash-bar"><span></span></div></div></div>
+<style>
+#kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
+#kt-splash.kt-hide{opacity:0;pointer-events:none}
+#kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:26px;padding:0 28px}
+#kt-splash .kt-splash-logo{width:min(66vw,224px);height:auto;animation:kt-pulse 2.4s ease-in-out infinite}
+#kt-splash .kt-splash-bar{width:128px;height:3px;border-radius:99px;background:rgba(20,70,100,.13);overflow:hidden}
+#kt-splash .kt-splash-bar span{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,#13B7CC,#8EC73C);animation:kt-load 1.25s ease-in-out infinite}
+@keyframes kt-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes kt-load{0%{transform:translateX(-130%)}100%{transform:translateX(360%)}}
+@media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo,#kt-splash .kt-splash-bar span{animation:none}}
+</style>
+<script>
+(function(){function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
+var MIN=1200,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}
+if(document.readyState==='complete')go();else window.addEventListener('load',go);
+setTimeout(hide,6000);})();
+</script>
+<script>
+/* SSO handoff from the marketing site (www.kiddietrac.com): #kt_sso=<token>, and ?email= prefill */
+(function () {
+  var API = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+  var m = (location.hash || '').match(/kt_sso=([^&]+)/);
+  if (m) {
+    var tok = decodeURIComponent(m[1]);
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (u) {
+        sessionStorage.setItem('kt_token', tok);
+        sessionStorage.setItem('kt_user', JSON.stringify(u));
+        var now = String(Date.now());
+        sessionStorage.setItem('kt_login_at', now);
+        sessionStorage.setItem('kt_last_activity', now);
+        location.replace('/dashboard.html');
+      }).catch(function () { /* invalid/expired token — stay on the login form */ });
+    return;
+  }
+  var q = (location.search || '').match(/[?&]email=([^&]+)/);
+  if (q) {
+    document.addEventListener('DOMContentLoaded', function () {
+      var e = document.getElementById('email'); if (e) e.value = decodeURIComponent(q[1]);
+      var pw = document.getElementById('password'); if (pw) pw.focus();
+    });
+  }
+})();
+</script>
+  <div class="ktl-wrap">
+    <!-- ── Sign-in ── -->
+    <section class="ktl-form-side">
+      <div class="ktl-mobile-hero" aria-hidden="true">
+        <div class="ktl-mhero-card"><img src="/logo-wordmark-large.png" alt="KiddieTrac"></div>
+        <p class="ktl-mhero-tag">Every moment, beautifully captured.</p>
       </div>
-      <!-- kt-v16-auth-logo-swapped -->
-
-      <h1 class="auth-title">Welcome back</h1>
-      <p class="auth-sub">Sign in to see how your little one's day is going.</p>
-
-      <div id="signedOutBanner" hidden style="background:#FEF3C7;color:#92400E;border:1px solid #FBBF24;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.4;margin-bottom:14px;"></div>
-
-      <form id="loginForm" class="auth-form" novalidate>
-        <div class="form-row">
-          <label for="email">Email</label>
-          <input type="email" id="email" name="email" autocomplete="email" required>
+      <div class="ktl-form-inner">
+        <div class="auth-logo">
+          <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" class="ktl-logo" onerror="this.style.display='none'">
         </div>
+        <!-- kt-v16-auth-logo-swapped -->
 
-        <div class="form-row">
-          <label for="password">
-            Password
-            <a href="/forgot-password.html" class="forgot-link">Forgot?</a>
-          </label>
-          <input type="password" id="password" name="password" autocomplete="current-password" minlength="10" required>
-        </div>
+        <h1 class="ktl-title auth-title">Welcome back</h1>
+        <p class="ktl-sub auth-sub">Sign in to see how your little one's day is going.</p>
 
-        <div id="errorMsg" class="form-error" hidden></div>
+        <div id="signedOutBanner" hidden style="background:#FEF3C7;color:#92400E;border:1px solid #FBBF24;border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.4;margin-bottom:14px;"></div>
 
-        <!-- v22p7.2: MFA code row, shown only after the backend responds mfa_required -->
-        <div id="mfaRow" class="form-row" hidden>
-          <label for="mfaCode">Authenticator code
-            <span style="font-weight:400;font-size:12px;color:#6B7280;">(6 digits, or a 10-char recovery code)</span>
-          </label>
-          <input type="text" id="mfaCode" name="code" autocomplete="one-time-code"
-                 inputmode="numeric" maxlength="14" pattern="[0-9A-Z\-]+">
-        </div>
-
-        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
-          Sign in
-        </button>
-
-        <div class="auth-divider"><span>or</span></div>
-
-        <p class="auth-foot">
-          Don't have an account?
-          Your childcare centre will send you an invitation email.
-          <a href="https://kiddietrac.ca/contact">Contact us</a> if you need help.
-        </p>
-      </form>
-    </div>
-
-    <div class="auth-marketing" aria-hidden="true">
-      <!-- v22p19: floating decorative SVGs for "pop" effect -->
-      <svg class="kt-login-svg-float" style="top:60px; right:60px; width:90px; height:60px;" viewBox="0 0 90 60" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="22" cy="32" rx="22" ry="14" fill="rgba(255,255,255,0.18)"/>
-        <ellipse cx="46" cy="28" rx="20" ry="13" fill="rgba(255,255,255,0.22)"/>
-        <ellipse cx="68" cy="34" rx="18" ry="12" fill="rgba(255,255,255,0.16)"/>
-      </svg>
-      <svg class="kt-login-svg-float-slow" style="top:38%; right:24px; width:50px; height:50px;" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
-        <path d="M 25 4 l 5 16 l 16 0 l -13 10 l 5 16 l -13 -10 l -13 10 l 5 -16 l -13 -10 l 16 0 z" fill="rgba(255,193,124,0.7)"/>
-      </svg>
-      <svg class="kt-login-svg-float" style="bottom:80px; left:48px; width:60px; height:60px; animation-delay: -2s;" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-        <rect x="6" y="32" width="22" height="22" rx="5" fill="rgba(255,138,101,0.7)" transform="rotate(-5 17 43)"/>
-        <rect x="32" y="26" width="22" height="22" rx="5" fill="rgba(142,199,60,0.7)" transform="rotate(8 43 37)"/>
-        <rect x="20" y="6" width="22" height="22" rx="5" fill="rgba(255,255,255,0.4)" transform="rotate(-2 31 17)"/>
-      </svg>
-      <svg class="kt-login-svg-float-slow" style="top:14%; left:30px; width:36px; height:36px; animation-delay: -4s;" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="18" cy="18" r="14" fill="rgba(255,255,255,0.2)"/>
-        <circle cx="18" cy="18" r="6" fill="rgba(255,255,255,0.5)"/>
-      </svg>
-      <svg class="kt-login-svg-float" style="bottom:24%; right:80px; width:42px; height:42px; animation-delay: -3s;" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
-        <path d="M 21 4 l 3 11 l 11 0 l -9 7 l 3 11 l -9 -7 l -9 7 l 3 -11 l -9 -7 l 11 0 z" fill="rgba(255,255,255,0.35)"/>
-      </svg>
-      <div class="marketing-content">
-        <div class="marketing-badge">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-          </svg>
-          AI-AUGMENTED · CANADA-FIRST
-        </div>
-        <h2>Every moment, every milestone — beautifully captured.</h2>
-        <p>From morning check-in to your AI-summarized day at 6pm, Kiddietrac brings your child's day to you with the warmth and clarity you deserve.</p>
-
-        <div class="marketing-feature">
-          <div class="feature-icon">📸</div>
-          <div>
-            <h3>Real-time photos & updates</h3>
-            <p>See what your child is doing, eating, and learning — as it happens.</p>
+        <form id="loginForm" class="auth-form" novalidate>
+          <div class="form-row">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required>
           </div>
-        </div>
-        <div class="marketing-feature">
-          <div class="feature-icon">💬</div>
-          <div>
-            <h3>Direct line to educators</h3>
-            <p>Message your child's room teacher anytime. Replies usually within an hour.</p>
-          </div>
-        </div>
-        <div class="marketing-feature">
-          <div class="feature-icon">💳</div>
-          <div>
-            <h3>Simple billing with CWELCC</h3>
-            <p>Your $10/day fee, applied automatically. Tax receipts ready every January.</p>
-          </div>
-        </div>
 
-        <div class="marketing-trust">
-          <div class="trust-stat"><div class="num">CCEYA</div><div class="lab">Compliant</div></div>
-          <div class="trust-stat"><div class="num">HDLH</div><div class="lab">Aligned</div></div>
-          <div class="trust-stat"><div class="num">AI</div><div class="lab">Augmented</div></div>
-        </div>
+          <div class="form-row">
+            <label for="password">
+              Password
+              <a href="/forgot-password.html" class="forgot-link">Forgot?</a>
+            </label>
+            <div class="kt-pw-wrap" style="position:relative;">
+              <input type="password" id="password" name="password" autocomplete="current-password" placeholder="••••••••••" minlength="10" required style="padding-right:46px;">
+              <button type="button" id="kt-pw-toggle" aria-label="Show password" title="Show password" style="position:absolute;top:0;right:0;height:100%;width:44px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;font-size:18px;color:#8A99A8;line-height:1;">👁️</button>
+            </div>
+          </div>
+          <script>
+          (function(){
+            var b=document.getElementById('kt-pw-toggle'), p=document.getElementById('password');
+            if(b&&p) b.addEventListener('click',function(){
+              var show=p.type==='password';
+              p.type=show?'text':'password';
+              b.textContent=show?'🙈':'👁️';
+              b.setAttribute('aria-label',show?'Hide password':'Show password');
+              b.title=show?'Hide password':'Show password';
+              p.focus();
+            });
+          })();
+          </script>
+
+          <div id="errorMsg" class="form-error" hidden></div>
+
+          <!-- v22p7.2: MFA code row, shown only after the backend responds mfa_required -->
+          <div id="mfaRow" class="form-row" hidden>
+            <label for="mfaCode">Authenticator code
+              <span style="font-weight:400;font-size:12px;color:#94A3B8;">(6 digits, or a 10-char recovery code)</span>
+            </label>
+            <input type="text" id="mfaCode" name="code" autocomplete="one-time-code"
+                   inputmode="numeric" maxlength="14" pattern="[0-9A-Z\-]+" placeholder="123 456">
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+            Sign in
+          </button>
+
+          <p class="ktl-foot">
+            No account yet? Your childcare centre will send you an invitation email.
+            <a href="https://kiddietrac.ca/contact">Contact us</a> if you need help.
+          </p>
+        </form>
       </div>
-    </div>
+      <div class="ktl-legal">© 2026 KiddieTrac · Smart Childcare Management Platform</div>
+    </section>
+
+    <!-- ── Brand showcase ── -->
+    <aside class="ktl-brand-side" aria-hidden="true">
+      <span class="ktl-blob ktl-blob-1"></span>
+      <span class="ktl-blob ktl-blob-2"></span>
+      <span class="ktl-blob ktl-blob-3"></span>
+      <div class="ktl-brand-content">
+        <div class="ktl-badge">✦ AI-AUGMENTED · CANADA-FIRST</div>
+        <h2 class="ktl-headline">Every moment,<br>every milestone —<br><span class="ktl-hl">beautifully captured.</span></h2>
+        <p class="ktl-lede">From morning check-in to your AI-summarized day at 6&nbsp;pm, KiddieTrac brings your child's day to you with the warmth and clarity you deserve.</p>
+
+        <div class="ktl-features">
+          <div class="ktl-feat"><span class="ic">📸</span><div><h3>Real-time photos &amp; updates</h3><p>See what your child is doing, eating, and learning — as it happens.</p></div></div>
+          <div class="ktl-feat"><span class="ic">💬</span><div><h3>Direct line to educators</h3><p>Message your child's room teacher anytime. Replies usually within an hour.</p></div></div>
+          <div class="ktl-feat"><span class="ic">💳</span><div><h3>Simple billing with CWELCC</h3><p>Your $10/day fee, applied automatically. Tax receipts every January.</p></div></div>
+        </div>
+
+        <div class="ktl-trust"><span>CCEYA Compliant</span><span>HDLH Aligned</span><span>AI Augmented</span></div>
+      </div>
+    </aside>
   </div>
 
   <script>
@@ -267,6 +295,10 @@
   <script src="/js/screen-admin-mrr.js" defer></script>
   <script src="/js/screen-admin-features.js" defer></script>
   <script src="/js/screen-admin-branding.js" defer></script>
+  <script src="/js/screen-marketing-site.js" defer></script>
   <script src="/js/nav-additions-v15.js" defer></script>
+  <script src="/js/kt-social-login.js?v=20260708c"></script>
+  <script src="/js/kt-biometric.js?v=20260711bio6" defer></script>
+  <script src="/js/kt-crash-report.js?v=20260711bio3" defer></script>
 </body>
 </html>

@@ -20,6 +20,11 @@ final class CacfpController extends Controller
     {
         $centreId = (int) $request->query('centre_id', 0);
         abort_unless($centreId, 400, 'centre_id required');
+        // SECURITY (v22p96): the centre must belong to the caller's active agency
+        // (platform_admin: the agency they've switched into). Was an unscoped read
+        // by centre_id — any caller could enumerate any centre's roster + tier.
+        $centreAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        abort_unless($centreAgency && $centreAgency === (int) $this->resolveAgencyId($request), 403);
         $date = Carbon::parse($request->query('date', Carbon::today()->toDateString()))->toDateString();
 
         $children = DB::table('children as ch')
@@ -83,6 +88,18 @@ final class CacfpController extends Controller
             'cacfp_tier' => 'required|in:free,reduced,paid',
             'eligibility_date' => 'nullable|date',
         ]);
+        // SECURITY (v22p95): the subsidy tier is financial — may only be set on a
+        // family whose centre is in the caller's own agency (platform_admin: any).
+        $agencyId = $this->resolveAgencyId($request);
+        $fam = DB::table('families as f')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('f.id', $familyId)
+            ->select('c.agency_id')
+            ->first();
+        abort_unless($fam, 404);
+        $isPlatform = DB::table('role_assignments')->where('user_id', $request->user()->id)
+            ->where('active', true)->where('role', 'platform_admin')->exists();
+        abort_unless($isPlatform || (int) $fam->agency_id === (int) $agencyId, 403);
         DB::table('families')->where('id', $familyId)->update([
             'cacfp_tier' => $data['cacfp_tier'],
             'cacfp_eligibility_date' => $data['eligibility_date'] ?? now()->toDateString(),
@@ -121,7 +138,13 @@ final class CacfpController extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)->where('active', true)
             ->value('agency_id');

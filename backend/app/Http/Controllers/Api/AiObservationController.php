@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Models\Child;
 use App\Models\Observation;
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\DB;
  */
 class AiObservationController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function __construct(protected AiObservationService $ai)
     {
     }
@@ -35,6 +38,7 @@ class AiObservationController extends Controller
             'child_id' => 'required|integer|exists:children,id',
             'raw_text' => 'required|string|min:10|max:3000',
         ]);
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403); // v22p94
 
         $child = Child::find($data['child_id']);
         if (! $child) return response()->json(['error' => 'Child not found'], 404);
@@ -77,6 +81,7 @@ class AiObservationController extends Controller
             'ai_model_used'                  => 'nullable|string|max:80',
             'ai_tokens_used'                 => 'nullable|integer',
         ]);
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403); // v22p94
 
         $observation = Observation::create([
             'child_id'             => $data['child_id'],
@@ -107,9 +112,25 @@ class AiObservationController extends Controller
         $limit = min(100, max(5, (int) $request->query('limit', 30)));
 
         $q = Observation::query()
-            ->where('recorded_by_id', $user->id)
             ->orderByDesc('observed_at')
             ->limit($limit);
+
+        // v22p98: educators see their OWN observations; an agency_admin /
+        // centre_director / platform_admin gets a centre-wide oversight view
+        // (scoped to the active agency's centres), so demo data is visible.
+        $isAdminView = DB::table('role_assignments')->where('user_id', $user->id)
+            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
+            ->where('active', true)->exists();
+        if ($isAdminView) {
+            $centreId = $this->resolveCentreId($user);
+            $childIds = $centreId
+                ? DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+                    ->where('f.centre_id', $centreId)->pluck('c.id')->all()
+                : [];
+            $q->whereIn('child_id', $childIds ?: [0]);
+        } else {
+            $q->where('recorded_by_id', $user->id);
+        }
 
         if ($childId = $request->query('child_id')) {
             $q->where('child_id', (int) $childId);

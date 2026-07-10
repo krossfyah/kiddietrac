@@ -43,6 +43,9 @@
   }
 
   let activeRoomId = null;
+  let activeCentreId = null;
+  let activeScope = 'room';        // v22p84: 'room' or 'centre'
+  let lastCentres = [];            // v22p84: agency centres (so centre-wide plans work even with 0 rooms)
   let activeWeek = mondayOf(new Date());
   let currentPlan = null;
   let currentTheme = '';
@@ -54,11 +57,13 @@
     if (role === 'agency_admin') {
       try {
         const res = await api('GET', '/admin/centres');
+        lastCentres = (res.centres || []).map(c => ({ id: c.id, name: c.name }));
         const rooms = [];
         (res.centres || []).forEach(c => {
-          (c.rooms || []).forEach(r => rooms.push({ ...r, centre_name: c.name }));
+          (c.rooms || []).forEach(r => rooms.push({ ...r, centre_name: c.name, centre_id: c.id }));
         });
-        if (rooms.length > 0) return rooms;
+        // Return even when empty — centre-wide plans still work via lastCentres.
+        return rooms;
       } catch (e) {}
     }
     try {
@@ -72,14 +77,48 @@
   async function renderProvider(container) {
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading lesson planner…</div>';
     const rooms = await getRooms();
-    if (rooms.length === 0) {
-      container.innerHTML = '<div style="padding:32px;color:#DC2626;">No rooms found. Add a room first.</div>';
+
+    // v22p84: a plan can target a room OR a whole centre. Prefer the full agency
+    // centre list (works even when no rooms exist yet); otherwise derive from rooms.
+    let centres = [];
+    if (lastCentres && lastCentres.length) {
+      centres = lastCentres.slice();
+    } else {
+      const seenCentre = {};
+      rooms.forEach(r => {
+        if (r.centre_id != null && !seenCentre[r.centre_id]) {
+          seenCentre[r.centre_id] = 1;
+          centres.push({ id: r.centre_id, name: r.centre_name || ('Centre ' + r.centre_id) });
+        }
+      });
+    }
+
+    const hasRooms = rooms.length > 0;
+    const canCentre = centres.length > 0;
+    if (!hasRooms && !canCentre) {
+      container.innerHTML = '<div style="padding:32px;color:#DC2626;">No rooms or centres found. Add a centre first.</div>';
       return;
     }
-    if (!activeRoomId || !rooms.find(r => r.id == activeRoomId)) activeRoomId = rooms[0].id;
+    // Pick a valid scope for what's available.
+    if (!hasRooms) activeScope = 'centre';
+    if (activeScope === 'centre' && !canCentre) activeScope = 'room';
+    if (activeScope === 'room' && !hasRooms) activeScope = 'centre';
+
+    if (hasRooms && (!activeRoomId || !rooms.find(r => r.id == activeRoomId))) activeRoomId = rooms[0].id;
+    if (!activeCentreId || !centres.find(c => c.id == activeCentreId)) {
+      var _ar = rooms.find(r => r.id == activeRoomId);
+      activeCentreId = (_ar && _ar.centre_id) || (centres[0] && centres[0].id) || null;
+    }
+
+    // Scope toggle options — only offer what exists.
+    var scopeOpts = '';
+    if (hasRooms)  scopeOpts += '<option value="room" '   + (activeScope==='room'?'selected':'')   + '>🚪 This room</option>';
+    if (canCentre) scopeOpts += '<option value="centre" ' + (activeScope==='centre'?'selected':'') + '>🏫 Whole centre</option>';
+    var showScopeToggle = hasRooms && canCentre;
 
     let plan;
-    try { plan = await api('GET', '/provider/lesson-plans?room_id=' + activeRoomId + '&week_starting=' + activeWeek); }
+    const loadQs = (activeScope === 'centre') ? ('centre_id=' + activeCentreId) : ('room_id=' + activeRoomId);
+    try { plan = await api('GET', '/provider/lesson-plans?' + loadQs + '&week_starting=' + activeWeek); }
     catch (e) { container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>'; return; }
 
     currentPlan = plan.plan;
@@ -93,8 +132,11 @@
             <p style="color:#6B7280;font-size:14px;margin:4px 0 0;">Weekly activities organized by HDLH domain</p>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select id="kt-room" style="${selectStyle()}">
-              ${rooms.map(r => `<option value="${r.id}" ${r.id==activeRoomId?'selected':''}>${esc(r.name)}${r.centre_name?' · '+esc(r.centre_name):''}</option>`).join('')}
+            ${showScopeToggle ? `<select id="kt-scope" style="${selectStyle()}" title="Plan for one room or the whole centre">${scopeOpts}</select>` : ''}
+            <select id="kt-target" style="${selectStyle()}">
+              ${activeScope==='centre'
+                ? centres.map(c => `<option value="${c.id}" ${c.id==activeCentreId?'selected':''}>🏫 ${esc(c.name)}</option>`).join('')
+                : rooms.map(r => `<option value="${r.id}" ${r.id==activeRoomId?'selected':''}>${esc(r.name)}${r.centre_name?' · '+esc(r.centre_name):''}</option>`).join('')}
             </select>
             <button id="kt-prev-week" style="${navBtnStyle()}">‹</button>
             <input type="date" id="kt-week" value="${activeWeek}" style="${selectStyle()};width:160px;">
@@ -102,6 +144,8 @@
             <button id="kt-save" style="background:#1F6080;color:white;border:none;padding:10px 22px;border-radius:8px;font-weight:700;cursor:pointer;">💾 Save</button>
           </div>
         </div>
+
+        ${activeScope==='centre' ? `<div style="background:#EAF3F6;border:1px solid #CFE3EB;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#16526E;">🏫 <strong>Centre-wide plan.</strong> This applies to every room in the centre, and parents see it for any room that doesn't have its own plan this week.</div>` : ''}
 
         <div style="background:white;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.04);">
           <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#6B7280;">Weekly theme</label>
@@ -123,7 +167,14 @@
 
     renderGrid();
 
-    $('#kt-room', container).addEventListener('change', (e) => { activeRoomId = parseInt(e.target.value, 10); renderProvider(container); });
+    if ($('#kt-scope', container)) {
+      $('#kt-scope', container).addEventListener('change', (e) => { activeScope = e.target.value; renderProvider(container); });
+    }
+    $('#kt-target', container).addEventListener('change', (e) => {
+      if (activeScope === 'centre') activeCentreId = parseInt(e.target.value, 10);
+      else activeRoomId = parseInt(e.target.value, 10);
+      renderProvider(container);
+    });
     $('#kt-week', container).addEventListener('change', (e) => { activeWeek = mondayOf(e.target.value); renderProvider(container); });
     $('#kt-prev-week', container).addEventListener('click', () => { const d = new Date(activeWeek); d.setDate(d.getDate()-7); activeWeek = mondayOf(d); renderProvider(container); });
     $('#kt-next-week', container).addEventListener('click', () => { const d = new Date(activeWeek); d.setDate(d.getDate()+7); activeWeek = mondayOf(d); renderProvider(container); });
@@ -195,14 +246,12 @@
     status.textContent = 'Saving…';
     currentTheme = $('#kt-theme', container).value;
     try {
-      await api('PUT', '/provider/lesson-plans', {
-        room_id: activeRoomId,
-        week_starting: activeWeek,
-        theme: currentTheme,
-        plan: currentPlan,
-      });
+      const payload = { week_starting: activeWeek, theme: currentTheme, plan: currentPlan };
+      if (activeScope === 'centre') payload.centre_id = activeCentreId;
+      else payload.room_id = activeRoomId;
+      await api('PUT', '/provider/lesson-plans', payload);
       status.style.color = '#16A34A';
-      status.textContent = '✓ Saved at ' + new Date().toLocaleTimeString();
+      status.textContent = '✓ Saved ' + (activeScope === 'centre' ? '(whole centre) ' : '') + 'at ' + new Date().toLocaleTimeString();
     } catch (e) {
       status.style.color = '#DC2626';
       status.textContent = '✗ ' + e.message;

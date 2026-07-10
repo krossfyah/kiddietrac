@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\Storage;
  */
 final class PhotoFeedController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function feed(Request $request): JsonResponse
     {
         $u = $request->user();
@@ -42,8 +45,14 @@ final class PhotoFeedController extends Controller
                 foreach ($childIds as $cid) $q->orWhereRaw("JSON_CONTAINS(child_ids, ?)", [(string) $cid]);
             });
         } else {
-            $agencyId = (int) ($request->header('X-Active-Agency-Id')
-                ?: DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id'));
+            // SECURITY: never trust X-Active-Agency-Id blindly — only honour it if the
+            // caller actually holds an active role in that agency (or is platform_admin).
+            // Otherwise fall back to their own agency, so staff can't read another
+            // agency's children's photos by spoofing the header.
+            $hdr = (int) $request->header('X-Active-Agency-Id');
+            $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->where('role', 'platform_admin')->exists();
+            $allowed = $hdr && ($isPlatform || DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->where('agency_id', $hdr)->exists());
+            $agencyId = $allowed ? $hdr : (int) DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id');
             $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
             $q->whereIn('p.centre_id', $centreIds);
         }
@@ -81,6 +90,10 @@ final class PhotoFeedController extends Controller
         $childIds = $request->input('child_ids');
         if (is_string($childIds)) $childIds = json_decode($childIds, true);
         if (!is_array($childIds)) $childIds = [];
+        // SECURITY (v22p94): the uploader must have access to every tagged child.
+        foreach ($childIds as $cid) {
+            abort_unless($this->canAccessChildId($u, (int) $cid), 403);
+        }
 
         $id = DB::table('photos')->insertGetId([
             'centre_id' => $centreId,
@@ -97,13 +110,15 @@ final class PhotoFeedController extends Controller
         if (!empty($childIds)) {
             $familyIds = DB::table('children')->whereIn('id', $childIds)->pluck('family_id')->unique();
             $guardianIds = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id');
+            $photoBody = $request->input('caption') ?: 'A new moment was added.';
             foreach ($guardianIds as $gid) {
                 DB::table('notifications')->insert([
                     'user_id' => $gid, 'type' => 'photo',
-                    'title' => 'New photo shared', 'body' => $request->input('caption') ?: 'A new moment was added.',
+                    'title' => 'New photo shared', 'body' => $photoBody,
                     'data' => json_encode(['link' => '#photos', 'photo_id' => $id]),
                     'created_at' => now(),
                 ]);
+                try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New photo shared 📸', $photoBody, '#photos'); } catch (\Throwable $e) {}
             }
         }
 

@@ -17,8 +17,14 @@
       catch (_) { return null; }
     },
     clear() {
-      sessionStorage.removeItem('kt_token');
-      sessionStorage.removeItem('kt_user');
+      // SECURITY: the bearer token is also written to localStorage (biometric
+      // sign-in, set-password) and every helper reads sessionStorage||localStorage,
+      // so a session-only clear left the token live on a shared device after
+      // sign-out / expiry. Purge both stores.
+      try {
+        sessionStorage.removeItem('kt_token'); sessionStorage.removeItem('kt_user');
+        localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user');
+      } catch (e) {}
     },
     requireLogin() {
       if (!this.token()) {
@@ -49,6 +55,18 @@
       };
       const token = Auth.token();
       if (token) headers['Authorization'] = 'Bearer ' + token;
+      // Multi-agency scope: tell the API which agency the user is currently
+      // viewing (set by the agency switcher; a platform_admin can switch freely).
+      // WITHOUT this, agency-scoped endpoints fall back to the user's first
+      // agency, so opening a different agency showed the wrong agency's data.
+      try {
+        const _activeAgencyId = sessionStorage.getItem('kt_active_agency_id');
+        if (_activeAgencyId) headers['X-Active-Agency-Id'] = _activeAgencyId;
+        // "View as" role preview (platform_admin) — only Help reads this, to show
+        // the previewed role's articles instead of the admin's own.
+        const _viewAs = sessionStorage.getItem('kt_view_as');
+        if (_viewAs) headers['X-View-As-Role'] = _viewAs;
+      } catch (e) { /* sessionStorage unavailable */ }
 
       let res;
       try {

@@ -1,0 +1,147 @@
+/* ------------------------------------------------------------------
+   Top-nav layout for Parent (guardian) + Educator roles.
+
+   The base .app-shell is a 2-column (sidebar + main) grid. For these
+   roles the shell must instead STACK: a full-width top NAV bar whose
+   items wrap, with the main content below it. Without this, the
+   horizontal nav row sat inside the narrow sidebar grid column and
+   shoved the page content off-screen to the right — the "parent /
+   educator dashboard doesn't show up correctly" bug.
+
+   Scoped to these two roles only, so the agency_admin / centre_director
+   sidebar layout is untouched.
+   ------------------------------------------------------------------ */
+/* Belt-and-suspenders: these roles never need horizontal page scroll (content is
+   a centred, max-width column), so clamp it — keeps a dense nav row from ever
+   pushing the page sideways. */
+body.role-guardian,
+body.role-educator { overflow-x: hidden; }
+
+body.role-guardian #appShell,
+body.role-educator  #appShell { display: block !important; }
+
+body.role-guardian #appSidebar,
+body.role-educator  #appSidebar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100% !important;
+  max-width: 100vw;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  height: auto !important;
+  overflow-x: hidden;
+  background: var(--kt-surface, #fff);
+  border-bottom: 1px solid var(--kt-border, #e5e7eb);
+  padding: 10px 18px;
+}
+
+/* The function nav links are redundant with the icon-tile home — hide them for
+   these roles. The header keeps the logo (which returns to the tiles) + the
+   user/identity pill, so it's a slim bar, not a duplicate menu. */
+body.role-guardian #appSidebar #navLinks,
+body.role-educator  #appSidebar #navLinks {
+  display: none !important;
+}
+/* QUICK ADD is an admin/staff quick-create — irrelevant to these roles (and it
+   was re-injecting duplicates on every render). Hide it here. */
+body.role-guardian #appSidebar .kt-v5a-actions,
+body.role-educator  #appSidebar .kt-v5a-actions {
+  display: none !important;
+}
+/* Logo becomes the "home" affordance (cursor + subtle hint). */
+body.role-guardian #appSidebar #navBrand,
+body.role-educator  #appSidebar #navBrand { cursor: pointer; }
+
+/* Floating "← Back" button shown on sub-screens (top nav is hidden for these
+   roles, so this is the obvious way back to the tile menu). */
+#kt-role-back {
+  position: fixed; top: 80px; left: 18px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #fff; color: var(--kt-text, #0D1B2A);
+  border: 1px solid var(--kt-border, #e5e7eb); border-radius: 999px;
+  padding: 10px 18px; font-size: 14px; font-weight: 800; cursor: pointer;
+  box-shadow: 0 6px 16px rgba(13,27,42,.14);
+  transition: transform .12s ease, border-color .12s ease;
+}
+#kt-role-back[hidden] { display: none; }
+#kt-role-back:hover { border-color: #c9b8ec; transform: translateX(-2px); }
+@media (max-width: 640px) {
+  #kt-role-back { top: auto; bottom: 84px; left: 14px; padding: 12px 20px; font-size: 15px; }
+}
+
+body.role-guardian #appMain,
+body.role-educator  #appMain {
+  width: 100% !important;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ------------------------------------------------------------------
+   Icon-tile HOME launcher (parent + educator). Big tappable tiles for
+   direct access; responsive grid for desktop + mobile.
+   ------------------------------------------------------------------ */
+.kt-tilehome { max-width: 1000px; margin: 0 auto; padding: 4px 0 48px; }
+.kt-hero-tiles { margin-bottom: 22px; }
+.kt-hero-tiles .kt-hero-sub { opacity: .85; font-size: .9rem; margin-top: 4px; }
+
+.kt-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 16px;
+}
+.kt-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 30px 16px; min-height: 156px;
+  background: #fff;
+  border: 1px solid var(--kt-border, #e5e7eb);
+  border-radius: 22px;
+  text-decoration: none;
+  color: var(--kt-text, #0D1B2A);
+  font-weight: 700; font-size: 16px; text-align: center;
+  box-shadow: 0 2px 6px rgba(13,27,42,.05);
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.kt-tile:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(13,27,42,.12); border-color: #c9b8ec; }
+.kt-tile:active { transform: translateY(-1px); }
+/* BIG icons in a soft tinted circle so they read as clear, tappable targets. */
+.kt-tile-icon {
+  font-size: 46px; line-height: 1;
+  width: 84px; height: 84px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #f3eefe, #eef5ff);
+  border-radius: 22px;
+}
+.kt-tile-label { font-weight: 800; }
+.kt-tile-sub { font-size: 12px; color: var(--kt-text-faint, #6b7280); font-weight: 600; margin-top: -4px; }
+
+.kt-tile-more { margin-top: 26px; }
+.kt-tile-more-label {
+  font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+  font-weight: 800; color: var(--kt-text-faint, #6b7280); margin-bottom: 12px;
+}
+
+@media (max-width: 640px) {
+  .kt-tile-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .kt-tile { padding: 24px 10px; min-height: 138px; border-radius: 20px; gap: 12px; }
+  .kt-tile-icon { font-size: 42px; width: 76px; height: 76px; }
+  .kt-tile-label { font-size: 15px; }
+}
+
+/* Auditor uses the same top-nav-hidden, icon-tile layout as guardian/educator. */
+body.role-auditor { overflow-x: hidden; }
+body.role-auditor #appShell { display: block !important; }
+body.role-auditor #appSidebar {
+  position: sticky; top: 0; z-index: 50; width: 100% !important; max-width: 100vw;
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  height: auto !important; overflow-x: hidden;
+  background: var(--kt-surface, #fff); border-bottom: 1px solid var(--kt-border, #e5e7eb); padding: 10px 18px;
+}
+body.role-auditor #appMain { width: 100% !important; max-width: 1200px; margin: 0 auto; padding: 20px; }
+body.role-auditor #appSidebar #navLinks { display: none !important; }
+body.role-auditor #appSidebar .kt-v5a-actions { display: none !important; }
+body.role-auditor #appSidebar #navBrand { cursor: pointer; }

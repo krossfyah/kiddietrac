@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Custom roles and permissions
 category: Administration
 order: 20
@@ -37,6 +38,23 @@ The role is now visible in the User management Manage modal — assign it to use
 ## Assigning a custom role to a user
 
 User management → click **Manage** on the user → in the Roles section, select the role from the dropdown → click **Apply**. Roles are additive — adding a new role does not remove existing ones.
+
+## Data isolation across centres and agencies
+
+Roles also decide **what data you can see**, independently of the permission
+matrix:
+
+- **Agency admin / Platform admin** see every centre in their **active agency** —
+  for example the **Children** list shows all children across all of the
+  agency's centres, and the centre filter lets you narrow down.
+- **Centre director / Educator** see only **their own centre's** families,
+  children, rooms and reports.
+- Agencies are fully separated: a new agency (or a new centre in another agency)
+  starts with its own settings and **never** sees another agency's data. Switch
+  the **active agency** from the top bar if you administer more than one.
+
+If you ever see "agency not found", make sure an **active agency is selected**
+in the top bar.
 
 ## Phase A note
 

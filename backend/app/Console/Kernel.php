@@ -56,6 +56,13 @@ class Kernel extends ConsoleKernel
             ->between('06:00', '19:00')
             ->timezone('America/Toronto');
 
+        // ─── Missed chat-message email escalation ───────────
+        // Every 5 min, email the intended recipients about chat messages that have
+        // been left unread for 15+ minutes (each message emailed at most once).
+        $schedule->command('kiddietrac:missed-messages --minutes=15')
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
+
         // ─── Cleanup expired tokens ─────────────────────────
         $schedule->command('sanctum:prune-expired --hours=24')
             ->daily();

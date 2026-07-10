@@ -216,21 +216,26 @@ final class ChatController extends Controller
         $family = DB::table('families')->where('id', $data['family_id'])->whereNull('deleted_at')->first();
         if (! $family) return response()->json(['message' => 'Family not found'], 404);
 
-        // Provider must have a role_assignment that grants access to this family's centre.
-        $hasAccess = DB::table('role_assignments')
-            ->where('user_id', $user->id)
-            ->where('active', true)
-            ->where(function ($q) use ($family) {
-                $q->where('centre_id', $family->centre_id)
-                  ->orWhereExists(function ($w) use ($family) {
-                      $w->select(DB::raw(1))->from('centres')
-                        ->whereColumn('centres.agency_id', 'role_assignments.agency_id')
-                        ->where('centres.id', $family->centre_id);
-                  });
-            })
-            ->exists();
-        if (! $hasAccess) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        // Platform admins can start a conversation with any family. Everyone else
+        // needs a role_assignment that grants access to this family's centre.
+        $isPlatform = DB::table('role_assignments')
+            ->where('user_id', $user->id)->where('role', 'platform_admin')->where('active', true)->exists();
+        if (! $isPlatform) {
+            $hasAccess = DB::table('role_assignments')
+                ->where('user_id', $user->id)
+                ->where('active', true)
+                ->where(function ($q) use ($family) {
+                    $q->where('centre_id', $family->centre_id)
+                      ->orWhereExists(function ($w) use ($family) {
+                          $w->select(DB::raw(1))->from('centres')
+                            ->whereColumn('centres.agency_id', 'role_assignments.agency_id')
+                            ->where('centres.id', $family->centre_id);
+                      });
+                })
+                ->exists();
+            if (! $hasAccess) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
         }
 
         // Find-or-create conversation for this (family, child) pair — same dedupe
@@ -504,7 +509,13 @@ final class ChatController extends Controller
     {
         if (! $request->hasFile('attachment')) return [];
         $request->validate([
-            'attachment' => ['file', 'image', 'max:5120', 'mimes:jpg,jpeg,png,webp,gif'],
+            // Accept images OR audio (voice notes). Max 10 MB.
+            'attachment' => ['file', 'max:10240', function ($attr, $value, $fail) {
+                $m = (string) $value->getMimeType();
+                if (! str_starts_with($m, 'image/') && ! str_starts_with($m, 'audio/')) {
+                    $fail('Only images or audio are allowed.');
+                }
+            }],
         ]);
         $file = $request->file('attachment');
         $path = $file->store('chat-attachments', 'public');
@@ -549,6 +560,14 @@ final class ChatController extends Controller
      */
     private function providerCentreIds(int $userId): array
     {
+        // Platform admins can access every centre (their role_assignment carries no
+        // agency_id/centre_id, so the role-scoped joins below would exclude them).
+        $isPlatform = DB::table('role_assignments')
+            ->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
+        if ($isPlatform) {
+            return DB::table('centres')->pluck('id')->all();
+        }
+
         $directIds = DB::table('role_assignments')
             ->where('user_id', $userId)
             ->whereIn('role', ['educator', 'centre_director'])

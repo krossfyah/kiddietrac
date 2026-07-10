@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class OperationsController extends Controller
 {
+    use ResolvesCentreContext;
+
     // =========================================================
     // (1) Drop-off / pickup signature capture from kiosk
     // =========================================================
@@ -58,6 +61,10 @@ final class OperationsController extends Controller
 
     public function listSignatures(Request $request, int $childId): JsonResponse
     {
+        // SECURITY (v22p96): pickup/drop-off signatures are child-private — only
+        // this child's guardians/centre staff, or a platform_admin scoped to the
+        // agency they've switched into. Was readable by id for any caller.
+        abort_unless($this->canAccessChildScoped($request, $childId), 403);
         $rows = DB::table('kiosk_signatures')
             ->where('child_id', $childId)
             ->orderByDesc('occurred_at')
@@ -73,6 +80,7 @@ final class OperationsController extends Controller
     {
         $centreId = (int) $request->query('centre_id', 0);
         abort_unless($centreId, 400, 'centre_id required');
+        $this->assertCentreAccess($request, $centreId); // v22p96: was an unscoped read by centre_id
         $weekStart = Carbon::parse($request->query('week_start', Carbon::now()->startOfWeek()->toDateString()))->toDateString();
         $week = DB::table('menu_weeks')
             ->where('centre_id', $centreId)
@@ -159,9 +167,17 @@ final class OperationsController extends Controller
     // =========================================================
     public function allergyAlerts(Request $request): JsonResponse
     {
+        // SECURITY (v22p96): allergy/health/dietary data is medical PII. Always
+        // scope to the active agency's centres — the prior optional centre_id with
+        // no agency filter returned every child's medical alerts across ALL
+        // tenants when centre_id was omitted.
+        $agencyId = $this->resolveAgencyId($request);
         $centreId = (int) $request->query('centre_id', 0);
+        if ($centreId) $this->assertCentreAccess($request, $centreId);
         $q = DB::table('children as c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->where('ce.agency_id', $agencyId)
             ->whereNull('c.deleted_at')
             ->whereNull('f.deleted_at')
             ->where(function ($q) {
@@ -283,6 +299,11 @@ final class OperationsController extends Controller
 
     public function listPermissionsForTrip(Request $request, int $tripId): JsonResponse
     {
+        // SECURITY (v22p96): scope the trip roster to the caller's active agency
+        // (field_trips.agency_id). Was readable by trip id for any caller.
+        $tripAgency = (int) DB::table('field_trips')->where('id', $tripId)->value('agency_id');
+        abort_unless($tripAgency, 404);
+        abort_unless($tripAgency === (int) $this->resolveAgencyId($request), 403);
         $rows = DB::table('field_trip_permissions as p')
             ->join('children as c', 'c.id', '=', 'p.child_id')
             ->where('p.field_trip_id', $tripId)
@@ -573,7 +594,13 @@ final class OperationsController extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)
@@ -585,10 +612,17 @@ final class OperationsController extends Controller
     private function assertCentreAccess(Request $request, int $centreId): void
     {
         $u = $request->user();
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        abort_unless($agencyId, 404);
+        // SECURITY (v22p96): a platform_admin is scoped to the agency they've
+        // switched into — the prior `if (isPlatform) return;` let a super-admin
+        // reach any centre in any tenant regardless of the active agency.
         $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)
             ->where('role', 'platform_admin')->where('active', true)->exists();
-        if ($isPlatform) return;
-        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        if ($isPlatform) {
+            abort_unless($agencyId === (int) $this->resolveAgencyId($request), 403);
+            return;
+        }
         $hasRole = DB::table('role_assignments')->where('user_id', $u->id)
             ->where('agency_id', $agencyId)
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator'])

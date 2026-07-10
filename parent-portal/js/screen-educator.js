@@ -110,7 +110,7 @@
       const data = await Api.get(`/provider/rooms/${currentRoomId}/roster`);
       Dom.clear(container);
 
-      const grid = Dom.el('div', { class: 'educator-roster' });
+      const grid = Dom.el('div', { class: 'educator-roster', 'data-kt-list': '1' });
 
       if (!data.roster || data.roster.length === 0) {
         grid.appendChild(emptyState('👶', 'No children enrolled',

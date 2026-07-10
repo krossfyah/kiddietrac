@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Services\InvoicePdfRenderer;
 use Illuminate\Http\Request;
@@ -27,10 +28,19 @@ use Illuminate\Support\Facades\DB;
  */
 final class InvoicePreviewController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function previewExisting(Request $request, int $id): Response
     {
         $user = $request->user();
         if (! $user) abort(401);
+
+        // SECURITY (v22p94): the invoice must belong to a centre the caller can
+        // access — otherwise any authenticated user could read any agency's
+        // invoices (bill-to PII, amounts) by enumerating ids.
+        $invoice = DB::table('invoices')->where('id', $id)->first();
+        if (! $invoice) abort(404, 'Invoice not found');
+        abort_unless($this->authorizeCentreAccess($user, (int) $invoice->centre_id), 403);
 
         $renderer = app(InvoicePdfRenderer::class);
         $html = $renderer->renderFromInvoiceId($id);

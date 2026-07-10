@@ -70,6 +70,7 @@
 
     const rows = (data && data.observations) || [];
     const listEl = wrap.querySelector('#kt-obs-list');
+    listEl.setAttribute('data-kt-list', '1');
     Dom.clear(listEl);
 
     if (rows.length === 0) {

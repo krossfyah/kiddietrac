@@ -57,39 +57,66 @@ final class EmailTemplate
 
         $css = "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;";
 
+        // Header: KiddieTrac-branded emails use the full banner image; white-label
+        // agencies keep their own logo on the coloured banner.
+        $ktDefaultLogo = 'https://app.kiddietrac.com/logo-wordmark.png';
+        $useKtHeader = ($brand['logo_url'] === $ktDefaultLogo);
+        $titleBlock = '';
+        if ($useKtHeader) {
+            $headerRow = '<tr><td style="padding:0;line-height:0;font-size:0;">'
+                . '<img src="https://app.kiddietrac.com/email-header.png" alt="KiddieTrac — Smart Childcare Management Platform" width="620" style="display:block;width:100%;max-width:620px;height:auto;border:0;border-radius:16px 16px 0 0;"></td></tr>';
+            $titleBlock = ($eyebrow ? '<div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#1BA7AC;margin-bottom:4px;">' . $eyebrow . '</div>' : '')
+                . '<div class="kt-h" style="font-size:22px;font-weight:800;color:#0B2545;line-height:1.2;">' . $title . '</div>'
+                . ($subtitle ? '<div style="font-size:14px;color:#64748B;margin-top:4px;">' . $subtitle . '</div>' : '')
+                . '<div style="height:18px;line-height:18px;">&nbsp;</div>';
+        } else {
+            $headerRow = '<tr><td class="kt-banner" bgcolor="' . $brand['primary'] . '" style="background-color:' . $brand['primary'] . ';background:linear-gradient(135deg,' . $brand['primary'] . ' 0%, ' . $brand['secondary'] . ' 100%); padding:26px 30px; border-radius:16px 16px 0 0; color:#FFFFFF;">'
+                . '<table cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td align="left" valign="middle">' . $logoBlock . '</td></tr>'
+                . '<tr><td align="left" style="padding-top:14px;">'
+                . ($eyebrow ? '<div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#E6EEF3;">' . $eyebrow . '</div>' : '')
+                . '<div class="kt-title" style="font-size:22px;font-weight:800;margin-top:4px;line-height:1.15;color:#FFFFFF;">' . $title . '</div>'
+                . ($subtitle ? '<div style="font-size:13px;color:#EAF2F7;margin-top:4px;">' . $subtitle . '</div>' : '')
+                . '</td></tr></table></td></tr>';
+        }
+
         return ''
             . '<!DOCTYPE html><html lang="en"><head>'
             . '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
             . '<title>' . $title . '</title>'
-            . '<style>@media (max-width:620px){.kt-card{padding:18px !important;}.kt-title{font-size:20px !important;}.kt-banner{padding:20px 22px !important;}}</style>'
+            . '<style>'
+            . '@media (max-width:620px){.kt-card{padding:18px !important;}.kt-title{font-size:20px !important;}.kt-banner{padding:20px 22px !important;}}'
+            // Dark-mode: render a proper dark palette instead of a broken auto-invert.
+            . '@media (prefers-color-scheme: dark){'
+            . 'body,.kt-bg{background:#0E1726 !important;}'
+            . '.kt-card{background:#152033 !important;color:#E5E7EB !important;border-color:#26344A !important;}'
+            . '.kt-card a{color:#7CC3E8 !important;}'
+            . '.kt-card strong,.kt-card .kt-h{color:#F1F5F9 !important;}'
+            . '.kt-footer{background:#101A2B !important;color:#94A3B8 !important;border-color:#26344A !important;}'
+            . '.kt-footer a{color:#7CC3E8 !important;}'
+            . '.kt-footer strong{color:#CBD5E1 !important;}'
+            . '.kt-logobox{background:#FFFFFF !important;}'
+            . '}'
+            . '</style>'
             . '</head>'
-            . '<body style="margin:0;padding:24px 12px;background:#F4F6F9;' . $css . '">'
+            . '<body class="kt-bg" style="margin:0;padding:24px 12px;background:#F4F6F9;' . $css . '">'
 
             // Hidden preheader (inbox snippet)
             . '<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">' . $preheader . '</div>'
 
             . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="100%" style="max-width:620px;margin:0 auto;">'
 
-            // Banner
-            . '<tr><td class="kt-banner" style="background:linear-gradient(135deg,' . $brand['primary'] . ' 0%, ' . $brand['secondary'] . ' 100%); padding:26px 30px; border-radius:16px 16px 0 0; color:#FFFFFF;">'
-            . '<table cellpadding="0" cellspacing="0" border="0" width="100%">'
-            . '<tr><td align="left" valign="middle">'
-            . $logoBlock
-            . '</td></tr>'
-            . '<tr><td align="left" style="padding-top:14px;">'
-            . ($eyebrow ? '<div style="font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(255,255,255,.85);">' . $eyebrow . '</div>' : '')
-            . '<div class="kt-title" style="font-size:22px;font-weight:800;margin-top:4px;line-height:1.15;">' . $title . '</div>'
-            . ($subtitle ? '<div style="font-size:13px;opacity:.85;margin-top:4px;">' . $subtitle . '</div>' : '')
-            . '</td></tr></table>'
-            . '</td></tr>'
+            // Header (banner image for KiddieTrac, coloured logo banner for white-label)
+            . $headerRow
 
             // Body
             . '<tr><td class="kt-card" style="background:#FFFFFF;padding:28px 32px;color:#0F172A;font-size:14px;line-height:1.55;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 0 0;">'
+            . $titleBlock
             . $bodyHtml
             . '</td></tr>'
 
             // Footer
-            . '<tr><td style="background:#F8FAFC;padding:18px 28px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 16px 16px;font-size:12px;color:#64748B;line-height:1.5;">'
+            . '<tr><td class="kt-footer" style="background:#F8FAFC;padding:18px 28px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 16px 16px;font-size:12px;color:#64748B;line-height:1.5;">'
             . $footer
             . '</td></tr>'
 
@@ -163,7 +190,9 @@ final class EmailTemplate
         return [
             'primary' => $primary,
             'secondary' => $secondary,
-            'logo_url' => $agency->brand_logo_url ?? null,
+            // Default to the Kiddietrac wordmark when there's no agency logo, so
+            // platform emails (invites etc.) always carry the brand.
+            'logo_url' => $agency->brand_logo_url ?? 'https://app.kiddietrac.com/logo-wordmark.png',
             'product_name' => $agency->name ?? 'Kiddietrac',
             'support_email' => $agency->brand_support_email ?? 'noreply@kiddietrac.com',
             'powered_by_visible' => $agency ? (bool) ($agency->powered_by_visible ?? 1) : true,
@@ -188,7 +217,7 @@ final class EmailTemplate
         $initial = strtoupper(mb_substr($name, 0, 1));
         if (!empty($brand['logo_url'])) {
             $url = self::absoluteUrl($brand['logo_url']);
-            return '<table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td style="background:#FFFFFF;padding:10px 16px;border-radius:10px;box-shadow:0 2px 6px rgba(15,23,42,.10);"><img src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($name) . '" height="40" style="height:40px;max-height:40px;border:0;display:block;"></td></tr></table>';
+            return '<table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td class="kt-logobox" style="background:#FFFFFF;padding:10px 18px;border-radius:10px;box-shadow:0 2px 6px rgba(15,23,42,.10);"><img src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($name) . '" height="42" style="height:42px;max-height:42px;border:0;display:block;"></td></tr></table>';
         }
         return '<div style="display:inline-block;background:#FFFFFF;color:' . $brand['primary'] . ';font-weight:800;font-size:20px;width:44px;height:44px;line-height:44px;text-align:center;border-radius:12px;box-shadow:0 2px 6px rgba(15,23,42,.10);">' . htmlspecialchars($initial) . '</div>';
     }
@@ -198,17 +227,26 @@ final class EmailTemplate
         $product = htmlspecialchars($brand['product_name']);
         $support = htmlspecialchars($brand['support_email']);
 
+        $supportRaw = $brand['support_email'];
+        $isNoReply = empty($supportRaw) || strtolower($supportRaw) === 'noreply@kiddietrac.com';
+
         $html = '';
         if ($note) {
             $html .= '<div style="margin-bottom:8px;color:#475569;">' . $note . '</div>';
         }
         $html .= 'You\'re receiving this from <strong style="color:#0F172A;">' . $product . '</strong>.';
-        if ($support) {
-            $html .= ' Reach out to <a href="mailto:' . $support . '" style="color:' . $brand['primary'] . ';text-decoration:none;">' . $support . '</a> if anything looks wrong.';
+        if ($isNoReply) {
+            // noreply@ is unmonitored — point people to a real contact.
+            $html .= ' <span style="color:#64748B;">Please don\'t reply — <strong>noreply@kiddietrac.com</strong> is not a monitored inbox. '
+                . 'For help, contact your site administrator or our sales &amp; support team at '
+                . '<a href="mailto:info@kiddietrac.com" style="color:' . $brand['primary'] . ';text-decoration:none;">info@kiddietrac.com</a>.</span>';
+        } else {
+            $s = htmlspecialchars($supportRaw);
+            $html .= ' Questions? Contact <a href="mailto:' . $s . '" style="color:' . $brand['primary'] . ';text-decoration:none;">' . $s . '</a>.';
         }
-        // 'Powered by Kiddietrac' only when NOT on the white-label plan
+        // 'Powered by KiddieTrac' only when NOT on the white-label plan
         if ($brand['powered_by_visible']) {
-            $html .= '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0;font-size:11px;color:#94A3B8;">Powered by <a href="https://kiddietrac.com" style="color:#94A3B8;text-decoration:none;">Kiddietrac</a> · the childcare management platform.</div>';
+            $html .= '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0;font-size:11px;color:#94A3B8;">Powered by <a href="https://kiddietrac.com" style="color:#94A3B8;text-decoration:none;">KiddieTrac</a> — The Smart Childcare Management Platform.</div>';
         }
         return $html;
     }

@@ -35,17 +35,31 @@ final class NotificationUnreadController extends Controller
 
     /**
      * POST /api/v1/notifications/mark-read
-     * Mark all of a type as read (called when parent opens the inbox).
+     * Mark notifications read for the current user — by exact `type`, or by a
+     * `category` (billing / photos / messages) that matches the same keywords the
+     * bottom-nav badge uses, so opening Billing/Photos clears its counter.
      */
     public function markRead(Request $request): JsonResponse
     {
         $data = $request->validate([
             'type' => ['nullable', 'string', 'max:80'],
+            'category' => ['nullable', 'string', 'in:billing,photos,messages'],
         ]);
         $q = DB::table('notifications')
             ->where('user_id', $request->user()->id)
             ->whereNull('read_at');
         if (!empty($data['type'])) $q->where('type', $data['type']);
+        if (!empty($data['category'])) {
+            $kw = $data['category'] === 'billing' ? ['invoice', 'billing', 'payment', 'receipt']
+                : ($data['category'] === 'photos' ? ['photo', 'image', 'gallery', 'picture'] : ['message', 'chat', 'nudge']);
+            $q->where(function ($w) use ($kw) {
+                foreach ($kw as $k) {
+                    $w->orWhere('type', 'like', '%' . $k . '%')
+                      ->orWhere('title', 'like', '%' . $k . '%')
+                      ->orWhere('body', 'like', '%' . $k . '%');
+                }
+            });
+        }
         $updated = $q->update(['read_at' => now()]);
 
         return response()->json(['marked_read' => $updated]);

@@ -33,7 +33,14 @@
   async function render(container) {
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading branding…</div>';
     const user = getUser();
-    const agencyId = user.agency_id;
+    // v22p87: use the ACTIVE agency (the one being viewed via the agency
+    // switcher) rather than the user's home agency. A platform_admin viewing a
+    // tenant has no user.agency_id, which produced "Agency not found".
+    let agencyId = user.agency_id;
+    try {
+      const active = parseInt(sessionStorage.getItem('kt_active_agency_id'), 10);
+      if (active) agencyId = active;
+    } catch (e) { /* sessionStorage unavailable */ }
     if (!agencyId) {
       container.innerHTML = `
         <div style="padding:48px;max-width:600px;margin:0 auto;text-align:center;">
@@ -60,9 +67,17 @@
             <h3 style="margin:0 0 14px;font-size:15px;">Brand settings</h3>
 
             ${field('Logo URL', 'kt-logo-url', brand.brand_logo_url || '', 'https://yourdomain.com/logo.png', 'PNG or SVG, recommended height 60-80px.')}
+            <div style="display:flex;align-items:center;gap:10px;margin:-6px 0 14px;">
+              <input type="file" id="kt-logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">
+              <button type="button" id="kt-logo-upload" style="padding:7px 14px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">⬆ Upload a logo file</button>
+              <span id="kt-logo-upmsg" style="font-size:12px;color:#9CA3AF;">…or paste a URL above</span>
+            </div>
             ${colorField('Primary colour', 'kt-color', brand.brand_primary_color || '#3BBBBE')}
             ${field('Support email', 'kt-support', brand.brand_support_email || '', 'billing@yourdomain.com', 'Shown on invoices and parent emails.')}
+            ${textareaField('Business address (shown on invoices)', 'kt-address', brand.brand_address || '', '123 Main St\\nToronto, ON  M5V 1A1')}
             ${textareaField('Bank info / payment details', 'kt-bank', brand.brand_bank_info || '', 'Bank: ...\nTransit: ...\nAccount: ...\nor e-Transfer: pay@yourdomain.com')}
+            ${field('Privacy policy URL', 'kt-privacy', brand.brand_privacy_url || '', 'https://yourdomain.com/privacy', 'Linked from the "Powered by Kiddietrac" footer on campaigns.')}
+            ${field('Terms & conditions URL', 'kt-terms', brand.brand_terms_url || '', 'https://yourdomain.com/terms', 'Linked from the campaign footer alongside your privacy policy.')}
 
             <div style="display:flex;align-items:center;gap:10px;padding:12px;background:#F9FAFB;border-radius:8px;margin-top:14px;">
               <input type="checkbox" id="kt-poweredby" ${brand.powered_by_visible == 0 ? '' : 'checked'} style="width:18px;height:18px;cursor:pointer;">
@@ -94,6 +109,37 @@
 
     $('#kt-preview-btn',      container).addEventListener('click', () => refreshPreview(container, agencyId));
     $('#kt-save',             container).addEventListener('click', () => save(container, agencyId));
+
+    // v22p88: logo file upload (in addition to the URL field).
+    const logoFile = $('#kt-logo-file', container);
+    const logoMsg = $('#kt-logo-upmsg', container);
+    $('#kt-logo-upload', container).addEventListener('click', () => logoFile.click());
+    logoFile.addEventListener('change', async () => {
+      const file = logoFile.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { logoMsg.textContent = 'Max 2 MB'; logoMsg.style.color = '#DC2626'; return; }
+      logoMsg.textContent = 'Uploading…'; logoMsg.style.color = '#6B7280';
+      try {
+        const fd = new FormData();
+        fd.append('logo', file);
+        const tok = sessionStorage.getItem('kt_token');
+        const headers = { 'Authorization': 'Bearer ' + tok };
+        const active = sessionStorage.getItem('kt_active_agency_id');
+        if (active) headers['X-Active-Agency-Id'] = active;
+        const r = await fetch(apiBase() + '/admin/branding/logo', { method: 'POST', headers, body: fd });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.message || ('HTTP ' + r.status));
+        const url = j.url || j.logo_url || j.brand_logo_url;
+        if (url) {
+          $('#kt-logo-url', container).value = url;
+          logoMsg.textContent = '✓ Uploaded — click Save to apply'; logoMsg.style.color = '#16A34A';
+        } else {
+          logoMsg.textContent = 'Uploaded but no URL returned'; logoMsg.style.color = '#DC2626';
+        }
+      } catch (e) {
+        logoMsg.textContent = 'Upload failed: ' + (e.message || 'error'); logoMsg.style.color = '#DC2626';
+      }
+    });
     $('#kt-open-fullscreen',  container).addEventListener('click', async (e) => {
       e.preventDefault();
       try {
@@ -160,7 +206,10 @@
       brand_logo_url:       $('#kt-logo-url', container).value.trim() || null,
       brand_primary_color:  colorText.value.trim() || null,
       brand_support_email:  $('#kt-support', container).value.trim() || null,
+      brand_address:        $('#kt-address', container).value.trim() || null,
       brand_bank_info:      $('#kt-bank',    container).value.trim() || null,
+      brand_privacy_url:    $('#kt-privacy', container).value.trim() || null,
+      brand_terms_url:      $('#kt-terms',   container).value.trim() || null,
       powered_by_visible:   $('#kt-poweredby', container).checked ? 1 : 0,
     };
     const msg = $('#kt-save-msg', container);

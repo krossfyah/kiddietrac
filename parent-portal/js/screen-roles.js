@@ -106,7 +106,7 @@
       listHeader.appendChild(newBtn);
       listCol.appendChild(listHeader);
 
-      var listEl = Dom.el('div');
+      var listEl = Dom.el('div', { 'data-kt-list': '1' });
       roles.forEach(function (r) {
         var item = Dom.el('div', {
           style: 'padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:4px;border:2px solid transparent;',

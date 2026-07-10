@@ -327,7 +327,9 @@ final class SchedulingController extends Controller
         $rows = $entries->map(function ($e) {
             $in = Carbon::parse($e->clocked_in_at);
             $out = Carbon::parse($e->clocked_out_at);
-            $minutes = $out->diffInMinutes($in) - (int) $e->total_break_min;
+            // abs(): Carbon 3 diffInMinutes is signed, and $out->diffInMinutes($in)
+            // yields a NEGATIVE value here (in precedes out) → every row was 0h.
+            $minutes = abs($out->diffInMinutes($in)) - (int) $e->total_break_min;
             return [
                 'date' => $in->toDateString(),
                 'staff_name' => trim($e->first_name . ' ' . $e->last_name),
@@ -427,7 +429,7 @@ final class SchedulingController extends Controller
 
     private function hasCentreAccess(int $userId, int $centreId): bool
     {
-        return DB::table('role_assignments')
+        $has = DB::table('role_assignments')
             ->where('user_id', $userId)
             ->whereIn('role', ['centre_director', 'agency_admin'])
             ->where('active', true)
@@ -438,6 +440,15 @@ final class SchedulingController extends Controller
                   });
             })
             ->exists();
+        if ($has) return true;
+        // v22p98: platform_admin scoped to the agency they've switched into
+        // (X-Active-Agency-Id) — else certs/timesheets/schedule 403 for a super-admin.
+        $isPlatform = DB::table('role_assignments')->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
+        if ($isPlatform) {
+            $centreAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+            return $centreAgency > 0 && $centreAgency === (int) request()->header('X-Active-Agency-Id');
+        }
+        return false;
     }
 
     /**

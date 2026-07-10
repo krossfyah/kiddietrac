@@ -1,0 +1,34 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — full-window content width (2026-07-06; broadened 2026-07-08).
+   The base stylesheet capped #appMain at max-width:1200px and centered it,
+   leaving large empty margins on wide monitors. Full-window is now the STANDARD
+   for EVERY page (current + future): the content area is uncapped and ANY
+   content wrapper directly under #appMain that sets its own max-width is
+   stretched to fill the window — so nothing renders as a narrow centered column.
+   The form-control guard below keeps individual inputs from over-stretching, and
+   modals (#modalRoot) are unaffected. Loaded LAST in <head> so it wins.
+   ═══════════════════════════════════════════════════════════════════ */
+#appMain { max-width: none !important; }
+
+/* Any wrapper directly under #appMain that caps its own width → full width. */
+#appMain > div[style*="max-width"],
+#appMain > section[style*="max-width"] {
+  max-width: 100% !important;
+}
+
+/* Tables + their headers always span their (now full-width) container. */
+#appMain table { width: 100% !important; }
+
+/* ── Form-control width guard ────────────────────────────────────────
+   kt-design sets `[data-kt-pretty] input/select/textarea { width:100% }`.
+   With the content area now uncapped, those stretched a lone dropdown/field
+   clear across the window. Cap standalone controls to a sensible field width
+   so this can never happen again. Controls inside modals (#modalRoot) and
+   toggles/sliders/file/color pickers are untouched; controls constrained by
+   their own container (table cells, narrow flex slots) stay smaller than the
+   cap, so it only ever REDUCES an over-wide control. */
+#appMain select,
+#appMain input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]) {
+  max-width: 480px !important;
+}
+#appMain textarea { max-width: 720px !important; }

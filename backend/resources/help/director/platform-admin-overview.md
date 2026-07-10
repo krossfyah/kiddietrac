@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Platform admin (overview)
 category: Administration
 order: 35

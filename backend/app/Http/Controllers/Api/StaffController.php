@@ -226,13 +226,11 @@ final class StaffController extends Controller
     {
         $user = $request->user();
 
-        $assignment = DB::table('role_assignments')
-            ->where('user_id', $user->id)
-            ->where('active', true)
-            ->whereNotNull('centre_id')
-            ->first();
-
-        if (! $assignment) {
+        // v22p97: resolve the centre WITHIN the active agency (header-aware) so a
+        // multi-agency user / super-admin clocks in at the agency they've switched
+        // into, rather than failing with "no centre assignment".
+        $centreId = $this->resolveCentreId($user);
+        if (! $centreId) {
             return response()->json(['message' => 'No centre assignment'], 422);
         }
 
@@ -250,7 +248,7 @@ final class StaffController extends Controller
 
         $id = DB::table('time_entries')->insertGetId([
             'user_id' => $user->id,
-            'centre_id' => $assignment->centre_id,
+            'centre_id' => $centreId,
             'clocked_in_at' => now(),
             'created_at' => now(),
         ]);

@@ -28,7 +28,7 @@
     wrap.appendChild(header);
 
     // Tab strip
-    const tabs = Dom.el('div', { style: 'display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--ink-200, #E5E7EB); overflow-x: auto;' });
+    const tabs = Dom.el('div', { style: 'display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--ink-200, #E5E7EB); overflow-x: auto; overflow-y: hidden;' });
 
     function tabBtn(key, label) {
       const isActive = state.activeTab === key;
@@ -51,7 +51,7 @@
       return btn;
     }
 
-    tabs.appendChild(tabBtn('centres', '🏫 Centres'));
+    tabs.appendChild(tabBtn('centres', '🏫 Centres / Rooms'));
     tabs.appendChild(tabBtn('users', '👥 Users'));
     tabs.appendChild(tabBtn('families', '👪 Families'));
     tabs.appendChild(tabBtn('branding', '🎨 Branding'));
@@ -104,6 +104,9 @@
       data.centres.length + ' centre' + (data.centres.length === 1 ? '' : 's') + ' in your agency. Click any row to edit branding, kiosk, or status.',
       'cloudsAndStars'
     ));
+
+    // v22p83: agency-wide Country & compliance setup (currency + regulations)
+    await renderCountryCard(content);
 
     // Action bar
     const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
@@ -440,9 +443,43 @@
         });
         urlRow.appendChild(rotBtn);
         kioskActions.appendChild(urlRow);
+
+        // v22p85: QR check-in — scannable code + printable poster for the centre door.
+        if (kioskState.token && window.KT && KT.qrImg) {
+          var qrSteps = '<strong>1.</strong> Scan this code with your phone camera.<br>'
+            + '<strong>2.</strong> Tap your child’s name.<br>'
+            + '<strong>3.</strong> Enter your 4–6 digit PIN to sign in or out.';
+          var qrRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin:6px 0 10px;padding:12px;border:1px solid var(--ink-100,#E5E7EB);border-radius:10px;background:#FAFCFD;' });
+          var qrBox = Dom.el('div', { style: 'width:96px;height:96px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:11px;' }, 'QR…');
+          qrRow.appendChild(qrBox);
+          var qrSide = Dom.el('div', { style: 'flex:1;min-width:0;' });
+          qrSide.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:13px;margin-bottom:2px;' }, '📲 QR check-in'));
+          qrSide.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-bottom:8px;line-height:1.4;' }, 'Print and post this at the door — families scan it to sign children in or out, no tablet needed.'));
+          var printBtn = Dom.el('button', {
+            type: 'button',
+            style: 'padding:7px 14px;background:#1F6080;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;',
+          }, '🖨️ Print QR poster');
+          printBtn.addEventListener('click', function () {
+            KT.printQRPoster({
+              title: centre.name || 'Centre check-in',
+              subtitle: 'Scan to sign your child in or out',
+              url: kioskUrlFor(kioskState.token),
+              steps: qrSteps,
+              footer: 'Powered by KiddieTrac',
+            }).catch(function (e) { alert(e.message || 'Could not open the QR poster.'); });
+          });
+          qrSide.appendChild(printBtn);
+          qrRow.appendChild(qrSide);
+          kioskActions.appendChild(qrRow);
+          // Render the inline preview thumbnail.
+          KT.qrImg(kioskUrlFor(kioskState.token), { size: 96, cell: 4, margin: 2 })
+            .then(function (img) { Dom.clear(qrBox); qrBox.appendChild(img); })
+            .catch(function () { qrBox.textContent = 'QR unavailable'; });
+        }
+
         kioskActions.appendChild(Dom.el('p', {
           style: 'font-size:11px;color:var(--ink-500);margin:4px 0 12px;line-height:1.4;',
-        }, 'Open this URL on the tablet at your centre entrance. Parents tap their child + enter their PIN to sign in or out. Set per-guardian PINs from the family detail (or via API).'));
+        }, 'Open this URL on the tablet at your centre entrance, or print the QR poster above. Parents tap their child + enter their PIN to sign in or out. Set per-guardian PINs from the family detail (or via API).'));
       };
 
       togIn.addEventListener('change', function () {
@@ -485,6 +522,27 @@
       inputs.status = select;
       statusWrap.appendChild(select);
       form.appendChild(statusWrap);
+    }
+
+    // Danger zone — archive / permanently delete this centre (edit only).
+    if (isEdit) {
+      form.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#B91C1C;letter-spacing:1px;text-transform:uppercase;margin:18px 0 8px;padding-top:14px;border-top:1px solid var(--ink-100,#E5E7EB);' }, '⚠ Danger zone'));
+      const dz = Dom.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;' });
+      const dzMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);' });
+      const archiveBtn = Dom.el('button', { type: 'button', style: 'padding:8px 14px;background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;' }, 'Archive centre');
+      const delBtn = Dom.el('button', { type: 'button', style: 'padding:8px 14px;background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;' }, 'Delete permanently');
+      archiveBtn.addEventListener('click', async () => {
+        if (!(window.KT && window.KT.confirm) || !await window.KT.confirm({ title: 'Archive “' + centre.name + '”?', description: 'It will be hidden from active centres but can be restored anytime from the Agency overview.' })) return;
+        try { await Api.delete('/admin/centres/' + centre.id); await renderCentresTab(content); Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre archived', 'success'); }
+        catch (e) { dzMsg.textContent = 'Could not archive: ' + (e.message || 'error'); dzMsg.style.color = '#DC2626'; }
+      });
+      delBtn.addEventListener('click', async () => {
+        if (!(window.KT && window.KT.confirm) || !await window.KT.confirm({ title: 'Permanently delete “' + centre.name + '”?', description: 'This cannot be undone. Archive instead if you might need it back.', tone: 'danger' })) return;
+        try { await Api.delete('/admin/centres/' + centre.id + '/permanent'); await renderCentresTab(content); Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre permanently deleted', 'success'); }
+        catch (e) { dzMsg.textContent = (e.message || 'Could not delete'); dzMsg.style.color = '#DC2626'; }
+      });
+      dz.appendChild(archiveBtn); dz.appendChild(delBtn); dz.appendChild(dzMsg);
+      form.appendChild(dz);
     }
 
     const status = Dom.el('div', { style: 'min-height: 20px; color: #DC2626; font-size: 13px; margin: 8px 0;' });
@@ -833,6 +891,75 @@
     avatarSide.appendChild(avatarMsg);
     avatarRow.appendChild(avatarSide);
     body.appendChild(avatarRow);
+    // v22 (2026-06) — account status / deactivate, profile extras & timestamped notes
+    (function () {
+      var uid = user.id;
+      var statusBox = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
+      statusBox.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;' }, 'Account status'));
+      var statusRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;' });
+      var statusLabel = Dom.el('span', { style: 'font-size:13px;font-weight:700;text-transform:capitalize;' }, (user.status || 'active'));
+      var toggleBtn = Dom.el('button', { style: 'padding:7px 14px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:' + (user.status === 'deactivated' ? '#16A34A' : '#DC2626') + ';' }, user.status === 'deactivated' ? 'Reactivate' : 'Deactivate');
+      toggleBtn.addEventListener('click', function () {
+        var to = user.status === 'deactivated' ? 'active' : 'deactivated';
+        if (to === 'deactivated' && !confirm('Deactivate ' + (user.name || 'this user') + '? They lose access until reactivated.')) return;
+        toggleBtn.disabled = true;
+        Api.patch('/admin/users/' + uid, { status: to }).then(function () {
+          user.status = to; statusLabel.textContent = to;
+          toggleBtn.textContent = to === 'deactivated' ? 'Reactivate' : 'Deactivate';
+          toggleBtn.style.background = to === 'deactivated' ? '#16A34A' : '#DC2626';
+          toggleBtn.disabled = false;
+        }).catch(function () { toggleBtn.disabled = false; alert('Failed to update status'); });
+      });
+      statusRow.appendChild(statusLabel); statusRow.appendChild(toggleBtn);
+      statusBox.appendChild(statusRow); body.appendChild(statusBox);
+
+      var pf = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
+      pf.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Profile & emergency contact'));
+      function _inp(ph) { return Dom.el('input', { placeholder: ph, style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;margin-bottom:8px;font-family:inherit;' }); }
+      var iAddr = _inp('Street, city, province'); var iDob = Dom.el('input', { type: 'date', style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;margin-bottom:8px;font-family:inherit;' });
+      var iEcN = _inp('Emergency contact name'); var iEcP = _inp('Emergency contact phone'); var iEcR = _inp('Relationship (e.g. spouse)');
+      pf.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-bottom:3px;' }, 'Address')); pf.appendChild(iAddr);
+      pf.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-bottom:3px;' }, 'Date of birth')); pf.appendChild(iDob);
+      pf.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin:4px 0 3px;' }, 'Emergency contact')); pf.appendChild(iEcN); pf.appendChild(iEcP); pf.appendChild(iEcR);
+      var pfSave = Dom.el('button', { style: 'padding:8px 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Save profile');
+      var pfMsg = Dom.el('span', { style: 'font-size:12px;font-weight:700;margin-left:10px;' });
+      pfSave.addEventListener('click', function () {
+        pfSave.disabled = true; pfMsg.textContent = 'Saving...'; pfMsg.style.color = '#6B7280';
+        Api.put('/admin/users/' + uid + '/profile', { address: iAddr.value, date_of_birth: iDob.value || null, emergency_contact_name: iEcN.value, emergency_contact_phone: iEcP.value, emergency_contact_relation: iEcR.value })
+          .then(function () { pfMsg.textContent = '✓ Saved'; pfMsg.style.color = '#16A34A'; pfSave.disabled = false; })
+          .catch(function (e) { pfMsg.textContent = '✕ ' + (e && e.message ? e.message : 'Failed'); pfMsg.style.color = '#DC2626'; pfSave.disabled = false; });
+      });
+      pf.appendChild(pfSave); pf.appendChild(pfMsg); body.appendChild(pf);
+
+      var nb = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
+      nb.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Notes'));
+      var noteList = Dom.el('div', { style: 'margin-bottom:10px;' }); nb.appendChild(noteList);
+      var noteInput = Dom.el('textarea', { placeholder: 'Add a note (timestamped)...', style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;font-family:inherit;resize:vertical;min-height:54px;margin-bottom:8px;' });
+      var noteBtn = Dom.el('button', { style: 'padding:8px 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Add note');
+      function renderNotes(notes) {
+        noteList.innerHTML = '';
+        if (!notes || !notes.length) { noteList.appendChild(Dom.el('div', { style: 'font-size:13px;color:#9CA3AF;' }, 'No notes yet.')); return; }
+        notes.forEach(function (n) {
+          var d = Dom.el('div', { style: 'padding:8px 0;border-bottom:1px solid #EEF2F5;' });
+          d.appendChild(Dom.el('div', { style: 'font-size:13px;color:#0a1e2c;white-space:pre-wrap;' }, n.note));
+          d.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;margin-top:2px;' }, (n.created_by_name || 'Admin') + ' · ' + (n.created_at ? new Date(n.created_at).toLocaleString() : '')));
+          noteList.appendChild(d);
+        });
+      }
+      noteBtn.addEventListener('click', function () {
+        var v = noteInput.value.trim(); if (!v) return; noteBtn.disabled = true;
+        Api.post('/admin/users/' + uid + '/notes', { note: v })
+          .then(function () { noteInput.value = ''; noteBtn.disabled = false; return Api.get('/admin/users/' + uid + '/profile'); })
+          .then(function (d) { renderNotes(d.notes); }).catch(function () { noteBtn.disabled = false; alert('Failed to add note'); });
+      });
+      nb.appendChild(noteInput); nb.appendChild(noteBtn); body.appendChild(nb);
+
+      Api.get('/admin/users/' + uid + '/profile').then(function (d) {
+        if (d.profile) { iAddr.value = d.profile.address || ''; iDob.value = d.profile.date_of_birth || ''; iEcN.value = d.profile.emergency_contact_name || ''; iEcP.value = d.profile.emergency_contact_phone || ''; iEcR.value = d.profile.emergency_contact_relation || ''; }
+        renderNotes(d.notes);
+      }).catch(function () { renderNotes([]); });
+    })();
+
 
     // v22p23: role section — show current roles as pills + a "Change role" form.
     const roleSection = Dom.el('div', {
@@ -1133,7 +1260,7 @@
     bar.appendChild(famCsvBtn);
 
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add family');
-    addBtn.addEventListener('click', () => showFamilyModal(null, centresData.centres, content));
+    addBtn.addEventListener('click', () => showFamilyWizard(centresData.centres, content));
     bar.appendChild(addBtn);
 
     // v22p26: card/table view toggle remembered per-list in localStorage.
@@ -1169,8 +1296,14 @@
       });
       card.appendChild(editBtn);
 
-      card.appendChild(Dom.el('div', { style: 'font-size: 17px; font-weight: 700; margin-bottom: 4px; padding-right: 60px;' }, f.family_name));
-      card.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; margin-bottom: 12px;' }, f.centre_name || '—'));
+      // v22p83: avatar header (coloured initials circle) + name/centre
+      var famHead = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-right:60px;' });
+      famHead.appendChild(avatarCircle({ id: f.id, name: f.family_name }, 44));
+      var famText = Dom.el('div', { style: 'min-width:0;' });
+      famText.appendChild(Dom.el('div', { style: 'font-size: 17px; font-weight: 700; margin-bottom: 2px;' }, f.family_name));
+      famText.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, f.centre_name || '—'));
+      famHead.appendChild(famText);
+      card.appendChild(famHead);
 
       const stats = Dom.el('div', { style: 'display: flex; gap: 16px; font-size: 13px; color: var(--ink-700);' });
       stats.appendChild(Dom.el('span', {}, '👶 ' + f.child_count + ' children'));
@@ -1285,7 +1418,14 @@
 
       tr.addEventListener('click', function () { showFamilyDetail(f.id); });
 
-      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-weight:600;' }, f.family_name));
+      // v22p83: avatar + clickable name, matching the Users tab. Families have no
+      // photo so this renders a deterministic coloured initials circle.
+      var famCell = Dom.el('td', { style: 'padding:11px 14px;font-weight:600;' });
+      var famWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
+      famWrap.appendChild(avatarCircle({ id: f.id, name: f.family_name }, 32));
+      famWrap.appendChild(Dom.el('span', { style: 'color:#1F6080;' }, f.family_name));
+      famCell.appendChild(famWrap);
+      tr.appendChild(famCell);
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;color:#6B7280;font-size:13px;' }, f.centre_name || '—'));
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' }, '👶 ' + f.child_count));
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' }, '👤 ' + f.guardian_count));
@@ -1311,8 +1451,342 @@
   }
 
   // v22p11: shared add/edit modal for families. centres = array of {id, name} for the picker.
+  // v22p36: multi-step "new family" wizard (Family -> Guardians -> Children -> Review).
+  // Creates the family plus nested guardians (each becomes an invited guardian
+  // login) and children in a single POST /admin/families call (DB transaction).
+  function showFamilyWizard(centres, content) {
+    centres = centres || [];
+    var inStyle = 'width:100%;padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;box-sizing:border-box;';
+    var labStyle = 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#1E293B;';
+    var state = {
+      family: {
+        centre_id: centres[0] ? centres[0].id : null,
+        family_name: '', primary_phone: '', primary_email: '',
+        address_line1: '', city: '', province: '', postal_code: '',
+        billing_split: 'single', notes: '',
+      },
+      guardians: [{ email: '', first_name: '', last_name: '', phone: '', relationship: 'mother', is_primary: true, can_pickup: true }],
+      children: [{ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '' }],
+      emergency: [],
+    };
+    var STEPS = ['Family', 'Guardians', 'Children', 'Emergency', 'Review'];
+    var step = 0;
+
+    var root = Dom.el('div', {});
+    var stepper = Dom.el('div', { style: 'display:flex;gap:8px;margin-bottom:18px;' });
+    var bodyEl = Dom.el('div', {});
+    var status = Dom.el('div', { style: 'min-height:18px;color:#DC2626;font-size:13px;margin:10px 0 4px;' });
+    var footer = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px;border-top:1px solid #E2E8F0;padding-top:14px;' });
+    root.appendChild(stepper); root.appendChild(bodyEl); root.appendChild(status); root.appendChild(footer);
+
+    function lab(t) { return Dom.el('label', { style: labStyle }, t); }
+    function wrap(label, input) { var d = Dom.el('div', { style: 'margin-bottom:14px;' }); d.appendChild(lab(label)); d.appendChild(input); return d; }
+    function fieldRow(cols) { return Dom.el('div', { style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;margin-bottom:14px;' }); }
+    function bindInput(obj, key, opts) {
+      opts = opts || {};
+      var input = Dom.el('input', { type: opts.type || 'text', style: inStyle });
+      if (opts.placeholder) input.placeholder = opts.placeholder;
+      input.value = obj[key] == null ? '' : obj[key];
+      input.addEventListener('input', function () { obj[key] = input.value; });
+      return input;
+    }
+    function bindSelect(obj, key, options) {
+      var s = Dom.el('select', { style: inStyle + 'background:white;' });
+      options.forEach(function (o) {
+        var op = Dom.el('option', { value: o.value }, o.label);
+        if (String(obj[key]) === String(o.value)) op.selected = true;
+        s.appendChild(op);
+      });
+      s.addEventListener('change', function () { obj[key] = s.value; });
+      return s;
+    }
+
+    function renderStepper() {
+      stepper.innerHTML = '';
+      STEPS.forEach(function (s, i) {
+        var cur = i === step, done = i < step;
+        stepper.appendChild(Dom.el('div', {
+          style: 'flex:1;text-align:center;font-size:12px;font-weight:700;padding:8px 6px;border-radius:8px;'
+            + (cur ? 'background:#1F6080;color:white;' : done ? 'background:#DCEAF1;color:#1F6080;' : 'background:#F1F5F9;color:#94A3B8;'),
+        }, (i + 1) + '. ' + s));
+      });
+    }
+
+    function renderFamilyStep() {
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(wrap('Centre *', bindSelect(state.family, 'centre_id', centres.map(function (c) { return { value: c.id, label: c.name }; }))));
+      bodyEl.appendChild(wrap('Family name *', bindInput(state.family, 'family_name', { placeholder: 'e.g. The Patel family' })));
+      var r1 = fieldRow('1fr 1fr');
+      r1.appendChild(wrap('Primary phone', bindInput(state.family, 'primary_phone')));
+      r1.appendChild(wrap('Primary email', bindInput(state.family, 'primary_email', { type: 'email' })));
+      bodyEl.appendChild(r1);
+      bodyEl.appendChild(wrap('Street address', bindInput(state.family, 'address_line1')));
+      var r2 = fieldRow('2fr 1fr 1fr');
+      r2.appendChild(wrap('City', bindInput(state.family, 'city')));
+      r2.appendChild(wrap('Province', bindInput(state.family, 'province')));
+      r2.appendChild(wrap('Postal code', bindInput(state.family, 'postal_code')));
+      bodyEl.appendChild(r2);
+      bodyEl.appendChild(wrap('Billing split', bindSelect(state.family, 'billing_split', [
+        { value: 'single', label: 'Single payer' },
+        { value: 'split_50_50', label: 'Split 50 / 50 between guardians' },
+        { value: 'custom', label: 'Custom split' },
+      ])));
+      var notes = Dom.el('textarea', { style: inStyle + 'min-height:60px;font-family:inherit;' });
+      notes.value = state.family.notes || '';
+      notes.addEventListener('input', function () { state.family.notes = notes.value; });
+      bodyEl.appendChild(wrap('Internal notes', notes));
+    }
+
+    function renderGuardiansStep() {
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 14px;' }, 'Add one or more parents / guardians. The first is the primary contact and billing payer. Each gets an invited login they can activate later.'));
+      state.guardians.forEach(function (g, idx) {
+        var card = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;background:#FBFDFE;' });
+        var head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
+        head.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;' }, idx === 0 ? '★ Primary guardian' : 'Guardian ' + (idx + 1)));
+        if (state.guardians.length > 1) {
+          var rm = Dom.el('button', { type: 'button', style: 'background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;' }, '✕ Remove');
+          rm.addEventListener('click', function () { state.guardians.splice(idx, 1); renderGuardiansStep(); });
+          head.appendChild(rm);
+        }
+        card.appendChild(head);
+        var r1 = fieldRow('1fr 1fr');
+        r1.appendChild(wrap('First name *', bindInput(g, 'first_name')));
+        r1.appendChild(wrap('Last name *', bindInput(g, 'last_name')));
+        card.appendChild(r1);
+        var r2 = fieldRow('1fr 1fr');
+        r2.appendChild(wrap('Email *', bindInput(g, 'email', { type: 'email' })));
+        r2.appendChild(wrap('Phone', bindInput(g, 'phone')));
+        card.appendChild(r2);
+        var r3 = fieldRow('1fr 1fr');
+        r3.appendChild(wrap('Relationship', bindSelect(g, 'relationship', [
+          { value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' },
+          { value: 'guardian', label: 'Guardian' }, { value: 'grandparent', label: 'Grandparent' },
+          { value: 'foster', label: 'Foster' }, { value: 'other', label: 'Other' },
+        ])));
+        var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:26px;' });
+        var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false;
+        pick.addEventListener('change', function () { g.can_pickup = pick.checked; });
+        pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
+        r3.appendChild(pickWrap);
+        card.appendChild(r3);
+        bodyEl.appendChild(card);
+      });
+      var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add another guardian');
+      add.addEventListener('click', function () { state.guardians.push({ email: '', first_name: '', last_name: '', phone: '', relationship: 'guardian', is_primary: false, can_pickup: true }); renderGuardiansStep(); });
+      bodyEl.appendChild(add);
+    }
+
+    function renderChildrenStep() {
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 14px;' }, 'Add the children in this family. Health, room and other details can be edited after creating.'));
+      state.children.forEach(function (c, idx) {
+        var card = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;background:#FBFDFE;' });
+        var head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
+        head.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;' }, 'Child ' + (idx + 1)));
+        if (state.children.length > 1) {
+          var rm = Dom.el('button', { type: 'button', style: 'background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;' }, '✕ Remove');
+          rm.addEventListener('click', function () { state.children.splice(idx, 1); renderChildrenStep(); });
+          head.appendChild(rm);
+        }
+        card.appendChild(head);
+        var r1 = fieldRow('1fr 1fr');
+        r1.appendChild(wrap('First name *', bindInput(c, 'first_name')));
+        r1.appendChild(wrap('Last name *', bindInput(c, 'last_name')));
+        card.appendChild(r1);
+        var r2 = fieldRow('1fr 1fr');
+        r2.appendChild(wrap('Preferred name', bindInput(c, 'preferred_name')));
+        r2.appendChild(wrap('Date of birth *', bindInput(c, 'date_of_birth', { type: 'date' })));
+        card.appendChild(r2);
+        var r3 = fieldRow('1fr 1fr');
+        r3.appendChild(wrap('Gender', bindSelect(c, 'gender', [
+          { value: 'female', label: 'Female' }, { value: 'male', label: 'Male' },
+          { value: 'non_binary', label: 'Non-binary' }, { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+          { value: 'other', label: 'Other' },
+        ])));
+        r3.appendChild(wrap('Enrollment', bindSelect(c, 'enrollment_status', [
+          { value: 'enrolled', label: 'Enrolled' }, { value: 'waitlist', label: 'Waitlist' },
+        ])));
+        card.appendChild(r3);
+        var r4 = fieldRow('1fr 1fr');
+        r4.appendChild(wrap('Allergies (comma-separated)', bindInput(c, 'allergies', { placeholder: 'e.g. Peanuts, Dairy' })));
+        r4.appendChild(wrap('Dietary restrictions', bindInput(c, 'dietary_restrictions', { placeholder: 'e.g. Vegetarian, Halal' })));
+        card.appendChild(r4);
+        var r5 = fieldRow('1fr 1fr');
+        r5.appendChild(wrap('School attending', bindInput(c, 'school', { placeholder: 'e.g. Bright Start Kindergarten' })));
+        r5.appendChild(wrap('Family doctor', bindInput(c, 'doctor_name')));
+        card.appendChild(r5);
+        var r6 = fieldRow('1fr 1fr');
+        r6.appendChild(wrap('Doctor phone', bindInput(c, 'doctor_phone')));
+        r6.appendChild(Dom.el('div', {}));
+        card.appendChild(r6);
+        var med = Dom.el('textarea', { style: inStyle + 'min-height:52px;font-family:inherit;' });
+        med.value = c.medical_notes || ''; med.addEventListener('input', function () { c.medical_notes = med.value; });
+        card.appendChild(wrap('Medical notes (medications, conditions)', med));
+        bodyEl.appendChild(card);
+      });
+      var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add another child');
+      add.addEventListener('click', function () { state.children.push({ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '' }); renderChildrenStep(); });
+      bodyEl.appendChild(add);
+    }
+
+    function renderEmergencyStep() {
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 14px;' }, 'Emergency contacts (optional) — people to call if a guardian can’t be reached. Tick anyone authorized to pick up the child.'));
+      state.emergency.forEach(function (e, idx) {
+        var card = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;background:#FBFDFE;' });
+        var head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
+        head.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;' }, '☎ Emergency contact ' + (idx + 1)));
+        var rm = Dom.el('button', { type: 'button', style: 'background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;' }, '✕ Remove');
+        rm.addEventListener('click', function () { state.emergency.splice(idx, 1); renderEmergencyStep(); });
+        head.appendChild(rm); card.appendChild(head);
+        var r1 = fieldRow('1fr 1fr');
+        r1.appendChild(wrap('Full name *', bindInput(e, 'name')));
+        r1.appendChild(wrap('Relationship', bindInput(e, 'relationship', { placeholder: 'e.g. Grandmother' })));
+        card.appendChild(r1);
+        var r2 = fieldRow('1fr 1fr');
+        r2.appendChild(wrap('Phone', bindInput(e, 'phone')));
+        r2.appendChild(wrap('Alternate phone', bindInput(e, 'alt_phone')));
+        card.appendChild(r2);
+        var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+        var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup;
+        pick.addEventListener('change', function () { e.can_pickup = pick.checked; });
+        pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
+        card.appendChild(pickWrap);
+        bodyEl.appendChild(card);
+      });
+      var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add emergency contact');
+      add.addEventListener('click', function () { state.emergency.push({ name: '', relationship: '', phone: '', alt_phone: '', can_pickup: false }); renderEmergencyStep(); });
+      bodyEl.appendChild(add);
+    }
+
+    function renderReviewStep() {
+      bodyEl.innerHTML = '';
+      function row(k, v) {
+        var d = Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:14px;padding:5px 0;border-bottom:1px solid #F1F5F9;font-size:13px;' });
+        d.appendChild(Dom.el('span', { style: 'color:#64748B;flex-shrink:0;' }, k));
+        d.appendChild(Dom.el('span', { style: 'font-weight:600;color:#0F172A;text-align:right;' }, v || '—'));
+        return d;
+      }
+      var centreObj = centres.filter(function (c) { return String(c.id) === String(state.family.centre_id); })[0];
+      var fam = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;' });
+      fam.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;display:block;margin-bottom:6px;' }, '👪 Family'));
+      fam.appendChild(row('Name', state.family.family_name));
+      fam.appendChild(row('Centre', centreObj ? centreObj.name : '—'));
+      fam.appendChild(row('Contact', [state.family.primary_phone, state.family.primary_email].filter(Boolean).join('  ·  ')));
+      bodyEl.appendChild(fam);
+      var gd = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;' });
+      gd.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;display:block;margin-bottom:6px;' }, '🧑‍🤝‍🧑 Guardians (' + state.guardians.length + ')'));
+      state.guardians.forEach(function (g, i) { gd.appendChild(row((i === 0 ? '★ ' : '') + (g.first_name + ' ' + g.last_name).trim(), g.relationship + '  ·  ' + g.email)); });
+      bodyEl.appendChild(gd);
+      var ch = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;' });
+      ch.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;display:block;margin-bottom:6px;' }, '🧒 Children (' + state.children.length + ')'));
+      state.children.forEach(function (c) { ch.appendChild(row((c.first_name + ' ' + c.last_name).trim(), (c.date_of_birth || '?') + '  ·  ' + c.enrollment_status)); });
+      bodyEl.appendChild(ch);
+    }
+
+    function validateStep() {
+      status.style.color = '#DC2626';
+      if (step === 0) {
+        if (!state.family.centre_id) { status.textContent = 'Please choose a centre.'; return false; }
+        if (!state.family.family_name.trim()) { status.textContent = 'Family name is required.'; return false; }
+      } else if (step === 1) {
+        for (var i = 0; i < state.guardians.length; i++) {
+          var g = state.guardians[i];
+          if (!g.first_name.trim() || !g.last_name.trim()) { status.textContent = 'Guardian ' + (i + 1) + ': first and last name are required.'; return false; }
+          if (!g.email.trim() || g.email.indexOf('@') < 1) { status.textContent = 'Guardian ' + (i + 1) + ': a valid email is required.'; return false; }
+        }
+        var emails = state.guardians.map(function (x) { return x.email.trim().toLowerCase(); });
+        for (var a = 0; a < emails.length; a++) { for (var b = a + 1; b < emails.length; b++) { if (emails[a] === emails[b]) { status.textContent = 'Each guardian needs a unique email address.'; return false; } } }
+      } else if (step === 2) {
+        for (var j = 0; j < state.children.length; j++) {
+          var c = state.children[j];
+          if (!c.first_name.trim() || !c.last_name.trim()) { status.textContent = 'Child ' + (j + 1) + ': first and last name are required.'; return false; }
+          if (!c.date_of_birth) { status.textContent = 'Child ' + (j + 1) + ': date of birth is required.'; return false; }
+        }
+      }
+      status.textContent = '';
+      return true;
+    }
+
+    function render() {
+      renderStepper();
+      if (step === 0) renderFamilyStep();
+      else if (step === 1) renderGuardiansStep();
+      else if (step === 2) renderChildrenStep();
+      else if (step === 3) renderEmergencyStep();
+      else renderReviewStep();
+      renderFooter();
+    }
+
+    function renderFooter() {
+      footer.innerHTML = '';
+      var left = Dom.el('div', {});
+      if (step > 0) {
+        var back = Dom.el('button', { type: 'button', style: 'background:#F1F5F9;border:1px solid #CBD5E1;color:#334155;border-radius:8px;padding:9px 18px;font-weight:600;cursor:pointer;' }, '← Back');
+        back.addEventListener('click', function () { step--; status.textContent = ''; render(); });
+        left.appendChild(back);
+      }
+      footer.appendChild(left);
+      var right = Dom.el('div', {});
+      if (step < STEPS.length - 1) {
+        var next = Dom.el('button', { type: 'button', style: 'background:#1F6080;border:none;color:white;border-radius:8px;padding:9px 22px;font-weight:700;cursor:pointer;' }, 'Next →');
+        next.addEventListener('click', function () { if (validateStep()) { step++; render(); } });
+        right.appendChild(next);
+      } else {
+        var create = Dom.el('button', { type: 'button', style: 'background:#16A34A;border:none;color:white;border-radius:8px;padding:9px 22px;font-weight:700;cursor:pointer;' }, '✓ Create family');
+        create.addEventListener('click', submit);
+        right.appendChild(create);
+      }
+      footer.appendChild(right);
+    }
+
+    async function submit() {
+      state.guardians.forEach(function (g, i) { g.is_primary = (i === 0); });
+      var payload = {
+        family_name: state.family.family_name.trim(),
+        centre_id: parseInt(state.family.centre_id, 10),
+        primary_email: state.family.primary_email.trim() || null,
+        primary_phone: state.family.primary_phone.trim() || null,
+        address_line1: state.family.address_line1.trim() || null,
+        city: state.family.city.trim() || null,
+        province: state.family.province.trim() || null,
+        postal_code: state.family.postal_code.trim() || null,
+        billing_split: state.family.billing_split,
+        notes: state.family.notes.trim() || null,
+        guardians: state.guardians.map(function (g) {
+          return { email: g.email.trim(), first_name: g.first_name.trim(), last_name: g.last_name.trim(), phone: g.phone.trim() || null, relationship: g.relationship, is_primary: !!g.is_primary, can_pickup: g.can_pickup !== false };
+        }),
+        children: state.children.map(function (c) {
+          return { first_name: c.first_name.trim(), last_name: c.last_name.trim(), preferred_name: c.preferred_name.trim() || null, date_of_birth: c.date_of_birth, gender: c.gender, enrollment_status: c.enrollment_status,
+            allergies: (c.allergies || '').trim() || null, dietary_restrictions: (c.dietary_restrictions || '').trim() || null, medical_notes: (c.medical_notes || '').trim() || null, doctor_name: (c.doctor_name || '').trim() || null, doctor_phone: (c.doctor_phone || '').trim() || null, school: (c.school || '').trim() || null };
+        }),
+        emergency_contacts: (state.emergency || []).filter(function (e) { return (e.name || '').trim(); }).map(function (e) {
+          return { name: e.name.trim(), relationship: (e.relationship || '').trim() || null, phone: (e.phone || '').trim() || null, alt_phone: (e.alt_phone || '').trim() || null, can_pickup: !!e.can_pickup };
+        }),
+      };
+      status.style.color = '#1F6080';
+      status.textContent = 'Creating family…';
+      footer.innerHTML = '';
+      try {
+        var res = await Api.post('/admin/families', payload);
+        if (Dom.toast) Dom.toast('Family created — ' + (res.guardians || 0) + ' guardian(s), ' + (res.children || 0) + ' child(ren)', 'success');
+        await renderFamiliesTab(content);
+        Shell.Modal.close();
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = (e.message || 'Could not create family') + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '');
+        renderFooter();
+      }
+    }
+
+    Shell.Modal.open({ title: 'New family', body: root, large: true, actions: [] });
+    render();
+  }
+
   function showFamilyModal(family, centres, content) {
     const isEdit = !!family;
+    if (!isEdit) { return showFamilyWizard(centres, content); }
     const inputs = {};
     const form = Dom.el('form', {});
 
@@ -1458,9 +1932,14 @@
         body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'No children'));
       } else {
         data.children.forEach(c => {
-          const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px;' });
-          row.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, c.preferred_name || c.first_name + ' ' + c.last_name));
-          row.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, 'Born ' + c.date_of_birth + ' · ' + c.enrollment_status));
+          const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px; display:flex; align-items:center; gap:10px;' });
+          // v22p83: child avatar (photo or initials)
+          const cName = c.preferred_name || (c.first_name + ' ' + c.last_name);
+          row.appendChild(Dom.el('span', { html: KT.avatar(c.first_name + ' ' + c.last_name, { size: 34, photoUrl: c.photo_url }) }));
+          const cInfo = Dom.el('div', { style: 'min-width:0;' });
+          cInfo.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, cName));
+          cInfo.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, (c.date_of_birth ? 'Born ' + c.date_of_birth + ' · ' : '') + c.enrollment_status));
+          row.appendChild(cInfo);
           body.appendChild(row);
         });
       }
@@ -1468,6 +1947,8 @@
       body.appendChild(Dom.el('h4', { style: 'font-size: 14px; font-weight: 700; margin: 16px 0 8px; letter-spacing: 0.5px; color: var(--ink-700);' }, 'GUARDIANS'));
       data.guardians.forEach(g => {
         const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;' });
+        // v22p83: guardian avatar (photo or initials)
+        row.appendChild(Dom.el('span', { html: KT.avatar(g.first_name + ' ' + g.last_name, { size: 34, photoUrl: g.photo_url }) }));
         const info = Dom.el('div', { style: 'flex: 1; min-width: 0;' });
         info.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, g.first_name + ' ' + g.last_name + (g.is_primary ? ' (primary)' : '')));
         info.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, g.email + ' · ' + g.relationship));
@@ -1651,6 +2132,75 @@
   // ════════════════════════════════════════════════════════════════
   //   BILLING TAB (Stripe Connect)
   // ════════════════════════════════════════════════════════════════
+  // v22p83: Country & compliance card — pick the agency's country to apply its
+  // currency/locale and surface the childcare, privacy, PCI and tax frameworks.
+  // Rendered on the Centres tab (the Branding tab's #admin-branding hash is taken
+  // by the reseller branding screen). Self-contained: appends its own card.
+  async function renderCountryCard(content) {
+    var card = Dom.el('div', { style: 'background:white;padding:24px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:24px;' });
+    card.appendChild(Dom.el('h3', { style: 'margin:0 0 4px;font-size:18px;' }, '🌍 Country & compliance'));
+    card.appendChild(Dom.el('div', { style: 'color:var(--ink-500);font-size:13px;margin-bottom:16px;' }, 'Pick the country this agency operates in. KiddieTrac applies the matching currency and surfaces the childcare, privacy, payment-card and tax regulations that apply.'));
+    var loadingEl = loading('Loading…'); card.appendChild(loadingEl); content.appendChild(card);
+    var info;
+    try { info = await Api.get('/admin/country'); }
+    catch (e) { loadingEl.replaceWith(errorBox('Could not load country settings: ' + (e.message || 'error'))); return; }
+    loadingEl.remove();
+
+    var topRow = Dom.el('div', { style: 'display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;' });
+    var selWrap = Dom.el('div', { style: 'flex:1;min-width:220px;' });
+    selWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Country'));
+    var sel = Dom.el('select', { style: 'width:100%;padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;' });
+    sel.appendChild(Dom.el('option', { value: '' }, '— Select a country —'));
+    info.supported.forEach(function (c) {
+      var o = Dom.el('option', { value: c.code }, c.flag + '  ' + c.name + '  (' + c.currency + ')');
+      if (info.country === c.code) o.selected = true;
+      sel.appendChild(o);
+    });
+    selWrap.appendChild(sel); topRow.appendChild(selWrap);
+    var applyBtn = Dom.el('button', { style: btnPrimary() }, 'Apply');
+    topRow.appendChild(applyBtn);
+    card.appendChild(topRow);
+
+    var msg = Dom.el('div', { style: 'min-height:18px;font-size:13px;margin-bottom:10px;' });
+    card.appendChild(msg);
+    var panel = Dom.el('div', {});
+    card.appendChild(panel);
+
+    function renderPack(pack, currency, locale) {
+      Dom.clear(panel);
+      if (!pack) { panel.appendChild(Dom.el('div', { style: 'color:var(--ink-500);font-size:13px;' }, 'No country selected yet.')); return; }
+      var meta = Dom.el('div', { style: 'display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;' });
+      meta.appendChild(Dom.el('div', {}, Dom.el('span', { style: 'color:var(--ink-500);' }, 'Currency: '), Dom.el('strong', {}, currency || pack.currency)));
+      meta.appendChild(Dom.el('div', {}, Dom.el('span', { style: 'color:var(--ink-500);' }, 'Locale: '), Dom.el('strong', {}, locale || pack.locale)));
+      panel.appendChild(meta);
+      var catColors = { Childcare: '#1F6080', Privacy: '#7C3AED', Payments: '#16A34A', Tax: '#B45309' };
+      pack.compliance.forEach(function (f) {
+        var item = Dom.el('div', { style: 'display:flex;gap:12px;padding:12px;border:1px solid var(--ink-100,#E5E7EB);border-radius:10px;margin-bottom:8px;' });
+        var tag = Dom.el('span', { style: 'flex-shrink:0;align-self:flex-start;background:' + (catColors[f.cat] || '#64748B') + ';color:white;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;' }, f.cat);
+        var txt = Dom.el('div', {});
+        txt.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;' }, f.label));
+        txt.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:2px;' }, f.desc));
+        item.appendChild(tag); item.appendChild(txt);
+        panel.appendChild(item);
+      });
+      panel.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#94A3B8;margin-top:6px;' }, 'These frameworks are indicative defaults to guide setup — your agency remains responsible for verifying local legal compliance.'));
+    }
+    renderPack(info.pack, info.currency, info.locale);
+
+    applyBtn.addEventListener('click', async function () {
+      if (!sel.value) { msg.style.color = '#DC2626'; msg.textContent = 'Pick a country first.'; return; }
+      applyBtn.disabled = true; msg.style.color = '#1F6080'; msg.textContent = 'Applying…';
+      try {
+        var r = await Api.patch('/admin/country', { country: sel.value });
+        msg.style.color = '#16A34A'; msg.textContent = '✓ Applied ' + r.country + ' — currency set to ' + r.currency + '.';
+        renderPack(r.pack, r.currency, r.locale);
+        if (Dom.toast) Dom.toast('Country compliance applied: ' + r.currency, 'success');
+      } catch (e) {
+        msg.style.color = '#DC2626'; msg.textContent = 'Failed: ' + (e.message || 'error');
+      } finally { applyBtn.disabled = false; }
+    });
+  }
+
   async function renderBillingTab(content) {
     Dom.clear(content);
     content.appendChild(loading('Loading billing...'));

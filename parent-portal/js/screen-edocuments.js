@@ -65,7 +65,7 @@
         '</div>' +
         (docs.length === 0
           ? '<div style="padding:32px;text-align:center;color:#6B7280;background:white;border-radius:14px;">No templates yet. Upload your first PDF to get parents signing electronically.</div>'
-          : '<div style="display:grid;gap:14px;">' + docs.map(docCard).join('') + '</div>') +
+          : '<div data-kt-list="1" style="display:grid;gap:14px;">' + docs.map(docCard).join('') + '</div>') +
       '</div>';
 
     container.querySelector('#kt-new-doc').addEventListener('click', function () { openUploadModal(container); });
@@ -253,13 +253,13 @@
           : '') +
         (pending.length > 0
           ? '<h3 style="margin:0 0 8px;font-size:14px;color:#DC2626;letter-spacing:0.5px;text-transform:uppercase;font-weight:800;">Awaiting your signature (' + pending.length + ')</h3>' +
-            '<div style="display:grid;gap:12px;margin-bottom:24px;">' +
+            '<div data-kt-list="1" style="display:grid;gap:12px;margin-bottom:24px;">' +
               pending.map(parentCard).join('') +
             '</div>'
           : '') +
         (signed.length > 0
           ? '<h3 style="margin:0 0 8px;font-size:14px;color:#16A34A;letter-spacing:0.5px;text-transform:uppercase;font-weight:800;">Signed (' + signed.length + ')</h3>' +
-            '<div style="display:grid;gap:12px;">' +
+            '<div data-kt-list="1" style="display:grid;gap:12px;">' +
               signed.map(parentCard).join('') +
             '</div>'
           : '') +

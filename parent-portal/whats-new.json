@@ -1,0 +1,33 @@
+{
+  "updated": "2026-07-10",
+  "entries": [
+    { "type": "new", "date": "2026-07-10", "icon": "💬", "title": "Richer parent chat", "body": "Parents can now send emoji, voice notes and photos, see everyone's avatar in the thread, and “nudge” the team for a quick reply." },
+    { "type": "new", "date": "2026-07-10", "icon": "📧", "title": "Missed-message email alerts", "body": "If a chat message goes unread for 15 minutes, the intended recipients get an email so nothing slips through." },
+    { "type": "new", "date": "2026-07-10", "icon": "🔔", "title": "Custom notification sound", "body": "The app now plays a branded KiddieTrac chime for push notifications on Android." },
+    { "type": "new", "date": "2026-07-10", "icon": "🔒", "title": "Security hardening", "body": "Sign-out now fully clears the session on shared devices, and several tenant-isolation checks were tightened." },
+    { "type": "new", "date": "2026-07-09", "icon": "📱", "title": "Redesigned parent app", "body": "A cleaner, faster mobile experience: an icon home screen, instant section switching, and a simple bottom bar with new-item counters." },
+    { "type": "new", "date": "2026-07-09", "icon": "🔔", "title": "Push notifications", "body": "Parents and staff now get a phone notification — with sound and vibration — for new messages, invoices and photos, even when the app is closed." },
+    { "type": "new", "date": "2026-07-09", "icon": "📷", "title": "Photos in messages", "body": "Parents can attach a photo to a message and start a brand-new message from the app." },
+    { "type": "new", "date": "2026-07-09", "icon": "🎫", "title": "QR check-in / out", "body": "Parents scan the centre's QR code to check their child in or out — the code rotates daily for security." },
+    { "type": "new", "date": "2026-07-09", "icon": "💳", "title": "View & pay invoices", "body": "Tap any invoice to see the full breakdown and pay it right from the parent app." },
+    { "type": "new", "date": "2026-07-09", "icon": "🛟", "title": "In-app support", "body": "Parents can report an app issue or share feedback from a new Support section — it reaches your team instantly." },
+    { "type": "new", "date": "2026-07-09", "icon": "🎂", "title": "New dashboard widgets", "body": "Your Agency overview now shows a month calendar, upcoming birthdays, and a Team-on-the-floor list — click a name to send a quick message." },
+    { "type": "new", "date": "2026-07-08", "icon": "🗄️", "title": "Data Retention & Compliance", "body": "Set how long each type of record is kept, plus privacy contacts and consent — under Settings." },
+    { "type": "new", "date": "2026-07-08", "icon": "🔔", "title": "Automated billing reminders", "body": "Schedule invoice and overdue-payment reminders to families under Billing → Reminders (off until you enable them)." },
+    { "type": "new", "date": "2026-07-08", "icon": "🛡️", "title": "Security alerts & monitoring", "body": "Automatic detection of suspicious sign-in activity, viewable under Settings → Security alerts." },
+    { "type": "new", "date": "2026-07-08", "icon": "🔑", "title": "Single sign-on (Google & Microsoft)", "body": "Staff and families can sign in with their Google or Microsoft account." },
+    { "type": "new", "date": "2026-07-08", "icon": "🧩", "title": "Customizable dashboard", "body": "Add, remove and drag-to-arrange the Business Insights widgets on your Agency overview." },
+    { "type": "new", "date": "2026-07-08", "icon": "🏫", "title": "Centres or Rooms", "body": "Choose whether the portal calls your facilities “Centres” or “Rooms” — Edit agency." },
+    { "type": "new", "date": "2026-07-08", "icon": "🌎", "title": "Country-aware fields", "body": "Address fields now match your country — State / ZIP code for the US, Province / Postal code for Canada, and more." },
+    { "type": "new", "date": "2026-07-08", "icon": "🕐", "title": "New top bar", "body": "A greeting, live clock, local weather, full date, and quick shortcuts for messages, announcements, and the AI assistant." },
+    { "type": "new", "date": "2026-07-08", "icon": "💬", "title": "Slide-in notifications", "body": "Get a friendly welcome on sign-in and a toast when new messages arrive." },
+    { "type": "new", "date": "2026-07-05", "icon": "💾", "title": "Nightly verified backups", "body": "Your database is now backed up automatically every night, with an integrity check." },
+    { "type": "new", "date": "2026-06-28", "icon": "📊", "title": "Canned reports + exports", "body": "Branded, date-ranged reports with PDF, Excel and CSV exports under Reports." },
+    { "type": "new", "date": "2026-06-20", "icon": "📥", "title": "Collapsible sidebar", "body": "Collapse the left menu to a slim icon rail for more room." },
+
+    { "type": "upcoming", "date": "", "icon": "🔐", "title": "Two-factor enforcement for admins", "body": "Require every administrator to use two-factor sign-in (rolling out after enrollment)." },
+    { "type": "upcoming", "date": "", "icon": "☁️", "title": "Offsite backups", "body": "Copy nightly backups to separate offsite storage for disaster recovery." },
+    { "type": "upcoming", "date": "", "icon": "🔴", "title": "Live staff activity", "body": "See staff sign-ins and clock-ins as live notifications." },
+    { "type": "upcoming", "date": "", "icon": "✅", "title": "SOC 2 readiness report", "body": "Formal audit-readiness milestone toward a SOC 2 report." }
+  ]
+}

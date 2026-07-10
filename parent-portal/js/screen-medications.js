@@ -17,6 +17,7 @@
   function apiBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
   function getUser() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function role() {
+    try { var v = sessionStorage.getItem('kt_view_as'); if (v) return v; } catch (e) {}
     var u = getUser();
     return (u && (u.primary_role || (u.roles && u.roles[0]))) || '';
   }
@@ -84,7 +85,7 @@
         '</div>' +
         (meds.length === 0
           ? '<div style="padding:32px;text-align:center;color:#6B7280;background:white;border-radius:14px;">No medications recorded yet.</div>'
-          : '<div style="display:grid;gap:14px;">' + meds.map(medCard).join('') + '</div>') +
+          : '<div data-kt-list="1" style="display:grid;gap:14px;">' + meds.map(medCard).join('') + '</div>') +
       '</div>';
 
     container.querySelector('#kt-new-med').addEventListener('click', function () { openNewMedModal(container); });
@@ -357,7 +358,7 @@
         '<p style="color:#6B7280;margin:0 0 18px;font-size:13px;">Active standing orders. Tap "+ Log dose" after administering.</p>' +
         (meds.length === 0
           ? '<div style="padding:32px;text-align:center;color:#6B7280;background:white;border-radius:14px;">No active medications.</div>'
-          : '<div style="display:grid;gap:14px;">' + meds.map(medCard).join('') + '</div>') +
+          : '<div data-kt-list="1" style="display:grid;gap:14px;">' + meds.map(medCard).join('') + '</div>') +
       '</div>';
     container.querySelectorAll('[data-action="logDose"]').forEach(function (btn) {
       btn.addEventListener('click', function () { openLogDoseModal(parseInt(btn.dataset.medId, 10), container); });
@@ -389,7 +390,7 @@
       var k = kids[i];
       var meds = [];
       try { var r = await api('GET', '/parent/children/' + k.id + '/medications'); meds = r.medications || []; } catch (e) {}
-      html += '<div style="background:white;border-radius:14px;padding:18px;margin-bottom:14px;">' +
+      html += '<div data-kt-list="1" style="background:white;border-radius:14px;padding:18px;margin-bottom:14px;">' +
         '<h3 style="margin:0 0 10px;font-size:17px;">' + esc(k.first_name + ' ' + k.last_name) + '</h3>' +
         (meds.length === 0 ? '<p style="color:#6B7280;">No medications on file.</p>' : meds.map(parentMedRow).join('')) +
         '</div>';

@@ -296,12 +296,29 @@ final class ExportsController extends Controller
             $slug . '-responses-' . now()->format('Y-m-d') . '.xlsx', $columns, $rows);
     }
 
+    // SECURITY (v22p94): validate the header — only platform_admin (any agency)
+    // or a user who actually belongs to the requested agency. Otherwise a forged
+    // header would export another tenant's data.
     private function resolveAgencyId(Request $request): int
     {
+        $user = $request->user();
+        $isPlatform = DB::table('role_assignments')->where('user_id', $user->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        if ($isPlatform) {
+            if ($activeId && DB::table('agencies')->where('id', $activeId)->whereNull('deleted_at')->exists()) return $activeId;
+            $f = (int) DB::table('agencies')->whereNull('deleted_at')->orderBy('id')->value('id');
+            abort_unless($f, 400);
+            return $f;
+        }
+        if ($activeId) {
+            $belongs = DB::table('role_assignments')->where('user_id', $user->id)->where('active', true)->where('agency_id', $activeId)->exists()
+                || DB::table('role_assignments')->where('role_assignments.user_id', $user->id)->where('role_assignments.active', true)
+                    ->join('centres', 'centres.id', '=', 'role_assignments.centre_id')->where('centres.agency_id', $activeId)->exists();
+            if ($belongs) return $activeId;
+        }
         $first = DB::table('role_assignments')
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $user->id)
             ->where('active', true)
             ->value('agency_id');
         abort_unless($first, 400);

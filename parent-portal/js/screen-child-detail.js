@@ -279,8 +279,11 @@
       }));
       headerActions.appendChild(btn('🚨 Emergency card', btnSecondary(), function () {
         var token = sessionStorage.getItem('kt_token');
-        fetch('/api/v1/director/children/' + child.id + '/emergency-card', {
-          headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'text/html' },
+        var apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+        var hdrs = { 'Authorization': 'Bearer ' + token, 'Accept': 'text/html' };
+        var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) hdrs['X-Active-Agency-Id'] = aa;
+        fetch(apiBase + '/director/children/' + child.id + '/emergency-card', {
+          headers: hdrs,
         }).then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.text();
@@ -296,6 +299,33 @@
         showArchiveConfirm(child, function () {
           window.location.hash = backHash(params);
         });
+      }));
+      headerActions.appendChild(btn('📋 Compliance report', btnSecondary(), function () {
+        var _e = function (s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+        var hf = (child.health_flags && child.health_flags.length) ? child.health_flags.map(function (f) { return '<li>' + _e(f.label || f.type || f.note || 'Health flag') + '</li>'; }).join('') : '<li>None on file</li>';
+        var w = window.open('', '_blank'); if (!w) { alert('Please allow pop-ups to generate the report.'); return; }
+        w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Compliance Report - ' + _e(child.full_name) + '</title>'
+          + '<style>body{font-family:Arial,Helvetica,sans-serif;color:#0a1e2c;max-width:760px;margin:22px auto;padding:0 22px}h1{color:#1F6080;font-size:23px;margin:0 0 2px}.sub{color:#777;font-size:13px;margin-bottom:18px}table{width:100%;border-collapse:collapse;margin-bottom:6px}td{padding:7px 4px;border-bottom:1px solid #eee;font-size:14px;vertical-align:top}td.l{color:#666;width:210px}h2{font-size:14px;color:#1F6080;border-bottom:2px solid #1F6080;padding-bottom:4px;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.5px}ul{margin:6px 0 6px 18px}.foot{margin-top:30px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:10px}@media print{.noprint{display:none}}</style></head><body>'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><h1>Child Compliance Report</h1><div class="sub">Generated ' + _e(new Date().toLocaleString()) + '</div></div>'
+          + '<button class="noprint" onclick="window.print()" style="padding:9px 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px">Print / Save as PDF</button></div>'
+          + '<h2>Child</h2><table>'
+          + '<tr><td class="l">Full name</td><td>' + _e(child.full_name) + '</td></tr>'
+          + '<tr><td class="l">Preferred name</td><td>' + _e(child.preferred_name || '—') + '</td></tr>'
+          + '<tr><td class="l">Date of birth</td><td>' + _e(fmtDate(child.date_of_birth)) + '</td></tr>'
+          + '<tr><td class="l">Age</td><td>' + _e(child.age && child.age.human ? child.age.human : '—') + '</td></tr>'
+          + '<tr><td class="l">Gender</td><td>' + _e(child.gender ? child.gender.replace(/_/g, ' ') : '—') + '</td></tr>'
+          + '<tr><td class="l">Pronouns</td><td>' + _e(child.pronouns || '—') + '</td></tr></table>'
+          + '<h2>Enrollment</h2><table>'
+          + '<tr><td class="l">Family</td><td>' + _e(child.family ? child.family.family_name : '—') + '</td></tr>'
+          + '<tr><td class="l">Room</td><td>' + _e(child.room ? child.room.name : '—') + '</td></tr>'
+          + '<tr><td class="l">Status</td><td>' + ((child.enrollment && child.enrollment.end_date) ? 'Withdrawn' : (child.enrollment ? 'Enrolled' : '—')) + '</td></tr>'
+          + '<tr><td class="l">Enrolled since</td><td>' + _e(child.enrollment ? fmtDate(child.enrollment.start_date) : '—') + '</td></tr></table>'
+          + '<h2>Health &amp; Safety</h2><table>'
+          + '<tr><td class="l">Doctor</td><td>' + _e(child.doctor_name ? (child.doctor_name + (child.doctor_phone ? ' · ' + child.doctor_phone : '')) : '—') + '</td></tr>'
+          + '<tr><td class="l">Health card (last 4)</td><td>' + _e(child.health_card_last4 ? ('xxxx-xxxx-' + child.health_card_last4) : '—') + '</td></tr></table>'
+          + '<h2>Active health flags</h2><ul>' + hf + '</ul>'
+          + '<div class="foot">KiddieTrac &middot; Reflects records on file at generation time. Confirm current requirements with your licensing authority.</div>'
+          + '</body></html>'); w.document.close();
       }));
       header.appendChild(headerActions);
       wrap.appendChild(header);
@@ -321,48 +351,178 @@
       card.appendChild(row('Cultural notes', child.cultural_notes));
       wrap.appendChild(card);
 
-      // Guardians
-      if (child.guardians && child.guardians.length) {
-        var gCard = Dom.el('div', {
-          style: 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;',
+      // v22p88: tabbed sections — Overview / Enrollment / Daily reports / Live feed / Attachments
+      var TABS = [['overview', '👤 Overview'], ['enrollment', '🏫 Enrollment'], ['daily', '📊 Daily reports'], ['feed', '📸 Live feed'], ['attachments', '📎 Attachments']];
+      var activeTab = 'overview';
+      var tabbar = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin:4px 0 18px;overflow-x:auto;overflow-y:hidden;' });
+      var tabContent = Dom.el('div', {});
+      function paintTabs() {
+        Dom.clear(tabbar);
+        TABS.forEach(function (t) {
+          var on = activeTab === t[0];
+          var b = Dom.el('button', { style: 'padding:10px 16px;border:none;background:transparent;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;' + (on ? 'color:#1F6080;border-bottom:2px solid #1F6080;margin-bottom:-1px;' : 'color:#6B7280;') }, t[1]);
+          b.addEventListener('click', function () { activeTab = t[0]; paintTabs(); paintTab(); });
+          tabbar.appendChild(b);
         });
-        gCard.appendChild(Dom.el('h3', {
-          style: 'margin:0 0 12px;font-size:16px;',
-        }, 'Guardians'));
-        child.guardians.forEach(function (g) {
-          var line = (g.first_name || '') + ' ' + (g.last_name || '') +
-            (g.relationship ? ' · ' + g.relationship : '') +
-            (g.is_primary ? ' (primary)' : '') +
-            (g.email ? '  ·  ' + g.email : '') +
-            (!g.can_pickup ? '  ·  cannot pick up' : '');
-          gCard.appendChild(Dom.el('div', {
-            style: 'padding:6px 0;font-size:14px;border-bottom:1px solid #F3F4F6;',
-          }, line));
-        });
-        wrap.appendChild(gCard);
       }
-
-      // Health flags
-      if (child.health_flags && child.health_flags.length) {
-        var hCard = Dom.el('div', {
-          style: 'background:#FEF3C7;border-radius:14px;padding:20px 24px;margin-bottom:16px;',
-        });
-        hCard.appendChild(Dom.el('h3', {
-          style: 'margin:0 0 12px;font-size:16px;color:#92400E;',
-        }, '⚠️ Active health flags'));
-        child.health_flags.forEach(function (h) {
-          hCard.appendChild(Dom.el('div', {
-            style: 'padding:4px 0;font-size:14px;color:#92400E;',
-          }, (h.flag_type || 'flag').toUpperCase() + ': ' + (h.detail || h.name || '')));
-        });
-        wrap.appendChild(hCard);
+      function paintTab() {
+        Dom.clear(tabContent);
+        if (activeTab === 'enrollment') renderEnrollmentTab(tabContent, child);
+        else if (activeTab === 'daily') renderDailyTab(tabContent, child);
+        else if (activeTab === 'feed') renderFeedTab(tabContent, child);
+        else if (activeTab === 'attachments') renderAttachmentsTab(tabContent, child);
+        else renderOverviewTab(tabContent, child);
       }
+      wrap.appendChild(tabbar);
+      wrap.appendChild(tabContent);
+      paintTabs();
+      paintTab();
     }).catch(function (e) {
       Dom.clear(wrap);
       wrap.appendChild(Dom.el('div', {
         style: 'padding:24px;color:#DC2626;',
       }, 'Could not load child: ' + (e.message || 'error')));
     });
+  }
+
+  function tcard() { return 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;'; }
+  function loadingBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, msg || 'Loading…'); }
+  function emptyBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#6B7280;' }, msg); }
+  function fmtDateTime(s) { if (!s) return '—'; try { return new Date(s).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return s; } }
+  function mediaUrl(u) {
+    if (!u) return '';
+    if (/^https?:\/\//i.test(u)) return u;
+    var base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    return base.replace(/\/api\/v1\/?$/, '') + u;
+  }
+  function detailRow(l, v) {
+    var r = Dom.el('div', { style: 'display:grid;grid-template-columns:180px 1fr;gap:10px;padding:6px 0;font-size:14px;border-bottom:1px solid #F3F4F6;' });
+    r.appendChild(Dom.el('div', { style: 'color:#6B7280;font-weight:600;' }, l));
+    r.appendChild(Dom.el('div', {}, v || '—'));
+    return r;
+  }
+
+  function renderOverviewTab(c, child) {
+    if (child.guardians && child.guardians.length) {
+      var g = Dom.el('div', { style: tcard() });
+      g.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Guardians'));
+      child.guardians.forEach(function (gu) {
+        var line = (gu.first_name || '') + ' ' + (gu.last_name || '') + (gu.relationship ? ' · ' + gu.relationship : '') + (gu.is_primary ? ' (primary)' : '') + (gu.email ? '  ·  ' + gu.email : '') + (!gu.can_pickup ? '  ·  cannot pick up' : '');
+        g.appendChild(Dom.el('div', { style: 'padding:6px 0;font-size:14px;border-bottom:1px solid #F3F4F6;' }, line));
+      });
+      c.appendChild(g);
+    }
+    if (child.health_flags && child.health_flags.length) {
+      var h = Dom.el('div', { style: 'background:#FEF3C7;border-radius:14px;padding:20px 24px;margin-bottom:16px;' });
+      h.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;color:#92400E;' }, '⚠️ Active health flags'));
+      child.health_flags.forEach(function (hf) { h.appendChild(Dom.el('div', { style: 'padding:4px 0;font-size:14px;color:#92400E;' }, (hf.flag_type || 'flag').toUpperCase() + ': ' + (hf.detail || hf.name || ''))); });
+      c.appendChild(h);
+    }
+    if (!c.children.length) c.appendChild(emptyBox('No guardians or health flags on file.'));
+  }
+
+  function renderEnrollmentTab(c, child) {
+    var card = Dom.el('div', { style: tcard() });
+    card.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Current placement'));
+    card.appendChild(detailRow('Agency', child.agency ? child.agency.name : '—'));
+    card.appendChild(detailRow('Centre', child.centre ? (child.centre.name + (child.centre.city ? ' · ' + child.centre.city : '')) : '—'));
+    card.appendChild(detailRow('Room', child.room ? child.room.name : '—'));
+    card.appendChild(detailRow('Status', (child.enrollment && child.enrollment.end_date) ? 'Withdrawn' : (child.enrollment ? 'Enrolled' : 'Not enrolled')));
+    card.appendChild(detailRow('Enrolled since', child.enrollment ? fmtDate(child.enrollment.start_date) : '—'));
+    card.appendChild(detailRow('Monthly fee', (child.enrollment && child.enrollment.monthly_fee) ? ('$' + child.enrollment.monthly_fee) : '—'));
+    c.appendChild(card);
+
+    var sc = Dom.el('div', { style: tcard() });
+    sc.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, '🏫 School details'));
+    if (child.school_name) { sc.appendChild(detailRow('School', child.school_name)); sc.appendChild(detailRow('Grade', child.school_grade)); }
+    else sc.appendChild(emptyBox('No school on file (for school-age children, add it via Edit).'));
+    c.appendChild(sc);
+
+    var hist = Dom.el('div', { style: tcard() });
+    hist.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Enrollment history'));
+    var hh = child.enrollment_history || [];
+    if (!hh.length) hist.appendChild(emptyBox('No enrollment history.'));
+    else hh.forEach(function (e) {
+      var line = (e.room_name || 'Room —') + '  ·  ' + fmtDate(e.start_date) + ' → ' + (e.end_date ? fmtDate(e.end_date) : 'present') + (e.monthly_fee ? '  ·  $' + e.monthly_fee + '/mo' : '');
+      hist.appendChild(Dom.el('div', { style: 'padding:7px 0;font-size:14px;border-bottom:1px solid #F3F4F6;' }, line));
+    });
+    c.appendChild(hist);
+  }
+
+  function renderDailyTab(c, child) {
+    c.appendChild(loadingBox());
+    Api.get('/director/children/' + child.id + '/daily-events?days=21').then(function (d) {
+      Dom.clear(c);
+      var all = [].concat((d.checks || []).map(function (x) { return { t: x.occurred_at, type: 'check', label: (x.event_type || '').replace(/_/g, ' '), notes: x.notes }; }),
+        (d.events || []).map(function (x) { return { t: x.occurred_at, type: 'event', label: (x.event_type || x.type || 'event').replace(/_/g, ' '), notes: x.notes }; }));
+      all.sort(function (a, b) { return (b.t || '').localeCompare(a.t || ''); });
+      if (!all.length) { c.appendChild(emptyBox('No daily activity in the last 21 days.')); return; }
+      var card = Dom.el('div', { style: tcard() });
+      all.forEach(function (e) {
+        var r = Dom.el('div', { style: 'display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
+        r.appendChild(Dom.el('div', { style: 'width:150px;flex-shrink:0;color:#6B7280;font-size:12px;' }, fmtDateTime(e.t)));
+        r.appendChild(Dom.el('span', { style: 'flex-shrink:0;' + (e.type === 'check' ? 'background:#DBEAFE;color:#1E40AF;' : 'background:#F3E8FF;color:#7C3AED;') + 'font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;height:fit-content;' }, e.type));
+        var txt = Dom.el('div', {});
+        txt.appendChild(Dom.el('div', { style: 'font-weight:600;text-transform:capitalize;' }, e.label || '—'));
+        if (e.notes) txt.appendChild(Dom.el('div', { style: 'color:#6B7280;font-size:13px;' }, e.notes));
+        r.appendChild(txt);
+        card.appendChild(r);
+      });
+      c.appendChild(card);
+    }).catch(function (e) { Dom.clear(c); c.appendChild(emptyBox('Could not load daily reports: ' + (e.message || 'error'))); });
+  }
+
+  function renderFeedTab(c, child) {
+    c.appendChild(loadingBox());
+    Api.get('/director/children/' + child.id + '/feed').then(function (d) {
+      Dom.clear(c);
+      var media = d.media || [], obs = d.observations || [];
+      if (!media.length && !obs.length) { c.appendChild(emptyBox('No photos or observations yet.')); return; }
+      if (media.length) {
+        var grid = Dom.el('div', { style: tcard() + 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;' });
+        media.forEach(function (m) {
+          var url = m.url || m.file_url || m.media_url || m.thumbnail_url; if (!url) return;
+          var fig = Dom.el('div', {});
+          fig.appendChild(Dom.el('img', { src: mediaUrl(url), style: 'width:100%;height:130px;object-fit:cover;border-radius:10px;background:#F3F4F6;' }));
+          if (m.caption) fig.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:4px;' }, m.caption));
+          fig.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, fmtDate(m.created_at)));
+          grid.appendChild(fig);
+        });
+        c.appendChild(grid);
+      }
+      if (obs.length) {
+        var oc = Dom.el('div', { style: tcard() });
+        oc.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Observations'));
+        obs.forEach(function (o) {
+          var r = Dom.el('div', { style: 'padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
+          r.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:12px;' }, fmtDate(o.created_at) + (o.domain ? '  ·  ' + String(o.domain).replace(/_/g, ' ') : '')));
+          r.appendChild(Dom.el('div', {}, o.note || o.text || o.title || '—'));
+          oc.appendChild(r);
+        });
+        c.appendChild(oc);
+      }
+    }).catch(function (e) { Dom.clear(c); c.appendChild(emptyBox('Could not load live feed: ' + (e.message || 'error'))); });
+  }
+
+  function renderAttachmentsTab(c, child) {
+    c.appendChild(loadingBox());
+    Api.get('/director/children/' + child.id + '/documents').then(function (d) {
+      Dom.clear(c);
+      var docs = d.documents || [];
+      if (!docs.length) { c.appendChild(emptyBox('No attachments on file for this child.')); return; }
+      var card = Dom.el('div', { style: tcard() });
+      docs.forEach(function (doc) {
+        var r = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
+        r.appendChild(Dom.el('span', {}, '📎'));
+        var info = Dom.el('div', { style: 'flex:1;min-width:0;' });
+        info.appendChild(Dom.el('div', { style: 'font-weight:600;' }, doc.title || 'Document'));
+        info.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;' }, (doc.category || '') + '  ·  ' + fmtDate(doc.created_at) + (doc.expires_at ? '  ·  expires ' + fmtDate(doc.expires_at) : '')));
+        r.appendChild(info);
+        if (doc.file_url) r.appendChild(Dom.el('a', { href: mediaUrl(doc.file_url), target: '_blank', style: 'color:#1F6080;font-size:13px;font-weight:600;text-decoration:none;' }, 'Open ↗'));
+        card.appendChild(r);
+      });
+      c.appendChild(card);
+    }).catch(function (e) { Dom.clear(c); c.appendChild(emptyBox('Could not load attachments: ' + (e.message || 'error'))); });
   }
 
   // Register for both director and agency_admin roles via Shell.

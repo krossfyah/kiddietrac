@@ -40,7 +40,7 @@
         <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Dietary</div><div class="kt-kpi-value">${dietary}</div></div>
         <div class="kt-kpi"><div class="kt-kpi-label">Children affected</div><div class="kt-kpi-value">${list.length}</div></div>
       </div>
-      <div>${list.map(c => `<div class="kt-alert">
+      <div data-kt-list="1">${list.map(c => `<div class="kt-alert">
         <div class="kt-alert-title">${esc(c.first_name)} ${esc(c.last_name)}</div>
         <div class="kt-alert-body">${(c.tags || []).map(t => {
           const sevDot = t.severity === 'anaphylactic' ? '🚨 ' : t.severity === 'severe' ? '⚠ ' : '';
@@ -227,7 +227,7 @@
         <p>${photos.length} photo(s) shared. Upload a moment — visible to the family within seconds.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="pf-upload">+ Upload photo</button></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px;">
+      <div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px;">
         ${photos.map(p => `<div class="kt-card" style="padding:0;overflow:hidden;">
           <img src="${esc(p.url)}" loading="lazy" style="width:100%;height:220px;object-fit:cover;display:block;background:#F1F5F9;">
           <div style="padding:14px 18px;">
@@ -361,14 +361,18 @@
       'payroll', 'background-checks', 'menu', 'field-trips', 'substitutes', 'inspection', 'cwelcc', 'time-off', 'sms',
       'ai-docs', 'agency-billing', 'autopay-card', 'language', 'forecast', 'anomalies', 'renewals', 'retention',
       'allergy-alerts', 'ai-churn', 'photos', 'feedback', 'doc-autolink'];
+    // v22p87: the narrow marker MUST be set/cleared on EVERY navigation, not
+    // only for "pretty" screens — otherwise it leaked: after visiting a narrow
+    // screen (e.g. Billing settings) every later screen stayed pinned to 640px
+    // until a full refresh. Clear it for any non-narrow screen. (agency-billing
+    // removed — it now lives in the full-width tabbed Billing screen.)
+    const narrowScreens = ['language', 'autopay-card', 'ach-pay'];
+    if (narrowScreens.includes(hash)) main.setAttribute('data-kt-narrow', '1');
+    else main.removeAttribute('data-kt-narrow');
+
     if (prettyHashes.includes(hash)) {
       main.setAttribute('data-kt-pretty', '1');
       main.setAttribute('data-kt-screen', hash);
-      // v22p64: do not force max-width — let each screen decide its own width
-      // Narrow form-style screens get a marker so CSS can keep them compact
-      const narrowScreens = ['language', 'autopay-card', 'agency-billing', 'ach-pay'];
-      if (narrowScreens.includes(hash)) main.setAttribute('data-kt-narrow', '1');
-      else main.removeAttribute('data-kt-narrow');
     }
   }
   window.addEventListener('hashchange', () => setTimeout(applyPrettyClass, 250));

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,8 +18,16 @@ use Illuminate\Support\Facades\Log;
  */
 final class PhotoTagController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function listTags(Request $request, int $photoId): JsonResponse
     {
+        // SECURITY (v22p95): tags expose co-tagged children's names — restrict to
+        // staff of the photo's centre (platform_admin sees any).
+        $photo = DB::table('photos')->where('id', $photoId)->first();
+        abort_unless($photo, 404);
+        $u = $request->user();
+        abort_unless($this->isPlatformAdminUser($u) || $this->authorizeCentreAccess($u, (int) $photo->centre_id), 403);
         $tags = DB::table('photo_tags as pt')
             ->join('children as c', 'c.id', '=', 'pt.child_id')
             ->where('pt.photo_id', $photoId)
@@ -31,6 +40,9 @@ final class PhotoTagController extends Controller
     {
         $photo = DB::table('photos')->where('id', $photoId)->first();
         abort_unless($photo, 404);
+        // SECURITY (v22p95): only staff of the photo's centre may AI-classify it.
+        $u = $request->user();
+        abort_unless($this->isPlatformAdminUser($u) || $this->authorizeCentreAccess($u, (int) $photo->centre_id), 403);
 
         $key = env('ANTHROPIC_API_KEY');
         if (!$key) return response()->json(['error' => 'AI not configured'], 503);
@@ -141,6 +153,7 @@ final class PhotoTagController extends Controller
             'child_id' => 'required|integer',
             'confirmed' => 'required|boolean',
         ]);
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403); // v22p94
         if ($data['confirmed']) {
             DB::table('photo_tags')->updateOrInsert(
                 ['photo_id' => $data['photo_id'], 'child_id' => $data['child_id']],

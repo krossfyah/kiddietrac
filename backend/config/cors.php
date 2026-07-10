@@ -10,6 +10,7 @@ return [
     'allowed_origins' => [
         'https://app.kiddietrac.com',
         'https://kiddietrac.com',
+        'https://www.kiddietrac.com',
         'http://localhost:8080',
         'http://localhost:5173',
     ],

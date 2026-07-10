@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\AgencyMailer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -88,12 +90,13 @@ final class FormsController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             'schema' => ['required', 'array', 'min:1'],
             'schema.*.id' => ['required', 'string', 'max:60'],
-            'schema.*.type' => ['required', 'in:text,textarea,email,number,date,select,checkbox,radio'],
+            'schema.*.type' => ['required', 'in:text,textarea,email,number,date,select,checkbox,radio,signature,payment'],
             'schema.*.label' => ['required', 'string', 'max:200'],
             'schema.*.required' => ['nullable', 'boolean'],
             'schema.*.placeholder' => ['nullable', 'string', 'max:200'],
             'schema.*.help' => ['nullable', 'string', 'max:500'],
             'schema.*.options' => ['nullable', 'array'],
+            'schema.*.amount' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'audience' => ['required', 'in:all_families,active_families,waitlist,prospects,staff'],
             'centre_id' => ['nullable', 'integer'],
             'status' => ['nullable', 'in:draft,published'],
@@ -255,6 +258,91 @@ final class FormsController extends Controller
     /**
      * POST /forms/{id}/submit — record a parent's response.
      */
+    /**
+     * POST /admin/forms/{id}/email — email a published form's link to the
+     * parents in its audience. White-labelled (agency branding + from-address)
+     * when the agency has the white-label add-on.
+     */
+    public function emailToParents(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+
+        $form = DB::table('custom_forms')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        if (!$form) return response()->json(['message' => 'Form not found'], 404);
+        if ($form->status !== 'published') return response()->json(['message' => 'Publish the form before emailing it.'], 422);
+
+        // Recipient guardians: families in this agency (or the form's centre).
+        $familyQuery = DB::table('families')->whereNull('deleted_at');
+        if ($form->centre_id) {
+            $familyQuery->where('centre_id', $form->centre_id);
+        } else {
+            $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+            if (empty($centreIds)) return response()->json(['sent' => 0]);
+            $familyQuery->whereIn('centre_id', $centreIds);
+        }
+        $familyIds = $familyQuery->pluck('id')->all();
+        if (empty($familyIds)) return response()->json(['sent' => 0]);
+
+        $emails = DB::table('guardians')
+            ->join('users', 'users.id', '=', 'guardians.user_id')
+            ->whereIn('guardians.family_id', $familyIds)
+            ->whereNotNull('users.email')
+            ->pluck('users.email')->unique()->values()->all();
+        if (empty($emails)) return response()->json(['sent' => 0]);
+
+        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+        $whiteLabel = $agency && !((bool) ($agency->powered_by_visible ?? 1));
+        $primary = ($whiteLabel ? ($agency->brand_primary_color ?? null) : null) ?: '#1F6080';
+        $orgName = $whiteLabel ? ($agency->name ?? 'KiddieTrac') : 'KiddieTrac';
+        $logo = $whiteLabel ? ($agency->brand_logo_url ?? null) : null;
+        $link = 'https://app.kiddietrac.com/dashboard.html#forms';
+        $subject = $orgName . ' — please complete: ' . $form->title;
+
+        $safeTitle = htmlspecialchars($form->title, ENT_QUOTES);
+        $safeDesc = $form->description ? htmlspecialchars($form->description, ENT_QUOTES) : '';
+        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
+            . '<div style="background:' . $primary . ';color:#fff;padding:22px 26px;">'
+            . ($logo ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES) . '" alt="" style="max-height:40px;margin-bottom:10px;background:#fff;border-radius:6px;padding:3px 6px;"><br>' : ('<div style="font-weight:800;font-size:18px;margin-bottom:6px;">' . htmlspecialchars($orgName, ENT_QUOTES) . '</div>'))
+            . '<div style="font-size:20px;font-weight:800;">' . $safeTitle . '</div>'
+            . ($safeDesc ? '<div style="font-size:13px;opacity:.92;margin-top:4px;">' . $safeDesc . '</div>' : '')
+            . '</div>'
+            . '<div style="padding:24px 26px;color:#374151;font-size:15px;line-height:1.6;">'
+            . '<p>Hello,</p><p>Please take a moment to complete this form from ' . htmlspecialchars($orgName, ENT_QUOTES) . '.</p>'
+            . '<p style="text-align:center;margin:26px 0;"><a href="' . $link . '" style="background:' . $primary . ';color:#fff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:700;display:inline-block;">Open the form</a></p>'
+            . '<p style="font-size:13px;color:#6B7280;">Or sign in to your parent portal and open the Forms section.</p>'
+            . '</div>'
+            . '<div style="padding:14px 26px;text-align:center;font-size:11px;color:#9CA3AF;">' . ($whiteLabel ? htmlspecialchars($orgName, ENT_QUOTES) . ($agency->brand_support_email ? ' · ' . htmlspecialchars($agency->brand_support_email, ENT_QUOTES) : '') : 'Powered by KiddieTrac — The Smart Childcare Management Platform') . '</div>'
+            . '</div>';
+
+        $svc = AgencyMailer::forAgency($agencyId);
+        $mailer = $svc->mailer();
+        $fromAddr = $svc->fromAddress();
+        $fromName = $whiteLabel ? $orgName : $svc->fromName();
+        $sent = 0;
+        foreach ($emails as $email) {
+            try {
+                $mailer->html($html, function ($m) use ($email, $fromAddr, $fromName, $subject) {
+                    $m->to($email)->from($fromAddr, $fromName)->subject($subject);
+                });
+                $sent++;
+            } catch (\Throwable $e) {
+                Log::warning('Form email failed', ['email' => $email, 'error' => $e->getMessage()]);
+            }
+        }
+
+        DB::table('audit_logs')->insert([
+            'user_id' => $request->user()->id,
+            'action' => 'form.emailed',
+            'entity_type' => 'custom_form',
+            'entity_id' => $id,
+            'payload' => json_encode(['sent' => $sent, 'recipients' => count($emails)]),
+            'created_at' => now(),
+        ]);
+
+        return response()->json(['sent' => $sent, 'recipients' => count($emails)]);
+    }
+
     public function submit(Request $request, int $id): JsonResponse
     {
         $form = DB::table('custom_forms')->where('id', $id)->whereNull('deleted_at')->where('status', 'published')->first();
@@ -281,6 +369,29 @@ final class FormsController extends Controller
             'submitted_at' => now(),
         ]);
         DB::table('custom_forms')->where('id', $id)->increment('response_count');
+
+        // v22p85: record any "payment" field charges against the family's account
+        // (status pending = owed). Only fires when the respondent authorised it.
+        $familyId = DB::table('guardians')->where('user_id', $request->user()->id)->value('family_id');
+        if ($familyId) {
+            foreach ($schema as $field) {
+                if (($field['type'] ?? '') !== 'payment') continue;
+                $fid = $field['id'] ?? null;
+                $authorised = $fid ? ($response[$fid] ?? null) : null;
+                $amount = round((float) ($field['amount'] ?? 0), 2);
+                if ($authorised && $amount > 0) {
+                    DB::table('payments')->insert([
+                        'family_id' => $familyId,
+                        'amount' => $amount,
+                        'method' => 'manual',
+                        'status' => 'pending',
+                        'reference_number' => 'FORM-' . $id,
+                        'notes' => 'Form charge: ' . $form->title,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+        }
         DB::table('audit_logs')->insert([
             'user_id' => $request->user()->id,
             'action' => 'form.submitted',

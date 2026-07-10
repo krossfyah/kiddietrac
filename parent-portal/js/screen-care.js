@@ -73,7 +73,7 @@
 
     var history = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);' });
     history.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Recent punches'));
-    var list = Dom.el('div'); history.appendChild(list);
+    var list = Dom.el('div', { 'data-kt-list': '1' }); history.appendChild(list);
     list.appendChild(Dom.el('div', { style: 'padding:18px;color:#9CA3AF;font-size:13px;text-align:center;' }, 'Loading…'));
     wrap.appendChild(history);
 
@@ -419,7 +419,7 @@
     var filterBar = Dom.el('div', { style: 'margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;' });
     wrap.appendChild(filterBar);
 
-    var listWrap = Dom.el('div', { style: cardStyle + 'overflow:hidden;margin-top:14px;' });
+    var listWrap = Dom.el('div', { 'data-kt-list': '1', style: cardStyle + 'overflow:hidden;margin-top:14px;' });
     wrap.appendChild(listWrap);
     listWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
 

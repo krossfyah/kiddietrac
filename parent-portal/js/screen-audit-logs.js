@@ -183,6 +183,17 @@
     t.appendChild(thead);
 
     var tb = Dom.el('tbody');
+    var iconFor = function (a) {
+      a = a || '';
+      if (ACTION_ICONS[a]) return ACTION_ICONS[a];
+      if (/email\.failed/.test(a)) return '⚠️';
+      if (/email/.test(a)) return '📧';
+      if (/delete|deleted|destroy/.test(a)) return '🗑️';
+      if (/login/.test(a)) return '🔑';
+      if (/^post:/.test(a)) return '➕';
+      if (/^(patch|put):/.test(a)) return '✏️';
+      return '•';
+    };
     logs.forEach(function (l) {
       var row = Dom.el('tr', { style: 'border-bottom:1px solid #F3F4F6;cursor:pointer;', title: 'Click to view full payload' });
       row.addEventListener('mouseenter', function () { row.style.background = '#FAFBFC'; });
@@ -196,14 +207,19 @@
       row.appendChild(whenCell);
 
       // Action
-      var actCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;' });
-      actCell.appendChild(Dom.el('span', { style: 'font-size:16px;margin-right:6px;' }, ACTION_ICONS[l.action] || '•'));
-      actCell.appendChild(Dom.el('span', { style: 'font-weight:600;color:#1F6080;' }, l.action));
+      var actCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;max-width:360px;' });
+      var actLine = Dom.el('div', {});
+      actLine.appendChild(Dom.el('span', { style: 'font-size:16px;margin-right:6px;' }, iconFor(l.action)));
+      actLine.appendChild(Dom.el('span', { style: 'font-weight:600;color:#1F6080;' }, l.action_label || l.action));
+      actCell.appendChild(actLine);
+      if (l.summary) actCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;margin-top:3px;word-break:break-word;' }, l.summary));
       row.appendChild(actCell);
 
-      // Entity
-      var ent = l.entity_type ? l.entity_type + (l.entity_id ? ' #' + l.entity_id : '') : '—';
-      row.appendChild(Dom.el('td', { style: 'padding:10px 14px;color:#374151;vertical-align:top;' }, ent));
+      // Entity — show the resolved NAME, with type/id underneath
+      var entCell = Dom.el('td', { style: 'padding:10px 14px;color:#374151;vertical-align:top;' });
+      if (l.entity_name) entCell.appendChild(Dom.el('div', { style: 'font-weight:600;color:#111827;' }, l.entity_name));
+      entCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, l.entity_type ? (l.entity_type + (l.entity_id ? ' #' + l.entity_id : '')) : '—'));
+      row.appendChild(entCell);
 
       // Actor
       var actorCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;' });

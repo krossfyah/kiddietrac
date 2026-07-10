@@ -1,0 +1,40 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KIDDIETRAC v22p86 — consistent section-banner animation
+   Previously only shell-injected heroes (which carry a floating .kt-hero-emoji)
+   animated; custom-built section banners (Forms, Tuition plans, Admin, etc.)
+   sat completely static. This gives EVERY .kt-hero the same gentle animated
+   gradient, and floats the SVG illustrations, so all banners feel alive the
+   same way. Respects prefers-reduced-motion.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.kt-hero {
+  background-size: 200% 200% !important;
+  animation: kt-hero-breathe 16s ease-in-out infinite;
+}
+
+@keyframes kt-hero-breathe {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Float the static SVG illustrations (clouds/bear) like the emoji ones do. */
+.kt-hero .kt-hero-svg {
+  animation: kt-float 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kt-hero,
+  .kt-hero .kt-hero-svg,
+  .kt-hero .kt-hero-emoji { animation: none !important; }
+}
+
+/* ─── v22p88: modal-dimming fix ───────────────────────────────────────
+   The screen fade-in animation used animation-fill-mode:both, which retains
+   an identity transform on #appMain's content wrappers. A transform other
+   than `none` makes it the containing block for position:fixed children, so
+   modal overlays mounted inside the content (e.g. New Announcement) shrank to
+   the content box and only dimmed part of the screen. Using `backwards` drops
+   the retained transform once the animation has run, so fixed overlays cover
+   the FULL viewport (sidebar + hero included) and the background dims fully. */
+#appMain > * { animation-fill-mode: backwards !important; }

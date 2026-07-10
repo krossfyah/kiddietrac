@@ -49,7 +49,7 @@
 
         ${families.length === 0
           ? '<div style="padding:48px;background:white;border-radius:14px;text-align:center;color:#6B7280;">No families found.</div>'
-          : `<div style="display:grid;gap:14px;">
+          : `<div data-kt-list="1" style="display:grid;gap:14px;">
               ${families.map(f => familyCard(f)).join('')}
             </div>`
         }
@@ -117,8 +117,12 @@
     try {
       intent = await api('POST', '/parent/billing/setup-intent', { family_id: familyId });
     } catch (e) {
-      $('#kt-status', mount).style.color = '#DC2626';
-      $('#kt-status', mount).textContent = '✗ ' + e.message;
+      // The backend 500s when Stripe isn't configured (empty STRIPE_KEY/SECRET).
+      // Show parents a calm, actionable message instead of a raw error.
+      $('#kt-status', mount).style.color = '#B45309';
+      $('#kt-status', mount).innerHTML = 'Online card payments aren’t switched on for your centre yet. '
+        + 'Please contact your centre — they can enable this in KiddieTrac. '
+        + '<span style="color:#9CA3AF;">(You can still pay your invoices by e-transfer or the method your centre uses.)</span>';
       return;
     }
     $('#kt-status', mount).textContent = '';

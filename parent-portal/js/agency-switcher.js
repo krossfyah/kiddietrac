@@ -76,7 +76,9 @@
   }
 
   function buildWidget(agencies, activeId, isPlatformAdmin) {
-    var active = agencies.find(function (a) { return String(a.id) === String(activeId); }) || agencies[0];
+    var active = (String(activeId) === 'all')
+      ? { id: 'all', name: 'All agencies' }
+      : (agencies.find(function (a) { return String(a.id) === String(activeId); }) || agencies[0]);
 
     var wrap = document.createElement('div');
     wrap.id = 'kt-agency-switcher';
@@ -129,8 +131,17 @@
       'display:none',
     ].join(';'));
 
+    var _allActive = String(active.id) === 'all';
     dropdown.innerHTML =
       '<div style="padding:8px 12px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#6B7280;font-weight:700;background:#F9FAFB;border-bottom:1px solid #F3F4F6;">Switch agency</div>' +
+      // Platform admins get an "All agencies" aggregate view at the top.
+      (isPlatformAdmin
+        ? '<button type="button" data-aid="all" style="display:flex;align-items:center;gap:8px;width:100%;background:' + (_allActive ? '#EFF6FF' : 'white') + ';border:none;padding:9px 12px;font-size:13px;color:#111827;cursor:pointer;text-align:left;border-bottom:1px solid #F3F4F6;">' +
+            '<span style="font-size:14px;">🌐</span>' +
+            '<span style="flex:1;font-weight:' + (_allActive ? '700' : '600') + ';">All agencies</span>' +
+            (_allActive ? '<span style="font-size:11px;color:#1F6080;font-weight:700;">✓</span>' : '') +
+          '</button>'
+        : '') +
       agencies.map(function (a) {
         var isActive = String(a.id) === String(active.id);
         return '<button type="button" data-aid="' + a.id + '" style="display:flex;align-items:center;gap:8px;width:100%;background:' + (isActive ? '#EFF6FF' : 'white') + ';border:none;padding:9px 12px;font-size:13px;color:#111827;cursor:pointer;text-align:left;border-bottom:1px solid #F3F4F6;">' +
@@ -153,7 +164,17 @@
 
     Array.prototype.forEach.call(dropdown.querySelectorAll('button[data-aid]'), function (b) {
       b.addEventListener('click', async function () {
-        var aid = parseInt(b.getAttribute('data-aid'), 10);
+        var raw = b.getAttribute('data-aid');
+        // "All agencies" is a client-side scope signal (header X-Active-Agency-Id:
+        // all) — no server active-agency call (it expects a numeric id).
+        if (raw === 'all') {
+          if (String(active.id) === 'all') { dropdown.style.display = 'none'; return; }
+          sessionStorage.setItem(STORAGE_KEY, 'all');
+          sessionStorage.setItem(ACTIVE_NAME, 'All agencies');
+          window.location.reload();
+          return;
+        }
+        var aid = parseInt(raw, 10);
         if (String(aid) === String(active.id)) {
           dropdown.style.display = 'none';
           return;
@@ -196,22 +217,58 @@
     sessionStorage.setItem('kt_is_platform_admin', isPlatformAdmin ? '1' : '0');
 
     // v22p22: inject the Platform sidebar section for platform_admin.
-    if (isPlatformAdmin) injectPlatformNav();
+    // ...but NOT while impersonating a lower role via "View as" (kt_view_as).
+    // Guardian/educator use a horizontal top-nav; injecting this sidebar-style
+    // section there overflows and breaks the dashboard. Hiding it also makes the
+    // "View as" preview faithful — those roles never see platform nav.
+    var _viewingAs = ''; try { _viewingAs = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    if (isPlatformAdmin && !_viewingAs) injectPlatformNav();
 
     if (! agencies.length || (! isPlatformAdmin && agencies.length < 2)) return;
 
-    var activeId = sessionStorage.getItem(STORAGE_KEY) || agencies[0].id;
-    if (! agencies.find(function (a) { return String(a.id) === String(activeId); })) {
-      activeId = agencies[0].id;
-      sessionStorage.setItem(STORAGE_KEY, String(activeId));
+    // v22p98: platform admins default to a CONCRETE agency, NOT the aggregate
+    // 'all' view. List/compose screens (users, families, centres, announcement
+    // composer) can't aggregate across agencies, and the backend no longer
+    // silently defaults a header-less / 'all' platform_admin to the first tenant
+    // (that was the "in Test Agency but seeing iLearn contacts" leak). Landing on
+    // 'all' therefore left those screens empty. Land on a real agency instead;
+    // "All agencies" stays available as an explicit dropdown choice for the
+    // aggregate dashboard. Preserve any explicit prior selection (incl. 'all').
+    var _hadAgency = !!sessionStorage.getItem(STORAGE_KEY);
+    var activeId = sessionStorage.getItem(STORAGE_KEY) || (agencies[0] ? agencies[0].id : null);
+    if (String(activeId) !== 'all'
+        && ! agencies.find(function (a) { return String(a.id) === String(activeId); })) {
+      activeId = agencies[0] ? agencies[0].id : null;
     }
-    if (! sessionStorage.getItem(ACTIVE_NAME)) {
+    sessionStorage.setItem(STORAGE_KEY, String(activeId));
+    if (String(activeId) === 'all') {
+      sessionStorage.setItem(ACTIVE_NAME, 'All agencies');
+    } else if (! sessionStorage.getItem(ACTIVE_NAME)) {
       var a0 = agencies.find(function (a) { return String(a.id) === String(activeId); });
       if (a0) sessionStorage.setItem(ACTIVE_NAME, a0.name);
     }
 
     var widget = buildWidget(agencies, activeId, isPlatformAdmin);
-    navUser.parentNode.insertBefore(widget, navUser);
+    var navHidden = /\brole-(guardian|educator|auditor)\b/.test(document.body.className);
+    if (navHidden) {
+      // The top nav is hidden for these roles and the header is at the very top,
+      // so the pill's upward dropdown would be clipped off-screen. Mount it
+      // bottom-left, just above the "Viewing as" pill, where it opens into view.
+      widget.setAttribute('style',
+        'position:fixed;left:14px;bottom:66px;z-index:9001;background:#fff;border:1px solid #D1D5DB;' +
+        'border-radius:12px;padding:6px 8px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:190px;');
+      document.body.appendChild(widget);
+    } else {
+      navUser.parentNode.insertBefore(widget, navUser);
+    }
+
+    // First login: the initial screen may have rendered BEFORE the active agency
+    // was known (a platform_admin sends no X-Active-Agency-Id header until it's
+    // set), so it showed "Could not load — no agency access". Now that the agency
+    // is resolved, re-render the current screen so it loads properly.
+    if (!_hadAgency && String(activeId) && String(activeId) !== 'null') {
+      try { if (window.KT && window.KT.Shell && window.KT.Shell.renderScreen) window.KT.Shell.renderScreen(); } catch (e) {}
+    }
   }
 
   if (document.readyState === 'loading') {

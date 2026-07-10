@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Middleware\AuditActivity;
+use App\Http\Middleware\EnforceAuditorReadOnly;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -26,6 +29,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // CORS first in the API pipeline
         $middleware->api(prepend: [
             HandleCors::class,
+        ]);
+
+        // v22p94: pure-auditor accounts are read-only across the whole API.
+        // SecurityHeaders: hardened response headers on every API response (SOC 2).
+        $middleware->api(append: [
+            EnforceAuditorReadOnly::class,
+            SecurityHeaders::class,
+            // Portal-wide activity audit — records every write action to audit_logs.
+            AuditActivity::class,
         ]);
 
         // Trust GoDaddy / CloudFlare proxy headers if present

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,8 +18,13 @@ use Illuminate\Support\Facades\DB;
  */
 final class PaymentPlanController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function listForFamily(Request $request, int $familyId): JsonResponse
     {
+        // SECURITY (v22p96): guardian / centre staff, or a platform_admin scoped
+        // to the agency they've switched into (was a global platform bypass).
+        abort_unless($this->canAccessFamilyScoped($request, $familyId), 403);
         $plans = DB::table('payment_plans')->where('family_id', $familyId)
             ->orderByDesc('created_at')->get();
         $planIds = $plans->pluck('id');

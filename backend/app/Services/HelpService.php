@@ -33,8 +33,11 @@ final class HelpService
      */
     public function listForRole(string $role): array
     {
+        // v22p98: auditor maps to the director library (compliance/audit/reporting
+        // content lives there) — NOT to 'parent' as the old default did, which
+        // showed auditors irrelevant family articles.
         $roleFolder = match ($role) {
-            'centre_director', 'agency_admin' => 'director',
+            'agency_admin', 'centre_director', 'auditor' => 'director',
             'educator' => 'educator',
             'guardian' => 'parent',
             default => 'parent',
@@ -44,6 +47,9 @@ final class HelpService
             ...$this->loadFolder($roleFolder),
             ...$this->loadFolder('shared'),
         ];
+
+        // v22p98: role-relevance — hide guides for features the role doesn't have.
+        $articles = $this->filterForRole($articles, $role);
 
         // Sort by category then order
         usort($articles, function ($a, $b) {
@@ -107,6 +113,32 @@ final class HelpService
         return implode("\n", $sections);
     }
 
+    /**
+     * v22p98 — Keep only articles relevant to the given role.
+     *  • `roles:` front-matter targets an article to specific roles (e.g. agency
+     *    admin / platform-only guides are hidden from a centre director).
+     *  • Auditors are read-only compliance reviewers — narrow the director library
+     *    to the categories that actually apply to them.
+     */
+    private function filterForRole(array $articles, string $role): array
+    {
+        $articles = array_filter($articles, function ($a) use ($role) {
+            return empty($a['roles']) || in_array($role, $a['roles'], true);
+        });
+
+        if ($role === 'auditor') {
+            $allowed = ['Compliance', 'Reporting', 'Getting Started', 'Troubleshooting', 'Your Account', 'Administration'];
+            $auditorTitles = ['Audit log viewer', 'Compliance dashboard', 'Custom report builder', 'Compliance and reporting'];
+            $articles = array_filter($articles, function ($a) use ($allowed, $auditorTitles) {
+                // Compliance/reporting categories, plus a few named admin articles an auditor uses.
+                return in_array($a['category'], ['Compliance', 'Reporting', 'Getting Started', 'Troubleshooting', 'Your Account'], true)
+                    || in_array($a['title'], $auditorTitles, true);
+            });
+        }
+
+        return array_values($articles);
+    }
+
     private function loadFolder(string $folder): array
     {
         $path = $this->basePath.'/'.$folder;
@@ -131,6 +163,11 @@ final class HelpService
                 'order' => isset($parsed['meta']['order']) ? (int) $parsed['meta']['order'] : 999,
                 'body' => $parsed['body'],
                 'audience' => $folder, // 'director', 'educator', 'parent', 'shared'
+                // v22p98: optional per-article role targeting — `roles: a, b` in the
+                // front-matter restricts the article to those roles.
+                'roles' => isset($parsed['meta']['roles'])
+                    ? array_filter(array_map('trim', explode(',', (string) $parsed['meta']['roles'])))
+                    : [],
             ];
         }
 

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,8 +18,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class WellnessController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function todayForChild(Request $request, int $childId): JsonResponse
     {
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $today = Carbon::today()->toDateString();
         $row = DB::table('wellness_screenings')
             ->where('child_id', $childId)
@@ -40,6 +44,9 @@ final class WellnessController extends Controller
             'exposure' => 'required|boolean',
             'notes' => 'nullable|string|max:1000',
         ]);
+        // SECURITY (v22p94): only the child's guardians/centre staff may submit a
+        // screening (it can set result=block and bar the child's attendance).
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
 
         // Decide the result. Public-health guidance: any of fever/vomiting/
         // diarrhea blocks attendance; any of cough/runny_nose flags review.
@@ -96,6 +103,17 @@ final class WellnessController extends Controller
     {
         $centreId = (int) $request->query('centre_id', 0);
         abort_unless($centreId, 400);
+        // SECURITY (v22p96): wellness screenings are medical PII. The endpoint took
+        // centre_id straight from the query with no authorization — any caller (and
+        // a switched platform_admin) could read any centre's screenings. Now staff
+        // of this centre only, or a platform_admin scoped to its agency.
+        $u = $request->user();
+        if ($this->isPlatformAdminUser($u)) {
+            $centreAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+            abort_unless($centreAgency && $centreAgency === (int) $this->resolveAgencyId($request), 403);
+        } else {
+            abort_unless($this->authorizeCentreAccess($u, $centreId), 403);
+        }
         $today = Carbon::today()->toDateString();
         $rows = DB::table('wellness_screenings as ws')
             ->join('children as ch', 'ch.id', '=', 'ws.child_id')

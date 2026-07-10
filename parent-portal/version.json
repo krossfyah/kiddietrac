@@ -1,0 +1,9 @@
+{
+  "android": {
+    "versionCode": 1,
+    "versionName": "1.0",
+    "apkUrl": "https://app.kiddietrac.com/dl/kiddietrac-test-9865891c2d.apk",
+    "notes": "Latest KiddieTrac app build.",
+    "mandatory": false
+  }
+}

@@ -57,3 +57,12 @@ parent-portal/.cache/
 # ─── Vendor directory (composer-managed, not source) ─────
 backend/vendor-laravel11/
 backend/vendor/
+
+# ─── Firebase service account (SECRET — added catch-up v23) ───
+backend/storage/firebase-sa.json
+
+# ─── Editor / scp backup junk ───
+*.bak
+*.bak2
+*.bak-*
+*.bak.*

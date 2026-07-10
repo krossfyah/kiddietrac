@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,9 +18,14 @@ use Illuminate\Support\Facades\DB;
  */
 final class FamilyOperationsController extends Controller
 {
+    use ResolvesCentreContext;
+
     // ===== Pickup authorizations =====
     public function listAuth(Request $request, int $childId): JsonResponse
     {
+        // SECURITY (v22p94): only the child's guardians/centre staff may view who
+        // is authorised to collect them.
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $rows = DB::table('pickup_authorizations')
             ->where('child_id', $childId)
             ->where('active', 1)
@@ -41,6 +47,9 @@ final class FamilyOperationsController extends Controller
         ]);
         $child = DB::table('children')->where('id', $data['child_id'])->first();
         abort_unless($child, 404);
+        // SECURITY (v22p94): CHILD SAFETY — only this child's guardians/centre
+        // staff may add someone authorised to collect them.
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
         $id = DB::table('pickup_authorizations')->insertGetId([
             'child_id' => $data['child_id'],
             'family_id' => $child->family_id,
@@ -60,6 +69,10 @@ final class FamilyOperationsController extends Controller
 
     public function removeAuth(Request $request, int $id): JsonResponse
     {
+        $row = DB::table('pickup_authorizations')->where('id', $id)->first();
+        abort_unless($row, 404);
+        // SECURITY (v22p94): only the child's guardians/centre staff may revoke.
+        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403);
         DB::table('pickup_authorizations')->where('id', $id)->update(['active' => 0, 'updated_at' => now()]);
         return response()->json(['status' => 'removed']);
     }
@@ -67,6 +80,7 @@ final class FamilyOperationsController extends Controller
     // ===== Daily check-in =====
     public function todayCheckin(Request $request, int $childId): JsonResponse
     {
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $today = Carbon::now()->toDateString();
         $row = DB::table('daily_checkins')
             ->where('child_id', $childId)
@@ -85,6 +99,7 @@ final class FamilyOperationsController extends Controller
             'medication_today' => 'nullable|string|max:1000',
             'parent_notes' => 'nullable|string|max:2000',
         ]);
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
         $today = Carbon::now()->toDateString();
         DB::table('daily_checkins')->updateOrInsert(
             ['child_id' => $data['child_id'], 'checkin_date' => $today],
@@ -120,6 +135,7 @@ final class FamilyOperationsController extends Controller
 
     public function recentCheckins(Request $request, int $childId): JsonResponse
     {
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $rows = DB::table('daily_checkins')
             ->where('child_id', $childId)
             ->orderByDesc('checkin_date')->limit(30)->get();
@@ -165,7 +181,13 @@ final class FamilyOperationsController extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)

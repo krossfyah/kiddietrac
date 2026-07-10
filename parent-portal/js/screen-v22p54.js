@@ -88,31 +88,33 @@
    * the current hash.
    */
   function injectXlsxButtons() {
-    document.querySelectorAll('button').forEach(btn => {
-      const text = (btn.textContent || '').trim();
-      if (!/⤓.*CSV/i.test(text)) return;
-      if (btn.dataset.xlsxInjected) return;
-      btn.dataset.xlsxInjected = '1';
+    const hash = location.hash.replace('#', '').split('?')[0];
+    const exportType = mapHashToExportType(hash);
+    if (!exportType) return; // not an exportable screen (e.g. #reports) — leave it alone
 
-      const hash = location.hash.replace('#', '').split('?')[0];
-      const exportType = mapHashToExportType(hash);
-      if (!exportType) return;
+    const buttons = Array.from(document.querySelectorAll('#appMain button, #modalRoot button'));
+    // Only ONE Excel/Import pair per screen. Bail if an Excel button already
+    // exists — whether the screen rendered its own, attachToolbar added one, or
+    // we injected one on a previous tick. (This was the double-button bug: the
+    // old code converted EVERY "⤓ CSV" button, so the screen's export pair and
+    // kt-polish's toolbar CSV both became Excel/Import.)
+    if (buttons.some(b => /excel/i.test(b.textContent || ''))) return;
 
-      // Replace CSV with Excel
-      btn.textContent = '⤓ Excel';
-      btn.title = 'Download branded XLSX with logo + colors';
-      btn.onclick = () => downloadAuthed(exportType.path, exportType.filename);
+    const btn = buttons.find(b => /⤓.*CSV/i.test((b.textContent || '').trim()) && !b.dataset.xlsxInjected);
+    if (!btn) return;
+    btn.dataset.xlsxInjected = '1';
+    btn.textContent = '⤓ Excel';
+    btn.title = 'Download branded XLSX with logo + colors';
+    btn.onclick = () => downloadAuthed(exportType.path, exportType.filename);
 
-      // Add Import sibling if available
-      if (exportType.importType) {
-        const imp = document.createElement('button');
-        imp.textContent = '⤒ Import';
-        imp.style.cssText = btn.style.cssText.replace(/background:#?[^;]+;?/, 'background:#7C3AED;');
-        imp.title = 'Bulk import from XLSX/CSV';
-        imp.onclick = () => buildImportModal(exportType.importType, exportType.label, () => location.reload());
-        btn.parentElement.insertBefore(imp, btn.nextSibling);
-      }
-    });
+    if (exportType.importType) {
+      const imp = document.createElement('button');
+      imp.textContent = '⤒ Import';
+      imp.style.cssText = btn.style.cssText.replace(/background:#?[^;]+;?/, 'background:#7C3AED;');
+      imp.title = 'Bulk import from XLSX/CSV';
+      imp.onclick = () => buildImportModal(exportType.importType, exportType.label, () => location.reload());
+      btn.parentElement.insertBefore(imp, btn.nextSibling);
+    }
   }
 
   function mapHashToExportType(hash) {
@@ -154,12 +156,13 @@
     host.appendChild(wrap);
   }
 
-  // Auto-inject on hash change + initial load
+  // The TOP Excel/Import injection is retired — exports now live in the bottom
+  // export bar (kt-table-export.js), which reuses mapHashToExportType +
+  // buildImportModal + downloadAuthed exported below. (injectXlsxButtons kept
+  // for any caller that still wants it.)
   function tick() { try { injectXlsxButtons(); } catch (e) { /* swallow */ } }
-  window.addEventListener('hashchange', () => setTimeout(tick, 300));
-  setInterval(tick, 1500);
-  setTimeout(tick, 800);
+  void tick;
 
   window.KT = KT;
-  window.KT.V22p54 = { downloadAuthed, buildImportModal, attachToolbar, injectXlsxButtons };
+  window.KT.V22p54 = { downloadAuthed, buildImportModal, attachToolbar, injectXlsxButtons, mapHashToExportType };
 })(window);

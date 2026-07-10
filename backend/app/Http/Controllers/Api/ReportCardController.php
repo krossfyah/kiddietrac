@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Dompdf\Dompdf;
 use Illuminate\Http\JsonResponse;
@@ -19,8 +20,12 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class ReportCardController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function listForChild(Request $request, int $childId): JsonResponse
     {
+        // SECURITY (v22p94): only the child's guardians/centre staff.
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $rows = DB::table('report_cards')->where('child_id', $childId)
             ->orderByDesc('created_at')->get();
         return response()->json(['data' => $rows]);
@@ -33,6 +38,8 @@ final class ReportCardController extends Controller
             'term' => 'required|string|max:40',
         ]);
         $this->assertStaff($request);
+        // SECURITY (v22p94): scope to a child the caller can actually access.
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
         $child = DB::table('children')->where('id', $data['child_id'])->first();
         abort_unless($child, 404);
 
@@ -109,6 +116,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         $this->assertStaff($request);
         $data = $request->validate([
             'narrative_belonging' => 'nullable|string',
@@ -126,6 +134,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         $this->assertStaff($request);
         DB::table('report_cards')->where('id', $id)->update([
             'status' => 'sent', 'sent_at' => now(), 'updated_at' => now(),
@@ -149,6 +158,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         $child = DB::table('children')->where('id', $row->child_id)->first();
         $family = DB::table('families')->where('id', $child->family_id)->first();
         $agency = DB::table('agencies')->where('id',

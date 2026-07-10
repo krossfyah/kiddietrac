@@ -57,6 +57,9 @@
   // v22p34: marketing campaigns — directors + agency admins
   reg(directors, 'marketing-campaigns', 'KT.Marketing');
 
+  // v22p90: provider map — directors + agency admins
+  reg(directors, 'provider-map', 'KT.ProviderMap');
+
   // v22p37: staff calendar — directors + agency admins
   reg(directors, 'staff-calendar', 'KT.StaffCalendar');
 
@@ -149,7 +152,11 @@
     Shell.registerScreen(r + ':doc-autolink',   bridge('KT.V22p55', 'renderDocAutolink'));
     Shell.registerScreen(r + ':feedback',       bridge('KT.V22p55', 'renderFeedback'));
   });
-  ['agency_admin','centre_director','educator','guardian','platform_admin'].forEach(function (r) {
+  // NOTE: 'guardian' intentionally excluded — parents get their own read-only,
+  // parent-scoped photo gallery (screen-parent.js › renderPhotosMobile/Tab, on
+  // /parent/children/{id}/photos). renderPhotoFeed is the staff feed (/photos/feed
+  // + upload) and would otherwise override the parent view for guardian:photos.
+  ['agency_admin','centre_director','educator','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':photos', bridge('KT.V22p55', 'renderPhotoFeed'));
   });
 

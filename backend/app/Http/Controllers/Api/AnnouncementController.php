@@ -34,6 +34,7 @@ final class AnnouncementController extends Controller
             'title' => ['required', 'string', 'max:200'],
             'body' => ['required', 'string', 'max:5000'],
             'send_email' => ['nullable', 'boolean'],
+            'send_sms' => ['nullable', 'boolean'],
             'send_push' => ['nullable', 'boolean'],
             'scheduled_at' => ['nullable', 'date', 'after_or_equal:now'],
         ]);
@@ -49,7 +50,7 @@ final class AnnouncementController extends Controller
             'title' => $data['title'],
             'body' => $data['body'],
             'send_email' => $data['send_email'] ?? 1,
-            'send_sms' => 0,
+            'send_sms' => $data['send_sms'] ?? 0,
             'send_push' => $data['send_push'] ?? 1,
             'scheduled_at' => $data['scheduled_at'] ?? null,
             'sent_at' => empty($data['scheduled_at']) ? now() : null,
@@ -265,35 +266,75 @@ final class AnnouncementController extends Controller
     private function deliver(int $announcementId, array $data, $sender): int
     {
         $userIds = $this->recipientUserIds($data['scope_type'], (int) $data['scope_id']);
+        // v22p88: body is now rich HTML. Keep a plain-text version for the
+        // in-app notification and SMS.
+        $plain = trim(html_entity_decode(strip_tags(str_replace(
+            ['</p>', '<br>', '<br/>', '<br />', '</li>'], "\n", (string) $data['body']
+        )), ENT_QUOTES));
+        $senderName = trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? ''));
+        $agencyId = $this->resolveAgencyForScope($data['scope_type'], (int) $data['scope_id']);
+
         $delivered = 0;
         foreach ($userIds as $uid) {
             DB::table('notifications')->insert([
                 'user_id' => $uid,
                 'type' => 'announcement',
                 'title' => $data['title'],
-                'body' => $data['body'],
+                'body' => mb_substr($plain, 0, 1000),
                 'data' => json_encode(['announcement_id' => $announcementId]),
                 'created_at' => now(),
             ]);
             $delivered++;
         }
 
-        // Best-effort email
+        // Best-effort email — rich HTML, white-labelled via the agency's mailer.
         if (! empty($data['send_email']) || $data['send_email'] === null) {
-            $emails = DB::table('users')->whereIn('id', $userIds)->pluck('email')->all();
+            $emails = DB::table('users')->whereIn('id', $userIds)->whereNotNull('email')->pluck('email')->all();
+            $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;color:#111827;">'
+                . '<h2 style="color:#1F6080;margin:0 0 12px;">' . e($data['title']) . '</h2>'
+                . '<div style="font-size:15px;line-height:1.6;">' . $data['body'] . '</div>'
+                . ($senderName ? '<p style="color:#6B7280;margin-top:18px;">— ' . e($senderName) . '</p>' : '')
+                . '</div>';
+            $mailerSvc = $agencyId ? \App\Services\AgencyMailer::forAgency($agencyId) : null;
             foreach ($emails as $email) {
                 try {
-                    $body = $data['body'] . "\n\n— " . trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? ''));
-                    Mail::raw($body, function ($m) use ($email, $data) {
-                        $m->to($email)->from('noreply@kiddietrac.com', 'Kiddietrac')->subject($data['title']);
-                    });
+                    if ($mailerSvc) {
+                        $m = $mailerSvc->mailer(); $from = $mailerSvc->fromAddress(); $fn = $mailerSvc->fromName();
+                        $m->html($html, function ($msg) use ($email, $from, $fn, $data) { $msg->to($email)->from($from, $fn)->subject($data['title']); });
+                    } else {
+                        Mail::html($html, function ($msg) use ($email, $data) { $msg->to($email)->from('noreply@kiddietrac.com', 'Kiddietrac')->subject($data['title']); });
+                    }
                 } catch (\Throwable $e) {
                     Log::warning('Announcement email failed', ['email' => $email, 'error' => $e->getMessage()]);
                 }
             }
         }
 
+        // Best-effort SMS — plain text via Twilio (SmsController).
+        if (! empty($data['send_sms']) && $agencyId) {
+            $sms = ($data['title'] ? $data['title'] . ': ' : '') . $plain;
+            if (mb_strlen($sms) > 600) $sms = mb_substr($sms, 0, 597) . '…';
+            $recips = DB::table('users')->whereIn('id', $userIds)->whereNotNull('phone')->where('phone', '!=', '')->get(['id', 'phone']);
+            $smsCtl = app(SmsController::class);
+            foreach ($recips as $r) {
+                try { $smsCtl->sendOne($agencyId, (int) $r->id, (string) $r->phone, $sms, 'announcement'); }
+                catch (\Throwable $e) { Log::warning('Announcement SMS failed', ['user' => $r->id, 'error' => $e->getMessage()]); }
+            }
+        }
+
         return $delivered;
+    }
+
+    private function resolveAgencyForScope(string $type, int $id): ?int
+    {
+        if ($type === 'agency') return $id;
+        if ($type === 'centre') { $v = DB::table('centres')->where('id', $id)->value('agency_id'); return $v ? (int) $v : null; }
+        if ($type === 'room') {
+            $cid = DB::table('rooms')->where('id', $id)->value('centre_id');
+            $v = $cid ? DB::table('centres')->where('id', $cid)->value('agency_id') : null;
+            return $v ? (int) $v : null;
+        }
+        return null;
     }
 
     private function recipientUserIds(string $scopeType, int $scopeId): array

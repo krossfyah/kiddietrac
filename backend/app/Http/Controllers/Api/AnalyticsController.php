@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,8 +17,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class AnalyticsController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function childTrends(Request $request, int $childId): JsonResponse
     {
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $days = (int) $request->query('days', 30);
         $start = Carbon::now()->subDays($days)->startOfDay();
 
@@ -59,6 +63,7 @@ final class AnalyticsController extends Controller
 
     public function hdlhGaps(Request $request, int $childId): JsonResponse
     {
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         // Count observations by HDLH domain
         $obsByDomain = DB::table('observations')
             ->where('child_id', $childId)

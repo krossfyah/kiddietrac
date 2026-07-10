@@ -32,6 +32,10 @@ final class MediaController extends Controller
         if (empty($childIds)) {
             return response()->json(['message' => 'At least one child_id required'], 422);
         }
+        // SECURITY (v22p94): the uploader must have access to EVERY tagged child.
+        foreach ($childIds as $cid) {
+            abort_unless($this->canAccessChild($request->user(), (int) $cid), 403);
+        }
 
         $roomId = $request->input('room_id');
         if (!$roomId) {
@@ -139,6 +143,7 @@ final class MediaController extends Controller
             'media_id' => ['nullable', 'integer'],
             'observed_at' => ['nullable', 'date'],
         ]);
+        abort_unless($this->canAccessChild($request->user(), (int) $data['child_id']), 403); // v22p94
 
         $id = DB::table('observations')->insertGetId([
             'child_id' => $data['child_id'],

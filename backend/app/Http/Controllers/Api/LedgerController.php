@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class LedgerController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function familyLedger(Request $request, int $familyId): JsonResponse
     {
         $this->assertAccess($request, $familyId);
@@ -99,15 +102,19 @@ final class LedgerController extends Controller
         ]);
     }
 
-    public function familyLedgerPdf(Request $request, int $familyId): \Symfony\Component\HttpFoundation\Response
+    public function familyLedgerPdf(Request $request, ?int $familyId = null): \Symfony\Component\HttpFoundation\Response
     {
-        $this->assertAccess($request, $familyId);
+        // v22p98: the /parent/ledger/pdf route passes no familyId — resolve the
+        // signed-in guardian's own family (was a "too few arguments" 500).
+        $familyId = $familyId ?: (int) DB::table('guardians')->where('user_id', $request->user()->id)->value('family_id');
+        abort_unless($familyId, 404);
+        $this->assertAccess($request, (int) $familyId);
         $resp = $this->familyLedger($request, $familyId);
         $payload = json_decode($resp->getContent(), true);
         $family = $payload['family'];
         $rows = $payload['data'];
 
-        $agencyId = (int) DB::table('families')->where('id', $familyId)
+        $agencyId = (int) DB::table('families')->where('families.id', $familyId)
             ->join('centres', 'centres.id', '=', 'families.centre_id')->value('centres.agency_id');
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
 
@@ -139,12 +146,10 @@ final class LedgerController extends Controller
 
     private function assertAccess(Request $request, int $familyId): void
     {
-        $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
-            ->where('active', 1)->exists();
-        if ($isStaff) return;
-        $hasFamily = DB::table('guardians')->where('user_id', $u->id)->where('family_id', $familyId)->exists();
-        abort_unless($hasFamily, 403);
+        // SECURITY (v22p96): guardian of THIS family, staff of its centre, OR a
+        // platform_admin SCOPED to the agency they've switched into. The prior
+        // unconditional `if (isPlatformAdminUser) return;` let a super-admin read
+        // any family's ledger in any tenant regardless of the active agency.
+        abort_unless($this->canAccessFamilyScoped($request, $familyId), 403);
     }
 }

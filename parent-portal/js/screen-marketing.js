@@ -20,6 +20,32 @@
   }
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return d; } }
+  function normUrl(u) { if (!u) return ''; return /^https?:\/\//i.test(u) ? u : 'https://' + u; }
+  function activeAgencyId() {
+    try { var a = parseInt(sessionStorage.getItem('kt_active_agency_id'), 10); if (a) return a; } catch (e) {}
+    try { var u = JSON.parse(sessionStorage.getItem('kt_user') || '{}'); return u.agency_id || null; } catch (e) { return null; }
+  }
+
+  // Branding + plan entitlements for the campaign frame — fetched once, cached.
+  // White-label is NOT a per-campaign choice: it is granted by the agency's
+  // tier/package (the `white_label` feature flag). When the plan includes it,
+  // the agency logo + details are applied automatically; otherwise campaigns
+  // use a standard header.
+  var _featCache = null;
+  function loadFeatures() {
+    if (_featCache) return Promise.resolve(_featCache);
+    var id = activeAgencyId();
+    if (!id) return Promise.resolve({ branding: {}, whiteLabel: false });
+    return Api.get('/admin/agencies/' + id + '/features')
+      .then(function (d) {
+        _featCache = {
+          branding: (d && d.branding) || {},
+          whiteLabel: !!(d && d.flags && d.flags.white_label),
+        };
+        return _featCache;
+      })
+      .catch(function () { return { branding: {}, whiteLabel: false }; });
+  }
 
   // ── List view ──────────────────────────────────────────────────────
   function render(container) {
@@ -38,7 +64,7 @@
     bar.appendChild(newBtn);
     wrap.appendChild(bar);
 
-    var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+    var listWrap = Dom.el('div', { 'data-kt-list': '1', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
     listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
 
@@ -174,6 +200,22 @@
     heroWrap.appendChild(heroFile);
     body.appendChild(heroWrap);
 
+    // White-label status — driven by the agency's plan/package, NOT a manual
+    // choice. The "Powered by Kiddietrac" footer (with privacy/terms) is always
+    // added. We resolve the entitlement when the composer opens (below).
+    var wlState = { on: false };
+    var wlNote = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;padding:11px 12px;background:#F9FAFB;border:1px solid #EEF0F2;border-radius:8px;margin-bottom:14px;font-size:13px;color:#6B7280;' }, 'Checking your plan…');
+    body.appendChild(wlNote);
+    loadFeatures().then(function (f) {
+      wlState.on = f.whiteLabel;
+      if (f.whiteLabel) {
+        wlNote.style.background = '#ECFDF5'; wlNote.style.borderColor = '#A7F3D0'; wlNote.style.color = '#065F46';
+        wlNote.innerHTML = '✓ <strong>White-label branding is included in your plan.</strong> Your agency logo &amp; details appear at the top of every campaign. <span style="opacity:.8;">Edit them under Settings → Branding.</span>';
+      } else {
+        wlNote.innerHTML = 'Campaigns use a standard header. <strong>White-label branding</strong> (your logo &amp; details at the top) is included on the Growth plan and above.';
+      }
+    });
+
     // Rich-text editor
     body.appendChild(labelEl('Body'));
     body.appendChild(buildRichEditor(existing ? existing.body_html : '', function () { return null; }));
@@ -197,10 +239,21 @@
     actions.appendChild(leftBtns);
 
     var rightBtns = Dom.el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' });
+    var previewBtn = Dom.el('button', { style: btnSecondary() }, '👁 Preview');
     var saveBtn = Dom.el('button', { style: btnSecondary() }, 'Save draft');
     var sendBtn = Dom.el('button', { style: btnPrimary() }, 'Send now');
+    rightBtns.appendChild(previewBtn);
     rightBtns.appendChild(saveBtn);
     rightBtns.appendChild(sendBtn);
+
+    previewBtn.addEventListener('click', function () {
+      var payload = collect();
+      if (!payload.body_html) { alert('Add some body content to preview.'); return; }
+      previewBtn.disabled = true; previewBtn.textContent = 'Loading…';
+      loadFeatures().then(function (f) {
+        openPreview(payload, f.branding, f.whiteLabel);
+      }).finally(function () { previewBtn.disabled = false; previewBtn.innerHTML = '👁 Preview'; });
+    });
     actions.appendChild(rightBtns);
     body.appendChild(actions);
 
@@ -395,6 +448,73 @@
   }
 
   function divider() { return Dom.el('div', { style: 'width:1px;background:#E5E7EB;margin:0 4px;' }); }
+
+  // ── Branded preview ────────────────────────────────────────────────
+  // Renders the campaign as recipients will see it: optional white-label
+  // header (logo + agency details), the message body, and an always-present
+  // "Powered by Kiddietrac" footer carrying the agency's privacy & terms links.
+  function openPreview(payload, brand, whiteLabel) {
+    brand = brand || {};
+    var color = brand.brand_primary_color || '#1F6080';
+    var name = brand.brand_name || 'Your agency';
+    var logo = brand.brand_logo_url ? absUrl(brand.brand_logo_url) : '';
+    var hero = payload.hero_image_url ? absUrl(payload.hero_image_url) : '';
+
+    var headerHtml;
+    if (whiteLabel) {
+      headerHtml =
+        '<div style="border-top:5px solid ' + esc(color) + ';background:#fff;padding:20px 28px;border-bottom:1px solid #EEF0F2;display:flex;align-items:center;gap:14px;">' +
+          (logo
+            ? '<img src="' + esc(logo) + '" alt="" style="max-height:54px;max-width:200px;object-fit:contain;flex-shrink:0;" />'
+            : '<div style="font-size:20px;font-weight:800;color:' + esc(color) + ';flex-shrink:0;">' + esc(name) + '</div>') +
+          '<div style="flex:1;text-align:right;font-size:12px;color:#6B7280;line-height:1.5;">' +
+            (logo ? '<div style="font-weight:700;color:#111827;font-size:14px;">' + esc(name) + '</div>' : '') +
+            (brand.brand_support_email ? '<div>' + esc(brand.brand_support_email) + '</div>' : '') +
+            (brand.brand_address ? '<div>' + esc(brand.brand_address).replace(/\n/g, '<br>') + '</div>' : '') +
+          '</div>' +
+        '</div>';
+    } else {
+      headerHtml = '<div style="height:5px;background:' + esc(color) + ';"></div>';
+    }
+
+    var privacy = normUrl(brand.brand_privacy_url);
+    var terms = normUrl(brand.brand_terms_url);
+    var legal = [];
+    if (privacy) legal.push('<a href="' + esc(privacy) + '" target="_blank" rel="noopener" style="color:#6B7280;text-decoration:underline;">Privacy policy</a>');
+    if (terms) legal.push('<a href="' + esc(terms) + '" target="_blank" rel="noopener" style="color:#6B7280;text-decoration:underline;">Terms &amp; conditions</a>');
+    var legalRow = legal.length
+      ? '<div style="margin-top:6px;">' + legal.join(' &nbsp;·&nbsp; ') + '</div>'
+      : '<div style="margin-top:6px;color:#B0B6BE;">Add privacy &amp; terms links under Settings → Branding</div>';
+
+    var footerHtml =
+      '<div style="background:#F9FAFB;border-top:1px solid #EEF0F2;padding:18px 28px;text-align:center;font-size:11px;color:#9CA3AF;">' +
+        '<div style="font-weight:700;color:#6B7280;">Powered by Kiddietrac</div>' +
+        legalRow +
+        '<div style="margin-top:8px;">You’re receiving this because you are part of ' + esc(name) + '.</div>' +
+      '</div>';
+
+    var inner =
+      '<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.12);font-family:Inter,system-ui,sans-serif;">' +
+        headerHtml +
+        (payload.subject ? '<div style="padding:18px 28px 0;font-size:18px;font-weight:800;color:#111827;">' + esc(payload.subject) + '</div>' : '') +
+        (hero ? '<div style="padding:16px 28px 0;"><img src="' + esc(hero) + '" alt="" style="width:100%;border-radius:8px;display:block;" /></div>' : '') +
+        '<div style="padding:18px 28px 24px;font-size:14px;line-height:1.6;color:#1F2937;">' + (payload.body_html || '') + '</div>' +
+        footerHtml +
+      '</div>';
+
+    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1100;display:flex;flex-direction:column;align-items:center;padding:24px;overflow:auto;' });
+    var topBar = Dom.el('div', { style: 'width:100%;max-width:600px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;' });
+    topBar.appendChild(Dom.el('div', { style: 'color:#fff;font-weight:700;font-size:14px;' }, '👁 Campaign preview' + (whiteLabel ? ' · white-label' : '')));
+    var cls = Dom.el('button', { style: 'background:rgba(255,255,255,.16);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-weight:700;cursor:pointer;' }, 'Close preview');
+    cls.addEventListener('click', function () { overlay.remove(); });
+    topBar.appendChild(cls);
+    overlay.appendChild(topBar);
+    var frame = Dom.el('div', { style: 'width:100%;' });
+    frame.innerHTML = inner;
+    overlay.appendChild(frame);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  }
 
   // ── Tiny styling helpers ───────────────────────────────────────────
   function labelEl(t) { return Dom.el('label', { style: 'display:block;font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;' }, t); }

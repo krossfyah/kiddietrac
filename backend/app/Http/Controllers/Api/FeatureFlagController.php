@@ -96,13 +96,29 @@ final class FeatureFlagController extends Controller
             'feature_flags' => $rawFlags,    // raw {feature: bool} (only explicit ones)
             'catalog'       => self::FEATURES,
             'branding'      => [
+                'brand_name'          => $agency->name ?? null,
                 'brand_logo_url'      => $agency->brand_logo_url ?? null,
                 'brand_primary_color' => $agency->brand_primary_color ?? null,
                 'brand_support_email' => $agency->brand_support_email ?? null,
                 'brand_bank_info'     => $agency->brand_bank_info ?? null,
+                'brand_address'       => $this->agencySetting($agency, 'brand_address'),
+                'brand_privacy_url'   => $this->agencySetting($agency, 'brand_privacy_url'),
+                'brand_terms_url'     => $this->agencySetting($agency, 'brand_terms_url'),
                 'powered_by_visible'  => isset($agency->powered_by_visible) ? (int) $agency->powered_by_visible : 1,
             ],
         ]);
+    }
+
+    /**
+     * Read a free-form branding value stored in the agency's settings JSON
+     * (used for fields that have no dedicated column — brand_address,
+     * brand_privacy_url, brand_terms_url).
+     */
+    private function agencySetting($agency, string $key): ?string
+    {
+        if (empty($agency->settings)) return null;
+        $s = json_decode((string) $agency->settings, true);
+        return (is_array($s) && !empty($s[$key])) ? (string) $s[$key] : null;
     }
 
     /**
@@ -144,6 +160,9 @@ final class FeatureFlagController extends Controller
             'brand_primary_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'brand_support_email' => ['nullable', 'email', 'max:255'],
             'brand_bank_info'     => ['nullable', 'string', 'max:2000'],
+            'brand_address'       => ['nullable', 'string', 'max:500'],
+            'brand_privacy_url'   => ['nullable', 'string', 'max:500'],
+            'brand_terms_url'     => ['nullable', 'string', 'max:500'],
             'powered_by_visible'  => ['nullable', 'integer', 'in:0,1'],
         ]);
 
@@ -193,7 +212,7 @@ final class FeatureFlagController extends Controller
                 || isset($data['plan_code']) || isset($data['plan_amount_cents'])
                 || isset($data['billing_status']);
             if ($sentPrivileged) {
-                $brandKeys = ['brand_logo_url','brand_primary_color','brand_support_email','brand_bank_info','powered_by_visible'];
+                $brandKeys = ['brand_logo_url','brand_primary_color','brand_support_email','brand_bank_info','brand_address','brand_privacy_url','brand_terms_url','powered_by_visible'];
                 $sentBrand = false;
                 foreach ($brandKeys as $bk) { if (array_key_exists($bk, $data)) { $sentBrand = true; break; } }
                 if (! $sentBrand) {
@@ -210,6 +229,22 @@ final class FeatureFlagController extends Controller
         }
         if (array_key_exists('powered_by_visible', $data)) {
             $update['powered_by_visible'] = (int) $data['powered_by_visible'];
+        }
+
+        // brand_address / brand_privacy_url / brand_terms_url have no columns —
+        // store them in the settings JSON (v22p88: address; v22p90: privacy/terms).
+        $jsonKeys = ['brand_address', 'brand_privacy_url', 'brand_terms_url'];
+        $touchesJson = false;
+        foreach ($jsonKeys as $jk) { if (array_key_exists($jk, $data)) { $touchesJson = true; break; } }
+        if ($touchesJson) {
+            $settings = [];
+            if (! empty($agency->settings)) { $x = json_decode($agency->settings, true); if (is_array($x)) $settings = $x; }
+            foreach ($jsonKeys as $jk) {
+                if (array_key_exists($jk, $data)) {
+                    $settings[$jk] = $data[$jk] !== '' ? $data[$jk] : null;
+                }
+            }
+            $update['settings'] = json_encode($settings);
         }
 
         if (empty($update)) {

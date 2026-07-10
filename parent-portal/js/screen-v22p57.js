@@ -21,7 +21,7 @@
     main.innerHTML = '<div style="padding:24px;">Loading children…</div>';
     // grab the parent's children
     const childrenRes = await Api.get('/parent/children').catch(() => ({ data: [] }));
-    const children = childrenRes.data || childrenRes || [];
+    const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
     if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children on file.</div>'; return; }
 
     const auths = {};
@@ -100,7 +100,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const childrenRes = await Api.get('/parent/children').catch(() => ({ data: [] }));
-    const children = childrenRes.data || childrenRes || [];
+    const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
     if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children on file.</div>'; return; }
     const today = (await Api.get(`/family/checkin/today/${children[0].id}`)).data || {};
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
@@ -184,7 +184,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading children…</div>';
     const childrenRes = await Api.get('/parent/children').catch(() => Api.get('/admin/children').catch(() => ({ data: [] })));
-    const children = childrenRes.data || childrenRes || [];
+    const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
     if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children.</div>'; return; }
     const id = children[0].id;
     const t = await Api.get(`/analytics/trends/${id}?days=30`);
@@ -351,7 +351,7 @@
         <p>Shared lesson plans across your agency. Click "Use" to copy a template into your centre.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="cl-new">+ New template</button></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;">
+      <div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;">
         ${rows.map(t => `<div class="kt-card">
           <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
             <div>

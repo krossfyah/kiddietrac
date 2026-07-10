@@ -335,9 +335,14 @@
     panel.id = 'kt-chatbot-panel';
     panel.style.cssText = 'position:fixed;bottom:96px;right:24px;width:400px;max-width:92vw;height:540px;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(15,23,42,.25);z-index:9999;display:flex;flex-direction:column;overflow:hidden;animation:kt-pop-in .2s ease-out;';
     panel.innerHTML = `
-      <div style="background:linear-gradient(135deg,#1F6080,#3a86ad);color:#fff;padding:16px 18px;">
-        <div style="font-weight:700;font-size:16px;">💬 Ask the centre</div>
-        <div style="font-size:12px;opacity:.85;">Answers from your centre's policies + handbook.</div>
+      <div style="background:linear-gradient(135deg,#1F6080,#3a86ad);color:#fff;padding:16px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+        <div>
+          <div style="font-weight:700;font-size:16px;">💬 Ask the centre</div>
+          <div style="font-size:12px;opacity:.85;">Answers from your centre's policies + handbook.</div>
+        </div>
+        <button id="kt-chatbot-close" title="Close" aria-label="Close chat"
+          style="background:rgba(255,255,255,.18);color:#fff;border:0;width:30px;height:30px;min-width:30px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;transition:background .15s;"
+          onmouseover="this.style.background='rgba(255,255,255,.32)'" onmouseout="this.style.background='rgba(255,255,255,.18)'">✕</button>
       </div>
       <div id="kt-chatbot-feed" style="flex:1;padding:16px;overflow:auto;background:#F9FAFB;">
         <div style="background:#fff;padding:12px 14px;border-radius:14px 14px 14px 4px;max-width:80%;margin-bottom:10px;font-size:13.5px;color:#1F2937;box-shadow:0 1px 3px rgba(15,23,42,.06);">
@@ -350,6 +355,7 @@
       </div>
     `;
     document.body.appendChild(panel);
+    panel.querySelector('#kt-chatbot-close').onclick = () => panel.remove();
     const input = panel.querySelector('#kt-chatbot-input');
     const send = panel.querySelector('#kt-chatbot-send');
     const feed = panel.querySelector('#kt-chatbot-feed');

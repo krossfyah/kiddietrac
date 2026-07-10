@@ -293,7 +293,7 @@
       <p style="color:#6B7280;font-size:14px;">Provincial / municipal inspectors typically cover these items. ${totalDone}/${totalAll} marked complete (${pct}%).</p>
       <div style="background:#E5E7EB;height:10px;border-radius:5px;margin:14px 0;"><div style="background:#10B981;height:100%;width:${pct}%;border-radius:5px;"></div></div>`;
     Object.entries(r.data || {}).forEach(([cat, items]) => {
-      html += `<h3 style="margin-top:24px;color:#1F6080;font-size:16px;">${esc(cat)}</h3><table style="width:100%;border-collapse:collapse;">`;
+      html += `<h3 style="margin-top:24px;color:#1F6080;font-size:16px;">${esc(cat)}</h3><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:10px 12px;border-bottom:2px solid #E5E7EB;font-size:12px;color:#6B7280;">Checklist item</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid #E5E7EB;font-size:12px;color:#6B7280;width:300px;">Status</th></tr></thead><tbody>`;
       items.forEach(it => {
         const bg = it.status === 'pass' ? '#DCFCE7' : it.status === 'fail' ? '#FEE2E2' : it.status === 'na' ? '#F3F4F6' : '#FFFFFF';
         html += `<tr style="background:${bg}"><td style="padding:10px 12px;border-bottom:1px solid #E5E7EB;font-size:13px;">${esc(it.item_text)}</td>
@@ -304,7 +304,7 @@
               <option value="fail" ${it.status === 'fail' ? 'selected' : ''}>✗ Fail</option>
               <option value="na" ${it.status === 'na' ? 'selected' : ''}>N/A</option></select></td></tr>`;
       });
-      html += '</table>';
+      html += '</tbody></table>';
     });
     html += '</div>';
     main.innerHTML = html;
@@ -444,7 +444,7 @@
         const titles = { expired: '⛔ Expired', soon: '⚠ Next 30 days', upcoming: 'Next 90 days', future: 'Later' };
         const colors = { expired: '#FEE2E2', soon: '#FEF3C7', upcoming: '#EFF6FF', future: '#F9FAFB' };
         return `<h3 style="margin-top:22px;font-size:15px;">${titles[b]} (${groups[b].length})</h3>
-          ${groups[b].length ? `<table style="width:100%;border-collapse:collapse;"><tbody>${groups[b].map(r => `<tr style="background:${colors[b]};">
+          ${groups[b].length ? `<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:9px 12px;border-bottom:2px solid #E5E7EB;font-size:11px;color:#6B7280;">Name / certification</th><th style="text-align:left;padding:9px 12px;border-bottom:2px solid #E5E7EB;font-size:11px;color:#6B7280;">Expires</th></tr></thead><tbody>${groups[b].map(r => `<tr style="background:${colors[b]};">
             <td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;font-size:13px;width:60%;"><strong>${esc(r.user_name)}</strong> · ${esc(r.type)} <span style="color:#6B7280;font-size:11px;">(${esc(r.source)})</span></td>
             <td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;font-size:13px;">${fmtDate(r.expires_at)} <span style="color:#6B7280;font-size:11px;">(${Math.abs(r.days_until)}d ${r.days_until < 0 ? 'ago' : 'left'})</span></td>
           </tr>`).join('')}</tbody></table>` : '<div style="color:#9CA3AF;padding:8px;font-size:13px;">None.</div>'}`;

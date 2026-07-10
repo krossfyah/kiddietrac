@@ -39,7 +39,7 @@
       </div>
       <div class="kt-card">
         <div class="kt-card-header"><h3 class="kt-card-title">Other families at your centre</h3></div>
-        ${(dir.data || []).length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">
+        ${(dir.data || []).length ? `<div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">
           ${(dir.data || []).map(f => `<div style="background:#FAFCFE;padding:16px;border-radius:10px;border:1px solid #F1F5F9;">
             <strong style="color:#0F172A;font-size:15px;">${esc(f.family_name)}</strong>
             ${f.child_names && f.child_names.length ? `<div style="color:#475569;font-size:13px;margin-top:4px;">Children: ${f.child_names.map(esc).join(', ')}</div>` : ''}
@@ -90,7 +90,7 @@
     </div>`;
     if (isStaff) document.getElementById('cf-new').onclick = () => openCreateSlotsModal();
     main.querySelectorAll('button[data-book]').forEach(b => b.onclick = async () => {
-      const kids = (await Api.get('/parent/children')).data || [];
+      const _kc = await Api.get('/parent/children'); const kids = _kc.children || _kc.data || [];
       const cid = kids.length === 1 ? kids[0].id : +prompt('Child ID for this booking? ' + kids.map(c => c.id + ': ' + c.first_name).join(', '));
       if (!cid) return;
       await Api.post(`/conferences/slots/${b.dataset.book}/book`, { child_id: cid });
@@ -183,7 +183,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const childrenRes = await Api.get('/parent/children').catch(() => Api.get('/admin/children').catch(() => ({ data: [] })));
-    const children = childrenRes.data || childrenRes || [];
+    const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
     if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children.</div>'; return; }
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">

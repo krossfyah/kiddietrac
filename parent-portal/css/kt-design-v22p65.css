@@ -52,11 +52,12 @@ html { scroll-behavior: smooth; }
 [data-kt-pretty] input:not([type]),
 [data-kt-pretty] select,
 [data-kt-pretty] textarea {
-  border: 2px solid var(--kt-input-border) !important;
+  border: 1.5px solid var(--kt-input-border) !important;
   background: var(--kt-input-bg) !important;
   border-radius: var(--kt-r-md) !important;
-  padding: 11px 14px !important;
-  font-size: 14.5px !important;
+  /* v22p98: tighter form controls system-wide (were 11px/14.5px, too bulky). */
+  padding: 7px 11px !important;
+  font-size: 13px !important;
   font-weight: 500 !important;
   color: #0F172A !important;
   transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease !important;
@@ -76,9 +77,13 @@ html { scroll-behavior: smooth; }
 [data-kt-pretty] select {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%231F6080' stroke-width='2' fill='none' stroke-linecap='round'/></svg>") !important;
   background-repeat: no-repeat !important;
-  background-position: right 14px center !important;
-  background-size: 12px !important;
-  padding-right: 38px !important;
+  background-position: right 11px center !important;
+  background-size: 11px !important;
+  /* v22p98: compact select/dropdown bars (were 43px form-height, too bulky,
+     esp. the Calendar filter bars). This select-specific rule wins over the
+     shared 11px/14.5px input rule above; text inputs are left untouched. */
+  padding: 6px 30px 6px 11px !important;
+  font-size: 13px !important;
 }
 
 [data-kt-pretty] input:hover,

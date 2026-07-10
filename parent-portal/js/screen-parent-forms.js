@@ -25,7 +25,7 @@
     hero.innerHTML = '<div class="kt-hero-greet">📝 FORMS</div><h1>Forms to fill in</h1><div class="kt-hero-sub">Permission slips, surveys, and updates from your centre. Fill in once and we keep your response on file.</div>';
     wrap.appendChild(hero);
 
-    var listWrap = Dom.el('div', { style: 'margin-top:18px;' });
+    var listWrap = Dom.el('div', { style: 'margin-top:18px;', 'data-kt-list': '1' });
     wrap.appendChild(listWrap);
     listWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
 
@@ -195,6 +195,38 @@
         optWrap.appendChild(Dom.el('span', {}, o));
         wrap.appendChild(optWrap);
       });
+    } else if (f.type === 'signature') {
+      // v22p85: digital signature pad — draws to a canvas, stored as a PNG data URL.
+      var sigBox = Dom.el('div', { style: 'border:1px solid #D1D5DB;border-radius:8px;overflow:hidden;background:#FFFEF8;' });
+      var canvas = Dom.el('canvas', { style: 'display:block;width:100%;height:160px;touch-action:none;cursor:crosshair;' });
+      sigBox.appendChild(canvas);
+      wrap.appendChild(sigBox);
+      var sigBar = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-top:6px;' });
+      sigBar.appendChild(Dom.el('span', { style: 'font-size:12px;color:#9CA3AF;' }, 'Sign above with your finger or mouse'));
+      var clearBtn = Dom.el('button', { type: 'button', style: 'background:#F1F5F9;border:none;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;color:#374151;' }, 'Clear');
+      sigBar.appendChild(clearBtn);
+      wrap.appendChild(sigBar);
+      setTimeout(function () {
+        initSignaturePad(canvas,
+          function (dataUrl) { responses[f.id] = dataUrl; onChange(); },
+          clearBtn,
+          function () { responses[f.id] = ''; onChange(); });
+      }, 0);
+    } else if (f.type === 'payment') {
+      // v22p85: payment attachment — shows the amount the director attached to
+      // this form. Submitting records the charge against the family's account.
+      var amt = Number(f.amount || 0);
+      var payCard = Dom.el('div', { style: 'border:1px solid #BFE3CF;background:#F0FBF4;border-radius:10px;padding:14px 16px;' });
+      payCard.appendChild(Dom.el('div', { style: 'font-size:13px;color:#166534;font-weight:600;margin-bottom:4px;' }, '💳 Payment required'));
+      payCard.appendChild(Dom.el('div', { style: 'font-size:24px;font-weight:800;color:#15803D;' }, fmtMoney(amt)));
+      if (f.help) payCard.appendChild(Dom.el('div', { style: 'font-size:12px;color:#166534;margin-top:4px;' }, f.help));
+      var ackWrap = Dom.el('label', { style: 'display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13px;color:#0F172A;cursor:pointer;' });
+      var ack = Dom.el('input', { type: 'checkbox' });
+      ack.addEventListener('change', function () { responses[f.id] = ack.checked ? amt : ''; onChange(); });
+      ackWrap.appendChild(ack);
+      ackWrap.appendChild(Dom.el('span', {}, 'I authorise this ' + fmtMoney(amt) + ' charge to be added to my account.'));
+      payCard.appendChild(ackWrap);
+      wrap.appendChild(payCard);
     }
 
     if (f.help) {
@@ -224,6 +256,49 @@
   }
 
   function inputStyle() { return 'width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;color:#0F172A;background:white;'; }
+
+  function fmtMoney(n) {
+    n = Number(n) || 0;
+    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(n); }
+    catch (e) { return '$' + n.toFixed(2); }
+  }
+
+  // Canvas signature pad. Calls onDraw(dataUrl) when a stroke completes,
+  // onClear() when the Clear button is pressed. Supports mouse + touch.
+  function initSignaturePad(canvas, onDraw, clearBtn, onClear) {
+    var rect = canvas.getBoundingClientRect();
+    var ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round((rect.width || 300) * ratio));
+    canvas.height = Math.max(1, Math.round((rect.height || 160) * ratio));
+    var ctx = canvas.getContext('2d');
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111827';
+    var drawing = false, last = null, dirty = false;
+    function pos(e) {
+      var r = canvas.getBoundingClientRect();
+      var p = (e.touches && e.touches[0]) || e;
+      return { x: p.clientX - r.left, y: p.clientY - r.top };
+    }
+    function start(e) { e.preventDefault(); drawing = true; last = pos(e); }
+    function move(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      var p = pos(e);
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      last = p; dirty = true;
+    }
+    function end() { if (!drawing) return; drawing = false; if (dirty) onDraw(canvas.toDataURL('image/png')); }
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+    clearBtn.addEventListener('click', function () {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      dirty = false; onClear();
+    });
+  }
 
   if (Shell && Shell.registerScreen) {
     Shell.registerScreen('guardian:forms', render);

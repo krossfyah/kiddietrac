@@ -468,25 +468,44 @@ HTML;
         $user = $request->user();
         if (!$user) return response()->json(['centres' => []]);
 
-        $roles = \Illuminate\Support\Facades\DB::table('role_assignments')
-            ->where('user_id', $user->id)
-            ->get(['role', 'centre_id', 'agency_id']);
-
-        $isAgencyAdmin = $roles->contains(function ($r) { return $r->role === 'agency_admin'; });
-
         $q = \Illuminate\Support\Facades\DB::table('centres')
             ->select('id', 'name', 'address_line1 as address', 'city', 'province')
             ->orderBy('name');
 
-        if (!$isAgencyAdmin) {
+        // v22p98: honour the active agency (X-Active-Agency-Id). This endpoint
+        // previously scoped by the user's OWN agency roles, so a platform_admin
+        // (who is agency_admin of their home agency) saw THEIR agency's centres
+        // even after switching into a tenant — a cross-tenant leak that also made
+        // every /director/centres-driven screen (schedule, etc.) load the wrong
+        // agency's staff/data. resolveAgencyId is header-aware and null-safe.
+        $activeAgencyId = $this->resolveAgencyId($request);
+
+        if ($this->isPlatformAdminUser($user)) {
+            if (!$activeAgencyId) return response()->json(['centres' => []]);
+            $q->where('agency_id', $activeAgencyId);
+            return response()->json(['centres' => $q->get()]);
+        }
+
+        $roles = \Illuminate\Support\Facades\DB::table('role_assignments')
+            ->where('user_id', $user->id)
+            ->where('active', true)
+            ->get(['role', 'centre_id', 'agency_id']);
+        $isAgencyAdmin = $roles->contains(function ($r) { return $r->role === 'agency_admin'; });
+
+        if ($isAgencyAdmin) {
+            // Scope to the agency they've switched into if they belong to it,
+            // otherwise fall back to all agencies they administer.
+            if ($activeAgencyId && $this->userBelongsToAgency($user->id, $activeAgencyId)) {
+                $q->where('agency_id', $activeAgencyId);
+            } else {
+                $agencyIds = $roles->pluck('agency_id')->filter()->unique()->all();
+                if (!empty($agencyIds)) $q->whereIn('agency_id', $agencyIds);
+            }
+        } else {
             $centreIds = $roles->whereIn('role', ['centre_director', 'agency_admin'])
                 ->pluck('centre_id')->filter()->unique()->all();
             if (empty($centreIds)) return response()->json(['centres' => []]);
             $q->whereIn('id', $centreIds);
-        } else {
-            // Agency admin: scope to their agency_id if any
-            $agencyIds = $roles->pluck('agency_id')->filter()->unique()->all();
-            if (!empty($agencyIds)) $q->whereIn('agency_id', $agencyIds);
         }
 
         return response()->json(['centres' => $q->get()]);

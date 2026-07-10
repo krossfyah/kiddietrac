@@ -89,6 +89,65 @@ final class PushController extends Controller
     }
 
     /**
+     * POST /api/v1/push/device
+     * Native (Capacitor / FCM) registration — stores the FCM registration token
+     * in device_tokens (platform=android/ios) so the backend can push to the app
+     * even when it's fully closed. Called by kt-native-push.js after register().
+     */
+    public function registerDevice(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'token' => ['required', 'string', 'max:500'],
+            'platform' => ['nullable', 'string', 'max:20'],
+        ]);
+        $user = $request->user();
+        $platform = in_array($data['platform'] ?? '', ['android', 'ios'], true) ? $data['platform'] : 'android';
+
+        $existing = DB::table('device_tokens')->where('token', $data['token'])->first();
+        if ($existing) {
+            DB::table('device_tokens')->where('id', $existing->id)->update([
+                'user_id' => $user->id, 'platform' => $platform, 'last_active_at' => now(),
+            ]);
+            return response()->json(['success' => true, 'token_id' => $existing->id, 'updated' => true]);
+        }
+        try {
+            $tokenId = DB::table('device_tokens')->insertGetId([
+                'user_id' => $user->id,
+                'token' => $data['token'],
+                'platform' => $platform,
+                'device_name' => substr((string) $request->header('User-Agent'), 0, 120),
+                'last_active_at' => now(),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Device register failed', ['error' => $e->getMessage()]);
+            return response()->json(['message' => 'Could not save device'], 500);
+        }
+        return response()->json(['success' => true, 'token_id' => $tokenId]);
+    }
+
+    /**
+     * POST /api/v1/push/test-fcm
+     * Sends a test FCM push to the current user's native devices — use this from
+     * the phone after the rebuild to confirm sound + vibration.
+     */
+    public function testFcm(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $svc = app(\App\Services\FcmService::class);
+        if (!$svc->configured()) {
+            return response()->json(['message' => 'FCM not configured on the server.'], 503);
+        }
+        $result = $svc->sendToUser(
+            $user->id,
+            'KiddieTrac test 🔔',
+            'If your phone buzzed and made a sound, push is working!',
+            '#home'
+        );
+        return response()->json($result);
+    }
+
+    /**
      * POST /api/v1/push/unsubscribe
      */
     public function unsubscribe(Request $request): JsonResponse

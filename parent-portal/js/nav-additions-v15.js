@@ -43,6 +43,7 @@
       extra.appendChild(sectionLabel('Reseller'));
       extra.appendChild(makeNavBtn('admin-mrr',      '💰 MRR Dashboard'));
       extra.appendChild(makeNavBtn('admin-features', '⚙️ Feature Flags'));
+      extra.appendChild(makeNavBtn('marketing-site', '🌐 Website'));
     }
     if (role === 'agency_admin' || role === 'platform_admin') {
       extra.appendChild(makeNavBtn('admin-branding', '🎨 White-Label Branding'));

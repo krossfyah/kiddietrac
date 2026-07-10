@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -94,6 +95,8 @@ final class DocumentWorkflowController extends Controller
     {
         $w = DB::table('document_workflows')->where('id', $id)->first();
         abort_unless($w, 404);
+        // SECURITY (v22p94): the workflow must belong to the caller's agency.
+        abort_unless($this->isPlatformAdminUser($request->user()) || $this->userBelongsToAgency($request->user()->id, (int) $w->agency_id), 403);
         $steps = DB::table('document_workflow_steps as s')
             ->leftJoin('users as u', 'u.id', '=', 's.signer_user_id')
             ->where('s.workflow_id', $id)
@@ -113,6 +116,9 @@ final class DocumentWorkflowController extends Controller
         $u = $request->user();
         $workflow = DB::table('document_workflows')->where('id', $id)->first();
         abort_unless($workflow, 404);
+        // SECURITY (v22p94): only someone in the workflow's agency may sign/advance
+        // it (in addition to the per-step assigned-signer check below).
+        abort_unless($this->isPlatformAdminUser($u) || $this->userBelongsToAgency($u->id, (int) $workflow->agency_id), 403);
         abort_unless($workflow->status === 'in_progress', 422, 'Workflow already complete');
         abort_unless($workflow->current_step === $data['step_order'], 422, 'Not the current step');
 

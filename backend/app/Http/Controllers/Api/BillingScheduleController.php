@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class BillingScheduleController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function get(Request $request, int $familyId): JsonResponse
     {
         $this->assertAccess($request, $familyId);
@@ -71,12 +74,11 @@ final class BillingScheduleController extends Controller
 
     private function assertAccess(Request $request, int $familyId): void
     {
-        $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
-            ->where('active', 1)->exists();
-        if ($isStaff) return;
-        $hasFamily = DB::table('guardians')->where('user_id', $u->id)->where('family_id', $familyId)->exists();
-        abort_unless($hasFamily, 403);
+        // SECURITY (v22p96): the prior blanket `$isStaff` accepted any active staff
+        // role anywhere, so a director/admin of agency A — or a switched
+        // platform_admin — could read/disable agency B's billing schedule. Now must
+        // be a guardian of THIS family, staff of its centre, or a platform_admin
+        // scoped to its agency.
+        abort_unless($this->canAccessFamilyScoped($request, $familyId), 403);
     }
 }

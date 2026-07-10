@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class ImmunizationScheduleController extends Controller
 {
+    use ResolvesCentreContext;
+
     // Ontario / Canada NACI default schedule (months)
     private const DEFAULTS = [
         ['DTaP-IPV-Hib', '1st dose', 2],
@@ -82,6 +85,12 @@ final class ImmunizationScheduleController extends Controller
 
     public function removeSchedule(Request $request, int $id): JsonResponse
     {
+        // SECURITY (v22p95): a schedule row belongs to an agency — only delete
+        // rows of the caller's own agency (platform_admin may delete any).
+        $row = DB::table('immunization_schedule')->where('id', $id)->first();
+        abort_unless($row, 404);
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($this->isPlatformAdminUser($request->user()) || (int) $row->agency_id === (int) $agencyId, 403);
         DB::table('immunization_schedule')->where('id', $id)->update(['active' => 0, 'updated_at' => now()]);
         return response()->json(['status' => 'removed']);
     }
@@ -95,6 +104,8 @@ final class ImmunizationScheduleController extends Controller
     {
         $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
         abort_unless($child, 404);
+        // SECURITY (v22p94): only the child's guardians/centre staff (health data).
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $family = DB::table('families')->where('id', $child->family_id)->first();
         $agencyId = (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
 
@@ -202,7 +213,13 @@ final class ImmunizationScheduleController extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)->where('active', true)
             ->value('agency_id');

@@ -38,12 +38,14 @@ final class AdminController extends Controller
             ->exists();
         $activeId = (int) $request->header('X-Active-Agency-Id');
         if ($isPlatformAdmin) {
-            if ($activeId && DB::table('agencies')->where('id', $activeId)->whereNull('deleted_at')->exists()) {
-                return $activeId;
-            }
-            // platform_admin without header — default to the first agency.
-            $first = DB::table('agencies')->whereNull('deleted_at')->orderBy('id')->value('id');
-            if ($first) return (int) $first;
+            // SECURITY (v22p98): a platform_admin must EXPLICITLY select an agency.
+            // The old "default to the first agency" silently returned iLearn's
+            // centres/families/contacts to a super-admin whenever the active-agency
+            // header was missing (fresh tab, race, or a call that bypasses app.js)
+            // — e.g. the announcement composer's centre picker leaked iLearn. Return
+            // null (→ "No agency access") instead of defaulting to a real tenant.
+            return ($activeId && DB::table('agencies')->where('id', $activeId)->whereNull('deleted_at')->exists())
+                ? $activeId : null;
         }
         if ($activeId && DB::table('role_assignments')
                 ->where('user_id', $request->user()->id)
@@ -125,8 +127,12 @@ final class AdminController extends Controller
                 'slug' => $c->slug,
                 'license_number' => $c->license_number,
                 'license_capacity' => $c->license_capacity,
+                'address_line1' => $c->address_line1,
+                'address_line2' => $c->address_line2,
                 'city' => $c->city,
                 'province' => $c->province,
+                'postal_code' => $c->postal_code,
+                'date_of_birth' => $c->date_of_birth ?? null,
                 'phone' => $c->phone,
                 'email' => $c->email,
                 'status' => $c->status,
@@ -157,6 +163,8 @@ final class AdminController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:180'],
+            'supervisor_first_name' => ['nullable', 'string', 'max:80'],
+            'supervisor_last_name' => ['nullable', 'string', 'max:80'],
             'license_number' => ['nullable', 'string', 'max:60'],
             'license_capacity' => ['nullable', 'integer', 'min:0', 'max:500'],
             'address_line1' => ['nullable', 'string', 'max:200'],
@@ -179,6 +187,8 @@ final class AdminController extends Controller
         $centreId = DB::table('centres')->insertGetId([
             'agency_id' => $agencyId,
             'name' => $data['name'],
+            'supervisor_first_name' => $data['supervisor_first_name'] ?? null,
+            'supervisor_last_name' => $data['supervisor_last_name'] ?? null,
             'slug' => $slug,
             'license_number' => $data['license_number'] ?? null,
             'license_capacity' => $data['license_capacity'] ?? 0,
@@ -232,19 +242,63 @@ final class AdminController extends Controller
         return response()->json(['message' => 'Centre updated']);
     }
 
+    /** Can this user archive/restore/delete the given centre? platform_admin →
+     *  any; agency_admin → centres in their agency; centre_director → their centre. */
+    private function canManageCentre(Request $request, $centre): bool
+    {
+        $uid = $request->user()->id;
+        if (DB::table('role_assignments')->where('user_id', $uid)->where('role', 'platform_admin')->where('active', true)->exists()) {
+            return true;
+        }
+        if (DB::table('role_assignments')->where('user_id', $uid)->where('role', 'agency_admin')->where('agency_id', $centre->agency_id)->where('active', true)->exists()) {
+            return true;
+        }
+        if (DB::table('role_assignments')->where('user_id', $uid)->where('role', 'centre_director')->where('centre_id', $centre->id)->where('active', true)->exists()) {
+            return true;
+        }
+        return false;
+    }
+
     public function archiveCentre(Request $request, int $centreId): JsonResponse
     {
-        $agencyId = $this->getAgencyId($request);
-        $centre = DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
-        if (!$centre) return response()->json(['message' => 'Centre not found'], 404);
-
-        DB::table('centres')->where('id', $centreId)->update([
-            'deleted_at' => now(),
-            'status' => 'closed',
-        ]);
-
+        $centre = DB::table('centres')->where('id', $centreId)->whereNull('deleted_at')->first();
+        if (!$centre || !$this->canManageCentre($request, $centre)) {
+            return response()->json(['message' => 'Centre not found'], 404);
+        }
+        DB::table('centres')->where('id', $centreId)->update(['deleted_at' => now(), 'status' => 'closed']);
         $this->audit($request->user()->id, 'centre.archived', 'centre', $centreId, []);
         return response()->json(['message' => 'Centre archived']);
+    }
+
+    public function restoreCentre(Request $request, int $centreId): JsonResponse
+    {
+        $centre = DB::table('centres')->where('id', $centreId)->whereNotNull('deleted_at')->first();
+        if (!$centre || !$this->canManageCentre($request, $centre)) {
+            return response()->json(['message' => 'Archived centre not found'], 404);
+        }
+        DB::table('centres')->where('id', $centreId)->update(['deleted_at' => null, 'status' => 'active']);
+        $this->audit($request->user()->id, 'centre.restored', 'centre', $centreId, []);
+        return response()->json(['message' => 'Centre restored']);
+    }
+
+    public function permanentDeleteCentre(Request $request, int $centreId): JsonResponse
+    {
+        $centre = DB::table('centres')->where('id', $centreId)->first(); // includes archived
+        if (!$centre || !$this->canManageCentre($request, $centre)) {
+            return response()->json(['message' => 'Centre not found'], 404);
+        }
+        // Guard: never permanently destroy a centre that still has children.
+        $hasKids = DB::table('children')
+            ->join('families', 'families.id', '=', 'children.family_id')
+            ->where('families.centre_id', $centreId)
+            ->whereNull('children.deleted_at')
+            ->exists();
+        if ($hasKids) {
+            return response()->json(['message' => 'This centre still has children — archive it instead, or remove the children first.'], 422);
+        }
+        DB::table('centres')->where('id', $centreId)->delete();
+        $this->audit($request->user()->id, 'centre.deleted', 'centre', $centreId, ['name' => $centre->name ?? null]);
+        return response()->json(['message' => 'Centre permanently deleted']);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -272,14 +326,93 @@ final class AdminController extends Controller
      *   limit       — page size (default 50, max 200)
      *   offset      — pagination offset
      */
+    /** "post:api/v1/admin/centres" → "Created · admin › centres"; "user.deleted" → "User deleted". */
+    private function humanizeAuditAction(?string $action): string
+    {
+        $action = (string) $action;
+        $failed = str_contains($action, '[fail]');
+        $action = trim(str_replace('[fail]', '', $action));
+        if (preg_match('#^(post|put|patch|delete):(.+)$#', $action, $m)) {
+            $verb = ['post' => 'Created', 'put' => 'Updated', 'patch' => 'Updated', 'delete' => 'Deleted'][$m[1]] ?? ucfirst($m[1]);
+            $path = trim(str_replace('/', ' › ', preg_replace('#^api/v1/#', '', $m[2])));
+            return $verb . ' · ' . $path . ($failed ? '  (failed)' : '');
+        }
+        return ucfirst(str_replace(['.', '_'], ' ', $action)) . ($failed ? ' (failed)' : '');
+    }
+
+    /** Human name for the entity an audit row touched (payload first, then a live lookup). */
+    private function describeAuditEntity(?string $type, ?int $id, ?string $payload): ?string
+    {
+        $data = $payload ? (json_decode($payload, true) ?: []) : [];
+        $input = is_array($data['input'] ?? null) ? $data['input'] : [];
+        $fromPayload = $data['name'] ?? $data['email'] ?? $data['to'] ?? ($input['name'] ?? $input['email'] ?? $input['family_name'] ?? null);
+        if (is_string($fromPayload) && trim($fromPayload) !== '') {
+            return $fromPayload;
+        }
+        if (! $type || ! $id) {
+            return null;
+        }
+        $map = ['users' => 'user', 'user' => 'user', 'agencies' => 'agency', 'agency' => 'agency', 'centres' => 'centre', 'centre' => 'centre', 'children' => 'child', 'child' => 'child', 'families' => 'family', 'family' => 'family'];
+        $t = $map[strtolower($type)] ?? strtolower($type);
+        try {
+            switch ($t) {
+                case 'user':
+                    $r = DB::table('users')->where('id', $id)->first(['first_name', 'last_name', 'email']);
+                    if (! $r) return null;
+                    $n = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
+                    return $n !== '' ? $n : $r->email;
+                case 'agency': return DB::table('agencies')->where('id', $id)->value('name') ?: null;
+                case 'centre': return DB::table('centres')->where('id', $id)->value('name') ?: null;
+                case 'family': return DB::table('families')->where('id', $id)->value('family_name') ?: null;
+                case 'child':
+                    $r = DB::table('children')->where('id', $id)->first(['first_name', 'last_name']);
+                    return $r ? (trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: null) : null;
+            }
+        } catch (\Throwable $e) {
+        }
+        return null;
+    }
+
+    /** Short human summary of what changed, drawn from the audit payload. */
+    private function summarizeAuditPayload(?string $payload): ?string
+    {
+        $data = $payload ? (json_decode($payload, true) ?: []) : [];
+        if (! is_array($data)) return null;
+        $bits = [];
+        if (isset($data['status']) && ((int) $data['status'] < 200 || (int) $data['status'] >= 300)) {
+            $bits[] = 'HTTP ' . $data['status'];
+        }
+        $input = is_array($data['input'] ?? null) ? $data['input'] : (isset($data['method']) ? [] : $data);
+        $skip = ['method', 'path', 'status', 'input', 'active_agency_id', 'fields', 'user_agent', 'ip_address'];
+        $fields = [];
+        foreach ($input as $k => $v) {
+            if (in_array($k, $skip, true) || ! is_scalar($v) || $v === '' || $v === null) continue;
+            $val = is_bool($v) ? ($v ? 'yes' : 'no') : (string) $v;
+            if (mb_strlen($val) > 40) $val = mb_substr($val, 0, 40) . '…';
+            $fields[] = $k . ': ' . $val;
+            if (count($fields) >= 5) break;
+        }
+        if (isset($data['fields']) && is_array($data['fields'])) {
+            $fields = array_merge($fields, array_map('strval', array_slice($data['fields'], 0, 6)));
+        }
+        if ($fields) $bits[] = implode(', ', $fields);
+        return $bits ? implode(' · ', $bits) : null;
+    }
+
     public function auditLogs(Request $request)
     {
-        $agencyId = $this->getAgencyId($request);
-        if (!$agencyId) return response()->json(['logs' => [], 'total' => 0]);
-
-        $callerIsPlatformAdmin = DB::table('role_assignments')
-            ->where('user_id', $request->user()->id)
-            ->where('role', 'platform_admin')->where('active', true)->exists();
+        // v22p47: viewable by agency_admin AND centre_director. Agency admins see
+        // the whole agency; directors see only the centre(s) they direct.
+        $caller = $request->user();
+        $callerRoles = DB::table('role_assignments')
+            ->where('user_id', $caller->id)->where('active', true)
+            ->pluck('role')->all();
+        $callerIsPlatformAdmin = in_array('platform_admin', $callerRoles, true);
+        $callerIsAgencyAdmin   = in_array('agency_admin', $callerRoles, true);
+        $callerIsDirector      = in_array('centre_director', $callerRoles, true);
+        if (!$callerIsPlatformAdmin && !$callerIsAgencyAdmin && !$callerIsDirector) {
+            return response()->json(['logs' => [], 'total' => 0]);
+        }
 
         $entityType = $request->input('entity_type');
         $action     = $request->input('action');
@@ -290,9 +423,17 @@ final class AdminController extends Controller
         $limit      = min(200, max(1, (int) $request->input('limit', 50)));
         $offset     = max(0, (int) $request->input('offset', 0));
 
-        // Build agency-scoped user id list (actors who belong to this agency)
+        // Build agency-scoped user id list (actors who belong to this agency).
+        // SECURITY (v22p96): ALWAYS scope to the active agency — a platform_admin
+        // is treated as an agency_admin of whichever agency they've switched into
+        // (getAgencyId resolves the X-Active-Agency-Id header), so audit logs are
+        // never shown across tenants. The prior `$scopedUserIds = null` bypass
+        // surfaced every agency's audit trail to platform_admins — removed.
         $scopedUserIds = null;
-        if (!$callerIsPlatformAdmin) {
+        if ($callerIsPlatformAdmin || $callerIsAgencyAdmin) {
+            // Whole active agency: actors scoped by agency_id or any agency centre.
+            $agencyId = $this->getAgencyId($request);
+            if (!$agencyId) return response()->json(['logs' => [], 'total' => 0]);
             $centreIds = $this->getCentreIds($agencyId);
             $scopedUserIds = DB::table('role_assignments')
                 ->where('active', true)
@@ -301,13 +442,22 @@ final class AdminController extends Controller
                     if (!empty($centreIds)) $x->orWhereIn('centre_id', $centreIds);
                 })
                 ->pluck('user_id')->unique()->values()->all();
-            // Also include guardian users in the agency
-            $guardianIds = DB::table('guardians as g')
-                ->join('families as f', 'f.id', '=', 'g.family_id')
-                ->whereIn('f.centre_id', $centreIds ?: [0])
-                ->pluck('g.user_id')->all();
-            $scopedUserIds = array_values(array_unique(array_merge($scopedUserIds, $guardianIds)));
+        } else {
+            // centre_director: limit to the centre(s) they actually direct.
+            $centreIds = DB::table('role_assignments')
+                ->where('user_id', $caller->id)->where('role', 'centre_director')
+                ->where('active', true)->whereNotNull('centre_id')
+                ->pluck('centre_id')->unique()->values()->all();
+            $scopedUserIds = DB::table('role_assignments')
+                ->where('active', true)->whereIn('centre_id', $centreIds ?: [0])
+                ->pluck('user_id')->unique()->values()->all();
         }
+        // Include guardian users tied to the in-scope centres + the viewer.
+        $guardianIds = DB::table('guardians as g')
+            ->join('families as f', 'f.id', '=', 'g.family_id')
+            ->whereIn('f.centre_id', $centreIds ?: [0])
+            ->pluck('g.user_id')->all();
+        $scopedUserIds = array_values(array_unique(array_merge($scopedUserIds, $guardianIds, [(int) $caller->id])));
 
         $base = DB::table('audit_logs as al')
             ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
@@ -335,6 +485,16 @@ final class AdminController extends Controller
             DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, 'system') as actor_name"),
             'u.email as actor_email',
         ]);
+
+        // Enrich each row: readable action, the affected entity's NAME (from
+        // payload first so it survives deletes, else a live lookup), and a short
+        // human summary of what changed.
+        $rows = $rows->map(function ($r) {
+            $r->action_label = $this->humanizeAuditAction($r->action);
+            $r->entity_name  = $this->describeAuditEntity($r->entity_type, $r->entity_id ? (int) $r->entity_id : null, $r->payload);
+            $r->summary      = $this->summarizeAuditPayload($r->payload);
+            return $r;
+        });
 
         // Distinct values for the UI filter dropdowns (capped at 60 each)
         $distinctActions = (clone $base)->distinct()->limit(60)->pluck('al.action');
@@ -389,10 +549,6 @@ final class AdminController extends Controller
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['online' => [], 'window_minutes' => 5]);
 
-        $callerIsPlatformAdmin = DB::table('role_assignments')
-            ->where('user_id', $request->user()->id)
-            ->where('role', 'platform_admin')->where('active', true)->exists();
-
         $cutoff = now()->subMinutes(5);
         $base = DB::table('personal_access_tokens as t')
             ->where('t.tokenable_type', \App\Models\User::class)
@@ -400,22 +556,23 @@ final class AdminController extends Controller
             ->where('t.last_used_at', '>=', $cutoff)
             ->groupBy('t.tokenable_id');
 
-        if (!$callerIsPlatformAdmin) {
-            $centreIds = $this->getCentreIds($agencyId);
-            $scoped = DB::table('role_assignments')
-                ->where('active', true)
-                ->where(function ($x) use ($agencyId, $centreIds) {
-                    $x->where('agency_id', $agencyId);
-                    if (!empty($centreIds)) $x->orWhereIn('centre_id', $centreIds);
-                })
-                ->pluck('user_id')->unique()->values()->all();
-            $guardianIds = DB::table('guardians as g')
-                ->join('families as f', 'f.id', '=', 'g.family_id')
-                ->whereIn('f.centre_id', $centreIds ?: [0])
-                ->pluck('g.user_id')->all();
-            $scoped = array_values(array_unique(array_merge($scoped, $guardianIds)));
-            $base->whereIn('t.tokenable_id', $scoped ?: [0]);
-        }
+        // SECURITY (v22p96): presence is ALWAYS scoped to the active agency,
+        // platform_admin included (getAgencyId resolves the switched-into agency).
+        // The prior platform bypass showed every online user across all tenants.
+        $centreIds = $this->getCentreIds($agencyId);
+        $scoped = DB::table('role_assignments')
+            ->where('active', true)
+            ->where(function ($x) use ($agencyId, $centreIds) {
+                $x->where('agency_id', $agencyId);
+                if (!empty($centreIds)) $x->orWhereIn('centre_id', $centreIds);
+            })
+            ->pluck('user_id')->unique()->values()->all();
+        $guardianIds = DB::table('guardians as g')
+            ->join('families as f', 'f.id', '=', 'g.family_id')
+            ->whereIn('f.centre_id', $centreIds ?: [0])
+            ->pluck('g.user_id')->all();
+        $scoped = array_values(array_unique(array_merge($scoped, $guardianIds)));
+        $base->whereIn('t.tokenable_id', $scoped ?: [0]);
 
         $rows = $base->get(['t.tokenable_id', DB::raw('MAX(t.last_used_at) as last_seen')]);
 
@@ -607,31 +764,21 @@ final class AdminController extends Controller
         $roleFilter = $request->input('role');
         $searchQuery = $request->input('q');
 
-        // v22p27: when the caller is a platform_admin, drop the agency filter
-        // entirely — they manage every tenant on the platform and should see
-        // every user with an active role_assignment, regardless of which
-        // agency the row belongs to. Anthony reported adding Safia Ali (iLearn
-        // agency_admin) and not seeing her while his active agency was
-        // Kiddietrac. Platform admins now bypass that scoping.
-        $callerIsPlatformAdmin = DB::table('role_assignments')
-            ->where('user_id', $request->user()->id)
-            ->where('role', 'platform_admin')
-            ->where('active', true)
-            ->exists();
-
-        $userIdsQuery = DB::table('role_assignments')->where('active', true);
-        if (! $callerIsPlatformAdmin) {
-            // v22p25: surface platform_admin users for everyone — they have
-            // NULL agency_id + NULL centre_id by design, so the regular WHERE
-            // would otherwise exclude them.
-            $userIdsQuery->where(function ($q) use ($agencyId, $centreIds) {
+        // SECURITY (v22p96): the Users view is ALWAYS scoped to the active agency
+        // — including for platform_admins. getAgencyId() already resolves the
+        // X-Active-Agency-Id header to the agency the super-admin has switched
+        // INTO, so a platform_admin sees one agency at a time (the one selected),
+        // never every tenant's users mixed together. To manage another agency's
+        // users they switch their active agency to it. The prior v22p27 bypass
+        // (drop the filter entirely for platform_admins) leaked every user on the
+        // platform into whatever agency context was active — removed.
+        $userIdsQuery = DB::table('role_assignments')->where('active', true)
+            ->where(function ($q) use ($agencyId, $centreIds) {
                 $q->where('agency_id', $agencyId);
                 if (!empty($centreIds)) {
                     $q->orWhereIn('centre_id', $centreIds);
                 }
-                $q->orWhere('role', 'platform_admin');
             });
-        }
 
         if ($roleFilter) {
             $userIdsQuery->where('role', $roleFilter);
@@ -640,13 +787,11 @@ final class AdminController extends Controller
         $userIds = $userIdsQuery->pluck('user_id')->unique()->all();
 
         // Also include guardians of families at this agency's centres
-        // (platform_admin sees every guardian on the platform).
+        // (v22p96: always scoped to the active agency, platform_admin included).
         if ($roleFilter === null || $roleFilter === 'guardian') {
             $guardianQuery = DB::table('guardians')
-                ->join('families', 'families.id', '=', 'guardians.family_id');
-            if (! $callerIsPlatformAdmin) {
-                $guardianQuery->whereIn('families.centre_id', $centreIds ?: [0]);
-            }
+                ->join('families', 'families.id', '=', 'guardians.family_id')
+                ->whereIn('families.centre_id', $centreIds ?: [0]);
             $guardianUserIds = $guardianQuery->pluck('guardians.user_id')->all();
             $userIds = array_unique(array_merge($userIds, $guardianUserIds));
         }
@@ -826,7 +971,10 @@ final class AdminController extends Controller
             // Drop the old (deactivated) role_assignment rows for this user; a
             // fresh one is inserted below. This avoids a recreated educator
             // accidentally inheriting a stale platform_admin row.
-            DB::table('role_assignments')->where('user_id', $userId)->delete();
+            // Never strip roles from the protected super-admin account.
+            if (!$this->isProtectedEmail($data['email'] ?? null)) {
+                DB::table('role_assignments')->where('user_id', $userId)->delete();
+            }
         } else {
             $userId = DB::table('users')->insertGetId([
                 'email' => $data['email'],
@@ -861,8 +1009,29 @@ final class AdminController extends Controller
             'role' => $data['role'],
         ]);
 
-        // TODO: send invite email here if $data['send_invite']
-        // For now, we just create the user; admin can use the forgot-password flow to send them a reset link
+        // Email the user a set-password invite. This was previously an
+        // unimplemented TODO — invited users never received anything, which is
+        // why enrollment invites silently "sent" but never arrived. Mirrors
+        // PlatformController's agency-admin invite (password_resets token +
+        // branded HTML + email_logs row).
+        $inviteSent = false;
+        if (!empty($data['send_invite'])) {
+            try {
+                $token = bin2hex(random_bytes(32));
+                DB::table('password_resets')->insert([
+                    'email'      => $data['email'],
+                    'token'      => hash('sha256', $token),
+                    'expires_at' => now()->addDays(7),
+                    'created_at' => now(),
+                ]);
+                $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?? 'Kiddietrac');
+                $this->sendUserInvite($data['email'], $data['first_name'], $data['last_name'], $agencyName,
+                    'https://app.kiddietrac.com/set-password.html?token=' . $token);
+                $inviteSent = true;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('User invite email failed', ['email' => $data['email'], 'error' => $e->getMessage()]);
+            }
+        }
 
         return response()->json([
             'id' => $userId,
@@ -870,8 +1039,59 @@ final class AdminController extends Controller
                 ? 'User restored — they previously existed and have been reinstated with the role you selected.'
                 : 'User created',
             'revived' => $isRevive,
-            'note' => 'Have the user click "Forgot password" on the login page to set their password.',
+            'invite_sent' => $inviteSent,
+            'note' => $inviteSent
+                ? 'An invite email with a set-password link has been sent.'
+                : 'Have the user click "Forgot password" on the login page to set their password.',
         ], 201);
+    }
+
+    /**
+     * Email a newly-created user a branded set-password link. Synchronous send
+     * (sendmail) + logs to email_logs with a tracking token; the X-KT-Logged
+     * header stops the global MessageSent listener writing a duplicate row.
+     */
+    private function sendUserInvite(string $email, string $firstName, string $lastName, string $agencyName, string $link): void
+    {
+        $trackToken = bin2hex(random_bytes(16));
+        $apiBase = preg_replace('#/api/v1/?$#', '', rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/'));
+        $pixel = '<img src="' . $apiBase . '/api/v1/e/o/' . $trackToken . '" width="1" height="1" alt="" style="display:none;border:0;">';
+        $first = htmlspecialchars($firstName);
+        $safeLink = htmlspecialchars($link);
+        $safeAgency = htmlspecialchars($agencyName);
+
+        $body = '<p style="margin:0 0 14px;">Hi ' . $first . ',</p>'
+            . '<p style="margin:0 0 16px;">You\'ve been invited to <strong>' . $safeAgency . '</strong> on Kiddietrac. '
+            . 'Set your password below and you\'ll be taken straight into your account.</p>'
+            . \App\Services\EmailTemplate::button('Set my password →', $link)
+            . '<p style="margin:16px 0 0;font-size:12px;color:#64748B;">Or paste this into your browser:<br>'
+            . '<a href="' . $safeLink . '" style="color:#1F6080;">' . $safeLink . '</a></p>'
+            . '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8;">This link expires in 7 days. If you weren\'t expecting this, you can ignore this email.</p>'
+            . $pixel;
+
+        $html = \App\Services\EmailTemplate::wrap(null, $body, [
+            'eyebrow'   => 'YOU\'RE INVITED',
+            'title'     => $agencyName,
+            'subtitle'  => 'Set your password to get started',
+            'preheader' => 'Set your password and sign in to ' . $agencyName . ' on Kiddietrac.',
+        ]);
+
+        \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($email, $firstName, $lastName) {
+            $m->to($email, trim($firstName . ' ' . $lastName))
+              ->from('noreply@kiddietrac.com', 'Kiddietrac')
+              ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
+              ->subject('You\'re invited to Kiddietrac — set your password');
+            $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
+            $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
+        });
+        if (\Illuminate\Support\Facades\Schema::hasTable('email_logs')) {
+            DB::table('email_logs')->insert([
+                'to_email' => $email, 'to_name' => trim($firstName . ' ' . $lastName),
+                'from_email' => 'noreply@kiddietrac.com', 'subject' => 'You\'re invited to Kiddietrac — set your password',
+                'mailer' => config('mail.default'), 'status' => 'sent', 'tracking_token' => $trackToken,
+                'opens' => 0, 'created_at' => now(),
+            ]);
+        }
     }
 
     public function updateUser(Request $request, int $userId): JsonResponse
@@ -900,6 +1120,72 @@ final class AdminController extends Controller
 
         $this->audit($request->user()->id, 'user.updated', 'user', $userId, $data);
         return response()->json(['message' => 'User updated']);
+    }
+
+    /** platform_admin / agency_admin — profile extras + notes for a user. */
+    public function userProfile(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) return response()->json(['message' => 'User not in your agency'], 403);
+        $p = DB::table('user_profiles')->where('user_id', $userId)->first();
+        $notes = DB::table('user_notes')->where('user_id', $userId)->orderByDesc('created_at')->limit(200)->get();
+        return response()->json([
+            'profile' => $p ? [
+                'address' => $p->address,
+                'date_of_birth' => $p->date_of_birth,
+                'emergency_contact_name' => $p->emergency_contact_name,
+                'emergency_contact_phone' => $p->emergency_contact_phone,
+                'emergency_contact_relation' => $p->emergency_contact_relation,
+            ] : null,
+            'notes' => $notes,
+        ]);
+    }
+
+    /** Upsert a user's profile extras. */
+    public function updateUserProfile(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) return response()->json(['message' => 'User not in your agency'], 403);
+        $data = $request->validate([
+            'address' => ['sometimes', 'nullable', 'string', 'max:300'],
+            'date_of_birth' => ['sometimes', 'nullable', 'date'],
+            'emergency_contact_name' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'emergency_contact_phone' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'emergency_contact_relation' => ['sometimes', 'nullable', 'string', 'max:80'],
+        ]);
+        $data['user_id'] = $userId;
+        $data['updated_at'] = now();
+        if (DB::table('user_profiles')->where('user_id', $userId)->exists()) {
+            DB::table('user_profiles')->where('user_id', $userId)->update($data);
+        } else {
+            $data['created_at'] = now();
+            DB::table('user_profiles')->insert($data);
+        }
+        $this->audit($request->user()->id, 'user.profile_updated', 'user', $userId, []);
+        return response()->json(['message' => 'Profile saved']);
+    }
+
+    /** Add a timestamped note to a user. */
+    public function addUserNote(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) return response()->json(['message' => 'User not in your agency'], 403);
+        $data = $request->validate(['note' => ['required', 'string', 'max:2000']]);
+        $actor = $request->user();
+        $name = trim((string) (($actor->first_name ?? '') . ' ' . ($actor->last_name ?? ''))) ?: ($actor->name ?? 'Admin');
+        $id = DB::table('user_notes')->insertGetId([
+            'user_id' => $userId,
+            'note' => $data['note'],
+            'created_by' => $actor->id,
+            'created_by_name' => $name,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->audit($actor->id, 'user.note_added', 'user', $userId, []);
+        return response()->json(['message' => 'Note added', 'id' => $id]);
     }
 
     public function setUserRole(Request $request, int $userId): JsonResponse
@@ -1080,6 +1366,36 @@ final class AdminController extends Controller
             'preferred_lang' => ['nullable', 'string', 'max:10'],
             'billing_split' => ['nullable', 'in:single,split_50_50,custom'],
             'notes' => ['nullable', 'string'],
+            // v22p36: optional nested guardians + children for the multi-step wizard.
+            // Omitting them keeps the legacy single-step behaviour (family only).
+            'guardians' => ['nullable', 'array'],
+            'guardians.*.email' => ['required_with:guardians', 'email', 'max:180'],
+            'guardians.*.first_name' => ['required_with:guardians', 'string', 'max:80'],
+            'guardians.*.last_name' => ['nullable', 'string', 'max:80'],
+            'guardians.*.phone' => ['nullable', 'string', 'max:40'],
+            'guardians.*.relationship' => ['nullable', 'in:mother,father,guardian,grandparent,foster,other'],
+            'guardians.*.is_primary' => ['nullable', 'boolean'],
+            'guardians.*.can_pickup' => ['nullable', 'boolean'],
+            'children' => ['nullable', 'array'],
+            'children.*.first_name' => ['required_with:children', 'string', 'max:80'],
+            'children.*.last_name' => ['required_with:children', 'string', 'max:80'],
+            'children.*.preferred_name' => ['nullable', 'string', 'max:80'],
+            'children.*.date_of_birth' => ['required_with:children', 'date'],
+            'children.*.gender' => ['nullable', 'in:female,male,non_binary,prefer_not_to_say,other'],
+            'children.*.enrollment_status' => ['nullable', 'in:waitlist,enrolled,withdrawn,graduated'],
+            // v22p… onboarding wizard — rich child + emergency-contact data.
+            'children.*.allergies' => ['nullable', 'string', 'max:1000'],
+            'children.*.dietary_restrictions' => ['nullable', 'string', 'max:1000'],
+            'children.*.medical_notes' => ['nullable', 'string', 'max:2000'],
+            'children.*.doctor_name' => ['nullable', 'string', 'max:120'],
+            'children.*.doctor_phone' => ['nullable', 'string', 'max:40'],
+            'children.*.school' => ['nullable', 'string', 'max:160'],
+            'emergency_contacts' => ['nullable', 'array'],
+            'emergency_contacts.*.name' => ['required_with:emergency_contacts', 'string', 'max:120'],
+            'emergency_contacts.*.relationship' => ['nullable', 'string', 'max:60'],
+            'emergency_contacts.*.phone' => ['nullable', 'string', 'max:40'],
+            'emergency_contacts.*.alt_phone' => ['nullable', 'string', 'max:40'],
+            'emergency_contacts.*.can_pickup' => ['nullable', 'boolean'],
         ]);
 
         // Centre must belong to this agency.
@@ -1095,17 +1411,142 @@ final class AdminController extends Controller
             ], 422);
         }
 
-        $id = DB::table('families')->insertGetId(array_merge($data, [
-            'preferred_lang' => $data['preferred_lang'] ?? 'en-CA',
-            'billing_split' => $data['billing_split'] ?? 'single',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]));
+        $guardians = $data['guardians'] ?? [];
+        $children = $data['children'] ?? [];
+        $emergency = $data['emergency_contacts'] ?? [];
+        unset($data['guardians'], $data['children'], $data['emergency_contacts']);
 
-        $this->audit($request->user()->id, 'create_family', 'family', $id, ['centre_id' => $data['centre_id']]);
+        // Reject duplicate guardian emails within the same submission so we do
+        // not create two guardian rows that collapse onto one user.
+        $seenEmails = [];
+        foreach ($guardians as $g) {
+            $em = strtolower(trim($g['email']));
+            if (isset($seenEmails[$em])) {
+                return response()->json([
+                    'message' => 'Duplicate guardian email in submission: '.$g['email'],
+                    'errors' => ['guardians' => ['Each guardian must have a unique email address.']],
+                ], 422);
+            }
+            $seenEmails[$em] = true;
+        }
+
+        try {
+            $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId) {
+                $famId = DB::table('families')->insertGetId(array_merge($data, [
+                    'preferred_lang' => $data['preferred_lang'] ?? 'en-CA',
+                    'billing_split' => $data['billing_split'] ?? 'single',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]));
+
+                $guardianIds = [];
+                foreach (array_values($guardians) as $i => $g) {
+                    $email = strtolower(trim($g['email']));
+                    // Reuse an existing (non-deleted) user with this email so we
+                    // never duplicate accounts or clobber an existing login.
+                    $existing = DB::table('users')->whereRaw('LOWER(email) = ?', [$email])->whereNull('deleted_at')->first();
+                    if ($existing) {
+                        $uid = (int) $existing->id;
+                        DB::table('users')->where('id', $uid)->update(array_filter([
+                            'first_name' => $g['first_name'] ?? null,
+                            'last_name' => $g['last_name'] ?? null,
+                            'phone' => $g['phone'] ?? null,
+                            'updated_at' => now(),
+                        ], fn ($v) => $v !== null));
+                    } else {
+                        $uid = (int) DB::table('users')->insertGetId([
+                            'email' => $g['email'],
+                            'password' => Hash::make(Str::random(24)),
+                            'first_name' => $g['first_name'],
+                            'last_name' => $g['last_name'] ?? '',
+                            'phone' => $g['phone'] ?? null,
+                            'locale' => 'en-CA',
+                            'timezone' => 'America/Toronto',
+                            'status' => 'invited',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+
+                    DB::table('role_assignments')->updateOrInsert(
+                        ['user_id' => $uid, 'role' => 'guardian', 'agency_id' => $agencyId, 'centre_id' => null],
+                        ['active' => true, 'created_at' => now()]
+                    );
+
+                    $isPrimary = ! empty($g['is_primary']) || $i === 0;
+                    DB::table('guardians')->updateOrInsert(
+                        ['family_id' => $famId, 'user_id' => $uid],
+                        [
+                            'relationship' => $g['relationship'] ?? 'guardian',
+                            'is_primary' => $isPrimary,
+                            'can_pickup' => array_key_exists('can_pickup', $g) ? (bool) $g['can_pickup'] : true,
+                            'can_receive_billing' => true,
+                            'billing_share_pct' => $isPrimary ? 100.00 : 0.00,
+                            'created_at' => now(),
+                        ]
+                    );
+                    $guardianIds[] = $uid;
+                }
+
+                $childIds = [];
+                foreach ($children as $c) {
+                    $status = $c['enrollment_status'] ?? 'enrolled';
+                    $childIds[] = (int) DB::table('children')->insertGetId([
+                        'family_id' => $famId,
+                        'first_name' => $c['first_name'],
+                        'last_name' => $c['last_name'],
+                        'preferred_name' => $c['preferred_name'] ?? $c['first_name'],
+                        'date_of_birth' => $c['date_of_birth'],
+                        'gender' => $c['gender'] ?? 'prefer_not_to_say',
+                        // allergies + dietary_restrictions are JSON (json_valid CHECK) — store as arrays.
+                        'allergies' => ! empty($c['allergies']) ? json_encode(array_values(array_filter(array_map('trim', explode(',', (string) $c['allergies']))))) : null,
+                        'dietary_restrictions' => ! empty($c['dietary_restrictions']) ? json_encode(array_values(array_filter(array_map('trim', explode(',', (string) $c['dietary_restrictions']))))) : null,
+                        'medical_notes' => $c['medical_notes'] ?? null,
+                        'doctor_name' => $c['doctor_name'] ?? null,
+                        'doctor_phone' => $c['doctor_phone'] ?? null,
+                        'school' => $c['school'] ?? null,
+                        'preferred_lang' => 'en-CA',
+                        'enrollment_status' => $status,
+                        'enrolled_at' => $status === 'enrolled' ? now()->toDateString() : null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                $emergencyIds = [];
+                if (\Illuminate\Support\Facades\Schema::hasTable('emergency_contacts')) {
+                    foreach ($emergency as $ec) {
+                        $emergencyIds[] = (int) DB::table('emergency_contacts')->insertGetId([
+                            'family_id' => $famId,
+                            'name' => $ec['name'],
+                            'relationship' => $ec['relationship'] ?? null,
+                            'phone' => $ec['phone'] ?? null,
+                            'alt_phone' => $ec['alt_phone'] ?? null,
+                            'can_pickup' => ! empty($ec['can_pickup']),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
+                return ['family_id' => $famId, 'guardian_ids' => $guardianIds, 'child_ids' => $childIds];
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Could not create family: '.$e->getMessage(),
+            ], 500);
+        }
+
+        $this->audit($request->user()->id, 'create_family', 'family', $result['family_id'], [
+            'centre_id' => $data['centre_id'],
+            'guardians' => count($result['guardian_ids']),
+            'children' => count($result['child_ids']),
+        ]);
 
         return response()->json([
-            'family' => DB::table('families')->where('id', $id)->first(),
+            'family' => DB::table('families')->where('id', $result['family_id'])->first(),
+            'guardians' => count($result['guardian_ids']),
+            'children' => count($result['child_ids']),
             'message' => 'Family created',
         ], 201);
     }
@@ -1271,26 +1712,18 @@ final class AdminController extends Controller
      * Verify a target user is within the admin's agency (staff via role_assignments,
      * or guardian via families.centre_id).
      *
-     * v22p30: platform_admin trumps tenancy and is allowed to act on any user in
-     * the system regardless of which agency context they are currently viewing.
-     * Without this short-circuit, mutating endpoints (delete user, reset password,
-     * resend welcome, reopen onboarding, upload avatar) would 403 for cross-agency
-     * targets — e.g. a platform_admin viewing Kiddietrac context could not delete
-     * an iLearn user. Mirrors the same bypass applied to listUsers in v22p27 and
-     * getAgencyId in v22p21.
+     * SECURITY (v22p96): membership is checked against the ACTIVE agency for
+     * everyone, platform_admins included. The prior v22p30 short-circuit
+     * (`if platform_admin return true`) let a super-admin read (userProfile) and
+     * mutate (delete/reset-password/resend/reopen/avatar) any user in any tenant
+     * regardless of which agency they were viewing — a cross-tenant leak. Because
+     * $agencyId comes from getAgencyId() (which resolves the X-Active-Agency-Id a
+     * platform_admin has switched into), a super-admin still manages any agency —
+     * one at a time, by selecting it. To act on another agency's user, switch to
+     * that agency first.
      */
     private function userBelongsToAgency(int $userId, int $agencyId): bool
     {
-        $caller = auth()->user();
-        if ($caller) {
-            $isPlatformAdmin = DB::table('role_assignments')
-                ->where('user_id', $caller->id)
-                ->where('role', 'platform_admin')
-                ->where('active', true)
-                ->exists();
-            if ($isPlatformAdmin) return true;
-        }
-
         $centreIds = $this->getCentreIds($agencyId);
 
         $hasStaffRole = DB::table('role_assignments')
@@ -1316,6 +1749,17 @@ final class AdminController extends Controller
      * Does not cascade to families or children — those keep their guardian link
      * intact for audit (but the user can no longer log in).
      */
+    /**
+     * Emails that are permanently protected: always super-admin, never deletable.
+     * Guarded across every delete path so the platform always retains an owner.
+     */
+    private const PROTECTED_SUPER_ADMINS = ['mr.anthonyhosein@gmail.com'];
+
+    private function isProtectedEmail(?string $email): bool
+    {
+        return $email !== null && in_array(strtolower(trim($email)), self::PROTECTED_SUPER_ADMINS, true);
+    }
+
     public function destroyUser(Request $request, int $userId): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
@@ -1329,6 +1773,11 @@ final class AdminController extends Controller
 
         $user = DB::table('users')->where('id', $userId)->first();
         if (!$user) return response()->json(['message' => 'User not found'], 404);
+
+        // Protected super-admin account — can never be deleted or deactivated.
+        if ($this->isProtectedEmail($user->email ?? null)) {
+            return response()->json(['message' => 'This is the protected super-admin account and cannot be deleted.'], 422);
+        }
 
         DB::transaction(function () use ($userId) {
             DB::table('role_assignments')->where('user_id', $userId)->update([

@@ -68,9 +68,24 @@ Schedule::command('kiddietrac:late-fees')
 
 Schedule::command('invoices:autopay-charge')->dailyAt('03:00');
 Schedule::command('expiry:warn')->dailyAt('08:00');
+Schedule::command('demo:seed-daily')->dailyAt('05:00')->withoutOverlapping();
 
 
 Schedule::command('drip:dispatch')->hourly();
 Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');
 
 Schedule::command('birthdays:celebrate')->dailyAt('07:30');
+
+// v22p98 — staff time-clock reminders (compliance/payroll/reporting)
+Schedule::command('staff:clock-reminders --mode=clock_in')->weekdays()->dailyAt('10:00');
+Schedule::command('staff:clock-reminders --mode=clock_out')->weekdays()->dailyAt('18:30');
+
+// SOC 2 — security monitoring: scan the audit log for auth anomalies.
+Schedule::command('security:alerts')->everyFifteenMinutes()->withoutOverlapping();
+
+// SOC 2 — Availability: nightly verified database backup (retains 14 days).
+Schedule::command('db:backup')->dailyAt('03:30')->withoutOverlapping();
+
+// Invoice/payment reminders — hourly; gated by config('billing.reminders_enabled')
+// (OFF) + per-agency settings; only fires in each agency's send-time hour.
+Schedule::command('billing:reminders')->hourly()->withoutOverlapping();

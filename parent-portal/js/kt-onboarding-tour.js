@@ -16,10 +16,17 @@
       { icon: '📖', title: 'Help & guide', body: 'New Help & Guide section in the sidebar with 30+ articles + AI Ask. Look for the ? badges on screens for contextual help.' },
     ],
     agency_admin: [
-      { icon: '👋', title: 'Welcome to KiddieTrac', body: 'You have full agency control. Manage centres, staff, families, billing, marketing, and compliance from one place.' },
-      { icon: '🏫', title: 'Set up centres', body: 'Add your centres and rooms in Administration → Centres. Each centre has its own director, schedule, and roster.' },
-      { icon: '👨‍👩‍👧', title: 'Invite families', body: 'Add families in Administration → Families. They get an email invite to set up their account.' },
-      { icon: '📖', title: 'Help anywhere', body: 'Sidebar → Help & Guide for full articles. Or click the ? badge on any section for instant context. ✨ AI Ask answers in plain English.' },
+      { icon: '👋', title: 'Welcome to KiddieTrac', body: 'You have full agency control — centres, staff, families, billing, marketing, and compliance, all in one place. This quick tour shows where everything lives. You can replay it anytime from Help & Guide.' },
+      { icon: '🏠', title: 'Agency overview', body: 'Your home base. Live KPIs (enrolled, present now, staff on floor, receivables), business-insight widgets you can customize, and your centres. The ✏️ Edit agency button updates your name, contact, and subdomain.', img: 'https://api.kiddietrac.com/help-img/tour/overview.png' },
+      { icon: '🗺️', title: 'Provider map', body: 'Under Overview — every provider/centre plotted on a map by address, with capacity, phone, and (for home providers) DOB. Great for a quick geographic view of your agency.', img: 'https://api.kiddietrac.com/help-img/provider-map.png' },
+      { icon: '🧒', title: 'Children', body: 'Administration → Children lists every child across all your centres. Filter by centre/status, open a child for the full record: enrollment history, daily reports, live feed, attachments, and the emergency card.', img: 'https://api.kiddietrac.com/help-img/tour/children.png' },
+      { icon: '👨‍👩‍👧', title: 'Families', body: 'Administration → Families. Add families and invite guardians by email — they get a parent-portal login to see their child\'s day, photos, and invoices.', img: 'https://api.kiddietrac.com/help-img/tour/families.png' },
+      { icon: '📝', title: 'Daily log & check-in', body: 'The Daily log captures attendance and day events. Turn on QR/kiosk check-in per centre so families sign in/out from a poster at the door.', img: 'https://api.kiddietrac.com/help-img/tour/daily-log.png' },
+      { icon: '📣', title: 'Marketing campaigns', body: 'Compose rich newsletters and open-house invites, preview them (with your white-label header + Powered-by footer), and send by email or in-portal. Sidebar → Campaigns.', img: 'https://api.kiddietrac.com/help-img/campaigns.png' },
+      { icon: '💳', title: 'Billing & invoices', body: 'Settings → Billing for defaults, late fees, payment methods, languages, and tuition plans. Generate invoices in a click; white-label invoices pull your full agency info.', img: 'https://api.kiddietrac.com/help-img/tour/billing.png' },
+      { icon: '🎨', title: 'Branding', body: 'Sidebar → Branding is where your agency identity lives: logo, colours, business address, bank details, and your privacy/terms links. These appear on invoices and campaigns.', img: 'https://api.kiddietrac.com/help-img/tour/branding.png' },
+      { icon: '📖', title: 'Help & Guide', body: 'Sidebar → Help & Guide has illustrated articles for every feature, plus ✨ AI Ask for plain-English answers. Click the ? badge on any screen for instant context. You can relaunch this tour from here anytime.', img: 'https://api.kiddietrac.com/help-img/tour/help.png' },
+      { icon: '🚀', title: 'You\'re ready', body: 'That\'s the whirlwind tour! Start by adding your centres and rooms, then invite your families. Everything you saw is one click away in the sidebar — and Help is always there if you get stuck.' },
     ],
     centre_director: [
       { icon: '👋', title: 'Welcome to KiddieTrac', body: 'You run a centre on KiddieTrac. Track attendance, schedule staff, share photos, message parents, and run compliance.' },
@@ -108,7 +115,17 @@
 
       // Body
       const bodyDiv = document.createElement('div');
-      bodyDiv.style.cssText = 'padding: 28px 32px; text-align: center;';
+      bodyDiv.style.cssText = 'padding: 24px 32px 28px; text-align: center;';
+
+      // Optional screenshot/visual for this step.
+      if (s.img) {
+        const fig = document.createElement('img');
+        fig.src = s.img;
+        fig.alt = s.title;
+        fig.loading = 'lazy';
+        fig.style.cssText = 'width: 100%; border-radius: 12px; border: 1px solid #E5E7EB; box-shadow: 0 4px 14px rgba(0,0,0,.08); margin-bottom: 18px; display: block;';
+        bodyDiv.appendChild(fig);
+      }
 
       const text = document.createElement('p');
       text.style.cssText = 'margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #4B5563;';

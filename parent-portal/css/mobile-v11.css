@@ -53,6 +53,7 @@ button, .btn, [role="button"] {
     z-index: 100 !important;
     padding: 0 !important;
     overflow-x: auto !important;
+    overflow-y: hidden !important; /* avoid stray vertical scrollbar (overflow-x:auto forces overflow-y to auto) */
     box-shadow: 0 -2px 8px rgba(0,0,0,0.04) !important;
   }
   .kt-sidebar > div, .kt-sidebar > section {
@@ -162,6 +163,7 @@ button, .btn, [role="button"] {
   /* Tabs go horizontal scrollable */
   [style*="display: flex"][style*="border-bottom"] {
     overflow-x: auto !important;
+    overflow-y: hidden !important; /* avoid stray vertical scrollbar on tab strips */
     -webkit-overflow-scrolling: touch !important;
   }
 

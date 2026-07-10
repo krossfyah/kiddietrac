@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Services\AnthropicService;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +16,8 @@ use Throwable;
 
 final class DailyEventController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function __construct(
         private readonly AnthropicService $ai = new AnthropicService()
     ) {}
@@ -29,6 +32,8 @@ final class DailyEventController extends Controller
             'occurred_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
+        // SECURITY (v22p94): only the child's centre staff (or guardian) may log.
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
 
         $eventId = DB::table('daily_events')->insertGetId([
             'child_id' => $data['child_id'],
@@ -63,6 +68,7 @@ final class DailyEventController extends Controller
         if (!$event) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless($this->canAccessChildId($request->user(), (int) $event->child_id), 403);
 
         $data = $request->validate([
             'event_type' => ['in:meal,snack,nap_start,nap_end,diaper,bathroom,activity,mood,note,milestone,bottle,medication_given'],
@@ -85,6 +91,11 @@ final class DailyEventController extends Controller
 
     public function destroy(Request $request, int $eventId): JsonResponse
     {
+        $event = DB::table('daily_events')->where('id', $eventId)->first();
+        if (! $event) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        abort_unless($this->canAccessChildId($request->user(), (int) $event->child_id), 403);
         DB::table('daily_events')->where('id', $eventId)->delete();
 
         return response()->json(['message' => 'Deleted']);
@@ -95,6 +106,8 @@ final class DailyEventController extends Controller
         if (!DB::table('children')->where('id', $childId)->exists()) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        // SECURITY (v22p94): only the child's guardians/centre staff.
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
 
         $date = $request->input('date', now()->toDateString());
 
@@ -129,6 +142,8 @@ final class DailyEventController extends Controller
      */
     public function digest(Request $request, int $childId, string $date): JsonResponse
     {
+        // SECURITY (v22p94): only the child's guardians/centre staff.
+        abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         // 1. Check for existing cached digest
         $existing = DB::table('ai_daily_digests')
             ->where('child_id', $childId)

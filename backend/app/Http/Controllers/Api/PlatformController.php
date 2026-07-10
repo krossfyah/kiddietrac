@@ -8,6 +8,10 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -110,15 +114,21 @@ final class PlatformController extends Controller
             ->limit(5)
             ->get(['a.id', 'a.name', 'a.brand_primary_color as accent', 'a.billing_status as status', DB::raw('COUNT(DISTINCT c.id) as children')]);
 
-        // Recent platform events from audit_logs
+        // Recent platform events from audit_logs — enriched with a human name for
+        // the affected entity (e.g. WHICH user was deleted) so the feed isn't generic.
         $recentEvents = DB::table('audit_logs as al')
             ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
             ->orderByDesc('al.created_at')
-            ->limit(10)
+            ->limit(12)
             ->get([
-                'al.id', 'al.action', 'al.entity_type', 'al.entity_id', 'al.created_at',
+                'al.id', 'al.action', 'al.entity_type', 'al.entity_id', 'al.created_at', 'al.payload',
                 DB::raw("COALESCE(CONCAT(u.first_name, ' ', u.last_name), 'system') as actor"),
             ]);
+        $recentEvents = $recentEvents->map(function ($ev) {
+            $ev->detail = $this->describeAuditEntity($ev->entity_type, $ev->entity_id ? (int) $ev->entity_id : null, $ev->payload);
+            unset($ev->payload);
+            return $ev;
+        });
 
         // Active sessions in the last 24 hours — distinct users with a recently-used token
         $sessionsToday = DB::table('personal_access_tokens')
@@ -257,14 +267,22 @@ final class PlatformController extends Controller
                 ->whereIn('families.centre_id', $cids)
                 ->whereNull('children.deleted_at')
                 ->count();
+            $set = json_decode($a->settings ?? '{}', true) ?: [];
             return [
                 'id' => $a->id,
                 'name' => $a->name,
                 'slug' => $a->slug,
                 'contact_email' => $a->contact_email,
+                'contact_phone' => $a->contact_phone,
                 'billing_status' => $a->billing_status,
                 'plan_code' => $a->plan_code,
                 'plan_amount_cents' => $a->plan_amount_cents,
+                'plan_currency' => $a->plan_currency ?? 'CAD',
+                'locale' => $a->locale ?? null,
+                // v22p92: address + residence country + default language (Edit-all-fields)
+                'brand_address' => $set['brand_address'] ?? null,
+                'country' => $set['country'] ?? null,
+                'default_locale' => $set['default_locale'] ?? ($a->locale ?? null),
                 'centre_count' => (int) ($centresPerAgency[$a->id] ?? 0),
                 'family_count' => $familyCount,
                 'child_count' => $childCount,
@@ -299,21 +317,56 @@ final class PlatformController extends Controller
      */
     public function createAgency(Request $request): JsonResponse
     {
+        // v22p91 — wizard-style provisioning. All caller-facing fields are
+        // mandatory; the wizard collects plan + logo, agency address + contact,
+        // and the first agency admin, then we provision agency + default centre +
+        // admin (invited) in one transaction. White-label is granted by the plan
+        // (growth / enterprise) — the admin configures it on first login.
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:180'],
-            'slug' => ['nullable', 'string', 'max:80'],
-            'contact_email' => ['nullable', 'email', 'max:180'],
-            'contact_phone' => ['nullable', 'string', 'max:40'],
-            'timezone' => ['nullable', 'string', 'max:60'],
-            'plan_code' => ['nullable', 'string', 'max:40'],
-            'plan_amount_cents' => ['nullable', 'integer', 'min:0'],
-            // v22p24: white-label branding (chargeable add-on; price baked into plan_amount_cents)
-            'white_label_enabled' => ['nullable', 'boolean'],
-            'brand_logo_url' => ['nullable', 'string', 'max:500'],
+            'name'                => ['required', 'string', 'max:180'],
+            'slug'                => ['nullable', 'string', 'max:80'],
+            'contact_email'       => ['required', 'email', 'max:180'],
+            'contact_phone'       => ['required', 'string', 'max:40'],
+            'timezone'            => ['nullable', 'string', 'max:60'],
+            'plan_code'           => ['required', 'string', 'in:starter,growth,enterprise'],
+            'plan_amount_cents'   => ['nullable', 'integer', 'min:0'],
+            // Agency address (mandatory)
+            'address_line1'       => ['required', 'string', 'max:191'],
+            'address_line2'       => ['nullable', 'string', 'max:191'],
+            'city'                => ['required', 'string', 'max:120'],
+            'province'            => ['required', 'string', 'max:120'],
+            'postal_code'         => ['required', 'string', 'max:20'],
+            'country'             => ['required', 'string', 'size:2'],   // residence country (sets currency/compliance)
+            'default_locale'      => ['required', 'string', 'max:8'],    // default language
+            // Branding
+            'brand_logo_url'      => ['nullable', 'string', 'max:500'],
             'brand_primary_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'brand_support_email' => ['nullable', 'email', 'max:160'],
-            'brand_bank_info' => ['nullable', 'string'],
+            // First agency admin (mandatory)
+            'admin_first_name'    => ['required', 'string', 'max:80'],
+            'admin_last_name'     => ['required', 'string', 'max:80'],
+            'admin_email'         => ['required', 'email', 'max:180', 'unique:users,email'],
+            'admin_phone'         => ['required', 'string', 'max:40'],
         ]);
+
+        $planAmounts = ['starter' => 4900, 'growth' => 14900, 'enterprise' => 34900];
+        $amount = $data['plan_amount_cents'] ?? ($planAmounts[$data['plan_code']] ?? 0);
+        // White-label is included on growth + enterprise (FeatureFlag plan_min=growth).
+        $whiteLabel = in_array($data['plan_code'], ['growth', 'enterprise'], true);
+
+        // Residence country → currency + display name (also drives compliance).
+        $countryMap = [
+            'CA' => ['cur' => 'CAD', 'name' => 'Canada'],
+            'US' => ['cur' => 'USD', 'name' => 'United States'],
+            'GB' => ['cur' => 'GBP', 'name' => 'United Kingdom'],
+            'AU' => ['cur' => 'AUD', 'name' => 'Australia'],
+            'NZ' => ['cur' => 'NZD', 'name' => 'New Zealand'],
+            'IE' => ['cur' => 'EUR', 'name' => 'Ireland'],
+        ];
+        $cm = $countryMap[$data['country']] ?? ['cur' => 'CAD', 'name' => $data['country']];
+        $currency = $cm['cur'];
+        $countryName = $cm['name'];
+        $locale = $data['default_locale'];
 
         $slug = $data['slug'] ?? Str::slug($data['name']);
         if (! $slug) $slug = 'agency_'.uniqid();
@@ -323,36 +376,265 @@ final class PlatformController extends Controller
             $slug = $base.'-'.(++$i);
         }
 
-        // v22p24: when white-label is enabled, powered_by_visible is hidden so
-        // end users see only the agency's brand, not "Powered by Kiddietrac".
-        $whiteLabel = ! empty($data['white_label_enabled']);
+        $address = trim($data['address_line1']
+            .(! empty($data['address_line2']) ? "\n".$data['address_line2'] : '')
+            ."\n".$data['city'].', '.$data['province'].'  '.$data['postal_code']
+            ."\n".$countryName);
 
-        $id = DB::table('agencies')->insertGetId([
-            'name' => $data['name'],
-            'slug' => $slug,
-            'contact_email' => $data['contact_email'] ?? null,
-            'contact_phone' => $data['contact_phone'] ?? null,
-            'timezone' => $data['timezone'] ?? 'America/Toronto',
-            'locale' => 'en-CA',
-            'billing_status' => 'trial',
-            'plan_code' => $data['plan_code'] ?? null,
-            'plan_amount_cents' => $data['plan_amount_cents'] ?? 0,
-            'plan_currency' => 'CAD',
-            'trial_ends_at' => now()->addDays(30),
-            'brand_logo_url' => $data['brand_logo_url'] ?? null,
-            'brand_primary_color' => $data['brand_primary_color'] ?? null,
-            'brand_support_email' => $data['brand_support_email'] ?? null,
-            'brand_bank_info' => $data['brand_bank_info'] ?? null,
-            'powered_by_visible' => $whiteLabel ? 0 : 1,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $result = DB::transaction(function () use ($data, $slug, $amount, $whiteLabel, $address, $currency, $countryName, $locale) {
+            $agencyId = DB::table('agencies')->insertGetId([
+                'name'                => $data['name'],
+                'slug'                => $slug,
+                'contact_email'       => $data['contact_email'],
+                'contact_phone'       => $data['contact_phone'],
+                'timezone'            => $data['timezone'] ?? 'America/Toronto',
+                'locale'              => $locale,
+                'billing_status'      => 'trial',
+                'plan_code'           => $data['plan_code'],
+                'plan_amount_cents'   => $amount,
+                'plan_currency'       => $currency,
+                'trial_ends_at'       => now()->addDays(30),
+                'brand_logo_url'      => $data['brand_logo_url'] ?? null,
+                'brand_primary_color' => $data['brand_primary_color'] ?? null,
+                'brand_support_email' => $data['brand_support_email'] ?? $data['contact_email'],
+                'powered_by_visible'  => $whiteLabel ? 0 : 1,
+                'settings'            => json_encode(['brand_address' => $address, 'country' => $data['country'], 'default_locale' => $locale]),
+                'created_at'          => now(),
+                'updated_at'          => now(),
+            ]);
+
+            // Default first centre from the agency address — keeps rooms/families/
+            // children functional. The admin can rename / add more under Centres.
+            $centreId = DB::table('centres')->insertGetId([
+                'agency_id'     => $agencyId,
+                'name'          => $data['name'],
+                'slug'          => $slug.'-main',
+                'address_line1' => $data['address_line1'],
+                'address_line2' => $data['address_line2'] ?? null,
+                'city'          => $data['city'],
+                'province'      => $data['province'],
+                'postal_code'   => $data['postal_code'],
+                'country'       => $countryName,
+                'phone'         => $data['contact_phone'],
+                'email'         => $data['contact_email'],
+                'status'        => 'onboarding',
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ]);
+
+            // First agency admin — created 'invited', activates via the emailed link.
+            $userId = DB::table('users')->insertGetId([
+                'email'      => $data['admin_email'],
+                'password'   => Hash::make(Str::random(32)),
+                'first_name' => $data['admin_first_name'],
+                'last_name'  => $data['admin_last_name'],
+                'phone'      => $data['admin_phone'],
+                'status'     => 'invited',
+                'locale'     => 'en-CA',
+                'timezone'   => 'America/Toronto',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            DB::table('role_assignments')->insert([
+                'user_id'    => $userId,
+                'role'       => 'agency_admin',
+                'agency_id'  => $agencyId,
+                'centre_id'  => null,
+                'active'     => 1,
+                'created_at' => now(),
+            ]);
+
+            $token = bin2hex(random_bytes(32));
+            DB::table('password_resets')->insert([
+                'email'      => $data['admin_email'],
+                'token'      => hash('sha256', $token), // store hashed; link carries plaintext
+                'expires_at' => now()->addDays(7),
+                'created_at' => now(),
+            ]);
+
+            return ['agency_id' => $agencyId, 'centre_id' => $centreId, 'user_id' => $userId, 'token' => $token];
+        });
+
+        $link = 'https://app.kiddietrac.com/set-password.html?token='.$result['token'];
+        $this->sendAdminInvite($data, $link);
 
         return response()->json([
-            'agency' => DB::table('agencies')->where('id', $id)->first(),
+            'agency'              => DB::table('agencies')->where('id', $result['agency_id'])->first(),
+            'admin_user_id'       => $result['user_id'],
+            'centre_id'           => $result['centre_id'],
             'white_label_enabled' => $whiteLabel,
-            'message' => 'Agency created. Invite the first agency_admin via /admin/users while X-Active-Agency-Id is set to '.$id.'.',
+            'invite_link'         => $link,
+            'message'             => 'Agency provisioned. The admin has been emailed an invite to set their password.',
         ], 201);
+    }
+
+    /**
+     * Email the first agency admin a set-password link. Sends branded HTML
+     * (better deliverability than plain text) with proper Reply-To +
+     * List-Unsubscribe headers and an open-tracking pixel. Logs the send
+     * directly (with the tracking token) — the global MessageSent listener
+     * skips this one via the X-KT-Logged header to avoid a duplicate row.
+     */
+    /**
+     * A human-readable name for the entity an audit event touched — resolved from
+     * the audit payload first (survives deletion) then a live lookup, so the
+     * activity feed reads "deleted — Jane Doe" instead of a generic "user #123".
+     */
+    private function describeAuditEntity(?string $type, ?int $id, ?string $payload): ?string
+    {
+        $data = $payload ? (json_decode($payload, true) ?: []) : [];
+        $input = is_array($data['input'] ?? null) ? $data['input'] : [];
+        $fromPayload = $data['name'] ?? $data['email'] ?? $data['to'] ?? ($input['name'] ?? $input['email'] ?? null);
+        if (is_string($fromPayload) && trim($fromPayload) !== '') {
+            return $fromPayload;
+        }
+        if (! $type || ! $id) {
+            return null;
+        }
+        $map = ['users' => 'user', 'user' => 'user', 'agencies' => 'agency', 'agency' => 'agency', 'centres' => 'centre', 'centre' => 'centre', 'children' => 'child', 'child' => 'child'];
+        $t = $map[strtolower($type)] ?? strtolower($type);
+        try {
+            switch ($t) {
+                case 'user':
+                    $r = DB::table('users')->where('id', $id)->first(['first_name', 'last_name', 'email']);
+                    if (! $r) return null;
+                    $n = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
+                    return $n !== '' ? $n : $r->email;
+                case 'agency':
+                    return DB::table('agencies')->where('id', $id)->value('name') ?: null;
+                case 'centre':
+                    return DB::table('centres')->where('id', $id)->value('name') ?: null;
+                case 'child':
+                    $r = DB::table('children')->where('id', $id)->first(['first_name', 'last_name']);
+                    return $r ? (trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: null) : null;
+            }
+        } catch (\Throwable $e) {
+            // best-effort — never break the overview
+        }
+        return null;
+    }
+
+    private function sendAdminInvite(array $data, string $link): void
+    {
+        $trackToken = bin2hex(random_bytes(16));
+        $apiBase = preg_replace('#/api/v1/?$#', '', rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/'));
+        $pixel = '<img src="'.$apiBase.'/api/v1/e/o/'.$trackToken.'" width="1" height="1" alt="" style="display:none;border:0;">';
+        $name = htmlspecialchars($data['name']);
+        $first = htmlspecialchars($data['admin_first_name']);
+        $safeLink = htmlspecialchars($link);
+
+        $body = '<p style="margin:0 0 14px;">Hi '.$first.',</p>'
+            .'<p style="margin:0 0 16px;">Your agency account for <strong>'.$name.'</strong> on Kiddietrac is ready. '
+            .'Set your password below and you\'ll be taken straight into your dashboard.</p>'
+            .\App\Services\EmailTemplate::button('Set my password →', $link)
+            .'<p style="margin:16px 0 0;font-size:12px;color:#64748B;">Or paste this into your browser:<br>'
+            .'<a href="'.$safeLink.'" style="color:#1F6080;">'.$safeLink.'</a></p>'
+            .'<p style="margin:14px 0 0;font-size:12px;color:#94A3B8;">This link expires in 7 days. If you weren\'t expecting this, you can ignore this email.</p>'
+            .$pixel;
+
+        $html = \App\Services\EmailTemplate::wrap(null, $body, [
+            'eyebrow'   => 'WELCOME TO KIDDIETRAC',
+            'title'     => $data['name'],
+            'subtitle'  => 'Set your password to get started',
+            'preheader' => 'Set your password and sign in to '.$data['name'].' on Kiddietrac.',
+        ]);
+
+        try {
+            Mail::html($html, function ($m) use ($data) {
+                $m->to($data['admin_email'], $data['admin_first_name'].' '.$data['admin_last_name'])
+                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
+                  ->subject('Welcome to Kiddietrac — set your password');
+                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
+                $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
+            });
+            if (Schema::hasTable('email_logs')) {
+                DB::table('email_logs')->insert([
+                    'to_email' => $data['admin_email'], 'to_name' => $data['admin_first_name'].' '.$data['admin_last_name'],
+                    'from_email' => 'noreply@kiddietrac.com', 'subject' => 'Welcome to Kiddietrac — set your password',
+                    'mailer' => config('mail.default'), 'status' => 'sent', 'tracking_token' => $trackToken,
+                    'opens' => 0, 'created_at' => now(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Agency admin invite failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * GET /api/v1/e/o/{token} — 1x1 open-tracking pixel. Public; records the
+     * first open + a running open count on the matching email_logs row.
+     */
+    public function trackOpen(Request $request, string $token)
+    {
+        try {
+            if (Schema::hasTable('email_logs')) {
+                $row = DB::table('email_logs')->where('tracking_token', $token)->first();
+                if ($row) {
+                    DB::table('email_logs')->where('id', $row->id)->update([
+                        'opens'     => (int) ($row->opens ?? 0) + 1,
+                        'opened_at' => $row->opened_at ?? now(),
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) { /* tracking is best-effort */ }
+        $gif = base64_decode('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==');
+        return response($gif, 200)
+            ->header('Content-Type', 'image/gif')
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
+
+    /**
+     * POST /api/v1/platform/agencies/{agency}/resend-invite
+     * Re-mint a set-password token for the agency's first admin and resend the
+     * invite email. Always returns the link so the admin can share it manually
+     * if delivery is flaky (sendmail/SPF).
+     */
+    public function resendInvite(Request $request, int $agencyId): JsonResponse
+    {
+        $agency = DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->first();
+        if (! $agency) return response()->json(['message' => 'Not found'], 404);
+
+        $userId = DB::table('role_assignments')
+            ->where('agency_id', $agencyId)->where('role', 'agency_admin')->where('active', 1)
+            ->orderBy('id')->value('user_id');
+        if (! $userId) return response()->json(['message' => 'This agency has no agency admin to invite.'], 422);
+        $user = DB::table('users')->where('id', $userId)->first();
+        if (! $user) return response()->json(['message' => 'Admin user not found.'], 422);
+
+        $token = bin2hex(random_bytes(32));
+        DB::table('password_resets')->insert([
+            'email' => $user->email, 'token' => hash('sha256', $token), // hashed at rest
+            'expires_at' => now()->addDays(7), 'created_at' => now(),
+        ]);
+        $link = 'https://app.kiddietrac.com/set-password.html?token='.$token;
+        $this->sendAdminInvite([
+            'admin_first_name' => $user->first_name, 'admin_last_name' => $user->last_name,
+            'admin_email' => $user->email, 'name' => $agency->name,
+        ], $link);
+
+        try {
+            DB::table('audit_logs')->insert([
+                'user_id' => $request->user()->id ?? null, 'action' => 'agency.invite_resent',
+                'entity_type' => 'agency', 'entity_id' => $agencyId,
+                'payload' => json_encode(['to' => $user->email]), 'ip_address' => $request->ip(), 'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* best-effort */ }
+
+        return response()->json([
+            'ok' => true, 'email' => $user->email, 'invite_link' => $link,
+            'message' => 'Invite re-sent to '.$user->email,
+        ]);
+    }
+
+    /**
+     * GET /api/v1/platform/email-logs — every outbound email (audit).
+     */
+    public function emailLogs(Request $request): JsonResponse
+    {
+        if (! Schema::hasTable('email_logs')) return response()->json(['logs' => []]);
+        $logs = DB::table('email_logs')->orderByDesc('id')->limit(300)->get();
+        return response()->json(['logs' => $logs]);
     }
 
     /**
@@ -375,6 +657,11 @@ final class PlatformController extends Controller
             'brand_primary_color' => ['sometimes', 'nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'brand_support_email' => ['sometimes', 'nullable', 'email', 'max:160'],
             'brand_bank_info' => ['sometimes', 'nullable', 'string'],
+            // v22p92: agency address + residence country + default language
+            // (so Edit shows/saves every field the create wizard collected).
+            'brand_address' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'country' => ['sometimes', 'nullable', 'string', 'size:2'],
+            'default_locale' => ['sometimes', 'nullable', 'string', 'max:8'],
             // v22p36: per-agency email settings
             'email_smtp_host' => ['sometimes', 'nullable', 'string', 'max:160'],
             'email_smtp_port' => ['sometimes', 'nullable', 'integer', 'between:1,65535'],
@@ -395,8 +682,42 @@ final class PlatformController extends Controller
         if (array_key_exists('email_smtp_pass', $data) && ($data['email_smtp_pass'] === null || $data['email_smtp_pass'] === '')) {
             unset($data['email_smtp_pass']);
         }
+
+        // v22p92: brand_address (no column) + country/locale → settings JSON +
+        // locale/currency columns. Extract so the raw column update stays valid.
+        if (array_key_exists('brand_address', $data) || array_key_exists('country', $data) || array_key_exists('default_locale', $data)) {
+            $countryMap = [
+                'CA' => 'CAD', 'US' => 'USD', 'GB' => 'GBP', 'AU' => 'AUD', 'NZ' => 'NZD', 'IE' => 'EUR',
+            ];
+            $row = DB::table('agencies')->where('id', $agencyId)->first();
+            $settings = json_decode($row->settings ?? '{}', true) ?: [];
+            if (array_key_exists('brand_address', $data)) {
+                $settings['brand_address'] = $data['brand_address'] !== '' ? $data['brand_address'] : null;
+            }
+            if (array_key_exists('country', $data) && $data['country']) {
+                $settings['country'] = $data['country'];
+                if (isset($countryMap[$data['country']])) $data['plan_currency'] = $countryMap[$data['country']];
+            }
+            if (array_key_exists('default_locale', $data) && $data['default_locale']) {
+                $settings['default_locale'] = $data['default_locale'];
+                $data['locale'] = $data['default_locale'];
+            }
+            $data['settings'] = json_encode($settings);
+            unset($data['brand_address'], $data['country'], $data['default_locale']);
+        }
+
         $data['updated_at'] = now();
         DB::table('agencies')->where('id', $agencyId)->update($data);
+
+        // Audit the change (best-effort).
+        try {
+            DB::table('audit_logs')->insert([
+                'user_id' => $request->user()->id ?? null, 'action' => 'agency.updated',
+                'entity_type' => 'agency', 'entity_id' => $agencyId,
+                'payload' => json_encode(['changes' => array_keys($data)]),
+                'ip_address' => $request->ip(), 'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* audit best-effort */ }
 
         return response()->json([
             'agency' => DB::table('agencies')->where('id', $agencyId)->first(),

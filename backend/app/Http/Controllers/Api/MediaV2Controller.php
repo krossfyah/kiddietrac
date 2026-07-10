@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,9 +14,14 @@ use Illuminate\Support\Facades\DB;
  */
 final class MediaV2Controller extends Controller
 {
+    use ResolvesCentreContext;
+
     public function listReactions(Request $request, string $type, int $id): JsonResponse
     {
         abort_unless(in_array($type, ['photo', 'video', 'observation']), 400);
+        // SECURITY (v22p95): a reaction list reveals who engaged with a specific
+        // media item — only expose it to users who can access that item.
+        abort_unless($this->canAccessReactionTarget($request->user(), $type, $id), 403);
         $rows = DB::table('reactions as r')
             ->leftJoin('users as u', 'u.id', '=', 'r.user_id')
             ->where('target_type', $type)
@@ -39,6 +45,8 @@ final class MediaV2Controller extends Controller
             'target_id' => 'required|integer',
             'reaction' => 'required|in:heart,smile,wow,celebrate,clap',
         ]);
+        // SECURITY (v22p95): may only react to media the user can actually access.
+        abort_unless($this->canAccessReactionTarget($request->user(), $data['target_type'], (int) $data['target_id']), 403);
         DB::table('reactions')->insertOrIgnore([
             'target_type' => $data['target_type'],
             'target_id' => $data['target_id'],
@@ -134,6 +142,10 @@ final class MediaV2Controller extends Controller
         $childIds = $request->input('child_ids');
         if (is_string($childIds)) $childIds = json_decode($childIds, true);
         if (!is_array($childIds)) $childIds = [];
+        // SECURITY (v22p94): the uploader must have access to every tagged child.
+        foreach ($childIds as $cid) {
+            abort_unless($this->canAccessChildId($u, (int) $cid), 403);
+        }
 
         $id = DB::table('videos')->insertGetId([
             'centre_id' => $centreId,
@@ -162,5 +174,30 @@ final class MediaV2Controller extends Controller
             }
         }
         return response()->json(['id' => $id, 'url' => '/storage/' . $path], 201);
+    }
+
+    /**
+     * SECURITY (v22p95): resolve a reaction target (photo/video/observation) to
+     * its owning centre/child and confirm the caller may access it. Staff of the
+     * item's centre, a guardian of any tagged child, or platform_admin pass.
+     */
+    private function canAccessReactionTarget($user, string $type, int $id): bool
+    {
+        if ($this->isPlatformAdminUser($user)) return true;
+
+        if ($type === 'observation') {
+            $row = DB::table('observations')->where('id', $id)->first();
+            return $row ? $this->canAccessChildId($user, (int) $row->child_id) : false;
+        }
+
+        $table = $type === 'video' ? 'videos' : 'photos';
+        $row = DB::table($table)->where('id', $id)->first();
+        if (!$row) return false;
+        if ($this->authorizeCentreAccess($user, (int) $row->centre_id)) return true;
+        $childIds = $row->child_ids ? (json_decode($row->child_ids, true) ?: []) : [];
+        foreach ($childIds as $cid) {
+            if ($this->canAccessChildId($user, (int) $cid)) return true;
+        }
+        return false;
     }
 }

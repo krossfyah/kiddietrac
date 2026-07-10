@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,8 @@ use Illuminate\Support\Facades\Log;
  */
 final class AiV2Controller extends Controller
 {
+    use ResolvesCentreContext;
+
     // =========================================================
     // (1) Auto-tag observations to HDLH framework
     // =========================================================
@@ -68,14 +71,26 @@ final class AiV2Controller extends Controller
             'message_id' => 'required|integer',
             'target_lang' => 'required|in:en,fr,es',
         ]);
+        // SECURITY (v22p96): only a participant of the message's conversation may
+        // translate it. The access check runs BEFORE the cache return — otherwise
+        // a cached translation leaked any message's content by id to any caller.
+        $msg = DB::table('messages')->where('id', $data['message_id'])->first();
+        abort_unless($msg, 404);
+        $conv = DB::table('conversations')->where('id', $msg->conversation_id)->first();
+        abort_unless($conv, 404);
+        $u = $request->user();
+        $allowed = $conv->family_id
+            ? $this->canAccessFamilyScoped($request, (int) $conv->family_id)
+            : ($conv->centre_id && ($this->authorizeCentreAccess($u, (int) $conv->centre_id)
+                || ($this->isPlatformAdminUser($u)
+                    && (int) DB::table('centres')->where('id', $conv->centre_id)->value('agency_id') === (int) $this->resolveAgencyId($request))));
+        abort_unless($allowed, 403);
         // cached?
         $cached = DB::table('message_translations')
             ->where('message_id', $data['message_id'])
             ->where('target_lang', $data['target_lang'])
             ->first();
         if ($cached) return response()->json(['translation' => $cached->translated_text, 'cached' => true]);
-        $msg = DB::table('messages')->where('id', $data['message_id'])->first();
-        abort_unless($msg, 404);
         $body = $msg->body ?? $msg->content ?? '';
         if (!$body) return response()->json(['translation' => '', 'cached' => false]);
 
@@ -114,6 +129,20 @@ final class AiV2Controller extends Controller
         $ext = DB::table('ai_doc_extractions')->where('id', $extractionId)->first();
         abort_unless($ext, 404);
         abort_unless($ext->status === 'extracted', 422, 'Extraction not ready');
+        // SECURITY (v22p96): the caller must own the extraction's agency (a
+        // platform_admin only when switched into it), and candidate name searches
+        // are constrained to THAT agency. Previously this matched users/children by
+        // name across ALL agencies and inserted cross-tenant credential rows.
+        $u = $request->user();
+        abort_unless($this->isPlatformAdminUser($u)
+            ? (int) $ext->agency_id === (int) $this->resolveAgencyId($request)
+            : $this->userBelongsToAgency($u->id, (int) $ext->agency_id), 403);
+        $agencyCentreIds = DB::table('centres')->where('agency_id', $ext->agency_id)->pluck('id');
+        $agencyUserIds = DB::table('role_assignments')->where('active', true)
+            ->where(function ($q) use ($ext, $agencyCentreIds) {
+                $q->where('agency_id', $ext->agency_id)
+                  ->orWhereIn('centre_id', $agencyCentreIds->all() ?: [0]);
+            })->pluck('user_id')->unique();
         $fields = json_decode($ext->extracted_fields, true);
         $type = $ext->doc_type;
         $result = ['action' => 'none', 'matches' => []];
@@ -123,6 +152,7 @@ final class AiV2Controller extends Controller
             if ($name) {
                 [$first, $last] = $this->splitName($name);
                 $matches = DB::table('users')
+                    ->whereIn('id', $agencyUserIds->all() ?: [0])
                     ->where('first_name', 'like', "%{$first}%")
                     ->where('last_name', 'like', "%{$last}%")
                     ->limit(5)->get(['id', 'first_name', 'last_name', 'email']);
@@ -166,11 +196,13 @@ final class AiV2Controller extends Controller
             $name = $fields['patient_name'] ?? null;
             if ($name) {
                 [$first, $last] = $this->splitName($name);
-                $matches = DB::table('children')
-                    ->where('first_name', 'like', "%{$first}%")
-                    ->where('last_name', 'like', "%{$last}%")
-                    ->whereNull('deleted_at')
-                    ->limit(5)->get(['id', 'first_name', 'last_name']);
+                $matches = DB::table('children as c')
+                    ->join('families as f', 'f.id', '=', 'c.family_id')
+                    ->whereIn('f.centre_id', $agencyCentreIds->all() ?: [0])
+                    ->where('c.first_name', 'like', "%{$first}%")
+                    ->where('c.last_name', 'like', "%{$last}%")
+                    ->whereNull('c.deleted_at')
+                    ->limit(5)->get(['c.id', 'c.first_name', 'c.last_name']);
                 $result['matches'] = $matches;
             }
         }
@@ -298,7 +330,13 @@ final class AiV2Controller extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)

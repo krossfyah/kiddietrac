@@ -217,8 +217,13 @@
     });
 
     // ---- CSV export button (added to existing kt-table-filter wrap if present) ----
-    const wrap = table.previousElementSibling;
-    if (wrap && wrap.classList.contains('kt-table-filter')) {
+    // The table may be wrapped in a .kt-tbl-scroll container; the toolbar sits
+    // above that wrapper, so look there too.
+    const _sc = table.closest('.kt-tbl-scroll');
+    const wrap = _sc ? _sc.previousElementSibling : table.previousElementSibling;
+    // Top CSV button retired — CSV/Excel/PDF now live in the bottom export bar
+    // (kt-table-export.js) for consistency with the Reports section.
+    if (false && wrap && wrap.classList.contains('kt-table-filter')) {
       if (!wrap.querySelector('.kt-csv-btn')) {
         const csvBtn = document.createElement('button');
         csvBtn.className = 'kt-csv-btn';

@@ -53,7 +53,7 @@
 
     const wrap = document.createElement('div');
     wrap.className = 'kt-table-filter';
-    wrap.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 10px;flex-wrap:wrap;';
+    wrap.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;gap:12px;margin:0 0 10px;flex-wrap:wrap;';
 
     const left = document.createElement('div');
     left.style.cssText = 'position:relative;flex:1;min-width:240px;max-width:380px;';
@@ -67,7 +67,7 @@
     left.appendChild(input);
 
     const right = document.createElement('div');
-    right.style.cssText = 'display:flex;align-items:center;gap:14px;color:#64748B;font-size:13px;font-weight:600;';
+    right.style.cssText = 'display:flex;align-items:center;gap:14px;color:#64748B;font-size:13px;font-weight:600;flex-shrink:0;white-space:nowrap;margin-left:auto;';
     const counter = document.createElement('span');
     counter.className = 'kt-table-filter-count';
     counter.textContent = tbody.children.length + ' / ' + tbody.children.length;
@@ -76,7 +76,19 @@
     wrap.appendChild(left);
     wrap.appendChild(right);
 
-    table.parentElement.insertBefore(wrap, table);
+    // Bounded height + internal scroll (Gmail-style): wrap the table in a
+    // scroll container so long tables scroll WITHIN a reasonable box instead of
+    // stretching the page. The toolbar (search + count) is inserted ABOVE the
+    // scroll container — never inside an overflow box — so the count is never
+    // clipped. Skipped for modal tables (they scroll themselves).
+    let sc = table.closest('.kt-tbl-scroll');
+    if (!sc && !table.closest('#modalRoot')) {
+      sc = document.createElement('div');
+      sc.className = 'kt-tbl-scroll';
+      table.parentElement.insertBefore(sc, table);
+      sc.appendChild(table);
+    }
+    (sc ? sc.parentElement : table.parentElement).insertBefore(wrap, sc || table);
 
     input.addEventListener('input', () => {
       const q = input.value.trim().toLowerCase();

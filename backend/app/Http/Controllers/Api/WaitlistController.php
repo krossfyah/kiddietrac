@@ -364,7 +364,7 @@ final class WaitlistController extends Controller
 
     private function hasCentreAccess(int $userId, int $centreId): bool
     {
-        return DB::table('role_assignments')
+        $has = DB::table('role_assignments')
             ->where('user_id', $userId)
             ->whereIn('role', ['agency_admin', 'centre_director'])
             ->where('active', true)
@@ -375,6 +375,12 @@ final class WaitlistController extends Controller
                   });
             })
             ->exists();
+        if ($has) return true;
+        // v22p98: platform_admin scoped to the agency they've switched into.
+        $isPlatform = DB::table('role_assignments')->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
+        if (! $isPlatform) return false;
+        $centreAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        return $centreAgency > 0 && $centreAgency === (int) request()->header('X-Active-Agency-Id');
     }
 
     private function reindexWaitlist(int $centreId): void

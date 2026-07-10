@@ -115,9 +115,11 @@
     if (centres.length === 0) { container.innerHTML = '<div style="padding:24px;color:#DC2626;">No centres.</div>'; return; }
     if (!activeCentreId) activeCentreId = centres[0].id;
 
-    const firstOfMonth = new Date(); firstOfMonth.setDate(1);
+    // v22p98: default to a trailing 30-day window (was first-of-month → today,
+    // which is a single empty day when opened on the 1st, hiding all entries).
     const today = new Date();
-    const from = firstOfMonth.toISOString().split('T')[0];
+    const startWin = new Date(); startWin.setDate(today.getDate() - 30);
+    const from = startWin.toISOString().split('T')[0];
     const to = today.toISOString().split('T')[0];
 
     let data;

@@ -56,7 +56,7 @@
           ${isPlatform ? '<button id="kt-new-agency" style="background:#1F6080;color:white;border:none;padding:12px 22px;border-radius:10px;font-weight:700;cursor:pointer;">+ New Agency</button>' : ''}
         </div>
 
-        <div id="kt-agency-list" style="display:grid;gap:16px;">
+        <div id="kt-agency-list" data-kt-list="1" style="display:grid;gap:16px;">
           ${agencies.map(a => agencyCard(a)).join('')}
         </div>
 

@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Drip campaigns
 category: Marketing
 order: 65

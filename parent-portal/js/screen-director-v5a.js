@@ -8,6 +8,25 @@
   'use strict';
 
   const { Api, Dom, Shell } = window.KT;
+
+  // v22p85: short-lived cache so re-opening Quick Add modals is instant instead
+  // of re-fetching families/rooms (~0.5s) every time. Cleared whenever a create
+  // succeeds, so freshly-added families/rooms always appear.
+  var _qaCache = {};
+  function cachedGet(path, ttl) {
+    ttl = ttl || 60000;
+    var hit = _qaCache[path];
+    if (hit && (Date.now() - hit.t) < ttl) return Promise.resolve(hit.v);
+    return Api.get(path).then(function (v) { _qaCache[path] = { v: v, t: Date.now() }; return v; });
+  }
+  function clearQaCache() { _qaCache = {}; }
+  // v22p85: warm the cache in the background so opening a Quick Add modal is
+  // instant. The cold backend call (~0.3–0.5s on shared hosting) then happens
+  // while the user is still moving the mouse, not after they click.
+  function prefetchQa() {
+    cachedGet('/director/families').catch(function () {});
+    cachedGet('/director/rooms').catch(function () {});
+  }
   // v14: Modal-class adapter — wraps Shell.Modal.open to provide the class-style
   // API that screen-director-v5a was written against:
   //   const m = new Modal('Title'); m.body.appendChild(form); m.close();
@@ -72,6 +91,7 @@
 
     form.appendChild(submitBtn('Create room', async (data) => {
       const r = await Api.post('/director/rooms', data);
+      clearQaCache();
       status.style.color = 'var(--brand-green)';
       status.textContent = '✓ Room "' + r.room.name + '" created';
       setTimeout(() => { modal.close(); onSuccess?.(); }, 1000);
@@ -111,6 +131,7 @@
 
     form.appendChild(submitBtn('Create family', async (data) => {
       const r = await Api.post('/director/families', data);
+      clearQaCache();
       status.style.color = 'var(--brand-green)';
       status.textContent = '✓ Family created (id: ' + r.family_id + '). Now you can add children and invite parents.';
       setTimeout(() => { modal.close(); onSuccess?.(r.family_id); }, 1500);
@@ -131,8 +152,8 @@
     let families = [], rooms = [];
     try {
       const [fRes, rRes] = await Promise.all([
-        Api.get('/director/families'),
-        Api.get('/director/rooms'),
+        cachedGet('/director/families'),
+        cachedGet('/director/rooms'),
       ]);
       families = fRes.data || [];
       rooms = rRes.rooms || [];
@@ -237,7 +258,7 @@
     if (!familyId) {
       modal.body.appendChild(Dom.el('p', { style: 'color: var(--ink-500);' }, 'Loading families...'));
       try {
-        const fRes = await Api.get('/director/families');
+        const fRes = await cachedGet('/director/families');
         const families = fRes.data || [];
         Dom.clear(modal.body);
 
@@ -475,7 +496,8 @@
         const btn = Dom.el('button', {
           style: 'display: block; width: 100%; text-align: left; background: none; border: none; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--ink-700); cursor: pointer; margin-bottom: 1px;',
         }, label);
-        btn.addEventListener('mouseenter', () => btn.style.background = 'var(--ink-50)');
+        // Hovering an item warms the families/rooms cache before the click.
+        btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--ink-50)'; prefetchQa(); });
         btn.addEventListener('mouseleave', () => btn.style.background = 'none');
         btn.addEventListener('click', handler);
         buttonsWrap.appendChild(btn);
@@ -485,6 +507,7 @@
         buttonsWrap.style.display = isCollapsed ? 'none' : 'block';
         chevron.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
         section.style.background = isCollapsed ? 'transparent' : '#FAFAFA';
+        if (!isCollapsed) prefetchQa(); // panel expanded → prefetch in background
       }
       applyCollapsed();
       header.addEventListener('click', function () {

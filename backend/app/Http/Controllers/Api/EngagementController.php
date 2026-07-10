@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class EngagementController extends Controller
 {
+    use ResolvesCentreContext;
+
     // =====================
     // Re-enrollment campaigns
     // =====================
@@ -93,6 +96,10 @@ final class EngagementController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
         $u = $request->user();
+        // SECURITY (v22p94): only respond for a child you actually have access to
+        // (own family / centre) — was updating by child_id from the body with no
+        // ownership check, letting a guardian alter any family's re-enrollment.
+        abort_unless($this->canAccessChildId($u, (int) $data['child_id']), 403);
         $familyId = DB::table('guardians')->where('user_id', $u->id)->value('family_id');
         DB::table('reenrollment_responses')
             ->where('campaign_id', $campaignId)
@@ -297,7 +304,13 @@ final class EngagementController extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        // SECURITY (v22p94): only honour the header if the user is platform_admin
+        // or holds an active role for that exact agency (else fall back below).
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->where(function ($w) use ($activeId) { $w->where('agency_id', $activeId)->orWhere('role', 'platform_admin'); })->exists()) return $activeId;
+        // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
+        // fall through to their first role's agency (iLearn) — require an explicit
+        // choice, else agency-scoped data leaked to a super-admin on a header-less call.
+        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)

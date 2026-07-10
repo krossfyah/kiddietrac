@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class FieldTripGpsController extends Controller
 {
+    use ResolvesCentreContext;
+
     public function ping(Request $request, int $tripId): JsonResponse
     {
         $data = $request->validate([
@@ -53,6 +56,14 @@ final class FieldTripGpsController extends Controller
         $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'platform_admin'])
             ->where('active', 1)->exists();
+        if ($isStaff) {
+            // SECURITY (v22p96): staff may only track a trip in their OWN agency;
+            // a platform_admin only one in the agency they've switched into. Was a
+            // global staff bypass that exposed any trip's live GPS trail by id.
+            $isStaff = $this->isPlatformAdminUser($u)
+                ? (int) $trip->agency_id === (int) $this->resolveAgencyId($request)
+                : $this->userBelongsToAgency($u->id, (int) $trip->agency_id);
+        }
         if (!$isStaff) {
             $familyIds = DB::table('guardians')->where('user_id', $u->id)->pluck('family_id');
             $childIds = DB::table('children')->whereIn('family_id', $familyIds)->pluck('id');

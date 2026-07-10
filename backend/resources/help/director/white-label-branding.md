@@ -1,35 +1,52 @@
 ---
-title: White-label branding for customer agencies
-category: Administration
+roles: agency_admin, platform_admin
+title: White-label branding & invoices
+category: Settings
 order: 40
 ---
-# White-label branding for customer agencies
+# White-label branding
 
-White-label lets a customer agency replace the default Kiddietrac branding with their own — logo, primary colour, support email, and the "Powered by Kiddietrac" footer is hidden. This is useful when you resell Kiddietrac to childcare operators who want their staff and parents to see only their own brand.
+If your plan includes the white-label add-on, you can put your own brand on
+invoices and parent-facing screens instead of KiddieTrac's.
 
-White-label is a chargeable add-on. The price is set by you when configuring the tenant's plan amount — there's no fixed surcharge enforced by the system.
+## Where to edit your agency information
 
-## Enabling white-label for a new agency
+Your agency's identity — **logo, primary colour, support email, business
+address, bank details, and your privacy / terms links** — all live in one place:
+**Sidebar → Branding** (Settings group). This is the place to update agency
+information that appears on invoices and on marketing campaigns.
 
-Go to **Platform → All agencies → + Create agency**. Fill in the name, contact email, plan code, and monthly amount. In the **White-label branding** section:
+For the agency's **name, contact email/phone, and subdomain**, use the
+**✏️ Edit agency** button on the **Agency overview** screen (it also has a
+shortcut straight to Branding).
 
-1. Toggle **Enable** to ON.
-2. Paste the agency's logo URL. Ideal: PNG or SVG, 200x60 pixels or smaller. Must be publicly hosted (a CDN or the agency's own website).
-3. Pick the **primary colour** with the colour picker. This becomes the agency's accent color throughout their dashboard.
-4. Set the **support email** so their staff see "Email support" pointing at the right inbox.
+![The Edit agency button on Agency overview](https://api.kiddietrac.com/help-img/edit-agency.png) (Plan, feature
+flags, and centres are managed separately under **Settings → Centres** and, for
+platform admins, the agency's Features screen.)
 
-Save. The new agency now has their branding stored. As they invite their own staff and parents, those users will see the customised look on next sign-in.
+## Setting your brand
 
-## Enabling white-label for an existing agency
+1. Sidebar → **Branding**.
+2. Set:
+   - **Logo** — paste a **Logo URL**, or click **⬆ Upload a logo file** (PNG/JPG/
+     SVG, max 2 MB).
+   - **Primary colour** — your brand colour (used on invoices and the form
+     preview header).
+   - **Support email** — shown on invoices and parent emails.
+   - **Business address** — appears in the invoice *From* block.
+   - **Bank info / payment details** — shown on invoices.
+   - **Privacy policy URL** and **Terms & conditions URL** — your legal links.
+     They appear in the **"Powered by KiddieTrac" footer** on marketing
+     campaigns. Set these as part of your agency setup.
+   - **"Powered by KiddieTrac"** — untick to fully white-label (plan must support
+     this).
+3. The **Live invoice preview** updates as you type. Click **Save changes**.
 
-Go to **Platform → All agencies** → click **Edit** on the agency's row. Same form, same fields — toggle Enable and fill in the branding details. Save.
+## What appears on white-label invoices
 
-## What white-label does NOT change
+The invoice *From* block pulls your **agency name, address, phone, and support
+email**, and uses your **logo and primary colour**. The same applies to real
+invoices, the form **Preview**, and emailed forms/announcements (sent from your
+agency's own address when configured).
 
-- Email templates still come from Kiddietrac's mail infrastructure unless a separate domain handover is arranged.
-- The kiosk page styling uses the centre's brand_color (set at the centre level), not the agency's.
-- The login page logo defaults to Kiddietrac's; agency-specific login domains are a separate feature.
-
-## Turning white-label off
-
-Edit the agency, toggle **Enable** to OFF, save. The brand fields remain stored — the only change is that "Powered by Kiddietrac" reappears. Re-enable any time without re-entering the logo/colour.
+> Who can use this: **Agency admin** (for their agency), **Platform admin**.
