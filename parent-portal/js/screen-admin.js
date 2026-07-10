@@ -820,8 +820,8 @@
     centreWrap.appendChild(centreSelect);
     body.appendChild(centreWrap);
 
-    const note = Dom.el('div', { style: 'background: #FFFBEB; border-left: 3px solid #F59E0B; padding: 10px 12px; font-size: 13px; color: #92400E; border-radius: 4px; margin-top: 12px;' },
-      'The user will be created with no password. Send them the login URL and ask them to click "Forgot password" to set their own.');
+    const note = Dom.el('div', { style: 'background: #ECFDF5; border-left: 3px solid #10B981; padding: 10px 12px; font-size: 13px; color: #065F46; border-radius: 4px; margin-top: 12px;' },
+      '✉ An invite email with a secure “set your password” link will be sent to this address automatically.');
     body.appendChild(note);
 
     const status = Dom.el('div', { style: 'min-height: 20px; color: #DC2626; font-size: 13px; margin: 8px 0;' });
@@ -837,6 +837,10 @@
           const data = {};
           ['first_name', 'last_name', 'email', 'phone', 'role'].forEach(k => { data[k] = inputs[k].value; });
           if (inputs.centre_id.value) data.centre_id = parseInt(inputs.centre_id.value, 10);
+          // Always request the set-password invite email. Without this flag the
+          // backend created the user but emailed nothing — invited users never
+          // received anything.
+          data.send_invite = true;
           if (!data.first_name || !data.last_name || !data.email) {
             status.textContent = 'Name and email are required';
             return;
