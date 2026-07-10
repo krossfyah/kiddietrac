@@ -30,6 +30,15 @@
   function user() { try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
   function apiBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
+  // Best-effort device diagnostic — traces the unlock→(logout) sequence across
+  // reloads so we can SEE why biometric bounces to login. Logs to /diag/bio.
+  function bioDiag(step, extra) {
+    try {
+      var hs = 0; try { hs = !!sessionStorage.getItem('kt_token'); } catch (e) {}
+      var payload = { step: step, path: location.pathname, search: location.search || '', hasSession: hs, enabled: isEnabled(), vault: hasVault(), unlockedAt: (get('kt_bio_unlocked_at') || '0'), extra: extra || null, ts: Date.now() };
+      fetch(apiBase() + '/diag/bio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: JSON.stringify(payload) }) }).catch(function () {});
+    } catch (e) {}
+  }
   function rpId() { var h = location.hostname; return h || 'app.kiddietrac.com'; }
 
   async function available() {
@@ -129,6 +138,7 @@
       fetch(apiBase() + '/auth/me', { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' } })
         .then(function (r) {
           if (settled) return; settled = true; try { clearTimeout(timer); } catch (e) {}
+          bioDiag('validated', { status: r.status });
           if (r.status === 401 || r.status === 419) {
             // Vault token is dead — clear it and fall back to password login (no loop).
             disable();
@@ -224,6 +234,7 @@
   }
 
   function boot() {
+    bioDiag('boot');
     var onDash = /dashboard\.html/i.test(location.pathname);
     var hasSession = false; try { hasSession = !!sessionStorage.getItem('kt_token'); } catch (e) {}
     var unlockedThisSession = false; try { unlockedThisSession = sessionStorage.getItem('kt_bio_session') === '1'; } catch (e) {}

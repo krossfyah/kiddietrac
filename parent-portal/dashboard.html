@@ -90,6 +90,26 @@
 @media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo,#kt-splash .kt-splash-bar span{animation:none}}
 </style>
 <script>
+/* Biometric early re-hydrate — runs BEFORE the deferred app.js. After a
+   biometric unlock the app HARD-RELOADS so every module boots authenticated;
+   app.js reads the bearer token from sessionStorage, but a WebView reload can
+   drop sessionStorage entirely (this is why "unlock then instantly logged out"
+   persisted). If we unlocked in the last 30s and the biometric vault (localStorage
+   kt_bio_*) is present, restore the session into sessionStorage right here so the
+   app boots signed-in. Gated on recency so a cold start still requires biometric. */
+(function(){try{
+  if(sessionStorage.getItem('kt_token'))return;
+  var ua=parseInt(localStorage.getItem('kt_bio_unlocked_at')||'0',10)||0;
+  if(!(Date.now()-ua<30000))return;
+  var t=localStorage.getItem('kt_bio_token');if(!t)return;
+  sessionStorage.setItem('kt_token',t);
+  var u=localStorage.getItem('kt_bio_user');if(u)sessionStorage.setItem('kt_user',u);
+  var a=localStorage.getItem('kt_bio_agency');if(a)sessionStorage.setItem('kt_active_agency_id',a);
+  var v=localStorage.getItem('kt_bio_view');if(v)sessionStorage.setItem('kt_view_as',v);
+  var n=String(Date.now());sessionStorage.setItem('kt_login_at',n);sessionStorage.setItem('kt_last_activity',n);
+}catch(e){}})();
+</script>
+<script>
 (function(){function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
 var MIN=1200,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}
 if(document.readyState==='complete')go();else window.addEventListener('load',go);
@@ -205,7 +225,7 @@ setTimeout(hide,6000);})();
   <script src="/js/kt-list-controls.js?v=20260706p2" defer></script>
   <script src="/js/kt-mfa-nudge.js?v=20260710pm8" defer></script>
   <script src="/js/kt-topbar.js?v=20260709m2" defer></script>
-  <script src="/js/kt-biometric.js?v=20260710bio8" defer></script>
+  <script src="/js/kt-biometric.js?v=20260710bio9" defer></script>
   <script src="/js/kt-crash-report.js?v=20260711bio3" defer></script>
   <script src="/js/kt-progress.js?v=20260709prog" defer></script>
   <script src="/js/kt-mobilenav.js?v=20260711bio6" defer></script>

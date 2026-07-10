@@ -94,6 +94,14 @@ Route::prefix('v1')->group(function () {
         return response()->json(['ok' => true]);
     })->middleware('throttle:60,1');
 
+    Route::post('/diag/bio', function (\Illuminate\Http\Request $r) {
+        try { \Illuminate\Support\Facades\Storage::append('bio-diag.log', json_encode([
+            'at' => now()->toDateTimeString(), 'ua' => mb_substr((string) $r->userAgent(), 0, 120),
+            'data' => mb_substr((string) $r->input('data'), 0, 2000),
+        ])); } catch (\Throwable $e) {}
+        return response()->json(['ok' => true]);
+    })->middleware('throttle:120,1');
+
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
     Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
