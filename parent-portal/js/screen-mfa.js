@@ -190,6 +190,10 @@
       confirmBtn.textContent = 'Verifying…';
       Api.post('/auth/mfa/confirm', { code: code }).then(function () {
         if (Dom.toast) Dom.toast('✓ MFA enabled', 'success');
+        // Clear the "set up MFA" nudge banner immediately (it caches status on
+        // page load and would otherwise linger until a full reload).
+        try { window.dispatchEvent(new Event('kt:mfa-enabled')); } catch (e) {}
+        try { if (window.KT && window.KT.clearMfaNudge) window.KT.clearMfaNudge(); } catch (e) {}
         renderMfa(wrap.parentNode); // re-fetch + re-render
       }).catch(function (e) {
         confirmBtn.disabled = false;

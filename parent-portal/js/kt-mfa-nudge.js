@@ -44,9 +44,22 @@
     if (!t || !isAdmin(u)) { decided = true; return; }
     fetch(API + '/auth/mfa/status', { headers: { 'Authorization': 'Bearer ' + t } })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { decided = true; needsMfa = !!(d && !d.enabled); if (needsMfa) inject(); })
+      .then(function (d) { decided = true; needsMfa = !!(d && !d.enabled); if (needsMfa) inject(); else clearNudge(); })
       .catch(function () { decided = true; });
   }
+
+  // Called when MFA gets turned on IN THIS SESSION (screen-mfa dispatches the
+  // event on a successful /confirm). Without this the banner kept re-injecting
+  // every 1.5s because needsMfa was cached true from the initial page load and
+  // never re-evaluated — so it lingered until a full reload even after enabling.
+  function clearNudge() {
+    needsMfa = false; decided = true;
+    var b = document.getElementById('kt-mfa-nudge');
+    if (b) b.remove();
+    try { clearInterval(iv); } catch (e) {}
+  }
+  window.addEventListener('kt:mfa-enabled', clearNudge);
+  window.KT = window.KT || {}; window.KT.clearMfaNudge = clearNudge;
 
   // #appMain is built by the shell after load; wait for it, decide once, then
   // keep the banner present across screen changes (each screen re-renders #appMain).
