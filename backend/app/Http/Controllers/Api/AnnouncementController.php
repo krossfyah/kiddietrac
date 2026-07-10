@@ -225,6 +225,19 @@ final class AnnouncementController extends Controller
 
     private function canBroadcast(int $userId, string $scopeType, int $scopeId): bool
     {
+        // A platform_admin (super admin) may broadcast to any scope — consistent
+        // with the rest of the app (ResolvesCentreContext treats platform_admin as
+        // able to target any agency). Without this, a super admin acting inside an
+        // agency they don't directly administer (e.g. the Test Agency) hit 403 on
+        // send even though the composer + centre list loaded fine.
+        if (DB::table('role_assignments')
+            ->where('user_id', $userId)
+            ->where('role', 'platform_admin')
+            ->where('active', true)
+            ->exists()) {
+            return true;
+        }
+
         if ($scopeType === 'agency') {
             return DB::table('role_assignments')
                 ->where('user_id', $userId)
