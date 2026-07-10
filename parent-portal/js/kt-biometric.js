@@ -29,6 +29,7 @@
   function del(k) { try { localStorage.removeItem(k); } catch (e) {} }
   function user() { try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
+  function apiBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
   function rpId() { var h = location.hostname; return h || 'app.kiddietrac.com'; }
 
   async function available() {
@@ -111,6 +112,34 @@
     } catch (e) {}
   }
 
+  // After a successful unlock we HARD-RELOAD rather than just removing the
+  // overlay. app.js / session-timeout / the shell all boot in a logged-out state
+  // (kt-biometric.js is the last script to load), so ov.remove() left them stale
+  // and the app bounced straight back to the login screen a moment later. A full
+  // reload — with the restored token already in sessionStorage — boots every
+  // module authenticated. First validate the token so a dead/revoked vault token
+  // falls back to password login instead of looping.
+  function commitUnlock(onDash, ov) {
+    var go = function () { if (onDash) location.reload(); else location.replace('/dashboard.html'); };
+    var t = tok();
+    if (!t) { go(); return; }
+    var settled = false;
+    var timer = setTimeout(function () { if (!settled) { settled = true; go(); } }, 3500); // slow network → proceed
+    try {
+      fetch(apiBase() + '/auth/me', { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' } })
+        .then(function (r) {
+          if (settled) return; settled = true; try { clearTimeout(timer); } catch (e) {}
+          if (r.status === 401 || r.status === 419) {
+            // Vault token is dead — clear it and fall back to password login (no loop).
+            disable();
+            try { sessionStorage.removeItem('kt_token'); } catch (e) {}
+            location.replace('/index.html?signed_out=biometric_expired');
+          } else { go(); }
+        })
+        .catch(function () { if (!settled) { settled = true; try { clearTimeout(timer); } catch (e) {} go(); } });
+    } catch (e) { if (!settled) { settled = true; go(); } }
+  }
+
   async function signIn() {
     var nb = nativeBio();
     if (nb && nb.authenticate) return nativeVerify('Use your fingerprint or face to continue');
@@ -169,8 +198,7 @@
         try { sessionStorage.setItem('kt_bio_session', '1'); } catch (e) {}
         set('kt_bio_unlocked_at', String(Date.now()));
         restoreSession();
-        if (onDash) { ov.remove(); }
-        else { location.replace('/dashboard.html'); }
+        commitUnlock(onDash, ov);
       });
     };
     ov.querySelector('#kt-bio-unlock').onclick = attempt;

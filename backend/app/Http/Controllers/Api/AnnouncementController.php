@@ -303,13 +303,19 @@ final class AnnouncementController extends Controller
         $senderName = trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? ''));
         $agencyId = $this->resolveAgencyForScope($data['scope_type'], (int) $data['scope_id']);
 
+        // Notification framing (requested): "Announcement · <Centre/Room name>"
+        // as the title, then the announcement itself as the body.
+        $scopeName = $this->scopeName($data['scope_type'], (int) $data['scope_id']);
+        $notifTitle = '📢 Announcement · ' . $scopeName;
+        $notifBody = trim(($data['title'] ?? '') . ($plain !== '' ? ' — ' . $plain : ''));
+
         $delivered = 0;
         foreach ($userIds as $uid) {
             DB::table('notifications')->insert([
                 'user_id' => $uid,
                 'type' => 'announcement',
-                'title' => $data['title'],
-                'body' => mb_substr($plain, 0, 1000),
+                'title' => $notifTitle,
+                'body' => mb_substr($notifBody, 0, 1000),
                 'data' => json_encode(['announcement_id' => $announcementId]),
                 'created_at' => now(),
             ]);
@@ -357,16 +363,16 @@ final class AnnouncementController extends Controller
         // native FCM push (Capacitor app) and web push (browser PWA). link
         // '#announcements' so tapping the notification deep-links to the section.
         if (! empty($data['send_push'])) {
-            $pushBody = mb_substr($plain !== '' ? $plain : $data['title'], 0, 180);
+            $pushBody = mb_substr($notifBody, 0, 180);
             try {
                 $fcm = app(\App\Services\FcmService::class);
                 foreach ($userIds as $uid) {
-                    $fcm->sendToUser((int) $uid, '📢 ' . $data['title'], $pushBody, '#announcements');
+                    $fcm->sendToUser((int) $uid, $notifTitle, $pushBody, '#announcements');
                 }
             } catch (\Throwable $e) { Log::warning('Announcement FCM push failed', ['error' => $e->getMessage()]); }
             try {
                 app(\App\Services\WebPushService::class)->sendToUsers($userIds, [
-                    'title' => '📢 ' . $data['title'],
+                    'title' => $notifTitle,
                     'body'  => $pushBody,
                     'icon'  => '/icon-192.png',
                     'url'   => '/dashboard.html#announcements',
@@ -376,6 +382,25 @@ final class AnnouncementController extends Controller
         }
 
         return $delivered;
+    }
+
+    // Human name of the target scope, for the notification title
+    // ("Announcement · <Centre/Room name>").
+    private function scopeName(string $type, int $id): string
+    {
+        if ($type === 'centre') {
+            return (string) (DB::table('centres')->where('id', $id)->value('name') ?: 'your centre');
+        }
+        if ($type === 'room') {
+            $room = DB::table('rooms')->where('id', $id)->first(['name', 'centre_id']);
+            if (! $room) return 'your room';
+            $cn = $room->centre_id ? DB::table('centres')->where('id', $room->centre_id)->value('name') : null;
+            return trim(($room->name ?: 'room') . ($cn ? ' · ' . $cn : ''));
+        }
+        if ($type === 'agency') {
+            return (string) (DB::table('agencies')->where('id', $id)->value('name') ?: 'your agency');
+        }
+        return 'KiddieTrac';
     }
 
     private function resolveAgencyForScope(string $type, int $id): ?int
