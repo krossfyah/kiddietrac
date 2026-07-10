@@ -460,6 +460,22 @@ final class ChatController extends Controller
                         'tag'   => 'chat-' . $conversationId,
                     ]);
 
+                    // v23: ALSO push to native FCM device tokens (the Capacitor
+                    // Android/iOS app). The WebPushService call above only reaches
+                    // VAPID web-push subscribers (browser PWAs); the app registers
+                    // an FCM token (device_tokens.platform = android/ios), so
+                    // without this the app NEVER got OS notifications for realtime
+                    // chat — you'd hear the in-app ping but see nothing in the bar.
+                    // Wrapped separately so an FCM hiccup can't break web push.
+                    try {
+                        $fcm = app(\App\Services\FcmService::class);
+                        foreach ($recipients as $rid) {
+                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat');
+                        }
+                    } catch (\Throwable $fe) {
+                        \Illuminate\Support\Facades\Log::warning('FCM push from chat failed', ['error' => $fe->getMessage()]);
+                    }
+
                     // v22p47: also persist a notifications row per recipient
                     // so the in-portal inbox shows the message even after the
                     // OS push notification has disappeared. Same payload shape

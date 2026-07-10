@@ -133,6 +133,31 @@
       sc.appendChild(rm);
     }
 
+    // Notifications self-test: fires an FCM push to THIS user's own device
+    // tokens via /push/test-fcm, bypassing chat-recipient logic — the cleanest
+    // way to confirm OS notifications actually land in the Android bar.
+    try {
+      var nd = el('div', { style: 'background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px;margin-bottom:14px;' });
+      nd.appendChild(el('div', { style: 'font-weight:800;font-size:14px;color:#0F172A;margin-bottom:4px;' }, ['🔔 Notifications']));
+      nd.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' }, ['Send yourself a test push. Tip: background the app first — an open app shows it in-app, not in the bar.']));
+      var ntBtn = el('button', { type: 'button', style: 'background:linear-gradient(135deg,#0FA3B1,#1F6FB2);border:0;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:800;cursor:pointer;' }, ['Send test notification']);
+      var ntMsg = el('div', { style: 'font-size:12px;margin-top:8px;min-height:16px;' });
+      ntBtn.addEventListener('click', function () {
+        ntBtn.disabled = true; var old = ntBtn.textContent; ntBtn.textContent = 'Sending…'; ntMsg.style.color = '#64748B'; ntMsg.textContent = '';
+        fetch(apiBase() + '/push/test-fcm', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' } })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            ntBtn.disabled = false; ntBtn.textContent = old; var s = res.j || {};
+            if (res.ok && (s.sent | 0) > 0) { ntMsg.style.color = '#16A34A'; ntMsg.textContent = '✓ Sent to ' + s.sent + ' device' + ((s.sent | 0) > 1 ? 's' : '') + '. Background the app and check your notification bar.'; }
+            else if (res.ok && (s.sent | 0) === 0) { ntMsg.style.color = '#B45309'; ntMsg.textContent = 'No registered devices yet. Open the app once and allow notifications, then retry.'; }
+            else { ntMsg.style.color = '#B91C1C'; ntMsg.textContent = (s.message || ('Could not send. ' + (s.error || ''))); }
+          })
+          .catch(function () { ntBtn.disabled = false; ntBtn.textContent = old; ntMsg.style.color = '#B91C1C'; ntMsg.textContent = 'Network error — try again.'; });
+      });
+      nd.appendChild(ntBtn); nd.appendChild(ntMsg);
+      wrap.appendChild(nd);
+    } catch (e) {}
+
     // Diagnostics: if the native app captured a crash (e.g. biometrics), show it
     // here so it can be screenshotted for support. Populated by MainActivity.
     try {
