@@ -103,6 +103,22 @@ final class AnnouncementController extends Controller
             ->pluck('agency_id')
             ->all();
 
+        // A platform_admin (super admin) is scoped to the agency they're currently
+        // acting in (X-Active-Agency-Id), not just agencies where they hold an
+        // agency_admin row. Without this, announcements a super admin sent in e.g.
+        // the Test Agency never appeared in the list (indexProvider saw nothing).
+        $isPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $user->id)->where('role', 'platform_admin')->where('active', true)->exists();
+        if ($isPlatformAdmin) {
+            $activeAgency = (int) $request->header('X-Active-Agency-Id');
+            if ($activeAgency > 0) {
+                $agencyIds[] = $activeAgency;
+                $centreIds = array_merge($centreIds, DB::table('centres')->where('agency_id', $activeAgency)->pluck('id')->all());
+            }
+        }
+        $agencyIds = array_values(array_unique($agencyIds));
+        $centreIds = array_values(array_unique($centreIds));
+
         $roomIds = !empty($centreIds)
             ? DB::table('rooms')->whereIn('centre_id', $centreIds)->pluck('id')->all()
             : [];
@@ -333,6 +349,30 @@ final class AnnouncementController extends Controller
                 try { $smsCtl->sendOne($agencyId, (int) $r->id, (string) $r->phone, $sms, 'announcement'); }
                 catch (\Throwable $e) { Log::warning('Announcement SMS failed', ['user' => $r->id, 'error' => $e->getMessage()]); }
             }
+        }
+
+        // v23: actually push an OS notification when "In-app notification" is on.
+        // Previously deliver() only wrote the notifications row + email/SMS, so
+        // announcements never reached the Android notification bar. Send BOTH the
+        // native FCM push (Capacitor app) and web push (browser PWA). link
+        // '#announcements' so tapping the notification deep-links to the section.
+        if (! empty($data['send_push'])) {
+            $pushBody = mb_substr($plain !== '' ? $plain : $data['title'], 0, 180);
+            try {
+                $fcm = app(\App\Services\FcmService::class);
+                foreach ($userIds as $uid) {
+                    $fcm->sendToUser((int) $uid, '📢 ' . $data['title'], $pushBody, '#announcements');
+                }
+            } catch (\Throwable $e) { Log::warning('Announcement FCM push failed', ['error' => $e->getMessage()]); }
+            try {
+                app(\App\Services\WebPushService::class)->sendToUsers($userIds, [
+                    'title' => '📢 ' . $data['title'],
+                    'body'  => $pushBody,
+                    'icon'  => '/icon-192.png',
+                    'url'   => '/dashboard.html#announcements',
+                    'tag'   => 'announcement',
+                ]);
+            } catch (\Throwable $e) { Log::warning('Announcement web push failed', ['error' => $e->getMessage()]); }
         }
 
         return $delivered;
