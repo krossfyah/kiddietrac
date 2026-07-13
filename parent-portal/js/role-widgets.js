@@ -116,15 +116,23 @@
     return hero || null;
   }
 
+  var mounting = false;
   function mount(container, opts) {
     if (!container || !Api) return;
     opts = opts || {};
     // De-dupe: drop any prior strip first (handles re-renders)
     var existing = container.querySelector('.kt-role-widget-strip');
     if (existing) existing.remove();
+    // The check above happens BEFORE the fetch, so two mounts issued inside the
+    // same request window both passed it and both inserted — two strips. Hold a
+    // flag across the async gap, and sweep any strays right before inserting.
+    if (mounting) return;
+    mounting = true;
 
     Api.get('/widgets/me').then(function (data) {
+      mounting = false;
       if (!data || !data.widgets || !data.widgets.length) return;
+      [].forEach.call(container.querySelectorAll('.kt-role-widget-strip'), function (s) { s.remove(); });
       // The endpoint tells us which role it built the cards for — use that to
       // pick each card's destination rather than re-deriving the role.
       var strip = renderStrip(data.widgets, data.role);
@@ -149,6 +157,7 @@
         container.insertBefore(strip, container.firstChild);
       }
     }).catch(function (e) {
+      mounting = false;
       if (window.console) console.warn('Role widgets load failed', e);
     });
   }

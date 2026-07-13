@@ -362,7 +362,23 @@
   }
   function currentHash() { return (location.hash || '').replace('#', '').split('?')[0]; }
 
+  // role-widgets.js mounts its stat strip ~350ms after a hashchange, but the
+  // educator screen renders asynchronously (it awaits /provider/bootstrap) and
+  // starts with Dom.clear(main) — so on a slow load the strip is wiped straight
+  // after it mounts and the cards vanish. Put them back if they went missing.
+  // Guarded on "no strip present", so this can't loop against its own mutation.
+  function ensureWidgets() {
+    if (!isEducator() || !KT.RoleWidgets) return;
+    var hash = currentHash();
+    if (hash !== 'dashboard' && hash !== 'today' && hash !== '') return;
+    var main = document.getElementById('appMain');
+    if (!main || !main.children.length) return;
+    if (main.querySelector('.kt-role-widget-strip')) return;
+    KT.RoleWidgets.mount(main, { prepend: true });   // stats first, then roster
+  }
+
   function ensureLauncher() {
+    ensureWidgets();
     if (!isEducator()) return;
     var hash = currentHash();
     if (hash !== 'dashboard' && hash !== 'today' && hash !== '') return;
