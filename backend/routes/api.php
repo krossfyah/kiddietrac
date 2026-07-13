@@ -237,6 +237,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/staff/punch',               [\App\Http\Controllers\Api\CareController::class, 'punch']);
         Route::get   ('/staff/punches/me',          [\App\Http\Controllers\Api\CareController::class, 'myPunches']);
         Route::get   ('/staff/punches/centre',      [\App\Http\Controllers\Api\CareController::class, 'centrePunches']);
+
+        // 2026-07-13 — self-scoped staff data for the educator mobile app.
+        // Own shifts only, and child records only for children the caller can
+        // already access (canAccessChildScoped). The director/admin schedule +
+        // payroll routes stay centre-wide and stay director-gated.
+        Route::get   ('/provider/shifts/me',        [\App\Http\Controllers\Api\EducatorSelfController::class, 'myShifts']);
+        Route::get   ('/provider/children/{child}',  [\App\Http\Controllers\Api\EducatorSelfController::class, 'childRecord']);
         Route::get   ('/admin/tours',               [\App\Http\Controllers\Api\CareController::class, 'listTours']);
         Route::patch ('/admin/tours/{id}',          [\App\Http\Controllers\Api\CareController::class, 'updateTour']);
 

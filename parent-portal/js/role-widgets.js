@@ -41,22 +41,68 @@
       '.kt-rw-label{font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1.2px;text-transform:uppercase;}' +
       '.kt-rw-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;background:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 14%, white);color:var(--kt-rw-accent,#1F6080);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--kt-rw-accent,#1F6080) 22%, transparent);}' +
       '.kt-rw-value{font-size:30px;font-weight:800;color:#0F172A;line-height:1.05;letter-spacing:-0.3px;position:relative;z-index:1;font-feature-settings:"tnum";}' +
-      '.kt-rw-hint{font-size:12px;color:#64748B;margin-top:4px;position:relative;z-index:1;line-height:1.35;}';
+      '.kt-rw-hint{font-size:12px;color:#64748B;margin-top:4px;position:relative;z-index:1;line-height:1.35;}' +
+      // Linked cards: look and behave tappable (they were plain divs before).
+      '.kt-rw-link{display:block;text-decoration:none;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}' +
+      '.kt-rw-link:active{transform:scale(.985);}' +
+      '.kt-rw-go{position:relative;z-index:1;margin-top:8px;font-size:11.5px;font-weight:800;color:var(--kt-rw-accent,#1F6080);opacity:.9;}';
     document.head.appendChild(s);
   }
 
-  function renderStrip(widgets) {
+  // Where each stat card goes when tapped. A number with no way to see what's
+  // behind it is a dead end — "Signed in now: 0/9" should open the roster. The
+  // destination depends on the role (a director's Children screen is #children,
+  // an agency admin's is #admin-children), and a widget with no sensible
+  // destination for that role stays a plain, non-clickable card rather than
+  // becoming a link to a screen that doesn't exist.
+  var WIDGET_LINKS = {
+    guardian: {
+      'today-status': 'today', 'balance': 'billing', 'photos-week': 'photos', 'children-count': 'today',
+    },
+    educator: {
+      'signed-in': 'today', 'meds-today': 'medications', 'observations': 'observations', 'enrolled': 'children',
+    },
+    centre_director: {
+      'capacity': 'children', 'open-invoices': 'billing-setup', 'missing-checkin': 'today', 'enrolled-count': 'children',
+      'signed-in': 'today', 'meds-today': 'medications', 'observations': 'observations', 'enrolled': 'children',
+    },
+    agency_admin: {
+      'capacity': 'admin-children', 'open-invoices': 'bulk-invoices', 'missing-checkin': 'admin-children',
+      'enrolled-count': 'admin-children', 'unassigned': 'admin-children',
+    },
+  };
+  function linkFor(role, id) {
+    var m = WIDGET_LINKS[role] || {};
+    return m[id] || null;
+  }
+  function roleOf() {
+    try {
+      var va = sessionStorage.getItem('kt_view_as') || '';
+      if (va) return va;
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return u.primary_role || '';
+    } catch (e) { return ''; }
+  }
+
+  function renderStrip(widgets, role) {
     installStyles();
+    role = role || roleOf();
     var strip = Dom.el('div', { class: 'kt-role-widget-strip kt-rw-strip' });
     widgets.forEach(function (w) {
       var accent = w.accent || '#1F6080';
-      var card = Dom.el('div', { class: 'kt-rw-card', style: '--kt-rw-accent:' + accent + ';' });
+      var hash = linkFor(role, w.id);
+      // An <a> keeps it keyboard-focusable and long-pressable, and the shell
+      // routes on hashchange, so no click handler is needed.
+      var card = hash
+        ? Dom.el('a', { class: 'kt-rw-card kt-rw-link', href: '#' + hash, style: '--kt-rw-accent:' + accent + ';' })
+        : Dom.el('div', { class: 'kt-rw-card', style: '--kt-rw-accent:' + accent + ';' });
       var head = Dom.el('div', { class: 'kt-rw-head' });
       head.appendChild(Dom.el('div', { class: 'kt-rw-label' }, w.label || ''));
       if (w.icon) head.appendChild(Dom.el('div', { class: 'kt-rw-icon' }, w.icon));
       card.appendChild(head);
       card.appendChild(Dom.el('div', { class: 'kt-rw-value' }, String(w.value == null ? '—' : w.value)));
       if (w.hint) card.appendChild(Dom.el('div', { class: 'kt-rw-hint' }, w.hint));
+      if (hash) card.appendChild(Dom.el('div', { class: 'kt-rw-go' }, 'View ›'));
       strip.appendChild(card);
     });
     return strip;
@@ -79,7 +125,9 @@
 
     Api.get('/widgets/me').then(function (data) {
       if (!data || !data.widgets || !data.widgets.length) return;
-      var strip = renderStrip(data.widgets);
+      // The endpoint tells us which role it built the cards for — use that to
+      // pick each card's destination rather than re-deriving the role.
+      var strip = renderStrip(data.widgets, data.role);
 
       if (opts.prepend === true) {
         container.insertBefore(strip, container.firstChild);

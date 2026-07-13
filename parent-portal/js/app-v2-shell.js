@@ -432,15 +432,24 @@
         if (items[j].hash === base) return { icon: items[j].icon || '', label: items[j].label || base, section: secs[i].label || '' };
       }
     }
-    return { icon: '', label: base.replace(/-/g, ' ').replace(/\w/g, function (c) { return c.toUpperCase(); }), section: '' };
+    return { icon: '', label: base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }), section: '' };
   }
   function buildAutoHero(info) {
     var b = document.createElement('div'); b.className = 'kt-hero kt-hero-auto';
-    var ic = info.icon ? info.icon + ' ' : '';
-    var top = String(info.section || info.label || '').replace(/[<>&]/g, '');
     var lbl = String(info.label || '').replace(/[<>&]/g, '');
+    var sect = String(info.section || '').replace(/[<>&]/g, '');
     var emoji = String(info.icon || '\u2728').replace(/[<>&]/g, '');
-    b.innerHTML = '<div class="kt-hero-greet">' + ic + top + '</div><h1>' + lbl + '</h1>' + '<div class="kt-hero-emoji" aria-hidden="true">' + emoji + '</div>';
+    // Only show the eyebrow when the section adds information. It used to fall
+    // back to the label, so any screen with no nav section (Settings, Dashboard)
+    // printed its own name twice — "Settings" above "Settings".
+    // "Menu"/"Main" are catch-all nav section names, not information — and with
+    // the Menu button gone from the mobile bar, an eyebrow reading "MENU" is
+    // actively confusing.
+    if (/^(menu|main|general|other)$/i.test(sect)) sect = '';
+    var greet = (sect && sect.toLowerCase() !== lbl.toLowerCase())
+      ? '<div class="kt-hero-greet">' + (info.icon ? info.icon + ' ' : '') + sect + '</div>'
+      : '';
+    b.innerHTML = greet + '<h1>' + lbl + '</h1>' + '<div class="kt-hero-emoji" aria-hidden="true">' + emoji + '</div>';
     return b;
   }
 

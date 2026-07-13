@@ -196,8 +196,18 @@
       + '<div style="font-weight:800;font-size:20px;margin-bottom:8px;">Welcome back</div>'
       + '<div style="font-size:14px;opacity:.8;margin-bottom:26px;max-width:280px;line-height:1.5;">Unlock KiddieTrac with your fingerprint or face.</div>'
       + '<button id="kt-bio-unlock" style="background:#fff;color:#081C41;border:none;border-radius:14px;padding:14px 30px;font-size:16px;font-weight:800;">Unlock</button>'
+      + '<button id="kt-bio-pin" hidden style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:12px;padding:11px 24px;margin-top:14px;font-size:14px;font-weight:700;">Use PIN instead</button>'
       + '<button id="kt-bio-signout" style="background:transparent;color:rgba(255,255,255,.7);border:none;margin-top:16px;font-size:13px;font-weight:700;">Use password instead</button>';
     document.body.appendChild(ov);
+    // A fingerprint that won't read shouldn't force a full password sign-in when
+    // the user has set a PIN — offer it as the middle option.
+    try {
+      if (window.KT && KT.pin && KT.pin.isSet()) {
+        var pinBtn = ov.querySelector('#kt-bio-pin');
+        pinBtn.hidden = false;
+        pinBtn.onclick = function () { ov.remove(); KT.pin.showLock(onDash); };
+      }
+    } catch (e) {}
     var busy = false;
     var attempt = function () {
       if (busy) return; busy = true;

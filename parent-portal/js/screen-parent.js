@@ -600,32 +600,78 @@
     ]).then(([timeline, dg, invoices]) => {
       const ev = timeline.events || [];
       const count = (types) => ev.filter(e => types.includes(e.type)).length;
-      [['🍽️', count(['meal', 'snack']), 'Meals'], ['😴', count(['nap_end']), 'Naps'],
-       ['👶', count(['diaper', 'bathroom']), 'Changes'], ['✨', count(['activity']), 'Play']].forEach(([ic, n, l]) => {
-        stats.appendChild(Dom.el('div', { style: card('padding:11px 4px;text-align:center;') }, [
-          Dom.el('div', { style: 'font-size:19px;line-height:1;' }, ic),
+
+      // The tiles summarise the timeline directly below them, so tapping one
+      // filters that timeline instead of being a dead number. Tapping the active
+      // tile again clears the filter.
+      let activeFilter = null;
+      const TILES = [
+        { icon: '🍽️', label: 'Meals',   types: ['meal', 'snack'] },
+        { icon: '😴', label: 'Naps',    types: ['nap_end'] },
+        { icon: '👶', label: 'Changes', types: ['diaper', 'bathroom'] },
+        { icon: '✨', label: 'Play',    types: ['activity'] },
+      ];
+      const tileEls = [];
+      TILES.forEach((t) => {
+        const n = count(t.types);
+        const el = Dom.el('button', {
+          type: 'button',
+          style: card('padding:11px 4px;text-align:center;border:1.5px solid transparent;cursor:pointer;width:100%;font:inherit;'),
+        }, [
+          Dom.el('div', { style: 'font-size:19px;line-height:1;' }, t.icon),
           Dom.el('div', { style: 'font-size:21px;font-weight:800;color:var(--brand-blue);margin-top:4px;line-height:1;' }, String(n)),
-          Dom.el('div', { style: 'font-size:10.5px;color:var(--ink-500);margin-top:3px;font-weight:600;' }, l),
-        ]));
+          Dom.el('div', { style: 'font-size:10.5px;color:var(--ink-500);margin-top:3px;font-weight:600;' }, t.label),
+        ]);
+        el.addEventListener('click', () => {
+          if (!n) return;                       // nothing logged → nothing to show
+          activeFilter = (activeFilter === t.label) ? null : t.label;
+          paintTiles();
+          renderTimeline(activeFilter ? t.types : null, activeFilter ? t.label : null);
+          tlCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+        tileEls.push({ el, tile: t, n });
+        stats.appendChild(el);
       });
+      function paintTiles() {
+        tileEls.forEach(({ el, tile, n }) => {
+          const on = activeFilter === tile.label;
+          el.style.borderColor = on ? '#159FB4' : 'transparent';
+          el.style.opacity = (!n && activeFilter) ? '.55' : '1';
+        });
+      }
 
       Dom.clear(digestBody);
       if (dg.body) digestBody.appendChild(Dom.el('div', { style: 'white-space:pre-wrap;' }, dg.body));
       else digestBody.appendChild(Dom.el('div', {}, dg.message || `${child.display_name}'s story will be ready this afternoon.`));
 
-      Dom.clear(tlBody);
-      if (!ev.length) {
-        tlBody.appendChild(Dom.el('div', { style: 'padding:22px 0;text-align:center;color:var(--ink-400);font-size:13px;' }, 'No moments logged yet today.'));
-      } else ev.forEach((e, i) => {
-        const row = Dom.el('div', { style: `display:flex;gap:12px;align-items:flex-start;padding:11px 0;${i < ev.length - 1 ? 'border-bottom:1px solid var(--ink-100);' : ''}` });
-        row.appendChild(Dom.el('div', { style: 'width:38px;height:38px;border-radius:12px;background:var(--ink-50);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' }, eventIcon(e.type)));
-        const t = Dom.el('div', { style: 'flex:1;min-width:0;' });
-        t.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:var(--ink-900);' }, e.display?.title || e.type));
-        if (e.display?.detail) t.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:1px;' }, e.display.detail));
-        row.appendChild(t);
-        row.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-400);flex-shrink:0;font-weight:600;' }, e.time_display));
-        tlBody.appendChild(row);
-      });
+      function renderTimeline(types, label) {
+        const rows = types ? ev.filter(e => types.includes(e.type)) : ev;
+        Dom.clear(tlBody);
+        if (label) {
+          const chip = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:9px 0 5px;' }, [
+            Dom.el('div', { style: 'font-size:12px;font-weight:800;color:#159FB4;' }, `Showing ${label.toLowerCase()} · ${rows.length}`),
+            Dom.el('button', { type: 'button', style: 'background:none;border:none;color:var(--ink-500);font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px;' }, 'Show all'),
+          ]);
+          chip.querySelector('button').addEventListener('click', () => { activeFilter = null; paintTiles(); renderTimeline(null, null); });
+          tlBody.appendChild(chip);
+        }
+        if (!rows.length) {
+          tlBody.appendChild(Dom.el('div', { style: 'padding:22px 0;text-align:center;color:var(--ink-400);font-size:13px;' },
+            types ? 'Nothing logged for this yet today.' : 'No moments logged yet today.'));
+          return;
+        }
+        rows.forEach((e, i) => {
+          const row = Dom.el('div', { style: `display:flex;gap:12px;align-items:flex-start;padding:11px 0;${i < rows.length - 1 ? 'border-bottom:1px solid var(--ink-100);' : ''}` });
+          row.appendChild(Dom.el('div', { style: 'width:38px;height:38px;border-radius:12px;background:var(--ink-50);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' }, eventIcon(e.type)));
+          const t = Dom.el('div', { style: 'flex:1;min-width:0;' });
+          t.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:var(--ink-900);' }, e.display?.title || e.type));
+          if (e.display?.detail) t.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:1px;' }, e.display.detail));
+          row.appendChild(t);
+          row.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-400);flex-shrink:0;font-weight:600;' }, e.time_display));
+          tlBody.appendChild(row);
+        });
+      }
+      renderTimeline(null, null);
 
       const inv = (invoices.invoices || [])[0];
       Dom.clear(bill);

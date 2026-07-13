@@ -176,12 +176,22 @@
       nav.appendChild(btn('💬', 'Messages', function () { go('#messages'); }, 'kt-mnav-msg', 'messages'));
       nav.appendChild(btn('💳', 'Billing', function () { go('#billing'); }, 'kt-b-billing', 'billing'));
     } else {
+      // No Menu button for anyone now. The dashboard carries the tile launcher
+      // (every section, one tap), so the sidebar drawer was a second, redundant
+      // way to reach the same places — and it was the only thing on the bar that
+      // didn't navigate.
       nav.appendChild(btn('🏠', 'Home', function () { go('#dashboard'); }, null, 'dashboard'));
       nav.appendChild(btn('💬', 'Messages', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
-      nav.appendChild(btn('📣', 'Alerts', function () { go('#announcements'); }, null, 'announcements'));
-      // Staff keep a Menu (full sidebar). Parents don't — the Home launcher IS
-      // their menu, so their bar stays dead-simple (Home · Photos · Messages · Billing).
-      nav.appendChild(btn('☰', 'Menu', function () { document.body.classList.toggle('kt-mnav-open'); }));
+      if (isEducatorView()) {
+        // The educator's check-in QR, as a raised centre button — the same
+        // affordance parents get for scanning. A 🔳 glyph floating in the corner
+        // was too easy to miss for something parents queue up to scan.
+        var qrBtn = btn('📷', 'Check-in QR', function () { showCheckinQr(); }, null, 'eduqr');
+        qrBtn.classList.add('scan');
+        nav.appendChild(qrBtn);
+      }
+      nav.appendChild(btn('📣', 'Alerts', function () { go('#announcements'); }, 'kt-b-alerts', 'announcements'));
+      nav.appendChild(btn('🔔', 'Inbox', function () { go('#notifications'); }, 'kt-b-inbox', 'notifications'));
     }
     document.body.appendChild(nav);
     pinToVisualViewport();
@@ -198,16 +208,14 @@
       document.body.appendChild(gear);
     }
 
-    // Educator check-in QR button — sits left of the gear. Shows the centre's
-    // daily QR fullscreen so parents can scan it off the educator's phone, plus
-    // a print option. The code rotates daily server-side (KTCHK.<centre>.<Ymd>).
-    if (isEducatorView() && !document.getElementById('kt-eduqr')) {
-      var qb = document.createElement('button');
-      qb.id = 'kt-eduqr'; qb.type = 'button'; qb.setAttribute('aria-label', 'Check-in QR'); qb.textContent = '🔳';
-      qb.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:60px;z-index:9450;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.94);box-shadow:0 2px 10px rgba(15,23,42,.2);font-size:19px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
-      qb.addEventListener('click', showCheckinQr);
-      document.body.appendChild(qb);
-    }
+    // The check-in QR now lives on the bottom bar as a raised centre button
+    // (see above), so the old floating 🔳 is gone — one obvious entry point,
+    // not two easy-to-miss ones. Any stale button from a cached build is removed.
+    var staleQr = document.getElementById('kt-eduqr');
+    if (staleQr) staleQr.remove();
+    // The Menu button is gone, so nothing can open the drawer any more; make sure
+    // a cached page can't leave the body stuck in the open state.
+    document.body.classList.remove('kt-mnav-open');
     padGearClearance();
 
     // Highlight the active section.
@@ -332,6 +340,10 @@
       var sec = curSection();
       _setBadge('kt-b-photos', sec === 'photos' ? 0 : cat.photos);
       _setBadge('kt-b-billing', sec === 'billing' ? 0 : cat.billing);
+      // Staff bar: everything unread that isn't a message lands in Inbox, so the
+      // count matches what the Notifications screen will actually show them.
+      var totalUnread = cat.photos + cat.billing + cat.other;
+      _setBadge('kt-b-inbox', sec === 'notifications' ? 0 : totalUnread);
     });
   }
   setInterval(refreshBadges, 30000);
@@ -341,6 +353,7 @@
     var sec = curSection();
     if (sec === 'billing') _setBadge('kt-b-billing', 0);
     if (sec === 'photos') _setBadge('kt-b-photos', 0);
+    if (sec === 'notifications') _setBadge('kt-b-inbox', 0);
     if (sec === 'messages' || sec === 'chat') _setBadge('kt-mnav-msg', 0);
     setTimeout(refreshBadges, 1500);
   });

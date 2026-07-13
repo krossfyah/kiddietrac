@@ -73,14 +73,20 @@
       sub: 'Everything in one place',
       primary: [
         { hash: 'today',         icon: '✨', label: 'Today',        sub: 'Rooms & children' },
+        { hash: 'children',      icon: '🧒', label: 'Child records' },
         { hash: 'care-log',      icon: '✅', label: 'Daily log' },
         { hash: 'observations',  icon: '👀', label: 'Observations' },
         { hash: 'lesson-plans',  icon: '📚', label: 'Lesson plans' },
         { hash: 'chat',          icon: '💬', label: 'Messages' },
         { hash: 'incidents',     icon: '⚠️', label: 'Incidents' },
         { hash: 'medications',   icon: '💊', label: 'Medications' },
-        { hash: 'announcements', icon: '📢', label: 'News' },
+        { hash: 'time-clock',    icon: '⏱', label: 'Clock in/out' },
+        { hash: 'my-schedule',   icon: '📅', label: 'My calendar' },
+        { hash: 'my-hours',      icon: '💰', label: 'My hours' },
         { hash: 'time-off',      icon: '🌴', label: 'Time off' },
+        { hash: 'announcements', icon: '📢', label: 'News' },
+        { hash: 'notifications', icon: '🔔', label: 'Inbox' },
+        { hash: 'settings',      icon: '⚙️', label: 'Settings' },
         { hash: 'help',          icon: '📖', label: 'Help' },
       ],
       more: [],
@@ -174,6 +180,15 @@
   Shell.registerScreen('guardian:home', renderHome);
   Shell.registerScreen('educator:home', renderHome);
   Shell.registerScreen('auditor:home', renderHome);
+
+  // Expose the launcher so other screens can carry it. The staff bottom bar no
+  // longer has a Menu button, so the dashboard hosts these tiles instead — the
+  // tiles ARE the menu now, and they should only be defined in one place.
+  KT.roleTilesHtml = function (role) {
+    var set = TILES[role];
+    if (!set) return '';
+    return gridHtml(set.primary.concat(set.more || []));
+  };
 
   // Auditor read-only screens — lazily delegate to existing render functions
   // (looked up at render time so script load-order doesn't matter).
