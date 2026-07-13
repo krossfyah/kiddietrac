@@ -73,7 +73,11 @@
     if (window.innerWidth > 768) return;
     if (!document.getElementById('kt-gear')) return;
     var nu = document.getElementById('navUser');
-    if (nu && nu.style.paddingRight !== '58px') nu.style.setProperty('padding-right', '58px', 'important');
+    if (!nu) return;
+    // Each floating button is 40px wide with an 8px gap; the QR button (educators)
+    // sits left of the gear, so the name/role block has to clear both.
+    var pad = (document.getElementById('kt-eduqr') ? 106 : 58) + 'px';
+    if (nu.style.paddingRight !== pad) nu.style.setProperty('padding-right', pad, 'important');
   }
 
   // A parent (guardian) — either by their own role, or a super-admin previewing
