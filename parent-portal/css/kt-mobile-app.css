@@ -190,3 +190,48 @@ body.kt-parentview .kt-export-btns,
 body.role-guardian [data-export],
 body.role-educator [data-export],
 body.kt-parentview [data-export] { display: none !important; }
+
+/* ── Educator topbar: rooms ran off the right edge (2026-07-13) ──────────
+   .educator-topbar is a row with the room pills (flex-wrap:nowrap) and the
+   ratio indicator pushed right by margin-left:auto. On a 412px phone the pill
+   strip is 433px wide, so the last room ("Explorers Kindergarten") sat at
+   x=347–467 — past the viewport, and since the document doesn't scroll
+   sideways it was clipped and untappable. Stack the bar and let the pills wrap
+   so every room is reachable. ── */
+@media (max-width: 600px) {
+  #appMain .educator-topbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  #appMain .educator-topbar h2 {
+    font-size: 17px !important;
+    margin: 0 !important;
+  }
+  #appMain .room-selector {
+    display: flex !important;
+    flex-wrap: wrap !important;      /* 4+ rooms drop onto a second line */
+    gap: 7px !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+  #appMain .room-selector .room-pill {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 12.5px !important;
+    padding: 7px 12px !important;
+    white-space: normal !important;  /* long room names can break rather than overflow */
+  }
+  /* The ratio pill was pinned right by margin-left:auto — full width once stacked. */
+  #appMain .educator-topbar #ratioIndicator {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  #appMain .educator-topbar #ratioIndicator > div {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+  }
+}
