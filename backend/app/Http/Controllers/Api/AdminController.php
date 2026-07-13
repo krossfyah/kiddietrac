@@ -1076,14 +1076,19 @@ final class AdminController extends Controller
             'preheader' => 'Set your password and sign in to ' . $agencyName . ' on Kiddietrac.',
         ]);
 
-        \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($email, $firstName, $lastName) {
-            $m->to($email, trim($firstName . ' ' . $lastName))
-              ->from('noreply@kiddietrac.com', 'Kiddietrac')
-              ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
-              ->subject('You\'re invited to Kiddietrac — set your password');
-            $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
-            $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
-        });
+        // Send in the background so the invite request returns immediately
+        // instead of blocking ~1.3–5.5s on sendmail. Capture only scalars.
+        $recipientName = trim($firstName . ' ' . $lastName);
+        dispatch(function () use ($email, $recipientName, $html) {
+            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($email, $recipientName) {
+                $m->to($email, $recipientName)
+                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
+                  ->subject('You\'re invited to Kiddietrac — set your password');
+                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
+                $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
+            });
+        })->onQueue('mail');
         if (\Illuminate\Support\Facades\Schema::hasTable('email_logs')) {
             DB::table('email_logs')->insert([
                 'to_email' => $email, 'to_name' => trim($firstName . ' ' . $lastName),
@@ -2014,7 +2019,8 @@ final class AdminController extends Controller
                 ctaLabel:      'Sign in to Kiddietrac',
                 ctaUrl:        config('app.url', 'https://app.kiddietrac.com'),
             );
-            Mail::to($to, $name ?: null)->send($mailable);
+            $mailable->onQueue('mail');
+            Mail::to($to, $name ?: null)->queue($mailable); // background — returns immediately
             return true;
         } catch (\Throwable $e) {
             Log::warning('sendAccountEmail failed', [

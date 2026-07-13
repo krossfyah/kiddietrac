@@ -89,3 +89,10 @@ Schedule::command('db:backup')->dailyAt('03:30')->withoutOverlapping();
 // Invoice/payment reminders — hourly; gated by config('billing.reminders_enabled')
 // (OFF) + per-agency settings; only fires in each agency's send-time hour.
 Schedule::command('billing:reminders')->hourly()->withoutOverlapping();
+
+// Async email/queue worker — drains queued jobs (invite emails, announcements,
+// bulk sends) in the background so admin actions return instantly instead of
+// blocking ~1.3–5.5s per email. --stop-when-empty exits when drained; --max-time
+// keeps each run under a minute so the next tick restarts it.
+Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=55 --tries=3 --sleep=2 --backoff=30")
+    ->everyMinute()->withoutOverlapping()->runInBackground();

@@ -338,18 +338,26 @@ final class AnnouncementController extends Controller
                 . '<div style="font-size:15px;line-height:1.6;">' . $data['body'] . '</div>'
                 . $sig
                 . '</div>';
-            $mailerSvc = $agencyId ? \App\Services\AgencyMailer::forAgency($agencyId) : null;
+            // Queue each email on the background 'mail' queue instead of sending
+            // inline. Sending is ~1.3–5.5s per email via sendmail; looping N
+            // recipients synchronously made "Send" hang for many seconds. The
+            // scheduled queue:work worker drains these right after. Capture only
+            // serializable scalars ($agencyId, not the mailer object) and rebuild
+            // the agency mailer inside the job.
             foreach ($emails as $email) {
-                try {
-                    if ($mailerSvc) {
-                        $m = $mailerSvc->mailer(); $from = $mailerSvc->fromAddress(); $fn = $mailerSvc->fromName();
-                        $m->html($html, function ($msg) use ($email, $from, $fn, $emailSubject) { $msg->to($email)->from($from, $fn)->subject($emailSubject); });
-                    } else {
-                        Mail::html($html, function ($msg) use ($email, $emailSubject) { $msg->to($email)->from('noreply@kiddietrac.com', 'Kiddietrac')->subject($emailSubject); });
+                dispatch(function () use ($email, $emailSubject, $html, $agencyId) {
+                    try {
+                        $svc = $agencyId ? \App\Services\AgencyMailer::forAgency($agencyId) : null;
+                        if ($svc) {
+                            $m = $svc->mailer(); $from = $svc->fromAddress(); $fn = $svc->fromName();
+                            $m->html($html, function ($msg) use ($email, $from, $fn, $emailSubject) { $msg->to($email)->from($from, $fn)->subject($emailSubject); });
+                        } else {
+                            \Illuminate\Support\Facades\Mail::html($html, function ($msg) use ($email, $emailSubject) { $msg->to($email)->from('noreply@kiddietrac.com', 'Kiddietrac')->subject($emailSubject); });
+                        }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('Announcement email failed', ['email' => $email, 'error' => $e->getMessage()]);
                     }
-                } catch (\Throwable $e) {
-                    Log::warning('Announcement email failed', ['email' => $email, 'error' => $e->getMessage()]);
-                }
+                })->onQueue('mail');
             }
         }
 
