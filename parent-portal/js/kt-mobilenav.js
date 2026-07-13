@@ -88,6 +88,66 @@
     } catch (e) { return false; }
   }
 
+  // An educator (by role, or previewed via view-as). Educators are phone-first
+  // too, so they get the same floating settings gear + a check-in QR button.
+  function isEducatorView() {
+    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    if (va) return va === 'educator';
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var r = u.roles || [];
+      return r.indexOf('educator') > -1 && !['agency_admin', 'platform_admin', 'centre_director'].some(function (x) { return r.indexOf(x) > -1; });
+    } catch (e) { return false; }
+  }
+
+  // Fullscreen check-in QR for the educator's centre — parents scan it off the
+  // educator's phone (or print it). The code is fetched fresh and rotates daily
+  // server-side (CheckinScanController::centreCode → KTCHK.<centre>.<Ymd>.<sig>).
+  function showCheckinQr() {
+    var u = {}; try { u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) {}
+    var centreId = u.centre_id;
+    var tok = null; try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+    var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+    var ov = document.createElement('div');
+    ov.id = 'kt-qr-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,28,65,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;color:#fff;';
+    ov.innerHTML =
+      '<div style="font-size:21px;font-weight:800;margin-bottom:4px;">📲 Check-in QR</div>'
+      + '<div id="kt-qr-sub" style="font-size:13.5px;opacity:.85;margin-bottom:18px;">Loading…</div>'
+      + '<div id="kt-qr-holder" style="background:#fff;padding:16px;border-radius:18px;width:250px;height:250px;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:13px;">Generating…</div>'
+      + '<div style="font-size:12px;opacity:.75;margin-top:14px;max-width:300px;line-height:1.5;">Parents scan this with the KiddieTrac app to sign in or out. It refreshes every day for security.</div>'
+      + '<div style="display:flex;gap:12px;margin-top:22px;">'
+      +   '<button id="kt-qr-print" style="background:#fff;color:#0B2545;border:none;border-radius:12px;padding:12px 24px;font-size:15px;font-weight:800;cursor:pointer;">🖨 Print</button>'
+      +   '<button id="kt-qr-close" style="background:transparent;color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer;">Close</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    var close = function () { if (ov && ov.parentNode) ov.parentNode.removeChild(ov); };
+    ov.querySelector('#kt-qr-close').addEventListener('click', close);
+    if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, close); // Android back closes it
+    if (!centreId) { ov.querySelector('#kt-qr-sub').textContent = 'No centre is assigned to your account.'; ov.querySelector('#kt-qr-holder').textContent = '—'; return; }
+    fetch(base + '/checkin/centre-code/' + centreId, { headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('load failed')); })
+      .then(function (d) {
+        var sub = ov.querySelector('#kt-qr-sub'); if (sub) sub.textContent = (d.centre_name || '') + ' · valid ' + (d.valid_for || 'today');
+        var holder = ov.querySelector('#kt-qr-holder');
+        if (window.KT && KT.qrImg && d.code) {
+          KT.qrImg(d.code, { size: 224, cell: 6, margin: 2 })
+            .then(function (img) { if (holder) { holder.innerHTML = ''; holder.appendChild(img); } })
+            .catch(function () { if (holder) holder.textContent = 'QR unavailable'; });
+          var pb = ov.querySelector('#kt-qr-print');
+          if (pb) pb.addEventListener('click', function () {
+            if (window.KT && KT.printQRPoster) KT.printQRPoster({
+              url: d.code, title: (d.centre_name || 'Check-in'),
+              subtitle: 'Scan to sign your child in or out',
+              steps: '<strong>1.</strong> Open the KiddieTrac app.<br><strong>2.</strong> Tap the camera / scan button.<br><strong>3.</strong> Point it at this code.',
+              footer: 'Valid ' + (d.valid_for || 'today') + ' · Powered by KiddieTrac',
+            });
+          });
+        } else if (holder) { holder.textContent = 'QR unavailable'; }
+      })
+      .catch(function () { var s = ov.querySelector('#kt-qr-sub'); if (s) s.textContent = 'Could not load the check-in code.'; var h = ov.querySelector('#kt-qr-holder'); if (h) h.textContent = '—'; });
+  }
+
   function ensure() {
     if (!tok() || document.getElementById('kt-mobilenav')) return;
     injectStyle();
@@ -122,14 +182,27 @@
     document.body.appendChild(nav);
     pinToVisualViewport();
 
-    // Settings gear — top-right of the parent mobile app (change password,
-    // biometrics, PIN, photo, contact). Hidden on desktop (the top bar covers it).
-    if (parent && !document.getElementById('kt-gear')) {
+    // Settings gear — top-right of the parent/educator mobile app (change
+    // password, biometrics, PIN, photo, contact). Hidden on desktop (the top bar
+    // covers it). Educators are phone-first too and had no gear before.
+    var showGear = parent || isEducatorView();
+    if (showGear && !document.getElementById('kt-gear')) {
       var gear = document.createElement('button');
       gear.id = 'kt-gear'; gear.type = 'button'; gear.setAttribute('aria-label', 'Settings'); gear.textContent = '⚙️';
       gear.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:12px;z-index:9450;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.94);box-shadow:0 2px 10px rgba(15,23,42,.2);font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
       gear.addEventListener('click', function () { go('#settings'); });
       document.body.appendChild(gear);
+    }
+
+    // Educator check-in QR button — sits left of the gear. Shows the centre's
+    // daily QR fullscreen so parents can scan it off the educator's phone, plus
+    // a print option. The code rotates daily server-side (KTCHK.<centre>.<Ymd>).
+    if (isEducatorView() && !document.getElementById('kt-eduqr')) {
+      var qb = document.createElement('button');
+      qb.id = 'kt-eduqr'; qb.type = 'button'; qb.setAttribute('aria-label', 'Check-in QR'); qb.textContent = '🔳';
+      qb.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:60px;z-index:9450;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.94);box-shadow:0 2px 10px rgba(15,23,42,.2);font-size:19px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
+      qb.addEventListener('click', showCheckinQr);
+      document.body.appendChild(qb);
     }
     padGearClearance();
 

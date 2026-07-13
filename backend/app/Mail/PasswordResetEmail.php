@@ -27,14 +27,29 @@ final class PasswordResetEmail extends Mailable
 
     public function content(): Content
     {
-        return new Content(
-            view: 'emails.password-reset',
-            with: [
-                'recipientName' => $this->recipientName,
-                'resetUrl' => $this->resetUrl,
-                'expiresInMinutes' => $this->expiresInMinutes,
-                'appUrl' => config('app.url', 'https://app.kiddietrac.com'),
-            ],
-        );
+        // Use the shared branded header/footer (EmailTemplate::wrap) — the same
+        // KiddieTrac banner as invites/announcements — instead of the old plain
+        // Blade view, so this email matches the rest.
+        $first   = htmlspecialchars($this->recipientName !== '' ? $this->recipientName : 'there');
+        $safeUrl = htmlspecialchars($this->resetUrl);
+
+        $body = '<p style="margin:0 0 14px;">Hi ' . $first . ',</p>'
+            . '<p style="margin:0 0 16px;">We received a request to reset your Kiddietrac password. '
+            . 'Click the button below to choose a new one.</p>'
+            . \App\Services\EmailTemplate::button('Reset my password →', $this->resetUrl)
+            . '<p style="margin:16px 0 0;font-size:12px;color:#64748B;">Or paste this link into your browser:<br>'
+            . '<a href="' . $safeUrl . '" style="color:#1F6080;">' . $safeUrl . '</a></p>'
+            . '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8;">This link expires in '
+            . htmlspecialchars($this->expiresInMinutes) . ' minutes. If you didn\'t request a reset, '
+            . 'you can safely ignore this email — your password won\'t change.</p>';
+
+        $html = \App\Services\EmailTemplate::wrap(null, $body, [
+            'eyebrow'   => 'PASSWORD RESET',
+            'title'     => 'Reset your password',
+            'subtitle'  => 'Choose a new password for your account',
+            'preheader' => 'Reset your Kiddietrac password — this link expires in ' . $this->expiresInMinutes . ' minutes.',
+        ]);
+
+        return new Content(htmlString: $html);
     }
 }
