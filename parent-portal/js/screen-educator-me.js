@@ -44,19 +44,27 @@
     // .kt-hero suppresses the shell's auto-banner (it checks for this class).
     return '<div class="kt-hero"><h1>' + esc(title) + '</h1><div class="kt-hero-sub">' + esc(sub || '') + '</div></div>';
   }
+  // Punches and shifts come back as UTC with no marker — parse as UTC and show in
+  // the agency's timezone, or an educator sees their shift hours out.
+  function ktParse(iso) {
+    if (window.KT && KT.parseTs) return KT.parseTs(iso);
+    var v = String(iso || '').trim();
+    return new Date(/(Z|[+-]\d{2}:?\d{2})$/.test(v) ? v.replace(' ', 'T') : v.replace(' ', 'T') + 'Z');
+  }
+  function ktTz() { return (window.KT && KT.tz) ? KT.tz() : 'America/Toronto'; }
   function fmtTime(iso) {
     if (!iso) return '—';
-    var d = new Date(String(iso).replace(' ', 'T'));
-    return isNaN(d) ? '—' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    var d = ktParse(iso);
+    return isNaN(d) ? '—' : d.toLocaleTimeString([], { timeZone: ktTz(), hour: 'numeric', minute: '2-digit' });
   }
   function fmtDay(iso) {
     if (!iso) return '';
-    var d = new Date(String(iso).replace(' ', 'T'));
-    return isNaN(d) ? '' : d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    var d = ktParse(iso);
+    return isNaN(d) ? '' : d.toLocaleDateString([], { timeZone: ktTz(), weekday: 'short', month: 'short', day: 'numeric' });
   }
   function hoursBetween(a, b) {
     if (!a || !b) return 0;
-    var s = new Date(String(a).replace(' ', 'T')), e = new Date(String(b).replace(' ', 'T'));
+    var s = ktParse(a), e = ktParse(b);
     if (isNaN(s) || isNaN(e)) return 0;
     return Math.max(0, (e - s) / 36e5);
   }

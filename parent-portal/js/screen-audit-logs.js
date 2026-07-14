@@ -124,10 +124,31 @@
   };
 
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function fmtTime(t) { if (!t) return '—'; try { return new Date(t).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return t; } }
+  // Timestamps come from MySQL as "2026-07-14 17:47:00" — UTC, with NO timezone
+  // marker — so new Date(t) read them as LOCAL and every entry in the audit log
+  // was shown four hours late. Parse as UTC and render in the AGENCY's timezone
+  // (kt-tz.js), which is the only clock an auditor cares about.
+  function auditTz() {
+    return (window.KT && KT.tz) ? KT.tz() : 'America/Toronto';
+  }
+  function parseTs(t) {
+    if (window.KT && KT.parseTs) return KT.parseTs(t);
+    var s = String(t || '').trim();
+    return new Date(/(Z|[+-]\d{2}:?\d{2})$/.test(s) ? s.replace(' ', 'T') : s.replace(' ', 'T') + 'Z');
+  }
+  function fmtTime(t) {
+    if (!t) return '—';
+    try {
+      var d = parseTs(t);
+      if (isNaN(d)) return t;
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: auditTz(), dateStyle: 'medium', timeStyle: 'short',
+      }).format(d);
+    } catch (e) { return t; }
+  }
   function relTime(t) {
     if (!t) return '';
-    var ms = Date.now() - new Date(t).getTime();
+    var ms = Date.now() - parseTs(t).getTime();
     if (ms < 60000) return 'just now';
     if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago';
     if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago';
@@ -153,7 +174,9 @@
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#0F172A 0%,#1F6080 60%,#16637A 100%);' });
-    hero.innerHTML = '<div class="kt-hero-greet">📜 ADMIN</div><h1>Audit log</h1><div class="kt-hero-sub">Every meaningful action on your agency — who did what, when, and from where.</div>';
+    hero.innerHTML = '<div class="kt-hero-greet">📜 ADMIN</div><h1>Audit log</h1>'
+      + '<div class="kt-hero-sub">Every meaningful action on your agency — who did what, when, and from where. '
+      + 'All times are shown in your agency timezone (' + auditTz() + ').</div>';
     wrap.appendChild(hero);
 
     var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });

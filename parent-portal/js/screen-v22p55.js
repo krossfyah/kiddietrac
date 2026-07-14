@@ -19,7 +19,16 @@
   });
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
+  // UTC in, agency-local out (kt-tz.js).
+  const fmtDate = (s) => {
+    if (!s) return '';
+    const d = (window.KT && KT.parseTs) ? KT.parseTs(s) : new Date(String(s).replace(' ', 'T') + 'Z');
+    if (isNaN(d)) return '';
+    return d.toLocaleDateString(undefined, {
+      timeZone: (window.KT && KT.tz) ? KT.tz() : 'America/Toronto',
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+  };
 
   // ============================ Allergy alerts (rewrite) ============================
   async function renderAllergyAlerts(main) {

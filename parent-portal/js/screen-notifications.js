@@ -27,10 +27,26 @@
   var Shell = KT.Shell;
 
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function fmtTime(t) { if (!t) return '—'; try { return new Date(t).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return t; } }
+  // MySQL timestamps are UTC with NO zone marker, so new Date(t) read them as
+  // LOCAL and every notification was stamped hours out. Parse as UTC, show in the
+  // agency's timezone (kt-tz.js).
+  function ktParse(t) {
+    if (window.KT && KT.parseTs) return KT.parseTs(t);
+    var v = String(t || '').trim();
+    return new Date(/(Z|[+-]\d{2}:?\d{2})$/.test(v) ? v.replace(' ', 'T') : v.replace(' ', 'T') + 'Z');
+  }
+  function fmtTime(t) {
+    if (!t) return '—';
+    try {
+      var d = ktParse(t);
+      if (isNaN(d)) return t;
+      var tz = (window.KT && KT.tz) ? KT.tz() : 'America/Toronto';
+      return new Intl.DateTimeFormat('en-CA', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' }).format(d);
+    } catch (e) { return t; }
+  }
   function relTime(t) {
     if (!t) return '';
-    var ms = Date.now() - new Date(t).getTime();
+    var ms = Date.now() - ktParse(t).getTime();
     if (ms < 60000) return 'just now';
     if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago';
     if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago';

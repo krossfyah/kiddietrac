@@ -15,7 +15,10 @@
   function fmt(d) {
     if (!d) return '-';
     try {
-      return new Date(d).toLocaleString('en-CA', {
+      // Agency-local time (kt-tz.js): the raw value is UTC with no marker.
+      var _d = (window.KT && KT.parseTs) ? KT.parseTs(d) : new Date(String(d).replace(' ', 'T') + 'Z');
+      return _d.toLocaleString('en-CA', {
+        timeZone: (window.KT && KT.tz) ? KT.tz() : 'America/Toronto',
         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
       });
     } catch (e) { return d; }
