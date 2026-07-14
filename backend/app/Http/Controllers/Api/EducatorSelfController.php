@@ -215,10 +215,16 @@ class EducatorSelfController extends Controller
                 ];
             });
 
-        $history = $checks->concat($careLogs)->concat($eventLogs)
-            ->sortByDesc('at')
-            ->values()
-            ->take(150);
+        // Honour the agency's retention policy: the child's record only shows logs
+        // inside the "Attendance & daily logs" window configured under Data
+        // Retention & Compliance (agencies.settings -> compliance.daily_log_months,
+        // 36 months by default). Older entries are past the period the agency says
+        // it keeps them for, so they are not surfaced here.
+        $months = $this->retentionMonths($child);
+        $cutoff = \Illuminate\Support\Carbon::now($tz)->subMonths($months)->format('Y-m-d H:i:s');
+
+        $all = $checks->concat($careLogs)->concat($eventLogs)->sortByDesc('at')->values();
+        $history = $all->filter(fn ($h) => $h->at >= $cutoff)->values();
 
         return response()->json([
             'child' => $row,
@@ -226,8 +232,26 @@ class EducatorSelfController extends Controller
             'emergency_contacts' => $emergency,
             'pickup_authorizations' => $pickup,
             'history' => $history,
+            'history_total' => $all->count(),
+            'retention_months' => $months,
             'timezone' => $tz,
         ]);
+    }
+
+    /** The agency's "Attendance & daily logs" retention window, in months. */
+    private function retentionMonths(int $childId): int
+    {
+        $settings = DB::table('children as c')
+            ->leftJoin('families as f', 'f.id', '=', 'c.family_id')
+            ->leftJoin('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->leftJoin('agencies as a', 'a.id', '=', 'ce.agency_id')
+            ->where('c.id', $childId)
+            ->value('a.settings');
+
+        $decoded = $settings ? (json_decode((string) $settings, true) ?: []) : [];
+        $months = (int) ($decoded['compliance']['daily_log_months'] ?? 36);
+
+        return $months > 0 ? $months : 36;
     }
 
     private function ageHuman(Carbon $dob): string

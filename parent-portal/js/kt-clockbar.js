@@ -66,15 +66,55 @@
     el.id = 'kt-clockpill';
     el.type = 'button';
     el.setAttribute('aria-label', 'Time clock');
-    // Centred: the logo owns the top-left and the ⚙️/QR buttons own the top-right,
-    // so the middle is the only place it doesn't collide with something.
-    el.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;transform:translateX(-50%);'
-      + 'z-index:9440;display:inline-flex;align-items:center;gap:6px;border:none;border-radius:999px;padding:7px 12px;'
-      + 'font-size:12.5px;font-weight:800;cursor:pointer;box-shadow:0 2px 10px rgba(15,23,42,.18);'
-      + 'font-family:system-ui,-apple-system,sans-serif;white-space:nowrap;';
-    el.addEventListener('click', function () { location.hash = '#time-clock'; });
-    document.body.appendChild(el);
+    // A full-width strip BELOW the header rather than a pill floating over it:
+    // centred, it sat on top of the user's name and the room pills. As a strip it
+    // covers nothing, and there is room to actually say "Clocked in".
+    el.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;width:100%;'
+      + 'border:none;border-radius:12px;padding:9px 12px;margin:0 0 10px;'
+      + 'font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;box-sizing:border-box;';
+    el.addEventListener('click', onTap);
     return el;
+  }
+
+  // Tapping the strip clocks you OUT — but never silently: clocking out ends the
+  // shift that pays them, so it asks first. Tapping when clocked out takes them
+  // to the time clock to clock in.
+  function onTap() {
+    if (!openPunch) { location.hash = '#time-clock'; return; }
+
+    var e = elapsed(openPunch.punched_in_at);
+    var msg = "Clock out now? You've been clocked in for " + e.text + '. This ends your shift for today.';
+
+    var go = function () {
+      var t = tok();
+      fetch(apiBase() + '/staff/punch', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (d) {
+          openPunch = null;
+          refresh();
+          if (KT.toast) KT.toast('👋', 'Clocked out', 'Your shift has been closed. Have a good evening.', '#0E7C90');
+        })
+        .catch(function () {
+          if (KT.toast) KT.toast('⚠️', 'Could not clock out', 'Please use the time clock screen.', '#B91C1C');
+          location.hash = '#time-clock';
+        });
+    };
+
+    if (KT.confirm) KT.confirm(msg, go);
+    else if (window.confirm(msg)) go();
+  }
+
+  // The strip lives at the top of the screen content, under the header.
+  function mount(el) {
+    var main = document.getElementById('appMain');
+    if (!main) return;
+    if (el.parentElement !== main || main.firstElementChild !== el) {
+      main.insertBefore(el, main.firstChild);
+    }
   }
 
   function paint() {
@@ -84,19 +124,25 @@
       return;
     }
     var el = pill();
+    mount(el);
 
     if (!openPunch) {
-      el.textContent = '⏱ Not clocked in';
+      el.innerHTML = '<span>⏱</span><span>Not clocked in</span>'
+        + '<span style="opacity:.8;font-weight:700;">· tap to clock in</span>';
       el.style.background = '#fff';
       el.style.color = '#64748B';
+      el.style.border = '1.5px solid #E2E8F0';
       return;
     }
 
     var e = elapsed(openPunch.punched_in_at);
     var overdue = e.hours >= LONG_SHIFT_HOURS;
-    el.textContent = (overdue ? '⚠️ ' : '⏱ ') + e.text;
+    el.innerHTML = '<span>' + (overdue ? '⚠️' : '⏱') + '</span>'
+      + '<span>Clocked in · ' + e.text + '</span>'
+      + '<span style="opacity:.85;font-weight:700;">· tap to clock out</span>';
     el.style.background = overdue ? '#B45309' : '#0E7C90';
     el.style.color = '#fff';
+    el.style.border = 'none';
 
     // Past a long shift, say it out loud — once an hour, not every minute.
     if (overdue && Date.now() - nudgedAt > 3600000) {
@@ -119,11 +165,13 @@
 
   KT.clockBar = { refresh: refresh, isClockedIn: function () { return !!openPunch; } };
 
-  setInterval(paint, 30000);      // keep the elapsed time honest
-  setInterval(refresh, POLL_MS);  // and the punch state
+  // The shell clears #appMain on every screen render, which takes the strip with
+  // it — so re-mount often, not just when the clock ticks.
+  setInterval(paint, 4000);
+  setInterval(refresh, POLL_MS);  // the punch state itself changes rarely
   setTimeout(refresh, 2500);
   window.addEventListener('hashchange', function () {
-    // Clocking in/out happens on #time-clock — re-check as soon as they leave it.
-    setTimeout(refresh, 1200);
+    setTimeout(paint, 350);       // put the strip back on the new screen
+    setTimeout(refresh, 1200);    // clocking in/out happens on #time-clock
   });
 })(window);

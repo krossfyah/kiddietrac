@@ -341,14 +341,35 @@
       return String(at || '').slice(0, 16);
     };
 
-    html += '<div style="' + CARD + '"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">'
-      + 'Log history <span style="color:#94A3B8;font-weight:600;">· ' + hist.length + '</span></div>';
-    if (!hist.length) {
-      html += '<div style="color:#94A3B8;font-size:13px;">Nothing logged for this child yet.</div>';
-    }
-    hist.slice(0, 40).forEach(function (h, i) {
+    // Paged, not endless: a child with a year of logs would otherwise render a
+    // scroll you can't get to the bottom of.
+    var PAGE = 15;
+    var shown = PAGE;
+
+    html += '<div id="cr-history" style="' + CARD + '"></div>';
+    var renderHistory = function () {
+      var el = ov.querySelector('#cr-history');
+      if (!el) return;
+      var rows = hist.slice(0, shown);
+      var h2 = '<div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">'
+        + 'Log history <span style="color:#94A3B8;font-weight:600;">· ' + hist.length + '</span></div>';
+      if (!hist.length) {
+        h2 += '<div style="color:#94A3B8;font-size:13px;">Nothing logged for this child yet.</div>';
+      }
+      h2 += rows.map(function (h, i) { return historyRow(h, i); }).join('');
+      if (shown < hist.length) {
+        h2 += '<button id="cr-more" style="width:100%;margin-top:10px;background:#F8FAFC;border:1px solid #E2E8F0;'
+          + 'color:#0E7C90;border-radius:10px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;">'
+          + 'Show ' + Math.min(PAGE, hist.length - shown) + ' more · ' + (hist.length - shown) + ' left</button>';
+      }
+      el.innerHTML = h2;
+      var more = el.querySelector('#cr-more');
+      if (more) more.addEventListener('click', function () { shown += PAGE; renderHistory(); });
+    };
+
+    function historyRow(h, i) {
       var isAttendance = h.group === 'attendance';
-      html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
         + '<span style="font-size:16px;width:22px;text-align:center;">' + (ICONS[h.kind] || '•') + '</span>'
         + '<div style="flex:1;min-width:0;">'
         + '<div style="font-weight:700;font-size:13.5px;color:' + (isAttendance ? '#0E7C90' : '#0F172A') + ';">'
@@ -358,11 +379,7 @@
         + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + esc(fmtHist(h.at))
         + (h.by ? ' · by ' + esc(h.by) : '') + '</div>'
         + '</div></div>';
-    });
-    if (hist.length > 40) {
-      html += '<div style="font-size:11.5px;color:#94A3B8;padding-top:8px;">Showing the 40 most recent of ' + hist.length + '.</div>';
     }
-    html += '</div>';
 
     var pk = d.pickup_authorizations || [];
     html += '<div style="' + CARD + 'margin-bottom:40px;"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">Authorised for pickup</div>';
@@ -378,6 +395,57 @@
     html += '</div>';
 
     ov.querySelector('#cr-body').innerHTML = html;
+    renderHistory();
+    makeCollapsible(ov);
+  }
+
+  // Every card on the child record collapses. On a phone the record is a long
+  // scroll — allergies, guardians, emergency contacts, pickup, and a year of
+  // logs — and an educator opening it mid-room usually wants exactly one of
+  // those. Safety cards (allergies/alerts) stay OPEN by default; the rest start
+  // closed. The state is remembered, so their preference sticks.
+  function makeCollapsible(root) {
+    if (window.innerWidth > 600) return;   // desktop has the room
+
+    var OPEN_BY_DEFAULT = /allerg|alert|medical|child record/i;
+    var cards = root.querySelectorAll('#cr-body > div');
+
+    [].forEach.call(cards, function (card) {
+      var head = card.firstElementChild;
+      if (!head || card.children.length < 2) return;             // nothing to fold
+      if (card.querySelector('.kt-avatar') && card.children.length === 2) return;  // the name/photo header card
+
+      var title = (head.textContent || '').trim();
+      if (!title) return;
+
+      var key = 'kt_cr_open_' + title.toLowerCase().replace(/[^a-z]+/g, '_').slice(0, 30);
+      var stored = null;
+      try { stored = localStorage.getItem(key); } catch (e) {}
+      var open = stored === null ? OPEN_BY_DEFAULT.test(title) : stored === '1';
+
+      var body = document.createElement('div');
+      while (head.nextSibling) body.appendChild(head.nextSibling);
+      card.appendChild(body);
+
+      var caret = document.createElement('span');
+      caret.style.cssText = 'float:right;color:#94A3B8;font-size:13px;transition:transform .18s;';
+      caret.textContent = '▾';
+      head.appendChild(caret);
+      head.style.cursor = 'pointer';
+      head.style.userSelect = 'none';
+
+      var paint = function () {
+        body.style.display = open ? '' : 'none';
+        caret.style.transform = open ? 'none' : 'rotate(-90deg)';
+      };
+      paint();
+
+      head.addEventListener('click', function () {
+        open = !open;
+        try { localStorage.setItem(key, open ? '1' : '0'); } catch (e) {}
+        paint();
+      });
+    });
   }
 
   Shell.registerScreen('educator:my-hours', renderMyHours);

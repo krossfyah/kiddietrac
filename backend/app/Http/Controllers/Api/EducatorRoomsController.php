@@ -100,6 +100,57 @@ class EducatorRoomsController extends Controller
         return response()->json(['ok' => true, 'assigned_room_ids' => $roomIds]);
     }
 
+    /**
+     * GET /admin/users/{user}/punches — that staff member's clock in/out history.
+     *
+     * The punches already existed (time_punches), but only as the person's own
+     * "My hours" screen and a centre-wide payroll export. A director asking "when
+     * did this educator actually work?" had nowhere to look on the person's own
+     * record. Times are returned in the agency's timezone.
+     */
+    public function punches(Request $request, int $user): JsonResponse
+    {
+        $centreId = $this->centreOf($user);
+        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $tz = DB::table('centres as c')
+            ->join('agencies as a', 'a.id', '=', 'c.agency_id')
+            ->where('c.id', $centreId)
+            ->value('a.timezone') ?: 'America/Toronto';
+
+        $rows = DB::table('time_punches')
+            ->where('user_id', $user)
+            ->orderByDesc('punched_in_at')
+            ->limit(90)
+            ->get(['id', 'punched_in_at', 'punched_out_at', 'notes']);
+
+        $total = 0.0;
+        $punches = $rows->map(function ($p) use ($tz, &$total) {
+            $in = \Illuminate\Support\Carbon::parse($p->punched_in_at)->timezone($tz);
+            $out = $p->punched_out_at ? \Illuminate\Support\Carbon::parse($p->punched_out_at)->timezone($tz) : null;
+            $hours = $out ? round($in->floatDiffInHours($out), 2) : null;
+            if ($hours) $total += $hours;
+
+            return [
+                'id' => $p->id,
+                'day' => $in->format('D j M Y'),
+                'in_time' => $in->format('g:i A'),
+                'out_time' => $out?->format('g:i A'),
+                'punched_out_at' => $p->punched_out_at,
+                'hours' => $hours,
+                'notes' => $p->notes,
+            ];
+        });
+
+        return response()->json([
+            'punches' => $punches,
+            'total_hours' => round($total, 2),
+            'timezone' => $tz,
+        ]);
+    }
+
     private function centreOf(int $userId): ?int
     {
         $id = DB::table('role_assignments')

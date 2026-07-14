@@ -545,6 +545,86 @@
   const card = (extra) => 'background:#fff;border-radius:16px;box-shadow:0 1px 6px rgba(15,23,42,.06);' + (extra || '');
 
   // ─── MOBILE · TODAY ────────────────────────────────────────────────
+  // Report an absence: a reason, an optional note, and a confirmation — because
+  // this tells the whole centre, and telling them the wrong day is worse than
+  // not telling them at all.
+  function openAbsenceSheet(child, sourceBtn) {
+    const ov = Dom.el('div', {
+      style: 'position:fixed;inset:0;z-index:9650;background:rgba(8,17,33,.6);display:flex;align-items:flex-end;',
+    });
+    const sheet = Dom.el('div', {
+      style: 'background:#fff;width:100%;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);',
+    });
+    ov.appendChild(sheet);
+
+    sheet.innerHTML = `
+      <div style="width:38px;height:4px;border-radius:99px;background:#E2E8F0;margin:0 auto 14px;"></div>
+      <div style="font-weight:800;font-size:17px;color:#0F172A;">${child.display_name} isn't attending today</div>
+      <div style="font-size:13px;color:#64748B;line-height:1.5;margin-top:4px;">
+        Your centre will be told straight away, and we'll stop reminding you to sign in today.
+      </div>
+      <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 7px;">Reason</div>
+      <div id="kt-abs-reasons" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
+      <textarea id="kt-abs-note" placeholder="Anything the centre should know (optional)"
+        style="width:100%;box-sizing:border-box;margin-top:12px;padding:11px;border:1.5px solid #E3EAF1;border-radius:10px;font-size:16px;min-height:64px;font-family:inherit;"></textarea>
+      <div id="kt-abs-err" style="color:#B91C1C;font-size:12.5px;min-height:16px;margin-top:4px;"></div>
+      <button id="kt-abs-send" style="width:100%;background:#159FB4;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">Tell the centre</button>
+      <button id="kt-abs-cancel" style="width:100%;background:none;border:none;color:#94A3B8;font-size:13px;font-weight:700;padding:11px;cursor:pointer;">Cancel</button>
+    `;
+
+    let reason = null;
+    const reasons = [['sick', '🤒 Unwell'], ['appointment', '🩺 Appointment'], ['holiday', '✈️ Holiday'], ['family', '👪 Family'], ['other', '• Other']];
+    const rWrap = sheet.querySelector('#kt-abs-reasons');
+    const chips = [];
+    reasons.forEach(([key, label]) => {
+      const c = Dom.el('button', {
+        type: 'button',
+        style: 'border:1.5px solid #E2E8F0;background:#fff;color:#0F172A;border-radius:999px;padding:9px 13px;font-size:13.5px;font-weight:700;cursor:pointer;',
+      }, label);
+      c.addEventListener('click', () => {
+        reason = reason === key ? null : key;
+        chips.forEach(({ el, k }) => {
+          const on = k === reason;
+          el.style.background = on ? '#159FB4' : '#fff';
+          el.style.color = on ? '#fff' : '#0F172A';
+          el.style.borderColor = on ? '#159FB4' : '#E2E8F0';
+        });
+      });
+      chips.push({ el: c, k: key });
+      rWrap.appendChild(c);
+    });
+
+    const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    sheet.querySelector('#kt-abs-cancel').addEventListener('click', close);
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    if (KT.pushOverlay) KT.pushOverlay(ov, close);
+
+    sheet.querySelector('#kt-abs-send').addEventListener('click', () => {
+      const btn = sheet.querySelector('#kt-abs-send');
+      btn.disabled = true; btn.textContent = 'Telling the centre…';
+      Api.post('/parent/absences', {
+        child_id: child.id,
+        reason,
+        note: (sheet.querySelector('#kt-abs-note').value || '').trim() || null,
+      }).then(() => {
+        close();
+        bust(`/parent/absences?child_id=${child.id}`);
+        if (sourceBtn) {
+          sourceBtn.textContent = `✓ Reported absent today${reason ? ' · ' + reason : ''}`;
+          sourceBtn.style.borderColor = '#159FB4';
+          sourceBtn.style.color = '#0E7C90';
+          sourceBtn.style.background = '#F0FBFD';
+        }
+        if (KT.toast) KT.toast('✅', 'Centre told', 'Your centre knows they are not coming in today.', '#16A34A');
+      }).catch((e) => {
+        btn.disabled = false; btn.textContent = 'Tell the centre';
+        sheet.querySelector('#kt-abs-err').textContent = (e && e.message) || 'Could not send — please try again.';
+      });
+    });
+
+    document.body.appendChild(ov);
+  }
+
   async function renderTodayMobile(wrap) {
     const child = state.children.find(c => c.id === state.selectedChildId);
     if (!child) return;
@@ -563,6 +643,32 @@
     ]));
     status.appendChild(info);
     wrap.appendChild(status);
+
+    // "Not attending today" — the centre has to chase every empty chair, and today
+    // that means a phone call at 9am. One tap here tells the room's educators, the
+    // director and the agency admin, and stops the sign-in reminders for the day.
+    if (!atCentre) {
+      const absWrap = Dom.el('div', { style: 'margin:-4px 0 13px;' });
+      const absBtn = Dom.el('button', {
+        type: 'button',
+        style: 'width:100%;background:#fff;border:1.5px solid #E2E8F0;color:#475569;border-radius:12px;'
+          + 'padding:11px;font-size:13.5px;font-weight:800;cursor:pointer;',
+      }, `🚫 ${child.display_name} isn't attending today`);
+      absBtn.addEventListener('click', () => openAbsenceSheet(child, absBtn));
+      absWrap.appendChild(absBtn);
+      wrap.appendChild(absWrap);
+
+      // If they already told us, say so instead of offering it again.
+      cget(`/parent/absences?child_id=${child.id}`).then((r) => {
+        const today = KT.agencyToday ? KT.agencyToday() : new Date().toISOString().slice(0, 10);
+        const hit = (r.absences || []).find(a => String(a.absent_on).slice(0, 10) === today);
+        if (!hit) return;
+        absBtn.textContent = `✓ Reported absent today${hit.reason ? ' · ' + hit.reason : ''}`;
+        absBtn.style.borderColor = '#159FB4';
+        absBtn.style.color = '#0E7C90';
+        absBtn.style.background = '#F0FBFD';
+      }).catch(() => {});
+    }
 
     // 2 · Daily digest (the emotional centrepiece)
     const digest = Dom.el('div', { style: 'background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 6px 18px -8px rgba(31,96,128,.55);' });

@@ -30,6 +30,25 @@ Schedule::command('kiddietrac:parent-summary')
     ->runInBackground()
     ->onOneServer();
 
+// Attendance reminders. Morning: the child has no sign-in and no reported absence.
+// Evening: the child was signed in and never signed out (an open attendance record
+// has to be closed by hand otherwise). Parents who reported an absence are skipped.
+Schedule::command('kiddietrac:checkin-reminders --window=morning')
+    ->dailyAt('09:30')
+    ->timezone('America/Toronto')
+    ->weekdays()
+    ->withoutOverlapping(30)
+    ->runInBackground()
+    ->onOneServer();
+
+Schedule::command('kiddietrac:checkin-reminders --window=evening')
+    ->dailyAt('18:00')
+    ->timezone('America/Toronto')
+    ->weekdays()
+    ->withoutOverlapping(30)
+    ->runInBackground()
+    ->onOneServer();
+
 // Daily morning digest — 07:00 in the agency's timezone (Toronto default).
 Schedule::command('kiddietrac:digest-daily')
     ->dailyAt('07:00')

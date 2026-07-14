@@ -230,10 +230,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // A parent's own notification preferences (email / SMS / in-app), e.g.
         // being told when their child is signed in or out. Scoped to the caller.
         Route::get('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'index']);
+        // 'My child isn't coming in today' — reported by a parent, tells the centre.
+        Route::get('/parent/absences',    [\App\Http\Controllers\Api\AbsenceController::class, 'index']);
+        Route::post('/parent/absences',   [\App\Http\Controllers\Api\AbsenceController::class, 'store']);
+        Route::delete('/parent/absences/{child}/{date}', [\App\Http\Controllers\Api\AbsenceController::class, 'destroy']);
         // Which rooms an educator is assigned to (director / agency-admin only —
         // the controller checks centre access on both the user and the rooms).
         Route::get('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'show']);
         Route::put('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'update']);
+        // A staff member's clock in/out history, on their own record.
+        Route::get('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'punches']);
         Route::put('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'update']);
 
         // Onboarding — Privacy Policy & NDA. Every role signs once; the signature,

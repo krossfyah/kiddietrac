@@ -968,6 +968,128 @@
     })();
 
 
+    // ── Rooms this educator may see ─────────────────────────────────────
+    // An educator sees ONLY the rooms assigned here. With none assigned they see
+    // their whole centre — which is the old behaviour, and is why this control
+    // spells out what is actually happening rather than showing empty checkboxes.
+    (function () {
+      const roomSection = Dom.el('div', {
+        style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;',
+      });
+      roomSection.appendChild(Dom.el('div', {
+        style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;',
+      }, 'Rooms this educator can see'));
+      const roomBody = Dom.el('div', {});
+      roomBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'Loading…'));
+      roomSection.appendChild(roomBody);
+      content.appendChild(roomSection);
+
+      Api.get('/admin/users/' + user.id + '/rooms').then(function (d) {
+        Dom.clear(roomBody);
+
+        const note = Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-bottom:10px;line-height:1.5;' }, d.note || '');
+        roomBody.appendChild(note);
+
+        const selected = {};
+        (d.assigned_room_ids || []).forEach(function (id) { selected[id] = true; });
+
+        const grid = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;' });
+        (d.rooms || []).forEach(function (room) {
+          const chip = Dom.el('button', {
+            type: 'button',
+            style: 'border-radius:999px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid;',
+          }, room.name);
+          const paint = function () {
+            const on = !!selected[room.id];
+            chip.style.background = on ? '#159FB4' : '#fff';
+            chip.style.color = on ? '#fff' : '#374151';
+            chip.style.borderColor = on ? '#159FB4' : '#E5E7EB';
+          };
+          chip.addEventListener('click', function () { selected[room.id] = !selected[room.id]; paint(); });
+          paint();
+          grid.appendChild(chip);
+        });
+        roomBody.appendChild(grid);
+
+        const status = Dom.el('div', { style: 'font-size:12.5px;min-height:16px;margin-top:8px;' });
+        const save = Dom.el('button', {
+          type: 'button',
+          style: 'background:#1F6080;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px;',
+        }, 'Save rooms');
+        save.addEventListener('click', function () {
+          const ids = Object.keys(selected).filter(function (k) { return selected[k]; }).map(Number);
+          save.disabled = true; save.textContent = 'Saving…';
+          Api.put('/admin/users/' + user.id + '/rooms', { room_ids: ids })
+            .then(function () {
+              save.disabled = false; save.textContent = 'Save rooms';
+              status.style.color = '#16A34A';
+              status.textContent = ids.length
+                ? '✓ Saved. They now see only these ' + ids.length + ' room(s).'
+                : '✓ Saved. With no rooms selected they see every room at their centre.';
+            })
+            .catch(function (e) {
+              save.disabled = false; save.textContent = 'Save rooms';
+              status.style.color = '#B91C1C';
+              status.textContent = (e && e.message) || 'Could not save.';
+            });
+        });
+        roomBody.appendChild(save);
+        roomBody.appendChild(status);
+      }).catch(function () {
+        Dom.clear(roomBody);
+        roomBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' },
+          'Room assignment applies to educators at a centre.'));
+      });
+    })();
+
+    // ── Clock in / out history ──────────────────────────────────────────
+    // The educator's punches, on their record, so a director can answer "when
+    // did they actually work?" without exporting a payroll report.
+    (function () {
+      const clockSection = Dom.el('div', {
+        style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;',
+      });
+      clockSection.appendChild(Dom.el('div', {
+        style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;',
+      }, 'Clock in / out history'));
+      const clockBody = Dom.el('div', {});
+      clockBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'Loading…'));
+      clockSection.appendChild(clockBody);
+      content.appendChild(clockSection);
+
+      Api.get('/admin/users/' + user.id + '/punches').then(function (d) {
+        Dom.clear(clockBody);
+        const rows = d.punches || [];
+        if (!rows.length) {
+          clockBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'No clock records for this user.'));
+          return;
+        }
+        clockBody.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-bottom:8px;' },
+          'Total on record: ' + (d.total_hours || 0) + ' hours across ' + rows.length + ' shift(s).'));
+
+        const list = Dom.el('div', {});
+        rows.slice(0, 20).forEach(function (p) {
+          const open = !p.punched_out_at;
+          const row = Dom.el('div', {
+            style: 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:13px;',
+          });
+          row.appendChild(Dom.el('div', {}, [
+            Dom.el('div', { style: 'font-weight:700;color:#111827;' }, p.day || ''),
+            Dom.el('div', { style: 'font-size:11.5px;color:#9CA3AF;' },
+              (p.in_time || '—') + ' – ' + (open ? 'still clocked in' : (p.out_time || '—'))),
+          ]));
+          row.appendChild(Dom.el('div', {
+            style: 'font-weight:800;color:' + (open ? '#B45309' : '#0E7C90') + ';',
+          }, open ? 'open' : (p.hours + 'h')));
+          list.appendChild(row);
+        });
+        clockBody.appendChild(list);
+      }).catch(function () {
+        Dom.clear(clockBody);
+        clockBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'Could not load clock records.'));
+      });
+    })();
+
     // v22p23: role section — show current roles as pills + a "Change role" form.
     const roleSection = Dom.el('div', {
       style: 'margin-bottom: 18px; padding: 14px 16px; background: #F9FAFB; border-radius: 10px; border: 1px solid #E5E7EB;',

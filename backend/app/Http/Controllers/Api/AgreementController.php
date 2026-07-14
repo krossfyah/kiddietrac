@@ -43,11 +43,25 @@ class AgreementController extends Controller
         $row = DB::table('signed_documents')
             ->where('signer_user_id', $user->id)
             ->whereIn('document_type', [self::TYPE, self::TYPE . '_declined'])
-            ->orderByDesc('signed_at')
+            // Order by id, NOT signed_at. signed_at briefly held agency-local time
+            // while older rows held UTC, so "the latest" resolved to a STALE row
+            // (Toronto 21:51 sorts before UTC 01:15) and the agreement demanded a
+            // re-sign on every login. Insertion order can't lie like that.
+            ->orderByDesc('id')
             ->first();
 
-        $currentHash = $this->documentHash();
-        $signed = $row && $row->document_type === self::TYPE && $row->document_hash === $currentHash;
+        // Re-signing is driven by the VERSION, not by the text hash.
+        //
+        // The hash is a record of the exact wording someone agreed to, and that is
+        // worth keeping — but it must NOT decide whether they have to sign again.
+        // Any edit to the text (even whitespace from a linter) changes the hash,
+        // which made the agreement pop up again on every single login. Bump
+        // AGREEMENT_VERSION when the terms genuinely change; then, and only then,
+        // is everyone asked to re-sign.
+        $signed = $row
+            && $row->document_type === self::TYPE
+            && ($row->agreement_version ?? null) === self::AGREEMENT_VERSION;
+
         $declined = $row && $row->document_type === self::TYPE . '_declined';
 
         // The date stamped on the agreement is the AGENCY's local time, not the
@@ -85,7 +99,9 @@ class AgreementController extends Controller
         }
 
         $agencyId = $this->agencyIdFor((int) $user->id);
-        $signedAt = now($this->agencyTz($agencyId));
+        // Stored in UTC (like the rest of the schema); shown in agency time.
+        $signedAt = now();
+        $signedAtLocal = $signedAt->copy()->timezone($this->agencyTz($agencyId));
 
         $dir = 'agreements/' . $user->id;
         $sigPath = $dir . '/signature-' . $signedAt->format('Ymd-His') . '-' . Str::random(6) . '.png';
@@ -93,13 +109,14 @@ class AgreementController extends Controller
 
         // The filed copy is a PDF: the full agreement with the signature image and
         // the date rendered into it, so the record stands on its own.
-        $pdf = $this->renderPdf($user, $data['full_name'], $signedAt->toDayDateTimeString(), $data['signature']);
+        $pdf = $this->renderPdf($user, $data['full_name'], $signedAtLocal->toDayDateTimeString(), $data['signature']);
         $pdfPath = $dir . '/privacy-nda-v' . self::AGREEMENT_VERSION . '-' . $signedAt->format('Ymd-His') . '.pdf';
         Storage::disk('public')->put($pdfPath, $pdf);
 
         $signedId = DB::table('signed_documents')->insertGetId([
             'agency_id' => $agencyId,
             'document_type' => self::TYPE,
+            'agreement_version' => self::AGREEMENT_VERSION,
             'source_table' => 'users',
             'source_id' => $user->id,
             'signer_user_id' => $user->id,
@@ -134,7 +151,7 @@ class AgreementController extends Controller
                 (string) $user->email,
                 trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $data['full_name'],
                 $data['full_name'],
-                $signedAt->toDayDateTimeString(),
+                $signedAtLocal->toDayDateTimeString(),
                 $pdfPath
             );
         } catch (\Throwable $e) {
@@ -160,11 +177,13 @@ class AgreementController extends Controller
 
         $user = $request->user();
         $agencyId = $this->agencyIdFor((int) $user->id);
-        $at = now($this->agencyTz($agencyId));
+        $at = now();
+        $atLocal = $at->copy()->timezone($this->agencyTz($agencyId));
 
         DB::table('signed_documents')->insert([
             'agency_id' => $agencyId,
             'document_type' => self::TYPE . '_declined',
+            'agreement_version' => self::AGREEMENT_VERSION,
             'source_table' => 'users',
             'source_id' => $user->id,
             'signer_user_id' => $user->id,
@@ -189,7 +208,7 @@ class AgreementController extends Controller
         }
 
         try {
-            $this->emailDeclineAlert($user, $agencyId, $at->toDayDateTimeString(), $data['reason'] ?? null);
+            $this->emailDeclineAlert($user, $agencyId, $atLocal->toDayDateTimeString(), $data['reason'] ?? null);
         } catch (\Throwable $e) {
         }
 
