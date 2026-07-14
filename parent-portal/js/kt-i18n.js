@@ -802,6 +802,94 @@
     'Profile': { fr: 'Profil', es: 'Perfil', hi: 'प्रोफ़ाइल' },
     'Members': { fr: 'Membres', es: 'Miembros', hi: 'सदस्य' },
     'Integrations': { fr: 'Intégrations', es: 'Integraciones', hi: 'एकीकरण' },
+    // ── Batch 9: parent + educator views ──
+    'Your child\'s day': { fr: 'La journée de votre enfant', es: 'El día de su hijo', hi: 'आपके बच्चे का दिन' },
+    'Everything in one place': { fr: 'Tout au même endroit', es: 'Todo en un solo lugar', hi: 'सब कुछ एक जगह' },
+    'Every moment logged by the educators': { fr: 'Chaque moment consigné par les éducateurs', es: 'Cada momento registrado por los educadores', hi: 'शिक्षकों द्वारा दर्ज हर पल' },
+    'Recent observations': { fr: 'Observations récentes', es: 'Observaciones recientes', hi: 'हाल के अवलोकन' },
+    'Logged today': { fr: 'Consigné aujourd’hui', es: 'Registrado hoy', hi: 'आज दर्ज' },
+    'Medication today': { fr: 'Médicaments aujourd’hui', es: 'Medicación de hoy', hi: 'आज की दवा' },
+    'Total today': { fr: 'Total du jour', es: 'Total de hoy', hi: 'आज कुल' },
+    'Timeline': { fr: 'Chronologie', es: 'Cronología', hi: 'समयरेखा' },
+    'Trends': { fr: 'Tendances', es: 'Tendencias', hi: 'रुझान' },
+    'Videos': { fr: 'Vidéos', es: 'Vídeos', hi: 'वीडियो' },
+    'Wellness check': { fr: 'Bilan de bien-être', es: 'Control de bienestar', hi: 'कल्याण जाँच' },
+    'My family': { fr: 'Ma famille', es: 'Mi familia', hi: 'मेरा परिवार' },
+    'Support': { fr: 'Assistance', es: 'Soporte', hi: 'सहायता' },
+    'Refer a friend': { fr: 'Parrainer un ami', es: 'Recomendar a un amigo', hi: 'मित्र को रेफ़र करें' },
+    'Select': { fr: 'Sélectionner', es: 'Seleccionar', hi: 'चुनें' },
+    'Select all': { fr: 'Tout sélectionner', es: 'Seleccionar todo', hi: 'सभी चुनें' },
+    'Completed': { fr: 'Terminé', es: 'Completado', hi: 'पूर्ण' },
+    'Reviewed': { fr: 'Révisé', es: 'Revisado', hi: 'समीक्षित' },
+    'Recorded by': { fr: 'Consigné par', es: 'Registrado por', hi: 'द्वारा दर्ज' },
+    'Severity': { fr: 'Gravité', es: 'Gravedad', hi: 'गंभीरता' },
+    'Rooms & children': { fr: 'Salles et enfants', es: 'Salas y niños', hi: 'कक्ष और बच्चे' },
+    'Export selected': { fr: 'Exporter la sélection', es: 'Exportar selección', hi: 'चयनित निर्यात करें' },
+    'ACTIVITIES': { fr: 'ACTIVITÉS', es: 'ACTIVIDADES', hi: 'गतिविधियाँ' },
+    'AT HOME': { fr: 'À LA MAISON', es: 'EN CASA', hi: 'घर पर' },
+    'DIAPER / BATHROOM': { fr: 'COUCHE / TOILETTES', es: 'PAÑAL / BAÑO', hi: 'डायपर / बाथरूम' },
+    'MEALS & SNACKS': { fr: 'REPAS ET COLLATIONS', es: 'COMIDAS Y MERIENDAS', hi: 'भोजन और नाश्ता' },
+    'YOUR DAILY DIGEST': { fr: 'VOTRE RÉSUMÉ QUOTIDIEN', es: 'SU RESUMEN DIARIO', hi: 'आपका दैनिक सारांश' },
+    'SHARED': { fr: 'PARTAGÉ', es: 'COMPARTIDO', hi: 'साझा' },
+    'RATIO OK': { fr: 'RATIO CONFORME', es: 'PROPORCIÓN OK', hi: 'अनुपात ठीक' },
+    'Ate breakfast?': { fr: 'A déjeuné ?', es: '¿Desayunó?', hi: 'नाश्ता किया?' },
+    'Mood this morning': { fr: 'Humeur ce matin', es: 'Ánimo esta mañana', hi: 'आज सुबह का मिज़ाज' },
+    'Sleep last night': { fr: 'Sommeil la nuit dernière', es: 'Sueño anoche', hi: 'पिछली रात की नींद' },
+    'Started nap': { fr: 'Début de la sieste', es: 'Comenzó la siesta', hi: 'झपकी शुरू की' },
+    'Woke from nap': { fr: 'Réveil de la sieste', es: 'Despertó de la siesta', hi: 'झपकी से जागा' },
+    'Notes for staff': { fr: 'Notes pour le personnel', es: 'Notas para el personal', hi: 'स्टाफ़ के लिए टिप्पणियाँ' },
+    'Pickup people': { fr: 'Personnes autorisées', es: 'Personas de recogida', hi: 'पिकअप व्यक्ति' },
+    'Pickup change today': { fr: 'Changement de départ aujourd’hui', es: 'Cambio de recogida hoy', hi: 'आज पिकअप बदलाव' },
+    'Quick drop-off survey. Staff see this on the Today screen so they know what to expect.': { fr: 'Court sondage de dépôt. Le personnel le voit sur l’écran Aujourd’hui pour savoir à quoi s’attendre.', es: 'Breve encuesta de entrega. El personal la ve en la pantalla Hoy para saber qué esperar.', hi: 'त्वरित ड्रॉप-ऑफ सर्वेक्षण। स्टाफ़ इसे आज स्क्रीन पर देखता है ताकि वे जान सकें कि क्या अपेक्षा करनी है।' },
+    'happy 😊': { fr: 'content 😊', es: 'feliz 😊', hi: 'खुश 😊' },
+    'okay 🌒': { fr: 'correct 🌒', es: 'bien 🌒', hi: 'ठीक 🌒' },
+    'fussy 😩': { fr: 'grognon 😩', es: 'inquieto 😩', hi: 'चिड़चिड़ा 😩' },
+    'quiet 😶': { fr: 'calme 😶', es: 'callado 😶', hi: 'शांत 😶' },
+    'sleepy 😴': { fr: 'somnolent 😴', es: 'soñoliento 😴', hi: 'नींद में 😴' },
+    'sick 🤒': { fr: 'malade 🤒', es: 'enfermo 🤒', hi: 'बीमार 🤒' },
+    'great 🌙': { fr: 'excellent 🌙', es: 'excelente 🌙', hi: 'बढ़िया 🌙' },
+    'poor 🌘': { fr: 'mauvais 🌘', es: 'malo 🌘', hi: 'खराब 🌘' },
+    'restless 🌖': { fr: 'agité 🌖', es: 'inquieto 🌖', hi: 'बेचैन 🌖' },
+    'Mood: —': { fr: 'Humeur : —', es: 'Ánimo: —', hi: 'मिज़ाज: —' },
+    'Account ledger': { fr: 'Grand livre du compte', es: 'Libro mayor de la cuenta', hi: 'खाता बही' },
+    'Wallet': { fr: 'Portefeuille', es: 'Cartera', hi: 'वॉलेट' },
+    'Subtotal': { fr: 'Sous-total', es: 'Subtotal', hi: 'उप-योग' },
+    'Your portion': { fr: 'Votre part', es: 'Su parte', hi: 'आपका हिस्सा' },
+    'This month\'s billing': { fr: 'Facturation de ce mois-ci', es: 'Facturación de este mes', hi: 'इस महीने की बिलिंग' },
+    'View billing': { fr: 'Voir la facturation', es: 'Ver facturación', hi: 'बिलिंग देखें' },
+    'balance due': { fr: 'solde dû', es: 'saldo pendiente', hi: 'देय शेष' },
+    'CWELCC subsidy': { fr: 'Subvention CWELCC', es: 'Subsidio CWELCC', hi: 'CWELCC सब्सिडी' },
+    'Invoices, payments and balances.': { fr: 'Factures, paiements et soldes.', es: 'Facturas, pagos y saldos.', hi: 'चालान, भुगतान और शेष।' },
+    'Check in / out': { fr: 'Arrivée / départ', es: 'Entrada / salida', hi: 'चेक-इन / आउट' },
+    'Daily check-in': { fr: 'Arrivée quotidienne', es: 'Registro diario', hi: 'दैनिक चेक-इन' },
+    'Submit check-in': { fr: 'Envoyer l’arrivée', es: 'Enviar registro', hi: 'चेक-इन भेजें' },
+    'Scan the QR': { fr: 'Scanner le code QR', es: 'Escanear el QR', hi: 'QR स्कैन करें' },
+    'Not checked in': { fr: 'Non arrivé', es: 'Sin registrar', hi: 'चेक-इन नहीं' },
+    'Documents to sign': { fr: 'Documents à signer', es: 'Documentos por firmar', hi: 'हस्ताक्षर के लिए दस्तावेज़' },
+    'Forms to fill in': { fr: 'Formulaires à remplir', es: 'Formularios por completar', hi: 'भरने के लिए फ़ॉर्म' },
+    'No forms waiting for you right now.': { fr: 'Aucun formulaire en attente pour l’instant.', es: 'No hay formularios esperándole ahora.', hi: 'अभी आपके लिए कोई फ़ॉर्म प्रतीक्षा में नहीं।' },
+    'Field trip permission': { fr: 'Autorisation de sortie', es: 'Permiso de excursión', hi: 'फ़ील्ड ट्रिप अनुमति' },
+    'Incident Reports': { fr: 'Rapports d’incident', es: 'Informes de incidentes', hi: 'घटना रिपोर्ट' },
+    'Multi-day attendance pattern': { fr: 'Modèle de présence sur plusieurs jours', es: 'Patrón de asistencia de varios días', hi: 'बहु-दिवसीय उपस्थिति पैटर्न' },
+    'Parent–Educator Conferences': { fr: 'Rencontres parent–éducateur', es: 'Conferencias padre–educador', hi: 'अभिभावक–शिक्षक बैठकें' },
+    'Active medications recorded at the centre for your children.': { fr: 'Médicaments actifs enregistrés au centre pour vos enfants.', es: 'Medicamentos activos registrados en el centro para sus hijos.', hi: 'आपके बच्चों के लिए केंद्र पर दर्ज सक्रिय दवाइयाँ।' },
+    'Declare which days each child normally attends. Used for ratios + tuition projections.': { fr: 'Indiquez les jours de présence habituels de chaque enfant. Sert aux ratios et aux prévisions de frais.', es: 'Indique qué días asiste normalmente cada niño. Se usa para proporciones y proyecciones de matrícula.', hi: 'बताएँ कि हर बच्चा सामान्यतः किन दिनों में आता है। अनुपात और शुल्क अनुमान के लिए उपयोग किया जाता है।' },
+    'Every alert from Kiddietrac for your account, newest first. Tap one to mark it read.': { fr: 'Chaque alerte de Kiddietrac pour votre compte, la plus récente en premier. Touchez-en une pour la marquer comme lue.', es: 'Cada alerta de Kiddietrac para su cuenta, la más reciente primero. Toque una para marcarla como leída.', hi: 'आपके खाते के लिए Kiddietrac से हर अलर्ट, नवीनतम पहले। पढ़ा हुआ चिह्नित करने के लिए एक पर टैप करें।' },
+    '(Generated from logged events — AI summary unavailable)': { fr: '(Généré à partir des événements consignés — résumé IA indisponible)', es: '(Generado a partir de los eventos registrados — resumen de IA no disponible)', hi: '(दर्ज घटनाओं से बनाया गया — एआई सारांश अनुपलब्ध)' },
+    'Mon': { fr: 'lun', es: 'lun', hi: 'सोम' },
+    'Tue': { fr: 'mar', es: 'mar', hi: 'मंगल' },
+    'Wed': { fr: 'mer', es: 'mié', hi: 'बुध' },
+    'Thu': { fr: 'jeu', es: 'jue', hi: 'गुरु' },
+    'Fri': { fr: 'ven', es: 'vie', hi: 'शुक्र' },
+    'Sat': { fr: 'sam', es: 'sáb', hi: 'शनि' },
+    'Sun': { fr: 'dim', es: 'dom', hi: 'रवि' },
+    // ── Batch 10: parent-view chrome ──
+    'Viewing as': { fr: 'Afficher en tant que', es: 'Ver como', hi: 'इस रूप में देखें' },
+    'Learning moments': { fr: 'Moments d’apprentissage', es: 'Momentos de aprendizaje', hi: 'सीखने के पल' },
+    'Parent': { fr: 'Parent', es: 'Padre/Madre', hi: 'अभिभावक' },
+    'View billing': { fr: 'Voir la facturation', es: 'Ver facturación', hi: 'बिलिंग देखें' },
+    'Back': { fr: 'Retour', es: 'Atrás', hi: 'वापस' },
+    'Naps': { fr: 'Siestes', es: 'Siestas', hi: 'झपकियाँ' },
     'Platform': { fr: 'Plateforme', es: 'Plataforma', hi: 'प्लेटफ़ॉर्म' },
     'Overview': { fr: 'Aperçu', es: 'Resumen', hi: 'अवलोकन' },
     'Operations': { fr: 'Opérations', es: 'Operaciones', hi: 'संचालन' },
@@ -940,36 +1028,31 @@
     var raw = String(text);
     var trimmed = raw.trim();
     if (!trimmed) return null;
-
-    var m = LEAD.exec(trimmed);
-    var prefix = m ? m[1] : '';
-    var words = m ? m[2].trim() : trimmed;
-
-    // Trailing punctuation is common where a string is glued to a value in the markup —
-    // the greeting is its own text node reading "Good evening, ".
-    var punct = '';
-    var pm = /^(.*?)([,:;·•]\s*)$/.exec(words);
-    if (pm) { words = pm[1]; punct = pm[2]; }
-
-    // Which key matched matters: if the WHOLE string (prefix included) is the key —
-    // "+ New medication" — then its translation already carries the "+", and re-attaching
-    // the prefix would print "+ + Nouveau médicament".
-    var hit = lookup(words);
-    var keepPrefix = true;
-    if (!hit) { hit = lookup(trimmed); keepPrefix = false; }
-    // A text node can carry internal newlines/indentation (the banner subtitle spans
-    // several lines in the markup); collapse whitespace and try once more.
-    if (!hit) {
-      var norm = trimmed.replace(/\s+/g, ' ');
-      if (norm !== trimmed) { hit = lookup(norm); keepPrefix = false; }
-    }
-    if (!hit) return null;
-    var out = hit[loc];
-    if (!out) return null;
-
     var lead = raw.match(/^\s*/)[0];
     var tail = raw.match(/\s*$/)[0];
-    return lead + (keepPrefix && prefix ? prefix + out : out) + punct + tail;
+
+    // 1) Whole-string exact match FIRST — so a key that itself carries a symbol
+    //    ("happy 😊", "Mood: —") wins before we start stripping symbols, otherwise the
+    //    stripped symbol would be re-added on top and we'd get "feliz 😊 😊".
+    var norm = trimmed.replace(/\s+/g, ' ');
+    var whole = lookup(trimmed) || (norm !== trimmed ? lookup(norm) : null);
+    if (whole && whole[loc]) return lead + whole[loc] + tail;
+
+    // 2) Otherwise strip a LEADING symbol run (emoji: "📢 Announcements") and a TRAILING
+    //    symbol run (a comma after "Good evening, ", a "→" on "View billing →"), look up
+    //    the core words, and re-attach both.
+    var lm = /^([^\p{L}\p{N}]*)([\s\S]*)$/u.exec(trimmed);
+    var prefix = lm ? lm[1] : '';
+    var core = lm ? lm[2] : trimmed;
+    var suffix = '';
+    var tm = /^([\s\S]*[\p{L}\p{N}])([^\p{L}\p{N}]*)$/u.exec(core);
+    if (tm) { core = tm[1]; suffix = tm[2]; }
+
+    var hit = lookup(core);
+    if (!hit) { var cn = core.replace(/\s+/g, ' '); if (cn !== core) hit = lookup(cn); }
+    if (!hit || !hit[loc]) return null;
+
+    return lead + prefix + hit[loc] + suffix + tail;
   }
 
   var done = new WeakSet();     // nodes already translated — repeat sweeps do nothing
@@ -1013,13 +1096,7 @@
   function apply() {
     var loc = locale();
     if (loc === 'en') return;               // nothing to do
-    try {
-      walk(document.getElementById('appMain'), loc);
-      walk(document.getElementById('appSidebar'), loc);
-      walk(document.getElementById('kt-topbar'), loc);
-      walk(document.querySelector('.kt-mobilenav'), loc);
-      walk(document.querySelector('#appNav'), loc);
-    } catch (e) {}
+    try { walk(document.body, loc); } catch (e) {}
   }
 
   // ── Dates and times ────────────────────────────────────────────────────────
