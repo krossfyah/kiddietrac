@@ -41,14 +41,28 @@ class SuppressAgencyMail
 
     public function handle(MessageSending $event): bool
     {
-        $agencyIds = $this->suppressedAgencyIds();
-        if (! $agencyIds) {
-            return true;   // nothing suppressed → send normally
-        }
-
         $recipients = $this->recipientsOf($event);
         if (! $recipients) {
             return true;
+        }
+
+        // An agency that has switched notifications off in its own settings is
+        // silenced too, not just the .env kill-switch — so check the recipients
+        // against BOTH rules via the shared Suppression service.
+        foreach ($recipients as $addr) {
+            if (in_array($addr, $this->allowlist(), true)) {
+                continue;
+            }
+            $uid = DB::table('users')->where('email', $addr)->value('id');
+            if ($uid && \App\Support\Suppression::isUser((int) $uid)) {
+                $this->cancel($event, [$addr]);
+                return false;
+            }
+        }
+
+        $agencyIds = $this->suppressedAgencyIds();
+        if (! $agencyIds) {
+            return true;   // nothing suppressed → send normally
         }
 
         $blocked = $this->blockedAddresses($agencyIds);
@@ -62,12 +76,18 @@ class SuppressAgencyMail
             return true;
         }
 
+        $this->cancel($event, $hits);
+
+        return false;   // cancels the send
+    }
+
+    /** Record what we stopped — silence with no trail is its own hazard. */
+    private function cancel(MessageSending $event, array $hits): void
+    {
         $subject = (string) ($event->message->getSubject() ?? '(no subject)');
 
         Log::warning('Email SUPPRESSED — recipient belongs to a suppressed agency', [
-            'agencies' => $agencyIds,
             'blocked_recipients' => $hits,
-            'all_recipients' => $recipients,
             'subject' => $subject,
         ]);
 
@@ -90,8 +110,6 @@ class SuppressAgencyMail
         } catch (\Throwable $e) {
             // Never let the audit trail break the kill-switch.
         }
-
-        return false;   // cancels the send
     }
 
 

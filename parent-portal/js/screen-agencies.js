@@ -28,6 +28,18 @@
     return json;
   }
 
+
+  // The master switch lives in the agency's settings JSON. Absent means ON — an
+  // agency that has never touched it keeps working normally.
+  function notificationsOn(a) {
+    try {
+      var st = a.settings;
+      if (typeof st === 'string') st = JSON.parse(st || '{}');
+      if (!st || typeof st !== 'object') return true;
+      return st.notifications_enabled !== false;
+    } catch (e) { return true; }
+  }
+
   function esc(s) {
     return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -269,6 +281,21 @@
             <div><label style="font-size:13px;font-weight:600;">Custom domain</label><input name="custom_domain" value="${esc(a.custom_domain || '')}" style="${inputStyle()}"></div>
             <div><label style="font-size:13px;font-weight:600;">Contact email</label><input name="contact_email" type="email" value="${esc(a.contact_email || '')}" style="${inputStyle()}"></div>
             <div><label style="font-size:13px;font-weight:600;">Timezone</label><select name="timezone" style="${inputStyle()}">${tzOptions(a.timezone || 'America/Toronto')}</select></div>
+            <div style="grid-column:1/-1;border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#F9FAFB;">
+              <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+                <input type="checkbox" name="notifications_enabled" ${notificationsOn(a) ? 'checked' : ''}
+                  style="width:19px;height:19px;margin-top:2px;flex:0 0 auto;accent-color:#159FB4;">
+                <span>
+                  <span style="display:block;font-size:13.5px;font-weight:700;color:#111827;">Send notifications and emails</span>
+                  <span style="display:block;font-size:12px;color:#6B7280;line-height:1.5;margin-top:2px;">
+                    The master switch for this agency. Turn it OFF and <strong>nothing</strong> goes out to their
+                    staff or families — no email, no text, no push, no in-app alert. Everything still gets recorded;
+                    it just isn't sent. Use this while setting an agency up, or to stop the platform contacting a
+                    live agency's families.
+                  </span>
+                </span>
+              </label>
+            </div>
             <div><label style="font-size:13px;font-weight:600;">Plan</label>
               <select name="plan" style="${inputStyle()}">
                 <option value="starter" ${a.plan==='starter'?'selected':''}>Starter</option>
@@ -312,6 +339,13 @@
       e.preventDefault();
       const data = {};
       new FormData(form).forEach((v, k) => { if (v !== '') data[k] = v; });
+
+      // An UNCHECKED checkbox is absent from FormData entirely — so switching
+      // notifications OFF would never have been sent, and the switch would look
+      // like it silently refused to turn off. Read it from the element instead.
+      const notifBox = form.querySelector('[name="notifications_enabled"]');
+      if (notifBox) data.notifications_enabled = notifBox.checked;
+
       try {
         await api('PATCH', '/admin/agencies/' + a.id, data);
         $('#kt-edit-status', mount).style.color = '#16A34A';

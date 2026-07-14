@@ -177,7 +177,10 @@
       Api.get('/admin/audit-logs?' + qs.toString()).then(function (data) {
         state.total = data.total || 0;
         if (data.filters) {
-          if (data.filters.actions) state.actions = data.filters.actions;
+          // Never blank the dropdown: keep what we already have if a response
+          // omits the list. (The backend now returns the unfiltered set, but a
+          // filtered/empty page must not empty the filter either.)
+          if (data.filters.actions && data.filters.actions.length) state.actions = data.filters.actions;
           if (data.filters.entity_types) state.entities = data.filters.entity_types;
         }
         Dom.clear(listWrap);
@@ -209,7 +212,7 @@
       }));
 
       // Free-text
-      toolbar.appendChild(filterInput('Search (action/payload)', state.filters.q, 'text', function (v) {
+      toolbar.appendChild(filterInput('Search', state.filters.q, 'text', function (v) {
         state.filters.q = v; state.offset = 0; reload();
       }));
 
@@ -281,7 +284,7 @@
     var t = Dom.el('table', { style: 'width:100%;border-collapse:collapse;font-size:13px;' });
     var thead = Dom.el('thead', { style: 'background:#FAFBFC;' });
     var hr = Dom.el('tr');
-    ['When', 'Action', 'Entity', 'Actor', 'IP', 'Payload'].forEach(function (h) {
+    ['When', 'Action', 'Entity', 'Actor', 'Location'].forEach(function (h) {
       hr.appendChild(Dom.el('th', { style: 'text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #E5E7EB;' }, h));
     });
     thead.appendChild(hr);
@@ -320,7 +323,7 @@
       var lbl = Dom.el('span', {
         style: 'font-weight:600;color:' + (/\[fail\]/.test(l.action || '') ? '#B91C1C' : '#1F6080') + ';',
         title: l.action || '',
-      }, actionLabel(l.action_label || l.action));
+      }, actionLabel(l.action));
       actLine.appendChild(lbl);
       actCell.appendChild(actLine);
       if (l.summary) actCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;margin-top:3px;word-break:break-word;' }, l.summary));
@@ -338,19 +341,18 @@
       if (l.actor_email) actorCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, l.actor_email));
       row.appendChild(actorCell);
 
-      // IP
-      row.appendChild(Dom.el('td', { style: 'padding:10px 14px;color:#9CA3AF;font-family:ui-monospace,monospace;font-size:11px;vertical-align:top;' }, l.ip_address || '—'));
-
-      // Payload (truncated)
-      var payTxt = l.payload || '';
-      try {
-        if (payTxt && typeof payTxt === 'string') {
-          var parsed = JSON.parse(payTxt);
-          payTxt = JSON.stringify(parsed);
-        }
-      } catch (e) {}
-      var trunc = payTxt.length > 80 ? payTxt.slice(0, 80) + '…' : payTxt;
-      row.appendChild(Dom.el('td', { style: 'padding:10px 14px;color:#6B7280;font-size:11px;font-family:ui-monospace,monospace;vertical-align:top;max-width:280px;overflow:hidden;text-overflow:ellipsis;' }, trunc || '—'));
+      // Where it came from. A raw payload blob was noise — nobody audits by
+      // reading JSON in a table cell, and it's still one click away in the detail
+      // view. "Was this done from Canada, or somewhere nobody here has worked
+      // from?" is the question an audit actually asks.
+      var locCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;font-size:12px;color:#374151;' });
+      locCell.appendChild(Dom.el('div', {}, l.location || l.ip_address || '—'));
+      if (l.ip_address) {
+        locCell.appendChild(Dom.el('div', {
+          style: 'color:#9CA3AF;font-family:ui-monospace,monospace;font-size:10.5px;margin-top:2px;',
+        }, l.ip_address));
+      }
+      row.appendChild(locCell);
 
       tb.appendChild(row);
     });

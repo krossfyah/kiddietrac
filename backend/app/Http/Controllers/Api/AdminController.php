@@ -464,7 +464,35 @@ final class AdminController extends Controller
             ->orderByDesc('al.created_at');
 
         if ($scopedUserIds !== null) {
-            $base->whereIn('al.user_id', $scopedUserIds ?: [0]);
+            // Rows with an actor: must be someone in this agency.
+            //
+            // Rows WITHOUT an actor (user_id NULL) are system events — every email
+            // the platform sends is audited this way. The old whereIn() silently
+            // dropped all of them, which is why the audit log showed no email
+            // activity whatsoever. Include a system row when its payload names a
+            // recipient who belongs to this agency, so an admin sees the mail that
+            // went to THEIR people and nobody else's.
+            $scopedEmails = DB::table('users')
+                ->whereIn('id', $scopedUserIds ?: [0])
+                ->whereNotNull('email')
+                ->pluck('email')
+                ->all();
+
+            $base->where(function ($w) use ($scopedUserIds, $scopedEmails) {
+                $w->whereIn('al.user_id', $scopedUserIds ?: [0]);
+
+                $w->orWhere(function ($sys) use ($scopedEmails) {
+                    $sys->whereNull('al.user_id');
+                    $sys->where(function ($m) use ($scopedEmails) {
+                        foreach ($scopedEmails as $email) {
+                            $m->orWhere('al.payload', 'like', '%' . $email . '%');
+                        }
+                        if (! $scopedEmails) {
+                            $m->whereRaw('1 = 0');
+                        }
+                    });
+                });
+            });
         }
         if ($entityType) $base->where('al.entity_type', $entityType);
         if ($action)     $base->where('al.action', $action);
@@ -493,12 +521,27 @@ final class AdminController extends Controller
             $r->action_label = $this->humanizeAuditAction($r->action);
             $r->entity_name  = $this->describeAuditEntity($r->entity_type, $r->entity_id ? (int) $r->entity_id : null, $r->payload);
             $r->summary      = $this->summarizeAuditPayload($r->payload);
+            // An IP address tells an auditor nothing. Where it came from does.
+            $r->location     = \App\Support\GeoIp::locate($r->ip_address);
             return $r;
         });
 
-        // Distinct values for the UI filter dropdowns (capped at 60 each)
-        $distinctActions = (clone $base)->distinct()->limit(60)->pluck('al.action');
-        $distinctEntities = (clone $base)->distinct()->limit(40)->pluck('al.entity_type')->filter()->values();
+        // Distinct values for the UI filter dropdowns.
+        //
+        // These MUST come from the agency-scoped set, NOT from $base — $base has
+        // the user's filters applied, so picking an action collapsed the dropdown
+        // to that single action, and a filter with no results emptied it entirely.
+        // That is the "sometimes it has options, sometimes it doesn't".
+        $optionsBase = DB::table('audit_logs as al');
+        if ($scopedUserIds !== null) {
+            $optionsBase->where(function ($w) use ($scopedUserIds) {
+                $w->whereIn('al.user_id', $scopedUserIds ?: [0])->orWhereNull('al.user_id');
+            });
+        }
+        $distinctActions = (clone $optionsBase)->select('al.action')->distinct()
+            ->orderBy('al.action')->limit(80)->pluck('al.action')->filter()->values();
+        $distinctEntities = (clone $optionsBase)->select('al.entity_type')->distinct()
+            ->orderBy('al.entity_type')->limit(40)->pluck('al.entity_type')->filter()->values();
 
         // v22p46: CSV export — pulls up to 5000 rows (above the 200 default)
         // so a date-range export can produce a full history slice in one shot.

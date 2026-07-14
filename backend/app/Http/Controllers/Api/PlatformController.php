@@ -654,6 +654,10 @@ final class PlatformController extends Controller
             // bucket (care logs, reports, the end-of-day parent summary). It was
             // settable at creation but NOT here, so editing it silently did nothing.
             'timezone' => ['sometimes', 'nullable', 'timezone'],
+            // Master switch: when false, NOTHING goes out to this agency — no
+            // email, no SMS, no push, no in-app notification. Stored in the
+            // settings JSON and read by App\Support\Suppression.
+            'notifications_enabled' => ['sometimes', 'boolean'],
             'plan_code' => ['sometimes', 'nullable', 'string', 'max:40'],
             'plan_amount_cents' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'white_label_enabled' => ['sometimes', 'boolean'],
@@ -675,6 +679,19 @@ final class PlatformController extends Controller
             'email_from_address' => ['sometimes', 'nullable', 'email', 'max:160'],
             'email_from_name' => ['sometimes', 'nullable', 'string', 'max:160'],
         ]);
+
+        // The master switch lives in the settings JSON (no schema change), and the
+        // suppression decision is cached — clear it so the toggle takes effect at
+        // once rather than up to two minutes later.
+        if (array_key_exists('notifications_enabled', $data)) {
+            $row = DB::table('agencies')->where('id', $agencyId)->first(['settings']);
+            $settings = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
+            $settings['notifications_enabled'] = (bool) $data['notifications_enabled'];
+            DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings)]);
+            \Illuminate\Support\Facades\Cache::forget('kt.agency_notifications:' . $agencyId);
+            unset($data['notifications_enabled']);
+        }
+
 
         // white_label_enabled maps to powered_by_visible (inverse).
         if (array_key_exists('white_label_enabled', $data)) {
