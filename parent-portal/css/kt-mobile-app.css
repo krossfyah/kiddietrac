@@ -272,3 +272,13 @@ body.kt-parentview [data-export] { display: none !important; }
   #appMain .kt-rw-go { margin-top: 5px !important; font-size: 10.5px !important; }
   #appMain .kt-rw-card::after { display: none !important; }   /* decorative blob, wasted paint */
 }
+
+/* ── Floating "← Back" clearance (2026-07-13) ────────────────────────────
+   #kt-role-back is fixed at bottom:84px / left:14px (above the bottom bar). At
+   the end of a scroll it landed ON TOP of the last launcher tile. The button is
+   now hidden on the educator home entirely (that IS home — nothing to go back
+   to), and any tile grid keeps clearance so it can never cover a tile. ── */
+@media (max-width: 600px) {
+  #appMain .kt-tile-grid:last-child,
+  #appMain #kt-edu-launcher { padding-bottom: 72px !important; }
+}

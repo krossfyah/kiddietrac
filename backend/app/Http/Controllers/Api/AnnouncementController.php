@@ -383,7 +383,7 @@ final class AnnouncementController extends Controller
             try {
                 $fcm = app(\App\Services\FcmService::class);
                 foreach ($userIds as $uid) {
-                    $fcm->sendToUser((int) $uid, $notifTitle, $pushBody, '#announcements');
+                    $fcm->sendToUser((int) $uid, $notifTitle, $pushBody, '#announcements', true);
                 }
             } catch (\Throwable $e) { Log::warning('Announcement FCM push failed', ['error' => $e->getMessage()]); }
             try {

@@ -242,7 +242,12 @@
     var btn = ensureBackBtn();
     var isRole = /\brole-(guardian|educator|auditor)\b/.test(document.body.className);
     var h = (window.location.hash || '').replace('#', '').split('?')[0];
-    var onHome = (h === '' || h === 'home');
+    // An educator's home is the DASHBOARD (that's where the bottom bar's Home
+    // button lands, and it now carries the tile launcher). Without this the back
+    // button floated over the home screen — with nowhere to go back to — and sat
+    // on top of the last tile.
+    var isEducator = /\brole-educator\b/.test(document.body.className);
+    var onHome = (h === '' || h === 'home' || (isEducator && h === 'dashboard'));
     if (isRole && !onHome) btn.removeAttribute('hidden');
     else btn.setAttribute('hidden', '');
   }

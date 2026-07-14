@@ -178,6 +178,33 @@
           })
           .catch(function () { ntBtn.disabled = false; ntBtn.textContent = old; ntMsg.style.color = '#B91C1C'; ntMsg.textContent = 'Network error — try again.'; });
       });
+      // Urgent alerts (staff): the full-screen, chiming, vibrating takeover when
+      // a message or alert lands while the app is open. On by default for staff,
+      // but it must be switchable — it's deliberately hard to ignore.
+      try {
+        if (KT.urgentAlert) {
+          var ua = el('div', { style: 'border-top:1px solid #EEF2F6;margin-top:14px;padding-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;' });
+          var uaSub = el('div', { style: 'font-size:12px;color:#94A3B8;' },
+            [KT.urgentAlert.isEnabled() ? 'New chats and alerts take over the screen with sound.' : 'New chats and alerts only show a badge.']);
+          ua.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['🚨 Urgent alerts']), uaSub]));
+          var uaBtn = el('button', { type: 'button', style: 'border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;' }, ['…']);
+          var paintUa = function () {
+            var on = KT.urgentAlert.isEnabled();
+            uaBtn.textContent = on ? 'On' : 'Off';
+            uaBtn.style.background = on ? '#159FB4' : '#E2E8F0';
+            uaBtn.style.color = on ? '#fff' : '#475569';
+            uaSub.textContent = on ? 'New chats and alerts take over the screen with sound.' : 'New chats and alerts only show a badge.';
+          };
+          uaBtn.addEventListener('click', function () { KT.urgentAlert.setEnabled(!KT.urgentAlert.isEnabled()); paintUa(); });
+          paintUa();
+          ua.appendChild(uaBtn);
+          nd.appendChild(ua);
+          var uaTest = el('button', { type: 'button', style: 'background:none;border:none;color:#159FB4;font-size:12px;font-weight:700;cursor:pointer;padding:8px 0 0;' }, ['Preview an urgent alert']);
+          uaTest.addEventListener('click', function () { KT.urgentAlert.test('message'); });
+          nd.appendChild(uaTest);
+        }
+      } catch (e) {}
+
       nd.appendChild(ntBtn); nd.appendChild(ntMsg);
       wrap.appendChild(nd);
     } catch (e) {}

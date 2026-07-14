@@ -470,7 +470,7 @@ final class ChatController extends Controller
                     try {
                         $fcm = app(\App\Services\FcmService::class);
                         foreach ($recipients as $rid) {
-                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat');
+                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true);
                         }
                     } catch (\Throwable $fe) {
                         \Illuminate\Support\Facades\Log::warning('FCM push from chat failed', ['error' => $fe->getMessage()]);

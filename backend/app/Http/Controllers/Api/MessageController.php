@@ -224,7 +224,7 @@ final class MessageController extends Controller
                 'data' => json_encode(['link' => '#chat', 'conversation_id' => $convoId]),
                 'created_at' => now(),
             ]);
-            try { app(\App\Services\FcmService::class)->sendToUser((int) $sid, 'New message from a parent 💬', $preview, '#chat'); } catch (\Throwable $e) {}
+            try { app(\App\Services\FcmService::class)->sendToUser((int) $sid, 'New message from a parent 💬', $preview, '#chat', true); } catch (\Throwable $e) {}
         }
 
         $this->audit($request, 'message.sent', $convoId, ['message_id' => $msgId, 'child_id' => $child->id, 'has_attachment' => !empty($attachments)]);
@@ -294,7 +294,7 @@ final class MessageController extends Controller
                 'data' => json_encode(['link' => '#chat', 'conversation_id' => $convoId]),
                 'created_at' => now(),
             ]);
-            try { app(\App\Services\FcmService::class)->sendToUser((int) $sid, '👋 Nudge from ' . $parentName, $body, '#chat'); } catch (\Throwable $e) {}
+            try { app(\App\Services\FcmService::class)->sendToUser((int) $sid, '👋 Nudge from ' . $parentName, $body, '#chat', true); } catch (\Throwable $e) {}
         }
         $this->audit($request, 'message.nudge', $convoId, ['message_id' => $msgId, 'child_id' => $child->id, 'notified' => $staffIds->count()]);
         return response()->json(['success' => true, 'notified' => $staffIds->count(), 'message_id' => $msgId]);

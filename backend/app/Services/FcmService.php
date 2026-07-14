@@ -71,7 +71,7 @@ class FcmService
     }
 
     /** Send to explicit device tokens. Returns ['sent'=>int,'failed'=>int,'error'=>?]. */
-    public function sendToTokens(array $tokens, string $title, string $body, array $data = []): array
+    public function sendToTokens(array $tokens, string $title, string $body, array $data = [], bool $urgent = false): array
     {
         $tokens = array_values(array_unique(array_filter($tokens)));
         if (!$tokens) return ['sent' => 0, 'failed' => 0];
@@ -88,17 +88,32 @@ class FcmService
 
         $sent = 0; $failed = 0;
         foreach ($tokens as $t) {
-            $payload = ['message' => [
-                'token' => $t,
-                'notification' => ['title' => $title, 'body' => $body],
-                'data' => $strData,
-                'android' => [
-                    'priority' => 'high',
-                    // kt_alerts is created NATIVELY in MainActivity (HIGH importance +
-                    // loud custom sound), so it is guaranteed to exist on the new APK.
-                    'notification' => ['channel_id' => 'kt_alerts', 'sound' => 'kt_notify', 'default_vibrate_timings' => true],
-                ],
-            ]];
+            if ($urgent) {
+                // DATA-ONLY on purpose. A message carrying a 'notification' block is
+                // rendered by Android itself when the app is backgrounded, and app
+                // code never runs — so nothing can set FLAG_INSISTENT and the chime
+                // would play exactly once. Data-only always reaches
+                // KtMessagingService.onMessageReceived, which builds the insistent
+                // notification (repeating sound + long vibration) on kt_urgent_v1.
+                // The title/body therefore have to travel inside data.
+                $payload = ['message' => [
+                    'token' => $t,
+                    'data' => $strData + ['title' => $title, 'body' => $body, 'kt_urgent' => '1'],
+                    'android' => ['priority' => 'high'],
+                ]];
+            } else {
+                $payload = ['message' => [
+                    'token' => $t,
+                    'notification' => ['title' => $title, 'body' => $body],
+                    'data' => $strData,
+                    'android' => [
+                        'priority' => 'high',
+                        // kt_alerts is created NATIVELY in MainActivity (HIGH importance +
+                        // loud custom sound), so it is guaranteed to exist on the new APK.
+                        'notification' => ['channel_id' => 'kt_alerts', 'sound' => 'kt_notify', 'default_vibrate_timings' => true],
+                    ],
+                ]];
+            }
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
@@ -119,11 +134,36 @@ class FcmService
         return ['sent' => $sent, 'failed' => $failed];
     }
 
-    /** Send to every native device a user has registered. */
-    public function sendToUser(int $userId, string $title, string $body, string $link = ''): array
+    /**
+     * Send to every native device a user has registered.
+     *
+     * $urgent asks for the "can't be missed" treatment — the sound repeats and
+     * the phone buzzes long and hard until the notification is acknowledged
+     * (Android FLAG_INSISTENT, set by KtMessagingService in the APK). It is
+     * applied ONLY to staff: the same code path pushes invoices and photos to
+     * parents, and nobody wants their phone screaming about a nap photo.
+     */
+    public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false): array
     {
         $tokens = DB::table('device_tokens')->where('user_id', $userId)
             ->whereIn('platform', ['android', 'ios'])->pluck('token')->all();
-        return $this->sendToTokens($tokens, $title, $body, $link !== '' ? ['link' => $link] : []);
+
+        $urgent = $urgent && $this->isStaff($userId);
+
+        $data = [];
+        if ($link !== '') $data['link'] = $link;
+        if ($urgent) $data['kt_urgent'] = '1';
+
+        return $this->sendToTokens($tokens, $title, $body, $data, $urgent);
+    }
+
+    /** Educators and directors only — the people who need to react on the floor. */
+    private function isStaff(int $userId): bool
+    {
+        return DB::table('role_assignments')
+            ->where('user_id', $userId)
+            ->whereIn('role', ['educator', 'centre_director'])
+            ->where('active', 1)
+            ->exists();
     }
 }
