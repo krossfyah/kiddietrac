@@ -26,6 +26,16 @@ class AppServiceProvider extends ServiceProvider
         // v22p92 — log every outbound email so platform admins can audit what
         // actually left the system (delivery itself still depends on DNS/SPF,
         // but the send is recorded). Best-effort; never breaks a real send.
+        // KILL-SWITCH: no email may reach the live agency while we test against the
+        // Test Agency. Registered on MessageSending (returning false cancels the
+        // send), so EVERY path is covered — controllers, queued closures, scheduled
+        // commands — and no future call site has to remember to check.
+        // Configured by MAIL_SUPPRESS_AGENCIES in .env.
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\SuppressAgencyMail::class, 'handle']
+        );
+
         Event::listen(MessageSent::class, function (MessageSent $event) {
             try {
                 $msg = $event->message; // Symfony\Component\Mime\Email
