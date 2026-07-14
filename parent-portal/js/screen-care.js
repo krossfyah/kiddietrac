@@ -517,11 +517,12 @@
     var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
 
-    var hero = Dom.el('div', { style: 'background:linear-gradient(135deg,#FF8A65 0%,#7C3AED 60%,#1F6080 100%);color:#fff;border-radius:16px;padding:26px 30px;box-shadow:0 10px 30px -12px rgba(31,96,128,.45);' });
-    hero.innerHTML = '<div style="font-size:12px;font-weight:800;letter-spacing:1.5px;opacity:.85;">🚪 TOURS</div>'
-      + '<h1 style="margin:6px 0 6px;font-size:26px;font-weight:800;">Tour bookings</h1>'
-      + '<div style="font-size:14px;opacity:.92;max-width:640px;">Prospective families that requested a centre tour through your public booking page. Confirm, complete, or cancel each one.</div>';
-    wrap.appendChild(hero);
+    // No banner here: the shell renders the standard one for every screen, and this
+    // hand-rolled gradient hero was stacking a SECOND banner underneath it. The
+    // explanatory line lives on as a caption above the table.
+    var intro = Dom.el('div', { style: 'font-size:14px;color:#5A6B7B;max-width:640px;margin:0 0 4px;' });
+    intro.textContent = 'Prospective families that requested a centre tour through your public booking page. Confirm, complete, or cancel each one.';
+    wrap.appendChild(intro);
 
     // Public booking link card
     var agencyId = sessionStorage.getItem('kt_active_agency_id') || '';

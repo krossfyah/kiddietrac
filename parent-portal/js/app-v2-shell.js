@@ -453,6 +453,109 @@
     return b;
   }
 
+  // Shared, per-screen-visit budget for banner normalisation. Deliberately survives
+  // re-renders of the same screen — that is the whole point (see __ensure).
+  var _bannerHash = null, _bannerRuns = 0;
+  function bannerSync(hash) {
+    var h = String(hash || '').split('/')[0];
+    if (h !== _bannerHash) { _bannerHash = h; _bannerRuns = 0; }
+  }
+  // Is there budget left? (Cheap look — costs nothing.)
+  function bannerBudgetLeft(hash) { bannerSync(hash); return _bannerRuns < 15; }
+  // Charge the budget — called ONLY after we actually changed the DOM, so a screen
+  // that merely re-renders a lot does not starve itself, while a screen that fights us
+  // over its banner still runs out and is left alone.
+  function bannerSpend(hash) { bannerSync(hash); _bannerRuns++; }
+
+  // Strip emoji/punctuation so "\ud83d\udcda Lesson Plans" and "Lesson plans" compare equal.
+  function heroKey(t) {
+    return String(t || '').replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  // Collapse whatever a screen rendered at the top into the single standard hero:
+  //   1. legacy header (.page-header-v17 / .kt-page-hero) -> its subtitle and action
+  //      buttons are MOVED into the hero (moved, not rebuilt, so ids and already-bound
+  //      listeners survive), then the header is removed;
+  //   2. a screen's own inline-gradient banner (Tours) -> removed;
+  //   3. a heading that merely repeats the hero title ("Medications" under the
+  //      Medications banner) -> removed, leaving any buttons beside it in place.
+  //
+  // Cheap and idempotent by construction: it only ever looks at main's first few
+  // levels, reads the inline style ATTRIBUTE rather than computed style (no forced
+  // layout), and marks what it has handled.
+  function normaliseBanners(main, hash) {
+    var hero = main.querySelector('.kt-hero-auto');
+    if (!hero) return false;                 // screen owns a real .kt-hero (role-home)
+    var changed = false;
+    var h1 = hero.querySelector('h1');
+    var title = heroKey(h1 && h1.textContent);
+
+    // 1. legacy headers
+    var legacy = main.querySelectorAll('.page-header-v17, .kt-page-hero');
+    for (var i = 0; i < legacy.length; i++) {
+      var L = legacy[i];
+      if (hero.contains(L)) continue;
+
+      // The legacy header's own <h1> is the page's real title ("AI-generated Lesson
+      // Plans"), and it beats the nav label — let alone the hash-derived fallback
+      // ("Lesson Plans Ai"). Carry it into the banner.
+      var lh1 = L.querySelector('h1');
+      if (lh1 && h1) {
+        var lt = (lh1.textContent || '').trim();
+        if (lt) { h1.textContent = lt; title = heroKey(lt); }
+      }
+
+      var sub = L.querySelector('.sub, .subtitle');
+      if (sub && !hero.querySelector('.kt-hero-sub')) {
+        var sd = document.createElement('div');
+        sd.className = 'kt-hero-sub';
+        sd.textContent = (sub.textContent || '').trim();
+        var em = hero.querySelector('.kt-hero-emoji');
+        hero.insertBefore(sd, em || null);
+      }
+
+      var acts = L.querySelector('.actions');
+      var btns = acts ? acts.children : L.querySelectorAll('button, a.btn');
+      if (btns && btns.length) {
+        var bar = hero.querySelector('.kt-hero-actions');
+        if (!bar) { bar = document.createElement('div'); bar.className = 'kt-hero-actions'; hero.appendChild(bar); }
+        while (btns.length) bar.appendChild(btns[0]);   // move: keeps listeners + ids
+      }
+      L.parentNode.removeChild(L);
+      changed = true;
+    }
+
+    // 3. The heading a screen prints as its own page title.
+    //
+    // Two cases, both ending with ONE banner and no repeated title underneath:
+    //  (a) it repeats the banner ("Medications" under a Medications banner) -> drop it;
+    //  (b) it IS the page's name but the banner is showing the nav SECTION instead
+    //      ("Medications" under a banner reading "Health", because the nav item for
+    //      #medications is labelled Health) -> promote it into the banner, then drop it.
+    //      Promotion is deliberately limited to a heading that matches the page's own
+    //      hash, so an ordinary card title can never rename the banner.
+    var pageKey = heroKey(String(hash || '').split('/')[0].replace(/-/g, ' '));
+    var heads = main.querySelectorAll('h1, h2, h3');
+    for (var k = 0; k < heads.length && k < 6; k++) {
+      var H = heads[k];
+      if (hero.contains(H)) continue;
+      var hk = heroKey(H.textContent);
+      if (!hk) continue;
+      if (title && hk === title) {                 // (a) duplicate
+        H.parentNode.removeChild(H);
+        changed = true;
+        break;
+      }
+      if (pageKey && hk === pageKey) {             // (b) the real page title
+        if (h1) h1.textContent = (H.textContent || '').replace(/[^\p{L}\p{N} &'\-]/gu, '').trim();
+        H.parentNode.removeChild(H);
+        changed = true;
+        break;
+      }
+    }
+    return changed;
+  }
+
   var _hashStack = [];
   function _trackNav(h) {
     if (_hashStack.length > 1 && _hashStack[_hashStack.length - 2] === h) { _hashStack.pop(); }
@@ -551,23 +654,55 @@
       } catch (e) {}
       try {
         var __info = navItemFor(role, hash);
-        // A section already has a banner if it uses a known hero class OR renders
-        // its own custom gradient banner near the top (some screens, e.g. Tours,
-        // build an inline-styled banner with no hero class). Detect both so we
-        // never stack a second auto-hero on top → no double banners anywhere.
+        // ONE banner per screen, and it always looks the same.
+        //
+        // Only the standard .kt-hero component counts as "this screen brought its own
+        // banner" (role-home's greeting tile is the one legitimate case). The legacy
+        // headers — .page-header-v17 / .kt-page-hero, and the hand-rolled inline-gradient
+        // banner Tours builds — no longer suppress the auto-hero; normaliseBanners()
+        // folds them INTO it. That is why AI Lesson Plans looked nothing like the rest
+        // of the site and Tours stacked two banners.
         var __hasHero = function () {
-          if (main.querySelector('.kt-hero, .kt-page-hero, .page-header-v17')) return true;
+          if (main.querySelector('.kt-hero')) return true;
+          // A screen that hand-rolls its own banner keeps it — we do NOT add a second
+          // one, and we do not remove theirs (Support tickets re-renders itself when we
+          // touch it, which turns into a fight we cannot win from out here).
+          // The gradient must be read from the COMPUTED style, not the style attribute:
+          // some of these banners are styled by a CSS class, and missing one means the
+          // shell stacks a banner on top and that screen spins.
           var f = main.firstElementChild;
           var cands = [f, f && f.firstElementChild];
           for (var ci = 0; ci < cands.length; ci++) {
-            var el = cands[ci]; if (!el || el.classList.contains('kt-hero-auto')) continue;
-            try { if ((getComputedStyle(el).backgroundImage || '').indexOf('gradient') !== -1 && el.getBoundingClientRect().height > 60) return true; } catch (e) {}
+            var el = cands[ci];
+            if (!el || el.classList.contains('kt-hero-auto')) continue;
+            try {
+              if ((getComputedStyle(el).backgroundImage || '').indexOf('gradient') !== -1
+                  && el.getBoundingClientRect().height > 60) return true;
+            } catch (e) {}
           }
           return false;
         };
-        var __ensure = function () { if (!__hasHero()) { main.insertBefore(buildAutoHero(__info), main.firstChild); } };
+
+        // Screens render asynchronously, so re-check on a few timers AND on top-level
+        // childList changes. Deliberately NOT subtree:true — every keystroke in a table
+        // filter is a subtree mutation, and re-running this on each one froze the tab.
+        var __ensure = function () {
+          // The budget is GLOBAL per screen visit, not per render pass. A screen that
+          // re-renders itself (support tickets does) calls renderScreen again, which
+          // would reset a per-pass counter to zero — so a screen that re-adds the banner
+          // we just folded in ping-pongs with us forever. That froze the tab. With a
+          // shared budget the worst case is that we stop touching the screen and it
+          // simply keeps its own banner.
+          if (!bannerBudgetLeft(hash)) return;
+          if (!__hasHero()) { main.insertBefore(buildAutoHero(__info), main.firstChild); bannerSpend(hash); }
+          try { if (normaliseBanners(main, hash)) bannerSpend(hash); } catch (e) {}
+        };
         __ensure();
-        if (window.MutationObserver) { var __obs = new MutationObserver(__ensure); window.__ktBannerObs = __obs; __obs.observe(main, { childList: true }); setTimeout(function () { __obs.disconnect(); }, 4000); }
+        // Some screens (Vacation holds) clear main and render their header seconds
+        // later — after the old 4s window had closed, which left them with no banner
+        // at all. The 15-run budget is what keeps this cheap.
+        [120, 400, 900, 1800, 3200, 5200, 7500].forEach(function (ms) { setTimeout(__ensure, ms); });
+        if (window.MutationObserver) { var __obs = new MutationObserver(__ensure); window.__ktBannerObs = __obs; __obs.observe(main, { childList: true }); setTimeout(function () { __obs.disconnect(); }, 9000); }
       } catch (e) {}
     } catch (e) {
       console.error('Screen render error:', e);
