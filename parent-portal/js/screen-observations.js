@@ -112,18 +112,46 @@
   async function renderObservationNew(main, ctx) {
     Dom.clear(main);
 
-    // Load children roster
+    // Load the children the educator can actually see.
+    //
+    // This used to read `room.children` off /provider/bootstrap — but bootstrap
+    // returns plain room rows and has NO children array on them, so the list was
+    // always empty and the child dropdown had nothing to pick. The empty catch
+    // below hid it: the screen looked fine and simply refused to let you choose a
+    // child. The roster lives on /provider/rooms/{id}/roster, one call per room
+    // (an educator has a handful), which is also what the Today screen and the
+    // Daily log use — and it respects room assignment.
     let children = [];
+    let childLoadError = null;
     try {
-      const r = await Api.get('/provider/bootstrap');
-      if (r && r.rooms) {
-        r.rooms.forEach(function (room) {
-          if (Array.isArray(room.children)) {
-            room.children.forEach(function (c) { children.push(c); });
-          }
-        });
-      }
-    } catch (e) {}
+      const boot = await Api.get('/provider/bootstrap');
+      const rooms = (boot && boot.rooms) || [];
+      const rosters = await Promise.all(rooms.map(function (room) {
+        return Api.get('/provider/rooms/' + room.id + '/roster')
+          .then(function (d) {
+            return ((d && d.roster) || []).map(function (c) {
+              return {
+                id: c.id,
+                first_name: c.first_name,
+                last_name: c.last_name,
+                display_name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.display_name,
+                room_name: room.name,
+                is_at_centre: !!c.is_at_centre,
+              };
+            });
+          })
+          .catch(function () { return []; });
+      }));
+      children = rosters.reduce(function (a, b) { return a.concat(b); }, []);
+
+      // Children who are here now first — they're the ones you're observing.
+      children.sort(function (a, b) {
+        if (!!a.is_at_centre !== !!b.is_at_centre) return a.is_at_centre ? -1 : 1;
+        return String(a.display_name).localeCompare(String(b.display_name));
+      });
+    } catch (e) {
+      childLoadError = e && e.message ? e.message : 'Could not load your children.';
+    }
 
     const wrap = document.createElement('div');
     main.appendChild(wrap);
@@ -148,9 +176,21 @@
           '<select id="kt-child" required style="padding:10px; border:1.5px solid var(--kt-border); border-radius:8px; width:100%;">' +
             '<option value="">- select -</option>' +
             children.map(function (c) {
-              return '<option value="' + c.id + '">' + esc(((c.first_name||'') + ' ' + (c.last_name||'')).trim()) + '</option>';
+              // Say where they are and whether they're here — an educator covering
+              // two rooms needs to tell two Aidans apart.
+              var label = esc(c.display_name || ((c.first_name || '') + ' ' + (c.last_name || '')).trim());
+              if (c.is_at_centre) label += ' · here now';
+              if (c.room_name) label += ' · ' + esc(c.room_name);
+              return '<option value="' + c.id + '">' + label + '</option>';
             }).join('') +
           '</select>' +
+          // Never leave an empty dropdown standing there with no explanation.
+          (children.length ? '' :
+            '<div style="color:#B45309;font-size:12.5px;margin-top:6px;">'
+            + (childLoadError
+                ? 'Could not load your children: ' + esc(childLoadError)
+                : 'No children found in your rooms. Ask your director to assign you to a room.')
+            + '</div>') +
         '</div>' +
 
         '<div class="form-row" style="margin-top:14px;">' +
