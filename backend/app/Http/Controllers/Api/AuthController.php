@@ -443,6 +443,11 @@ final class AuthController extends Controller
             'id' => $user->id,
             'email' => $user->email,
             'agency_timezone' => $agencyTz ?: 'America/Toronto',
+            // Which agency a platform admin lands in by default. Without this the
+            // switcher fell back to agencies[0] — alphabetically the LIVE agency —
+            // so a super admin opened the app inside real families' data.
+            // DEFAULT_ADMIN_AGENCY_ID in .env; empty = first agency, as before.
+            'default_agency_id' => env('DEFAULT_ADMIN_AGENCY_ID') ? (int) env('DEFAULT_ADMIN_AGENCY_ID') : null,
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
             'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')),

@@ -8,6 +8,26 @@
   'use strict';
 
   var STORAGE_KEY = 'kt_active_agency_id';
+
+  // Which agency a platform admin lands in.
+  //
+  // This used to be agencies[0] — and the list is alphabetical, so a super admin
+  // opened the app inside the LIVE agency, looking at real families, every single
+  // time. The default now comes from the server (DEFAULT_ADMIN_AGENCY_ID, set to
+  // the Test Agency), falling back to the old behaviour only if it isn't set or
+  // the agency isn't in their list.
+  function defaultAgencyId(agencies) {
+    if (!agencies || !agencies.length) return null;
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var want = u.default_agency_id;
+      if (want && agencies.some(function (a) { return String(a.id) === String(want); })) {
+        return want;
+      }
+    } catch (e) {}
+    return agencies[0].id;
+  }
+
   var ACTIVE_NAME = 'kt_active_agency_name';
   var MOUNT_ATTEMPTS = 0;
   var MAX_MOUNT_ATTEMPTS = 60;
@@ -235,10 +255,10 @@
     // "All agencies" stays available as an explicit dropdown choice for the
     // aggregate dashboard. Preserve any explicit prior selection (incl. 'all').
     var _hadAgency = !!sessionStorage.getItem(STORAGE_KEY);
-    var activeId = sessionStorage.getItem(STORAGE_KEY) || (agencies[0] ? agencies[0].id : null);
+    var activeId = sessionStorage.getItem(STORAGE_KEY) || defaultAgencyId(agencies);
     if (String(activeId) !== 'all'
         && ! agencies.find(function (a) { return String(a.id) === String(activeId); })) {
-      activeId = agencies[0] ? agencies[0].id : null;
+      activeId = defaultAgencyId(agencies);
     }
     sessionStorage.setItem(STORAGE_KEY, String(activeId));
     if (String(activeId) === 'all') {

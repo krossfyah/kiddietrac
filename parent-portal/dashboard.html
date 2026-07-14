@@ -35,7 +35,13 @@
     try {
       if (!sessionStorage.getItem('kt_active_agency_id')) {
         var _u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
-        if (_u && _u.agency_id) sessionStorage.setItem('kt_active_agency_id', String(_u.agency_id));
+        // Prefer the configured default agency (DEFAULT_ADMIN_AGENCY_ID -> the Test
+        // Agency). This shim runs BEFORE agency-switcher.js, so seeding it from the
+        // admin's OWN agency_id here is what kept dropping a super admin straight
+        // into the LIVE agency, looking at real families, no matter what the
+        // switcher's default said.
+        var _seed = (_u && _u.default_agency_id) ? _u.default_agency_id : (_u && _u.agency_id);
+        if (_seed) sessionStorage.setItem('kt_active_agency_id', String(_seed));
       }
     } catch(e){}
   })();
@@ -215,7 +221,7 @@ setTimeout(hide,6000);})();
   <script src="/js/screen-sibling-discounts.js?v=20260706p2" defer></script>
   <script src="/js/screen-roles.js?v=20260706p2" defer></script>
   <script src="/js/screen-admin-children.js?v=20260706p2" defer></script>
-  <script src="/js/agency-switcher.js?v=20260708b" defer></script>
+  <script src="/js/agency-switcher.js?v=20260714r" defer></script>
   <script src="/js/screen-platform.js?v=20260709act" defer></script>
   <script src="/js/screen-digest-status.js?v=20260706p2" defer></script>
   <script src="/js/nav-additions-v15.js?v=20260706p2" defer></script>
