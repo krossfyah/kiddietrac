@@ -185,7 +185,6 @@
           { hash: 'billing-setup',      label: 'Billing',             icon: '💳' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
-          { hash: 'language',           label: 'Language',            icon: '🌐' },
 
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
@@ -262,7 +261,6 @@
 
 
           { hash: 'mfa',              label: 'Two-factor (MFA)', icon: '🔐' },
-          { hash: 'language',         label: 'Language',         icon: '🌐' },
           { hash: 'help',             label: 'Help & guides',    icon: '📖' },
         ]},
       ];
@@ -434,16 +432,138 @@
     }
     return { icon: '', label: base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }), section: '' };
   }
-  function buildAutoHero(info) {
+  // One-line description under each banner. Keyed by screen hash, so the wording lives
+  // in one place instead of being re-invented per screen (which is why some banners had
+  // a description and some had none).
+  var SCREEN_DESC = {
+    'dashboard': 'Today at a glance: enrolment, attendance, staffing and receivables.',
+    'platform-overview': 'Every agency on the platform, with usage and revenue.',
+    'platform-agencies': 'Create, configure and suspend agencies.',
+    'agencies': 'Create, configure and suspend agencies.',
+    'provider-map': 'Where your centres are, and who is on the floor.',
+
+    'care-log': 'Meals, naps, nappies and notes for each child, as the day happens.',
+    'chat': 'Conversations with families and staff.',
+    'messages': 'Conversations with families and staff.',
+    'announcements': 'Broadcast news to a centre, a room, or the whole agency.',
+    'lesson-plans': 'Weekly plans for each room.',
+    'lesson-plans-ai': 'HDLH-aware weekly plans, drafted in seconds.',
+    'observations': 'Learning stories and developmental observations for each child.',
+    'curriculum': 'Curriculum framework and coverage.',
+    'hdlh-gaps': 'Where your programme is light against How Does Learning Happen.',
+    'schedule': 'Who is working, and where.',
+    'staff-calendar': 'Shifts, leave and coverage across the team.',
+    'certifications': 'Staff qualifications and their expiry dates.',
+    'timesheets': 'Hours worked, ready for payroll.',
+    'time-clock': 'Clock in and out.',
+    'time-off': 'Leave requests awaiting a decision.',
+    'substitutes': 'Cover for absent staff.',
+    'payroll': 'Pay runs and hours.',
+    'background-checks': 'Police checks and vulnerable-sector screening.',
+
+    'waitlist': 'Families waiting for a space.',
+    'tours': 'Prospective families who booked a centre tour.',
+    'incidents': 'Injuries, behaviour and safeguarding reports.',
+    'medications': 'Medication authorised, given and outstanding.',
+    'immunizations': 'Immunisation records and what is missing.',
+    'immun-schedule': 'Children with an immunisation due.',
+    'allergy-alerts': 'Allergies and dietary requirements, by room.',
+    'room-ratios': 'Live child-to-educator ratios against licensing.',
+    'room-rotations': 'Which educator is in which room.',
+    'closures': 'Holidays and unplanned closures.',
+    'late-pickups': 'Late collections and the fees they attract.',
+    'field-trips': 'Outings, consent and headcounts.',
+    'trip-gps': 'Live location of a bus or a trip in progress.',
+    'bus-routes': 'Routes, stops and riders.',
+    'zones': 'Activity zones within each room.',
+    'menu': 'This week on the menu.',
+    'cacfp': 'CACFP meal counts and claims.',
+    'attendance-pattern': 'Attendance patterns and days booked.',
+    'photos': 'Photos and clips shared with families.',
+    'videos': 'Video clips shared with families.',
+    'photo-tagging': 'Faces suggested by AI, for you to confirm.',
+    'conferences': 'Parent-teacher conferences.',
+    'report-cards': 'Progress reports for each child.',
+    'wellness-digest': 'A weekly wellbeing summary for each child.',
+
+    'admin-users': 'Staff accounts, roles and access.',
+    'admin-centres': 'Centres and the rooms inside them.',
+    'admin-children': 'Every child enrolled, and their records.',
+    'admin-families': 'Families, guardians and contact details.',
+    'admin-roles': 'What each role is allowed to do.',
+    'admin-forms': 'Forms families and staff are asked to complete.',
+    'admin-branding': 'Your logo, colours and the name families see.',
+    'admin-features': 'Turn features on and off per agency.',
+    'admin-mrr': 'Recurring revenue across the platform.',
+    'invitation-codes': 'Codes that let a family or educator join.',
+    'edocuments': 'Documents on file, and what is still outstanding.',
+    'signed-docs': 'Agreements that have been signed.',
+    'doc-workflows': 'Who has to sign what, and in which order.',
+    'compliance': 'Licensing obligations and the evidence for them.',
+    'inspection': 'Walk the licensing checklist before an inspector does.',
+    'renewals': 'Licences and certificates coming up for renewal.',
+    'cwelcc': 'CWELCC subsidy funding and claims.',
+    'audit-logs': 'Every change made in the portal, and by whom.',
+    'security-alerts': 'Sign-in anomalies and security events.',
+    'data-retention': 'How long records are kept before deletion.',
+    'anomalies': 'Unusual activity worth a second look.',
+
+    'admin-billing': 'Invoices, payments and Stripe.',
+    'billing': 'Invoices, payments and balances.',
+    'billing-setup': 'Fees, schedules and automatic reminders.',
+    'billing-schedule': 'When invoices go out, and when payment is due.',
+    'bulk-invoices': 'Raise invoices for everyone in one run.',
+    'refunds': 'Money returned to families.',
+    'payment-plans': 'Split a large balance into instalments.',
+    'tuition-plans': 'The fee plans a family can be placed on.',
+    'tuition-increases': 'Plan and communicate a fee increase.',
+    'sibling-discounts': 'Discounts for second and subsequent children.',
+    'vacation-holds': 'Places held while a family is away.',
+    'expenses': 'Suppliers, purchase orders and bills.',
+    'quickbooks': 'Sync invoices and payments with QuickBooks.',
+    'forecast': 'Projected enrolment and revenue.',
+    'reports': 'Ready-made reports you can print or export.',
+    'retention': 'Which families stay, and which leave.',
+    'reenrollment': 'Families due to re-enrol for next term.',
+    'engagement': 'How engaged each family is with the app.',
+    'nps': 'What families think of you.',
+    'ai-churn': 'Families at risk of leaving.',
+    'ai-docs': 'Pull the details out of an uploaded document.',
+    'digest-status': 'Whether the daily AI summaries went out.',
+
+    'marketing-campaigns': 'Campaigns to fill your empty spaces.',
+    'drip-campaigns': 'Automated follow-up with prospective families.',
+    'marketing-site': 'Your public website.',
+    'sms': 'Send a one-off text to staff or families.',
+    'email-settings': 'The mailbox your agency sends from.',
+    'notifications': 'What the app tells people about, and how.',
+    'tickets': 'Operational issues, tracked to resolution.',
+    'social-settings': 'Google, Microsoft and Facebook sign-in.',
+    'mfa': 'Two-factor authentication for your team.',
+    'help': 'Guides for every part of KiddieTrac.',
+    'reports-canned': 'Ready-made reports you can print or export.'
+  };
+
+  function buildAutoHero(info, hash) {
     var b = document.createElement('div');
     b.className = 'kt-hero kt-hero-auto kt-banner-fx';
     var h1 = document.createElement('h1');
     h1.textContent = String(info.label || '');   // textContent keeps the "&" in "Help & guides"
+    b.appendChild(h1);
+
+    var key = String(hash || '').split('/')[0].split('?')[0];
+    var desc = SCREEN_DESC[key];
+    if (desc) {
+      var sub = document.createElement('div');
+      sub.className = 'kt-hero-sub';
+      sub.textContent = desc;
+      b.appendChild(sub);
+    }
+
     var art = document.createElement('div');
     art.className = 'kt-hero-emoji';
     art.setAttribute('aria-hidden', 'true');
     art.textContent = String(info.icon || '\u2728');
-    b.appendChild(h1);
     b.appendChild(art);
     return b;
   }
@@ -737,7 +857,7 @@
           // simply keeps its own banner.
           ensureTopbar(hash);   // capped — see below
           if (!bannerBudgetLeft(hash)) return;
-          if (!__hasHero()) { main.insertBefore(buildAutoHero(__info), heroAnchor(main)); bannerSpend(hash); }
+          if (!__hasHero()) { main.insertBefore(buildAutoHero(__info, hash), heroAnchor(main)); bannerSpend(hash); }
           try { if (normaliseBanners(main, hash)) bannerSpend(hash); } catch (e) {}
         };
         __ensure();

@@ -26,19 +26,11 @@
   // Locate the banner on the current screen: a known hero class, or a
   // gradient-backed block near the very top (custom inline banners).
   function findBanner(main) {
-    var known = main.querySelector('.kt-hero, .kt-page-hero, .page-header-v17');
-    if (known) return known;
-    var f = main.firstElementChild;
-    var cands = [f, f && f.firstElementChild, f && f.firstElementChild && f.firstElementChild.firstElementChild];
-    for (var i = 0; i < cands.length; i++) {
-      var el = cands[i];
-      if (!el || el.nodeType !== 1) continue;
-      try {
-        var bg = getComputedStyle(el).backgroundImage || '';
-        if (bg.indexOf('gradient') !== -1 && el.getBoundingClientRect().height > 60) return el;
-      } catch (e) {}
-    }
-    return null;
+    // ONLY a real banner. The old fallback guessed by sniffing the first few elements for
+    // a gradient background, which is how the SMS form's card ended up wearing banner
+    // artwork — a floating emoji sat on top of the message box. The shell now guarantees
+    // every screen has a .kt-hero, so there is nothing left to guess at.
+    return main.querySelector('.kt-hero, .kt-page-hero, .page-header-v17');
   }
 
   function normalize() {

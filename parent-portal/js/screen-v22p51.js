@@ -316,41 +316,101 @@
 
   // ============================ SMS ============================
   async function renderSms(main) {
-    main.innerHTML = `<div style="padding:24px;max-width:760px;margin:0 auto;">
-      <h2 style="margin:0 0 16px;color:#1F6080;">SMS broadcast</h2>
-      <p style="color:#6B7280;font-size:14px;">Send a one-off SMS to staff or families. Only recipients with sms_opt_in and a phone number on file will receive it.</p>
-      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Audience
-        <select id="sms-aud" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;">
-          <option value="role">By role</option><option value="centre">By centre</option><option value="agency">Whole agency</option>
-        </select></label>
-      <label id="sms-role-l" style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Role
-        <select id="sms-role" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;">
-          <option value="guardian">Parents</option><option value="educator">Educators</option><option value="centre_director">Directors</option></select></label>
-      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Message (max 300 chars)
-        <textarea id="sms-body" maxlength="300" rows="4" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;"></textarea></label>
-      <button id="sms-send" style="background:#1F6080;color:#fff;border:0;padding:10px 18px;border-radius:6px;margin-top:18px;cursor:pointer;">Send broadcast</button>
-      <div id="sms-msg" style="margin-top:14px;font-size:13px;"></div>
-      <h3 style="margin-top:32px;font-size:14px;color:#6B7280;text-transform:uppercase;">Recent</h3>
-      <div id="sms-recent"></div></div>`;
+    // The fields used to be stacked full-width labels of differing widths, which made
+    // the form look ragged. One card, one column of aligned rows: label left, control
+    // right, every control the same width.
+    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+      <div class="kt-card" style="max-width:720px;padding:20px;">
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:12px 14px;align-items:center;">
+          <label for="sms-aud" style="font-size:13px;font-weight:600;color:#334155;">Audience</label>
+          <select id="sms-aud" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;">
+            <option value="role">By role</option><option value="centre">By centre</option><option value="agency">Whole agency</option>
+          </select>
+
+          <label for="sms-role" id="sms-role-l" style="font-size:13px;font-weight:600;color:#334155;">Role</label>
+          <select id="sms-role" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;">
+            <option value="guardian">Parents</option><option value="educator">Educators</option><option value="centre_director">Directors</option>
+          </select>
+
+          <label for="sms-body" style="font-size:13px;font-weight:600;color:#334155;align-self:start;padding-top:8px;">Message</label>
+          <div>
+            <textarea id="sms-body" maxlength="300" rows="4" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;resize:vertical;font:inherit;"></textarea>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+              <span style="font-size:12px;color:#94A3B8;">Only recipients who opted in to SMS and have a phone number on file will receive it.</span>
+              <span id="sms-count" style="font-size:12px;color:#94A3B8;">0 / 300</span>
+            </div>
+          </div>
+
+          <div></div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button id="sms-send" class="kt-btn kt-btn-primary" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Send broadcast</button>
+            <span id="sms-msg" style="font-size:13px;"></span>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin:26px 0 10px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recent broadcasts</h3>
+      <div id="sms-recent"></div>
+    </div>`;
+
+    const body = document.getElementById('sms-body');
+    const counter = document.getElementById('sms-count');
+    body.addEventListener('input', () => { counter.textContent = `${body.value.length} / 300`; });
+
+    const aud = document.getElementById('sms-aud');
+    const roleRow = document.getElementById('sms-role-l');
+    const roleSel = document.getElementById('sms-role');
+    const syncRole = () => {
+      const show = aud.value === 'role';
+      roleRow.style.display = show ? '' : 'none';
+      roleSel.style.display = show ? '' : 'none';
+    };
+    aud.addEventListener('change', syncRole);
+    syncRole();
+
     document.getElementById('sms-send').onclick = async () => {
-      const aud = document.getElementById('sms-aud').value;
-      const payload = { audience: aud, body: document.getElementById('sms-body').value, category: 'broadcast' };
-      if (aud === 'role') payload.role = document.getElementById('sms-role').value;
+      const payload = { audience: aud.value, body: body.value, category: 'broadcast' };
+      if (aud.value === 'role') payload.role = roleSel.value;
       try {
         const r = await Api.post('/admin/sms/broadcast', payload);
-        document.getElementById('sms-msg').innerHTML = `<span style="color:#047857;">Sent: ${r.sent} · Skipped: ${r.skipped} · Total: ${r.total}</span>`;
+        document.getElementById('sms-msg').innerHTML = `<span style="color:#047857;">Sent ${r.sent} · skipped ${r.skipped} · total ${r.total}</span>`;
       } catch (e) { document.getElementById('sms-msg').innerHTML = '<span style="color:#B91C1C;">Send failed</span>'; }
       loadSmsRecent();
     };
     loadSmsRecent();
   }
+
+  // Recent broadcasts as a REAL table, so it picks up the same search, sort and record
+  // count as every other table on the site (kt-table-filter + kt-table-export attach to
+  // any #appMain table). It used to be a hand-rolled list of divs, which got none of it.
   async function loadSmsRecent() {
     const r = await Api.get('/admin/sms/messages').catch(() => ({ data: [] }));
     const host = document.getElementById('sms-recent');
-    if (!r.data || !r.data.length) { host.innerHTML = '<div style="color:#9CA3AF;padding:12px;font-size:13px;">No messages yet.</div>'; return; }
-    host.innerHTML = r.data.slice(0, 20).map(m => `<div style="padding:10px;border-bottom:1px solid #F3F4F6;font-size:13px;">
-      <div style="color:#6B7280;font-size:11px;">${fmtDate(m.created_at)} · ${m.to_phone} · <span style="color:${m.status === 'sent' ? '#047857' : m.status === 'failed' ? '#B91C1C' : '#D97706'};font-weight:600;">${m.status}</span></div>
-      <div style="margin-top:4px;">${escapeHtml((m.body || '').substring(0, 200))}</div></div>`).join('');
+    if (!host) return;
+    const rows = (r && r.data) || [];
+    if (!rows.length) {
+      host.innerHTML = '<div class="kt-card" style="color:#94A3B8;padding:40px;text-align:center;font-size:13px;">No broadcasts sent yet.</div>';
+      return;
+    }
+    const colour = (st) => st === 'sent' ? '#047857' : st === 'failed' ? '#B91C1C' : '#D97706';
+    host.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff;">
+      <thead style="background:#F8FAFC;">
+        <tr>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Sent</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">To</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Status</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(m => `<tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${fmtDate(m.created_at)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${escapeHtml(m.to_phone || '')}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;"><span style="color:${colour(m.status)};font-weight:600;">${escapeHtml(m.status || '')}</span></td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;">${escapeHtml((m.body || '').substring(0, 200))}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
   }
 
   // ============================ AI churn risk ============================

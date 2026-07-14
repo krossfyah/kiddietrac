@@ -106,7 +106,11 @@
   }
 
   function sweepTables() {
-    document.querySelectorAll('[data-kt-pretty] table').forEach(t => {
+    // EVERY table in the app, not only screens flagged data-kt-pretty. Certifications
+    // (and others) were never flagged, so they got no search, no sort and no live
+    // record count. attachFilter is guarded by a dataset flag, so this attaches once
+    // per table however often the sweep runs.
+    document.querySelectorAll('#appMain table').forEach(t => {
       // skip tables with only a "no data" empty-state row
       const tbody = t.querySelector('tbody');
       if (!tbody) return;
@@ -125,7 +129,7 @@
     sweepTimer = setTimeout(sweepTables, 350);
   }
   window.addEventListener('hashchange', scheduleSweep);
-  setInterval(sweepTables, 2000);
+  setInterval(sweepTables, 500);    // was 2000ms — the toolbar landed long after the table
   setTimeout(sweepTables, 700);
 
   // ============================ Better empty states ============================

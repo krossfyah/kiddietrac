@@ -90,12 +90,48 @@
   // toolbar and into the bottom bar's right slot — so it reads as the record
   // total at the bottom-right, not floating at the top.
   function relocateCount(table, barEl) {
+    var slot = barEl.querySelector('.kt-export-count');
+    if (!slot) return;
+
+    // Already holding the filter's live counter? Then we are done. This check has to come
+    // FIRST: once the counter has been moved into the slot it is no longer in the
+    // toolbar, so the lookup below finds nothing, concludes there is no filter, and adds
+    // a second count — which is why the bar read "10 / 1010 records".
+    if (slot.querySelector('.kt-table-filter-count')) {
+      var dupe = slot.querySelector('.kt-export-own-count');
+      if (dupe) dupe.parentNode.removeChild(dupe);
+      return;
+    }
+
     var sc = table.closest('.kt-tbl-scroll');
     var toolbar = sc ? sc.previousElementSibling : table.previousElementSibling;
-    if (!toolbar || !toolbar.classList || !toolbar.classList.contains('kt-table-filter')) return;
-    var cnt = toolbar.querySelector('.kt-table-filter-count');
-    var slot = barEl.querySelector('.kt-export-count');
-    if (cnt && slot && cnt.parentNode !== slot) slot.appendChild(cnt);
+    var cnt = (toolbar && toolbar.classList && toolbar.classList.contains('kt-table-filter'))
+      ? toolbar.querySelector('.kt-table-filter-count') : null;
+
+    if (cnt) {                                   // the filter owns a live "N / N" counter
+      // The filter attaches AFTER the first sweep, so our fallback count may already be
+      // sitting there — drop it, or the bar reads "20 records20 / 20".
+      var stale = slot.querySelector('.kt-export-own-count');
+      if (stale) stale.parentNode.removeChild(stale);
+      if (cnt.parentNode !== slot) slot.appendChild(cnt);
+      return;
+    }
+
+    // No filter on this table — count the rows ourselves so the bar still reports how
+    // many records are on screen (hidden rows, e.g. filtered out, are not counted).
+    var own = slot.querySelector('.kt-export-own-count');
+    if (!own) {
+      own = document.createElement('span');
+      own.className = 'kt-export-own-count';
+      slot.appendChild(own);
+    }
+    var rows = table.querySelectorAll('tbody tr');
+    var shown = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].offsetParent !== null || rows[i].style.display !== 'none') shown++;
+    }
+    var label = shown === 1 ? '1 record' : (shown + ' records');
+    if (own.textContent !== label) own.textContent = label;
   }
 
   // Report tables keep their own export footer (no auto-bar), but still move the
@@ -168,7 +204,7 @@
   }
 
   function sweep() {
-    document.querySelectorAll('#appMain table').forEach(addBar);
+    document.querySelectorAll('#appMain table').forEach(addBar);   // addBar refreshes the count on tables that already have a bar
     removeLegacyCsv();
   }
   // Let the shell run the sweep as part of a screen render. The 1.8s poll below meant

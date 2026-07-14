@@ -163,6 +163,59 @@
     return b;
   }
 
+  // Language picker. Replaces the old Language SCREEN — changing your language is a
+  // preference, not somewhere you navigate to. Posts to the same /locale endpoint the
+  // screen used, then reloads so the new strings take effect.
+  var LOCALES = [['en', 'English'], ['fr', 'Fran\u00e7ais'], ['es', 'Espa\u00f1ol']];
+  function languagePicker() {
+    var wrap = document.createElement('div');
+    wrap.className = 'kt-tb-lang';
+    wrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+    var sel = document.createElement('select');
+    sel.id = 'kt-tb-locale';
+    sel.setAttribute('aria-label', 'Language');
+    sel.title = 'Language';
+    sel.style.cssText = 'border:1px solid rgba(15,23,42,.12);border-radius:8px;background:#fff;'
+      + 'padding:4px 6px;font-size:12px;font-weight:600;color:#334155;cursor:pointer;max-width:120px;';
+
+    var current = 'en';
+    try { current = localStorage.getItem('kt_locale') || 'en'; } catch (e) {}
+    LOCALES.forEach(function (l) {
+      var o = document.createElement('option');
+      o.value = l[0]; o.textContent = '\ud83c\udf10 ' + l[1];
+      if (l[0] === current) o.selected = true;
+      sel.appendChild(o);
+    });
+
+    sel.addEventListener('change', function () {
+      var loc = sel.value;
+      try { localStorage.setItem('kt_locale', loc); } catch (e) {}
+      var t = store('kt_token');
+      fetch(API + '/locale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + t },
+        body: JSON.stringify({ locale: loc })
+      }).catch(function () {}).then(function () { window.location.reload(); });
+    });
+
+    wrap.appendChild(sel);
+
+    // Reflect what the server actually has on file.
+    var t = store('kt_token');
+    if (t) {
+      fetch(API + '/locale', { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.locale) return;
+          try { localStorage.setItem('kt_locale', d.locale); } catch (e) {}
+          var el = document.getElementById('kt-tb-locale');
+          if (el) el.value = d.locale;
+        }).catch(function () {});
+    }
+    return wrap;
+  }
+
   function ensure() {
     var host = document.getElementById('appMain');
     if (!host || !store('kt_token') || document.getElementById('kt-topbar')) return;
@@ -181,6 +234,7 @@
     var nameEl = left.querySelector('.kt-tb-name'); if (nameEl) nameEl.addEventListener('click', function (e) { e.preventDefault(); openProfile(); });
 
     var right = document.createElement('div'); right.className = 'kt-tb-right';
+    right.appendChild(languagePicker());
     right.appendChild(iconBtn('🏠', 'Home', openHome));
     right.appendChild(iconBtn('⚡', 'Quick add', openQuickAdd));
     right.appendChild(iconBtn('💬', 'Messages', function () { go('#chat'); }, 'kt-tb-msg-badge'));
