@@ -130,17 +130,34 @@
     }
   }
 
+  // Photo URLs come back either absolute (an external avatar service) or as a
+  // /storage/... path on the API host.
+  function ktAbsUrl(u) {
+    if (!u) return '';
+    if (/^https?:\/\//.test(u)) return u;
+    const base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+    return base.replace(/\/api\/v1\/?$/, '') + (u.charAt(0) === '/' ? u : '/' + u);
+  }
+
   function buildChildCard(child) {
     const card = Dom.el('div', {
       class: 'child-card' + (child.is_at_centre ? ' at-centre' : ''),
     });
 
-    // Header: avatar + name
+    // Header: avatar + name. The roster carries photo_url, but this only ever
+    // drew initials — so a child with a photo (Aria) still showed "AH".
+    const avatar = Dom.el('div', {
+      class: 'avatar',
+      style: { background: 'var(--kt-blue)', color: 'white', width: '40px', height: '40px', fontSize: '14px', flexShrink: 0 },
+    }, child.photo_url ? '' : (child.initials || (child.display_name || '?').substring(0, 2).toUpperCase()));
+    if (child.photo_url) {
+      const url = ktAbsUrl(child.photo_url);
+      avatar.style.backgroundImage = 'url(' + url + ')';
+      avatar.style.backgroundSize = 'cover';
+      avatar.style.backgroundPosition = 'center';
+    }
     card.appendChild(Dom.el('div', { class: 'child-card-header' },
-      Dom.el('div', {
-        class: 'avatar',
-        style: { background: 'var(--kt-blue)', color: 'white', width: '40px', height: '40px', fontSize: '14px', flexShrink: 0 },
-      }, child.initials || (child.display_name || '?').substring(0, 2).toUpperCase()),
+      avatar,
       Dom.el('div', {},
         Dom.el('div', { class: 'child-card-name' }, child.display_name),
         Dom.el('div', { class: 'child-card-age' }, child.age_human),

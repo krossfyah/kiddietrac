@@ -225,20 +225,32 @@
     } catch (e) {}
 
     wrap.appendChild(sc);
-
-    // sign out
-    var so = el('button', { type: 'button', style: 'display:block;margin:6px auto 0;background:none;border:none;color:#94A3B8;font:700 13px/1 inherit;cursor:pointer;padding:10px;' }, ['Sign out']);
-    so.addEventListener('click', function () {
-      try { if (window.KT && KT.biometric && KT.biometric.disable) KT.biometric.disable(); } catch (e) {}
-      try { if (KT.Auth && KT.Auth.clear) KT.Auth.clear(); } catch (e) {}
-      try { sessionStorage.clear(); localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user'); } catch (e) {}
-      location.href = '/index.html';
-    });
-    wrap.appendChild(so);
+    // Sign out deliberately does NOT live here any more — there is exactly one
+    // sign-out button, on the home screen, so it's always in the same place.
   }
 
   function field(parent, label, type, val) {
     parent.appendChild(el('div', { style: LABEL, style: LABEL + 'margin-top:12px;' }, [label]));
+    // Password fields get a reveal button — typing a password blind on a phone
+    // keyboard is how people end up locked out.
+    if (type === 'password') {
+      var wrapF = el('div', { style: 'position:relative;' });
+      var pi = el('input', { type: 'password', value: val || '', style: INPUT + 'padding-right:52px;' });
+      var eye = el('button', {
+        type: 'button', 'aria-label': 'Show password',
+        style: 'position:absolute;top:50%;right:6px;transform:translateY(-50%);background:none;border:none;font-size:17px;line-height:1;cursor:pointer;padding:8px;color:#64748B;',
+      }, ['👁']);
+      eye.addEventListener('click', function () {
+        var show = pi.type === 'password';
+        pi.type = show ? 'text' : 'password';
+        eye.textContent = show ? '🙈' : '👁';
+        eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        pi.focus();
+      });
+      wrapF.appendChild(pi); wrapF.appendChild(eye);
+      parent.appendChild(wrapF);
+      return pi;
+    }
     var i = el('input', { type: type, value: val || '', style: INPUT });
     parent.appendChild(i);
     return i;

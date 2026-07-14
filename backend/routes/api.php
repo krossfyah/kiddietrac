@@ -705,6 +705,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // NOTIFICATIONS — unread badge support
     Route::get('/notifications/unread-count', [NotificationUnreadController::class, 'unreadCount']);
     Route::post('/notifications/mark-read',   [NotificationUnreadController::class, 'markRead']);
+    // Inbox housekeeping — always scoped to the caller's own notifications.
+    Route::post('/notifications/delete',      [NotificationUnreadController::class, 'destroyMany']);
+    Route::delete('/notifications/{id}',      [NotificationUnreadController::class, 'destroy']);
 
     // ───────── v15 ROUTES — Reseller features ─────────
     // These routes are spliced INTO the auth:sanctum group by deploy.sh.

@@ -56,9 +56,17 @@
     var head = table.querySelector('thead tr');
     if (!head) return null;
     return [].map.call(head.children, function (th) {
-      // Strip the sort arrow some headers carry ("Date ▾").
-      return (th.textContent || '').replace(/[▾▴▲▼↑↓]/g, '').trim();
+      // Strip the sort arrows headers carry ("Date ▾", "Sent to ⇅") — they're
+      // controls for a table that no longer exists at this width.
+      return (th.textContent || '').replace(/[▾▴▲▼↑↓⇅⇵↕]/g, '').trim();
     });
+  }
+
+  // A cell holding nothing (or a placeholder dash) is a blank line in a card.
+  function isBlank(td) {
+    var t = (td.textContent || '').trim();
+    if (td.querySelector('img,button,a,svg,input')) return false;
+    return t === '' || t === '—' || t === '-' || t === '–';
   }
 
   function restack(table) {
@@ -66,18 +74,20 @@
     if (!labels || !labels.length) return;
     table.classList.add('kt-mcards');
     [].forEach.call(table.querySelectorAll('tbody tr'), function (tr) {
-      [].forEach.call(tr.children, function (td, i) {
-        if (td.hasAttribute('data-label')) return;      // already done
-        var label = labels[i] == null ? '' : labels[i];
-        td.setAttribute('data-label', label);
-        // An empty cell with an empty header is pure layout padding on desktop —
-        // as a card row it would render as a blank line, so hide it.
-        if (!label && !(td.textContent || '').trim() && !td.querySelector('img,button,a,svg')) {
-          td.classList.add('kt-mcard-empty');
-        }
+      if (tr.__ktCards) return;                        // already done
+      tr.__ktCards = true;
+      var cells = [].slice.call(tr.children);
+      cells.forEach(function (td, i) {
+        td.setAttribute('data-label', labels[i] == null ? '' : labels[i]);
+        if (isBlank(td)) td.classList.add('kt-mcard-empty');
       });
-      var first = tr.querySelector('td');
-      if (first) first.classList.add('kt-mcard-title');
+      // The card's title is the first cell with something IN it. Tables often
+      // lead with a checkbox/spacer column, and titling that gave every card a
+      // blank heading followed by a list of "LABEL: value" rows — which is
+      // exactly the table we were trying to get away from.
+      for (var i = 0; i < cells.length; i++) {
+        if (!isBlank(cells[i])) { cells[i].classList.add('kt-mcard-title'); break; }
+      }
     });
   }
 

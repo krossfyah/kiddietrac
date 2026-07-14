@@ -169,26 +169,90 @@
     var recent = Dom.el('div'); recentWrap.appendChild(recent);
     wrap.appendChild(recentWrap);
 
-    // Load child list — parent sees their kids, staff sees their centre's kids
-    Api.get('/parent/children').then(function (r) {
-      var kids = (r && r.children) || [];
+    // Load the child list for whoever is looking.
+    //
+    // This used to call /parent/children FIRST for everyone. That route is
+    // guardian-only, so for an educator it failed and the catch below wrote
+    // "Sign in failed" into the dropdown — the screen looked broken and no
+    // child could be picked, even one standing checked-in in the room. Its only
+    // fallback was /admin/children, which an educator can't call either.
+    //
+    // So: parents use /parent/children; staff use the rooms they actually work
+    // in (/provider/bootstrap + each room's roster — the same source the Today
+    // screen uses), which also tells us who is currently checked in. Admins keep
+    // the agency-wide list as a last resort.
+    function roleOf() {
+      try {
+        var va = sessionStorage.getItem('kt_view_as') || '';
+        if (va) return va;
+        var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+        return u.primary_role || '';
+      } catch (e) { return ''; }
+    }
+    function fillOptions(kids) {
       childSel.innerHTML = '';
       if (!kids.length) {
-        // Staff fallback — agency-wide children
-        return Api.get('/admin/children').then(function (r2) {
-          (r2.children || []).forEach(function (c) {
-            childSel.appendChild(Dom.el('option', { value: c.id }, (c.first_name + ' ' + c.last_name) + ' · ' + (c.centre_name || '')));
-          });
-          if (childSel.options.length) loadRecent();
-        }).catch(function () {
-          childSel.innerHTML = '<option value="">No children loaded</option>';
-        });
+        childSel.innerHTML = '<option value="">No children found</option>';
+        return;
       }
-      kids.forEach(function (c) { childSel.appendChild(Dom.el('option', { value: c.id }, c.first_name + ' ' + c.last_name)); });
+      // Children who are AT the centre come first and are marked — they're the
+      // ones you're logging a nappy/nap/meal for.
+      kids.sort(function (a, b) {
+        if (!!a.at_centre !== !!b.at_centre) return a.at_centre ? -1 : 1;
+        return String(a.name).localeCompare(String(b.name));
+      });
+      kids.forEach(function (c) {
+        childSel.appendChild(Dom.el('option', { value: c.id },
+          c.name + (c.at_centre ? ' · here now' : '') + (c.suffix ? ' · ' + c.suffix : '')));
+      });
       loadRecent();
-    }).catch(function () {
-      childSel.innerHTML = '<option value="">Sign in failed</option>';
-    });
+    }
+
+    function loadStaffChildren() {
+      return Api.get('/provider/bootstrap').then(function (boot) {
+        var rooms = (boot && boot.rooms) || [];
+        if (!rooms.length) return [];
+        return Promise.all(rooms.map(function (rm) {
+          return Api.get('/provider/rooms/' + rm.id + '/roster')
+            .then(function (d) {
+              return ((d && d.roster) || []).map(function (c) {
+                return {
+                  id: c.id,
+                  name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.display_name,
+                  at_centre: !!c.is_at_centre,
+                  suffix: rm.name,
+                };
+              });
+            })
+            .catch(function () { return []; });
+        })).then(function (lists) {
+          return lists.reduce(function (a, b) { return a.concat(b); }, []);
+        });
+      });
+    }
+
+    var role = roleOf();
+    if (role === 'guardian') {
+      Api.get('/parent/children')
+        .then(function (r) {
+          fillOptions(((r && r.children) || []).map(function (c) {
+            return { id: c.id, name: (c.first_name + ' ' + c.last_name).trim(), at_centre: !!c.is_at_centre };
+          }));
+        })
+        .catch(function () { childSel.innerHTML = '<option value="">Could not load your children</option>'; });
+    } else {
+      loadStaffChildren()
+        .then(function (kids) {
+          if (kids.length) { fillOptions(kids); return; }
+          // Admins/directors with no rooms of their own → agency-wide list.
+          return Api.get('/admin/children').then(function (r2) {
+            fillOptions(((r2 && r2.children) || []).map(function (c) {
+              return { id: c.id, name: (c.first_name + ' ' + c.last_name).trim(), suffix: c.centre_name || '' };
+            }));
+          });
+        })
+        .catch(function () { childSel.innerHTML = '<option value="">No children loaded</option>'; });
+    }
     childSel.addEventListener('change', loadRecent);
 
     function loadRecent() {

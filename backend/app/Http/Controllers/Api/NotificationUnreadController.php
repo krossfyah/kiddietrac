@@ -64,4 +64,51 @@ final class NotificationUnreadController extends Controller
 
         return response()->json(['marked_read' => $updated]);
     }
+
+    /**
+     * Delete notifications from the caller's own inbox.
+     *
+     * Body: {ids: [1,2,3]}  — delete those, or
+     *       {all: true}     — clear the whole inbox, or
+     *       {read: true}    — clear just the ones already read.
+     *
+     * Every query is scoped by user_id, so a caller can only ever delete their
+     * own rows even if they pass someone else's id.
+     */
+    public function destroyMany(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids'   => 'array',
+            'ids.*' => 'integer',
+            'all'   => 'boolean',
+            'read'  => 'boolean',
+        ]);
+
+        $userId = $request->user()->id;
+        $q = DB::table('notifications')->where('user_id', $userId);
+
+        if (!empty($data['all'])) {
+            // whole inbox
+        } elseif (!empty($data['read'])) {
+            $q->whereNotNull('read_at');
+        } elseif (!empty($data['ids'])) {
+            $q->whereIn('id', $data['ids']);
+        } else {
+            return response()->json(['message' => 'Nothing to delete.'], 422);
+        }
+
+        return response()->json(['deleted' => $q->delete()]);
+    }
+
+    /** Delete a single notification from the caller's own inbox. */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $deleted = DB::table('notifications')
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->delete();
+
+        if (!$deleted) return response()->json(['message' => 'Not found'], 404);
+        return response()->json(['deleted' => $deleted]);
+    }
 }

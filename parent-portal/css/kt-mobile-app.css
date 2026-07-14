@@ -279,6 +279,68 @@ body.kt-parentview [data-export] { display: none !important; }
    now hidden on the educator home entirely (that IS home — nothing to go back
    to), and any tile grid keeps clearance so it can never cover a tile. ── */
 @media (max-width: 600px) {
-  #appMain .kt-tile-grid:last-child,
-  #appMain #kt-edu-launcher { padding-bottom: 72px !important; }
+  /* Clearance ONLY where the back button is actually shown. It is hidden on the
+     home screens (home IS the destination), so padding there was just dead space
+     under the last tile. #appMain already reserves 62px for the bottom bar. */
+  #appMain .kt-tile-grid:last-child { padding-bottom: 0 !important; }
+  #appMain #kt-edu-launcher { padding-bottom: 0 !important; }
+}
+
+/* ── Chat compose bar (2026-07-13) ───────────────────────────────────────
+   The 📎 😊 🎤 buttons were 66px wide EACH (22px glyph + 12px/18px padding) and
+   sit before the input, so on a 412px screen the text box got 105px — you could
+   see about two words of what you were typing. Shrink the icons to 38px taps,
+   give the input everything that's left. ── */
+@media (max-width: 600px) {
+  #appMain .kt-thread-compose {
+    gap: 6px !important;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    align-items: center !important;
+  }
+  #appMain .kt-thread-compose .kt-attach-btn,
+  #appMain .kt-thread-compose .kt-emoji-btn,
+  #appMain .kt-thread-compose .kt-mic-btn {
+    flex: 0 0 auto !important;
+    width: 38px !important; height: 38px !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    font-size: 18px !important;
+    line-height: 1 !important;
+    border-radius: 10px !important;
+    display: inline-flex !important;
+    align-items: center !important; justify-content: center !important;
+  }
+  #appMain .kt-thread-compose .kt-compose-input {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    height: 42px !important;
+    font-size: 16px !important;          /* 16px = no iOS zoom-on-focus */
+    padding: 10px 14px !important;
+    border-radius: 21px !important;
+  }
+  #appMain .kt-thread-compose .kt-send-btn {
+    flex: 0 0 auto !important;
+    height: 38px !important;
+    padding: 0 14px !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+  }
+}
+
+/* ── Breadcrumbs: barely legible at 12px / 85%-white on the hero ── */
+@media (max-width: 600px) {
+  #appMain .crumbs {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #fff !important;
+    background: rgba(0, 0, 0, .22) !important;
+    border-radius: 999px !important;
+    padding: 5px 12px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .25) !important;
+  }
+  #appMain .crumbs a { color: #fff !important; text-decoration: underline !important; text-underline-offset: 2px; }
 }

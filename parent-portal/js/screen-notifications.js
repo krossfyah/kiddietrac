@@ -47,9 +47,80 @@
       filter.appendChild(Dom.el('option', { value: o[0] }, o[1]));
     });
     bar.appendChild(filter);
+    var btns = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;' });
+    var selectBtn = Dom.el('button', { style: 'background:white;color:#475569;border:1px solid #CBD5E1;padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;' }, 'Select');
     var markAll = Dom.el('button', { style: 'background:white;color:#1F6080;border:1px solid #1F6080;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;' }, 'Mark all read');
-    bar.appendChild(markAll);
+    btns.appendChild(selectBtn); btns.appendChild(markAll);
+    bar.appendChild(btns);
     wrap.appendChild(bar);
+
+    // ── Selection mode: tick rows, then delete them (or clear the lot) ──
+    var selecting = false;
+    var selected = {};      // id → true
+
+    var selBar = Dom.el('div', {
+      style: 'display:none;align-items:center;justify-content:space-between;gap:8px;background:#0F172A;color:#fff;'
+        + 'border-radius:12px;padding:9px 12px;margin-bottom:12px;position:sticky;top:4px;z-index:5;',
+    });
+    var selCount = Dom.el('div', { style: 'font-size:13px;font-weight:700;' }, '0 selected');
+    var selActions = Dom.el('div', { style: 'display:flex;gap:6px;' });
+    var selAll = Dom.el('button', { style: 'background:rgba(255,255,255,.14);color:#fff;border:none;padding:7px 11px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;' }, 'Select all');
+    var selDel = Dom.el('button', { style: 'background:#DC2626;color:#fff;border:none;padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:800;cursor:pointer;' }, 'Delete');
+    var selCancel = Dom.el('button', { style: 'background:transparent;color:rgba(255,255,255,.8);border:none;padding:7px 8px;font-size:12.5px;font-weight:700;cursor:pointer;' }, 'Cancel');
+    selActions.appendChild(selAll); selActions.appendChild(selDel); selActions.appendChild(selCancel);
+    selBar.appendChild(selCount); selBar.appendChild(selActions);
+    wrap.appendChild(selBar);
+
+    function visibleRows() {
+      var rows = cache;
+      if (filter.value === 'unread') rows = rows.filter(function (r) { return !r.read_at; });
+      if (filter.value === 'read') rows = rows.filter(function (r) { return r.read_at; });
+      return rows;
+    }
+    function selectedIds() { return Object.keys(selected).filter(function (k) { return selected[k]; }).map(Number); }
+    function paintSelBar() {
+      var n = selectedIds().length;
+      selBar.style.display = selecting ? 'flex' : 'none';
+      selCount.textContent = n + ' selected';
+      selDel.style.opacity = n ? '1' : '.5';
+      selDel.disabled = !n;
+      selAll.textContent = (n && n === visibleRows().length) ? 'Select none' : 'Select all';
+      selectBtn.textContent = selecting ? 'Done' : 'Select';
+    }
+    function setSelecting(on) {
+      selecting = on;
+      if (!on) selected = {};
+      paintSelBar(); paint();
+    }
+    selectBtn.addEventListener('click', function () { setSelecting(!selecting); });
+    selCancel.addEventListener('click', function () { setSelecting(false); });
+    selAll.addEventListener('click', function () {
+      var rows = visibleRows();
+      var allOn = selectedIds().length === rows.length;
+      selected = {};
+      if (!allOn) rows.forEach(function (r) { selected[r.id] = true; });
+      paintSelBar(); paint();
+    });
+    selDel.addEventListener('click', function () {
+      var ids = selectedIds();
+      if (!ids.length) return;
+      var go = function () {
+        selDel.disabled = true; selDel.textContent = 'Deleting…';
+        Api.post('/notifications/delete', { ids: ids })
+          .then(function () {
+            cache = cache.filter(function (r) { return ids.indexOf(r.id) === -1; });
+            setSelecting(false);
+            selDel.textContent = 'Delete';
+            if (KT.toast) KT.toast('🗑', 'Deleted', ids.length + ' notification' + (ids.length === 1 ? '' : 's') + ' removed.', '#0F172A');
+          })
+          .catch(function () {
+            selDel.disabled = false; selDel.textContent = 'Delete';
+            if (KT.toast) KT.toast('⚠️', 'Could not delete', 'Please try again.', '#B91C1C');
+          });
+      };
+      if (KT.confirm) KT.confirm('Delete ' + ids.length + ' notification' + (ids.length === 1 ? '' : 's') + '?', go);
+      else if (window.confirm('Delete ' + ids.length + ' notification' + (ids.length === 1 ? '' : 's') + '?')) go();
+    });
 
     var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
@@ -79,6 +150,17 @@
         row.appendChild(Dom.el('div', { style: 'width:8px;height:8px;border-radius:50%;background:#3B82F6;position:absolute;left:6px;top:22px;' }));
       }
 
+      if (selecting) {
+        var box = Dom.el('input', { type: 'checkbox', style: 'width:20px;height:20px;flex-shrink:0;margin-top:10px;accent-color:#159FB4;' });
+        box.checked = !!selected[n.id];
+        box.addEventListener('click', function (e) {
+          e.stopPropagation();
+          selected[n.id] = box.checked;
+          paintSelBar();
+        });
+        row.appendChild(box);
+      }
+
       row.appendChild(Dom.el('div', { style: 'font-size:22px;width:36px;flex-shrink:0;text-align:center;padding-top:2px;' }, icon));
 
       var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
@@ -89,7 +171,33 @@
       body.appendChild(meta);
       row.appendChild(body);
 
+      // Per-row delete — the common case is binning one notification, and making
+      // someone enter select-mode for that is a tax.
+      var del = Dom.el('button', {
+        type: 'button', 'aria-label': 'Delete notification',
+        style: 'background:none;border:none;color:#CBD5E1;font-size:16px;cursor:pointer;padding:6px 2px;flex-shrink:0;align-self:flex-start;',
+      }, '🗑');
+      del.addEventListener('mouseenter', function () { del.style.color = '#DC2626'; });
+      del.addEventListener('mouseleave', function () { del.style.color = '#CBD5E1'; });
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var prev = cache.slice();
+        cache = cache.filter(function (r) { return r.id !== n.id; });   // optimistic
+        paint();
+        Api.delete('/notifications/' + n.id).catch(function () {
+          cache = prev;                                                  // put it back
+          paint();
+          if (KT.toast) KT.toast('⚠️', 'Could not delete', 'Please try again.', '#B91C1C');
+        });
+      });
+      row.appendChild(del);
+
       row.addEventListener('click', function () {
+        if (selecting) {
+          selected[n.id] = !selected[n.id];
+          paintSelBar(); paint();
+          return;
+        }
         if (!n.read_at) {
           // Optimistic update
           n.read_at = new Date().toISOString();

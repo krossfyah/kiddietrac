@@ -391,8 +391,24 @@
     wrap.id = 'kt-edu-launcher';
     wrap.style.cssText = 'margin-top:18px;';
     wrap.innerHTML = '<div style="font-weight:800;font-size:15px;color:#0F172A;margin:0 2px 10px;">Everything else</div>'
-      + KT.roleTilesHtml('educator');
+      + KT.roleTilesHtml('educator')
+      // The ONE sign-out button, on the home screen — it used to be buried at the
+      // bottom of Settings, which is not where anyone looks for it.
+      + '<button id="kt-edu-signout" type="button" style="display:block;width:100%;max-width:280px;margin:16px auto 4px;'
+      + 'background:#fff;border:1.5px solid #E2E8F0;color:#B91C1C;border-radius:12px;padding:12px;'
+      + 'font-size:14px;font-weight:800;cursor:pointer;">Sign out</button>';
     main.appendChild(wrap);
+
+    var so = wrap.querySelector('#kt-edu-signout');
+    if (so) so.addEventListener('click', function () {
+      // Same teardown the parent launcher does: drop the biometric enrolment and
+      // purge the token from BOTH stores so nothing auto-resumes on a shared phone.
+      try { if (KT.biometric && KT.biometric.disable) KT.biometric.disable(); } catch (e) {}
+      try { if (KT.pin && KT.pin.remove) KT.pin.remove(); } catch (e) {}
+      try { if (KT.Auth && KT.Auth.clear) KT.Auth.clear(); } catch (e) {}
+      try { sessionStorage.clear(); localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user'); } catch (e) {}
+      location.href = '/index.html';
+    });
   }
 
   var pending = null;
