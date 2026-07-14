@@ -24,11 +24,23 @@ final class RoomController extends Controller
             return response()->json(['message' => 'No centre access'], 403);
         }
 
-        $rooms = DB::table('rooms')
+        // An educator sees only the rooms they are assigned to. Before this, every
+        // educator saw EVERY room in the centre — including children they have no
+        // business seeing. Assignments are made by an agency admin or director
+        // (educator_rooms). If none have been made yet, they fall back to the
+        // rooms of the centre they are assigned to, so the app is not empty on
+        // day one; directors and admins always see the whole centre.
+        $roomsQuery = DB::table('rooms')
             ->where('centre_id', $centre->id)
             ->where('active', true)
-            ->orderBy('age_min_months')
-            ->get();
+            ->orderBy('age_min_months');
+
+        $assignedRoomIds = $this->assignedRoomIds((int) $user->id);
+        if ($assignedRoomIds !== null) {
+            $roomsQuery->whereIn('id', $assignedRoomIds ?: [0]);
+        }
+
+        $rooms = $roomsQuery->get();
 
         return response()->json([
             'user' => [
@@ -58,6 +70,13 @@ final class RoomController extends Controller
         }
 
         if (! $this->authorizeCentreAccess($request->user(), (int) $room->centre_id)) {
+            abort(403);
+        }
+
+        // Centre access is not enough: an educator restricted to Room A must not
+        // be able to pull Room B's roster by asking for it directly.
+        $assignedRoomIds = $this->assignedRoomIds((int) $request->user()->id);
+        if ($assignedRoomIds !== null && ! in_array((int) $roomId, $assignedRoomIds, true)) {
             abort(403);
         }
 
@@ -250,5 +269,37 @@ final class RoomController extends Controller
             'time_display' => Carbon::parse($event->occurred_at)->format('g:i A'),
             'summary' => $summary,
         ];
+    }
+
+    /**
+     * The room ids an EDUCATOR is limited to.
+     *
+     * Returns null when the caller is not room-restricted (directors, agency and
+     * platform admins — and educators with no assignments yet, who fall back to
+     * their whole centre). Returns an array (possibly empty) when they are.
+     */
+    private function assignedRoomIds(int $userId): ?array
+    {
+        $roles = DB::table('role_assignments')
+            ->where('user_id', $userId)->where('active', true)
+            ->pluck('role')->all();
+
+        $privileged = array_intersect($roles, ['centre_director', 'agency_admin', 'platform_admin']);
+        if ($privileged) {
+            return null;   // sees the whole centre
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('educator_rooms')) {
+            return null;
+        }
+
+        $ids = DB::table('educator_rooms')
+            ->where('user_id', $userId)
+            ->pluck('room_id')
+            ->map(fn ($i) => (int) $i)
+            ->all();
+
+        // No assignments made yet → not restricted (centre scope still applies).
+        return $ids ?: null;
     }
 }

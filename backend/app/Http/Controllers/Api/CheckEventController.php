@@ -71,6 +71,13 @@ final class CheckEventController extends Controller
             'created_at' => now(),
         ]);
 
+        // Tell the parents — who signed the child out, and when. Wrapped so a
+        // failed notification can never undo a check-out that already happened.
+        try {
+            app(\App\Services\CheckEventNotifier::class)
+                ->notify((int) $data['child_id'], 'check_out', (int) $request->user()->id);
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'event_id' => $eventId,
             'child_id' => $data['child_id'],
@@ -156,6 +163,12 @@ final class CheckEventController extends Controller
             'notes' => $notes,
             'created_at' => now(),
         ]);
+
+        // Tell the parents — including WHO signed the child in. This helper backs
+        // both the single check-in and the batch, so hooking it here covers both.
+        try {
+            app(\App\Services\CheckEventNotifier::class)->notify((int) $childId, 'check_in', (int) $userId);
+        } catch (\Throwable $e) {}
 
         return [
             'event_id' => $eventId,

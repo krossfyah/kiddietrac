@@ -147,5 +147,7 @@
   }
 
   Shell.registerScreen('guardian:support', renderSupport);
+  // Educators need a way to report a problem too — it was parent-only.
+  Shell.registerScreen('educator:support', renderSupport);
   window.KT.renderSupport = renderSupport;
 })(window);

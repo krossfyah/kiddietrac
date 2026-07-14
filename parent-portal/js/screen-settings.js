@@ -207,6 +207,57 @@
 
       nd.appendChild(ntBtn); nd.appendChild(ntMsg);
       wrap.appendChild(nd);
+
+      // ── What you get told about, and how ──
+      // Sign-in/out alerts: email and in-app on by default, SMS off — every text
+      // costs the centre money, so nobody is opted into it silently.
+      try {
+        var pc2 = el('div', { style: CARD });
+        pc2.appendChild(el('div', { style: SECT }, ['Notify me about…']));
+        var prefsBody = el('div', {});
+        pc2.appendChild(prefsBody);
+        prefsBody.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px;padding:6px 0;' }, ['Loading…']));
+        wrap.appendChild(pc2);
+
+        Api.get('/me/notification-prefs').then(function (res) {
+          Dom.clear ? Dom.clear(prefsBody) : (prefsBody.innerHTML = '');
+          (res.preferences || []).forEach(function (p) {
+            var row = el('div', { style: 'padding:6px 0;' });
+            row.appendChild(el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, [p.label]));
+            row.appendChild(el('div', { style: 'font-size:12px;color:#94A3B8;margin-bottom:9px;' }, [p.hint]));
+
+            var chans = el('div', { style: 'display:flex;gap:7px;flex-wrap:wrap;' });
+            var state = { email: !!p.email, push: !!p.push, sms: !!p.sms };
+            [['email', '✉️ Email'], ['push', '🔔 In-app'], ['sms', '💬 Text']].forEach(function (c) {
+              var key = c[0];
+              var b = el('button', { type: 'button', style: 'border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;border:1.5px solid;' }, [c[1]]);
+              var paintChan = function () {
+                var on = state[key];
+                b.style.background = on ? '#159FB4' : '#fff';
+                b.style.color = on ? '#fff' : '#64748B';
+                b.style.borderColor = on ? '#159FB4' : '#E2E8F0';
+              };
+              b.addEventListener('click', function () {
+                state[key] = !state[key];
+                paintChan();
+                Api.put('/me/notification-prefs', {
+                  key: p.key, email: state.email, push: state.push, sms: state.sms,
+                }).catch(function () {
+                  state[key] = !state[key]; paintChan();     // put it back
+                  if (KT.toast) KT.toast('⚠️', 'Could not save', 'Please try again.', '#B91C1C');
+                });
+              });
+              paintChan();
+              chans.appendChild(b);
+            });
+            row.appendChild(chans);
+            prefsBody.appendChild(row);
+          });
+        }).catch(function () {
+          Dom.clear ? Dom.clear(prefsBody) : (prefsBody.innerHTML = '');
+          prefsBody.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px;' }, ['Could not load your notification settings.']));
+        });
+      } catch (e) {}
     } catch (e) {}
 
     // Diagnostics: if the native app captured a crash (e.g. biometrics), show it

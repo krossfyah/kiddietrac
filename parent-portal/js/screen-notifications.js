@@ -184,14 +184,21 @@
       del.addEventListener('mouseleave', function () { del.style.color = '#CBD5E1'; });
       del.addEventListener('click', function (e) {
         e.stopPropagation();
-        var prev = cache.slice();
-        cache = cache.filter(function (r) { return r.id !== n.id; });   // optimistic
-        paint();
-        Api.delete('/notifications/' + n.id).catch(function () {
-          cache = prev;                                                  // put it back
+        // Deleting is not undoable — ask first. A stray tap on a 16px bin icon
+        // shouldn't silently destroy something.
+        var go = function () {
+          var prev = cache.slice();
+          cache = cache.filter(function (r) { return r.id !== n.id; });   // optimistic
           paint();
-          if (KT.toast) KT.toast('⚠️', 'Could not delete', 'Please try again.', '#B91C1C');
-        });
+          Api.delete('/notifications/' + n.id).catch(function () {
+            cache = prev;                                                  // put it back
+            paint();
+            if (KT.toast) KT.toast('⚠️', 'Could not delete', 'Please try again.', '#B91C1C');
+          });
+        };
+        var msg = 'Delete this notification? This cannot be undone.';
+        if (KT.confirm) KT.confirm(msg, go);
+        else if (window.confirm(msg)) go();
       });
       row.appendChild(del);
 

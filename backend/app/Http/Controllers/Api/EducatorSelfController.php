@@ -134,11 +134,99 @@ class EducatorSelfController extends Controller
             ->select(['id', 'full_name', 'relationship', 'phone', 'photo_id_url', 'expires_at', 'notes'])
             ->get();
 
+        // The child's own record of everything logged about them — care moments
+        // AND every sign-in/sign-out, each with WHO recorded it and when. This is
+        // the compliance trail: "who had this child, and when" has to be
+        // answerable from the child's record, not reconstructed from three screens.
+        $tz = 'America/Toronto';
+        $agencyTz = DB::table('children as c')
+            ->leftJoin('families as f', 'f.id', '=', 'c.family_id')
+            ->leftJoin('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->leftJoin('agencies as a', 'a.id', '=', 'ce.agency_id')
+            ->where('c.id', $child)
+            ->value('a.timezone');
+        if ($agencyTz) $tz = $agencyTz;
+
+        $byName = "NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))),'')";
+
+        $checks = DB::table('check_events as e')
+            ->leftJoin('users as u', 'u.id', '=', 'e.by_user_id')
+            ->where('e.child_id', $child)
+            ->orderByDesc('e.occurred_at')
+            ->limit(120)
+            ->get([
+                'e.id', 'e.event_type', 'e.occurred_at', 'e.notes',
+                DB::raw("$byName as by_name"),
+            ])
+            ->map(fn ($e) => (object) [
+                'kind' => $e->event_type,          // check_in | check_out
+                'group' => 'attendance',
+                'detail' => null,
+                'note' => $e->notes,
+                'by' => $e->by_name,
+                'at' => \Carbon\Carbon::parse($e->occurred_at)->timezone($tz)->format('Y-m-d H:i:s'),
+            ]);
+
+        $careLogs = DB::table('daily_care_logs as l')
+            ->leftJoin('users as u', 'u.id', '=', 'l.recorded_by_id')
+            ->where('l.child_id', $child)
+            ->orderByDesc('l.occurred_at')
+            ->limit(120)
+            ->get([
+                'l.log_type', 'l.occurred_at', 'l.details', 'l.notes',
+                DB::raw("$byName as by_name"),
+            ])
+            ->map(fn ($l) => (object) [
+                'kind' => $l->log_type,
+                'group' => 'care',
+                'detail' => $l->details,
+                'note' => $l->notes,
+                'by' => $l->by_name,
+                'at' => \Carbon\Carbon::parse($l->occurred_at)->timezone($tz)->format('Y-m-d H:i:s'),
+            ]);
+
+        // The roster quick-log writes to daily_events, not daily_care_logs — read
+        // both or half the child's history is missing.
+        $eventLogs = DB::table('daily_events as d')
+            ->leftJoin('users as u', 'u.id', '=', 'd.recorded_by_id')
+            ->where('d.child_id', $child)
+            ->whereNull('d.deleted_at')
+            ->whereIn('d.event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood'])
+            ->orderByDesc('d.occurred_at')
+            ->limit(120)
+            ->get([
+                'd.event_type', 'd.occurred_at', 'd.payload', 'd.notes',
+                DB::raw("$byName as by_name"),
+            ])
+            ->map(function ($d) use ($tz) {
+                $detail = null;
+                $p = json_decode((string) $d->payload, true);
+                if (is_array($p)) {
+                    $vals = array_filter(array_map(fn ($v) => is_scalar($v) ? (string) $v : '', array_values($p)));
+                    $detail = $vals ? implode(', ', $vals) : null;
+                }
+                return (object) [
+                    'kind' => $d->event_type,
+                    'group' => 'care',
+                    'detail' => $detail,
+                    'note' => $d->notes,
+                    'by' => $d->by_name,
+                    'at' => \Carbon\Carbon::parse($d->occurred_at)->timezone($tz)->format('Y-m-d H:i:s'),
+                ];
+            });
+
+        $history = $checks->concat($careLogs)->concat($eventLogs)
+            ->sortByDesc('at')
+            ->values()
+            ->take(150);
+
         return response()->json([
             'child' => $row,
             'guardians' => $guardians,
             'emergency_contacts' => $emergency,
             'pickup_authorizations' => $pickup,
+            'history' => $history,
+            'timezone' => $tz,
         ]);
     }
 

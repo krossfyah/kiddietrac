@@ -327,6 +327,43 @@
     });
     html += '</div>';
 
+    // The child's own log history — every care moment AND every sign-in/out, with
+    // who recorded it. This is the compliance trail: "who had this child, and
+    // when" has to be answerable from the child's record.
+    var hist = d.history || [];
+    var ICONS = {
+      check_in: '✅', check_out: '👋', diaper: '🧷', bathroom: '🚽', nap: '😴',
+      meal: '🍽️', snack: '🍎', bottle: '🍼', sunscreen: '☀️', mood: '🙂',
+    };
+    var LABELS = { check_in: 'Signed in', check_out: 'Signed out' };
+    var fmtHist = function (at) {
+      if (KT.fmtDateTime) return KT.fmtDateTime(at);
+      return String(at || '').slice(0, 16);
+    };
+
+    html += '<div style="' + CARD + '"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">'
+      + 'Log history <span style="color:#94A3B8;font-weight:600;">· ' + hist.length + '</span></div>';
+    if (!hist.length) {
+      html += '<div style="color:#94A3B8;font-size:13px;">Nothing logged for this child yet.</div>';
+    }
+    hist.slice(0, 40).forEach(function (h, i) {
+      var isAttendance = h.group === 'attendance';
+      html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
+        + '<span style="font-size:16px;width:22px;text-align:center;">' + (ICONS[h.kind] || '•') + '</span>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:700;font-size:13.5px;color:' + (isAttendance ? '#0E7C90' : '#0F172A') + ';">'
+        + esc(LABELS[h.kind] || (h.kind.charAt(0).toUpperCase() + h.kind.slice(1)))
+        + (h.detail ? ' <span style="font-weight:400;color:#475569;">· ' + esc(h.detail) + '</span>' : '') + '</div>'
+        + (h.note ? '<div style="font-size:12px;color:#64748B;margin-top:1px;">' + esc(h.note) + '</div>' : '')
+        + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + esc(fmtHist(h.at))
+        + (h.by ? ' · by ' + esc(h.by) : '') + '</div>'
+        + '</div></div>';
+    });
+    if (hist.length > 40) {
+      html += '<div style="font-size:11.5px;color:#94A3B8;padding-top:8px;">Showing the 40 most recent of ' + hist.length + '.</div>';
+    }
+    html += '</div>';
+
     var pk = d.pickup_authorizations || [];
     html += '<div style="' + CARD + 'margin-bottom:40px;"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">Authorised for pickup</div>';
     if (!pk.length) html += '<div style="color:#94A3B8;font-size:13px;">Only the guardians listed above.</div>';

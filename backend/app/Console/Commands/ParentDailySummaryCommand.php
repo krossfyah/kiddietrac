@@ -118,11 +118,17 @@ class ParentDailySummaryCommand extends Command
         $ymd = $date->format('Y-m-d');
 
         // Sign in / out
-        $events = DB::table('check_events')
-            ->where('child_id', $child->id)
-            ->whereBetween('occurred_at', [$start, $end])
-            ->orderBy('occurred_at')
-            ->get(['event_type', 'occurred_at', 'notes']);
+        // WHO signed the child in and out matters — for the parent's peace of mind
+        // and for the centre's compliance record.
+        $events = DB::table('check_events as e')
+            ->leftJoin('users as u', 'u.id', '=', 'e.by_user_id')
+            ->where('e.child_id', $child->id)
+            ->whereBetween('e.occurred_at', [$start, $end])
+            ->orderBy('e.occurred_at')
+            ->get([
+                'e.event_type', 'e.occurred_at', 'e.notes',
+                DB::raw("NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))),'') as by_name"),
+            ]);
         $checkIn = $events->firstWhere('event_type', 'check_in');
         $checkOut = $events->last(fn ($e) => $e->event_type === 'check_out');
 
@@ -233,6 +239,13 @@ class ParentDailySummaryCommand extends Command
                 ->value('body');
         }
 
+        // Last resort: write the summary ourselves from the same facts. The AI is
+        // better, but it costs money and it can be down — and a parent should never
+        // get an email with an empty space where their child's day should be.
+        if (!$digest) {
+            $digest = $this->writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, $tz);
+        }
+
         return [
             'date' => $date,
             'check_in' => $checkIn,
@@ -244,6 +257,104 @@ class ParentDailySummaryCommand extends Command
             'digest' => $digest,
             'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $digest),
         ];
+    }
+
+    /**
+     * A written summary of the day, composed from the day's own facts.
+     *
+     * This is the fallback when the AI is unavailable. It is not an LLM — it
+     * reads the logs and writes plain, specific sentences about what actually
+     * happened: what they ate, how they slept, what the photos show, how the day
+     * ran. It never claims anything the data doesn't say.
+     */
+    private function writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, string $tz): string
+    {
+        $name = $child->preferred_name ?: $child->first_name;
+        $t = fn ($ts) => Carbon::parse($ts)->timezone($tz)->format('g:i A');
+
+        $of = fn (string $type) => $logs->filter(fn ($l) => $l->type === $type)->values();
+        $detailsOf = fn ($rows) => $rows->pluck('detail')->filter()->map(fn ($d) => mb_strtolower((string) $d))->all();
+
+        $meals = $of('meal')->concat($of('snack'));
+        $naps = $of('nap');
+        $bottles = $of('bottle');
+        $nappies = $of('diaper')->concat($of('bathroom'));
+        $moods = $of('mood');
+
+        // ── Opening: how the day ran ──
+        $para1 = [];
+        if ($checkIn) {
+            $para1[] = "{$name} arrived at " . $t($checkIn->occurred_at)
+                . ($checkOut ? ' and went home at ' . $t($checkOut->occurred_at) . '.' : ' and is still with us.');
+        } else {
+            $para1[] = "Here is how {$name}'s day went.";
+        }
+        if ($moods->count()) {
+            $m = $detailsOf($moods);
+            if ($m) {
+                $para1[] = count($m) === 1
+                    ? "She seemed " . $m[0] . " today."
+                    : "Her mood moved through " . $this->list($m) . " across the day.";
+            }
+        }
+
+        // ── Middle: eating and sleeping — what parents actually ask about ──
+        $para2 = [];
+        if ($meals->count()) {
+            $d = $detailsOf($meals);
+            $para2[] = $d
+                ? "At mealtimes she " . $this->list(array_unique($d)) . " (" . $meals->count() . ' '
+                    . ($meals->count() === 1 ? 'sitting' : 'sittings') . ")."
+                : "She ate with the group " . $meals->count() . " times.";
+            $notes = $meals->pluck('note')->filter()->all();
+            if ($notes) $para2[] = (string) $notes[0] . '.';
+        }
+        if ($bottles->count()) {
+            $d = $detailsOf($bottles);
+            $para2[] = $bottles->count() === 1
+                ? "She had a bottle" . ($d ? " and " . $d[0] : '') . "."
+                : "She had " . $bottles->count() . " bottles" . ($d ? " (" . $this->list(array_unique($d)) . ")" : '') . ".";
+        }
+        if ($naps->count()) {
+            $d = $detailsOf($naps);
+            $para2[] = $naps->count() === 1
+                ? "She napped at " . $t($naps[0]->at) . ($d ? " and " . $d[0] : '') . "."
+                : "She had " . $naps->count() . " naps" . ($d ? " (" . $this->list(array_unique($d)) . ")" : '') . ".";
+            $notes = $naps->pluck('note')->filter()->all();
+            if ($notes) $para2[] = (string) $notes[0] . '.';
+        } else {
+            $para2[] = "She didn't settle for a nap today.";
+        }
+        if ($nappies->count()) {
+            $para2[] = "We changed her " . $nappies->count() . ' '
+                . ($nappies->count() === 1 ? 'time' : 'times') . '.';
+        }
+
+        // ── Close: photos, messages, and a friendly line ──
+        $para3 = [];
+        $captions = $photos->pluck('caption')->filter()->values()->all();
+        if ($captions) {
+            $para3[] = "There are photos below — " . mb_strtolower(rtrim((string) $captions[0], '.'))
+                . (count($captions) > 1 ? ", and more from the rest of the day." : ".");
+        } elseif ($photos->count()) {
+            $para3[] = "There " . ($photos->count() === 1 ? 'is a photo' : 'are ' . $photos->count() . ' photos') . " below.";
+        }
+        if ($messages->count()) {
+            $para3[] = "Thank you for chatting with us today.";
+        }
+        $para3[] = "See you tomorrow!";
+
+        return implode(' ', $para1) . "\n\n" . implode(' ', $para2) . "\n\n" . implode(' ', $para3);
+    }
+
+    /** "a, b and c" — an Oxford-comma-free list that reads like a person wrote it. */
+    private function list(array $items): string
+    {
+        $items = array_values(array_filter($items));
+        if (!$items) return '';
+        if (count($items) === 1) return (string) $items[0];
+        $last = array_pop($items);
+        return implode(', ', $items) . ' and ' . $last;
     }
 
     private function guardians(int $familyId): array
@@ -292,12 +403,15 @@ class ParentDailySummaryCommand extends Command
         $body = '<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Here is how <strong>' . $name . '</strong>\'s day went at '
             . e($child->centre_name) . '.</p>';
 
-        // Sign in / out
+        // Sign in / out — with WHO did it, which is the part parents actually want
+        // and the part a compliance audit asks for.
         $in = $day['check_in'] ? $t($day['check_in']->occurred_at) : 'Not signed in';
         $out = $day['check_out'] ? $t($day['check_out']->occurred_at) : 'Still at the centre';
+        $inBy = $day['check_in']->by_name ?? null;
+        $outBy = $day['check_out']->by_name ?? null;
         $body .= EmailTemplate::statRow(
-            EmailTemplate::statTile('Signed in', $in, '', '#16A34A'),
-            EmailTemplate::statTile('Signed out', $out, '', '#1F6080')
+            EmailTemplate::statTile('Signed in', $in, $inBy ? 'by ' . $inBy : '', '#16A34A'),
+            EmailTemplate::statTile('Signed out', $out, $outBy ? 'by ' . $outBy : '', '#1F6080')
         );
 
         // The AI story

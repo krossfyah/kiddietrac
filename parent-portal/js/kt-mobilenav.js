@@ -186,7 +186,9 @@
       // way to reach the same places — and it was the only thing on the bar that
       // didn't navigate.
       nav.appendChild(btn('🏠', 'Home', function () { go('#dashboard'); }, null, 'dashboard'));
-      nav.appendChild(btn('💬', 'Messages', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
+      // Daily log is the thing an educator reaches for most times in a day —
+      // it belongs on the bar, not two taps deep in the launcher.
+      nav.appendChild(btn('📝', 'Daily log', function () { go('#care-log'); }, null, 'care-log'));
       if (isEducatorView()) {
         // The educator's check-in QR, as a raised centre button — the same
         // affordance parents get for scanning. A 🔳 glyph floating in the corner
@@ -195,6 +197,7 @@
         qrBtn.classList.add('scan');
         nav.appendChild(qrBtn);
       }
+      nav.appendChild(btn('💬', 'Messages', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
       // Alerts folded INTO the Inbox: an announcement already lands in the inbox
       // as a notification, so a separate Alerts tab showed the same thing twice.
       // (Composing an alert lives on the Home launcher, under Alerts.)

@@ -86,6 +86,7 @@
         { hash: 'time-off',      icon: '🌴', label: 'Time off' },
         { hash: 'announcements', icon: '📢', label: 'News' },
         { hash: 'notifications', icon: '🔔', label: 'Inbox' },
+        { hash: 'support',       icon: '🛟', label: 'Support' },
         { hash: 'settings',      icon: '⚙️', label: 'Settings' },
         { hash: 'help',          icon: '📖', label: 'Help' },
       ],

@@ -108,6 +108,12 @@ final class CheckinScanController extends Controller
                 'created_at' => now(),
             ]);
 
+            // The QR scan is a check-in/out like any other — the other guardians
+            // on the family should hear about it too.
+            try {
+                app(\App\Services\CheckEventNotifier::class)->notify((int) $c->id, $newType, (int) $user->id);
+            } catch (\Throwable $e) {}
+
             $results[] = [
                 'child_id' => $c->id,
                 'name' => $c->preferred_name ?: $c->first_name,

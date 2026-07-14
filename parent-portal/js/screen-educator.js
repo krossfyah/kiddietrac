@@ -305,17 +305,34 @@
   }
 
   // ─── Actions ─────────────────────────────────────────────────
-  async function doCheckIn(child) {
-    try {
-      await Api.post('/provider/check-in', {
-        child_id: child.id,
-        room_id: currentRoomId,
-      });
-      Dom.toast(`${child.display_name} checked in ✓`, 'success');
-      await renderRoster(Dom.$('#educatorRoster'));
-    } catch (e) {
-      Dom.toast(e.message || 'Could not check in', 'error');
-    }
+  // Signing a child in tells their parents and starts an attendance record that
+  // gets audited — it deserves the same "are you sure" as signing them out. It's
+  // also the mistake that's most annoying to undo when you tap the wrong card.
+  function doCheckIn(child) {
+    Modal.confirm({
+      title: `Check ${child.display_name} in?`,
+      message: `${child.display_name} will be marked as here, and their parents will be told.`,
+      confirmLabel: 'Yes, check in',
+      onConfirm: async () => {
+        try {
+          await Api.post('/provider/check-in', {
+            child_id: child.id,
+            room_id: currentRoomId,
+          });
+          Dom.toast(`${child.display_name} checked in ✓`, 'success');
+          bustRoster();
+          await renderRoster(Dom.$('#educatorRoster'));
+        } catch (e) {
+          Dom.toast(e.message || 'Could not check in', 'error');
+        }
+      },
+    });
+  }
+
+  // The roster is cached (so screens don't blank and spin on every navigation) —
+  // after a check-in or check-out that cache is a lie, so drop it.
+  function bustRoster() {
+    if (currentRoomId != null) delete rosterCache[currentRoomId];
   }
 
   function confirmCheckOut(child) {
@@ -329,6 +346,7 @@
           room_id: currentRoomId,
         });
         Dom.toast(`${child.display_name} checked out ✓`, 'success');
+        bustRoster();
         await renderRoster(Dom.$('#educatorRoster'));
       },
     });
