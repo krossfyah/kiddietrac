@@ -5,6 +5,109 @@
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
+
+  // ── Human-readable action labels ─────────────────────────────────────
+  // The log holds two kinds of action. Named events ("email.sent", "login") and
+  // raw HTTP strings written by the write-auditing middleware
+  // ("post:api/v1/notifications/mark-read", sometimes with a " [fail]" suffix).
+  // Neither is something you should have to decode while auditing an incident.
+  var ACTION_LABELS = {
+    'login': 'Signed in',
+    'login_failed': 'Failed sign-in',
+    'logout': 'Signed out',
+    'email.sent': 'Email sent',
+    'email.failed': 'Email failed',
+    'chat.email_notified': 'Missed-message email sent',
+    'message.sent': 'Message sent',
+    'message.edited': 'Message edited',
+    'message.deleted': 'Message deleted',
+    'message.nudge': 'Nudge sent',
+    'announcement.sent': 'Announcement sent',
+    'digest.daily_sent': 'Daily digest sent',
+    'digest.weekly_sent': 'Weekly digest sent',
+    'campaign.email_sent': 'Campaign email sent',
+    'password_set_via_invite': 'Password set from invite',
+    'password_reset_requested': 'Password reset requested',
+    'agency.invite_resent': 'Invite re-sent',
+    'lesson_plan.saved': 'Lesson plan saved',
+    'centre.deleted': 'Centre deleted',
+  };
+
+  // Known endpoints, said plainly. Anything not listed still gets a sensible
+  // fallback below rather than being dumped raw on screen.
+  var PATH_LABELS = [
+    [/notifications\/mark-read/, 'Marked notifications read'],
+    [/notifications\/delete/, 'Deleted notifications'],
+    [/push\/subscribe/, 'Enabled push notifications'],
+    [/push\/device/, 'Registered a device for push'],
+    [/push\/test-fcm/, 'Sent a test push'],
+    [/auth\/logout/, 'Signed out'],
+    [/auth\/agreement\/sign/, 'Signed the Terms & NDA'],
+    [/auth\/agreement\/decline/, 'DECLINED the Terms & NDA'],
+    [/auth\/mfa\/setup/, 'Set up two-factor'],
+    [/integration\/sync/, 'Integration sync'],
+    [/provider\/chats\/\d+\/send/, 'Replied to a family'],
+    [/provider\/chats\/start/, 'Started a conversation'],
+    [/parent\/messages\/nudge/, 'Parent nudged the centre'],
+    [/parent\/messages/, 'Parent sent a message'],
+    [/provider\/announcements/, 'Sent an announcement'],
+    [/provider\/observations\/structure/, 'Structured an observation with AI'],
+    [/provider\/observations\/save/, 'Saved an observation'],
+    [/provider\/observations/, 'Recorded an observation'],
+    [/provider\/check-in-batch/, 'Signed children in (batch)'],
+    [/provider\/check-in/, 'Signed a child in'],
+    [/provider\/check-out/, 'Signed a child out'],
+    [/parent\/checkin\/scan/, 'Parent scanned the check-in QR'],
+    [/parent\/absences/, 'Parent reported an absence'],
+    [/staff\/punch/, 'Clocked in / out'],
+    [/attendance\/pattern/, 'Updated an attendance pattern'],
+    [/billing\/setup-intent/, 'Started card setup'],
+    [/admin\/email-settings/, 'Changed email settings'],
+    [/care\/logs/, 'Logged a care moment'],
+    [/photos\/upload/, 'Shared a photo or video'],
+    [/invoices\/generate/, 'Generated invoices'],
+  ];
+
+  var VERBS = { post: 'Created', patch: 'Updated', put: 'Updated', delete: 'Deleted', get: 'Viewed' };
+
+  function actionLabel(raw) {
+    var a = String(raw || '').trim();
+    if (!a) return '—';
+
+    var failed = / \[fail\]$/i.test(a);
+    a = a.replace(/ \[fail\]$/i, '');
+
+    var label = ACTION_LABELS[a];
+
+    if (!label) {
+      var m = a.match(/^([a-z]+):(.*)$/i);
+      if (m) {
+        var verb = m[1].toLowerCase();
+        var path = m[2].replace(/^api\/v1\//, '');
+
+        for (var i = 0; i < PATH_LABELS.length; i++) {
+          if (PATH_LABELS[i][0].test(path)) { label = PATH_LABELS[i][1]; break; }
+        }
+        if (!label) {
+          // Fallback: "Updated admin / users / 12" reads far better than
+          // "patch:api/v1/admin/users/12".
+          var pretty = path.split('/')
+            .filter(function (p) { return p && !/^\d+$/.test(p); })
+            .join(' ')
+            .replace(/[-_]/g, ' ');
+          label = (VERBS[verb] || verb.toUpperCase()) + ' ' + pretty;
+          label = label.charAt(0).toUpperCase() + label.slice(1);
+        }
+      } else {
+        // A named event we don't have a label for: "care.log_added" → "Care log added"
+        label = a.replace(/[._-]/g, ' ');
+        label = label.charAt(0).toUpperCase() + label.slice(1);
+      }
+    }
+
+    return label + (failed ? ' — failed' : '');
+  }
+
   if (!window.KT) return;
   var KT = window.KT;
   var Api = KT.Api;
@@ -94,6 +197,8 @@
       Dom.clear(toolbar);
 
       // Action dropdown
+      // The filter lists the same clean labels — a dropdown of
+      // "post:api/v1/notifications/mark-read" is not a filter anyone can use.
       toolbar.appendChild(filterSelect('Action', state.filters.action, ['', ''].concat(state.actions.map(function (a) { return a; })), function (v) {
         state.filters.action = v; state.offset = 0; reload();
       }));
@@ -210,7 +315,13 @@
       var actCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;max-width:360px;' });
       var actLine = Dom.el('div', {});
       actLine.appendChild(Dom.el('span', { style: 'font-size:16px;margin-right:6px;' }, iconFor(l.action)));
-      actLine.appendChild(Dom.el('span', { style: 'font-weight:600;color:#1F6080;' }, l.action_label || l.action));
+      // Show the clean label, and keep the raw action in the tooltip for anyone
+      // who needs the exact event name (support, an auditor, a bug report).
+      var lbl = Dom.el('span', {
+        style: 'font-weight:600;color:' + (/\[fail\]/.test(l.action || '') ? '#B91C1C' : '#1F6080') + ';',
+        title: l.action || '',
+      }, actionLabel(l.action_label || l.action));
+      actLine.appendChild(lbl);
       actCell.appendChild(actLine);
       if (l.summary) actCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;margin-top:3px;word-break:break-word;' }, l.summary));
       row.appendChild(actCell);
@@ -288,7 +399,11 @@
     wrap.appendChild(Dom.el('label', { style: lblStyle() }, label));
     var sel = Dom.el('select', { style: inputStyle() });
     options.forEach(function (o) {
-      var opt = Dom.el('option', { value: o }, o || 'All');
+      // The value stays raw (that's what the API filters on); only the text is
+      // humanised — a dropdown of "post:api/v1/notifications/mark-read" is not a
+      // filter anyone can actually use.
+      var text = o ? (label === 'Action' ? actionLabel(o) : o) : 'All';
+      var opt = Dom.el('option', { value: o }, text);
       if (o === value) opt.selected = true;
       sel.appendChild(opt);
     });

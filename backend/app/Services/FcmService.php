@@ -145,6 +145,14 @@ class FcmService
      */
     public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false): array
     {
+        // Do-not-contact: a user at a suppressed (live) agency gets NOTHING while we
+        // are testing. The email kill-switch didn't cover push, which is how 16
+        // real iLearn parents received a phone notification on 2026-07-14.
+        if (\App\Support\Suppression::isUser($userId)) {
+            \App\Support\Suppression::note('push', $userId, $title);
+            return ['sent' => 0, 'failed' => 0, 'suppressed' => true];
+        }
+
         $tokens = DB::table('device_tokens')->where('user_id', $userId)
             ->whereIn('platform', ['android', 'ios'])->pluck('token')->all();
 

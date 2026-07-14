@@ -59,6 +59,12 @@ class CheckinReminderCommand extends Command
         $sent = 0;
 
         foreach ($children as $child) {
+            // Never nag a LIVE agency's parents while we are testing. This command
+            // reached 39 real iLearn families before this guard existed.
+            if (\App\Support\Suppression::isAgency((int) $child->agency_id)) {
+                continue;
+            }
+
             $tz = $child->tz ?: 'America/Toronto';
             $today = Carbon::now($tz);
             $start = $today->copy()->startOfDay()->utc();

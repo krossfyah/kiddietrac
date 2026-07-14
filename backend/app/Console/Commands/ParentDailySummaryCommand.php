@@ -65,6 +65,11 @@ class ParentDailySummaryCommand extends Command
 
         $sent = 0;
         foreach ($children as $child) {
+            // A LIVE agency gets no summary while we are testing.
+            if (\App\Support\Suppression::isAgency((int) $child->agency_id)) {
+                continue;
+            }
+
             $tz = $child->agency_tz ?: 'America/Toronto';
             $date = $this->option('date')
                 ? Carbon::parse((string) $this->option('date'), $tz)

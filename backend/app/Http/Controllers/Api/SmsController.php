@@ -84,6 +84,12 @@ final class SmsController extends Controller
 
     public function sendOne(int $agencyId, int $userId, string $phone, string $body, string $category): bool
     {
+        // Do-not-contact: never text a parent at a live agency while we are testing.
+        if (\App\Support\Suppression::isUser($userId)) {
+            \App\Support\Suppression::note('sms', $userId, $category);
+            return false;
+        }
+
         $rowId = DB::table('sms_messages')->insertGetId([
             'agency_id'  => $agencyId,
             'to_user_id' => $userId,
