@@ -70,6 +70,10 @@
   }
   // A cell with no text AND nothing worth showing is a blank line in a card.
   function isBlank(td) {
+    // A cell holding nothing but a chevron is a desktop "click me" affordance —
+    // on a phone the whole card is tappable, so it's just a stray line.
+    var t = (td.textContent || '').trim();
+    if (/^[→›»⟩>]$/.test(t)) return true;
     if (hasText(td)) return false;
     return !td.querySelector('img,button,a,svg,input');
   }
@@ -90,8 +94,20 @@
       // with a checkbox/spacer column, and titling that gave every card an empty
       // heading followed by a list of "LABEL: value" rows — exactly the table we
       // were trying to get away from.
+      var TITLE_LABELS = /child|name|title|announcement|subject|from|staff|user|family/i;
+      var titled = false;
       for (var i = 0; i < cells.length; i++) {
-        if (hasText(cells[i])) { cells[i].classList.add('kt-mcard-title'); break; }
+        var lbl = cells[i].getAttribute('data-label') || '';
+        if (TITLE_LABELS.test(lbl) && hasText(cells[i])) {
+          cells[i].classList.add('kt-mcard-title');
+          titled = true;
+          break;
+        }
+      }
+      if (!titled) {
+        for (var j = 0; j < cells.length; j++) {
+          if (hasText(cells[j])) { cells[j].classList.add('kt-mcard-title'); break; }
+        }
       }
     });
   }

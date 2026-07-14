@@ -104,7 +104,22 @@
   }
 
   /* ─── List view ─────────────────────────────────────────────── */
+  // A notification can deep-link straight to a thread: #chat?c=8. Without this,
+  // tapping "new message from Anthony" dropped you on the conversation LIST and
+  // you had to find the thread again — which is the one thing the tap was for.
+  function deepLinkedConversationId() {
+    var m = (window.location.hash || '').match(/[?&]c=(\d+)/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
   async function renderList(container) {
+    var deepId = deepLinkedConversationId();
+    if (deepId) {
+      // Strip the parameter so a later re-render doesn't re-open it on top.
+      try { history.replaceState(null, '', location.pathname + location.search + '#chat'); } catch (e) {}
+      return openThread(deepId, container);   // openThread(cid, container)
+    }
+
     container.innerHTML = '<div class="kt-chat-loading" style="text-align:center;padding:32px;color:#6B7280;">Loading conversations…</div>';
     try {
       const data = await api('GET', endpointBase());

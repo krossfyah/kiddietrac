@@ -20,7 +20,7 @@
         'border-top:1px solid #E5E7EB;box-shadow:0 -4px 16px -8px rgba(15,23,42,.2);',
         'padding:5px 4px calc(env(safe-area-inset-bottom,0px) + 5px);justify-content:space-around;}',
         '#kt-mobilenav button{position:relative;flex:1;background:transparent;border:none;display:flex;flex-direction:column;',
-        'align-items:center;gap:2px;padding:8px 2px 6px;cursor:pointer;color:#64748B;font:600 10.5px/1.2 inherit;min-height:52px;}',
+        'align-items:center;gap:2px;padding:8px 2px 6px;cursor:pointer;color:#64748B;font-weight:600;font-size:10.5px;line-height:1.2;min-height:52px;}',
         '#kt-mobilenav button .ic{font-size:21px;line-height:1;transition:transform .12s ease;}',
         '#kt-mobilenav button:active{color:#1F6080;}',
         '#kt-mobilenav button.on{color:#0E7C90;font-weight:800;}',
@@ -33,7 +33,14 @@
         '#kt-mobilenav button.scan.on::before{display:none;}',
         // Keep the parent profile name clear of the floating settings gear.
         '#navUser{padding-right:56px !important;box-sizing:border-box !important;}',
-        '#kt-mobilenav button .badge{position:absolute;top:-2px;left:50%;margin-left:5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#EF4444;color:#fff;font:800 10px/16px inherit;text-align:center;box-shadow:0 0 0 2px #fff;}',
+        // The `font` shorthand needs a real family — `font:800 10px/16px inherit` is
+        // INVALID, so the browser threw the whole declaration away and the badge
+        // inherited the emoji's 21px size, which clipped the digit inside a 16px
+        // pill. Longhand, so each property stands on its own.
+        '#kt-mobilenav button .badge{position:absolute;top:-3px;left:50%;margin-left:5px;min-width:17px;height:17px;'
+          + 'padding:0 4px;box-sizing:border-box;border-radius:9px;background:#EF4444;color:#fff;'
+          + 'font-family:system-ui,-apple-system,sans-serif;font-weight:800;font-size:10.5px;line-height:17px;'
+          + 'text-align:center;white-space:nowrap;box-shadow:0 0 0 2px #fff;}',
         // clear the bottom bar, nothing more — and never force a full-screen
         // min-height, which padded short sections with dead white space.
         // 62px was the flat-bar height. The bar is taller now (the raised

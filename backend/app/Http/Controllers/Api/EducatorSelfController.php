@@ -89,7 +89,7 @@ class EducatorSelfController extends Controller
             ->where('c.id', $child)
             ->whereNull('c.deleted_at')
             ->select([
-                'c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.pronouns',
+                'c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.pronouns', 'c.gender',
                 'c.date_of_birth', 'c.photo_url', 'c.allergies', 'c.medical_notes',
                 'c.dietary_restrictions', 'c.dietary_notes', 'c.health_alerts',
                 'c.cultural_notes', 'c.preferred_lang', 'c.doctor_name', 'c.doctor_phone',

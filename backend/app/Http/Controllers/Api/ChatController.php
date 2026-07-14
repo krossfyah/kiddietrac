@@ -470,7 +470,7 @@ final class ChatController extends Controller
                     try {
                         $fcm = app(\App\Services\FcmService::class);
                         foreach ($recipients as $rid) {
-                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true);
+                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true);   // context added to the inbox row below
                         }
                     } catch (\Throwable $fe) {
                         \Illuminate\Support\Facades\Log::warning('FCM push from chat failed', ['error' => $fe->getMessage()]);
@@ -480,13 +480,33 @@ final class ChatController extends Controller
                     // so the in-portal inbox shows the message even after the
                     // OS push notification has disappeared. Same payload shape
                     // as web push so the inbox renderer can lean on data.url.
+                    // Context for the recipient: who sent it, about which child, at
+                    // which centre. A parent seeing only "New message from Sarah"
+                    // has to open it to find out which of their children it is about.
+                    $ctxChild = null;
+                    $ctxCentre = null;
+                    try {
+                        $ctx = DB::table('conversations as cv')
+                            ->leftJoin('children as ch', 'ch.id', '=', 'cv.child_id')
+                            ->leftJoin('centres as ce', 'ce.id', '=', 'cv.centre_id')
+                            ->where('cv.id', $conversationId)
+                            ->first(['ch.first_name as child_name', 'ce.name as centre_name']);
+                        $ctxChild = $ctx->child_name ?? null;
+                        $ctxCentre = $ctx->centre_name ?? null;
+                    } catch (\Throwable $ce) {
+                    }
+                    $ctxSuffix = trim(
+                        ($ctxChild ? ' · ' . $ctxChild : '')
+                        . ($ctxCentre ? ' · ' . $ctxCentre : '')
+                    );
+
                     $nowTs = $now;
                     $rows = [];
                     foreach ($recipients as $rid) {
                         $rows[] = [
                             'user_id' => $rid,
                             'type' => 'chat',
-                            'title' => 'New message from ' . $senderName,
+                            'title' => '💬 ' . $senderName . $ctxSuffix,
                             'body' => $preview,
                             'data' => json_encode([
                                 'url' => '/dashboard.html#chat',

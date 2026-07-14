@@ -22,6 +22,18 @@
   var TEAL = '#159FB4';
   var CARD = 'background:#fff;border-radius:16px;box-shadow:0 1px 6px rgba(15,23,42,.06);padding:16px;margin-bottom:14px;';
 
+
+  // Male / Female on the record — staff need it (nappy changes, toileting,
+  // and it's on every regulator's enrolment form), and it was simply missing.
+  function genderLabel(g) {
+    if (!g) return '';
+    var k = String(g).toLowerCase();
+    if (k === 'm' || k === 'male') return 'Male';
+    if (k === 'f' || k === 'female') return 'Female';
+    if (k === 'x' || k === 'other' || k === 'nonbinary' || k === 'non_binary') return 'Other';
+    return g.charAt(0).toUpperCase() + g.slice(1);
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
@@ -274,7 +286,9 @@
     html += '<div style="' + CARD + 'display:flex;align-items:center;gap:13px;">'
       + KT.avatar(name, { size: 56, photoUrl: c.photo_url ? absUrl(c.photo_url) : '' })
       + '<div><div style="font-weight:800;font-size:17px;color:#0F172A;">' + esc(name) + '</div>'
-      + '<div style="font-size:12.5px;color:#64748B;">' + esc([c.age_human, c.room_name, c.pronouns].filter(Boolean).join(' · ') || '—') + '</div></div></div>';
+      + '<div style="font-size:12.5px;color:#64748B;">'
+      + esc([c.age_human, genderLabel(c.gender), c.room_name, c.pronouns].filter(Boolean).join(' · ') || '—')
+      + '</div></div></div>';
 
     // Safety first — this is the reason an educator opens a record mid-room.
     var alerts = [

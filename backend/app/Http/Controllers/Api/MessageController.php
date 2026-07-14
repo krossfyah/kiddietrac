@@ -219,12 +219,21 @@ final class MessageController extends Controller
             if ((int) $sid === (int) $user->id) continue;
             DB::table('notifications')->insert([
                 'user_id' => $sid, 'type' => 'message',
-                'title' => 'New message from a parent',
+                // Name the parent AND the child: "New message from a parent" tells
+                // an educator with thirty families nothing they can act on.
+                'title' => '💬 ' . trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''))
+                    . ' · ' . ($child->first_name ?? 'a child'),
                 'body' => $preview,
                 'data' => json_encode(['link' => '#chat', 'conversation_id' => $convoId]),
                 'created_at' => now(),
             ]);
-            try { app(\App\Services\FcmService::class)->sendToUser((int) $sid, 'New message from a parent 💬', $preview, '#chat', true); } catch (\Throwable $e) {}
+            try {
+                app(\App\Services\FcmService::class)->sendToUser(
+                    (int) $sid,
+                    '💬 ' . trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) . ' · ' . ($child->first_name ?? 'a child'),
+                    $preview, '#chat', true
+                );
+            } catch (\Throwable $e) {}
         }
 
         $this->audit($request, 'message.sent', $convoId, ['message_id' => $msgId, 'child_id' => $child->id, 'has_attachment' => !empty($attachments)]);
@@ -289,7 +298,7 @@ final class MessageController extends Controller
             if ((int) $sid === (int) $user->id) continue;
             DB::table('notifications')->insert([
                 'user_id' => $sid, 'type' => 'nudge',
-                'title' => '👋 Nudge from ' . $parentName,
+                'title' => '👋 Nudge from ' . $parentName . ' · ' . $childName,
                 'body' => $body,
                 'data' => json_encode(['link' => '#chat', 'conversation_id' => $convoId]),
                 'created_at' => now(),

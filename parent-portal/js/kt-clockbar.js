@@ -83,7 +83,12 @@
     if (!openPunch) { location.hash = '#time-clock'; return; }
 
     var e = elapsed(openPunch.punched_in_at);
-    var msg = "Clock out now? You've been clocked in for " + e.text + '. This ends your shift for today.';
+    var msg = {
+      title: 'Clock out now?',
+      message: "You've been clocked in for " + e.text + '. This ends your shift for today.',
+      confirmLabel: 'Yes, clock out',
+      tone: 'default',
+    };
 
     var go = function () {
       var t = tok();
@@ -104,9 +109,23 @@
         });
     };
 
-    if (KT.confirm) KT.confirm(msg, go);
-    else if (window.confirm(msg)) go();
+    ktConfirmThen(msg, go);
   }
+
+  // KT.confirm returns a PROMISE — it does not take a callback. Passing one meant
+  // the action never ran: the confirm box appeared, you pressed Yes, and nothing
+  // happened. This wraps both shapes safely.
+  function ktConfirmThen(message, onYes) {
+    try {
+      if (window.KT && KT.confirm) {
+        var r = KT.confirm(message);
+        if (r && typeof r.then === 'function') { r.then(function (ok) { if (ok) onYes(); }); return; }
+        return;   // a non-promise KT.confirm would already have handled it
+      }
+    } catch (e) {}
+    if (window.confirm(message)) onYes();
+  }
+
 
   // The strip lives at the top of the screen content, under the header.
   function mount(el) {
@@ -117,8 +136,17 @@
     }
   }
 
+  function currentHash() { return (location.hash || '').replace('#', '').split('?')[0]; }
+  function onHome() {
+    var h = currentHash();
+    return h === '' || h === 'dashboard' || h === 'home';
+  }
+
   function paint() {
-    if (!isStaff() || !tok() || window.innerWidth > 600) {
+    // Home screen only. A clock strip pinned to the top of every section (chat,
+    // observations, a child's record) is clutter — the educator checks the clock
+    // when they arrive and when they leave, and home is where they land.
+    if (!isStaff() || !tok() || window.innerWidth > 600 || !onHome()) {
       var old = document.getElementById('kt-clockpill');
       if (old) old.remove();
       return;

@@ -5,6 +5,21 @@
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
+
+  // KT.confirm returns a PROMISE — it does not take a callback. Passing one meant
+  // the action never ran: the confirm box appeared, you pressed Yes, and nothing
+  // happened. This wraps both shapes safely.
+  function ktConfirmThen(message, onYes) {
+    try {
+      if (window.KT && KT.confirm) {
+        var r = KT.confirm(message);
+        if (r && typeof r.then === 'function') { r.then(function (ok) { if (ok) onYes(); }); return; }
+        return;   // a non-promise KT.confirm would already have handled it
+      }
+    } catch (e) {}
+    if (window.confirm(message)) onYes();
+  }
+
   if (!window.KT) return;
   var KT = window.KT;
   var Api = KT.Api;
@@ -121,8 +136,7 @@
             if (KT.toast) KT.toast('⚠️', 'Could not delete', 'Please try again.', '#B91C1C');
           });
       };
-      if (KT.confirm) KT.confirm('Delete ' + ids.length + ' notification' + (ids.length === 1 ? '' : 's') + '?', go);
-      else if (window.confirm('Delete ' + ids.length + ' notification' + (ids.length === 1 ? '' : 's') + '?')) go();
+      ktConfirmThen('Delete ' + ids.length + ' notification' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.', go);
     });
 
     var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
@@ -196,9 +210,7 @@
             if (KT.toast) KT.toast('⚠️', 'Could not delete', 'Please try again.', '#B91C1C');
           });
         };
-        var msg = 'Delete this notification? This cannot be undone.';
-        if (KT.confirm) KT.confirm(msg, go);
-        else if (window.confirm(msg)) go();
+        ktConfirmThen('Delete this notification? This cannot be undone.', go);
       });
       row.appendChild(del);
 
@@ -215,10 +227,24 @@
           Api.patch('/notifications/' + n.id + '/read', {})
             .catch(function () { n.read_at = null; paint(); });
         }
-        // Deep-link: try data.url if present
+        // Tapping a notification takes you to the thing it is about.
+        //
+        // Notifications carry their destination as `url` (older) or `link`
+        // (newer) — this only read `url`, so every notification written since
+        // then did nothing at all when tapped. A chat notification also carries
+        // conversation_id, so we can open the actual thread rather than dumping
+        // the user on the message list to find it themselves.
         try {
           var d = typeof n.data === 'string' ? JSON.parse(n.data) : (n.data || {});
-          if (d && d.url) { window.location.hash = d.url.replace(/^\/?#?/, '#'); }
+          var dest = (d && (d.link || d.url)) || '';
+          if (d && d.conversation_id && /chat|message/i.test(dest + ' ' + (n.type || ''))) {
+            dest = '#chat?c=' + d.conversation_id;
+          }
+          if (dest) {
+            // Accept '/dashboard.html#chat', '#chat', or 'chat'.
+            var hash = String(dest).replace(/^.*#/, '');
+            window.location.hash = '#' + hash.replace(/^#/, '');
+          }
         } catch (e) {}
       });
 

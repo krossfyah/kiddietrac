@@ -4,6 +4,21 @@
 (function (window) {
   'use strict';
 
+  // KT.confirm returns a PROMISE — it does not take a callback. Passing one meant
+  // the action never ran: the confirm box appeared, you pressed Yes, and nothing
+  // happened. This wraps both shapes safely.
+  function ktConfirmThen(message, onYes) {
+    try {
+      if (window.KT && KT.confirm) {
+        var r = KT.confirm(message);
+        if (r && typeof r.then === 'function') { r.then(function (ok) { if (ok) onYes(); }); return; }
+        return;   // a non-promise KT.confirm would already have handled it
+      }
+    } catch (e) {}
+    if (window.confirm(message)) onYes();
+  }
+
+
   function token() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
   function apiBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
   function getUser() { try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
@@ -215,8 +230,7 @@
           if (window.KT && KT.toast) KT.toast('⚠️', 'Could not delete', e.message || 'Try again.', '#B91C1C');
         }
       };
-      if (window.KT && KT.confirm) KT.confirm(msg, go);
-      else if (window.confirm(msg)) go();
+      ktConfirmThen(msg, go);
     }
 
     paint();

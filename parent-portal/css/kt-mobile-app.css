@@ -467,3 +467,74 @@ body.kt-parentview [data-export] { display: none !important; }
   #appMain .educator-roster .empty-large > div:nth-child(2) { font-size: 15px !important; margin-top: 6px !important; }
   #appMain .educator-roster .empty-large p { font-size: 13px !important; margin-top: 4px !important; }
 }
+
+/* ── Page banners: one size, everywhere (2026-07-14) ─────────────────────
+   Most sections use .kt-hero, which the mobile rules already collapse to a slim
+   ~36px title bar. Observations (and a few others) use .page-header-v17, which
+   was NOT being collapsed the same way — 160px of banner, four times the height
+   of every other section, which is why it looked out of place. Same treatment. ── */
+@media (max-width: 600px) {
+  #appMain .page-header-v17,
+  #appMain .kt-banner-fx {
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 9px 14px !important;
+    margin-bottom: 8px !important;
+    border-radius: 12px !important;
+  }
+  #appMain .page-header-v17 h1,
+  #appMain .page-header-v17 h2 { font-size: 16px !important; margin: 0 !important; line-height: 1.15 !important; }
+  #appMain .page-header-v17 p,
+  #appMain .page-header-v17 .kt-hero-sub { font-size: 11.5px !important; margin: 1px 0 0 !important; line-height: 1.35 !important; }
+  /* Decorative art/illustration inside a banner is pure height on a phone. */
+  #appMain .page-header-v17 svg,
+  #appMain .page-header-v17 img,
+  #appMain .page-header-v17 .kt-hero-emoji,
+  #appMain .page-header-v17 [class*="illustration"] { display: none !important; }
+  /* The breadcrumb sits above it — don't let the two stack into a tower. */
+  #appMain .page-header-v17 + * { margin-top: 8px !important; }
+}
+
+/* The .page-header-v17 banner is tall because of what's INSIDE it, not the box:
+   a 30px breadcrumb chip, the title, a subtitle, and a 45px full-width button —
+   161px against every other section's 36px. Shrink the parts. */
+@media (max-width: 600px) {
+  #appMain .page-header-v17 { padding: 8px 12px !important; }
+  #appMain .page-header-v17 .crumbs {
+    font-size: 11px !important;
+    padding: 3px 9px !important;
+    margin-bottom: 4px !important;
+  }
+  #appMain .page-header-v17 .sub {
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+    display: -webkit-box !important;      /* one line; the screen explains itself */
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden !important;
+  }
+  #appMain .page-header-v17 .actions { margin-top: 7px !important; }
+  #appMain .page-header-v17 .actions button,
+  #appMain .page-header-v17 .actions a {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 14px !important;
+    font-size: 12.5px !important;
+    border-radius: 9px !important;
+  }
+}
+
+/* Final pass: bring .page-header-v17 in line with the ~36px .kt-hero used
+   everywhere else, and stop table-cards from running to 340px. */
+@media (max-width: 600px) {
+  /* The subtitle is a desktop nicety — the screen title already says what this is. */
+  #appMain .page-header-v17 .sub { display: none !important; }
+  #appMain .page-header-v17 .crumbs { display: none !important; }   /* the ← Back button covers this */
+  #appMain .page-header-v17 { padding: 7px 12px !important; }
+
+  /* Card rows: tighter lines, so a 6-field record isn't a 340px card. */
+  #appMain table.kt-mcards tr { padding: 11px 13px !important; margin-bottom: 8px !important; }
+  #appMain table.kt-mcards td { padding: 3px 0 !important; font-size: 13px !important; line-height: 1.35 !important; }
+  #appMain table.kt-mcards td::before { font-size: 9.5px !important; margin-bottom: 1px !important; }
+  #appMain table.kt-mcards td.kt-mcard-title { font-size: 15px !important; padding: 0 0 4px !important; }
+}
