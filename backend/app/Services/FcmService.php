@@ -100,6 +100,27 @@ class FcmService
                     'token' => $t,
                     'data' => $strData + ['title' => $title, 'body' => $body, 'kt_urgent' => '1'],
                     'android' => ['priority' => 'high'],
+                    // iOS has no FLAG_INSISTENT and will NOT display a data-only push
+                    // at all (it is a silent background wake, and throttled). So an
+                    // iPhone must be sent a real APNs alert. The closest thing to the
+                    // Android "won't let you ignore it" behaviour is a time-sensitive
+                    // interruption level, which breaks through Focus/Do Not Disturb.
+                    // A repeating sound is only possible with Apple's Critical Alerts
+                    // entitlement (request-only) — see IOS-BUILD-RUNBOOK.md.
+                    'apns' => [
+                        'headers' => [
+                            'apns-priority' => '10',
+                            'apns-push-type' => 'alert',
+                        ],
+                        'payload' => [
+                            'aps' => [
+                                'alert' => ['title' => $title, 'body' => $body],
+                                'sound' => 'kt_notify.wav',
+                                'interruption-level' => 'time-sensitive',
+                                'badge' => 1,
+                            ],
+                        ],
+                    ],
                 ]];
             } else {
                 $payload = ['message' => [
@@ -111,6 +132,20 @@ class FcmService
                         // kt_alerts is created NATIVELY in MainActivity (HIGH importance +
                         // loud custom sound), so it is guaranteed to exist on the new APK.
                         'notification' => ['channel_id' => 'kt_alerts', 'sound' => 'kt_notify', 'default_vibrate_timings' => true],
+                    ],
+                    // Calm alerts for parents (invoices, photos): normal priority, the
+                    // custom chime, no Focus override.
+                    'apns' => [
+                        'headers' => [
+                            'apns-priority' => '10',
+                            'apns-push-type' => 'alert',
+                        ],
+                        'payload' => [
+                            'aps' => [
+                                'sound' => 'kt_notify.wav',
+                                'badge' => 1,
+                            ],
+                        ],
                     ],
                 ]];
             }

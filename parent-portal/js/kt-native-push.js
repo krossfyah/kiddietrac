@@ -12,6 +12,15 @@
   if (window.__ktNativePush) return; window.__ktNativePush = true;
 
   function apiBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
+  // 'ios' | 'android' | 'web'. The device token is only meaningful together with
+  // the platform it came from — APNs and FCM tokens are not interchangeable.
+  function platform() {
+    try {
+      if (window.Capacitor && Capacitor.getPlatform) return Capacitor.getPlatform();
+    } catch (e) {}
+    return 'android';
+  }
+
   function token() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
 
   async function init() {
@@ -21,7 +30,7 @@
     if (!PN) return; // plugin not in this build yet — no-op
 
     try {
-      if (PN.createChannel) {
+      if (platform() === 'android' && PN.createChannel) {
         // v2 channel carries the custom KiddieTrac chime (res/raw/kt_notify.wav).
         // A channel's sound is fixed once created, so the custom tone needs a NEW
         // channel id — FcmService sends to 'kt_default_v2'. To swap the sound later,
@@ -47,7 +56,7 @@
         fetch(apiBase() + '/push/device', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + tok },
-          body: JSON.stringify({ platform: 'android', token: t.value }),
+          body: JSON.stringify({ platform: platform(), token: t.value }),
         }).catch(function () {});
       });
 
