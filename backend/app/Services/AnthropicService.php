@@ -27,9 +27,29 @@ final class AnthropicService
         private readonly int $timeoutSeconds = 30,
     ) {}
 
+    /**
+     * The key lives at services.anthropic.KEY (see config/services.php).
+     * This class was reading services.anthropic.API_KEY, which does not exist —
+     * so isConfigured() was always false and every feature routed through this
+     * service (Help answers, event summaries) silently did nothing. Read the real
+     * key, keeping the old path as a fallback in case someone sets it.
+     */
+    private function key(): ?string
+    {
+        return $this->apiKey
+            ?: config('services.anthropic.key')
+            ?: config('services.anthropic.api_key');
+    }
+
+    /** The model configured for this deployment, not a hard-coded default. */
+    private function modelName(): string
+    {
+        return config('services.anthropic.model') ?: $this->model;
+    }
+
     public function isConfigured(): bool
     {
-        return !empty($this->apiKey ?? config('services.anthropic.api_key'));
+        return !empty($this->key());
     }
 
     /**
@@ -37,7 +57,7 @@ final class AnthropicService
      */
     public function generateDailyDigest(array $context): string
     {
-        $apiKey = $this->apiKey ?? config('services.anthropic.api_key');
+        $apiKey = $this->key();
         if (!$apiKey) {
             throw new RuntimeException('ANTHROPIC_API_KEY not configured.');
         }
@@ -51,7 +71,7 @@ final class AnthropicService
                 'content-type' => 'application/json',
             ])
             ->post(self::API_URL, [
-                'model' => $this->model,
+                'model' => $this->modelName(),
                 'max_tokens' => $this->maxTokens,
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
@@ -125,6 +145,85 @@ WRITE THE DIGEST FOLLOWING THESE RULES:
 8. End with one sentence that gives the parent a starting point for conversation with their child
 
 OUTPUT ONLY THE DIGEST TEXT. No headers, no preamble, no "Dear parent". Just the digest.
+PROMPT;
+    }
+
+    /**
+     * The warm, written-to-the-parent message at the top of the end-of-day email.
+     *
+     * Different job from generateDailyDigest(): that one narrates the child's day
+     * from the events. This one is addressed TO the parent and has the whole day
+     * in front of it — logs, photos and their captions, messages with the centre,
+     * and the sign-in/out times — so it can pull the day together and say
+     * something worth reading, rather than listing back what is already listed
+     * below it in the email.
+     */
+    public function generateParentSummary(array $context): string
+    {
+        $apiKey = $this->key();
+        if (!$apiKey) {
+            throw new RuntimeException('ANTHROPIC_API_KEY not configured.');
+        }
+
+        $response = Http::timeout($this->timeoutSeconds)
+            ->withHeaders([
+                'x-api-key' => $apiKey,
+                'anthropic-version' => self::API_VERSION,
+                'content-type' => 'application/json',
+            ])
+            ->post(self::API_URL, [
+                'model' => $this->modelName(),
+                'max_tokens' => 700,
+                'messages' => [
+                    ['role' => 'user', 'content' => $this->buildParentSummaryPrompt($context)],
+                ],
+            ]);
+
+        if (!$response->successful()) {
+            Log::error('Anthropic parent summary failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+            throw new RuntimeException('AI parent summary failed: ' . $response->status());
+        }
+
+        $text = $response->json()['content'][0]['text'] ?? '';
+        if (empty(trim($text))) {
+            throw new RuntimeException('AI parent summary returned empty response.');
+        }
+
+        return trim($text);
+    }
+
+    private function buildParentSummaryPrompt(array $c): string
+    {
+        $name = $c['child_name'] ?? 'the child';
+        $facts = json_encode($c['facts'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        return <<<PROMPT
+You are an experienced, warm early-childhood educator writing the end-of-day note home
+to {$name}'s parents at a childcare centre.
+
+Here is everything that was recorded for {$name} today, as JSON:
+
+{$facts}
+
+Write the note that goes at the top of their daily summary email.
+
+Rules:
+- Address the parents directly and warmly ("{$name} had a lovely day…"). Never say "Dear parent".
+- 2 to 3 short paragraphs, about 90-150 words in total. Plain sentences, no bullet points.
+- Be SPECIFIC: use the real details above — what they ate, how they slept, what the photo
+  captions show they were doing, their mood. Details are what a parent actually wants.
+- Draw the day together and say something human about it. Do not simply list the logs back:
+  the parent can already see the full list of logs, photos and times further down the email.
+- If they did not sleep well, ate little, or seemed unsettled, say so kindly and factually —
+  parents need the honest picture, not a sales pitch. Never invent anything that is not in
+  the data. If there is very little data, keep it short rather than padding it out.
+- No medical advice, no diagnosis, no judgement of the parents.
+- End with one friendly closing line from the team at the centre.
+
+OUTPUT ONLY THE NOTE. No subject line, no headings, no sign-off block, no quotation marks.
 PROMPT;
     }
 }

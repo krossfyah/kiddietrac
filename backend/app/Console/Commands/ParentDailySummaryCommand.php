@@ -79,7 +79,9 @@ class ParentDailySummaryCommand extends Command
             }
 
             $html = $this->buildHtml($child, $day, $tz);
-            $subject = ($child->preferred_name ?: $child->first_name) . "'s day — " . $date->format('D j M');
+            // The year matters: these emails get filed, searched and looked back on
+            // months later, and "Mon 13 Jul" alone is ambiguous in an inbox.
+            $subject = ($child->preferred_name ?: $child->first_name) . "'s day — " . $date->format('D j M Y');
 
             $recipients = $override
                 ? [(object) ['email' => $override, 'name' => 'Test recipient']]
@@ -188,22 +190,47 @@ class ParentDailySummaryCommand extends Command
             ->orderBy('created_at')
             ->get(['title', 'body', 'created_at']);
 
-        // The AI story of the day (already generated nightly; fall back to live).
-        $digest = DB::table('ai_daily_digests')
-            ->where('child_id', $child->id)
-            ->whereDate('digest_date', $ymd)
-            ->value('body');
-
-        if (!$digest && $ai->isConfigured()) {
-            try {
-                $model = \App\Models\Child::find($child->id);
-                if ($model) {
-                    $generated = $ai->generate($model, $ymd);
-                    $digest = $generated->body ?? null;
-                }
-            } catch (\Throwable $e) {
-                // A missing story must never stop the summary going out.
+        // The note home: written by the AI from the WHOLE day (logs, photo
+        // captions, messages, times), addressed to the parent. It sits at the top
+        // of the email, above the detail — so it has to pull the day together,
+        // not repeat the list underneath it.
+        $digest = null;
+        try {
+            $anthropic = app(\App\Services\AnthropicService::class);
+            if ($anthropic->isConfigured()) {
+                $digest = $anthropic->generateParentSummary([
+                    'child_name' => $child->preferred_name ?: $child->first_name,
+                    'facts' => [
+                        'date' => $date->format('l, j F Y'),
+                        'centre' => $child->centre_name,
+                        'signed_in' => $checkIn ? Carbon::parse($checkIn->occurred_at)->timezone($tz)->format('g:i A') : null,
+                        'signed_out' => $checkOut ? Carbon::parse($checkOut->occurred_at)->timezone($tz)->format('g:i A') : null,
+                        'care_logs' => $logs->map(fn ($l) => [
+                            'what' => $l->type,
+                            'detail' => $l->detail,
+                            'note' => $l->note,
+                            'at' => Carbon::parse($l->at)->timezone($tz)->format('g:i A'),
+                        ])->values()->all(),
+                        'photo_captions' => $photos->pluck('caption')->filter()->values()->all(),
+                        'photo_count' => $photos->count(),
+                        'messages_with_centre' => $messages->map(fn ($m) => [
+                            'from' => $m->sender,
+                            'said' => $m->body,
+                        ])->values()->all(),
+                        'centre_announcements' => $announcements->pluck('title')->values()->all(),
+                    ],
+                ]);
             }
+        } catch (\Throwable $e) {
+            // Fall through — a missing note must never stop the summary going out.
+        }
+
+        // Fall back to the digest generated overnight, if the live call failed.
+        if (!$digest) {
+            $digest = DB::table('ai_daily_digests')
+                ->where('child_id', $child->id)
+                ->whereDate('digest_date', $ymd)
+                ->value('body');
         }
 
         return [
