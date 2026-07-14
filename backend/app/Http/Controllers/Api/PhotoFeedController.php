@@ -31,7 +31,7 @@ final class PhotoFeedController extends Controller
             ->leftJoin('centres as c', 'c.id', '=', 'p.centre_id')
             ->orderByDesc('p.taken_at')
             ->select(
-                'p.id', 'p.url', 'p.thumbnail_url', 'p.caption', 'p.taken_at',
+                'p.id', 'p.url', 'p.thumbnail_url', 'p.media_type', 'p.caption', 'p.taken_at',
                 'p.centre_id', 'c.name as centre_name',
                 DB::raw("CONCAT(up.first_name,' ',up.last_name) as uploader_name"),
                 'p.child_ids'
@@ -72,8 +72,13 @@ final class PhotoFeedController extends Controller
     public function upload(Request $request): JsonResponse
     {
         $u = $request->user();
+        // Educators can now share a short VIDEO clip as well as a photo — the
+        // moments parents most want (first steps, a song, a wobble across the
+        // room) don't survive as stills. Capped at 30MB, which is about 30
+        // seconds of phone video and inside PHP's 32MB upload limit; anything
+        // longer is a file transfer, not a moment.
         $request->validate([
-            'photo' => 'required|file|mimes:jpg,jpeg,png,webp|max:8192',
+            'photo' => 'required|file|mimetypes:image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,video/3gpp|max:30720',
             'caption' => 'nullable|string|max:500',
             'child_ids' => 'nullable',
             'centre_id' => 'nullable|integer',
@@ -95,11 +100,17 @@ final class PhotoFeedController extends Controller
             abort_unless($this->canAccessChildId($u, (int) $cid), 403);
         }
 
+        // A video has no still to use as its thumbnail (no ffmpeg here), so the
+        // clients render a <video> element with preload=metadata and let the
+        // browser show the first frame. media_type is what tells them which.
+        $isVideo = str_starts_with((string) $file->getMimeType(), 'video/');
+
         $id = DB::table('photos')->insertGetId([
             'centre_id' => $centreId,
             'uploaded_by_id' => $u->id,
             'url' => '/storage/' . $path,
-            'thumbnail_url' => '/storage/' . $path,
+            'thumbnail_url' => $isVideo ? null : '/storage/' . $path,
+            'media_type' => $isVideo ? 'video' : 'image',
             'caption' => $request->input('caption'),
             'child_ids' => json_encode($childIds),
             'taken_at' => now(),
@@ -122,6 +133,6 @@ final class PhotoFeedController extends Controller
             }
         }
 
-        return response()->json(['id' => $id, 'url' => '/storage/' . $path], 201);
+        return response()->json(['id' => $id, 'url' => '/storage/' . $path, 'media_type' => $isVideo ? 'video' : 'image'], 201);
     }
 }

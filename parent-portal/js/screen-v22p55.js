@@ -229,7 +229,9 @@
       </div>
       <div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px;">
         ${photos.map(p => `<div class="kt-card" style="padding:0;overflow:hidden;">
-          <img src="${esc(p.url)}" loading="lazy" style="width:100%;height:220px;object-fit:cover;display:block;background:#F1F5F9;">
+          ${(p.media_type === 'video')
+            ? `<video src="${esc(p.url)}" controls preload="metadata" playsinline style="width:100%;height:220px;object-fit:cover;display:block;background:#0F172A;"></video>`
+            : `<img src="${esc(p.url)}" loading="lazy" style="width:100%;height:220px;object-fit:cover;display:block;background:#F1F5F9;">`}
           <div style="padding:14px 18px;">
             <div style="font-size:12.5px;color:#475569;">${fmtDate(p.taken_at)} · ${esc(p.uploader_name || '')}</div>
             <div style="font-size:13.5px;color:#0F172A;margin-top:6px;">${esc(p.caption || '')}</div>
@@ -245,7 +247,8 @@
     m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:480px;width:92%;">
       <h3 style="margin:0 0 16px;color:#0F172A;">Share a photo</h3>
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;">Photo file</label>
-      <input id="pf-file" type="file" accept="image/*" style="width:100%;padding:9px;border:2px dashed #CBD5E1;border-radius:8px;background:#F8FAFC;">
+      <input id="pf-file" type="file" accept="image/*,video/mp4,video/quicktime,video/webm,video/3gpp" capture style="width:100%;padding:9px;border:2px dashed #CBD5E1;border-radius:8px;background:#F8FAFC;">
+      <div style="font-size:11.5px;color:#94A3B8;margin-top:5px;">Photos, or a short video clip (up to about 30 seconds).</div>
       <label style="display:block;font-size:13px;font-weight:600;margin-top:14px;">Caption</label>
       <textarea id="pf-caption" rows="3" placeholder="What were they up to?" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
       <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:8px;">

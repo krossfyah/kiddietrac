@@ -158,6 +158,14 @@
       sessionStorage.removeItem('kt_login_at');
       sessionStorage.removeItem('kt_active_agency_id');
       sessionStorage.removeItem('kt_active_agency_name');
+      // These two mark "this app session has already been unlocked", and
+      // kt-biometric / kt-pin skip their lock screen when they're set. Leaving
+      // them behind after an idle sign-out meant the biometric prompt never came
+      // back — the user was dumped on the login page and had to type a password,
+      // which is precisely what biometric unlock exists to avoid. The session is
+      // over, so the unlock is over with it.
+      sessionStorage.removeItem('kt_bio_session');
+      sessionStorage.removeItem('kt_pin_session');
     } catch (e) {}
     var path = window.location.pathname || '';
     var qs = reason ? ('?signed_out=' + encodeURIComponent(reason)) : '';

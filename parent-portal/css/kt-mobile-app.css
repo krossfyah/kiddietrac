@@ -447,3 +447,23 @@ body.kt-parentview [data-export] { display: none !important; }
   #appMain #kt-msg-filter,
   #appMain #kt-ann-filter { display: none !important; }
 }
+
+/* ── Empty room: "No children enrolled" (2026-07-14) ─────────────────────
+   The roster is a 2-column grid, and the empty state was being dropped into a
+   SINGLE 192px column with 80px of vertical padding — so the message sat
+   squashed in the left half of the screen, 382px tall. Span the whole grid,
+   centre it, and cut the padding to something a phone can afford. ── */
+@media (max-width: 600px) {
+  #appMain .educator-roster .empty-large,
+  #appMain .educator-roster .empty-state,
+  #appMain .educator-shell .empty-large {
+    grid-column: 1 / -1 !important;
+    padding: 22px 16px !important;
+    text-align: center !important;
+    margin: 0 !important;
+  }
+  #appMain .educator-roster .empty-large > *:first-child { font-size: 34px !important; }
+  #appMain .educator-roster .empty-large h3,
+  #appMain .educator-roster .empty-large > div:nth-child(2) { font-size: 15px !important; margin-top: 6px !important; }
+  #appMain .educator-roster .empty-large p { font-size: 13px !important; margin-top: 4px !important; }
+}

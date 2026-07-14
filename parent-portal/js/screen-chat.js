@@ -427,11 +427,14 @@
         </div>
         <div class="kt-thread-compose" style="padding:10px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:4px;flex-shrink:0;align-items:center;position:relative;">
           <input class="kt-attach-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display:none;" />
-          <button class="kt-attach-btn" type="button" title="Attach an image" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:22px;padding:4px 6px;">📎</button>
           <button class="kt-emoji-btn" type="button" title="Emoji" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">😊</button>
-          <button class="kt-mic-btn" type="button" title="Record a voice note" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">🎤</button>
+          <button class="kt-attach-btn" type="button" title="Attach a photo or video" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:22px;padding:4px 6px;">📷</button>
           <input class="kt-compose-input" type="text" placeholder="Type a message…" style="flex:1;min-width:0;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;font-family:inherit;" />
-          <button class="kt-send-btn" style="background:#159FB4;color:white;border:none;padding:0 18px;height:44px;border-radius:24px;font-weight:700;cursor:pointer;font-size:15px;">Send</button>
+          <!-- One action button, exactly like the parent app: 🎤 while the box is
+               empty, ➤ as soon as you type. The old wide "Send" button sat there
+               permanently and pushed the text box down to nothing. -->
+          <button class="kt-mic-btn" type="button" title="Record a voice note" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">🎤</button>
+          <button class="kt-send-btn" title="Send" style="display:none;background:#159FB4;color:white;border:none;width:44px;height:44px;border-radius:50%;font-weight:700;cursor:pointer;font-size:17px;line-height:1;">➤</button>
           <div class="kt-emoji-panel" style="display:none;position:absolute;bottom:58px;left:8px;background:white;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;width:280px;max-height:180px;overflow-y:auto;z-index:40;font-size:23px;line-height:1.5;"></div>
         </div>
       </div>
@@ -458,6 +461,20 @@
 
     const input = $('.kt-compose-input', container);
     const send = $('.kt-send-btn', container);
+
+    // Mic when there's nothing to send, send arrow the moment there is.
+    const micToggle = $('.kt-mic-btn', container);
+    const paintAction = () => {
+      const typing = !!(input.value || '').trim();
+      // setProperty with 'important': the mobile stylesheet sizes these buttons
+      // with `display: inline-flex !important`, which out-ranks a plain inline
+      // style — so a bare style.display = 'none' silently did nothing and both
+      // buttons showed at once.
+      if (send) send.style.setProperty('display', typing ? 'inline-flex' : 'none', 'important');
+      if (micToggle) micToggle.style.setProperty('display', typing ? 'none' : 'inline-flex', 'important');
+    };
+    input.addEventListener('input', paintAction);
+    paintAction();
     const attachBtn = $('.kt-attach-btn', container);
     const attachInput = $('.kt-attach-input', container);
     const attachPreview = $('.kt-attach-preview', container);

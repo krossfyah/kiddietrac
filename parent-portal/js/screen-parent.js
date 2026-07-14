@@ -813,7 +813,16 @@
       }
       data.photos.forEach(p => {
         const c = Dom.el('div', { style: 'border-radius:14px;overflow:hidden;' + card() });
-        c.appendChild(Dom.el('img', { src: p.url, alt: p.caption || 'Photo', loading: 'lazy', style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--ink-100);' }));
+        // Educators can share short video clips as well as photos — a first
+        // wobble across the room doesn't survive as a still.
+        if (p.media_type === 'video') {
+          c.appendChild(Dom.el('video', {
+            src: p.url, controls: true, preload: 'metadata', playsInline: true,
+            style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#0F172A;',
+          }));
+        } else {
+          c.appendChild(Dom.el('img', { src: p.url, alt: p.caption || 'Photo', loading: 'lazy', style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--ink-100);' }));
+        }
         if (p.caption || p.date_display) {
           const b = Dom.el('div', { style: 'padding:8px 10px;' });
           if (p.caption) b.appendChild(Dom.el('div', { style: 'font-size:12.5px;line-height:1.35;color:var(--ink-800);' }, p.caption.replace(/^\[Demo\] /, '')));

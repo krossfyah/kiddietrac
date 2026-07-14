@@ -126,12 +126,14 @@
     var el = pill();
     mount(el);
 
+    // Green = on the clock. Amber = off the clock (and amber is a nudge, not an
+    // error — you're not working yet, or you've finished).
     if (!openPunch) {
-      el.innerHTML = '<span>⏱</span><span>Not clocked in</span>'
-        + '<span style="opacity:.8;font-weight:700;">· tap to clock in</span>';
-      el.style.background = '#fff';
-      el.style.color = '#64748B';
-      el.style.border = '1.5px solid #E2E8F0';
+      el.innerHTML = '<span>⏱</span><span>Clocked out</span>'
+        + '<span style="opacity:.85;font-weight:700;">· tap to clock in</span>';
+      el.style.background = '#F59E0B';
+      el.style.color = '#fff';
+      el.style.border = 'none';
       return;
     }
 
@@ -140,7 +142,9 @@
     el.innerHTML = '<span>' + (overdue ? '⚠️' : '⏱') + '</span>'
       + '<span>Clocked in · ' + e.text + '</span>'
       + '<span style="opacity:.85;font-weight:700;">· tap to clock out</span>';
-    el.style.background = overdue ? '#B45309' : '#0E7C90';
+    // Still green while on the clock; a long shift deepens it to a warning red so
+    // "you have been on for 10 hours" doesn't read as business as usual.
+    el.style.background = overdue ? '#B45309' : '#16A34A';
     el.style.color = '#fff';
     el.style.border = 'none';
 

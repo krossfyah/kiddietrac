@@ -89,20 +89,25 @@ final class MediaController extends Controller
         }
         $limit = min(50, (int) $request->input('limit', 30));
 
-        $photos = DB::table('media')
-            ->join('media_child_tags', 'media_child_tags.media_id', '=', 'media.id')
-            ->where('media_child_tags.child_id', $childId)
-            ->where('media.media_type', 'photo')
-            ->whereNull('media.deleted_at')
-            ->orderByDesc('media.taken_at')
+        // Read the table educators actually upload into.
+        //
+        // This used to query `media` + `media_child_tags` — which is EMPTY. Every
+        // photo an educator shares goes to `photos` (PhotoFeedController::upload,
+        // tagging children in a child_ids JSON column), so the parent gallery has
+        // been showing parents nothing at all while their child's photos existed
+        // the whole time. Videos (media_type = 'video') come through here too.
+        $rows = DB::table('photos')
+            ->whereJsonContains('child_ids', (int) $childId)
+            ->orderByDesc('taken_at')
             ->limit($limit)
-            ->select('media.*')
-            ->get();
+            ->get(['id', 'url', 'thumbnail_url', 'media_type', 'caption', 'taken_at']);
 
         return response()->json([
-            'photos' => $photos->map(fn ($m) => [
+            'photos' => $rows->map(fn ($m) => [
                 'id' => $m->id,
-                'url' => '/storage/' . $m->storage_path,
+                'url' => $m->url,
+                'thumbnail_url' => $m->thumbnail_url,
+                'media_type' => $m->media_type ?: 'image',
                 'caption' => $m->caption,
                 'taken_at' => $m->taken_at,
                 'date_display' => Carbon::parse($m->taken_at)->format('M j, g:i A'),
