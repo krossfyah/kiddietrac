@@ -85,7 +85,7 @@ body,
 
 /* Respect the intentional compact-form screens from v22p64 (locale,
    settings) — do NOT widen these; they opted in via data-kt-narrow. */
-[data-kt-pretty][data-kt-narrow] > div {
+[data-kt-pretty][data-kt-narrow] > div:not(#kt-topbar):not(.kt-hero):not(.kt-page-hero):not(.kt-page-actions) {
   max-width: 640px !important;
   margin-left: auto;
   margin-right: auto;

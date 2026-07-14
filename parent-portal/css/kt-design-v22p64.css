@@ -376,7 +376,7 @@
 }
 
 /* ============================ Settings + form screens stay compact ============================ */
-[data-kt-pretty][data-kt-narrow] > div {
+[data-kt-pretty][data-kt-narrow] > div:not(#kt-topbar):not(.kt-hero):not(.kt-page-hero):not(.kt-page-actions) {
   max-width: 640px !important;
 }
 

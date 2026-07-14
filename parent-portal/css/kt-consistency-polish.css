@@ -29,9 +29,22 @@
 
 /* ── 2b) Banner normalizer (kt-banner-normalize.js) — guarantees EVERY banner
         has the shimmer + a floating art icon, incl. class-less custom ones. ── */
+/* Specificity matters here: the screen-transition rule  sets
+   , and an ID selector outranks a class — so it
+   was overwriting the shimmer on every banner. Match #appMain to outrank it, and keep
+   BOTH the fade-in and the shimmer. */
+#appMain .kt-banner-fx,
+#appMain > .kt-banner-fx {
+  animation: kt-fade-in 0.12s ease both, kt-hero-breathe 16s ease-in-out infinite !important;
+  background-size: 200% 200% !important;
+}
 .kt-banner-fx {
   background-size: 200% 200% !important;
-  animation: kt-hero-breathe 16s ease-in-out infinite;
+  /* Both animations, and !important: the .kt-hero rule's `animation: kt-fade-in`
+     was overriding the shimmer entirely (computed animation-name came out as
+     kt-fade-in), which is why banners stopped shimmering. Keep the fade-in AND the
+     shimmer. */
+  animation: kt-fade-in 0.28s ease-out, kt-hero-breathe 16s ease-in-out infinite !important;
 }
 /* Floating emoji art — identical to the native .kt-hero-emoji so EVERY banner's
    art is the same size / transparency / float (was 54px + opacity .85 + a
@@ -154,7 +167,22 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
 .kt-hero .kt-hero-greet { font-size: 10.5px !important; letter-spacing: 1px; margin-bottom: 2px !important; }
 .kt-hero .kt-hero-sub { font-size: 12px !important; margin-top: 2px !important; }
 /* Float the action buttons to the right so they add no vertical height. */
-.kt-hero .kt-hero-actions { position: absolute !important; top: 50% !important; right: 22px !important; transform: translateY(-50%) !important; margin: 0 !important; display: flex !important; gap: 8px !important; z-index: 2 !important; }
+/* Buttons no longer sit INSIDE a banner — the shell lifts them out into a
+   .kt-page-actions toolbar directly beneath it. This rule stays only as a fallback
+   for a banner whose buttons have not been lifted yet (e.g. mid-render), and it no
+   longer floats them over the artwork. */
+.kt-hero .kt-hero-actions { position: static !important; transform: none !important; margin: 12px 0 0 !important; display: flex !important; gap: 8px !important; flex-wrap: wrap; z-index: 2 !important; }
+
+/* The toolbar that action buttons are lifted into: sits under the banner, left-aligned
+   with the page content. */
+#appMain .kt-page-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: -6px 0 16px;
+}
+#appMain .kt-page-actions:empty { display: none; margin: 0; }
 .kt-hero .kt-hero-btn { padding: 7px 13px !important; font-size: 12px !important; }
 .kt-hero .kt-hero-svg { width: 92px !important; height: auto !important; opacity: .45 !important; }
 @media (max-width: 680px) {

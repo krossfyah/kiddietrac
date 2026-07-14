@@ -42,14 +42,25 @@
 
   function promptSend(trace) {
     if (document.getElementById('kt-crash-ov')) return;
+    // A centred dialog over a dimmed page, not a full-width bar glued to the bottom
+    // edge. The bar spanned the whole screen and its "Send report" button stretched
+    // with it, which read as a system-level failure rather than an ordinary prompt.
     var ov = document.createElement('div'); ov.id = 'kt-crash-ov';
-    ov.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147481000;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);background:#0D1B2A;color:#fff;box-shadow:0 -6px 24px rgba(0,0,0,.4);font-family:system-ui,-apple-system,sans-serif;animation:kt-crash-up .3s ease both;';
-    var st = document.createElement('style'); st.textContent = '@keyframes kt-crash-up{from{transform:translateY(100%);}to{transform:none;}}'; document.head.appendChild(st);
-    ov.innerHTML = '<div style="font-weight:800;font-size:15px;margin-bottom:4px;">⚠️ KiddieTrac had a problem</div>'
-      + '<div style="font-size:13px;opacity:.85;margin-bottom:12px;line-height:1.5;">Send a quick error report so our team can fix it? Only technical details are shared.</div>'
-      + '<div style="display:flex;gap:10px;">'
-      + '<button id="kt-crash-send" style="flex:1;background:#0E7C90;color:#fff;border:none;border-radius:11px;padding:12px;font-weight:800;font-size:14px;cursor:pointer;">Send report</button>'
-      + '<button id="kt-crash-no" style="background:transparent;color:rgba(255,255,255,.7);border:none;padding:12px 14px;font-weight:700;font-size:13px;cursor:pointer;">Not now</button></div>';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481000;display:flex;align-items:center;justify-content:center;padding:20px;'
+      + 'background:rgba(8,28,65,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);'
+      + 'font-family:system-ui,-apple-system,sans-serif;animation:kt-crash-fade .18s ease both;';
+    var st = document.createElement('style');
+    st.textContent = '@keyframes kt-crash-fade{from{opacity:0;}to{opacity:1;}}'
+      + '@keyframes kt-crash-pop{from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:none;}}';
+    document.head.appendChild(st);
+
+    ov.innerHTML = '<div role="dialog" aria-modal="true" aria-labelledby="kt-crash-t" style="width:100%;max-width:380px;background:#0D1B2A;color:#fff;border-radius:16px;padding:22px;box-shadow:0 24px 60px -12px rgba(0,0,0,.55);animation:kt-crash-pop .22s ease both;">'
+      + '<div id="kt-crash-t" style="font-weight:800;font-size:16px;margin-bottom:6px;">⚠️ KiddieTrac had a problem</div>'
+      + '<div style="font-size:13px;opacity:.85;margin-bottom:16px;line-height:1.5;">Send a quick error report so our team can fix it? Only technical details are shared.</div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;">'
+      + '<button id="kt-crash-no" style="background:transparent;color:rgba(255,255,255,.7);border:none;padding:10px 12px;font-weight:700;font-size:13px;cursor:pointer;border-radius:9px;">Not now</button>'
+      + '<button id="kt-crash-send" style="background:#0E7C90;color:#fff;border:none;border-radius:9px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">Send report</button>'
+      + '</div></div>';
     document.body.appendChild(ov);
     document.getElementById('kt-crash-send').onclick = function () {
       var b = document.getElementById('kt-crash-send'); b.textContent = 'Sending…'; b.disabled = true;

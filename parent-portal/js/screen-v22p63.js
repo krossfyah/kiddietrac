@@ -124,21 +124,48 @@
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
     const isStaff = Array.isArray(u.roles) && u.roles.some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
+    // Staff used to be met with an "Enter the family ID" prompt on arrival — and there
+    // is nowhere in the app to look that number up, so the screen was unusable. Pick the
+    // family by NAME instead, and remember the choice so returning here doesn't ask again.
     let r;
+    let families = [];
+    let fid = 0;
     if (isStaff) {
-      const fid = +(await KT.prompt({ title: 'Family ID', description: 'Enter the family ID to view their payment plans.' }));
-      if (!fid) { main.innerHTML = '<div class="kt-card" style="margin:24px;padding:40px;text-align:center;color:#94A3B8;">Enter a family ID via the action button to load plans.</div>'; return; }
-      r = await Api.get(`/payment-plans/family/${fid}`);
+      try {
+        const fr = await Api.get('/admin/families');
+        // /admin/families answers with {families:[...]}; other endpoints use {data:[...]},
+        // a bare array, or a paginated {data:{data:[...]}}. Accept all of them — assuming
+        // one shape is what threw "families.map is not a function".
+        families = (fr && Array.isArray(fr.families)) ? fr.families
+                 : Array.isArray(fr) ? fr
+                 : (fr && Array.isArray(fr.data)) ? fr.data
+                 : (fr && fr.data && Array.isArray(fr.data.data)) ? fr.data.data
+                 : [];
+      } catch (e) { families = []; }
+      const remembered = +(sessionStorage.getItem('kt_pp_family') || 0);
+      if (remembered && families.some(f => +f.id === remembered)) fid = remembered;
+      else if (families.length === 1) fid = +families[0].id;
+      r = fid ? await Api.get(`/payment-plans/family/${fid}`) : { data: [] };
     } else {
       r = await Api.get('/payment-plans/mine');
     }
+    const familyName = (f) => esc(f.name || f.family_name || [f.primary_guardian_name, f.last_name].filter(Boolean).join(' ').trim() || ('Family #' + f.id));
+    const picker = isStaff ? `<div class="kt-card" style="margin:0 0 16px;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <label for="pp-family" style="font-weight:600;color:#334155;">Family</label>
+        <select id="pp-family" style="min-width:260px;padding:6px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;">
+          <option value="">Select a family…</option>
+          ${families.map(f => `<option value="${f.id}"${+f.id === fid ? ' selected' : ''}>${familyName(f)}</option>`).join('')}
+        </select>
+        ${families.length ? '' : '<span style="color:#94A3B8;font-size:13px;">No families found for this agency.</span>'}
+      </div>` : '';
     const plans = r.data || [];
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>📅 Payment plans</h2>
-        <p>${plans.length} plan(s). Split a large balance into manageable installments.</p>
+        <p>${isStaff && !fid ? 'Choose a family to see their payment plans.' : plans.length + ' plan(s). Split a large balance into manageable installments.'}</p>
         ${isStaff ? '<div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="pp-new">+ New payment plan</button></div>' : ''}
       </div>
+      ${picker}
       ${plans.map(p => `<div class="kt-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
@@ -156,9 +183,15 @@
             <td><span class="kt-pill ${i.status === 'paid' ? 'kt-pill-success' : i.status === 'cancelled' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(i.status)}</span></td>
           </tr>`).join('')}</tbody>
         </table>
-      </div>`).join('') || '<div class="kt-card" style="text-align:center;padding:60px;color:#94A3B8;">No payment plans on file.</div>'}
+      </div>`).join('') || `<div class="kt-card" style="text-align:center;padding:60px;color:#94A3B8;">${isStaff && !fid ? 'Select a family above to view their payment plans.' : 'No payment plans on file.'}</div>`}
     </div>`;
     if (isStaff) {
+      const sel = document.getElementById('pp-family');
+      if (sel) sel.onchange = () => {
+        if (sel.value) sessionStorage.setItem('kt_pp_family', sel.value);
+        else sessionStorage.removeItem('kt_pp_family');
+        renderPaymentPlans(main);
+      };
       const newBtn = document.getElementById('pp-new');
       if (newBtn) newBtn.onclick = () => openPaymentPlanModal();
       main.querySelectorAll('button[data-cancel-plan]').forEach(b => b.onclick = async () => {

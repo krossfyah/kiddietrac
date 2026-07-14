@@ -435,26 +435,33 @@
     return { icon: '', label: base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }), section: '' };
   }
   function buildAutoHero(info) {
-    var b = document.createElement('div'); b.className = 'kt-hero kt-hero-auto';
-    var lbl = String(info.label || '').replace(/[<>&]/g, '');
-    var sect = String(info.section || '').replace(/[<>&]/g, '');
-    var emoji = String(info.icon || '\u2728').replace(/[<>&]/g, '');
-    // Only show the eyebrow when the section adds information. It used to fall
-    // back to the label, so any screen with no nav section (Settings, Dashboard)
-    // printed its own name twice — "Settings" above "Settings".
-    // "Menu"/"Main" are catch-all nav section names, not information — and with
-    // the Menu button gone from the mobile bar, an eyebrow reading "MENU" is
-    // actively confusing.
-    if (/^(menu|main|general|other)$/i.test(sect)) sect = '';
-    var greet = (sect && sect.toLowerCase() !== lbl.toLowerCase())
-      ? '<div class="kt-hero-greet">' + (info.icon ? info.icon + ' ' : '') + sect + '</div>'
-      : '';
-    b.innerHTML = greet + '<h1>' + lbl + '</h1>' + '<div class="kt-hero-emoji" aria-hidden="true">' + emoji + '</div>';
+    var b = document.createElement('div');
+    b.className = 'kt-hero kt-hero-auto kt-banner-fx';
+    var h1 = document.createElement('h1');
+    h1.textContent = String(info.label || '');   // textContent keeps the "&" in "Help & guides"
+    var art = document.createElement('div');
+    art.className = 'kt-hero-emoji';
+    art.setAttribute('aria-hidden', 'true');
+    art.textContent = String(info.icon || '\u2728');
+    b.appendChild(h1);
+    b.appendChild(art);
     return b;
   }
 
   // The banner belongs directly BELOW the top bar, never above it. Both are inserted at
   // the top of #appMain, so without this they race and the order flips per screen.
+  // The toolbar that sits directly beneath the banner and holds its action buttons.
+  function pageActions(main, hero) {
+    var bar = main.querySelector('.kt-page-actions');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'kt-page-actions';
+      if (hero && hero.parentNode) hero.parentNode.insertBefore(bar, hero.nextSibling);
+      else main.appendChild(bar);
+    }
+    return bar;
+  }
+
   function heroAnchor(main) {
     var bar = main.querySelector('#kt-topbar');
     return bar ? bar.nextSibling : main.firstChild;
@@ -509,10 +516,34 @@
   // Cheap and idempotent by construction: it only ever looks at main's first few
   // levels, reads the inline style ATTRIBUTE rather than computed style (no forced
   // layout), and marks what it has handled.
+  // Lift action buttons out of ANY banner into the toolbar beneath it. Buttons inside a
+  // banner sit on top of the artwork and read as decoration rather than controls.
+  // Returns true if it moved anything.
+  function liftBannerButtons(main) {
+    var banner = main.querySelector('.kt-hero, .kt-page-hero');
+    if (!banner) return false;
+    var btns = main.querySelectorAll('.kt-hero button, .kt-hero a.btn, .kt-page-hero button, .kt-page-hero a.btn');
+    if (!btns.length) return false;
+    var host = pageActions(main, banner);
+    for (var q = 0; q < btns.length; q++) host.appendChild(btns[q]);   // move: keeps ids + listeners
+    return true;
+  }
+
   function normaliseBanners(main, hash) {
     var hero = main.querySelector('.kt-hero-auto');
-    if (!hero) return false;                 // screen owns a real .kt-hero (role-home)
-    var changed = false;
+
+    // If the screen rendered its OWN banner after we had already added the automatic one
+    // (the Admin tabs do this: each tab draws its own .kt-hero), drop OURS — theirs is
+    // the more specific one, and otherwise two banners stack. We only ever remove the
+    // element we created, never one the screen owns.
+    if (hero) {
+      var own = main.querySelector('.kt-hero:not(.kt-hero-auto), .kt-page-hero');
+      if (own) { hero.parentNode.removeChild(hero); return true; }
+    }
+    // No auto-banner: the screen brought its own (role-home's greeting, or a
+    // .kt-page-hero). Nothing to fold or de-duplicate — but its buttons still come out.
+    if (!hero) return liftBannerButtons(main);
+    var changed = liftBannerButtons(main);
     var h1 = hero.querySelector('h1');
     var title = heroKey(h1 && h1.textContent);
 
@@ -543,8 +574,7 @@
       var acts = L.querySelector('.actions');
       var btns = acts ? acts.children : L.querySelectorAll('button, a.btn');
       if (btns && btns.length) {
-        var bar = hero.querySelector('.kt-hero-actions');
-        if (!bar) { bar = document.createElement('div'); bar.className = 'kt-hero-actions'; hero.appendChild(bar); }
+        var bar = pageActions(main, hero);
         while (btns.length) bar.appendChild(btns[0]);   // move: keeps listeners + ids
       }
       L.parentNode.removeChild(L);

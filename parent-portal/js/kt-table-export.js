@@ -171,7 +171,13 @@
     document.querySelectorAll('#appMain table').forEach(addBar);
     removeLegacyCsv();
   }
+  // Let the shell run the sweep as part of a screen render. The 1.8s poll below meant
+  // a table appeared first and its Excel/CSV/PDF bar dropped in a beat later — visible
+  // on Support tickets and every other table.
+  window.KT = window.KT || {};
+  window.KT.tableExport = { sweep: sweep };
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sweep);
   else sweep();
-  setInterval(sweep, 1800);
+  setInterval(sweep, 250);   // was 1800ms — the table appeared, then its export bar dropped in a beat later
 })(window);
