@@ -459,6 +459,76 @@ final class AnnouncementController extends Controller
         return [];
     }
 
+    /**
+     * Delete announcements the caller's own centres/agency own.
+     *
+     * Body: {ids: [1,2,3]} — bulk, or a single id via the route.
+     *
+     * An announcement is a centre-wide record, so deleting it removes it for
+     * everyone it was sent to; we therefore also purge the inbox notifications
+     * it generated (they carry data.announcement_id), otherwise recipients would
+     * be left with a notification pointing at something that no longer exists.
+     */
+    public function destroyMany(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+
+        $user = $request->user();
+        $centreIds = $this->myCentres($user->id);
+        $agencyIds = DB::table('role_assignments')
+            ->where('user_id', $user->id)
+            ->whereIn('role', ['agency_admin', 'platform_admin'])
+            ->where('active', true)
+            ->whereNotNull('agency_id')
+            ->pluck('agency_id')->all();
+
+        $isPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $user->id)->where('role', 'platform_admin')->where('active', true)->exists();
+        if ($isPlatformAdmin) {
+            $active = (int) $request->header('X-Active-Agency-Id');
+            if ($active > 0) {
+                $agencyIds[] = $active;
+                $centreIds = array_merge($centreIds, DB::table('centres')->where('agency_id', $active)->pluck('id')->all());
+            }
+        }
+
+        // Only rows this user's scope owns — anything else is silently skipped
+        // rather than deleted.
+        $allowed = DB::table('announcements')
+            ->whereIn('id', $data['ids'])
+            ->where(function ($q) use ($centreIds, $agencyIds, $user) {
+                $q->where(function ($w) use ($centreIds) {
+                    $w->where('scope_type', 'centre')->whereIn('scope_id', $centreIds ?: [0]);
+                })->orWhere(function ($w) use ($agencyIds) {
+                    $w->where('scope_type', 'agency')->whereIn('scope_id', $agencyIds ?: [0]);
+                })->orWhere('created_by_id', $user->id);
+            })
+            ->pluck('id')->all();
+
+        if (!$allowed) {
+            return response()->json(['message' => 'Nothing you can delete.'], 403);
+        }
+
+        foreach ($allowed as $aid) {
+            DB::table('notifications')
+                ->where('type', 'announcement')
+                ->whereJsonContains('data->announcement_id', (int) $aid)
+                ->delete();
+        }
+        $deleted = DB::table('announcements')->whereIn('id', $allowed)->delete();
+
+        return response()->json(['deleted' => $deleted, 'ids' => $allowed]);
+    }
+
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $request->merge(['ids' => [$id]]);
+        return $this->destroyMany($request);
+    }
+
     private function myCentres(int $userId): array
     {
         $direct = DB::table('role_assignments')

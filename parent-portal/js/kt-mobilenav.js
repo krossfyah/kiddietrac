@@ -195,7 +195,9 @@
         qrBtn.classList.add('scan');
         nav.appendChild(qrBtn);
       }
-      nav.appendChild(btn('📣', 'Alerts', function () { go('#announcements'); }, 'kt-b-alerts', 'announcements'));
+      // Alerts folded INTO the Inbox: an announcement already lands in the inbox
+      // as a notification, so a separate Alerts tab showed the same thing twice.
+      // (Composing an alert lives on the Home launcher, under Alerts.)
       nav.appendChild(btn('🔔', 'Inbox', function () { go('#notifications'); }, 'kt-b-inbox', 'notifications'));
     }
     document.body.appendChild(nav);

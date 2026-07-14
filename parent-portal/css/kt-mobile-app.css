@@ -438,3 +438,12 @@ body.kt-parentview [data-export] { display: none !important; }
   /* The announcement body itself is the point of the card — let it breathe. */
   #appMain table.kt-mcards td { font-size: 13.5px !important; line-height: 1.45 !important; color: #334155 !important; }
 }
+
+/* ── Filters: no room, no need on a phone (2026-07-13) ───────────────────
+   The Messages list carries a desktop "🔍 Filter…" box; on a phone it eats a
+   whole row above a list you can already see in full. (The Alerts screen gets a
+   purpose-built mobile view with no filter at all.) ── */
+@media (max-width: 600px) {
+  #appMain #kt-msg-filter,
+  #appMain #kt-ann-filter { display: none !important; }
+}

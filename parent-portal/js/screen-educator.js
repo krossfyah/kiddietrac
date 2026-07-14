@@ -145,11 +145,40 @@
     }
   }
 
-  async function renderRoster(container) {
-    container.innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
+  // Cache-first, revalidate in the background — the same trick that makes the
+  // parent app feel instant. Navigating to a room used to blank the roster and
+  // spin, so the screen-transition animation played over an empty box and the
+  // real content popped in afterwards: that's the "educator screens don't
+  // transition smoothly" everyone can feel but nobody can point at.
+  const rosterCache = {};
 
+  async function renderRoster(container) {
+    const cached = rosterCache[currentRoomId];
+    if (cached) {
+      paintRoster(container, cached);
+      // Refresh quietly; if nothing changed the user never sees a flicker.
+      Api.get(`/provider/rooms/${currentRoomId}/roster`)
+        .then((fresh) => {
+          rosterCache[currentRoomId] = fresh;
+          if (document.body.contains(container)) paintRoster(container, fresh);
+        })
+        .catch(() => {});
+      return;
+    }
+
+    container.innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
     try {
       const data = await Api.get(`/provider/rooms/${currentRoomId}/roster`);
+      rosterCache[currentRoomId] = data;
+      paintRoster(container, data);
+    } catch (e) {
+      Dom.clear(container);
+      container.appendChild(emptyState('⚠️', 'Could not load the roster', e.message));
+    }
+  }
+
+  function paintRoster(container, data) {
+    try {
       Dom.clear(container);
 
       const grid = Dom.el('div', { class: 'educator-roster', 'data-kt-list': '1' });

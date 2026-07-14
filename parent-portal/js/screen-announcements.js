@@ -43,7 +43,135 @@
     return day + ', ' + time;
   }
 
+  function isMobile() { return window.matchMedia && window.matchMedia('(max-width:600px)').matches; }
+
+  // ── Phone view: cards, not a table ───────────────────────────────────
+  // The desktop view is a sortable/filterable table. Restacking that into cards
+  // generically still read like a table (LABEL: value rows), so phones get a
+  // purpose-built list: each announcement is a card you can read at a glance,
+  // with select + delete (single and bulk). No filter box, no sort headers —
+  // there's no room for them and the list is short.
+  async function renderProviderMobile(container) {
+    container.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;">Loading…</div>';
+    let data;
+    try { data = await api('GET', '/provider/announcements'); }
+    catch (e) {
+      container.innerHTML = '<div style="padding:20px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>';
+      return;
+    }
+    let items = data.announcements || [];
+
+    let selecting = false;
+    const selected = {};
+
+    const paint = () => {
+      const ids = Object.keys(selected).filter(k => selected[k]).map(Number);
+      container.innerHTML = `
+        <div class="kt-hero" style="background:linear-gradient(135deg,#1F6080,#0E7C90);">
+          <h1>📢 Alerts</h1>
+          <div class="kt-hero-sub">${items.length} sent to your families</div>
+        </div>
+        <div style="display:flex;gap:7px;align-items:center;margin:10px 0 10px;">
+          <button id="kt-ann-new" style="flex:1;background:#159FB4;color:#fff;border:none;height:40px;border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;">+ New alert</button>
+          <button id="kt-ann-select" style="flex:0 0 auto;background:#fff;color:#475569;border:1px solid #CBD5E1;height:40px;padding:0 13px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;">${selecting ? 'Done' : 'Select'}</button>
+        </div>
+        ${selecting ? `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0F172A;color:#fff;border-radius:11px;padding:8px 11px;margin-bottom:10px;position:sticky;top:2px;z-index:5;">
+            <span style="font-size:13px;font-weight:700;">${ids.length} selected</span>
+            <span style="display:flex;gap:6px;">
+              <button id="kt-ann-all" style="background:rgba(255,255,255,.14);color:#fff;border:none;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">${ids.length === items.length && items.length ? 'None' : 'All'}</button>
+              <button id="kt-ann-del" ${ids.length ? '' : 'disabled'} style="background:#DC2626;color:#fff;border:none;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;opacity:${ids.length ? 1 : .5};">Delete</button>
+            </span>
+          </div>` : ''}
+        ${items.length === 0
+          ? `<div style="text-align:center;padding:34px 16px;background:#fff;border-radius:14px;color:#64748B;">
+               <div style="font-size:38px;">📭</div>
+               <div style="font-weight:800;color:#0F172A;margin-top:6px;">No alerts sent yet</div>
+             </div>`
+          : items.map(a => {
+              const when = a.sent_at || a.scheduled_at || a.created_at;
+              const scope = a.centre_name || a.scope_name || (a.scope_type === 'agency' ? 'All centres' : a.scope_type) || '';
+              const chips = [a.send_email ? '📧' : '', a.send_push ? '🔔' : '', (a.scheduled_at && !a.sent_at) ? '⏱ scheduled' : ''].filter(Boolean).join(' ');
+              return `
+                <div class="kt-ann-card" data-id="${a.id}" style="display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid #E7EDF3;border-left:5px solid #159FB4;border-radius:13px;padding:12px 13px;margin-bottom:9px;box-shadow:0 1px 4px rgba(15,23,42,.05);">
+                  ${selecting ? `<input type="checkbox" class="kt-ann-cb" data-id="${a.id}" ${selected[a.id] ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:#159FB4;">` : ''}
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-weight:800;font-size:15px;color:#0F172A;line-height:1.3;">${esc(a.title || '(untitled)')}</div>
+                    <div style="font-size:13px;color:#475569;line-height:1.45;margin-top:3px;">${esc(plainPreview(a.body, 150))}</div>
+                    <div style="font-size:11px;color:#94A3B8;margin-top:6px;">${esc(scope)} · ${esc(fmtDate(when))}${chips ? ' · ' + chips : ''}</div>
+                  </div>
+                  ${selecting ? '' : `<button class="kt-ann-x" data-id="${a.id}" aria-label="Delete" style="background:none;border:none;color:#CBD5E1;font-size:15px;cursor:pointer;padding:4px;flex-shrink:0;">🗑</button>`}
+                </div>`;
+            }).join('')}
+      `;
+
+      $('#kt-ann-new', container).addEventListener('click', () => openComposer(container));
+      $('#kt-ann-select', container).addEventListener('click', () => {
+        selecting = !selecting;
+        if (!selecting) Object.keys(selected).forEach(k => delete selected[k]);
+        paint();
+      });
+
+      container.querySelectorAll('.kt-ann-cb').forEach(cb => {
+        cb.addEventListener('change', () => { selected[cb.dataset.id] = cb.checked; paint(); });
+      });
+      const allBtn = $('#kt-ann-all', container);
+      if (allBtn) allBtn.addEventListener('click', () => {
+        const on = !(ids.length === items.length && items.length);
+        Object.keys(selected).forEach(k => delete selected[k]);
+        if (on) items.forEach(a => { selected[a.id] = true; });
+        paint();
+      });
+      const delBtn = $('#kt-ann-del', container);
+      if (delBtn) delBtn.addEventListener('click', () => remove(ids));
+
+      container.querySelectorAll('.kt-ann-x').forEach(b => {
+        b.addEventListener('click', (e) => { e.stopPropagation(); remove([Number(b.dataset.id)]); });
+      });
+      container.querySelectorAll('.kt-ann-card').forEach(card => {
+        card.addEventListener('click', () => {
+          if (selecting) {
+            const id = card.dataset.id;
+            selected[id] = !selected[id];
+            paint();
+          }
+        });
+      });
+    };
+
+    async function remove(ids) {
+      if (!ids || !ids.length) return;
+      const msg = 'Delete ' + ids.length + ' alert' + (ids.length === 1 ? '' : 's') + '? This removes it from every family\'s inbox too.';
+      const go = async () => {
+        try {
+          await api('POST', '/provider/announcements/delete', { ids });
+          items = items.filter(a => ids.indexOf(a.id) === -1);
+          ids.forEach(id => delete selected[id]);
+          selecting = false;
+          paint();
+          if (window.KT && KT.toast) KT.toast('🗑', 'Deleted', ids.length + ' alert' + (ids.length === 1 ? '' : 's') + ' removed.', '#0F172A');
+        } catch (e) {
+          if (window.KT && KT.toast) KT.toast('⚠️', 'Could not delete', e.message || 'Try again.', '#B91C1C');
+        }
+      };
+      if (window.KT && KT.confirm) KT.confirm(msg, go);
+      else if (window.confirm(msg)) go();
+    }
+
+    paint();
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(String(iso).replace(' ', 'T'));
+    if (isNaN(d)) return '';
+    const today = new Date().toDateString() === d.toDateString();
+    return (today ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' }))
+      + ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
   async function renderProvider(container) {
+    if (isMobile()) return renderProviderMobile(container);
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading…</div>';
     let data;
     try { data = await api('GET', '/provider/announcements'); }

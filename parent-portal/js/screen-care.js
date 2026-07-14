@@ -315,13 +315,21 @@
       var opts = DETAIL_OPTIONS[t.type] || [];
       var detailsIn = Dom.el('input', { type: 'hidden' });   // carries the chosen value
 
+      // "Other" is always offered: the fixed chips cover the common cases, but a
+      // real day produces things no list anticipates, and without an escape hatch
+      // the quick-pick would be a step backwards from free text.
+      var otherIn = Dom.el('input', {
+        type: 'text', placeholder: 'Describe it…',
+        style: 'width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #159FB4;border-radius:10px;font-size:16px;margin:-6px 0 14px;display:none;',
+      });
+
       if (opts.length) {
         modal.appendChild(Dom.el('div', {
           style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:7px;',
         }, 'What happened?'));
         var chips = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px;' });
         var chipEls = [];
-        opts.forEach(function (label) {
+        opts.concat(['Other']).forEach(function (label) {
           var chip = Dom.el('button', {
             type: 'button',
             style: 'border:1.5px solid #E2E8F0;background:#fff;color:#0F172A;border-radius:999px;'
@@ -336,11 +344,15 @@
               c.style.color = on ? '#fff' : '#0F172A';
               c.style.borderColor = on ? t.color : '#E2E8F0';
             });
+            var other = chosen === 'Other';
+            otherIn.style.display = other ? 'block' : 'none';
+            if (other) otherIn.focus(); else otherIn.value = '';
           });
           chipEls.push(chip);
           chips.appendChild(chip);
         });
         modal.appendChild(chips);
+        modal.appendChild(otherIn);
       }
 
       modal.appendChild(Dom.el('div', {
@@ -361,7 +373,11 @@
       cancel.addEventListener('click', function () { overlay.remove(); });
       var save = Dom.el('button', { style: 'background:' + t.color + ';color:white;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Log it');
       save.addEventListener('click', function () {
-        var body = { child_id: childId, log_type: t.type, details: detailsIn.value.trim() || null, notes: notesIn.value.trim() || null };
+        // "Other" means the typed text IS the detail — don't file it as the
+        // literal word "Other".
+        var detail = detailsIn.value.trim();
+        if (detail === 'Other') detail = otherIn.value.trim();
+        var body = { child_id: childId, log_type: t.type, details: detail || null, notes: notesIn.value.trim() || null };
         if (t.type === 'bottle' && amtIn && amtIn.value) body.amount_oz = parseFloat(amtIn.value);
         save.disabled = true; save.textContent = 'Saving…';
         Api.post('/care/logs', body).then(function () { overlay.remove(); loadRecent(); }).catch(function (e) {

@@ -227,6 +227,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p33 — Per-role dashboard widget data
         Route::get('/widgets/me', [\App\Http\Controllers\Api\WidgetsController::class, 'me']);
 
+        // Onboarding — Privacy Policy & NDA. Every role signs once; the signature,
+        // a hash of the exact wording, the IP and the timestamp are recorded, the
+        // signed copy is filed against the user's record, and a copy is emailed.
+        Route::get('/auth/agreement',      [\App\Http\Controllers\Api\AgreementController::class, 'status']);
+        Route::post('/auth/agreement/sign', [\App\Http\Controllers\Api\AgreementController::class, 'sign']);
+
         // v22p49 — Daily care logs, milestones, portfolio, time clock
         Route::post  ('/care/logs',                 [\App\Http\Controllers\Api\CareController::class, 'logCare']);
         Route::get   ('/care/logs/child/{child}',   [\App\Http\Controllers\Api\CareController::class, 'logsForChild']);
@@ -649,6 +655,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:educator,centre_director,agency_admin')->prefix('provider')->group(function () {
         Route::get('/announcements',                  [AnnouncementController::class, 'indexProvider']);
         Route::post('/announcements',                 [AnnouncementController::class, 'store']);
+        // Staff can delete announcements their own centre/agency owns (single or
+        // bulk). Deleting also purges the inbox notifications it generated.
+        Route::post('/announcements/delete',          [AnnouncementController::class, 'destroyMany']);
+        Route::delete('/announcements/{id}',          [AnnouncementController::class, 'destroy']);
     });
     
     // PARENT — announcements inbox + waitlist status + autopay
