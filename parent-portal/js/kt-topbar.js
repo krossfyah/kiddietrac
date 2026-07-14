@@ -242,8 +242,15 @@
     av.appendChild(img);
   }
 
+  // Let the shell mount the bar the instant it clears #appMain, instead of leaving it
+  // missing until the 1.2s poll below fires. Clearing the screen takes the bar with it,
+  // so on every navigation the bar disappeared and popped back in AFTER the banner had
+  // already drawn — that is the jank. ensure() is a no-op when the bar is present.
+  window.KT = window.KT || {};
+  window.KT.topbar = { ensure: ensure };
+
   setInterval(function () { var c = document.getElementById('kt-tb-clock'); if (c) c.textContent = fmtClock(); var d = document.getElementById('kt-tb-date'); if (d) d.textContent = fmtDate(); }, 15000);
-  setInterval(ensure, 1200);
+  setInterval(ensure, 1200);   // safety net; the shell now calls ensure() on every render
   setInterval(buildSelectors, 1400);   // rebuild View-as + agency switcher in the bar after any nav
   setInterval(refreshUnread, 15000);   // near-real-time unread badge
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ensure(); refreshUser(); });

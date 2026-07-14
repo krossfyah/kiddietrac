@@ -453,6 +453,32 @@
     return b;
   }
 
+  // The banner belongs directly BELOW the top bar, never above it. Both are inserted at
+  // the top of #appMain, so without this they race and the order flips per screen.
+  function heroAnchor(main) {
+    var bar = main.querySelector('#kt-topbar');
+    return bar ? bar.nextSibling : main.firstChild;
+  }
+  // Remount the top bar, but never more than a few times per screen visit.
+  //
+  // THE CAP IS LOAD-BEARING. Some screens (Support tickets) re-render themselves in
+  // response to any #appMain mutation, so re-adding the bar makes them wipe it again —
+  // an uncapped remount is an infinite render loop that freezes the tab. After the cap
+  // we leave it to kt-topbar's own 1.2s poll, which is slow enough not to spiral.
+  var _tbHash = null, _tbMounts = 0;
+  function ensureTopbar(hash) {
+    var h = String(hash || '').split('/')[0];
+    if (h !== _tbHash) { _tbHash = h; _tbMounts = 0; }
+    if (_tbMounts >= 3) return;
+    if (document.getElementById('kt-topbar')) return;
+    try {
+      if (window.KT && KT.topbar && KT.topbar.ensure) {
+        KT.topbar.ensure();
+        if (document.getElementById('kt-topbar')) _tbMounts++;
+      }
+    } catch (e) {}
+  }
+
   // Shared, per-screen-visit budget for banner normalisation. Deliberately survives
   // re-renders of the same screen — that is the whole point (see __ensure).
   var _bannerHash = null, _bannerRuns = 0;
@@ -491,7 +517,7 @@
     var title = heroKey(h1 && h1.textContent);
 
     // 1. legacy headers
-    var legacy = main.querySelectorAll('.page-header-v17, .kt-page-hero');
+    var legacy = main.querySelectorAll('.page-header-v17');
     for (var i = 0; i < legacy.length; i++) {
       var L = legacy[i];
       if (hero.contains(L)) continue;
@@ -621,10 +647,17 @@
     Dom.clear(main);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
 
+
+
     const user = Auth.user();
     const role = Roles.primaryRoleOf(user);
     const hash = (window.location.hash || ('#' + homeHashForRole(role))).replace('#', '').split('?')[0];
     _trackNav(hash);
+
+    // Clearing #appMain took the top bar with it. Put it back before the screen renders
+    // a single node, so the bar is already there when the banner draws — otherwise it
+    // was missing until kt-topbar's 1.2s poll, and popped in on top of the banner.
+    ensureTopbar(hash);
 
     updateActiveNav();
 
@@ -663,29 +696,8 @@
         // folds them INTO it. That is why AI Lesson Plans looked nothing like the rest
         // of the site and Tours stacked two banners.
         var __hasHero = function () {
-          if (main.querySelector('.kt-hero')) return true;
-          // A screen that hand-rolls its own banner keeps it — we do NOT add a second
-          // one, and we do not remove theirs (Support tickets re-renders itself when we
-          // touch it, which turns into a fight we cannot win from out here).
-          // The gradient must be read from the COMPUTED style, not the style attribute:
-          // some of these banners are styled by a CSS class, and missing one means the
-          // shell stacks a banner on top and that screen spins.
-          var f = main.firstElementChild;
-          var cands = [f, f && f.firstElementChild];
-          for (var ci = 0; ci < cands.length; ci++) {
-            var el = cands[ci];
-            if (!el || el.classList.contains('kt-hero-auto')) continue;
-            try {
-              if ((getComputedStyle(el).backgroundImage || '').indexOf('gradient') !== -1
-                  && el.getBoundingClientRect().height > 60) return true;
-            } catch (e) {}
-          }
-          return false;
+          return !!main.querySelector('.kt-hero, .kt-page-hero');
         };
-
-        // Screens render asynchronously, so re-check on a few timers AND on top-level
-        // childList changes. Deliberately NOT subtree:true — every keystroke in a table
-        // filter is a subtree mutation, and re-running this on each one froze the tab.
         var __ensure = function () {
           // The budget is GLOBAL per screen visit, not per render pass. A screen that
           // re-renders itself (support tickets does) calls renderScreen again, which
@@ -693,8 +705,9 @@
           // we just folded in ping-pongs with us forever. That froze the tab. With a
           // shared budget the worst case is that we stop touching the screen and it
           // simply keeps its own banner.
+          ensureTopbar(hash);   // capped — see below
           if (!bannerBudgetLeft(hash)) return;
-          if (!__hasHero()) { main.insertBefore(buildAutoHero(__info), main.firstChild); bannerSpend(hash); }
+          if (!__hasHero()) { main.insertBefore(buildAutoHero(__info), heroAnchor(main)); bannerSpend(hash); }
           try { if (normaliseBanners(main, hash)) bannerSpend(hash); } catch (e) {}
         };
         __ensure();
