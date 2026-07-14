@@ -708,6 +708,12 @@
     'Live - pick what you want, drag to reorder': { fr: 'En direct — choisissez ce que vous voulez, glissez pour réorganiser', es: 'En vivo: elija lo que quiera, arrastre para reordenar', hi: 'लाइव — जो चाहें चुनें, पुनः क्रम के लिए खींचें' },
     'of capacity': { fr: 'de la capacité', es: 'de la capacidad', hi: 'क्षमता का' },
     'of enrolled': { fr: 'des inscrits', es: 'de los matriculados', hi: 'नामांकित में से' },
+    // ── Batch 6: banner subtitle + activity header ──
+    'Live · pick what you want, drag to reorder': { fr: 'En direct · choisissez ce que vous voulez, glissez pour réorganiser', es: 'En vivo · elija lo que quiera, arrastre para reordenar', hi: 'लाइव · जो चाहें चुनें, पुनः क्रम के लिए खींचें' },
+    'children enrolled · last updated just now': { fr: 'enfants inscrits · mis à jour à l’instant', es: 'niños matriculados · actualizado hace un momento', hi: 'बच्चे नामांकित · अभी अद्यतन किया गया' },
+    'centres': { fr: 'centres', es: 'centros', hi: 'केंद्र' },
+    'children enrolled': { fr: 'enfants inscrits', es: 'niños matriculados', hi: 'बच्चे नामांकित' },
+    'last updated just now': { fr: 'mis à jour à l’instant', es: 'actualizado hace un momento', hi: 'अभी अद्यतन किया गया' },
     'Platform': { fr: 'Plateforme', es: 'Plataforma', hi: 'प्लेटफ़ॉर्म' },
     'Overview': { fr: 'Aperçu', es: 'Resumen', hi: 'अवलोकन' },
     'Operations': { fr: 'Opérations', es: 'Operaciones', hi: 'संचालन' },
@@ -763,6 +769,85 @@
     return DICT[words] || CI[String(words).toLowerCase()] || null;
   }
 
+  // Number-glued templates. § marks a number run; numbers are reinserted positionally.
+  var PATTERNS = {
+    'in § days': { fr: 'dans § jours', es: 'en § días', hi: '§ दिनों में' },
+    'Waiting: § days': { fr: 'En attente : § jours', es: 'Esperando: § días', hi: 'प्रतीक्षा: § दिन' },
+    '§ families': { fr: '§ familles', es: '§ familias', hi: '§ परिवार' },
+    '§ enrolled · § families': { fr: '§ inscrits · § familles', es: '§ matriculados · § familias', hi: '§ नामांकित · § परिवार' },
+    'Est. § month lifetime': { fr: 'Durée de vie estimée à § mois', es: 'Vida útil estimada de § meses', hi: 'अनुमानित § माह जीवनकाल' },
+    'Per active agency / month': { fr: 'Par agence active / mois', es: 'Por agencia activa / mes', hi: 'प्रति सक्रिय एजेंसी / माह' },
+    'Per enrolled child / month': { fr: 'Par enfant inscrit / mois', es: 'Por niño matriculado / mes', hi: 'प्रति नामांकित बच्चा / माह' },
+    '§ of capacity': { fr: '§ de la capacité', es: '§ de la capacidad', hi: '§ क्षमता का' },
+    'of § licensed spaces': { fr: 'sur § places autorisées', es: 'de § plazas autorizadas', hi: '§ लाइसेंस स्थानों में से' },
+    '§ / § licensed seats': { fr: '§ / § places autorisées', es: '§ / § plazas autorizadas', hi: '§ / § लाइसेंस स्थान' },
+    '§ spaces open': { fr: '§ places libres', es: '§ plazas libres', hi: '§ स्थान खाली' },
+    '§ enrolled': { fr: '§ inscrits', es: '§ matriculados', hi: '§ नामांकित' },
+    '/ § enrolled': { fr: '/ § inscrits', es: '/ § matriculados', hi: '/ § नामांकित' },
+    '§ of enrolled': { fr: '§ des inscrits', es: '§ de los matriculados', hi: '§ नामांकित में से' },
+    '§ of enrolled children checked in right now': { fr: '§ des enfants inscrits présents en ce moment', es: '§ de los niños matriculados presentes ahora', hi: '§ नामांकित बच्चे अभी उपस्थित' },
+    '● § checked in': { fr: '● § présents', es: '● § presentes', hi: '● § उपस्थित' },
+    '● § not in': { fr: '● § absents', es: '● § ausentes', hi: '● § अनुपस्थित' },
+    '▲ § vs last month': { fr: '▲ § vs mois dernier', es: '▲ § frente al mes pasado', hi: '▲ § पिछले महीने की तुलना में' },
+    'Month over month · §': { fr: 'D’un mois à l’autre · §', es: 'Mes a mes · §', hi: 'महीने-दर-महीने · §' },
+    'NET ENROLLMENT · § DAYS': { fr: 'INSCRIPTIONS NETTES · § JOURS', es: 'MATRÍCULA NETA · § DÍAS', hi: 'शुद्ध नामांकन · § दिन' },
+    'Trailing § days': { fr: '§ derniers jours', es: 'Últimos § días', hi: 'पिछले § दिन' },
+    'Trailing § months': { fr: '§ derniers mois', es: 'Últimos § meses', hi: 'पिछले § महीने' },
+    'Recent § days': { fr: '§ derniers jours', es: 'Últimos § días', hi: 'पिछले § दिन' },
+    'Latest § events': { fr: '§ derniers événements', es: 'Últimos § eventos', hi: 'अंतिम § घटनाएँ' },
+    'Last § events across all agencies': { fr: '§ derniers événements de toutes les agences', es: 'Últimos § eventos de todas las agencias', hi: 'सभी एजेंसियों की अंतिम § घटनाएँ' },
+    'Page § of § · § events': { fr: 'Page § sur § · § événements', es: 'Página § de § · § eventos', hi: 'पृष्ठ § / § · § घटनाएँ' },
+    '§ events': { fr: '§ événements', es: '§ eventos', hi: '§ घटनाएँ' },
+    '§ children': { fr: '§ enfants', es: '§ niños', hi: '§ बच्चे' },
+    '§ kids': { fr: '§ enfants', es: '§ niños', hi: '§ बच्चे' },
+    '§ records': { fr: '§ enregistrements', es: '§ registros', hi: '§ रिकॉर्ड' },
+    '§ record': { fr: '§ enregistrement', es: '§ registro', hi: '§ रिकॉर्ड' },
+    '§ messages': { fr: '§ messages', es: '§ mensajes', hi: '§ संदेश' },
+    '§ messages · § feedback': { fr: '§ messages · § commentaires', es: '§ mensajes · § comentarios', hi: '§ संदेश · § प्रतिक्रिया' },
+    '§ messages · § observations viewed': { fr: '§ messages · § observations vues', es: '§ mensajes · § observaciones vistas', hi: '§ संदेश · § अवलोकन देखे गए' },
+    '§ observations viewed': { fr: '§ observations vues', es: '§ observaciones vistas', hi: '§ अवलोकन देखे गए' },
+    '§ min': { fr: '§ min', es: '§ min', hi: '§ मिनट' },
+    '§ months': { fr: '§ mois', es: '§ meses', hi: '§ महीने' },
+    '§ total': { fr: '§ au total', es: '§ en total', hi: '§ कुल' },
+    '§ selected': { fr: '§ sélectionné(s)', es: '§ seleccionado(s)', hi: '§ चयनित' },
+    '§ on waitlist': { fr: '§ sur la liste d’attente', es: '§ en lista de espera', hi: '§ प्रतीक्षा सूची में' },
+    '§ centres compliant': { fr: '§ centres conformes', es: '§ centros conformes', hi: '§ केंद्र अनुपालक' },
+    '§ ratio breaches': { fr: '§ dépassements de ratio', es: '§ incumplimientos de proporción', hi: '§ अनुपात उल्लंघन' },
+    '§ bills past due': { fr: '§ factures en souffrance', es: '§ facturas vencidas', hi: '§ बकाया बिल' },
+    '§ centres with children + no staff': { fr: '§ centres avec enfants + sans personnel', es: '§ centros con niños y sin personal', hi: '§ केंद्र बच्चों सहित + स्टाफ़ रहित' },
+    'Outstanding receivables: §': { fr: 'Créances en souffrance : §', es: 'Cuentas por cobrar pendientes: §', hi: 'बकाया प्राप्य: §' },
+    '§ plan(s). Split a large balance into manageable installments.': { fr: '§ plan(s). Répartissez un solde important en versements gérables.', es: '§ plan(es). Divida un saldo grande en cuotas manejables.', hi: '§ योजना(एँ)। बड़ी राशि को प्रबंधनीय किश्तों में बाँटें।' },
+    '§ child(ren) with unusual activity patterns in the last § days.': { fr: '§ enfant(s) présentant des comportements inhabituels au cours des § derniers jours.', es: '§ niño(s) con patrones de actividad inusuales en los últimos § días.', hi: 'पिछले § दिनों में § बच्चे असामान्य गतिविधि पैटर्न के साथ।' },
+    '§ responses in the last § months.': { fr: '§ réponses au cours des § derniers mois.', es: '§ respuestas en los últimos § meses.', hi: 'पिछले § महीनों में § प्रतिक्रियाएँ।' },
+    '§ active · § expiring in § days · § expired': { fr: '§ actifs · § expirant dans § jours · § expirés', es: '§ activos · § por vencer en § días · § vencidos', hi: '§ सक्रिय · § § दिनों में समाप्त · § समाप्त' },
+    '§h ago': { fr: 'il y a §h', es: 'hace §h', hi: '§ घंटे पहले' },
+    'active last §h': { fr: 'actif dans les dernières §h', es: 'activo en las últimas §h', hi: 'पिछले § घंटे में सक्रिय' },
+    'Used §× • platform': { fr: 'Utilisé §× • plateforme', es: 'Usado §× • plataforma', hi: '§× उपयोग किया • प्लेटफ़ॉर्म' },
+    '§-month enrolment trajectory': { fr: 'Trajectoire d’inscription sur § mois', es: 'Trayectoria de matrícula de § meses', hi: '§-महीने का नामांकन प्रक्षेप' },
+    'Expired or expiring within § days': { fr: 'Expirés ou expirant dans § jours', es: 'Vencidos o por vencer en § días', hi: '§ दिनों में समाप्त या समाप्त होने वाले' },
+    '§ hours across § staff': { fr: '§ heures pour § membres du personnel', es: '§ horas entre § miembros del personal', hi: '§ स्टाफ़ में § घंटे' },
+  };
+
+  // Match a string against a number-glued template: blank the numbers to form a key,
+  // look it up, and reinsert the numbers into the localized template in the same order.
+  // The SAME number regex the templates were built with; if the template is unknown the
+  // string is left untouched (never mangled).
+  var I18N_NUM = /\$?\d[\d,]*(?:\.\d+)?%?/g;
+  function translatePattern(text, loc) {
+    var raw = String(text);
+    if (!/\d/.test(raw)) return null;
+    var lead = raw.match(/^\s*/)[0], tail = raw.match(/\s*$/)[0];
+    var body = raw.slice(lead.length, raw.length - tail.length);
+    var nums = body.match(I18N_NUM);
+    if (!nums) return null;
+    var tpl = body.replace(I18N_NUM, '\u00a7');
+    var hit = PATTERNS[tpl];
+    if (!hit || !hit[loc]) return null;
+    var i = 0;
+    var out = hit[loc].replace(/\u00a7/g, function () { return i < nums.length ? nums[i++] : ''; });
+    return lead + out + tail;
+  }
+
   function translate(text, loc) {
     var raw = String(text);
     var trimmed = raw.trim();
@@ -775,7 +860,7 @@
     // Trailing punctuation is common where a string is glued to a value in the markup —
     // the greeting is its own text node reading "Good evening, ".
     var punct = '';
-    var pm = /^(.*?)([,:;]\s*)$/.exec(words);
+    var pm = /^(.*?)([,:;·•]\s*)$/.exec(words);
     if (pm) { words = pm[1]; punct = pm[2]; }
 
     // Which key matched matters: if the WHOLE string (prefix included) is the key —
@@ -784,6 +869,12 @@
     var hit = lookup(words);
     var keepPrefix = true;
     if (!hit) { hit = lookup(trimmed); keepPrefix = false; }
+    // A text node can carry internal newlines/indentation (the banner subtitle spans
+    // several lines in the markup); collapse whitespace and try once more.
+    if (!hit) {
+      var norm = trimmed.replace(/\s+/g, ' ');
+      if (norm !== trimmed) { hit = lookup(norm); keepPrefix = false; }
+    }
     if (!hit) return null;
     var out = hit[loc];
     if (!out) return null;
@@ -811,6 +902,7 @@
     while ((n = it.nextNode())) hits.push(n);
     for (var i = 0; i < hits.length; i++) {
       var out = translate(hits[i].nodeValue, loc);
+      if (out === null) out = translatePattern(hits[i].nodeValue, loc);
       done.add(hits[i]);                    // mark either way: never reconsider this node
       if (out !== null && out !== hits[i].nodeValue) hits[i].nodeValue = out;
     }
@@ -883,7 +975,7 @@
     apply: apply,
     locale: locale,
     locales: LOCALES,
-    t: function (s) { var out = translate(s, locale()); return out === null ? s : out; },
+    t: function (s) { var out = translate(s, locale()); if (out === null) out = translatePattern(s, locale()); return out === null ? s : out; },
     dict: DICT
   };
 
