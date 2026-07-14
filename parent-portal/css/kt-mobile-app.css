@@ -538,3 +538,29 @@ body.kt-parentview [data-export] { display: none !important; }
   #appMain table.kt-mcards td::before { font-size: 9.5px !important; margin-bottom: 1px !important; }
   #appMain table.kt-mcards td.kt-mcard-title { font-size: 15px !important; padding: 0 0 4px !important; }
 }
+
+/* ── The banner's action button, lifted out of the banner (2026-07-14) ───
+   kt-mobile-tables.js moves .page-header-v17 > .actions to just below the
+   banner on phones, so the banner collapses to a plain title bar like every
+   other section. Style it where it now lives: full width, thumb-height. ── */
+@media (max-width: 600px) {
+  #appMain .kt-lifted-actions {
+    display: flex !important;
+    gap: 8px !important;
+    margin: 0 0 10px !important;
+    padding: 0 !important;
+  }
+  #appMain .kt-lifted-actions button,
+  #appMain .kt-lifted-actions a {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 14px !important;
+    font-size: 13.5px !important;
+    font-weight: 800 !important;
+    border-radius: 11px !important;
+  }
+  /* With the button gone, the banner is just a title. */
+  #appMain .page-header-v17 { padding: 8px 12px !important; }
+}

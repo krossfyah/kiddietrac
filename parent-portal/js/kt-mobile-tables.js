@@ -112,11 +112,36 @@
     });
   }
 
+  // ── Lift the action button out of the page banner ────────────────────
+  // .page-header-v17 puts its primary action ("+ New observation") INSIDE the
+  // banner. On a phone that makes the banner ~90-160px tall, against the ~36px
+  // title bar every other section shows — the same screen, two different
+  // headers. Move the actions row out and drop it directly below the banner:
+  // the banner collapses to a title, and the button becomes a full-width tap
+  // target where a thumb actually is.
+  function liftBannerActions() {
+    var main = document.getElementById('appMain');
+    if (!main) return;
+
+    [].forEach.call(main.querySelectorAll('.page-header-v17'), function (banner) {
+      var actions = banner.querySelector(':scope > .actions');
+      if (!actions || actions.__ktLifted) return;
+
+      // Desktop keeps the button where it was — this is a phone-only rearrangement.
+      if (!isPhone()) return;
+
+      actions.__ktLifted = true;
+      actions.classList.add('kt-lifted-actions');
+      banner.insertAdjacentElement('afterend', actions);
+    });
+  }
+
   function apply() {
     if (!isPhone()) return;
     var main = document.getElementById('appMain');
     if (!main) return;
     injectStyle();
+    liftBannerActions();
     [].forEach.call(main.querySelectorAll('table'), function (t) {
       // Leave a table alone if a screen has already built its own mobile view,
       // or if it's a layout table with no header row.
