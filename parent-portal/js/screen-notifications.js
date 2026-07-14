@@ -41,15 +41,18 @@
     hero.innerHTML = '<div class="kt-hero-greet">🔔 INBOX</div><h1>Notifications</h1><div class="kt-hero-sub">Every alert from Kiddietrac for your account, newest first. Tap one to mark it read.</div>';
     wrap.appendChild(hero);
 
-    var bar = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin:18px 0;' });
-    var filter = Dom.el('select', { style: 'background:white;border:1px solid #D1D5DB;padding:7px 12px;border-radius:8px;font-size:13px;color:#374151;' });
+    // Classed so the mobile stylesheet can line the control row up — the select
+    // and the buttons had different paddings/heights and fell out of alignment
+    // (and wrapped) on a phone.
+    var bar = Dom.el('div', { class: 'kt-notif-bar', style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin:18px 0;' });
+    var filter = Dom.el('select', { class: 'kt-notif-filter', style: 'background:white;border:1px solid #D1D5DB;padding:7px 12px;border-radius:8px;font-size:13px;color:#374151;' });
     [['','All'],['unread','Unread only'],['read','Read only']].forEach(function (o) {
       filter.appendChild(Dom.el('option', { value: o[0] }, o[1]));
     });
     bar.appendChild(filter);
-    var btns = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;' });
-    var selectBtn = Dom.el('button', { style: 'background:white;color:#475569;border:1px solid #CBD5E1;padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;' }, 'Select');
-    var markAll = Dom.el('button', { style: 'background:white;color:#1F6080;border:1px solid #1F6080;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;' }, 'Mark all read');
+    var btns = Dom.el('div', { class: 'kt-notif-btns', style: 'display:flex;gap:8px;align-items:center;' });
+    var selectBtn = Dom.el('button', { class: 'kt-notif-btn', style: 'background:white;color:#475569;border:1px solid #CBD5E1;padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;' }, 'Select');
+    var markAll = Dom.el('button', { class: 'kt-notif-btn', style: 'background:white;color:#1F6080;border:1px solid #1F6080;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;' }, 'Mark all read');
     btns.appendChild(selectBtn); btns.appendChild(markAll);
     bar.appendChild(btns);
     wrap.appendChild(bar);

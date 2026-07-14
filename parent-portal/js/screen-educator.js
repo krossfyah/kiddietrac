@@ -86,20 +86,62 @@
     return topbar;
   }
 
+  // The ratio bar is the one thing on this screen that can mean "you are out of
+  // compliance right now" — as a small grey pill it read like decoration. It's a
+  // full-width, colour-coded banner: green when staffed, amber when it's tight,
+  // red when the room is over ratio.
   async function refreshRatio(container) {
     try {
       const ratio = await Api.get(`/provider/rooms/${currentRoomId}/ratio`);
       Dom.clear(container);
-      const status = statusTagFor(ratio.status);
-      container.appendChild(Dom.el('div', {
-        style: 'display: flex; gap: 10px; align-items: center; padding: 8px 16px; background: var(--kt-bg); border-radius: 100px;'
-      },
-        Dom.el('span', { class: 'ratio-status ' + ratio.status, style: 'font-weight: 700;' }, status.text),
-        Dom.el('span', { style: 'font-size: 13px; color: var(--kt-text-muted);' },
-          `${ratio.children_present} children · ${ratio.educators_present}/${ratio.required_educators} educators`),
-      ));
+
+      const kids = ratio.children_present || 0;
+      const have = ratio.educators_present || 0;
+      const need = ratio.required_educators || 0;
+      const short = Math.max(0, need - have);
+      const breached = short > 0 || ratio.status === 'over' || ratio.status === 'breach' || ratio.status === 'danger';
+      const tight = !breached && (ratio.status === 'warning' || (need > 0 && have === need && kids > 0));
+
+      const theme = breached
+        ? { bg: '#FEF2F2', border: '#DC2626', text: '#991B1B', chipBg: '#DC2626', icon: '🚨', label: 'RATIO BREACH' }
+        : tight
+          ? { bg: '#FFFBEB', border: '#F59E0B', text: '#92400E', chipBg: '#F59E0B', icon: '⚠️', label: 'AT THE LIMIT' }
+          : { bg: '#F0FDF4', border: '#16A34A', text: '#166534', chipBg: '#16A34A', icon: '✅', label: 'RATIO OK' };
+
+      const headline = breached
+        ? `${short} more educator${short === 1 ? '' : 's'} needed`
+        : `${kids} ${kids === 1 ? 'child' : 'children'} · ${have}/${need} educators`;
+
+      const bar = Dom.el('div', {
+        class: 'kt-ratio-bar' + (breached ? ' breached' : ''),
+        style: `display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;`
+          + `background:${theme.bg};border:2px solid ${theme.border};border-left:7px solid ${theme.border};`
+          + `border-radius:12px;padding:11px 13px;`,
+      });
+      bar.appendChild(Dom.el('div', { style: 'font-size:22px;line-height:1;' }, theme.icon));
+
+      const txt = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      txt.appendChild(Dom.el('div', {
+        style: `font-size:11px;font-weight:800;letter-spacing:1px;color:${theme.text};`,
+      }, theme.label));
+      txt.appendChild(Dom.el('div', {
+        style: `font-size:15px;font-weight:800;color:${theme.text};line-height:1.2;margin-top:1px;`,
+      }, headline));
+      if (breached) {
+        txt.appendChild(Dom.el('div', {
+          style: `font-size:11.5px;color:${theme.text};opacity:.85;margin-top:2px;`,
+        }, `${kids} ${kids === 1 ? 'child' : 'children'} in the room with ${have} educator${have === 1 ? '' : 's'}.`));
+      }
+      bar.appendChild(txt);
+
+      bar.appendChild(Dom.el('div', {
+        style: `background:${theme.chipBg};color:#fff;border-radius:9px;padding:6px 10px;`
+          + `font-size:15px;font-weight:800;flex-shrink:0;font-feature-settings:"tnum";`,
+      }, `${have}:${kids}`));
+
+      container.appendChild(bar);
     } catch (e) {
-      // silent
+      // silent — a missing ratio shouldn't blank the roster
     }
   }
 
@@ -139,16 +181,35 @@
     return base.replace(/\/api\/v1\/?$/, '') + (u.charAt(0) === '/' ? u : '/' + u);
   }
 
+  // A deterministic colour per child — the roster was a wall of identical white
+  // cards, which is hard to scan when you're looking for one child. Same name →
+  // same colour every time, so it becomes a recognisable cue.
+  const CARD_COLOURS = [
+    '#7C3AED', '#E91E8C', '#0EA5E9', '#10B981', '#F59E0B',
+    '#EF4444', '#8B5CF6', '#0F9D6B', '#DB2777', '#0891B2',
+  ];
+  function childColour(child) {
+    const nm = ((child.first_name || '') + (child.last_name || '') + (child.display_name || '')).trim();
+    let h = 0;
+    for (let i = 0; i < nm.length; i++) h = (h * 31 + nm.charCodeAt(i)) >>> 0;
+    return CARD_COLOURS[h % CARD_COLOURS.length];
+  }
+
   function buildChildCard(child) {
     const card = Dom.el('div', {
       class: 'child-card' + (child.is_at_centre ? ' at-centre' : ''),
     });
+    // Tint, not paint: a colour bar down the edge plus the faintest wash, so the
+    // card stays readable and "at centre" still reads as the stronger signal.
+    const colour = childColour(child);
+    card.style.borderLeft = '6px solid ' + colour;
+    card.style.background = 'linear-gradient(100deg, ' + colour + '0F 0%, #ffffff 42%)';
 
     // Header: avatar + name. The roster carries photo_url, but this only ever
     // drew initials — so a child with a photo (Aria) still showed "AH".
     const avatar = Dom.el('div', {
       class: 'avatar',
-      style: { background: 'var(--kt-blue)', color: 'white', width: '40px', height: '40px', fontSize: '14px', flexShrink: 0 },
+      style: { background: colour, color: 'white', width: '40px', height: '40px', fontSize: '14px', flexShrink: 0 },
     }, child.photo_url ? '' : (child.initials || (child.display_name || '?').substring(0, 2).toUpperCase()));
     if (child.photo_url) {
       const url = ktAbsUrl(child.photo_url);

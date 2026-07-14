@@ -36,7 +36,12 @@
         '#kt-mobilenav button .badge{position:absolute;top:-2px;left:50%;margin-left:5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:#EF4444;color:#fff;font:800 10px/16px inherit;text-align:center;box-shadow:0 0 0 2px #fff;}',
         // clear the bottom bar, nothing more — and never force a full-screen
         // min-height, which padded short sections with dead white space.
-        '.app-main,#appMain{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 62px) !important;min-height:0 !important;}',
+        // 62px was the flat-bar height. The bar is taller now (the raised
+        // check-in/QR button pushes it to ~87px), so 62px left the last control
+        // on a screen — the Sign out button on the home launcher — sitting
+        // UNDERNEATH the bar and untappable. Clear the real height, with room to
+        // spare; pinToVisualViewport() refines it from the measured bar.
+        '.app-main,#appMain{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 100px) !important;min-height:0 !important;}',
         // Kill browser scroll-anchoring — as tall screens (Home tiles) render in
         // stages it shoves the scroll down, then our reset yanks it up = the flash.
         'html,body,#appMain{overflow-anchor:none !important;}',
@@ -241,9 +246,22 @@
   function pinToVisualViewport() {
     var nav = document.getElementById('kt-mobilenav'); if (!nav) return;
     var vv = window.visualViewport;
-    if (!vv) { nav.style.bottom = '0px'; return; }
-    var offset = window.innerHeight - (vv.offsetTop + vv.height);
-    nav.style.bottom = (offset > 1 ? Math.round(offset) : 0) + 'px';
+    if (vv) {
+      var offset = window.innerHeight - (vv.offsetTop + vv.height);
+      nav.style.bottom = (offset > 1 ? Math.round(offset) : 0) + 'px';
+    } else {
+      nav.style.bottom = '0px';
+    }
+    // Reserve exactly as much room as the bar actually occupies. Hard-coding the
+    // clearance is how the Sign out button ended up hidden under it — the bar's
+    // height changes with the raised QR button and the safe-area inset.
+    var main = document.getElementById('appMain');
+    if (main && window.innerWidth <= 600) {
+      var need = Math.round(nav.getBoundingClientRect().height) + 16;
+      if (need > 20 && main.style.paddingBottom !== need + 'px') {
+        main.style.setProperty('padding-bottom', need + 'px', 'important');
+      }
+    }
   }
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', pinToVisualViewport);

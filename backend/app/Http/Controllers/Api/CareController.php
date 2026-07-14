@@ -89,17 +89,116 @@ final class CareController extends Controller
                 'l.id', 'l.log_type', 'l.occurred_at', 'l.ended_at',
                 'l.details', 'l.notes', 'l.amount_ml', 'l.amount_oz',
                 DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'staff') as logged_by"),
-            ]);
+            ])
+            ->map(function ($r) { $r->source = 'care_log'; return $r; });
 
-        // Summary counts for the parent's quick-glance UI
-        $today = now()->startOfDay();
-        $todayRows = $rows->where('occurred_at', '>=', $today)->values();
+        // A care moment can be recorded from TWO places, into two different
+        // tables: "Log a moment" writes daily_care_logs, while the room roster's
+        // quick-log writes daily_events. Reading only the first meant a nappy
+        // logged from the roster never appeared in Today's log — the entry looked
+        // lost. Merge both so every reader sees the child's full day.
+        $eventRows = DB::table('daily_events as e')
+            ->leftJoin('users as u', 'u.id', '=', 'e.recorded_by_id')
+            ->where('e.child_id', $child)
+            ->whereNull('e.deleted_at')
+            ->where('e.occurred_at', '>=', $since)
+            ->whereIn('e.event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood'])
+            ->orderByDesc('e.occurred_at')
+            ->limit(300)
+            ->get([
+                'e.id', 'e.event_type', 'e.occurred_at', 'e.payload', 'e.notes',
+                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'staff') as logged_by"),
+            ])
+            ->map(function ($e) {
+                // payload is a small JSON blob ({"type":"wet"}) — flatten its values
+                // into the same "details" string daily_care_logs uses ("wet").
+                $details = null;
+                if (!empty($e->payload)) {
+                    $p = json_decode($e->payload, true);
+                    if (is_array($p)) {
+                        $parts = [];
+                        foreach ($p as $v) {
+                            if (is_scalar($v) && trim((string) $v) !== '') {
+                                $parts[] = (string) $v;
+                            }
+                        }
+                        $details = $parts ? implode(', ', $parts) : null;
+                    } elseif (is_string($p) && trim($p) !== '') {
+                        $details = $p;
+                    }
+                }
+                return (object) [
+                    'id' => $e->id,
+                    'log_type' => $e->event_type,
+                    'occurred_at' => $e->occurred_at,
+                    'ended_at' => null,
+                    'details' => $details,
+                    'notes' => $e->notes,
+                    'amount_ml' => null,
+                    'amount_oz' => null,
+                    'logged_by' => $e->logged_by,
+                    'source' => 'event',
+                ];
+            });
+
+        $rows = $rows->concat($eventRows)
+            ->sortByDesc('occurred_at')
+            ->values()
+            ->take(300);
+
+        // "Today" means today at the CENTRE, not today in UTC. An 8pm Toronto
+        // nappy is stamped 00:07 the next day in UTC, so a UTC-midnight cutoff
+        // dropped every late-afternoon and evening entry from the day's summary.
+        $tz = $this->centreTimezoneForChild($child);
+        $today = \Carbon\Carbon::now($tz)->startOfDay()->timezone(config('app.timezone', 'UTC'));
+
         $summary = [];
         foreach (['diaper','bathroom','nap','meal','snack','bottle','sunscreen','mood'] as $t) {
-            $summary[$t] = $todayRows->where('log_type', $t)->count();
+            $summary[$t] = $rows
+                ->filter(fn ($r) => $r->log_type === $t && \Carbon\Carbon::parse($r->occurred_at)->gte($today))
+                ->count();
         }
 
-        return response()->json(['logs' => $rows, 'today_summary' => $summary]);
+        // Hand the client times already in the centre's zone, so its own
+        // "is this today?" check agrees with ours.
+        $rows = $rows->map(function ($r) use ($tz) {
+            $r->occurred_at = \Carbon\Carbon::parse($r->occurred_at)->timezone($tz)->format('Y-m-d H:i:s');
+            if (!empty($r->ended_at)) {
+                $r->ended_at = \Carbon\Carbon::parse($r->ended_at)->timezone($tz)->format('Y-m-d H:i:s');
+            }
+            return $r;
+        });
+
+        return response()->json(['logs' => $rows->values(), 'today_summary' => $summary]);
+    }
+
+    /**
+     * The timezone the child's centre actually operates in.
+     *
+     * There is no `timezone` column on centres — the value /provider/bootstrap
+     * reports is a constant — so we look in the centre's settings JSON and fall
+     * back to the same default the rest of the app assumes. This matters because
+     * app.timezone is UTC: without it, an early-evening entry in Toronto is
+     * stamped tomorrow and disappears from "today".
+     */
+    private const DEFAULT_TZ = 'America/Toronto';
+
+    private function centreTimezoneForChild(int $child): string
+    {
+        $settings = DB::table('children as c')
+            ->leftJoin('families as f', 'f.id', '=', 'c.family_id')
+            ->leftJoin('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->where('c.id', $child)
+            ->value('ce.settings');
+
+        if ($settings) {
+            $decoded = json_decode((string) $settings, true);
+            if (is_array($decoded) && !empty($decoded['timezone'])) {
+                return (string) $decoded['timezone'];
+            }
+        }
+
+        return self::DEFAULT_TZ;
     }
 
     // ── Milestones ──────────────────────────────────────────────────────

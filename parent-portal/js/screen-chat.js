@@ -431,7 +431,7 @@
           <button class="kt-emoji-btn" type="button" title="Emoji" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">😊</button>
           <button class="kt-mic-btn" type="button" title="Record a voice note" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">🎤</button>
           <input class="kt-compose-input" type="text" placeholder="Type a message…" style="flex:1;min-width:0;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;font-family:inherit;" />
-          <button class="kt-send-btn" style="background:#1F6080;color:white;border:none;padding:0 18px;height:44px;border-radius:24px;font-weight:700;cursor:pointer;font-size:15px;">Send</button>
+          <button class="kt-send-btn" style="background:#159FB4;color:white;border:none;padding:0 18px;height:44px;border-radius:24px;font-weight:700;cursor:pointer;font-size:15px;">Send</button>
           <div class="kt-emoji-panel" style="display:none;position:absolute;bottom:58px;left:8px;background:white;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;width:280px;max-height:180px;overflow-y:auto;z-index:40;font-size:23px;line-height:1.5;"></div>
         </div>
       </div>
@@ -629,15 +629,19 @@
         return `<div style="margin:6px 0;">🎤 <audio controls preload="none" src="${escapeHtml(a.url)}" style="max-width:230px;height:38px;vertical-align:middle;"></audio></div>`;
       }
       // Non-image fallback (future: pdf, etc.)
-      return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:${mine ? 'white' : '#1F6080'};text-decoration:underline;font-size:13px;">📎 ${escapeHtml(a.name || 'attachment')}</a></div>`;
+      return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:${mine ? '#0E7C90' : '#1F6080'};text-decoration:underline;font-size:13px;">📎 ${escapeHtml(a.name || 'attachment')}</a></div>`;
     }).join('');
+    // Same bubbles as the parent app: a pale teal tint for your own messages with
+    // dark text, not solid brand-blue with white text. The two chats sat side by
+    // side looking like different products, and the solid fill also inherited the
+    // agency's brand colour — which on one agency is neon lime.
     return `
       <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};">
-        <div style="max-width:75%;padding:10px 14px;border-radius:18px;background:${mine ? '#1F6080' : 'white'};color:${mine ? 'white' : '#111827'};box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-          ${!mine ? `<div style="font-size:11px;font-weight:700;color:#6B7280;margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
+        <div style="max-width:78%;padding:10px 13px;border-radius:16px;background:${mine ? '#E1F3F6' : '#fff'};color:#0D1B2A;box-shadow:0 1px 2px rgba(15,23,42,.06);">
+          ${!mine ? `<div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
           ${attachmentsHtml}
-          ${m.body ? `<div style="font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(m.body)}</div>` : ''}
-          <div style="font-size:10px;opacity:0.7;margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}</div>
+          ${m.body ? `<div style="font-size:15px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(m.body)}</div>` : ''}
+          <div style="font-size:10.5px;color:rgba(13,27,42,.5);margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}</div>
         </div>
       </div>
     `;

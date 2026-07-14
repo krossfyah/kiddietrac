@@ -62,11 +62,16 @@
     });
   }
 
-  // A cell holding nothing (or a placeholder dash) is a blank line in a card.
-  function isBlank(td) {
+  // Does this cell carry readable text (rather than being empty, a placeholder
+  // dash, or a bare checkbox / icon button)?
+  function hasText(td) {
     var t = (td.textContent || '').trim();
-    if (td.querySelector('img,button,a,svg,input')) return false;
-    return t === '' || t === '—' || t === '-' || t === '–';
+    return t !== '' && t !== '—' && t !== '-' && t !== '–';
+  }
+  // A cell with no text AND nothing worth showing is a blank line in a card.
+  function isBlank(td) {
+    if (hasText(td)) return false;
+    return !td.querySelector('img,button,a,svg,input');
   }
 
   function restack(table) {
@@ -81,12 +86,12 @@
         td.setAttribute('data-label', labels[i] == null ? '' : labels[i]);
         if (isBlank(td)) td.classList.add('kt-mcard-empty');
       });
-      // The card's title is the first cell with something IN it. Tables often
-      // lead with a checkbox/spacer column, and titling that gave every card a
-      // blank heading followed by a list of "LABEL: value" rows — which is
-      // exactly the table we were trying to get away from.
+      // The card's title is the first cell with actual TEXT in it. Tables lead
+      // with a checkbox/spacer column, and titling that gave every card an empty
+      // heading followed by a list of "LABEL: value" rows — exactly the table we
+      // were trying to get away from.
       for (var i = 0; i < cells.length; i++) {
-        if (!isBlank(cells[i])) { cells[i].classList.add('kt-mcard-title'); break; }
+        if (hasText(cells[i])) { cells[i].classList.add('kt-mcard-title'); break; }
       }
     });
   }

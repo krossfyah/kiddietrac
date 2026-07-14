@@ -290,14 +290,64 @@
       });
     }
 
+    // Quick-pick options per type. Typing "wet only" into a free-text box while
+    // holding a baby is not a workflow — one tap should do it. The picked value
+    // goes into the same `details` field the free-text box used, so nothing
+    // downstream changes, and a custom note is still available underneath.
+    var DETAIL_OPTIONS = {
+      diaper:    ['Wet', 'BM', 'Wet + BM', 'Dry'],
+      bathroom:  ['Pee', 'BM', 'Both', 'Tried, nothing', 'Accident'],
+      nap:       ['Slept well', 'Short nap', 'Restless', 'Did not sleep'],
+      meal:      ['Ate all', 'Ate most', 'Ate some', 'Refused'],
+      snack:     ['Ate all', 'Ate most', 'Ate some', 'Refused'],
+      bottle:    ['Finished', 'Most of it', 'A few sips', 'Refused'],
+      sunscreen: ['Applied', 'Reapplied'],
+      mood:      ['Happy', 'Calm', 'Playful', 'Tired', 'Fussy', 'Upset', 'Unwell'],
+    };
+
     function openDetailsModal(t, childId) {
-      var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;' });
-      var modal = Dom.el('div', { style: 'background:white;border-radius:14px;max-width:420px;width:100%;padding:24px;' });
+      var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px;' });
+      var modal = Dom.el('div', { style: 'background:white;border-radius:16px;max-width:420px;width:100%;padding:20px;max-height:88vh;overflow-y:auto;' });
       overlay.appendChild(modal);
-      modal.innerHTML = '<h2 style="margin:0 0 14px;font-size:18px;">' + t.icon + ' ' + t.label + '</h2>';
-      var detailsIn = Dom.el('input', { type: 'text', placeholder: 'Detail (e.g. wet only, lunch, etc.)', style: 'width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box;' });
-      var notesIn = Dom.el('textarea', { placeholder: 'Notes (optional)', style: 'width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;min-height:70px;box-sizing:border-box;font-family:inherit;' });
-      modal.appendChild(detailsIn); modal.appendChild(notesIn);
+      modal.innerHTML = '<h2 style="margin:0 0 12px;font-size:18px;">' + t.icon + ' ' + t.label + '</h2>';
+
+      var chosen = '';
+      var opts = DETAIL_OPTIONS[t.type] || [];
+      var detailsIn = Dom.el('input', { type: 'hidden' });   // carries the chosen value
+
+      if (opts.length) {
+        modal.appendChild(Dom.el('div', {
+          style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:7px;',
+        }, 'What happened?'));
+        var chips = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px;' });
+        var chipEls = [];
+        opts.forEach(function (label) {
+          var chip = Dom.el('button', {
+            type: 'button',
+            style: 'border:1.5px solid #E2E8F0;background:#fff;color:#0F172A;border-radius:999px;'
+              + 'padding:9px 14px;font-size:14px;font-weight:700;cursor:pointer;',
+          }, label);
+          chip.addEventListener('click', function () {
+            chosen = (chosen === label) ? '' : label;      // tap again to unpick
+            detailsIn.value = chosen;
+            chipEls.forEach(function (c) {
+              var on = c.textContent === chosen;
+              c.style.background = on ? t.color : '#fff';
+              c.style.color = on ? '#fff' : '#0F172A';
+              c.style.borderColor = on ? t.color : '#E2E8F0';
+            });
+          });
+          chipEls.push(chip);
+          chips.appendChild(chip);
+        });
+        modal.appendChild(chips);
+      }
+
+      modal.appendChild(Dom.el('div', {
+        style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;',
+      }, 'Note (optional)'));
+      var notesIn = Dom.el('textarea', { placeholder: 'Anything the parent should know…', style: 'width:100%;padding:11px;border:1px solid #D1D5DB;border-radius:10px;font-size:16px;min-height:70px;box-sizing:border-box;font-family:inherit;' });
+      modal.appendChild(notesIn);
       var amtWrap;
       if (t.type === 'bottle') {
         amtWrap = Dom.el('div', { style: 'display:flex;gap:8px;margin-top:8px;align-items:center;' });
