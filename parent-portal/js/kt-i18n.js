@@ -890,6 +890,40 @@
     'View billing': { fr: 'Voir la facturation', es: 'Ver facturación', hi: 'बिलिंग देखें' },
     'Back': { fr: 'Retour', es: 'Atrás', hi: 'वापस' },
     'Naps': { fr: 'Siestes', es: 'Siestas', hi: 'झपकियाँ' },
+    // ── Batch 11: login / index page ──
+    "Welcome back": { fr: "Bon retour", es: "Bienvenido de nuevo", hi: "वापसी पर स्वागत है" },
+    "Sign in": { fr: "Se connecter", es: "Iniciar sesión", hi: "साइन इन" },
+    "Sign in to see how your little one's day is going.": { fr: "Connectez-vous pour voir comment se passe la journée de votre tout-petit.", es: "Inicie sesión para ver cómo va el día de su pequeño.", hi: "अपने नन्हे का दिन कैसा जा रहा है, यह देखने के लिए साइन इन करें।" },
+    "Email": { fr: "Courriel", es: "Correo", hi: "ईमेल" },
+    "Password": { fr: "Mot de passe", es: "Contraseña", hi: "पासवर्ड" },
+    "Forgot?": { fr: "Oublié ?", es: "¿Olvidó?", hi: "भूल गए?" },
+    "Authenticator code (6 digits, or a 10-char recovery code)": { fr: "Code d'authentification (6 chiffres, ou un code de secours à 10 caractères)", es: "Código de autenticación (6 dígitos, o un código de recuperación de 10 caracteres)", hi: "प्रमाणक कोड (6 अंक, या 10-अक्षर का रिकवरी कोड)" },
+    "Every moment, beautifully captured.": { fr: "Chaque instant, magnifiquement capturé.", es: "Cada momento, bellamente capturado.", hi: "हर पल, खूबसूरती से कैद।" },
+    "beautifully captured.": { fr: "magnifiquement capturé.", es: "bellamente capturado.", hi: "खूबसूरती से कैद।" },
+    "See what your child is doing, eating, and learning — as it happens.": { fr: "Voyez ce que fait, mange et apprend votre enfant — en temps réel.", es: "Vea lo que su hijo hace, come y aprende, en tiempo real.", hi: "देखें कि आपका बच्चा क्या कर रहा, खा रहा और सीख रहा है — जैसे ही होता है।" },
+    "Real-time photos & updates": { fr: "Photos et mises à jour en temps réel", es: "Fotos y actualizaciones en tiempo real", hi: "वास्तविक समय की तस्वीरें और अपडेट" },
+    "Direct line to educators": { fr: "Ligne directe avec les éducateurs", es: "Línea directa con los educadores", hi: "शिक्षकों से सीधा संपर्क" },
+    "Simple billing with CWELCC": { fr: "Facturation simple avec CWELCC", es: "Facturación sencilla con CWELCC", hi: "CWELCC के साथ सरल बिलिंग" },
+    "AI Augmented": { fr: "Augmenté par l'IA", es: "Potenciado por IA", hi: "एआई संवर्धित" },
+    "CCEYA Compliant": { fr: "Conforme à la CCEYA", es: "Conforme con CCEYA", hi: "CCEYA अनुपालक" },
+    "HDLH Aligned": { fr: "Aligné sur HDLH", es: "Alineado con HDLH", hi: "HDLH संरेखित" },
+    "Your $10/day fee, applied automatically. Tax receipts every January.": { fr: "Vos frais de 10 $/jour, appliqués automatiquement. Reçus fiscaux chaque janvier.", es: "Su tarifa de $10/día, aplicada automáticamente. Recibos fiscales cada enero.", hi: "आपका $10/दिन शुल्क, स्वतः लागू। हर जनवरी कर रसीदें।" },
+    "Contact us": { fr: "Contactez-nous", es: "Contáctenos", hi: "हमसे संपर्क करें" },
+    // ── Batch 12: login page (SSO, hero, footer) ──
+    "Continue with Google": { fr: "Continuer avec Google", es: "Continuar con Google", hi: "Google से जारी रखें" },
+    "Continue with Microsoft": { fr: "Continuer avec Microsoft", es: "Continuar con Microsoft", hi: "Microsoft से जारी रखें" },
+    "Continue with Facebook": { fr: "Continuer avec Facebook", es: "Continuar con Facebook", hi: "Facebook से जारी रखें" },
+    "or sign in with email": { fr: "ou connectez-vous avec un courriel", es: "o inicie sesión con correo", hi: "या ईमेल से साइन इन करें" },
+    "Every moment,": { fr: "Chaque instant,", es: "Cada momento,", hi: "हर पल," },
+    "every milestone —": { fr: "chaque étape —", es: "cada hito —", hi: "हर पड़ाव —" },
+    "Message your child's room teacher anytime. Replies usually within an hour.": { fr: "Écrivez à l'éducateur de votre enfant à tout moment. Réponse généralement en moins d'une heure.", es: "Escriba al educador de su hijo en cualquier momento. Respuesta normalmente en menos de una hora.", hi: "किसी भी समय अपने बच्चे के कक्ष शिक्षक को संदेश भेजें। आमतौर पर एक घंटे के भीतर उत्तर।" },
+    "No account yet? Your childcare centre will send you an invitation email.": { fr: "Pas encore de compte ? Votre centre vous enverra un courriel d'invitation.", es: "¿Aún no tiene cuenta? Su centro le enviará un correo de invitación.", hi: "अभी तक खाता नहीं? आपका केंद्र आपको आमंत्रण ईमेल भेजेगा।" },
+    "if you need help.": { fr: "si vous avez besoin d'aide.", es: "si necesita ayuda.", hi: "यदि आपको सहायता चाहिए।" },
+    "Authenticator code": { fr: "Code d'authentification", es: "Código de autenticación", hi: "प्रमाणक कोड" },
+    "(6 digits, or a 10-char recovery code)": { fr: "(6 chiffres, ou un code de secours à 10 caractères)", es: "(6 dígitos, o un código de recuperación de 10 caracteres)", hi: "(6 अंक, या 10-अक्षर का रिकवरी कोड)" },
+    // ── Batch 13: login hero subtitle + badge ──
+    "AI-AUGMENTED · CANADA-FIRST": { fr: "AUGMENTÉ PAR L'IA · CONÇU AU CANADA", es: "POTENCIADO POR IA · HECHO EN CANADÁ", hi: "एआई-संवर्धित · कनाडा-प्रथम" },
+    "From morning check-in to your AI-summarized day at 6 pm, KiddieTrac brings your child's day to you with the warmth and clarity you deserve.": { fr: "De l'arrivée du matin au résumé de la journée par l'IA à 18 h, KiddieTrac vous transmet la journée de votre enfant avec toute la chaleur et la clarté que vous méritez.", es: "Desde el registro de la mañana hasta el resumen de IA del día a las 6 p. m., KiddieTrac le trae el día de su hijo con la calidez y claridad que merece.", hi: "सुबह के चेक-इन से लेकर शाम 6 बजे आपके एआई-सारांशित दिन तक, KiddieTrac आपके बच्चे का दिन उस गर्मजोशी और स्पष्टता के साथ लाता है जिसके आप हकदार हैं।" },
     'Platform': { fr: 'Plateforme', es: 'Plataforma', hi: 'प्लेटफ़ॉर्म' },
     'Overview': { fr: 'Aperçu', es: 'Resumen', hi: 'अवलोकन' },
     'Operations': { fr: 'Opérations', es: 'Operaciones', hi: 'संचालन' },
@@ -1093,7 +1127,43 @@
     }
   }
 
+
+  // On a page WITHOUT the app top bar (the login / index page), there is no language
+  // control at all — a non-English visitor cannot even change it before signing in. Inject
+  // a compact picker in that case. It sets kt_locale locally and reloads so the page
+  // re-renders in the new language; the server preference syncs after login.
+  function injectLoginPicker() {
+    try {
+      if (document.getElementById('kt-tb-locale')) return;      // the app top bar owns it
+      if (document.getElementById('kt-login-locale')) return;   // already injected
+      if (!document.getElementById('loginForm')) return;        // only on the login page
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;top:14px;right:16px;z-index:2147480000;';
+      var sel = document.createElement('select');
+      sel.id = 'kt-login-locale';
+      sel.setAttribute('aria-label', 'Language');
+      sel.style.cssText = 'border:1px solid rgba(15,23,42,.18);border-radius:8px;background:rgba(255,255,255,.92);'
+        + 'padding:6px 10px;font-size:13px;font-weight:600;color:#334155;cursor:pointer;'
+        + 'box-shadow:0 1px 3px rgba(16,40,64,.12);';
+      var opts = [['en', '🌐 English'], ['fr', '🌐 Français'], ['es', '🌐 Español'], ['hi', '🌐 हिन्दी']];
+      var cur = locale();
+      for (var i = 0; i < opts.length; i++) {
+        var o = document.createElement('option');
+        o.value = opts[i][0]; o.textContent = opts[i][1];
+        if (opts[i][0] === cur) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.addEventListener('change', function () {
+        try { localStorage.setItem('kt_locale', sel.value); } catch (e) {}
+        window.location.reload();
+      });
+      wrap.appendChild(sel);
+      document.body.appendChild(wrap);
+    } catch (e) {}
+  }
+
   function apply() {
+    injectLoginPicker();
     var loc = locale();
     if (loc === 'en') return;               // nothing to do
     try { walk(document.body, loc); } catch (e) {}
