@@ -208,9 +208,15 @@
     runPayroll();
   }
   async function runPayroll() {
-    const f = document.getElementById('pr-from').value, t = document.getElementById('pr-to').value;
+    // Guard against the user navigating away mid-fetch: the from/to inputs and the
+    // result host all live on this screen, and firing this after leaving it threw
+    // "Cannot set properties of null (setting 'innerHTML')".
+    const fromEl = document.getElementById('pr-from'), toEl = document.getElementById('pr-to');
+    if (!fromEl || !toEl) return;
+    const f = fromEl.value, t = toEl.value;
     const res = await Api.get(`/admin/payroll?from=${f}&to=${t}`);
     const host = document.getElementById('pr-result');
+    if (!host) return;
     if (!res.data || !res.data.length) { host.innerHTML = '<div style="color:#9CA3AF;padding:12px;">No punches in range.</div>'; return; }
     let tot = 0;
     host.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr>
