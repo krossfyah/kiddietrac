@@ -178,10 +178,21 @@
         state.total = data.total || 0;
         if (data.filters) {
           // Never blank the dropdown: keep what we already have if a response
-          // omits the list. (The backend now returns the unfiltered set, but a
-          // filtered/empty page must not empty the filter either.)
+          // omits the list.
+          var before = state.actions.length + '|' + state.entities.length;
           if (data.filters.actions && data.filters.actions.length) state.actions = data.filters.actions;
-          if (data.filters.entity_types) state.entities = data.filters.entity_types;
+          // The API sends `entities`; this read `entity_types`, which does not
+          // exist — so the Entity filter was always empty.
+          var ents = data.filters.entities || data.filters.entity_types;
+          if (ents && ents.length) state.entities = ents;
+
+          // THE BUG: the toolbar is built BEFORE the first request returns, when
+          // state.actions is still empty — and nothing ever rebuilt it. So the
+          // Action dropdown sat there with nothing in it forever, no matter what
+          // the API sent. Rebuild it the moment the lists change.
+          if (before !== state.actions.length + '|' + state.entities.length) {
+            buildToolbar();
+          }
         }
         Dom.clear(listWrap);
         if (!data.logs || !data.logs.length) {
@@ -202,7 +213,7 @@
       // Action dropdown
       // The filter lists the same clean labels — a dropdown of
       // "post:api/v1/notifications/mark-read" is not a filter anyone can use.
-      toolbar.appendChild(filterSelect('Action', state.filters.action, ['', ''].concat(state.actions.map(function (a) { return a; })), function (v) {
+      toolbar.appendChild(filterSelect('Action', state.filters.action, [''].concat(state.actions.map(function (a) { return a; })), function (v) {
         state.filters.action = v; state.offset = 0; reload();
       }));
 
