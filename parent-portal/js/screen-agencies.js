@@ -32,6 +32,34 @@
     return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // The agency's timezone drives EVERY time in the platform — sign-in/out, care
+  // logs, reports, and when the end-of-day parent summary is bucketed and sent —
+  // so it is a required step at onboarding, not a hidden default.
+  var TIMEZONES = [
+    ['America/St_Johns', "Newfoundland (St. John's)"],
+    ['America/Halifax', 'Atlantic (Halifax)'],
+    ['America/Toronto', 'Eastern (Toronto, Ottawa, Montreal)'],
+    ['America/Winnipeg', 'Central (Winnipeg)'],
+    ['America/Regina', 'Central, no DST (Regina)'],
+    ['America/Edmonton', 'Mountain (Edmonton, Calgary)'],
+    ['America/Vancouver', 'Pacific (Vancouver)'],
+    ['America/New_York', 'US Eastern (New York)'],
+    ['America/Chicago', 'US Central (Chicago)'],
+    ['America/Denver', 'US Mountain (Denver)'],
+    ['America/Phoenix', 'US Arizona, no DST (Phoenix)'],
+    ['America/Los_Angeles', 'US Pacific (Los Angeles)'],
+    ['Europe/London', 'UK (London)'],
+    ['Europe/Dublin', 'Ireland (Dublin)'],
+    ['Australia/Sydney', 'Australia (Sydney)'],
+    ['Pacific/Auckland', 'New Zealand (Auckland)'],
+    ['UTC', 'UTC'],
+  ];
+  function tzOptions(selected) {
+    return TIMEZONES.map(function (t) {
+      return '<option value="' + t[0] + '"' + (t[0] === selected ? ' selected' : '') + '>' + esc(t[1]) + '</option>';
+    }).join('');
+  }
+
   async function render(container) {
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading agencies…</div>';
     let data;
@@ -151,6 +179,12 @@
                   <input name="accent_color" type="color" value="#8EC73C" style="${inputStyle()};height:42px;">
                 </div>
               </div>
+              <label style="font-size:13px;font-weight:600;">Timezone *</label>
+              <select name="timezone" required style="${inputStyle()}">${tzOptions('America/Toronto')}</select>
+              <div style="font-size:12px;color:#6B7280;margin-top:4px;">
+                Every time in the platform — sign-in/out, logs, reports and the daily summary emails — is shown
+                and bucketed in this timezone. Get this right at setup; changing it later re-dates nothing already recorded.
+              </div>
             </section>
             <section style="border:1px solid #E5E7EB;border-radius:10px;padding:16px;">
               <h3 style="font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#6B7280;margin:0 0 10px;">First centre</h3>
@@ -234,6 +268,7 @@
             <div><label style="font-size:13px;font-weight:600;">Subdomain</label><input name="subdomain" value="${esc(a.subdomain || '')}" style="${inputStyle()}"></div>
             <div><label style="font-size:13px;font-weight:600;">Custom domain</label><input name="custom_domain" value="${esc(a.custom_domain || '')}" style="${inputStyle()}"></div>
             <div><label style="font-size:13px;font-weight:600;">Contact email</label><input name="contact_email" type="email" value="${esc(a.contact_email || '')}" style="${inputStyle()}"></div>
+            <div><label style="font-size:13px;font-weight:600;">Timezone</label><select name="timezone" style="${inputStyle()}">${tzOptions(a.timezone || 'America/Toronto')}</select></div>
             <div><label style="font-size:13px;font-weight:600;">Plan</label>
               <select name="plan" style="${inputStyle()}">
                 <option value="starter" ${a.plan==='starter'?'selected':''}>Starter</option>

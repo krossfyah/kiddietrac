@@ -27,20 +27,19 @@
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return (r || document).querySelectorAll(s); }
 
+  // Times read in the AGENCY's timezone, not the device's — see kt-tz.js.
   function fmtDate(iso) {
     if (!iso) return '';
+    if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(iso);
     const d = new Date(iso.replace(' ', 'T') + 'Z');
-    const today = new Date().toDateString() === d.toDateString();
-    return today ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    return isNaN(d) ? '' : d.toLocaleString();
   }
   // Date AND time together, for the table Date column.
   function fmtDateTime(iso) {
     if (!iso) return '';
+    if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(iso);
     const d = new Date(iso.replace(' ', 'T') + 'Z');
-    const today = new Date().toDateString() === d.toDateString();
-    const day = today ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    return day + ', ' + time;
+    return isNaN(d) ? '' : d.toLocaleString();
   }
 
   function isMobile() { return window.matchMedia && window.matchMedia('(max-width:600px)').matches; }
@@ -130,14 +129,76 @@
       });
       container.querySelectorAll('.kt-ann-card').forEach(card => {
         card.addEventListener('click', () => {
+          const id = Number(card.dataset.id);
           if (selecting) {
-            const id = card.dataset.id;
             selected[id] = !selected[id];
             paint();
+            return;
           }
+          const a = items.find(x => x.id === id);
+          if (a) openDetail(a);
         });
       });
     };
+
+    // Tap a card → read the whole thing: full message, who it went to, when it
+    // was sent, and how. The preview on the card is deliberately short, so
+    // without this there was no way to read a long announcement at all.
+    function openDetail(a) {
+      const when = a.sent_at || a.scheduled_at || a.created_at;
+      const scope = a.centre_name || a.scope_name || (a.scope_type === 'agency' ? 'All centres' : a.scope_type) || '—';
+      const channels = [
+        a.send_email ? '📧 Email' : '',
+        a.send_push ? '🔔 Push' : '',
+        a.send_sms ? '💬 SMS' : '',
+      ].filter(Boolean).join(' · ') || 'In-app only';
+      const status = a.sent_at ? 'Sent' : (a.scheduled_at ? 'Scheduled' : 'Draft');
+
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9600;background:#F6F9FC;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+      ov.innerHTML = `
+        <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #E7EDF3;padding:12px 14px;display:flex;align-items:center;gap:10px;z-index:2;">
+          <button type="button" data-back style="background:none;border:none;font-size:22px;color:#159FB4;cursor:pointer;padding:0 4px;">‹</button>
+          <span style="font-weight:800;font-size:16px;color:#0F172A;">Alert</span>
+        </div>
+        <div style="padding:14px;">
+          <div style="background:#fff;border:1px solid #E7EDF3;border-left:5px solid #159FB4;border-radius:14px;padding:15px;">
+            <div style="font-weight:800;font-size:18px;color:#0F172A;line-height:1.3;">${esc(a.title || '(untitled)')}</div>
+            <div style="font-size:12px;color:#94A3B8;margin-top:6px;">${esc(fmtDate(when))}</div>
+            <div style="font-size:14.5px;color:#334155;line-height:1.6;margin-top:12px;white-space:pre-wrap;">${esc(plainPreview(a.body, 4000))}</div>
+          </div>
+          <div style="background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:15px;margin-top:11px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:9px;">Details</div>
+            ${detailRow('Sent to', scope)}
+            ${detailRow('Status', status)}
+            ${detailRow('Date', fmtDate(when))}
+            ${detailRow('Sent via', channels)}
+            ${a.created_by_name ? detailRow('Sent by', a.created_by_name) : ''}
+            ${a.recipients || a.delivered ? detailRow('Recipients', String(a.recipients || a.delivered)) : ''}
+          </div>
+          <button id="kt-ann-detail-del" style="width:100%;background:#fff;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:12px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;margin-top:12px;">Delete this alert</button>
+        </div>`;
+      document.body.appendChild(ov);
+
+      const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+      ov.querySelector('[data-back]').addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (window.KT && KT.popOverlay) KT.popOverlay(ov); else close();
+      });
+      if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, close);   // Android back closes it
+
+      ov.querySelector('#kt-ann-detail-del').addEventListener('click', () => {
+        close();
+        remove([a.id]);
+      });
+    }
+
+    function detailRow(label, value) {
+      return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #F1F5F9;">'
+        + '<span style="font-size:12.5px;color:#94A3B8;font-weight:700;">' + esc(label) + '</span>'
+        + '<span style="font-size:13.5px;color:#0F172A;text-align:right;">' + esc(value) + '</span>'
+        + '</div>';
+    }
 
     async function remove(ids) {
       if (!ids || !ids.length) return;
@@ -159,15 +220,6 @@
     }
 
     paint();
-  }
-
-  function fmtDate(iso) {
-    if (!iso) return '';
-    const d = new Date(String(iso).replace(' ', 'T'));
-    if (isNaN(d)) return '';
-    const today = new Date().toDateString() === d.toDateString();
-    return (today ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' }))
-      + ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }
 
   async function renderProvider(container) {

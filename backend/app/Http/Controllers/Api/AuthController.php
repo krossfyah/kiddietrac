@@ -426,9 +426,23 @@ final class AuthController extends Controller
             ? DB::table('centres')->where('id', $centreId)->select('id', 'name')->first()
             : null;
 
+        // The agency's timezone. Every time shown in the app should be the
+        // agency's local time, not the device's — a parent travelling, or a
+        // phone left on another zone, must not see a different day.
+        // Guardians hold no agency role, so reach it through their family's centre.
+        $tzAgencyId = $agencyId ?: DB::table('guardians as g')
+            ->join('families as f', 'f.id', '=', 'g.family_id')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('g.user_id', $user->id)
+            ->value('c.agency_id');
+        $agencyTz = $tzAgencyId
+            ? DB::table('agencies')->where('id', $tzAgencyId)->value('timezone')
+            : null;
+
         return [
             'id' => $user->id,
             'email' => $user->email,
+            'agency_timezone' => $agencyTz ?: 'America/Toronto',
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
             'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')),

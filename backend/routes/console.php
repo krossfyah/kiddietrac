@@ -19,6 +19,17 @@ Artisan::command('inspire', function () {
 |
 */
 
+// End-of-day summary to PARENTS — 18:30, after pickup. One email per child:
+// the AI story of the day, photos, sign-in/out, every care log, the day's
+// messages, and any announcements. Each child is bucketed in its own agency's
+// timezone inside the command, so this schedule only picks the wall-clock hour.
+Schedule::command('kiddietrac:parent-summary')
+    ->dailyAt('18:30')
+    ->timezone('America/Toronto')
+    ->withoutOverlapping(60)
+    ->runInBackground()
+    ->onOneServer();
+
 // Daily morning digest — 07:00 in the agency's timezone (Toronto default).
 Schedule::command('kiddietrac:digest-daily')
     ->dailyAt('07:00')

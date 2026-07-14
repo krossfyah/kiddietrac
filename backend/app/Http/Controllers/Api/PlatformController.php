@@ -650,6 +650,10 @@ final class PlatformController extends Controller
             'name' => ['sometimes', 'string', 'max:180'],
             'contact_email' => ['sometimes', 'nullable', 'email', 'max:180'],
             'contact_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            // The agency's timezone drives every displayed time and every daily
+            // bucket (care logs, reports, the end-of-day parent summary). It was
+            // settable at creation but NOT here, so editing it silently did nothing.
+            'timezone' => ['sometimes', 'nullable', 'timezone'],
             'plan_code' => ['sometimes', 'nullable', 'string', 'max:40'],
             'plan_amount_cents' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'white_label_enabled' => ['sometimes', 'boolean'],

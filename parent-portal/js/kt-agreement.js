@@ -47,8 +47,8 @@
     ov.innerHTML =
       '<div style="background:#0B2545;color:#fff;padding:16px 18px;flex:0 0 auto;">'
       + '  <div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">BEFORE YOU START</div>'
-      + '  <div style="font-size:19px;font-weight:800;margin-top:2px;">Privacy Policy &amp; NDA</div>'
-      + '  <div style="font-size:12.5px;opacity:.85;margin-top:3px;">Please read this and sign it — it only takes a minute.</div>'
+      + '  <div style="font-size:19px;font-weight:800;margin-top:2px;">Terms, Privacy &amp; NDA</div>'
+      + '  <div style="font-size:12.5px;opacity:.85;margin-top:3px;">Please read this and sign it. You must accept it to use KiddieTrac.</div>'
       + '</div>'
       + '<div id="kt-agree-scroll" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 18px;">'
       + '  <div id="kt-agree-text" style="background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:16px;font-size:14px;line-height:1.6;color:#334155;"></div>'
@@ -67,7 +67,7 @@
       + '      <div id="kt-agree-date" style="font-size:12.5px;color:#475569;margin-top:10px;font-weight:700;"></div>'
       + '      <label style="display:flex;gap:9px;align-items:flex-start;margin-top:12px;font-size:13.5px;color:#0F172A;line-height:1.45;">'
       + '        <input id="kt-agree-check" type="checkbox" style="width:19px;height:19px;flex:0 0 auto;margin-top:1px;accent-color:#159FB4;">'
-      + '        <span>I have read and agree to the Privacy Policy &amp; Non-Disclosure Agreement.</span>'
+      + '        <span>I have read and agree to the Terms of Use, Privacy Policy and Non-Disclosure Agreement.</span>'
       + '      </label>'
       + '    </div>'
       + '    <div id="kt-agree-err" style="color:#B91C1C;font-size:13px;min-height:17px;margin:8px 2px;"></div>'
@@ -76,14 +76,16 @@
       + '<div style="flex:0 0 auto;padding:12px 18px calc(env(safe-area-inset-bottom,0px) + 14px);background:#fff;border-top:1px solid #E7EDF3;">'
       + '  <button id="kt-agree-submit" disabled style="width:100%;border:none;border-radius:13px;padding:15px;font-size:16px;font-weight:800;'
       + '    color:#fff;background:#159FB4;opacity:.5;cursor:not-allowed;">Agree &amp; continue</button>'
-      + '  <button id="kt-agree-out" type="button" style="width:100%;background:none;border:none;color:#94A3B8;font-size:12.5px;font-weight:700;padding:10px;cursor:pointer;">Sign out instead</button>'
+      + '  <button id="kt-agree-decline" type="button" style="width:100%;background:none;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:12px;'
+      + '    font-size:13.5px;font-weight:800;padding:12px;margin-top:9px;cursor:pointer;">Decline</button>'
+      + '  <div style="text-align:center;font-size:11px;color:#94A3B8;margin-top:7px;line-height:1.4;">If you decline you will not be onboarded, and your centre will be notified.</div>'
       + '</div>';
     document.body.appendChild(ov);
 
     ov.querySelector('#kt-agree-text').innerHTML = info.body_html || '';
-    var now = new Date();
-    ov.querySelector('#kt-agree-date').textContent = 'Date: ' + now.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })
-      + ' · ' + now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    // The stamped date is the AGENCY's local time (from the server), not this
+    // device's clock — a phone in another timezone must not stamp another day.
+    ov.querySelector('#kt-agree-date').textContent = 'Date: ' + (info.now_human || new Date().toLocaleString());
 
     // ── Gate: they must reach the end of the text ──
     var scroller = ov.querySelector('#kt-agree-scroll');
@@ -177,10 +179,51 @@
       });
     });
 
-    ov.querySelector('#kt-agree-out').addEventListener('click', function () {
-      try { if (KT.Auth && KT.Auth.clear) KT.Auth.clear(); } catch (e) {}
-      try { sessionStorage.clear(); localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user'); } catch (e) {}
-      location.href = '/index.html';
+    // ── Decline: a real, deliberate exit, not a way to skip the step ──
+    ov.querySelector('#kt-agree-decline').addEventListener('click', function () {
+      var panel = document.createElement('div');
+      panel.style.cssText = 'position:fixed;inset:0;z-index:2147481500;background:rgba(8,17,33,.72);display:flex;align-items:center;'
+        + 'justify-content:center;padding:22px;font-family:system-ui,-apple-system,sans-serif;';
+      panel.innerHTML =
+        '<div style="background:#fff;border-radius:18px;max-width:380px;width:100%;padding:20px;">'
+        + '<div style="font-size:40px;line-height:1;">⚠️</div>'
+        + '<div style="font-weight:800;font-size:18px;color:#0F172A;margin-top:8px;">Decline the agreement?</div>'
+        + '<div style="font-size:13.5px;color:#475569;line-height:1.55;margin-top:7px;">'
+        + 'You will <strong>not be onboarded</strong> onto KiddieTrac and you will be signed out. '
+        + 'Your centre and KiddieTrac will be notified. You can only get access by accepting the agreement.</div>'
+        + '<textarea id="kt-decl-why" placeholder="Reason (optional)" style="width:100%;box-sizing:border-box;margin-top:12px;padding:10px;'
+        + 'border:1.5px solid #E3EAF1;border-radius:10px;font-size:15px;min-height:64px;font-family:inherit;"></textarea>'
+        + '<div id="kt-decl-err" style="color:#B91C1C;font-size:12.5px;min-height:16px;margin-top:4px;"></div>'
+        + '<button id="kt-decl-yes" style="width:100%;background:#DC2626;color:#fff;border:none;border-radius:12px;padding:14px;'
+        + 'font-size:15px;font-weight:800;cursor:pointer;">Yes, decline</button>'
+        + '<button id="kt-decl-no" style="width:100%;background:none;border:none;color:#64748B;font-size:13px;font-weight:700;padding:11px;cursor:pointer;">Go back</button>'
+        + '</div>';
+      document.body.appendChild(panel);
+
+      panel.querySelector('#kt-decl-no').addEventListener('click', function () { panel.remove(); });
+      panel.querySelector('#kt-decl-yes').addEventListener('click', function () {
+        var yes = panel.querySelector('#kt-decl-yes');
+        yes.disabled = true; yes.textContent = 'Notifying your centre…';
+        api('POST', '/auth/agreement/decline', { reason: (panel.querySelector('#kt-decl-why').value || '').trim() || null })
+          .then(function () {
+            panel.querySelector('div').innerHTML =
+              '<div style="text-align:center;padding:8px 4px;">'
+              + '<div style="font-size:40px;">✋</div>'
+              + '<div style="font-weight:800;font-size:17px;color:#0F172A;margin-top:8px;">You have declined</div>'
+              + '<div style="font-size:13.5px;color:#475569;line-height:1.55;margin-top:6px;">Your centre has been notified. You have not been onboarded.</div>'
+              + '</div>';
+            // The server has already revoked the session — clear the client and go.
+            setTimeout(function () {
+              try { if (KT.Auth && KT.Auth.clear) KT.Auth.clear(); } catch (e) {}
+              try { sessionStorage.clear(); localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user'); } catch (e) {}
+              location.href = '/index.html?declined=1';
+            }, 2600);
+          })
+          .catch(function (e) {
+            yes.disabled = false; yes.textContent = 'Yes, decline';
+            panel.querySelector('#kt-decl-err').textContent = e.message || 'Could not record that — please try again.';
+          });
+      });
     });
   }
 

@@ -232,6 +232,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // signed copy is filed against the user's record, and a copy is emailed.
         Route::get('/auth/agreement',      [\App\Http\Controllers\Api\AgreementController::class, 'status']);
         Route::post('/auth/agreement/sign', [\App\Http\Controllers\Api\AgreementController::class, 'sign']);
+        // Declining means no access: the account is flagged, the session revoked,
+        // and the agency (bcc info@kiddietrac.com) is told.
+        Route::post('/auth/agreement/decline', [\App\Http\Controllers\Api\AgreementController::class, 'decline']);
 
         // v22p49 — Daily care logs, milestones, portfolio, time clock
         Route::post  ('/care/logs',                 [\App\Http\Controllers\Api\CareController::class, 'logCare']);
