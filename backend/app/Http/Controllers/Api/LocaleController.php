@@ -34,7 +34,7 @@ final class LocaleController extends Controller
 
     public function set(Request $request): JsonResponse
     {
-        $data = $request->validate(['locale' => 'required|string|in:en,fr,es']);
+        $data = $request->validate(['locale' => 'required|string|in:en,fr,es,hi']);
         DB::table('users')->where('id', $request->user()->id)->update([
             'locale' => $data['locale'], 'updated_at' => now(),
         ]);

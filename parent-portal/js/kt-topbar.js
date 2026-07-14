@@ -166,7 +166,7 @@
   // Language picker. Replaces the old Language SCREEN — changing your language is a
   // preference, not somewhere you navigate to. Posts to the same /locale endpoint the
   // screen used, then reloads so the new strings take effect.
-  var LOCALES = [['en', 'English'], ['fr', 'Fran\u00e7ais'], ['es', 'Espa\u00f1ol']];
+  var LOCALES = [['en', 'English'], ['fr', 'Fran\u00e7ais'], ['es', 'Espa\u00f1ol'], ['hi', '\u0939\u093f\u0928\u094d\u0926\u0940']];
   function languagePicker() {
     var wrap = document.createElement('div');
     wrap.className = 'kt-tb-lang';
@@ -196,7 +196,11 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + t },
         body: JSON.stringify({ locale: loc })
-      }).catch(function () {}).then(function () { window.location.reload(); });
+      }).catch(function () {}).then(function () {
+        // Reload so every screen re-renders in English first, then kt-i18n translates the
+        // fresh DOM. (Translating in place would leave already-translated nodes stale.)
+        window.location.reload();
+      });
     });
 
     wrap.appendChild(sel);

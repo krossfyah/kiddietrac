@@ -65,14 +65,19 @@
     left.appendChild(input);
 
     var right = document.createElement('div');
-    right.style.cssText = 'display:flex;align-items:center;gap:10px;color:#64748B;font-size:13px;font-weight:600;';
+    // width:max-content — the group was sizing to the Sort control alone, so the
+    // "51 / 51" count spilled past its right edge and got clipped by the page.
+    right.style.cssText = 'display:flex;align-items:center;gap:10px;color:#64748B;font-size:13px;font-weight:600;'
+      + 'flex:0 0 auto;white-space:nowrap;width:max-content;justify-content:flex-end;';
     var sortSel = document.createElement('select');
-    sortSel.style.cssText = 'padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;color:#334155;';
+    sortSel.style.cssText = 'padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;color:#334155;'
+      + 'min-width:130px;flex:0 0 auto;';   // was shrinking until "Sort…" was clipped
     var opts = [['', 'Sort…'], ['__az', 'A → Z'], ['__za', 'Z → A']];
     sortOpts.forEach(function (o) { opts.push([o.key + ':asc', o.label + ' ↑']); opts.push([o.key + ':desc', o.label + ' ↓']); });
     opts.forEach(function (o) { var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; sortSel.appendChild(op); });
     var counter = document.createElement('span');
     counter.className = 'kt-list-count';
+    counter.style.cssText = 'white-space:nowrap;flex:0 0 auto;';   // "51 / 51" was wrapping onto two lines
     counter.textContent = kids.length + ' / ' + kids.length;
     right.appendChild(sortSel);
     right.appendChild(counter);

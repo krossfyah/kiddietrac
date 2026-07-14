@@ -183,6 +183,43 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
   margin: -6px 0 16px;
 }
 #appMain .kt-page-actions:empty { display: none; margin: 0; }
+
+/* Buttons lifted OUT of a banner were styled for a dark banner — .kt-btn-ghost is white
+   text on translucent white. On the page they became white-on-white and vanished (the
+   "+ New template" button on Curriculum library was invisible). Re-skin anything sitting
+   in the toolbar for a light background. !important because several of these buttons
+   carry inline colours from the screen that drew them. */
+#appMain .kt-page-actions .kt-btn,
+#appMain .kt-page-actions button,
+#appMain .kt-page-actions a.btn {
+  background: #FFFFFF !important;
+  color: #1F6080 !important;
+  border: 1px solid #CBD5E1 !important;
+  border-radius: 8px !important;
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 40, 64, .04);
+}
+#appMain .kt-page-actions .kt-btn:hover,
+#appMain .kt-page-actions button:hover,
+#appMain .kt-page-actions a.btn:hover {
+  background: #F1F5F9 !important;
+  border-color: #94A3B8 !important;
+}
+/* The primary action keeps its emphasis. */
+#appMain .kt-page-actions .kt-btn-primary,
+#appMain .kt-page-actions .btn-primary {
+  background: #1F6080 !important;
+  color: #FFFFFF !important;
+  border-color: #1F6080 !important;
+}
+#appMain .kt-page-actions .kt-btn-danger {
+  background: #FFFFFF !important;
+  color: #B91C1C !important;
+  border-color: #FCA5A5 !important;
+}
 .kt-hero .kt-hero-btn { padding: 7px 13px !important; font-size: 12px !important; }
 .kt-hero .kt-hero-svg { width: 92px !important; height: auto !important; opacity: .45 !important; }
 @media (max-width: 680px) {
