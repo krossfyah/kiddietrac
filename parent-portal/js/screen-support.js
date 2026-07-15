@@ -89,7 +89,7 @@
     wrap.appendChild(status);
     var submit = el('button', {
       type: 'button',
-      style: 'width:100%;border:0;cursor:pointer;padding:15px;border-radius:14px;font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);box-shadow:0 12px 24px -12px rgba(31,111,178,.6);',
+      style: 'display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;cursor:pointer;padding:10px 22px;border-radius:10px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);box-shadow:0 6px 16px -8px rgba(31,111,178,.5);',
     }, ['Send to my centre']);
     wrap.appendChild(submit);
 
