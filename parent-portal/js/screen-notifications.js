@@ -161,16 +161,38 @@
 
     var cache = [];
 
+    var _npage = 1, _nlastF = filter.value, N_PER = 12;
     function paint() {
       Dom.clear(listWrap);
       var rows = cache;
       if (filter.value === 'unread') rows = rows.filter(function (r) { return !r.read_at; });
       if (filter.value === 'read') rows = rows.filter(function (r) { return r.read_at; });
+      if (filter.value !== _nlastF) { _npage = 1; _nlastF = filter.value; }   // reset paging when the filter changes
       if (!rows.length) {
         listWrap.appendChild(Dom.el('div', { style: 'padding:48px;text-align:center;color:#6B7280;' }, 'Inbox zero. 🎉'));
         return;
       }
-      rows.forEach(function (n) { listWrap.appendChild(renderRow(n)); });
+      var total = rows.length, pages = Math.ceil(total / N_PER);
+      if (_npage > pages) _npage = pages;
+      if (_npage < 1) _npage = 1;
+      var start = (_npage - 1) * N_PER, end = Math.min(start + N_PER, total);
+      // A bounded, internally-scrolling window — like a Gmail message list.
+      var scroller = Dom.el('div', { style: 'max-height:calc(100vh - 330px);min-height:140px;overflow-y:auto;' });
+      rows.slice(start, end).forEach(function (n) { scroller.appendChild(renderRow(n)); });
+      listWrap.appendChild(scroller);
+      // Page through them so the list never grows without bound.
+      if (pages > 1) {
+        var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-top:1px solid #F3F4F6;background:#FCFCFD;' });
+        var mkBtn = function (label, disabled, fn) {
+          var b = Dom.el('button', { type: 'button', style: 'background:' + (disabled ? '#F3F4F6' : '#fff') + ';border:1px solid #E5E7EB;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;color:' + (disabled ? '#9CA3AF' : '#159FB4') + ';cursor:' + (disabled ? 'default' : 'pointer') + ';' }, label);
+          if (!disabled) b.addEventListener('click', fn);
+          return b;
+        };
+        pager.appendChild(mkBtn('‹ Newer', _npage <= 1, function () { _npage--; paint(); }));
+        pager.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;font-weight:600;' }, 'Showing ' + (start + 1) + '–' + end + ' of ' + total));
+        pager.appendChild(mkBtn('Older ›', _npage >= pages, function () { _npage++; paint(); }));
+        listWrap.appendChild(pager);
+      }
     }
 
     function renderRow(n) {

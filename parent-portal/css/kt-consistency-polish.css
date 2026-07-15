@@ -65,7 +65,8 @@
   animation: kt-float 6s ease-in-out infinite;
 }
 @media (max-width: 920px) {
-  .kt-banner-art, .kt-banner-fx .kt-hero-emoji { display: none; }
+  /* Keep the floating banner art visible on tablets/phones, just smaller. */
+  .kt-banner-art, .kt-banner-fx .kt-hero-emoji { font-size: 46px; right: 16px; opacity: 0.26 !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .kt-banner-fx, .kt-banner-art, .kt-banner-fx .kt-hero-emoji { animation: none !important; }
@@ -265,7 +266,9 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
   }
   #appMain .kt-hero h1, #appMain .kt-page-hero h1, #appMain .kt-page-hero h2 { font-size: 17px !important; }
   #appMain .kt-hero .kt-hero-sub, #appMain .kt-page-hero .kt-hero-sub { font-size: 12px !important; }
-  #appMain .kt-hero-svg, #appMain .kt-banner-art, #appMain .kt-banner-fx .kt-hero-emoji { display: none !important; }
+  #appMain .kt-hero-svg { display: none !important; }
+  /* Parents asked to see the moving banner art on phones — keep it (smaller). */
+  #appMain .kt-banner-art, #appMain .kt-banner-fx .kt-hero-emoji { display: block !important; font-size: 34px !important; right: 12px !important; opacity: 0.22 !important; }
   /* Keep tiny meta text legible (was as small as 9–10px). */
   #appMain [style*="font-size:10px"], #appMain [style*="font-size: 10px"],
   #appMain [style*="font-size:9px"], #appMain [style*="font-size: 9px"],

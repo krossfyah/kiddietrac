@@ -107,7 +107,14 @@
 
     const hash = (window.location.hash || '#today').replace('#', '').split('?')[0];
     if (hash === 'photos') await renderPhotosTab(wrap);
-    else if (hash === 'messages') await renderMessagesTab(wrap);
+    else if (hash === 'messages') {
+      // Desktop parents get the same rich chat as mobile (emoji picker, photo, voice
+      // notes) — the mobile conversation list + thread, centred in a tidy column.
+      wrap.appendChild(buildSubNav('messages'));
+      const _mcol = Dom.el('div', { style: 'max-width: 760px; margin: 0 auto;' });
+      wrap.appendChild(_mcol);
+      await renderMessagesMobile(_mcol);
+    }
     else if (hash === 'billing') await renderBillingTab(wrap);
     else await renderTodayTab(wrap);
   }
@@ -292,7 +299,6 @@
   }
 
   async function renderTodayTab(wrap) {
-    wrap.appendChild(buildSubNav('today'));
 
     const child = state.children.find(c => c.id === state.selectedChildId);
     if (!child) return;

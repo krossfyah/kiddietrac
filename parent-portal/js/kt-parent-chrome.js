@@ -103,6 +103,7 @@
       '.kt-pc-date{font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;}',
       '.kt-pc-clock{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;}',
       '.kt-pc-sep{width:1px;height:24px;background:rgba(15,23,42,.10);margin:0 2px;}',
+      '.kt-back-inbar{position:static !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;margin:0 12px 0 0 !important;box-shadow:none !important;align-self:center !important;z-index:auto !important;}',
       '@media(max-width:768px){.kt-pc-wrap,.kt-pc-greet{display:none !important;}}',
       '@media(max-width:1240px){.kt-pc-date{display:none;}}',
       '@media(max-width:1080px){.kt-pc-greet{display:none;}}',
@@ -151,17 +152,18 @@
       var wrap = document.createElement('div');
       wrap.className = 'kt-pc-wrap'; wrap.id = 'kt-pc-wrap';
 
+      // All the icon controls grouped together first (Home · Language · Settings ·
+      // Sign out), then a separator, then the weather / date / clock — per request.
       wrap.appendChild(iconBtn('🏠', 'Home', function () { location.hash = (role === 'educator') ? '#dashboard' : '#home'; }));
+      wrap.appendChild(langPicker());
+      wrap.appendChild(iconBtn('⚙️', 'Settings', function () { location.hash = '#settings'; }));
+      wrap.appendChild(iconBtn('🚪', 'Sign out', doSignOut));
+
+      var sep = document.createElement('span'); sep.className = 'kt-pc-sep'; wrap.appendChild(sep);
 
       var wx = document.createElement('span'); wx.className = 'kt-pc-wx'; wx.id = 'kt-pc-wx'; wx.style.display = 'none'; wrap.appendChild(wx);
       var dt = document.createElement('span'); dt.className = 'kt-pc-date'; dt.id = 'kt-pc-date'; dt.textContent = fmtDate(); wrap.appendChild(dt);
       var ck = document.createElement('span'); ck.className = 'kt-pc-clock'; ck.id = 'kt-pc-clock'; ck.textContent = fmtClock(); wrap.appendChild(ck);
-
-      var sep = document.createElement('span'); sep.className = 'kt-pc-sep'; wrap.appendChild(sep);
-
-      wrap.appendChild(langPicker());
-      wrap.appendChild(iconBtn('⚙️', 'Settings', function () { location.hash = '#settings'; }));
-      wrap.appendChild(iconBtn('🚪', 'Sign out', doSignOut));
 
       if (userBlock && userBlock.parentNode === bar) bar.insertBefore(wrap, userBlock);
       else bar.appendChild(wrap);
@@ -184,14 +186,20 @@
     paintGreeting();
   }
 
-  // Keep the floating "← Back" button clear of the top bar whatever its height.
+  // Move the floating "← Back" button INTO the top bar (far left, before the logo)
+  // so it can never overlap the banner that sits directly beneath the bar. It keeps
+  // its own show/hide — screen-role-home toggles [hidden] — and in the bar it just flows.
   function placeBack() {
     if (!isDesktop() || !roleOf()) return;
     var back = document.getElementById('kt-role-back');
     var bar = document.getElementById('appSidebar');
     if (!back || !bar) return;
-    var b = Math.round(bar.getBoundingClientRect().bottom);
-    if (b > 0) back.style.top = (b + 12) + 'px';
+    if (back.parentNode !== bar) {
+      back.classList.add('kt-back-inbar');
+      back.style.top = ''; back.style.left = '';
+      var brand = bar.querySelector('.nav-brand, #navBrand');
+      bar.insertBefore(back, brand || bar.firstChild);
+    }
   }
 
   ensure();

@@ -564,3 +564,25 @@ body.kt-parentview [data-export] { display: none !important; }
   /* With the button gone, the banner is just a title. */
   #appMain .page-header-v17 { padding: 8px 12px !important; }
 }
+
+
+/* ── Desktop parent chat (2026-07-14): the parent Messages tab now reuses the mobile
+      thread (emoji picker, photo, voice notes). On desktop present it as a centred
+      floating panel over a dimmed backdrop instead of a full-screen takeover. ── */
+@media (min-width: 601px) {
+  body.role-guardian:has(.kt-thread-compose) #appMain > div:has(> .kt-thread-compose) {
+    position: fixed !important; top: 116px; left: 50%; transform: translateX(-50%);
+    width: min(720px, 94vw); height: calc(100vh - 150px); max-height: 780px;
+    z-index: 9400 !important; background: #fff !important;
+    border: 1px solid #E5E7EB; border-radius: 18px; overflow: hidden;
+    box-shadow: 0 24px 70px rgba(8,20,36,.35) !important;
+    display: flex !important; flex-direction: column !important;
+  }
+  body.role-guardian:has(.kt-thread-compose)::after {
+    content: ''; position: fixed; left: 0; right: 0; top: 108px; bottom: 0;
+    background: rgba(8,20,36,.42); z-index: 9399;
+  }
+  body.role-guardian .kt-thread-header { flex: 0 0 auto !important; }
+  body.role-guardian .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; }
+  body.role-guardian .kt-thread-compose, body.role-guardian .kt-voice-preview { flex: 0 0 auto !important; }
+}

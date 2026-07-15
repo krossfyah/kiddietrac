@@ -66,3 +66,7 @@ backend/storage/firebase-sa.json
 *.bak2
 *.bak-*
 *.bak.*
+*.bak*
+error_log
+**/error_log
+*.orig
