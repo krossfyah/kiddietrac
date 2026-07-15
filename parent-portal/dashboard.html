@@ -72,18 +72,18 @@
   <link rel="stylesheet" href="/css/kt-design-v22p66.css?v=20260706p2">
   <link rel="stylesheet" href="/css/kt-consistency-v22p71.css?v=20260714n1">
   <link rel="stylesheet" href="/css/kt-cards-v22p72.css?v=20260706p2">
-  <link rel="stylesheet" href="/css/kt-topnav-fix.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-topnav-fix.css?v=20260714back">
   <link rel="stylesheet" href="/css/kt-sidebar-brand.css?v=20260706p2">
   <link rel="stylesheet" href="/css/kt-hero-anim.css?v=20260706p2">
 
   <link rel="stylesheet" href="/css/kt-fullwidth.css?v=20260708fw2">
   <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20260714s3">
   <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20260714j">
-  <link rel="stylesheet" href="/css/kt-sidebar-compact.css?v=20260709sc3">
+  <link rel="stylesheet" href="/css/kt-sidebar-compact.css?v=20260714logo">
 </head>
 <body><!-- v17.2-shell -->
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
-<div id="kt-splash"><div class="kt-splash-in"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="KiddieTrac"><div class="kt-splash-bar"><span></span></div></div></div>
+<div id="kt-splash"><div class="kt-splash-in"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="" style="opacity:0;transition:opacity .25s ease" onload="this.style.opacity=1" onerror="this.style.display='none'"><div class="kt-splash-bar"><span></span></div></div></div>
 <style>
 #kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
 #kt-splash.kt-hide{opacity:0;pointer-events:none}
@@ -148,13 +148,14 @@ setTimeout(hide,6000);})();
 
   <script src="/js/app.js?v=20260710chat1" defer></script>
   <script src="/js/kt-tz.js?v=20260714b" defer></script>
-  <script src="/js/kt-back.js?v=20260710chat1" defer></script>
+  <script src="/js/kt-back.js?v=20260714back" defer></script>
+  <script src="/js/kt-parent-chrome.js?v=20260714pc2" defer></script>
   <script src="/js/session-timeout.js?v=20260714e" defer></script>
   <script src="/js/kt-illustrations.js?v=20260706p2" defer></script>
   <script src="/js/app-v2-shell.js?v=20260714hero19" defer></script>
   <script src="/js/screen-parent.js?v=20260714e" defer></script>
   <script src="/js/kt-checkin-scan.js?v=20260710fix1" defer></script>
-  <script src="/js/screen-role-home.js?v=20260714c" defer></script>
+  <script src="/js/screen-role-home.js?v=20260714back" defer></script>
   <script src="/js/screen-support.js?v=20260714c" defer></script>
   <script src="/js/screen-settings.js?v=20260714lang" defer></script>
   <script src="/js/screen-agency-admin.js?v=20260709cc1" defer></script>

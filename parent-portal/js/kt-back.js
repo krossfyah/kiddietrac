@@ -44,7 +44,7 @@
     if (overlays.length) { var o = overlays.pop(); try { o.dismiss(); } catch (e) {} return true; }
     if (document.body.classList.contains('kt-mnav-open')) { document.body.classList.remove('kt-mnav-open'); return true; }
     var h = (window.location.hash || '').replace('#', '').split('?')[0];
-    var homes = { '': 1, home: 1, today: 1, dashboard: 1 };
+    var homes = { '': 1, home: 1, dashboard: 1 };  // today is a parent sub-screen: back from it goes home, not a no-op
     if (!homes[h]) {
       if (typeof window.ktBack === 'function') window.ktBack();
       else window.location.hash = '#home';

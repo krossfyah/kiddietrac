@@ -59,7 +59,7 @@ body.role-educator  #appSidebar #navBrand { cursor: pointer; }
 /* Floating "← Back" button shown on sub-screens (top nav is hidden for these
    roles, so this is the obvious way back to the tile menu). */
 #kt-role-back {
-  position: fixed; top: 80px; left: 18px; z-index: 70;
+  position: fixed; top: 108px; left: 18px; z-index: 70;  /* clear of the 95px sticky top bar */
   display: inline-flex; align-items: center; gap: 6px;
   background: #fff; color: var(--kt-text, #0D1B2A);
   border: 1px solid var(--kt-border, #e5e7eb); border-radius: 999px;

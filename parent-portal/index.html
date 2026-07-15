@@ -25,7 +25,7 @@
 </head>
 <body class="auth-body">
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
-<div id="kt-splash"><div class="kt-splash-in"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="KiddieTrac"><div class="kt-splash-bar"><span></span></div></div></div>
+<div id="kt-splash"><div class="kt-splash-in"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="" style="opacity:0;transition:opacity .25s ease" onload="this.style.opacity=1" onerror="this.style.display='none'"><div class="kt-splash-bar"><span></span></div></div></div>
 <style>
 #kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
 #kt-splash.kt-hide{opacity:0;pointer-events:none}

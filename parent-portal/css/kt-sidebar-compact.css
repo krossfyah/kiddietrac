@@ -7,7 +7,7 @@
 
 /* Brand: keep the header tidy but the logo prominent */
 #appSidebar .nav-brand { padding: 16px 18px 14px !important; }
-#appSidebar .nav-brand img { height: 44px !important; }
+#appSidebar .nav-brand img { height: 58px !important; }  /* larger so the Smart Childcare Management Platform tagline is readable */
 
 /* Nav list: less outer padding */
 #appSidebar .sidebar-nav,

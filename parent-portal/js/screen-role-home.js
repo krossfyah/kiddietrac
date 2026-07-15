@@ -231,9 +231,15 @@
       // back handler so overlapping handlers can't double-navigate.
       btn.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation();
-        if (window.KT && KT.goBack) { if (!KT.goBack()) window.location.hash = '#home'; }
-        else if (window.ktBack) window.ktBack();
-        else window.location.hash = '#home';
+        // Close any open overlay (chat thread, invoice, scanner) or the menu drawer first.
+        if (window.KT && KT.hasOverlay && KT.hasOverlay()) { KT.goBack(); return; }
+        if (document.body.classList.contains('kt-mnav-open')) { document.body.classList.remove('kt-mnav-open'); return; }
+        // Otherwise return to the HOME tile menu. For these roles every tab (Today,
+        // Photos, Messages, Billing...) hangs off the home launcher, so "back" means
+        // home — not the browser-previous screen (Today used to go to whatever tab was
+        // visited before it, or nothing).
+        var educator = /\brole-educator\b/.test(document.body.className);
+        window.location.hash = educator ? '#dashboard' : '#home';
       });
       (document.body || document.documentElement).appendChild(btn);
     }
