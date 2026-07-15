@@ -92,7 +92,16 @@
       // The single greeting now lives INSIDE the user block, on the far left.
       '.kt-pc-user-left{margin-left:14px !important;cursor:pointer;}',
       '.kt-pc-navgreet{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;line-height:1.15;}',
-      'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role{display:none !important;}',
+      // Role shown as a pill (like admin / director / super admin), not hidden.
+      'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role{display:inline-block !important;margin-top:3px;font-size:9.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;background:rgba(14,124,144,.12);color:#0C6070;border:1px solid rgba(14,124,144,.22);padding:2px 9px;border-radius:100px;white-space:nowrap;align-self:flex-start;}',
+      // Tighter top bar (less whitespace): smaller logo + slimmer vertical padding — DESKTOP only.
+      '@media(min-width:601px){body.role-guardian #appSidebar,body.role-educator #appSidebar{padding-top:6px !important;padding-bottom:6px !important;}body.role-guardian #appSidebar #navBrand img,body.role-educator #appSidebar #navBrand img{height:60px !important;}}',
+      // Home launcher: stop the banner replaying its fade-in (a "pop") when the
+      // normalizer adds .kt-banner-fx after the tiles have already settled.
+      'body.role-guardian #appMain .kt-tilehome .kt-banner-fx,body.role-educator #appMain .kt-tilehome .kt-banner-fx{animation:kt-hero-breathe 16s ease-in-out infinite !important;}',
+      // Mobile top-header date/time.
+      '.kt-pc-mobmeta{display:none;}',
+      '@media(max-width:600px){body.role-guardian .kt-pc-mobmeta,body.role-educator .kt-pc-mobmeta{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;margin-left:auto;margin-right:52px;text-align:right;flex-shrink:0;}body.role-guardian .kt-pc-mobmeta .d,body.role-educator .kt-pc-mobmeta .d{font-size:10px;font-weight:700;color:#94A3B8;white-space:nowrap;}body.role-guardian .kt-pc-mobmeta .t,body.role-educator .kt-pc-mobmeta .t{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;}}',
       // Admin-only search box: hidden in parent/educator view.
       'body.role-guardian #kt-search-widget,body.role-educator #kt-search-widget{display:none !important;}',
       // Super-admin "view as": agency switcher relocated from bottom-left into the top bar.
@@ -137,6 +146,27 @@
 
   // The single "Good <time>" greeting, injected above the name in the user block.
   // Runs on desktop AND mobile (the app's own JS fills the name itself).
+  function fmtDateShort() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
+
+  // Mobile top header: a compact date + time (the desktop bar has weather/date/clock;
+  // phones just get date + time, right-aligned before the floating settings gear).
+  function ensureMobileMeta() {
+    if (isDesktop() || !roleOf()) return;
+    var bar = document.getElementById('appSidebar');
+    if (!bar) return;
+    injectStyle();
+    var m = document.getElementById('kt-pc-mobmeta');
+    if (!m) {
+      m = document.createElement('div');
+      m.id = 'kt-pc-mobmeta'; m.className = 'kt-pc-mobmeta';
+      m.innerHTML = '<span class="d"></span><span class="t"></span>';
+      bar.appendChild(m);
+    }
+    var d = m.querySelector('.d'), t = m.querySelector('.t');
+    if (d) d.textContent = fmtDateShort();
+    if (t) t.textContent = fmtClock();
+  }
+
   function ensureGreeting() {
     if (!roleOf()) return;
     injectStyle();
@@ -219,6 +249,7 @@
   function tick() {
     var c = document.getElementById('kt-pc-clock'); if (c) c.textContent = fmtClock();
     var d = document.getElementById('kt-pc-date'); if (d) d.textContent = fmtDate();
+    ensureMobileMeta();
     paintGreeting();
   }
 
@@ -246,7 +277,7 @@
   function boot() {
     if (_booting) return;
     _booting = true;
-    try { ensureGreeting(); ensure(); placeBack(); } catch (e) {} finally { _booting = false; }
+    try { ensureGreeting(); ensureMobileMeta(); ensure(); placeBack(); } catch (e) {} finally { _booting = false; }
   }
   boot();
 

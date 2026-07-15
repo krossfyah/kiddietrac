@@ -600,7 +600,7 @@ body.kt-parentview [data-export] { display: none !important; }
   body.role-guardian #appSidebar, body.role-educator #appSidebar { flex-wrap: nowrap !important; padding: 8px 12px !important; }
   body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img { height: 40px !important; }
   body.role-guardian #appSidebar #navUser, body.role-educator #appSidebar #navUser { margin-left: 10px !important; min-width: 0; }
-  body.role-guardian #appSidebar #navUser .nav-user-role, body.role-educator #appSidebar #navUser .nav-user-role { display: none !important; }
+  /* Role now shown as a pill (styled by kt-parent-chrome) — no longer hidden. */
   body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name { font-size: 14px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet { font-size: 10px !important; }
 }

@@ -399,9 +399,6 @@
       Dom.clear(digestBody);
       if (digest.body) {
         digestBody.appendChild(Dom.el('div', { style: 'white-space: pre-wrap;' }, digest.body));
-        if (digest.fallback) {
-          digestBody.appendChild(Dom.el('div', { style: 'font-size: 11px; opacity: 0.7; margin-top: 12px; font-style: italic;' }, '(Generated from logged events — AI summary unavailable)'));
-        }
       } else {
         digestBody.appendChild(Dom.el('div', { style: 'opacity: 0.9;' }, digest.message || `${child.display_name}'s digest will be ready after 4 PM today.`));
       }
