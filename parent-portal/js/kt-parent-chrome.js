@@ -135,6 +135,22 @@
     document.head.appendChild(s);
   }
 
+  // The single "Good <time>" greeting, injected above the name in the user block.
+  // Runs on desktop AND mobile (the app's own JS fills the name itself).
+  function ensureGreeting() {
+    if (!roleOf()) return;
+    injectStyle();
+    var navUser = document.querySelector('#appSidebar #navUser, #appSidebar .nav-user');
+    if (!navUser) return;
+    var txt = navUser.querySelector('.nav-user-text');
+    if (txt && !document.getElementById('kt-pc-navgreet')) {
+      var gr = document.createElement('div');
+      gr.id = 'kt-pc-navgreet'; gr.className = 'kt-pc-navgreet';
+      gr.textContent = greetWord();
+      txt.insertBefore(gr, txt.firstChild);
+    }
+  }
+
   function ensure() {
     if (!isDesktop()) return;
     var role = roleOf();
@@ -152,13 +168,7 @@
         bar.insertBefore(navUser, brand.nextSibling);
       }
       navUser.classList.add('kt-pc-user-left');
-      var txt = navUser.querySelector('.nav-user-text');
-      if (txt && !document.getElementById('kt-pc-navgreet')) {
-        var gr = document.createElement('div');
-        gr.id = 'kt-pc-navgreet'; gr.className = 'kt-pc-navgreet';
-        gr.textContent = greetWord();
-        txt.insertBefore(gr, txt.firstChild);
-      }
+      ensureGreeting();
       paintGreeting();
     }
 
@@ -228,13 +238,36 @@
     }
   }
 
-  ensure();
-  placeBack();
-  setInterval(function () { ensure(); placeBack(); }, 1200);
+  // Mount the chrome the instant it's possible — NOT on a lazy 1.2s poll (which made
+  // the static top bar paint first, then the icons/greeting pop in a beat later). A
+  // MutationObserver fires ensure() the moment the role class lands or the bar gains
+  // children (name, view-as, agency switcher), so the chrome appears WITH the bar.
+  var _booting = false;
+  function boot() {
+    if (_booting) return;
+    _booting = true;
+    try { ensureGreeting(); ensure(); placeBack(); } catch (e) {} finally { _booting = false; }
+  }
+  boot();
+
+  if (w.MutationObserver) {
+    // Role class (role-guardian / role-educator) is what flips the layout — react to it.
+    try { new w.MutationObserver(boot).observe(document.body, { attributes: true, attributeFilter: ['class'] }); } catch (e) {}
+    // Late-injected bar chrome (auth name, view-as pill, agency switcher) → re-run.
+    var attachBarObs = function () {
+      var bar = document.getElementById('appSidebar');
+      if (bar && !bar.__ktPcObs) { bar.__ktPcObs = new w.MutationObserver(boot); bar.__ktPcObs.observe(bar, { childList: true }); }
+    };
+    attachBarObs();
+    document.addEventListener('DOMContentLoaded', function () { attachBarObs(); boot(); });
+  }
+  w.addEventListener('hashchange', boot);
+  // A slow safety net only — the observers do the real work.
+  setInterval(boot, 2000);
   setInterval(tick, 15000);
   w.addEventListener('resize', function () {
-    var wrap = document.getElementById('kt-pc-wrap'), greet = document.getElementById('kt-pc-greet');
-    if (!isDesktop()) { if (wrap) wrap.remove(); if (greet) greet.remove(); }
-    else ensure();
+    var wrap = document.getElementById('kt-pc-wrap');
+    if (!isDesktop()) { if (wrap) wrap.remove(); ensureGreeting(); }
+    else boot();
   });
 })(window);
