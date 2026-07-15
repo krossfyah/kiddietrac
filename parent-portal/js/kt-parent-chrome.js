@@ -152,29 +152,16 @@
   // The single "Good <time>" greeting, injected above the name in the user block.
   // Runs on desktop AND mobile (the app's own JS fills the name itself).
   function fmtDateShort() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
+  function fmtDateShort2() { try { return new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
 
   // Mobile top header: a compact date + time (the desktop bar has weather/date/clock;
   // phones just get date + time, right-aligned before the floating settings gear).
   function ensureMobileMeta() {
     if (isDesktop() || !roleOf()) return;
-    var bar = document.getElementById('appSidebar');
-    if (!bar) return;
+    // Date/time is folded into the greeting eyebrow now — remove any old right block.
+    var old = document.getElementById('kt-pc-mobmeta'); if (old) old.remove();
     injectStyle();
-    var m = document.getElementById('kt-pc-mobmeta');
-    if (!m) {
-      m = document.createElement('div');
-      m.id = 'kt-pc-mobmeta'; m.className = 'kt-pc-mobmeta';
-      m.innerHTML = '<span class="d"></span><span class="t"></span>';
-      bar.appendChild(m);
-    }
-    var d = m.querySelector('.d'), t = m.querySelector('.t');
-    if (d) d.textContent = fmtDateShort();
-    if (t) t.textContent = fmtClock();
-    // On phones, show just the FIRST name in the bar so the full name + role pill +
-    // date/time + avatar + logo all fit without clipping (desktop keeps the full name).
-    var nn = document.getElementById('navName');
-    var fn = firstName();
-    if (nn && fn && nn.textContent.trim() !== fn) nn.textContent = fn;
+    paintGreeting();
   }
 
   function ensureGreeting() {
@@ -253,7 +240,10 @@
 
   function paintGreeting() {
     var gr = document.getElementById('kt-pc-navgreet');
-    if (gr) gr.textContent = greetWord();   // name itself is set by the app's own auth JS
+    if (!gr) return;
+    if (isDesktop()) { gr.textContent = greetWord(); return; }
+    // Phones: fold date + time into the eyebrow so the full name below keeps its width.
+    gr.textContent = greetWord() + ' \u00b7 ' + fmtClock();
   }
 
   function tick() {

@@ -604,7 +604,7 @@ body.kt-parentview [data-export] { display: none !important; }
   body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { min-width: 0 !important; overflow: hidden !important; }
   /* Role now shown as a pill (styled by kt-parent-chrome) — no longer hidden. */
   body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name { font-size: 13px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet { font-size: 10px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet { font-size: 9.5px !important; letter-spacing: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The top bar already greets the parent — drop the repetitive greeting line on the home banner. */
   body.role-guardian #appMain .kt-tilehome .kt-hero-greet, body.role-educator #appMain .kt-tilehome .kt-hero-greet { display: none !important; }
   body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { flex: 1 1 0 !important; }

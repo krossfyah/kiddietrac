@@ -88,7 +88,7 @@
     if (!nu) return;
     // The parent/educator chrome adds a right-aligned date/time (kt-pc-mobmeta) that
     // already clears the floating gear — padding navUser too just crushes the name.
-    if (document.getElementById('kt-pc-mobmeta')) { if (nu.style.paddingRight) nu.style.removeProperty('padding-right'); return; }
+    if (document.getElementById('kt-pc-navgreet')) { if (nu.style.paddingRight) nu.style.removeProperty('padding-right'); return; }
     // Each floating button is 40px wide with an 8px gap; the QR button (educators)
     // sits left of the gear, so the name/role block has to clear both.
     var pad = (document.getElementById('kt-eduqr') ? 106 : 58) + 'px';
