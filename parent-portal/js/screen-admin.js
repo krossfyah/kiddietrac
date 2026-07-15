@@ -594,14 +594,16 @@
   // ════════════════════════════════════════════════════════════════
   //   USERS TAB
   // ════════════════════════════════════════════════════════════════
-  async function renderUsersTab(content) {
+  async function renderUsersTab(content, opts) {
+    opts = opts || {};
+    const showDeactivated = !!opts.deactivated;
     Dom.clear(content);
     content.appendChild(loading('Loading users...'));
 
     let data;
     let presenceSet = new Set();
     try {
-      data = await Api.get('/admin/users');
+      data = await Api.get('/admin/users' + (showDeactivated ? '?deactivated=1' : ''));
       // v22p42: presence is a best-effort enrichment — if it 403s for a non-admin
       // we still render the user list without dots.
       try {
@@ -618,8 +620,10 @@
 
     // v22p12.1: tab hero
     content.appendChild(tabHero(
-      '👥 User management',
-      data.users.length + ' active user' + (data.users.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.',
+      showDeactivated ? '🗄 Deactivated users' : '👥 User management',
+      showDeactivated
+        ? (data.users.length + ' deactivated account' + (data.users.length === 1 ? '' : 's') + '. Reactivate one to restore access and its previous roles.')
+        : (data.users.length + ' active user' + (data.users.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.'),
       'bear'
     ));
 
@@ -631,9 +635,18 @@
     csvBtn.addEventListener('click', () => downloadCsv('/admin/users', 'users.csv', csvBtn));
     bar.appendChild(csvBtn);
 
-    const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Invite user');
-    addBtn.addEventListener('click', () => showInviteModal(content));
-    bar.appendChild(addBtn);
+    // Toggle between active accounts and the deactivated (soft-deleted) ones.
+    const toggleBtn = Dom.el('button', {
+      style: 'background: white; color: #475569; border: 1px solid #CBD5E1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;',
+    }, showDeactivated ? '← Active users' : '🗄 Deactivated');
+    toggleBtn.addEventListener('click', () => renderUsersTab(content, { deactivated: !showDeactivated }));
+    bar.appendChild(toggleBtn);
+
+    if (!showDeactivated) {
+      const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Invite user');
+      addBtn.addEventListener('click', () => showInviteModal(content));
+      bar.appendChild(addBtn);
+    }
     content.appendChild(bar);
 
     // v22p45: bulk-action bar (hidden until a checkbox is ticked)
@@ -645,7 +658,7 @@
     const bulkDelete = Dom.el('button', { style: 'background: white; color: #DC2626; border: 1px solid #FCA5A5; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, 'Delete');
     bulkBar.appendChild(bulkResend);
     bulkBar.appendChild(bulkDelete);
-    content.appendChild(bulkBar);
+    if (!showDeactivated) content.appendChild(bulkBar);
 
     function refreshBulkBar() {
       const n = selectedIds.size;
@@ -669,7 +682,7 @@
     bulkDelete.addEventListener('click', () => bulkRun('Delete', (id) => Api.delete('/admin/users/' + id)));
 
     if (data.users.length === 0) {
-      content.appendChild(emptyMsg('No users yet.'));
+      content.appendChild(emptyMsg(showDeactivated ? 'No deactivated users. Everyone in your agency is active.' : 'No users yet.'));
       return;
     }
 
@@ -747,9 +760,27 @@
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(u.status)));
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px;' }, u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'));
 
-      const editBtn = Dom.el('button', { style: 'background: transparent; border: 1px solid var(--ink-300); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;' }, 'Manage');
-      editBtn.addEventListener('click', () => showUserModal(u, content));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, editBtn));
+      let actionEl;
+      if (showDeactivated) {
+        const reBtn = Dom.el('button', { style: 'background: #16A34A; color: #fff; border: 0; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;' }, '♻ Reactivate');
+        reBtn.addEventListener('click', async () => {
+          if (!confirm('Reactivate ' + (u.name || u.email) + '? They will regain access and their previous roles.')) return;
+          reBtn.disabled = true; reBtn.textContent = 'Reactivating…';
+          try {
+            await Api.post('/admin/users/' + u.id + '/reactivate', {});
+            await renderUsersTab(content, { deactivated: true });
+          } catch (e) {
+            reBtn.disabled = false; reBtn.textContent = '♻ Reactivate';
+            alert('Could not reactivate: ' + (e && e.message ? e.message : 'error'));
+          }
+        });
+        actionEl = reBtn;
+      } else {
+        const editBtn = Dom.el('button', { style: 'background: transparent; border: 1px solid var(--ink-300); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;' }, 'Manage');
+        editBtn.addEventListener('click', () => showUserModal(u, content));
+        actionEl = editBtn;
+      }
+      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, actionEl));
 
       tbody.appendChild(row);
     });

@@ -815,7 +815,13 @@ final class AdminController extends Controller
         // users they switch their active agency to it. The prior v22p27 bypass
         // (drop the filter entirely for platform_admins) leaked every user on the
         // platform into whatever agency context was active — removed.
-        $userIdsQuery = DB::table('role_assignments')->where('active', true)
+        // ?deactivated=1 flips the whole query to show SOFT-DELETED users (so an admin
+        // can find and reactivate them). Deleting a user sets role_assignments.active=false
+        // AND users.deleted_at, so both filters below invert together.
+        $deactivated = $request->boolean('deactivated');
+
+        $userIdsQuery = DB::table('role_assignments')
+            ->when(! $deactivated, function ($q) { $q->where('active', true); })
             ->where(function ($q) use ($agencyId, $centreIds) {
                 $q->where('agency_id', $agencyId);
                 if (!empty($centreIds)) {
@@ -845,7 +851,9 @@ final class AdminController extends Controller
 
         $usersQuery = DB::table('users')
             ->whereIn('id', $userIds)
-            ->whereNull('deleted_at');
+            ->when($deactivated,
+                function ($q) { $q->whereNotNull('deleted_at'); },
+                function ($q) { $q->whereNull('deleted_at'); });
 
         if ($searchQuery) {
             $usersQuery->where(function ($q) use ($searchQuery) {
@@ -860,7 +868,7 @@ final class AdminController extends Controller
         // Get all roles for these users
         $allAssignments = DB::table('role_assignments')
             ->whereIn('user_id', $users->pluck('id'))
-            ->where('active', true)
+            ->when(! $deactivated, function ($q) { $q->where('active', true); })
             ->get()
             ->groupBy('user_id');
 
@@ -895,6 +903,8 @@ final class AdminController extends Controller
                 'phone' => $u->phone,
                 'photo_url' => $u->photo_url,
                 'status' => $u->status,
+                'deactivated' => ! empty($u->deleted_at),
+                'deactivated_at' => $u->deleted_at ?? null,
                 'last_login_at' => $u->last_login_at,
                 'onboarded_at' => $u->onboarded_at ?? null,
                 'profile_extras' => $extras,
@@ -1959,7 +1969,45 @@ final class AdminController extends Controller
      * their profile (eg, an educator's expired First Aid date).
      * v22p3.5.
      */
-    public function reopenOnboarding(Request $request, int $userId): JsonResponse
+    /**
+     * POST /admin/users/{user}/reactivate
+     * Restore a soft-deleted (deactivated) user: clear deleted_at, set status active, and
+     * re-activate their role assignments for THIS agency. The reverse of destroyUser.
+     */
+    public function reactivateUser(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (!$this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
+
+        $user = DB::table('users')->where('id', $userId)->whereNotNull('deleted_at')->first();
+        if (!$user) return response()->json(['message' => 'Deactivated user not found'], 404);
+
+        $centreIds = $this->getCentreIds($agencyId);
+        DB::transaction(function () use ($userId, $agencyId, $centreIds) {
+            // Re-activate the assignments scoped to THIS agency only — never touch a
+            // separate agency's assignment for the same person.
+            DB::table('role_assignments')->where('user_id', $userId)
+                ->where(function ($q) use ($agencyId, $centreIds) {
+                    $q->where('agency_id', $agencyId);
+                    if (!empty($centreIds)) $q->orWhereIn('centre_id', $centreIds);
+                })
+                ->update(['active' => true]);
+            DB::table('users')->where('id', $userId)->update([
+                'status'     => 'active',
+                'deleted_at' => null,
+                'updated_at' => now(),
+            ]);
+        });
+
+        $this->audit($request->user()->id, 'user.reactivated', 'user', $userId, ['email' => $user->email]);
+
+        return response()->json(['message' => 'User reactivated', 'id' => $userId]);
+    }
+
+        public function reopenOnboarding(Request $request, int $userId): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);

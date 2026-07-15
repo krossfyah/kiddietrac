@@ -556,6 +556,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/users/{user}/role', [AdminController::class, 'setUserRole']);
         // v22p1.2: user lifecycle
         Route::delete('/users/{user}', [AdminController::class, 'destroyUser']);
+        Route::post('/users/{user}/reactivate', [AdminController::class, 'reactivateUser']);
         Route::post('/users/{user}/reset-password', [AdminController::class, 'resetUserPassword']);
         Route::post('/users/{user}/resend-welcome', [AdminController::class, 'resendWelcome']);
         // v22p3.2: avatars
