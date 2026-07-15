@@ -88,6 +88,38 @@
     pc.appendChild(pStatus); pc.appendChild(pSave);
     wrap.appendChild(pc);
 
+    // ── LANGUAGE ──
+    // Parents/educators pick their app language here. It is saved to the server
+    // (users.locale) as well as locally, so it sticks on the next sign-in on any device
+    // (kt-i18n seeds from the saved value when there is no local choice yet).
+    var lc = el('div', { style: CARD });
+    lc.appendChild(el('div', { style: SECT }, ['Language']));
+    lc.appendChild(el('div', { style: 'font-size:13px;color:#64748b;margin:-2px 0 12px;' },
+      ['Choose the language for the app. Saved for your next sign-in, on any device.']));
+    var LANGS = [['en', 'English'], ['fr', 'Fran\u00e7ais'], ['es', 'Espa\u00f1ol'], ['hi', '\u0939\u093f\u0928\u094d\u0926\u0940']];
+    var curLang = 'en';
+    try { curLang = localStorage.getItem('kt_locale') || u.locale || 'en'; } catch (e) {}
+    var langSel = el('select', { style: 'width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:15px;background:#fff;color:#0f172a;cursor:pointer;' });
+    LANGS.forEach(function (l) { var o = el('option', { value: l[0] }, [l[1]]); if (l[0] === curLang) o.selected = true; langSel.appendChild(o); });
+    var langStatus = el('div', { style: 'font-size:13px;min-height:16px;margin-top:8px;' });
+    langSel.addEventListener('change', function () {
+      var loc = langSel.value;
+      try { localStorage.setItem('kt_locale', loc); } catch (e) {}
+      langStatus.style.color = '#16A34A'; langStatus.textContent = '\u2713 Saved. Applying\u2026';
+      fetch(apiBase() + '/locale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
+        body: JSON.stringify({ locale: loc })
+      }).catch(function () {}).then(function () {
+        try { var ku = cachedUser(); ku.locale = loc; sessionStorage.setItem('kt_user', JSON.stringify(ku)); } catch (e) {}
+        // Reload so every screen re-renders in the new language (kt-i18n translates the
+        // fresh DOM; translating in place would leave already-translated nodes stale).
+        setTimeout(function () { window.location.reload(); }, 300);
+      });
+    });
+    lc.appendChild(langSel); lc.appendChild(langStatus);
+    wrap.appendChild(lc);
+
     // ── SECURITY ──
     var sc = el('div', { style: CARD });
     sc.appendChild(el('div', { style: SECT }, ['Security']));

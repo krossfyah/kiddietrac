@@ -924,6 +924,20 @@
     // ── Batch 13: login hero subtitle + badge ──
     "AI-AUGMENTED · CANADA-FIRST": { fr: "AUGMENTÉ PAR L'IA · CONÇU AU CANADA", es: "POTENCIADO POR IA · HECHO EN CANADÁ", hi: "एआई-संवर्धित · कनाडा-प्रथम" },
     "From morning check-in to your AI-summarized day at 6 pm, KiddieTrac brings your child's day to you with the warmth and clarity you deserve.": { fr: "De l'arrivée du matin au résumé de la journée par l'IA à 18 h, KiddieTrac vous transmet la journée de votre enfant avec toute la chaleur et la clarté que vous méritez.", es: "Desde el registro de la mañana hasta el resumen de IA del día a las 6 p. m., KiddieTrac le trae el día de su hijo con la calidez y claridad que merece.", hi: "सुबह के चेक-इन से लेकर शाम 6 बजे आपके एआई-सारांशित दिन तक, KiddieTrac आपके बच्चे का दिन उस गर्मजोशी और स्पष्टता के साथ लाता है जिसके आप हकदार हैं।" },
+    // ── Batch 14: settings screen (language card + profile/security labels) ──
+    "Choose the language for the app. Saved for your next sign-in, on any device.": { fr: "Choisissez la langue de l'application. Enregistrée pour votre prochaine connexion, sur n'importe quel appareil.", es: "Elija el idioma de la aplicación. Se guarda para su próximo inicio de sesión, en cualquier dispositivo.", hi: "ऐप की भाषा चुनें। किसी भी डिवाइस पर आपके अगले साइन-इन के लिए सहेजी जाती है।" },
+    "Saved. Applying…": { fr: "Enregistré. Application…", es: "Guardado. Aplicando…", hi: "सहेजा गया। लागू किया जा रहा है…" },
+    "Profile": { fr: "Profil", es: "Perfil", hi: "प्रोफ़ाइल" },
+    "Change photo": { fr: "Changer la photo", es: "Cambiar foto", hi: "फ़ोटो बदलें" },
+    "First name": { fr: "Prénom", es: "Nombre", hi: "पहला नाम" },
+    "Last name": { fr: "Nom", es: "Apellido", hi: "अंतिम नाम" },
+    "Phone": { fr: "Téléphone", es: "Teléfono", hi: "फ़ोन" },
+    "Date of birth": { fr: "Date de naissance", es: "Fecha de nacimiento", hi: "जन्म तिथि" },
+    "Save profile": { fr: "Enregistrer le profil", es: "Guardar perfil", hi: "प्रोफ़ाइल सहेजें" },
+    "Change password": { fr: "Changer le mot de passe", es: "Cambiar contraseña", hi: "पासवर्ड बदलें" },
+    "Current password": { fr: "Mot de passe actuel", es: "Contraseña actual", hi: "वर्तमान पासवर्ड" },
+    "New password": { fr: "Nouveau mot de passe", es: "Nueva contraseña", hi: "नया पासवर्ड" },
+    "Quick-unlock PIN": { fr: "NIP de déverrouillage rapide", es: "PIN de desbloqueo rápido", hi: "त्वरित-अनलॉक पिन" },
     'Platform': { fr: 'Plateforme', es: 'Plataforma', hi: 'प्लेटफ़ॉर्म' },
     'Overview': { fr: 'Aperçu', es: 'Resumen', hi: 'अवलोकन' },
     'Operations': { fr: 'Opérations', es: 'Operaciones', hi: 'संचालन' },
@@ -1132,6 +1146,18 @@
   // control at all — a non-English visitor cannot even change it before signing in. Inject
   // a compact picker in that case. It sets kt_locale locally and reloads so the page
   // re-renders in the new language; the server preference syncs after login.
+  // Persist the chosen language across logins and devices. The picker writes the choice
+  // to the server (users.locale) AND to localStorage; on a FRESH login (new browser /
+  // device) localStorage is empty, so seed it from the signed-in user's saved locale.
+  // Local choice, once present, wins — so a mid-session switch is never overridden.
+  function seedLocaleFromUser() {
+    try {
+      if (localStorage.getItem('kt_locale')) return;
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      if (u && u.locale && LOCALES.indexOf(u.locale) !== -1) localStorage.setItem('kt_locale', u.locale);
+    } catch (e) {}
+  }
+
   function injectLoginPicker() {
     try {
       if (document.getElementById('kt-tb-locale')) return;      // the app top bar owns it
@@ -1163,6 +1189,7 @@
   }
 
   function apply() {
+    seedLocaleFromUser();
     injectLoginPicker();
     var loc = locale();
     if (loc === 'en') return;               // nothing to do

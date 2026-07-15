@@ -31,22 +31,17 @@
     const wrap = Dom.el('div', { class: 'kt-help-wrap' });
     main.appendChild(wrap);
 
-    // Hero header
-    const hero = Dom.el('div', { class: 'kt-help-hero' });
-    const left = Dom.el('div', {});
-    left.appendChild(Dom.el('h1', { class: 'kt-help-title' }, 'Help & Guide'));
-    left.appendChild(Dom.el('p', { class: 'kt-help-sub' }, 'Find answers fast. 30+ articles, AI search, contextual hints.'));
-    hero.appendChild(left);
-
-    const actions = Dom.el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;' });
+    // The shell renders the standard "Help & guides" banner; we only add the action
+    // buttons in a row beneath it (previously they lived inside a second, screen-owned
+    // banner). Styled solid so they stay visible on the light page.
+    const actions = Dom.el('div', { class: 'kt-help-actions' });
     const tourBtn = Dom.el('button', { class: 'kt-help-ask-btn', style: 'background:#7C3AED;' }, ['🎬', Dom.el('span', {}, 'Take the tour')]);
     tourBtn.addEventListener('click', function () { if (window.KT && window.KT.showTour) window.KT.showTour(); });
     actions.appendChild(tourBtn);
     const askBtn = Dom.el('button', { class: 'kt-help-ask-btn' }, ['✨', Dom.el('span', {}, 'Ask AI')]);
     askBtn.addEventListener('click', showAskModal);
     actions.appendChild(askBtn);
-    hero.appendChild(actions);
-    wrap.appendChild(hero);
+    wrap.appendChild(actions);
 
     /* v22p70: search lives inside sidebar — declare input here, attach inside renderSidebar */
     const searchInput = Dom.el('input', {
@@ -587,8 +582,9 @@
       .kt-help-hero { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; padding: 24px 28px; background: linear-gradient(135deg, #1F6080 0%, #2D7BA8 60%, #4A90B8 100%); color: white; border-radius: 20px; box-shadow: 0 6px 24px rgba(31, 96, 128, 0.18); }
       .kt-help-title { margin: 0 0 6px; font-size: 30px; font-weight: 800; }
       .kt-help-sub { margin: 0; opacity: 0.92; font-size: 14px; }
-      .kt-help-ask-btn { background: rgba(255,255,255,0.18); backdrop-filter: blur(8px); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 12px 22px; border-radius: 28px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 15px; transition: background 0.15s; }
-      .kt-help-ask-btn:hover { background: rgba(255,255,255,0.28); }
+      .kt-help-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 18px; }
+      .kt-help-ask-btn { background: #1F6080; color: #fff; border: 0; padding: 10px 20px; border-radius: 24px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; transition: filter 0.15s; }
+      .kt-help-ask-btn:hover { filter: brightness(1.08); }
 
       /* v22p70: search now lives inside sidebar */
       .kt-help-search-box { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #E5E7EB; display: flex; align-items: center; gap: 8px; }
