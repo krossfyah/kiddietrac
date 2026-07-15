@@ -89,9 +89,15 @@
     if (document.getElementById('kt-pc-style')) return;
     var s = document.createElement('style'); s.id = 'kt-pc-style';
     s.textContent = [
-      '.kt-pc-greet{display:flex;flex-direction:column;justify-content:center;margin-left:16px;line-height:1.15;}',
-      '.kt-pc-greet b{font-size:15px;font-weight:800;color:#0F172A;}',
-      '.kt-pc-greet small{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;}',
+      // The single greeting now lives INSIDE the user block, on the far left.
+      '.kt-pc-user-left{margin-left:14px !important;cursor:pointer;}',
+      '.kt-pc-navgreet{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;line-height:1.15;}',
+      'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role{display:none !important;}',
+      // Admin-only search box: hidden in parent/educator view.
+      'body.role-guardian #kt-search-widget,body.role-educator #kt-search-widget{display:none !important;}',
+      // Super-admin "view as": agency switcher relocated from bottom-left into the top bar.
+      '.kt-agency-inbar{position:relative !important;left:auto !important;right:auto !important;top:auto !important;bottom:auto !important;margin:0 8px 0 0 !important;padding:0 !important;border-top:none !important;box-shadow:none !important;z-index:50 !important;min-width:150px;background:transparent !important;border:none !important;}',
+      '.kt-agency-inbar > div[style*="position:absolute"]{top:calc(100% + 4px) !important;bottom:auto !important;}',
       // grouped cluster on the right
       '.kt-pc-wrap{display:flex;align-items:center;gap:8px;margin-left:auto;margin-right:12px;}',
       '.kt-pc-btn{width:38px;height:38px;border-radius:11px;border:1px solid rgba(15,23,42,.10);',
@@ -104,6 +110,8 @@
       '.kt-pc-clock{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;}',
       '.kt-pc-sep{width:1px;height:24px;background:rgba(15,23,42,.10);margin:0 2px;}',
       '.kt-back-inbar{position:static !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;margin:0 12px 0 0 !important;box-shadow:none !important;align-self:center !important;z-index:auto !important;}',
+      // The in-page bottom "Sign out" is redundant now it's a top-bar icon (desktop).
+      '@media(min-width:769px){body.role-guardian #kt-home-signout,body.role-educator #kt-home-signout{display:none !important;}}',
       '@media(max-width:768px){.kt-pc-wrap,.kt-pc-greet{display:none !important;}}',
       '@media(max-width:1240px){.kt-pc-date{display:none;}}',
       '@media(max-width:1080px){.kt-pc-greet{display:none;}}',
@@ -135,14 +143,22 @@
     if (!bar) return;
     injectStyle();
 
-    // ── LEFT: greeting beside the logo ──
-    if (!document.getElementById('kt-pc-greet')) {
+    // ── LEFT: the user block (avatar + name) moved to the far left, with the ONE
+    //    greeting injected above the name. ──
+    var navUser = bar.querySelector('#navUser, .nav-user');
+    if (navUser) {
       var brand = bar.querySelector('.nav-brand, #navBrand');
-      var g = document.createElement('div');
-      g.className = 'kt-pc-greet'; g.id = 'kt-pc-greet';
-      g.innerHTML = '<small id="kt-pc-greet-word"></small><b id="kt-pc-greet-name"></b>';
-      if (brand && brand.parentNode === bar) bar.insertBefore(g, brand.nextSibling);
-      else bar.insertBefore(g, bar.firstChild);
+      if (brand && brand.parentNode === bar && navUser.previousElementSibling !== brand) {
+        bar.insertBefore(navUser, brand.nextSibling);
+      }
+      navUser.classList.add('kt-pc-user-left');
+      var txt = navUser.querySelector('.nav-user-text');
+      if (txt && !document.getElementById('kt-pc-navgreet')) {
+        var gr = document.createElement('div');
+        gr.id = 'kt-pc-navgreet'; gr.className = 'kt-pc-navgreet';
+        gr.textContent = greetWord();
+        txt.insertBefore(gr, txt.firstChild);
+      }
       paintGreeting();
     }
 
@@ -155,9 +171,9 @@
       // All the icon controls grouped together first (Home · Language · Settings ·
       // Sign out), then a separator, then the weather / date / clock — per request.
       wrap.appendChild(iconBtn('🏠', 'Home', function () { location.hash = (role === 'educator') ? '#dashboard' : '#home'; }));
-      wrap.appendChild(langPicker());
       wrap.appendChild(iconBtn('⚙️', 'Settings', function () { location.hash = '#settings'; }));
       wrap.appendChild(iconBtn('🚪', 'Sign out', doSignOut));
+      wrap.appendChild(langPicker());
 
       var sep = document.createElement('span'); sep.className = 'kt-pc-sep'; wrap.appendChild(sep);
 
@@ -170,14 +186,24 @@
 
       loadWeather(function (txt) { var el = document.getElementById('kt-pc-wx'); if (el && txt) { el.textContent = txt; el.style.display = ''; } });
     }
+
+    // Super-admin "view as": pull the agency switcher out of the bottom-left and
+    // into the top bar, right after the "Viewing as" pill — like real super-admin mode.
+    var ag = document.getElementById('kt-agency-switcher');
+    var va = document.getElementById('kt-view-as');
+    if (ag && va && va.parentNode === bar && ag.parentNode !== bar) {
+      ag.classList.add('kt-agency-inbar');
+      bar.insertBefore(ag, va.nextSibling);
+      var dd = ag.querySelector('div[style*="absolute"]');
+      if (dd) { dd.style.top = 'calc(100% + 4px)'; dd.style.bottom = 'auto'; }
+    }
+
     placeBack();
   }
 
   function paintGreeting() {
-    var word = document.getElementById('kt-pc-greet-word');
-    var name = document.getElementById('kt-pc-greet-name');
-    if (word) word.textContent = greetWord();
-    if (name) name.textContent = firstName() || 'there';
+    var gr = document.getElementById('kt-pc-navgreet');
+    if (gr) gr.textContent = greetWord();   // name itself is set by the app's own auth JS
   }
 
   function tick() {

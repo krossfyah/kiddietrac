@@ -586,3 +586,7 @@ body.kt-parentview [data-export] { display: none !important; }
   body.role-guardian .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; }
   body.role-guardian .kt-thread-compose, body.role-guardian .kt-voice-preview { flex: 0 0 auto !important; }
 }
+
+/* Chat close ✕ — visible only on the desktop floating chat panel. */
+.kt-thread-close-desk { display: none; }
+@media (min-width: 601px) { body.role-guardian .kt-thread-close-desk { display: inline-flex !important; align-items: center; justify-content: center; } }

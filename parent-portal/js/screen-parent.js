@@ -1204,6 +1204,10 @@
       finally { setTimeout(() => { nudge.disabled = !childId; }, 4000); }
     });
     header.appendChild(nudge);
+    // Desktop shows an explicit ✕ to close the floating chat panel (mobile uses the ‹ back).
+    var closeX = Dom.el('button', { type: 'button', title: 'Close', class: 'kt-thread-close-desk', style: 'background:var(--ink-100);border:none;width:40px;height:40px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;color:var(--ink-600);line-height:1;align-items:center;justify-content:center;' }, '✕');
+    closeX.addEventListener('click', closeThread);
+    header.appendChild(closeX);
     tw.appendChild(header);
 
     const body = Dom.el('div', { class: 'kt-thread-body', style: 'padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--ink-50);' });
