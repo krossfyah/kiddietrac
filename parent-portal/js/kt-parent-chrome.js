@@ -141,7 +141,8 @@
       'body.role-guardian #appMain [style*="max-width:520px"],',
       'body.role-educator #appMain [style*="max-width:520px"]{max-width:600px !important;margin-left:auto !important;margin-right:auto !important;}',
       // Smoother home launcher entrance — fade the whole tilehome as ONE unit.
-      '@media(min-width:601px){body.role-guardian #appMain > .kt-tilehome,body.role-educator #appMain > .kt-tilehome{animation:kt-fade-in .32s ease both !important;}}',
+      // The home launcher paints all at once (no fade/slide that reads as the cards loading after the chrome).
+      'body.role-guardian #appMain > .kt-tilehome,body.role-educator #appMain > .kt-tilehome{animation:none !important;opacity:1 !important;transform:none !important;}',
       // Desktop: the invoice pay sheet becomes a centred panel over a dim backdrop.
       '@media(min-width:601px){body.role-guardian:has(.kt-invoice-sheet)::after,body.role-educator:has(.kt-invoice-sheet)::after{content:"";position:fixed;inset:0;background:rgba(8,20,36,.42);z-index:9599;}body.role-guardian .kt-invoice-sheet,body.role-educator .kt-invoice-sheet{inset:auto !important;position:fixed !important;top:96px !important;left:50% !important;transform:translateX(-50%) !important;width:min(560px,94vw) !important;max-height:calc(100vh - 130px) !important;border-radius:18px !important;overflow:hidden !important;box-shadow:0 24px 70px rgba(8,20,36,.4) !important;border:1px solid #E5E7EB !important;z-index:9600 !important;animation:kt-fade-in .18s ease both !important;}}'
     ].join('');
