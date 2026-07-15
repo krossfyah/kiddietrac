@@ -23,6 +23,12 @@
     try { return /^[\p{Extended_Pictographic}️‍\s]+$/u.test(t); } catch (e) { return false; }
   }
 
+  // Does the trimmed string START with an emoji? (used to avoid double-prefixing a title)
+  function startsWithEmoji(t) {
+    if (!t) return false;
+    try { return /^\s*\p{Extended_Pictographic}/u.test(t); } catch (e) { return false; }
+  }
+
   // Locate the banner on the current screen: a known hero class, or a
   // gradient-backed block near the very top (custom inline banners).
   function findBanner(main) {
@@ -63,9 +69,14 @@
       } catch (ex) {}
     }
     var art = illus.concat(emojiArt);
+    // A real illustration/logo (an <img>/<svg>, e.g. the agency-overview banner) carries
+    // its own identity — those keep their logo and are exempt from the emoji treatment.
+    var hasIllustration = illus.length > 0;
+    var iconEmoji = null;
     if (art.length > 0) {
       var keeper = illus[0] || emojiArt[0];
       art.forEach(function (el) { if (el !== keeper && el.style) el.style.display = 'none'; });
+      if (!hasIllustration) iconEmoji = firstEmoji(keeper.textContent);
     } else {
       var navActive = document.querySelector('#appSidebar .active, #appSidebar [aria-current="page"], .nav-item.active');
       var emoji = firstEmoji(banner.textContent) || firstEmoji(navActive && navActive.textContent) || '✨';
@@ -74,6 +85,20 @@
       el2.setAttribute('aria-hidden', 'true');
       el2.textContent = emoji;
       banner.appendChild(el2);
+      iconEmoji = emoji;
+    }
+
+    // 3) Leading icon on the title — the SAME emoji as the floating art, so EVERY section
+    //    reads "<icon> Title" with its matching art hovering on the right. Some banners
+    //    (auto-hero, Provider map, Expenses, Audit log...) had the art but no leading
+    //    icon; others (Support tickets, Reports...) had both — this makes them all alike.
+    //    Added as a separate text node so it survives translation and never clobbers the
+    //    title's own child nodes (breadcrumbs, <strong>, etc.).
+    if (iconEmoji && !hasIllustration) {
+      var titleEl = banner.querySelector('h1, h2');
+      if (titleEl && !startsWithEmoji((titleEl.textContent || '').replace(/^\s+/, ''))) {
+        titleEl.insertBefore(document.createTextNode(iconEmoji + ' '), titleEl.firstChild);
+      }
     }
   }
 
