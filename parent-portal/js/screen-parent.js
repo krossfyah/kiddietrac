@@ -157,6 +157,140 @@
 
   // ─── TODAY TAB ─────────────────────────────────────────────────
 
+  // Tap a photo to see it full-size, with a Download button. Registered as an overlay so
+  // the ← Back / Android back closes it first.
+  function openPhotoLightbox(url, caption) {
+    if (!url) return;
+    var ov = document.createElement('div');
+    ov.className = 'kt-photo-lightbox';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;display:flex;flex-direction:column;'
+      + 'align-items:center;justify-content:center;background:rgba(8,20,36,.88);padding:24px;'
+      + 'animation:kt-fade-in .15s ease both;';
+
+    var img = document.createElement('img');
+    img.src = url;
+    img.alt = caption || 'Photo';
+    img.style.cssText = 'max-width:min(94vw,1100px);max-height:80vh;border-radius:12px;'
+      + 'box-shadow:0 20px 60px rgba(0,0,0,.5);object-fit:contain;background:#0b1626;';
+    ov.appendChild(img);
+
+    if (caption) {
+      var cap = document.createElement('div');
+      cap.textContent = String(caption).replace(/^\[Demo\] /, '');
+      cap.style.cssText = 'color:#E2E8F0;font-size:14px;margin-top:14px;text-align:center;max-width:90vw;';
+      ov.appendChild(cap);
+    }
+
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;gap:10px;margin-top:18px;';
+    var dl = document.createElement('button');
+    dl.type = 'button';
+    dl.textContent = '\u2b07\ufe0f  Download';
+    dl.style.cssText = 'background:#159FB4;color:#fff;border:0;border-radius:24px;padding:10px 22px;font-weight:700;font-size:14px;cursor:pointer;';
+    dl.addEventListener('click', function () { downloadPhoto(url, caption); });
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = 'Close';
+    close.style.cssText = 'background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:24px;padding:10px 22px;font-weight:700;font-size:14px;cursor:pointer;';
+    var dismiss = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    close.addEventListener('click', function () { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); });
+    bar.appendChild(dl); bar.appendChild(close);
+    ov.appendChild(bar);
+
+    // Click the dim backdrop (not the image/buttons) to close.
+    ov.addEventListener('click', function (e) { if (e.target === ov) { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); } });
+
+    document.body.appendChild(ov);
+    if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, dismiss);
+  }
+
+  // Save the image to the device. Fetch as a blob so the download attribute is honoured
+  // even for cross-path URLs; fall back to opening the image in a new tab.
+  function downloadPhoto(url, caption) {
+    var name = ('kiddietrac-' + String(caption || 'photo').replace(/^\[Demo\] /, '').replace(/[^a-z0-9]+/gi, '-').slice(0, 40) || 'photo').replace(/-+$/, '') + '.jpg';
+    fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
+      var u = URL.createObjectURL(b);
+      var a = document.createElement('a');
+      a.href = u; a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(u); if (a.parentNode) a.parentNode.removeChild(a); }, 4000);
+    }).catch(function () { window.open(url, '_blank', 'noopener'); });
+  }
+
+  // Read-only child record. Parents can VIEW their child's full details (never edit them —
+  // the agency owns those). Opened by clicking the child card on the Today screen.
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  async function openChildRecord(childId) {
+    if (!childId) return;
+    var ov = document.createElement('div');
+    ov.className = 'kt-child-record';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;display:flex;align-items:flex-start;justify-content:center;'
+      + 'overflow-y:auto;padding:32px 16px;background:rgba(8,20,36,.55);animation:kt-fade-in .15s ease both;';
+    var card = document.createElement('div');
+    card.style.cssText = 'width:100%;max-width:640px;background:#fff;border-radius:18px;box-shadow:0 24px 60px -12px rgba(0,0,0,.4);overflow:hidden;';
+    card.innerHTML = '<div style="padding:40px;text-align:center;color:#64748B;">Loading record…</div>';
+    ov.appendChild(card);
+    var dismiss = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    ov.addEventListener('click', function (e) { if (e.target === ov) { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); } });
+    document.body.appendChild(ov);
+    if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, dismiss);
+
+    var d;
+    try { d = await Api.get('/parent/children/' + childId); }
+    catch (e) { card.innerHTML = '<div style="padding:40px;text-align:center;color:#B91C1C;">Could not load the record.</div>'; return; }
+
+    var apiHost = ((window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
+    var photo = d.photo_url ? (/^https?:/.test(d.photo_url) ? d.photo_url : apiHost + d.photo_url) : '';
+    var gender = ({ male: 'Male', female: 'Female', non_binary: 'Non-binary', prefer_not_to_say: 'Prefer not to say' })[d.gender] || '—';
+    var sched = '';
+    try { var arr = JSON.parse((d.enrollment && d.enrollment.schedule) || '[]'); sched = arr.map(function (x) { return x.charAt(0).toUpperCase() + x.slice(1); }).join(', '); } catch (e) {}
+
+    function row(label, value) {
+      if (!value) return '';
+      return '<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #F1F5F9;">'
+        + '<span style="color:#64748B;font-size:13px;">' + esc(label) + '</span>'
+        + '<span style="color:#0F172A;font-size:14px;font-weight:600;text-align:right;">' + esc(value) + '</span></div>';
+    }
+    function section(title, inner) {
+      if (!inner) return '';
+      return '<div style="padding:16px 24px;"><div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;margin-bottom:6px;">' + esc(title) + '</div>' + inner + '</div>';
+    }
+
+    var guardians = (d.guardians || []).map(function (g) {
+      return '<div style="padding:8px 0;border-bottom:1px solid #F1F5F9;">'
+        + '<div style="font-weight:600;color:#0F172A;font-size:14px;">' + esc((g.first_name || '') + ' ' + (g.last_name || '')) + (g.is_primary ? ' <span style="color:#159FB4;font-weight:700;font-size:11px;">· PRIMARY</span>' : '') + '</div>'
+        + '<div style="color:#64748B;font-size:12.5px;">' + esc(g.relationship || 'guardian') + (g.can_pickup ? ' · can pick up' : ' · not authorised for pickup') + '</div>'
+        + (g.email ? '<div style="color:#94A3B8;font-size:12px;">' + esc(g.email) + '</div>' : '') + '</div>';
+    }).join('');
+
+    var health = [];
+    if (d.medical_notes) health.push(row('Medical', d.medical_notes));
+    if (d.dietary_notes) health.push(row('Dietary', d.dietary_notes));
+    (d.health_flags || []).forEach(function (h) { health.push(row('Flag', h.label || h.name || h)); });
+    var healthHtml = health.length ? health.join('') : '<div style="color:#94A3B8;font-size:13px;padding:6px 0;">None on file.</div>';
+
+    var fam = d.family || {};
+    var addr = [fam.address_line1, fam.address_line2, fam.city, fam.province, fam.postal_code].filter(Boolean).join(', ');
+
+    card.innerHTML =
+      '<div style="background:linear-gradient(135deg,#1F6080 0%,#2c7894 100%);color:#fff;padding:22px 24px;display:flex;align-items:center;gap:16px;position:relative;">'
+      + (photo ? '<img src="' + esc(photo) + '" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.5);">'
+               : '<div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;">' + esc((d.first_name || '?')[0]) + '</div>')
+      + '<div><div style="font-size:22px;font-weight:800;">' + esc(d.full_name || d.display_name) + '</div>'
+      + '<div style="opacity:.9;font-size:13px;">' + esc((d.age && d.age.human) || '') + (d.room && d.room.name ? ' · ' + esc(d.room.name) : '') + '</div></div>'
+      + '<button type="button" id="kt-cr-close" aria-label="Close" style="position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);color:#fff;border:0;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">&times;</button>'
+      + '<span style="position:absolute;bottom:12px;right:18px;background:rgba(255,255,255,.16);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 9px;border-radius:20px;">VIEW ONLY</span></div>'
+      + section('Child', row('Full name', d.full_name) + row('Date of birth', d.date_of_birth) + row('Age', d.age && d.age.human) + row('Gender', gender) + row('Status', d.is_at_centre ? 'At the centre' : 'At home'))
+      + section('Enrolment', row('Room', d.room && d.room.name) + row('Centre', d.centre && d.centre.name) + row('Schedule', sched) + row('Start date', d.enrollment && d.enrollment.start_date) + row('CWELCC', d.enrollment && d.enrollment.cwelcc_eligible ? 'Eligible' : ''))
+      + section('Guardians', guardians)
+      + section('Health & dietary', healthHtml)
+      + section('Family', row('Household', fam.family_name) + row('Address', addr) + row('Phone', fam.primary_phone) + row('Email', fam.primary_email))
+      + '<div style="padding:14px 24px 22px;color:#94A3B8;font-size:12px;">Need a change? Contact your childcare centre — these records are maintained by the agency.</div>';
+
+    var cl = card.querySelector('#kt-cr-close');
+    if (cl) cl.addEventListener('click', function () { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); });
+  }
+
   async function renderTodayTab(wrap) {
     wrap.appendChild(buildSubNav('today'));
 
@@ -174,6 +308,11 @@
       Dom.el('p', { style: 'color: var(--ink-600); margin: 0;' },
         `${child.display_name} · ${child.age?.human || '—'} · ${child.room_name || 'No room assigned'}`
       ),
+      Dom.el('button', {
+        type: 'button',
+        style: 'margin-top: 10px; background: #fff; color: #1F6080; border: 1px solid #cbd5e1; border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;',
+        onclick: () => openChildRecord(child.id),
+      }, `📋 View ${child.display_name}'s record`),
     ]));
 
     const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr; gap: 24px;' });
@@ -314,7 +453,8 @@
       }
       data.photos.forEach(p => {
         const card = Dom.el('div', { class: 'card', style: 'padding: 0; overflow: hidden;' });
-        const img = Dom.el('img', { src: p.url, alt: p.caption || 'Photo', style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--ink-100);' });
+        const img = Dom.el('img', { src: p.url, alt: p.caption || 'Photo', style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--ink-100); cursor: zoom-in;' });
+        img.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
         card.appendChild(img);
         const body = Dom.el('div', { style: 'padding: 12px;' });
         if (p.caption) body.appendChild(Dom.el('div', { style: 'font-size: 14px; line-height: 1.4;' }, p.caption.replace(/^\[Demo\] /, '')));
@@ -334,14 +474,14 @@
     wrap.appendChild(buildSubNav('messages'));
     wrap.appendChild(Dom.el('h1', { style: 'margin: 0 0 24px;' }, 'Messages'));
 
-    const container = Dom.el('div', { style: 'display: grid; grid-template-columns: 320px 1fr; gap: 24px; min-height: 60vh;' });
+    const container = Dom.el('div', { style: 'display: grid; grid-template-columns: 320px 1fr; gap: 24px; height: calc(100vh - 290px); min-height: 380px; max-height: calc(100vh - 290px);' });
     wrap.appendChild(container);
 
-    const list = Dom.el('div', { class: 'card', style: 'padding: 8px; max-height: 70vh; overflow-y: auto;' });
+    const list = Dom.el('div', { class: 'card', style: 'padding: 8px; height: 100%; max-height: 100%; overflow-y: auto;' });  // fills the bounded area and scrolls, like a Gmail conversation list
     container.appendChild(list);
     list.appendChild(Dom.el('p', { style: 'padding: 12px; color: var(--ink-500);' }, 'Loading conversations…'));
 
-    const thread = Dom.el('div', { class: 'card', style: 'display: flex; flex-direction: column; min-height: 500px;' });
+    const thread = Dom.el('div', { class: 'card', style: 'display: flex; flex-direction: column; height: 100%; max-height: 100%; overflow: hidden;' });  // fills the bounded area; its message body scrolls internally
     container.appendChild(thread);
 
     try {
@@ -821,7 +961,9 @@
             style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#0F172A;',
           }));
         } else {
-          c.appendChild(Dom.el('img', { src: p.url, alt: p.caption || 'Photo', loading: 'lazy', style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--ink-100);' }));
+          const mimg = Dom.el('img', { src: p.url, alt: p.caption || 'Photo', loading: 'lazy', style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--ink-100);cursor:zoom-in;' });
+          mimg.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
+          c.appendChild(mimg);
         }
         if (p.caption || p.date_display) {
           const b = Dom.el('div', { style: 'padding:8px 10px;' });
