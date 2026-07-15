@@ -1,11 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════
    KiddieTrac — parent & educator DESKTOP top-bar chrome (2026-07-14).
    On desktop the parent/educator top bar (the sidebar restyled horizontally)
-   showed only a logo and the user block. Super admins get a Home button, the
-   date/clock, weather and a settings gear — this gives parents and educators
-   the same, in their own top bar, on desktop only. Mobile keeps its bottom nav
-   + floating gear untouched (this module no-ops below 769px).
-   Purely additive: one controls cluster injected before the user block.
+   gets the same chrome super admins have, grouped together on the right:
+   Home · weather · date/clock · language · Settings · Sign out — plus a
+   time-of-day greeting on the LEFT beside the logo. Desktop only; mobile keeps
+   its bottom nav + floating gear (this module no-ops below 769px).
    ═══════════════════════════════════════════════════════════════════ */
 (function (w) {
   'use strict';
@@ -19,13 +18,27 @@
     if (/\brole-educator\b/.test(c)) return 'educator';
     return null;
   }
+  function store(k) { try { return sessionStorage.getItem(k) || localStorage.getItem(k); } catch (e) { return null; } }
+  function firstName() {
+    try {
+      var u = JSON.parse(store('kt_user') || '{}');
+      return (u.first_name || u.preferred_name || (u.name || '').split(' ')[0] || '').trim();
+    } catch (e) { return ''; }
+  }
 
-  // ── clock / date / weather (same look + source as the admin top bar) ──
+  // ── clock / date / weather / greeting ──
   function fmtClock() {
     var d = new Date(), h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM', hh = h % 12; if (hh === 0) hh = 12;
     return hh + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
   }
   function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
+  function greetWord() {
+    var h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    if (h < 22) return 'Good evening';
+    return 'Good night';
+  }
   function wxEmoji(c) {
     if (c === 0) return '☀️'; if (c <= 2) return '🌤'; if (c === 3) return '☁️';
     if (c === 45 || c === 48) return '🌫'; if (c >= 51 && c <= 67) return '🌧';
@@ -43,29 +56,72 @@
 
   function iconBtn(emoji, title, fn) {
     var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'kt-pc-btn';
-    b.title = title;
-    b.setAttribute('aria-label', title);
+    b.type = 'button'; b.className = 'kt-pc-btn'; b.title = title; b.setAttribute('aria-label', title);
     b.textContent = emoji;
     b.addEventListener('click', function (e) { e.preventDefault(); fn(); });
     return b;
+  }
+
+  var LOCALES = [['en', '🌐 English'], ['fr', '🌐 Français'], ['es', '🌐 Español'], ['hi', '🌐 हिन्दी']];
+  function langPicker() {
+    var sel = document.createElement('select');
+    sel.className = 'kt-pc-lang'; sel.title = 'Language'; sel.setAttribute('aria-label', 'Language');
+    var cur = 'en'; try { cur = localStorage.getItem('kt_locale') || 'en'; } catch (e) {}
+    LOCALES.forEach(function (l) { var o = document.createElement('option'); o.value = l[0]; o.textContent = l[1]; if (l[0] === cur) o.selected = true; sel.appendChild(o); });
+    sel.addEventListener('change', function () {
+      var loc = sel.value;
+      try { localStorage.setItem('kt_locale', loc); } catch (e) {}
+      var t = store('kt_token');
+      fetch(API + '/locale', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + t }, body: JSON.stringify({ locale: loc }) })
+        .catch(function () {}).then(function () { w.location.reload(); });
+    });
+    return sel;
+  }
+
+  function doSignOut() {
+    if (!w.confirm('Sign out of KiddieTrac?')) return;
+    try { if (w.Auth && w.Auth.logout) return w.Auth.logout(); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
+    w.location.href = '/index.html?signed_out=1';
   }
 
   function injectStyle() {
     if (document.getElementById('kt-pc-style')) return;
     var s = document.createElement('style'); s.id = 'kt-pc-style';
     s.textContent = [
-      '.kt-pc-wrap{display:flex;align-items:center;gap:10px;margin-left:auto;margin-right:14px;}',
+      '.kt-pc-greet{display:flex;flex-direction:column;justify-content:center;margin-left:16px;line-height:1.15;}',
+      '.kt-pc-greet b{font-size:15px;font-weight:800;color:#0F172A;}',
+      '.kt-pc-greet small{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;}',
+      // grouped cluster on the right
+      '.kt-pc-wrap{display:flex;align-items:center;gap:8px;margin-left:auto;margin-right:12px;}',
       '.kt-pc-btn{width:38px;height:38px;border-radius:11px;border:1px solid rgba(15,23,42,.10);',
       '  background:#fff;font-size:17px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;',
       '  box-shadow:0 1px 2px rgba(16,40,64,.05);transition:background .12s,border-color .12s;}',
       '.kt-pc-btn:hover{background:#F1F5F9;border-color:#94A3B8;}',
+      '.kt-pc-lang{border:1px solid rgba(15,23,42,.10);border-radius:10px;background:#fff;padding:7px 8px;font-size:12px;font-weight:600;color:#334155;cursor:pointer;max-width:118px;box-shadow:0 1px 2px rgba(16,40,64,.05);}',
       '.kt-pc-wx{font-size:12.5px;font-weight:600;color:#475569;white-space:nowrap;}',
       '.kt-pc-date{font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;}',
       '.kt-pc-clock{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;}',
-      '@media(max-width:768px){.kt-pc-wrap{display:none !important;}}',   // mobile keeps its own chrome
-      '@media(max-width:1180px){.kt-pc-date{display:none;}}'
+      '.kt-pc-sep{width:1px;height:24px;background:rgba(15,23,42,.10);margin:0 2px;}',
+      '@media(max-width:768px){.kt-pc-wrap,.kt-pc-greet{display:none !important;}}',
+      '@media(max-width:1240px){.kt-pc-date{display:none;}}',
+      '@media(max-width:1080px){.kt-pc-greet{display:none;}}',
+      // ── FULL SCREEN: parent/educator content fills the viewport. The 1800px cap
+      //    (on #appMain via CSS, and on each screen's wrapper via an inline style) left
+      //    empty gutters on wide monitors. Lift ONLY the 1800 caps — narrow panels
+      //    (settings/forms at 640px etc.) keep their own smaller max-width. ──
+      'body.role-guardian #appMain,body.role-educator #appMain,',
+      'body.role-guardian .kt-tilehome,body.role-educator .kt-tilehome{max-width:none !important;margin-left:0 !important;margin-right:0 !important;}',
+      // Only lift the WIDE (1800px) caps — narrow panels (settings at 520px, forms)
+      // keep their own readable max-width, so a settings form never stretches edge to edge.
+      'body.role-guardian #appMain [style*="max-width: 1800"],',
+      'body.role-educator #appMain [style*="max-width: 1800"],',
+      'body.role-guardian #appMain [style*="max-width:1800"],',
+      'body.role-educator #appMain [style*="max-width:1800"]{max-width:none !important;}',
+      // The settings/profile form stays a readable, centred width (a desktop rule was
+      // stretching its own 520px wrap to 100%). Keep forms narrow while content is full.
+      'body.role-guardian #appMain [style*="max-width:520px"],',
+      'body.role-educator #appMain [style*="max-width:520px"]{max-width:600px !important;margin-left:auto !important;margin-right:auto !important;}'
     ].join('');
     document.head.appendChild(s);
   }
@@ -76,40 +132,59 @@
     if (!role) return;
     var bar = document.getElementById('appSidebar');
     if (!bar) return;
-    if (document.getElementById('kt-pc-wrap')) return;   // already injected
-    var userBlock = bar.querySelector('.nav-user');
     injectStyle();
 
-    var wrap = document.createElement('div');
-    wrap.className = 'kt-pc-wrap'; wrap.id = 'kt-pc-wrap';
+    // ── LEFT: greeting beside the logo ──
+    if (!document.getElementById('kt-pc-greet')) {
+      var brand = bar.querySelector('.nav-brand, #navBrand');
+      var g = document.createElement('div');
+      g.className = 'kt-pc-greet'; g.id = 'kt-pc-greet';
+      g.innerHTML = '<small id="kt-pc-greet-word"></small><b id="kt-pc-greet-name"></b>';
+      if (brand && brand.parentNode === bar) bar.insertBefore(g, brand.nextSibling);
+      else bar.insertBefore(g, bar.firstChild);
+      paintGreeting();
+    }
 
-    // Home — parents land on #home, educators on #dashboard (their tile launcher).
-    wrap.appendChild(iconBtn('🏠', 'Home', function () {
-      location.hash = (role === 'educator') ? '#dashboard' : '#home';
-    }));
+    // ── RIGHT: the grouped cluster ──
+    if (!document.getElementById('kt-pc-wrap')) {
+      var userBlock = bar.querySelector('.nav-user');
+      var wrap = document.createElement('div');
+      wrap.className = 'kt-pc-wrap'; wrap.id = 'kt-pc-wrap';
 
-    var wx = document.createElement('span'); wx.className = 'kt-pc-wx'; wx.id = 'kt-pc-wx'; wx.style.display = 'none'; wrap.appendChild(wx);
-    var dt = document.createElement('span'); dt.className = 'kt-pc-date'; dt.id = 'kt-pc-date'; dt.textContent = fmtDate(); wrap.appendChild(dt);
-    var ck = document.createElement('span'); ck.className = 'kt-pc-clock'; ck.id = 'kt-pc-clock'; ck.textContent = fmtClock(); wrap.appendChild(ck);
+      wrap.appendChild(iconBtn('🏠', 'Home', function () { location.hash = (role === 'educator') ? '#dashboard' : '#home'; }));
 
-    // Settings gear — same destination as the mobile floating gear.
-    wrap.appendChild(iconBtn('⚙️', 'Settings', function () { location.hash = '#settings'; }));
+      var wx = document.createElement('span'); wx.className = 'kt-pc-wx'; wx.id = 'kt-pc-wx'; wx.style.display = 'none'; wrap.appendChild(wx);
+      var dt = document.createElement('span'); dt.className = 'kt-pc-date'; dt.id = 'kt-pc-date'; dt.textContent = fmtDate(); wrap.appendChild(dt);
+      var ck = document.createElement('span'); ck.className = 'kt-pc-clock'; ck.id = 'kt-pc-clock'; ck.textContent = fmtClock(); wrap.appendChild(ck);
 
-    if (userBlock && userBlock.parentNode === bar) bar.insertBefore(wrap, userBlock);
-    else bar.appendChild(wrap);
+      var sep = document.createElement('span'); sep.className = 'kt-pc-sep'; wrap.appendChild(sep);
 
-    loadWeather(function (txt) { var el = document.getElementById('kt-pc-wx'); if (el && txt) { el.textContent = txt; el.style.display = ''; } });
+      wrap.appendChild(langPicker());
+      wrap.appendChild(iconBtn('⚙️', 'Settings', function () { location.hash = '#settings'; }));
+      wrap.appendChild(iconBtn('🚪', 'Sign out', doSignOut));
+
+      if (userBlock && userBlock.parentNode === bar) bar.insertBefore(wrap, userBlock);
+      else bar.appendChild(wrap);
+
+      loadWeather(function (txt) { var el = document.getElementById('kt-pc-wx'); if (el && txt) { el.textContent = txt; el.style.display = ''; } });
+    }
     placeBack();
+  }
+
+  function paintGreeting() {
+    var word = document.getElementById('kt-pc-greet-word');
+    var name = document.getElementById('kt-pc-greet-name');
+    if (word) word.textContent = greetWord();
+    if (name) name.textContent = firstName() || 'there';
   }
 
   function tick() {
     var c = document.getElementById('kt-pc-clock'); if (c) c.textContent = fmtClock();
     var d = document.getElementById('kt-pc-date'); if (d) d.textContent = fmtDate();
+    paintGreeting();
   }
 
-  // Keep the floating "← Back" button clear of the top bar whatever its height (it is
-  // taller in the super-admin "View as" preview, and can wrap on narrow widths). Position
-  // it just below the sticky bar's actual bottom instead of a hard-coded offset.
+  // Keep the floating "← Back" button clear of the top bar whatever its height.
   function placeBack() {
     if (!isDesktop() || !roleOf()) return;
     var back = document.getElementById('kt-role-back');
@@ -121,11 +196,11 @@
 
   ensure();
   placeBack();
-  setInterval(function(){ ensure(); placeBack(); }, 1200);   // re-inject if the bar is rebuilt; no-op once present
+  setInterval(function () { ensure(); placeBack(); }, 1200);
   setInterval(tick, 15000);
   w.addEventListener('resize', function () {
-    var wrap = document.getElementById('kt-pc-wrap');
-    if (!isDesktop() && wrap) { wrap.remove(); }
-    else if (isDesktop()) ensure();
+    var wrap = document.getElementById('kt-pc-wrap'), greet = document.getElementById('kt-pc-greet');
+    if (!isDesktop()) { if (wrap) wrap.remove(); if (greet) greet.remove(); }
+    else ensure();
   });
 })(window);
