@@ -123,71 +123,6 @@
     return '<div class="kt-tile-grid">' + items.map(tileHtml).join('') + '</div>';
   }
 
-  // ── Parent home glance stats (skeleton-first so they paint WITH the tiles, then
-  //    fill in — no "cards load after the banner" stagger). Guardian only. ──
-  function injectHomeStatsCss() {
-    if (document.getElementById('kt-home-stats-css')) return;
-    var st = document.createElement('style'); st.id = 'kt-home-stats-css';
-    st.textContent = [
-      '.kt-home-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 22px;}',
-      '.kt-hstat{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E7ECF3;border-radius:16px;padding:15px 18px;text-decoration:none;color:inherit;box-shadow:0 1px 3px rgba(15,23,42,.05);transition:transform .12s,box-shadow .12s,border-color .12s;}',
-      '.kt-hstat:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(13,27,42,.10);border-color:#c9d7ea;}',
-      '.kt-hstat-icon{font-size:23px;width:44px;height:44px;border-radius:12px;background:#F1F5F9;display:flex;align-items:center;justify-content:center;flex-shrink:0;}',
-      '.kt-hstat-body{min-width:0;}',
-      '.kt-hstat-label{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;margin-bottom:3px;}',
-      '.kt-hstat-value{font-size:22px;font-weight:800;color:#0F172A;line-height:1.1;white-space:nowrap;}',
-      '.kt-hstat-unit{font-size:12px;font-weight:600;color:#94A3B8;}',
-      '.kt-hstat.kt-hstat-warn .kt-hstat-value{color:#B45309;}',
-      '.kt-hstat.kt-hstat-ok .kt-hstat-value{color:#047857;}',
-      '.kt-hstat-sk{display:inline-block;min-width:66px;height:22px;border-radius:6px;background:linear-gradient(90deg,#EEF2F7 25%,#E2E8F0 37%,#EEF2F7 63%);background-size:400% 100%;animation:kt-sk 1.2s ease infinite;}',
-      '@keyframes kt-sk{0%{background-position:100% 0}100%{background-position:0 0}}',
-      '@media(max-width:900px){.kt-home-stats{grid-template-columns:repeat(2,1fr);}}',
-      '@media(max-width:600px){.kt-home-stats{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;}.kt-hstat{padding:11px;gap:9px;border-radius:13px;}.kt-hstat-icon{width:34px;height:34px;font-size:18px;}.kt-hstat-value{font-size:17px;}}',
-    ].join('');
-    document.head.appendChild(st);
-  }
-
-  function homeStatsShell() {
-    var card = function (id, hash, icon, label) {
-      return '<a class="kt-hstat" id="' + id + '" href="#' + hash + '">'
-        + '<div class="kt-hstat-icon">' + icon + '</div>'
-        + '<div class="kt-hstat-body"><div class="kt-hstat-label">' + label + '</div>'
-        + '<div class="kt-hstat-value"><span class="kt-hstat-sk">&nbsp;</span></div></div></a>';
-    };
-    return '<div class="kt-home-stats">'
-      + card('hstat-status', 'today', '📍', "Today's status")
-      + card('hstat-balance', 'billing', '💳', 'Outstanding balance')
-      + card('hstat-photos', 'photos', '📸', 'Photos this week')
-      + card('hstat-children', 'today', '🧒', 'Your children')
-      + '</div>';
-  }
-
-  async function loadHomeStats() {
-    var Api = KT.Api; if (!Api || !Api.get) return;
-    var setVal = function (id, html, cls) {
-      var el = document.getElementById(id); if (!el) return;
-      var v = el.querySelector('.kt-hstat-value'); if (v) v.innerHTML = html;
-      if (cls) el.classList.add(cls);
-    };
-    var kids = [];
-    try { var d = await Api.get('/parent/children'); kids = d.children || []; } catch (e) {}
-    setVal('hstat-children', kids.length + ' <span class="kt-hstat-unit">enrolled</span>');
-    var atc = kids.filter(function (k) { return k.is_at_centre; }).length;
-    var stat = !kids.length ? '—' : (atc === kids.length ? 'At the centre' : (atc === 0 ? 'At home' : (atc + ' of ' + kids.length + ' in')));
-    setVal('hstat-status', stat, atc > 0 ? 'kt-hstat-ok' : '');
-    try { var l = await Api.get('/parent/ledger'); var bal = Number(l.current_balance || 0); setVal('hstat-balance', '$' + bal.toFixed(2), bal > 0.005 ? 'kt-hstat-warn' : 'kt-hstat-ok'); }
-    catch (e) { setVal('hstat-balance', '—'); }
-    try {
-      var weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-      var count = 0;
-      for (var i = 0; i < kids.length; i++) {
-        var pd = await Api.get('/parent/children/' + kids[i].id + '/photos').catch(function () { return null; });
-        if (pd && pd.photos) count += pd.photos.filter(function (ph) { return (ph.taken_at || '').slice(0, 10) >= weekAgo; }).length;
-      }
-      setVal('hstat-photos', count + ' <span class="kt-hstat-unit">' + (count === 1 ? 'photo' : 'photos') + '</span>');
-    } catch (e) { setVal('hstat-photos', '—'); }
-  }
-
   function renderHome(main, ctx) {
     var role = (ctx && ctx.role) || 'guardian';
     var set = TILES[role] || TILES.guardian;
@@ -208,7 +143,6 @@
           '<h1>' + esc(set.title) + '</h1>' +
           '<div class="kt-hero-sub">' + esc(set.sub) + '</div>' +
         '</div>' +
-        (role === 'guardian' ? homeStatsShell() : '') +
         gridHtml(set.primary.concat(hasMore ? [{ hash: '', icon: '➕', label: 'More', _more: true }] : [])) +
         (hasMore
           ? '<div class="kt-tile-more" hidden>' +
@@ -220,7 +154,6 @@
       '</div>';
 
     main.insertAdjacentHTML('beforeend', html);
-    if (role === 'guardian') { injectHomeStatsCss(); loadHomeStats(); }
 
     // Sign-out (parents have no bottom-bar Menu, so the launcher carries it).
     var signout = main.querySelector('#kt-home-signout');
