@@ -158,6 +158,33 @@ final class DailyEventController extends Controller
             ]);
         }
 
+        // 1b. If the child was reported absent for this date, there's no day to
+        //     summarise — write a warm little note about their day off instead.
+        $absence = DB::table('child_absences')
+            ->where('child_id', $childId)
+            ->whereDate('absent_on', $date)
+            ->first();
+        if ($absence) {
+            $c = DB::table('children')->where('id', $childId)->first();
+            $name = $c ? (($c->preferred_name ?: $c->first_name) ?: 'Your child') : 'Your child';
+            $reasonLine = [
+                'sick'        => "was home unwell",
+                'appointment' => "was away for an appointment",
+                'holiday'     => "was away on holiday",
+                'family'      => "had a family day",
+                'other'       => "was away",
+            ][$absence->reason] ?? "was away";
+            $note = trim((string) ($absence->note ?? ''));
+            $body = "{$name} {$reasonLine} today, so there isn't a daily story to share. "
+                . ($note ? "You let us know: \"{$note}\". " : "")
+                . "We hope {$name} is feeling good, and we can't wait to see them back at the centre! \u{1F49B}";
+            return response()->json([
+                'body' => $body,
+                'generated_at' => now()->toIso8601String(),
+                'absent' => true,
+            ]);
+        }
+
         // 2. Decide whether to generate. Only auto-generate if it's:
         //    - Today AND it's past 4 PM (most of the day has happened)
         //    - OR a past date (anything in the past should be available on demand)

@@ -130,7 +130,7 @@
         class: 'child-tab' + (active ? ' active' : ''),
         style: `padding: 12px 20px; background: none; border: none; border-bottom: 3px solid ${active ? 'var(--brand-green)' : 'transparent'}; font-weight: ${active ? '700' : '500'}; color: ${active ? 'var(--brand-blue)' : 'var(--ink-600)'}; cursor: pointer; font-size: 15px;`,
       }, [
-        Dom.el('span', { class: 'child-avatar', style: 'background: var(--brand-green); color: white; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; margin-right: 8px;' }, c.display_name?.[0]?.toUpperCase() || 'C'),
+        (function () { var a = Dom.el('span', { class: 'child-avatar', style: 'margin-right:8px;display:inline-flex;flex-shrink:0;' }); if (window.KT && KT.avatar) { a.innerHTML = KT.avatar(c.display_name, { size: 28, photoUrl: c.photo_url ? absUrl(c.photo_url) : null }); } else { a.textContent = c.display_name && c.display_name[0] ? c.display_name[0].toUpperCase() : 'C'; a.style.cssText += 'background:var(--brand-green);color:#fff;width:28px;height:28px;border-radius:50%;align-items:center;justify-content:center;font-size:12px;font-weight:700;'; } return a; })(),
         c.display_name,
       ]);
       tab.addEventListener('click', () => {
@@ -141,6 +141,36 @@
     });
 
     return tabs;
+  }
+
+  // Browse the child's day across dates — history back through past days (never the future).
+  function buildDateNav() {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isToday = state.date === todayStr;
+    const dObj = new Date(state.date + 'T00:00:00');
+    const label = dObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    const nav = Dom.el('div', { style: 'display:flex; align-items:center; gap:10px; margin:0 0 18px; flex-wrap:wrap;' });
+    const rerender = () => { setTimeout(() => { try { Shell.renderScreen(); } catch (e) {} }, 0); };
+    const shift = (days, ev) => {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      const d = new Date(state.date + 'T00:00:00'); d.setDate(d.getDate() + days);
+      const ns = d.toISOString().split('T')[0];
+      if (ns > todayStr) return;               // never go past today
+      state.date = ns; rerender();
+    };
+    const prev = Dom.el('button', { type: 'button', title: 'Previous day', style: 'background:#fff;border:1px solid #cbd5e1;border-radius:9px;width:34px;height:34px;font-size:13px;line-height:1;cursor:pointer;color:#1F6080;flex-shrink:0;' }, '◀');
+    prev.addEventListener('click', (e) => shift(-1, e));
+    const next = Dom.el('button', { type: 'button', title: 'Next day', style: `background:#fff;border:1px solid #cbd5e1;border-radius:9px;width:34px;height:34px;font-size:13px;line-height:1;color:${isToday ? '#cbd5e1' : '#1F6080'};cursor:${isToday ? 'default' : 'pointer'};flex-shrink:0;` }, '▶');
+    if (!isToday) next.addEventListener('click', (e) => shift(1, e));
+    nav.appendChild(prev);
+    nav.appendChild(Dom.el('div', { style: 'font-weight:700; font-size:15px; color:#0F172A;' }, isToday ? ('Today · ' + label) : label));
+    nav.appendChild(next);
+    if (!isToday) {
+      const t = Dom.el('button', { type: 'button', style: 'background:#EEF2FF;border:0;border-radius:9px;padding:7px 14px;font-size:13px;font-weight:700;color:#4338CA;cursor:pointer;' }, 'Back to today');
+      t.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); state.date = todayStr; rerender(); });
+      nav.appendChild(t);
+    }
+    return nav;
   }
 
   function buildSubNav(active) {
@@ -303,24 +333,30 @@
     const child = state.children.find(c => c.id === state.selectedChildId);
     if (!child) return;
 
-    // Header
-    wrap.appendChild(Dom.el('div', { style: 'margin-bottom: 24px;' }, [
-      Dom.el('div', { style: 'display: flex; align-items: center; gap: 12px; margin-bottom: 8px;' }, [
-        Dom.el('h1', { style: 'margin: 0; font-size: 32px;' }, `Today with ${child.display_name}`),
-        child.is_at_centre
-          ? Dom.el('span', { style: 'background: var(--brand-green); color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;' }, 'AT CENTRE')
-          : Dom.el('span', { style: 'background: var(--ink-200); color: var(--ink-700); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;' }, 'AT HOME'),
+    // Header — child's avatar + name/status + view-record
+    const _todayAv = Dom.el('div', { style: 'flex-shrink:0;' });
+    if (window.KT && KT.avatar) _todayAv.innerHTML = KT.avatar(child.display_name, { size: 60, photoUrl: child.photo_url ? absUrl(child.photo_url) : null });
+    wrap.appendChild(Dom.el('div', { style: 'display: flex; align-items: center; gap: 16px; margin-bottom: 24px;' }, [
+      _todayAv,
+      Dom.el('div', { style: 'min-width: 0;' }, [
+        Dom.el('div', { style: 'display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap;' }, [
+          Dom.el('h1', { style: 'margin: 0; font-size: 32px;' }, `Today with ${child.display_name}`),
+          child.is_at_centre
+            ? Dom.el('span', { style: 'background: var(--brand-green); color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;' }, 'AT CENTRE')
+            : Dom.el('span', { style: 'background: var(--ink-200); color: var(--ink-700); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;' }, 'AT HOME'),
+        ]),
+        Dom.el('p', { style: 'color: var(--ink-600); margin: 0;' },
+          `${child.display_name} · ${child.age?.human || '—'} · ${child.room_name || 'No room assigned'}`
+        ),
+        Dom.el('button', {
+          type: 'button',
+          style: 'margin-top: 10px; background: #fff; color: #1F6080; border: 1px solid #cbd5e1; border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;',
+          onclick: () => openChildRecord(child.id),
+        }, `📋 View ${child.display_name}'s record`),
       ]),
-      Dom.el('p', { style: 'color: var(--ink-600); margin: 0;' },
-        `${child.display_name} · ${child.age?.human || '—'} · ${child.room_name || 'No room assigned'}`
-      ),
-      Dom.el('button', {
-        type: 'button',
-        style: 'margin-top: 10px; background: #fff; color: #1F6080; border: 1px solid #cbd5e1; border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;',
-        onclick: () => openChildRecord(child.id),
-      }, `📋 View ${child.display_name}'s record`),
     ]));
 
+    wrap.appendChild(buildDateNav());
     const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr; gap: 24px;' });
     wrap.appendChild(grid);
     const main = Dom.el('div'); grid.appendChild(main);
@@ -611,7 +647,9 @@
       }
 
       data.invoices.forEach(inv => {
-        const card = Dom.el('div', { class: 'card', style: 'margin-bottom: 16px;' });
+        const _payable = (inv.balance_due || 0) > 0 && inv.status !== 'paid';
+        const card = Dom.el('div', { class: 'card', style: 'margin-bottom: 16px;' + (_payable ? ' cursor: pointer;' : '') });
+        if (_payable) card.addEventListener('click', () => openInvoiceDetail(inv, child));
         const head = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;' });
         head.appendChild(Dom.el('div', {}, [
           Dom.el('div', { style: 'font-weight: 700; font-size: 18px;' }, inv.invoice_number),
@@ -633,9 +671,12 @@
         card.appendChild(breakdown);
 
         if (inv.balance_due > 0) {
-          card.appendChild(Dom.el('div', { style: 'background: #FEF3C7; border-left: 3px solid #F59E0B; padding: 12px; margin-top: 12px; font-size: 13px; border-radius: 4px;' },
-            `Balance due: $${inv.balance_due.toFixed(2)} · Please pay by ${inv.due_date}. Contact your centre for payment instructions.`
-          ));
+          const payRow = Dom.el('div', { style: 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background: #FEF3C7; border-left: 3px solid #F59E0B; padding: 12px 14px; margin-top: 12px; font-size: 13px; border-radius: 4px;' });
+          payRow.appendChild(Dom.el('div', {}, `Balance due: $${inv.balance_due.toFixed(2)} · due ${inv.due_date}`));
+          const payBtn = Dom.el('button', { type: 'button', style: 'background: linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6); color:#fff; border:0; border-radius:10px; padding:9px 18px; font-weight:800; font-size:14px; cursor:pointer;' }, `Pay $${inv.balance_due.toFixed(2)}`);
+          payBtn.addEventListener('click', (e) => { e.stopPropagation(); openInvoiceDetail(inv, child); });
+          payRow.appendChild(payBtn);
+          card.appendChild(payRow);
         }
         container.appendChild(card);
       });
@@ -786,6 +827,7 @@
     ]));
     status.appendChild(info);
     wrap.appendChild(status);
+    wrap.appendChild(buildDateNav());
 
     // "Not attending today" — the centre has to chase every empty chair, and today
     // that means a phone call at 9am. One tap here tells the room's educators, the
@@ -1032,7 +1074,7 @@
   function openInvoiceDetail(inv, child) {
     const appMain = document.getElementById('appMain');
     if (!appMain) return;
-    const tw = Dom.el('div', { style: 'position:fixed;inset:0;z-index:9600;background:var(--ink-50,#F4F7FA);display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
+    const tw = Dom.el('div', { class: 'kt-invoice-sheet', style: 'position:fixed;inset:0;z-index:9600;background:var(--ink-50,#F4F7FA);display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
 
     const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;border-bottom:1px solid var(--ink-100);background:#fff;flex-shrink:0;' });
     const back = Dom.el('button', { style: 'background:none;border:none;font-size:26px;color:var(--brand-blue);cursor:pointer;padding:0 6px;line-height:1;flex-shrink:0;' }, '‹');
