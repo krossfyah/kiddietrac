@@ -145,3 +145,13 @@ body.role-auditor #appMain { width: 100% !important; max-width: 1200px; margin: 
 body.role-auditor #appSidebar #navLinks { display: none !important; }
 body.role-auditor #appSidebar .kt-v5a-actions { display: none !important; }
 body.role-auditor #appSidebar #navBrand { cursor: pointer; }
+
+/* ── Parent/educator HOME launcher paints all at once — NO entrance animation.
+      (Belt-and-suspenders copy of the chrome-injected rule so it applies even if
+      the chrome JS is cached. Fixes "banner shows, then the cards load after".) ── */
+body.role-guardian #appMain > .kt-tilehome,
+body.role-educator #appMain > .kt-tilehome {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}

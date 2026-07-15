@@ -336,7 +336,7 @@
     // Header — child's avatar + name/status + view-record
     const _todayAv = Dom.el('div', { style: 'flex-shrink:0;' });
     if (window.KT && KT.avatar) _todayAv.innerHTML = KT.avatar(child.display_name, { size: 60, photoUrl: child.photo_url ? absUrl(child.photo_url) : null });
-    wrap.appendChild(Dom.el('div', { style: 'display: flex; align-items: center; gap: 16px; margin-bottom: 24px;' }, [
+    const _todayLeft = Dom.el('div', { style: 'display: flex; align-items: center; gap: 16px;' }, [
       _todayAv,
       Dom.el('div', { style: 'min-width: 0;' }, [
         Dom.el('div', { style: 'display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap;' }, [
@@ -354,9 +354,12 @@
           onclick: () => openChildRecord(child.id),
         }, `📋 View ${child.display_name}'s record`),
       ]),
+    ]);
+    // Identity on the left, the date navigator on the right — fills the empty space
+    // that used to sit beside "Today with …".
+    wrap.appendChild(Dom.el('div', { style: 'display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px;' }, [
+      _todayLeft, buildDateNav(),
     ]));
-
-    wrap.appendChild(buildDateNav());
     const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr; gap: 24px;' });
     wrap.appendChild(grid);
     const main = Dom.el('div'); grid.appendChild(main);

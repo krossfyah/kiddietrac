@@ -170,6 +170,11 @@
     var d = m.querySelector('.d'), t = m.querySelector('.t');
     if (d) d.textContent = fmtDateShort();
     if (t) t.textContent = fmtClock();
+    // On phones, show just the FIRST name in the bar so the full name + role pill +
+    // date/time + avatar + logo all fit without clipping (desktop keeps the full name).
+    var nn = document.getElementById('navName');
+    var fn = firstName();
+    if (nn && fn && nn.textContent.trim() !== fn) nn.textContent = fn;
   }
 
   function ensureGreeting() {

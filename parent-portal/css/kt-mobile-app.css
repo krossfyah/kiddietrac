@@ -599,13 +599,13 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (max-width: 600px) {
   body.role-guardian #appSidebar, body.role-educator #appSidebar { flex-wrap: nowrap !important; padding: 8px 12px !important; }
   body.role-guardian #appSidebar #navBrand, body.role-educator #appSidebar #navBrand { flex-shrink: 0 !important; }
-  body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img { height: 28px !important; }
-  /* Hide the small parent avatar on phones so the name + role pill get full width. */
-  body.role-guardian #appSidebar #navUser .avatar, body.role-educator #appSidebar #navUser .avatar { display: none !important; }
+  body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img { height: 34px !important; }
   body.role-guardian #appSidebar #navUser, body.role-educator #appSidebar #navUser { margin-left: 10px !important; flex: 1 1 0 !important; min-width: 0 !important; overflow: hidden !important; }
   body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { min-width: 0 !important; overflow: hidden !important; }
   /* Role now shown as a pill (styled by kt-parent-chrome) — no longer hidden. */
   body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name { font-size: 13px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet { font-size: 10px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The top bar already greets the parent — drop the repetitive greeting line on the home banner. */
+  body.role-guardian #appMain .kt-tilehome .kt-hero-greet, body.role-educator #appMain .kt-tilehome .kt-hero-greet { display: none !important; }
   body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { flex: 1 1 0 !important; }
 }
