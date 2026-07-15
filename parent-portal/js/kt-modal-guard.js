@@ -20,6 +20,8 @@
   // Is `el` a full-screen modal overlay/backdrop?
   function isOverlay(el) {
     if (!el || el.nodeType !== 1 || el.__ktModal) return false;
+    // Not modals: the loading splash, or anything that explicitly opts out.
+    if (el.id === 'kt-splash' || el.hasAttribute('data-no-modal-guard')) return false;
     var cs;
     try { cs = getComputedStyle(el); } catch (e) { return false; }
     if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
