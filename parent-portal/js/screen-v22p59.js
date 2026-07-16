@@ -31,11 +31,7 @@
       </div>
       <div class="kt-card">
         <div class="kt-card-header"><h3 class="kt-card-title">My privacy</h3></div>
-        <label style="display:block;margin:8px 0;"><input id="opt-em" type="checkbox" ${o.share_email ? 'checked' : ''}> Share my email</label>
-        <label style="display:block;margin:8px 0;"><input id="opt-ph" type="checkbox" ${o.share_phone ? 'checked' : ''}> Share my phone</label>
-        <label style="display:block;margin:8px 0;"><input id="opt-ad" type="checkbox" ${o.share_address ? 'checked' : ''}> Share my address (city only)</label>
-        <label style="display:block;margin:8px 0;"><input id="opt-kn" type="checkbox" ${o.share_children_names !== 0 ? 'checked' : ''}> Show my children's first names</label>
-        <button id="opt-save" class="kt-btn kt-btn-primary" style="margin-top:10px;">Save preferences</button>
+        <p style="color:#475569;font-size:14px;margin:4px 0;">Choose what you share with other families in <a href="#settings" style="color:#1F6080;font-weight:700;text-decoration:none;">Settings &rsaquo; Family directory</a>.</p>
       </div>
       <div class="kt-card">
         <div class="kt-card-header"><h3 class="kt-card-title">Other families at your centre</h3></div>
@@ -50,15 +46,7 @@
         </div>` : '<div style="color:#94A3B8;padding:20px;text-align:center;">No other families have opted in yet.</div>'}
       </div>
     </div>`;
-    document.getElementById('opt-save').onclick = async () => {
-      await Api.post('/directory/me', {
-        share_email: document.getElementById('opt-em').checked,
-        share_phone: document.getElementById('opt-ph').checked,
-        share_address: document.getElementById('opt-ad').checked,
-        share_children_names: document.getElementById('opt-kn').checked,
-      });
-      renderDirectory(main);
-    };
+    // Privacy preferences now live on the Settings screen (Family directory section).
   }
 
   // ============================ Conferences ============================

@@ -120,6 +120,32 @@
     lc.appendChild(langSel); lc.appendChild(langStatus);
     wrap.appendChild(lc);
 
+    // ── FAMILY DIRECTORY (guardian only) — moved here from the Directory screen so
+    //    all of the user's preferences live in one place. ──
+    if (/\brole-guardian\b/.test(document.body.className || '')) {
+      var fc = el('div', { style: CARD });
+      fc.appendChild(el('div', { style: SECT }, ['Family directory']));
+      fc.appendChild(el('div', { style: 'font-size:13px;color:#64748b;margin:-2px 0 12px;' },
+        ['Connect with other families at your centre. Sharing is opt-in \u2014 choose exactly what to share.']));
+      var mkChk = function (label) {
+        var w = el('label', { style: 'display:flex;align-items:center;gap:10px;margin:9px 0;font-size:14px;color:#0f172a;cursor:pointer;' });
+        var i = el('input', { type: 'checkbox', style: 'width:18px;height:18px;accent-color:#159FB4;flex-shrink:0;' });
+        w.appendChild(i); w.appendChild(el('span', {}, [label])); fc.appendChild(w); return i;
+      };
+      var dEm = mkChk('Share my email'), dPh = mkChk('Share my phone'), dAd = mkChk('Share my address (city only)'), dKn = mkChk("Show my children's first names");
+      var dStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
+      var dSave = el('button', { type: 'button', style: btn() }, ['Save preferences']);
+      fc.appendChild(dStatus); fc.appendChild(dSave);
+      wrap.appendChild(fc);
+      Api.get('/directory/me').then(function (r) { var o = (r && r.data) || {}; dEm.checked = !!o.share_email; dPh.checked = !!o.share_phone; dAd.checked = !!o.share_address; dKn.checked = (o.share_children_names !== 0); }).catch(function () {});
+      dSave.addEventListener('click', function () {
+        dSave.disabled = true; dSave.textContent = 'Saving\u2026'; dStatus.textContent = '';
+        Api.post('/directory/me', { share_email: dEm.checked, share_phone: dPh.checked, share_address: dAd.checked, share_children_names: dKn.checked })
+          .then(function () { dSave.disabled = false; dSave.textContent = 'Save preferences'; dStatus.style.color = '#16A34A'; dStatus.textContent = '\u2713 Saved.'; })
+          .catch(function (e) { dSave.disabled = false; dSave.textContent = 'Save preferences'; dStatus.style.color = '#B91C1C'; dStatus.textContent = 'Could not save: ' + ((e && e.message) || 'try again'); });
+      });
+    }
+
     // ── SECURITY ──
     var sc = el('div', { style: CARD });
     sc.appendChild(el('div', { style: SECT }, ['Security']));
