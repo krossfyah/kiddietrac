@@ -674,23 +674,32 @@
   }
 
   // ─────────────────────────────── Team chat (sales + superadmin only) ───────────────────────────────
-  async function renderChat(container) {
-    clear(container);
-    container.appendChild(hero('Team chat', 'Private channel for the sales team and superadmins only.', '💬'));
-    var wrapEl = el('div', {});
-    var listBox = el('div', { style: 'background:#fff;border:1px solid #e6ebf1;border-radius:14px;padding:14px;height:min(58vh,540px);overflow-y:auto;display:flex;flex-direction:column;gap:9px' }, [el('div', { style: 'text-align:center;color:#94A3B8;padding:20px' }, ['Loading…'])]);
+  // Renders into either the full-screen #sales-chat OR the shared pop-out ChatDock
+  // (KT.ChatDock — the same floating window every other role uses), plus a top-bar
+  // 💬 icon with an unread indicator that flashes the dock on new messages.
+  function seenId() { try { return parseInt(localStorage.getItem('kt_sales_chat_seen') || '0', 10) || 0; } catch (e) { return 0; } }
+  function setSeen(id) { try { if (id > seenId()) localStorage.setItem('kt_sales_chat_seen', String(id)); } catch (e) {} paintChatBadge(0); }
+  function paintChatBadge(n) {
+    var b = document.getElementById('kt-sales-chat-badge'); if (!b) return;
+    if (n > 0) { b.textContent = n > 99 ? '99+' : String(n); b.hidden = false; b.style.display = ''; }
+    else { b.hidden = true; b.style.display = 'none'; }
+  }
+  function renderChatThread(intoEl, docked) {
+    intoEl.innerHTML = '';
+    var wrapper = el('div', { style: 'display:flex;flex-direction:column;min-height:0;' + (docked ? 'height:100%' : 'height:min(62vh,560px)') });
+    var listBox = el('div', { style: 'flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:9px;background:#fff;padding:' + (docked ? '12px 12px 4px' : '14px') + ';' + (docked ? '' : 'border:1px solid #e6ebf1;border-radius:14px;') }, [el('div', { style: 'text-align:center;color:#94A3B8;padding:20px' }, ['Loading…'])]);
     var inputEl = input({ placeholder: 'Message the sales team…', style: 'flex:1;min-width:0;max-width:none !important;padding:10px 12px;border:1px solid #d9e1ea;border-radius:10px;font-size:14px;box-sizing:border-box' });
-    var composer = el('form', { onsubmit: function (ev) { ev.preventDefault(); send(); }, style: 'display:flex;gap:8px;margin-top:10px' }, [inputEl, btn('Send', 'primary', function () { send(); })]);
-    wrapEl.appendChild(listBox); wrapEl.appendChild(composer);
-    container.appendChild(wrap([wrapEl], 920));
+    var composer = el('form', { onsubmit: function (ev) { ev.preventDefault(); send(); }, style: 'flex:0 0 auto;display:flex;gap:8px;padding:' + (docked ? '10px 12px 12px' : '10px 0 0') }, [inputEl, btn('Send', 'primary', function () { send(); })]);
+    wrapper.appendChild(listBox); wrapper.appendChild(composer);
+    intoEl.appendChild(wrapper);
     var lastId = 0;
     function bubble(m) {
       return el('div', { style: 'display:flex;flex-direction:column;align-items:' + (m.mine ? 'flex-end' : 'flex-start') }, [
         el('div', { style: 'font-size:10.5px;color:#94A3B8;margin:0 5px 2px' }, [(m.mine ? 'You' : m.author) + ' · ' + fmtTime(m.at)]),
-        el('div', { style: 'max-width:76%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.35;word-break:break-word;' + (m.mine ? 'background:' + ACCENT + ';color:#fff;border-bottom-right-radius:5px' : 'background:#F1F5F9;color:#0D1B2A;border-bottom-left-radius:5px') }, [m.body]),
+        el('div', { style: 'max-width:80%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.35;word-break:break-word;' + (m.mine ? 'background:' + ACCENT + ';color:#fff;border-bottom-right-radius:5px' : 'background:#F1F5F9;color:#0D1B2A;border-bottom-left-radius:5px') }, [m.body]),
       ]);
     }
-    function append(msgs) { msgs.forEach(function (m) { listBox.appendChild(bubble(m)); lastId = Math.max(lastId, m.id); }); listBox.scrollTop = listBox.scrollHeight; }
+    function append(msgs) { msgs.forEach(function (m) { listBox.appendChild(bubble(m)); lastId = Math.max(lastId, m.id); }); listBox.scrollTop = listBox.scrollHeight; if (lastId) setSeen(lastId); }
     async function load() {
       try {
         var d = await Api.get('/sales/messages');
@@ -701,11 +710,42 @@
     }
     async function refresh() { if (!lastId) return; try { var d = await Api.get('/sales/messages', { since: lastId }); if (d.messages.length) append(d.messages); } catch (e) {} }
     async function send() { var t = inputEl.value.trim(); if (!t) return; inputEl.value = ''; try { var m = await Api.post('/sales/messages', { body: t }); append([m]); } catch (e) { toast('⚠️', 'Send failed', e.message || '', '#DC2626'); inputEl.value = t; } }
-    await load();
+    load();
     var poll = setInterval(refresh, 5000);
-    var stop = function () { if (window.location.hash.indexOf('sales-chat') === -1) { clearInterval(poll); window.removeEventListener('hashchange', stop); } };
-    window.addEventListener('hashchange', stop);
+    return function stop() { clearInterval(poll); };
   }
+  async function renderChat(container) {
+    clear(container);
+    container.appendChild(hero('Team chat', 'Private channel for the sales team and superadmins only.', '💬'));
+    var wrapEl = el('div', {}); container.appendChild(wrap([wrapEl], 920));
+    var stop = renderChatThread(wrapEl, false);
+    var onLeave = function () { if (window.location.hash.indexOf('sales-chat') === -1) { stop(); window.removeEventListener('hashchange', onLeave); } };
+    window.addEventListener('hashchange', onLeave);
+  }
+  var _dockStop = null;
+  function openChatDock() {
+    if (!salesAuthed()) return;
+    if (KT.ChatDock && KT.ChatDock.enabled && KT.ChatDock.enabled()) {
+      if (_dockStop) { try { _dockStop(); } catch (e) {} _dockStop = null; }
+      _dockStop = renderChatThread(KT.ChatDock.contentEl(), true);
+      KT.ChatDock.show('💬 Team chat', function () { if (_dockStop) { _dockStop(); _dockStop = null; } });
+    } else { go('sales-chat'); }   // phone / no dock → full screen
+  }
+  async function pollChatUnread() {
+    if (!salesAuthed()) return;
+    try {
+      var since = seenId();
+      var d = await Api.get('/sales/messages', since ? { since: since } : {});
+      var msgs = d.messages || [];
+      var maxId = msgs.reduce(function (a, m) { return Math.max(a, m.id); }, since);
+      if (since === 0) { setSeen(maxId); return; }   // first run → treat history as read
+      var unread = msgs.filter(function (m) { return !m.mine; }).length;
+      paintChatBadge(unread);
+      if (unread && KT.ChatDock && KT.ChatDock.isMinimized && KT.ChatDock.isMinimized()) KT.ChatDock.flashIncoming();
+    } catch (e) {}
+  }
+  KT.SalesChat = { open: openChatDock, poll: pollChatUnread };
+  if (salesAuthed()) { setTimeout(pollChatUnread, 2500); setInterval(pollChatUnread, 20000); }
 
   // ─────────────────────────────── Announcements (company / sales only) ───────────────────────────────
   async function renderNews(container) {
