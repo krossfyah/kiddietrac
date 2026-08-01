@@ -151,13 +151,55 @@
   }
   function fieldWide(label, node) { var f = field(label, node); f.style.gridColumn = '1 / -1'; return f; }
   function formActions(kids) { var d = el('div', { style: 'display:flex;gap:8px;margin-top:2px' }, kids); d.style.gridColumn = '1 / -1'; return d; }
-  // A titled section with a responsive field grid — used to lay a wide form out
-  // across the full content width in tidy, labelled groups.
-  function formSection(title, kids) {
-    return el('div', { style: 'margin-bottom:4px' }, [
-      el('div', { style: 'font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#0C6070;margin:16px 0 11px' }, [title]),
+  // A titled section rendered as its own soft panel, with a responsive field grid —
+  // lays a wide form out across the full width in tidy, clearly grouped cards.
+  function formSection(title, icon, kids) {
+    return el('div', { style: 'background:#FAFBFD;border:1px solid #EAF0F5;border-radius:14px;padding:15px 17px 17px;margin-bottom:14px' }, [
+      el('div', { style: 'font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#0C6070;margin:0 0 13px;display:flex;align-items:center;gap:6px' }, [(icon || '') + ' ' + title]),
       el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 18px;align-items:start' }, kids),
     ]);
+  }
+  // Free-text address autocomplete via Photon (Komoot's OSM geocoder — free, no key,
+  // CORS-enabled). Suggests as you type and fills city / province / postal / country.
+  function attachAddressAutocomplete(inp, fields) {
+    var box = null, timer = null, seq = 0;
+    inp.setAttribute('autocomplete', 'off');
+    function closeBox() { if (box) { box.remove(); box = null; } }
+    function line1(p) { return [p.housenumber, p.street || p.name].filter(Boolean).join(' '); }
+    function pick(p) {
+      inp.value = line1(p) || (p.name || inp.value);
+      if (fields.city && p.city) fields.city.value = p.city;
+      if (fields.province && p.state) fields.province.value = p.state;
+      if (fields.postal_code && p.postcode) fields.postal_code.value = p.postcode;
+      if (fields.country && p.country) fields.country.value = p.country;
+      closeBox();
+    }
+    function show(feats) {
+      closeBox();
+      feats = (feats || []).filter(function (f) { return line1(f.properties || {}) || (f.properties || {}).name; });
+      if (!feats.length) return;
+      box = el('div', { style: 'position:absolute;z-index:9500;left:0;right:0;top:100%;margin-top:3px;background:#fff;border:1px solid #d9e1ea;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.16);max-height:262px;overflow:auto' });
+      feats.slice(0, 6).forEach(function (f) {
+        var p = f.properties || {};
+        box.appendChild(el('div', { style: 'padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9', onmouseover: function () { this.style.background = '#F1F5F9'; }, onmouseout: function () { this.style.background = ''; }, onmousedown: function (ev) { ev.preventDefault(); pick(p); } }, [
+          el('div', { style: 'font-weight:600;font-size:13px;color:#0D1B2A' }, [line1(p) || p.name || '']),
+          el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:1px' }, [[p.city, p.state, p.postcode, p.country].filter(Boolean).join(', ')]),
+        ]));
+      });
+      var host = inp.parentElement; host.style.position = 'relative'; host.appendChild(box);
+    }
+    inp.addEventListener('input', function () {
+      var q = inp.value.trim(); clearTimeout(timer);
+      if (q.length < 3) { closeBox(); return; }
+      timer = setTimeout(function () {
+        var rid = ++seq;
+        fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=6&lang=en')
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (rid === seq) show(d.features || []); })
+          .catch(function () {});
+      }, 280);
+    });
+    inp.addEventListener('blur', function () { setTimeout(closeBox, 200); });
   }
 
   var META = null; // {owners, products, stats}
@@ -293,30 +335,36 @@
     var f = {};
     var myId = (function () { try { return (JSON.parse(sessionStorage.getItem('kt_user') || '{}').id) || ''; } catch (e) { return ''; } })();
     var inner = el('div', {}, [
-      formSection('Contact', [
+      formSection('Primary contact', '👤', [
         field('Contact name *', f.name = input({ placeholder: 'Jane Doe' })),
-        field('Job title', f.title = input({ placeholder: 'Owner / Director' })),
+        field('Job title', f.title = input({ placeholder: 'Director / Manager' })),
         field('Email', f.email = input({ type: 'email', placeholder: 'jane@example.com' })),
         field('Phone', f.phone = input({ placeholder: '(555) 123-4567' })),
       ]),
-      formSection('Business', [
+      formSection('Business owner / decision maker', '🧑‍💼', [
+        field('Owner name', f.owner_name = input({ placeholder: 'Owner / principal' })),
+        field('Owner title', f.owner_title = input({ placeholder: 'Owner, CEO…' })),
+        field('Owner email', f.owner_email = input({ type: 'email', placeholder: 'owner@example.com' })),
+        field('Owner phone', f.owner_phone = input({ placeholder: '(555) 987-6543' })),
+      ]),
+      formSection('Business', '🏢', [
         field('Company / childcare', f.company = input({ placeholder: 'Sunshine Daycare' })),
         field('Website', f.website = input({ placeholder: 'sunshinedaycare.com' })),
-        field('Street address', f.address = input({ placeholder: '123 Main St' })),
+        fieldWide('Street address', f.address = input({ placeholder: 'Start typing an address…' })),
         field('City', f.city = input({ placeholder: 'Toronto' })),
         field('Province / state', f.province = input({ placeholder: 'ON' })),
         field('Postal / ZIP', f.postal_code = input({ placeholder: 'M5V 2T6' })),
         field('Country', f.country = input({ placeholder: 'Canada' })),
       ]),
-      formSection('What they use today', [
+      formSection('What they use today', '🧩', [
         field('Current software / solution', f.current_solution = input({ placeholder: 'e.g. HiMama, spreadsheets, paper' })),
         field('# children', f.num_children = input({ type: 'number', min: '0', placeholder: '0' })),
         field('# locations / centres', f.num_locations = input({ type: 'number', min: '0', placeholder: '1' })),
         field('Lead source', f.source = selectEl(SOURCES, '')),
       ]),
-      formSection('Pipeline', [
+      formSection('Pipeline', '📊', [
         field('Stage', f.stage = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), 'new')),
-        field('Owner', f.owner_id = selectEl(ownerOpts(), myId)),
+        field('Owner (rep)', f.owner_id = selectEl(ownerOpts(), myId)),
         field('Est. value ($)', f.value = input({ type: 'number', step: '0.01', min: '0', placeholder: '0.00' })),
         field('Expected close', f.expected_close = input({ type: 'date' })),
         field('Next follow-up', f.follow_up_date = input({ type: 'date' })),
@@ -333,6 +381,8 @@
               address: f.address.value.trim(), city: f.city.value.trim(), province: f.province.value.trim(),
               postal_code: f.postal_code.value.trim(), country: f.country.value.trim(),
               current_solution: f.current_solution.value.trim(),
+              owner_name: f.owner_name.value.trim(), owner_title: f.owner_title.value.trim(),
+              owner_email: f.owner_email.value.trim(), owner_phone: f.owner_phone.value.trim(),
               num_children: f.num_children.value || null, num_locations: f.num_locations.value || null,
               source: f.source.value || null, stage: f.stage.value, owner_id: f.owner_id.value || null,
               value: f.value.value || null, expected_close: f.expected_close.value || null,
@@ -348,8 +398,10 @@
     ]);
     // Full-width card (no narrow wrap); wrapped in a real <form> so kt-icon-buttons.js
     // skips the buttons and the teal primary "Create lead" is preserved.
-    var formEl = el('form', { onsubmit: function (ev) { ev.preventDefault(); }, style: 'max-width:none !important;width:100%' }, [card([inner])]);
+    var formEl = el('form', { onsubmit: function (ev) { ev.preventDefault(); }, style: 'max-width:none !important;width:100%' }, [inner]);
     container.appendChild(formEl);
+    // Type-ahead address suggestions → auto-fill city / province / postal / country.
+    attachAddressAutocomplete(f.address, { city: f.city, province: f.province, postal_code: f.postal_code, country: f.country });
   }
 
   // ─────────────────────────────── Lead detail ───────────────────────────────
@@ -399,6 +451,10 @@
         field('Province / state', e.province = input({ value: lead.province || '' })),
         field('Postal / ZIP', e.postal_code = input({ value: lead.postal_code || '' })),
         field('Country', e.country = input({ value: lead.country || '' })),
+        field('Owner name', e.owner_name = input({ value: lead.owner_name || '', placeholder: 'Business owner' })),
+        field('Owner title', e.owner_title = input({ value: lead.owner_title || '' })),
+        field('Owner email', e.owner_email = input({ value: lead.owner_email || '' })),
+        field('Owner phone', e.owner_phone = input({ value: lead.owner_phone || '' })),
         field('Using today', e.current_solution = input({ value: lead.current_solution || '', placeholder: 'HiMama, paper…' })),
         field('# children', e.num_children = input({ type: 'number', min: '0', value: lead.num_children == null ? '' : lead.num_children })),
         field('# locations', e.num_locations = input({ type: 'number', min: '0', value: lead.num_locations == null ? '' : lead.num_locations })),
@@ -419,6 +475,8 @@
               province: e.province.value, postal_code: e.postal_code.value, country: e.country.value,
               current_solution: e.current_solution.value, num_children: e.num_children.value || null,
               num_locations: e.num_locations.value || null, source: e.source.value || null,
+              owner_name: e.owner_name.value, owner_title: e.owner_title.value,
+              owner_email: e.owner_email.value, owner_phone: e.owner_phone.value,
               owner_id: e.owner_id.value || null, value: e.value.value || null,
               expected_close: e.expected_close.value || null, follow_up_date: e.follow_up_date.value || null, notes: e.notes.value,
             });
@@ -428,6 +486,7 @@
         btn('🗑 Delete', 'danger', async function () { if (!confirm('Delete this lead?')) return; try { await Api.delete('/sales/leads/' + id); toast('🗑', 'Deleted'); go('sales'); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); } }),
       ]),
     ], 'margin-bottom:14px'));
+    attachAddressAutocomplete(e.address, { city: e.city, province: e.province, postal_code: e.postal_code, country: e.country });
 
     // Activity + follow-up composer
     var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Activity & follow-ups'])], '');
