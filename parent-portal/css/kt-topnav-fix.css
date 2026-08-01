@@ -188,7 +188,7 @@ body.role-sales-rep #appSidebar {
   height: auto !important; overflow-x: hidden;
   background: var(--kt-surface, #fff); border-bottom: 1px solid var(--kt-border, #e5e7eb); padding: 10px 18px;
 }
-body.role-sales-rep #appMain { width: 100% !important; max-width: 1200px; margin: 0 auto; padding: 20px; }
+body.role-sales-rep #appMain { width: 100% !important; max-width: none; margin: 0; padding: 20px; }
 body.role-sales-rep #appSidebar #navLinks { display: none !important; }
 body.role-sales-rep #appSidebar .kt-v5a-actions { display: none !important; }
 body.role-sales-rep #appSidebar #navBrand { cursor: pointer; }

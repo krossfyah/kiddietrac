@@ -16,6 +16,10 @@
     var c = document.body.className || '';
     if (/\brole-guardian\b/.test(c)) return 'guardian';
     if (/\brole-educator\b/.test(c)) return 'educator';
+    // Home visitor uses the exact same top-bar chrome as parent/educator.
+    if (/\brole-home-visitor\b/.test(c)) return 'home_visitor';
+    // Sales rep uses the exact same top-bar chrome as parent/educator.
+    if (/\brole-sales-rep\b/.test(c)) return 'sales_rep';
     return null;
   }
   function store(k) { try { return sessionStorage.getItem(k) || localStorage.getItem(k); } catch (e) { return null; } }
@@ -54,10 +58,11 @@
     }).catch(function () { cb(null); });
   }
 
-  function iconBtn(emoji, title, fn) {
+  function iconBtn(emoji, title, fn, badgeId) {
     var b = document.createElement('button');
-    b.type = 'button'; b.className = 'kt-pc-btn'; b.title = title; b.setAttribute('aria-label', title);
-    b.textContent = emoji;
+    b.type = 'button'; b.className = 'kt-pc-btn'; b.setAttribute('data-kttip', title); b.setAttribute('aria-label', title);
+    b.appendChild(document.createTextNode(emoji));
+    if (badgeId) { var bd = document.createElement('span'); bd.className = 'kt-pc-badge'; bd.id = badgeId; bd.hidden = true; b.appendChild(bd); }
     b.addEventListener('click', function (e) { e.preventDefault(); fn(); });
     return b;
   }
@@ -78,8 +83,8 @@
     return sel;
   }
 
-  function doSignOut() {
-    if (!w.confirm('Sign out of KiddieTrac?')) return;
+  async function doSignOut() {
+    if (!await KT.confirm('Sign out of KiddieTrac?')) return;
     try { if (w.Auth && w.Auth.logout) return w.Auth.logout(); } catch (e) {}
     try { sessionStorage.clear(); } catch (e) {}
     w.location.href = '/index.html?signed_out=1';
@@ -91,7 +96,7 @@
     s.textContent = [
       // The single greeting now lives INSIDE the user block, on the far left.
       '.kt-pc-user-left{margin-left:14px !important;cursor:pointer;}',
-      '.kt-pc-navgreet{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;line-height:1.15;}',
+      '.kt-pc-navgreet{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#64748B;line-height:1.15;}',
       // Role shown as a pill (like admin / director / super admin), not hidden.
       'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role{display:inline-block !important;margin-top:3px;font-size:9.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;background:rgba(14,124,144,.12);color:#0C6070;border:1px solid rgba(14,124,144,.22);padding:2px 9px;border-radius:100px;white-space:nowrap;align-self:flex-start;}',
       // Tighter top bar (less whitespace): smaller logo + slimmer vertical padding — DESKTOP only.
@@ -101,26 +106,38 @@
       'body.role-guardian #appMain .kt-tilehome .kt-banner-fx,body.role-educator #appMain .kt-tilehome .kt-banner-fx{animation:kt-hero-breathe 16s ease-in-out infinite !important;}',
       // Mobile top-header date/time.
       '.kt-pc-mobmeta{display:none;}',
-      '@media(max-width:600px){body.role-guardian .kt-pc-mobmeta,body.role-educator .kt-pc-mobmeta{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;margin-left:auto;margin-right:52px;text-align:right;flex-shrink:0;}body.role-guardian .kt-pc-mobmeta .d,body.role-educator .kt-pc-mobmeta .d{font-size:10px;font-weight:700;color:#94A3B8;white-space:nowrap;}body.role-guardian .kt-pc-mobmeta .t,body.role-educator .kt-pc-mobmeta .t{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;}}',
+      '@media(max-width:600px){body.role-guardian .kt-pc-mobmeta,body.role-educator .kt-pc-mobmeta{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;margin-left:auto;margin-right:52px;text-align:right;flex-shrink:0;}body.role-guardian .kt-pc-mobmeta .d,body.role-educator .kt-pc-mobmeta .d{font-size:10px;font-weight:700;color:#64748B;white-space:nowrap;}body.role-guardian .kt-pc-mobmeta .t,body.role-educator .kt-pc-mobmeta .t{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;}}',
       // Admin-only search box: hidden in parent/educator view.
       'body.role-guardian #kt-search-widget,body.role-educator #kt-search-widget{display:none !important;}',
       // Super-admin "view as": agency switcher relocated from bottom-left into the top bar.
       '.kt-agency-inbar{position:relative !important;left:auto !important;right:auto !important;top:auto !important;bottom:auto !important;margin:0 8px 0 0 !important;padding:0 !important;border-top:none !important;box-shadow:none !important;z-index:50 !important;min-width:150px;background:transparent !important;border:none !important;}',
       '.kt-agency-inbar > div[style*="position:absolute"]{top:calc(100% + 4px) !important;bottom:auto !important;}',
       // grouped cluster on the right
-      '.kt-pc-wrap{display:flex;align-items:center;gap:8px;margin-left:auto;margin-right:12px;}',
-      '.kt-pc-btn{width:38px;height:38px;border-radius:11px;border:1px solid rgba(15,23,42,.10);',
-      '  background:#fff;font-size:17px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;',
-      '  box-shadow:0 1px 2px rgba(16,40,64,.05);transition:background .12s,border-color .12s;}',
-      '.kt-pc-btn:hover{background:#F1F5F9;border-color:#94A3B8;}',
+      '.kt-pc-wrap{display:flex;align-items:center;gap:9px;margin-left:auto;margin-right:12px;}',
+      // Match the super-admin top-bar icon sizing (kt-tb-ico): 31x31, 9px radius,
+      // 15px glyph — so the action icons are the same size across every role.
+      '.kt-pc-btn{position:relative;width:31px;height:31px;border-radius:9px;border:1px solid rgba(15,23,42,.10);',
+      '  background:rgba(15,23,42,.03);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#334155;padding:0;',
+      '  transition:background .12s,border-color .12s;}',
+      '.kt-pc-btn:hover{background:#F1F5F9;border-color:#64748B;}',
+      // Custom tooltip below the icon — consistent with the super-admin top bar.
+      '.kt-pc-btn[data-kttip]:hover::after{content:attr(data-kttip);position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:4px 9px;border-radius:6px;z-index:10001;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28);}',
+      // Unread badge on the Messages icon — same look as the super-admin bar.
+      '.kt-pc-badge{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;',
+      '  background:#EF4444;color:#fff;font-size:9.5px;font-weight:800;line-height:15px;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.8);}',
       '.kt-pc-lang{border:1px solid rgba(15,23,42,.10);border-radius:10px;background:#fff;padding:7px 8px;font-size:12px;font-weight:600;color:#334155;cursor:pointer;max-width:118px;box-shadow:0 1px 2px rgba(16,40,64,.05);}',
       '.kt-pc-wx{font-size:12.5px;font-weight:600;color:#475569;white-space:nowrap;}',
       '.kt-pc-date{font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;}',
-      '.kt-pc-clock{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;}',
+      '.kt-pc-clock{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;background:#fff;padding:5px 11px;border-radius:9px;border:1px solid rgba(15,23,42,.08);box-shadow:0 1px 3px rgba(16,40,64,.12);}',
       '.kt-pc-sep{width:1px;height:24px;background:rgba(15,23,42,.10);margin:0 2px;}',
       '.kt-back-inbar{position:static !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;margin:0 12px 0 0 !important;box-shadow:none !important;align-self:center !important;z-index:auto !important;}',
       // The in-page bottom "Sign out" is redundant now it's a top-bar icon (desktop).
       '@media(min-width:769px){body.role-guardian #kt-home-signout,body.role-educator #kt-home-signout{display:none !important;}}',
+      // Educator #today: the roster shell carries min-height:calc(100vh-64px) (app-v2.css)
+      // so a sparse roster left a huge empty gap ABOVE the "Everything else" tile launcher
+      // that the shell appends below it. On desktop the launcher makes the page tall enough
+      // on its own, so let the shell hug its content and sit the tiles right beneath it.
+      '@media(min-width:769px){#appMain .educator-shell{min-height:0 !important;}#kt-edu-launcher{margin-top:10px !important;}}',
       '@media(max-width:768px){.kt-pc-wrap,.kt-pc-greet{display:none !important;}}',
       '@media(max-width:1240px){.kt-pc-date{display:none;}}',
       '@media(max-width:1080px){.kt-pc-greet{display:none;}}',
@@ -146,6 +163,14 @@
       // Desktop: the invoice pay sheet becomes a centred panel over a dim backdrop.
       '@media(min-width:601px){body.role-guardian:has(.kt-invoice-sheet)::after,body.role-educator:has(.kt-invoice-sheet)::after{content:"";position:fixed;inset:0;background:rgba(8,20,36,.42);z-index:9599;}body.role-guardian .kt-invoice-sheet,body.role-educator .kt-invoice-sheet{inset:auto !important;position:fixed !important;top:96px !important;left:50% !important;transform:translateX(-50%) !important;width:min(560px,94vw) !important;max-height:calc(100vh - 130px) !important;border-radius:18px !important;overflow:hidden !important;box-shadow:0 24px 70px rgba(8,20,36,.4) !important;border:1px solid #E5E7EB !important;z-index:9600 !important;animation:kt-fade-in .18s ease both !important;}}'
     ].join('');
+    // Home visitor AND sales rep get the IDENTICAL chrome: every rule above is
+    // scoped to role-guardian (paired with role-educator), so whole-sheet copies
+    // with role-guardian → role-home-visitor / role-sales-rep give them the same
+    // styling without hand-maintaining extra selectors on each rule.
+    var _base = s.textContent;
+    s.textContent = _base
+      + _base.replace(/role-guardian/g, 'role-home-visitor')
+      + _base.replace(/role-guardian/g, 'role-sales-rep');
     document.head.appendChild(s);
   }
 
@@ -205,9 +230,23 @@
       var wrap = document.createElement('div');
       wrap.className = 'kt-pc-wrap'; wrap.id = 'kt-pc-wrap';
 
-      // All the icon controls grouped together first (Home · Language · Settings ·
-      // Sign out), then a separator, then the weather / date / clock — per request.
-      wrap.appendChild(iconBtn('🏠', 'Home', function () { location.hash = (role === 'educator') ? '#dashboard' : '#home'; }));
+      // All the icon controls grouped together first (Home · Messages · Announcements ·
+      // Settings · Sign out), then a separator, then the weather / date / clock.
+      // Messages + Announcements were previously admin-only (kt-topbar) — parents,
+      // educators and home visitors now get the same quick access + unread badge.
+      var msgHash = (role === 'guardian') ? '#messages' : '#chat';
+      // Home = the tile launcher for every role (#home renders it). The educator
+      // Home used to point at #dashboard (the roster) — but the tiles live on the
+      // launcher, so Home now takes every role there.
+      wrap.appendChild(iconBtn('🏠', 'Home', function () { location.hash = '#home'; }));
+      if (role === 'sales_rep') {
+        // Sales rep has no Messages / Announcements — give the pipeline + inbox instead.
+        wrap.appendChild(iconBtn('📊', 'Pipeline', function () { location.hash = '#sales'; }));
+        wrap.appendChild(iconBtn('🔔', 'Inbox', function () { location.hash = '#notifications'; }));
+      } else {
+        wrap.appendChild(iconBtn('💬', 'Messages', function () { location.hash = msgHash; }, 'kt-pc-msg-badge'));
+        wrap.appendChild(iconBtn('📣', 'Announcements', function () { location.hash = '#announcements'; }));
+      }
       wrap.appendChild(iconBtn('⚙️', 'Settings', function () { location.hash = '#settings'; }));
       wrap.appendChild(iconBtn('🚪', 'Sign out', doSignOut));
       wrap.appendChild(langPicker());
@@ -228,11 +267,22 @@
     // into the top bar, right after the "Viewing as" pill — like real super-admin mode.
     var ag = document.getElementById('kt-agency-switcher');
     var va = document.getElementById('kt-view-as');
-    if (ag && va && va.parentNode === bar && ag.parentNode !== bar) {
-      ag.classList.add('kt-agency-inbar');
-      bar.insertBefore(ag, va.nextSibling);
-      var dd = ag.querySelector('div[style*="absolute"]');
-      if (dd) { dd.style.top = 'calc(100% + 4px)'; dd.style.bottom = 'auto'; }
+    var nu = bar.querySelector('#navUser, .nav-user');
+    // Place "Viewing as" + the agency switcher RIGHT AFTER the user's name (left),
+    // like the super-admin view — not stranded at the far right. Order:
+    // [name][View as][agency] … then the icon/clock cluster (margin-left:auto).
+    // CRITICAL: idempotent — a bar MutationObserver re-runs ensure() on every
+    // child change, so only move when not already positioned (else infinite loop).
+    if (ag && va && nu) {
+      var positioned = (va.previousElementSibling === nu) && (ag.previousElementSibling === va);
+      if (!positioned) {
+        va.classList.add('kt-viewas-inbar');
+        bar.insertBefore(va, nu.nextSibling);
+        ag.classList.add('kt-agency-inbar');
+        bar.insertBefore(ag, va.nextSibling);
+        var dd = ag.querySelector('div[style*="absolute"]');
+        if (dd) { dd.style.top = 'calc(100% + 4px)'; dd.style.bottom = 'auto'; }
+      }
     }
 
     placeBack();
@@ -273,11 +323,33 @@
   // the static top bar paint first, then the icons/greeting pop in a beat later). A
   // MutationObserver fires ensure() the moment the role class lands or the bar gains
   // children (name, view-as, agency switcher), so the chrome appears WITH the bar.
+  // Messages unread badge — parents read /parent/messages, everyone else the
+  // team chat (/chats). Mirrors the super-admin bar's badge behaviour.
+  function refreshUnread() {
+    var bd = document.getElementById('kt-pc-msg-badge');
+    if (!bd) return;
+    var role = roleOf();
+    if (!role) return;
+    var t; try { t = store('kt_token'); } catch (e) {}
+    if (!t) return;
+    var path = (role === 'guardian') ? '/parent/messages/unread-count' : '/chats/unread-count';
+    fetch(API + path, { headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + t } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        var n = 0;
+        if (d) n = (d.unread_count != null ? d.unread_count : (d.count != null ? d.count : (d.unread != null ? d.unread : 0)));
+        var el = document.getElementById('kt-pc-msg-badge'); if (!el) return;
+        if (n > 0) { el.textContent = n > 99 ? '99+' : n; el.hidden = false; }
+        else { el.hidden = true; }
+      })
+      .catch(function () {});
+  }
+
   var _booting = false;
   function boot() {
     if (_booting) return;
     _booting = true;
-    try { ensureGreeting(); ensureMobileMeta(); ensure(); placeBack(); } catch (e) {} finally { _booting = false; }
+    try { ensureGreeting(); ensureMobileMeta(); ensure(); placeBack(); refreshUnread(); } catch (e) {} finally { _booting = false; }
   }
   boot();
 
@@ -296,6 +368,7 @@
   // A slow safety net only — the observers do the real work.
   setInterval(boot, 2000);
   setInterval(tick, 15000);
+  setInterval(refreshUnread, 60000);   // keep the Messages unread badge current
   w.addEventListener('resize', function () {
     var wrap = document.getElementById('kt-pc-wrap');
     if (!isDesktop()) { if (wrap) wrap.remove(); ensureGreeting(); }
