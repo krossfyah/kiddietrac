@@ -141,7 +141,7 @@
     loading.remove();
 
     var st = data.stats || {};
-    var statRow = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px' }, [
+    var statRow = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:12px' }, [
       statCard('🎯', 'Open leads', st.open || 0, '#EEF2FF', '#4338CA'),
       statCard('💰', 'Pipeline value', money(st.pipeline_value || 0), '#ECFDF5', '#047857'),
       statCard('🏆', 'Won', st.won || 0, '#F0FDF4', '#15803D'),
@@ -149,6 +149,17 @@
       statCard('🙋', 'My open', st.my_open || 0, '#FDF2F8', '#BE185D'),
     ]);
     container.appendChild(statRow);
+
+    // Win/loss analytics — conversion at a glance.
+    var closed = (st.won || 0) + (st.lost || 0);
+    var analytics = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px' }, [
+      winCard('Win rate', (st.win_rate || 0) + '%', (st.won || 0) + ' won · ' + (st.lost || 0) + ' lost', st.win_rate || 0),
+      statCard('📈', 'Won revenue', money(st.won_value || 0), '#ECFEFF', '#0E7490'),
+      statCard('🧾', 'Avg won deal', money(st.avg_won || 0), '#F5F3FF', '#6D28D9'),
+      statCard('❌', 'Lost', st.lost || 0, '#FEF2F2', '#B91C1C'),
+      statCard('📊', 'Closed deals', closed, '#F8FAFC', '#475569'),
+    ]);
+    container.appendChild(analytics);
 
     var board = el('div', { style: 'display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;align-items:flex-start' });
     var byStage = {}; STAGES.forEach(function (s) { byStage[s.key] = []; });
@@ -172,6 +183,19 @@
       el('div', { style: 'font-size:16px' }, [icon]),
       el('div', { style: 'font-size:20px;font-weight:800;color:' + ink + ';line-height:1.1;margin-top:5px' }, [String(val)]),
       el('div', { style: 'font-size:11.5px;color:' + ink + ';opacity:.85;font-weight:600;margin-top:2px' }, [label]),
+    ]);
+  }
+  function winCard(label, val, sub, pct) {
+    var p = Math.max(0, Math.min(100, Number(pct) || 0));
+    var ink = p >= 50 ? '#15803D' : (p > 0 ? '#B45309' : '#64748B');
+    return el('div', { style: 'background:#F0FDF4;border:1px solid ' + ink + '22;border-radius:14px;padding:13px 14px' }, [
+      el('div', { style: 'font-size:16px' }, ['🎉']),
+      el('div', { style: 'font-size:20px;font-weight:800;color:' + ink + ';line-height:1.1;margin-top:5px' }, [String(val)]),
+      el('div', { style: 'font-size:11.5px;color:' + ink + ';opacity:.85;font-weight:600;margin-top:2px' }, [label]),
+      el('div', { style: 'height:5px;background:#DCFCE7;border-radius:999px;margin-top:8px;overflow:hidden' }, [
+        el('div', { style: 'height:100%;width:' + p + '%;background:' + ink + ';border-radius:999px' }),
+      ]),
+      el('div', { style: 'font-size:10.5px;color:#64748B;margin-top:4px' }, [sub || '']),
     ]);
   }
   function leadCard(l) {

@@ -538,6 +538,18 @@ class SalesController extends Controller
             'lost'           => SalesLead::where('status', 'lost')->count(),
             'my_open'        => SalesLead::where('status', 'open')->where('owner_id', auth()->id())->count(),
             'pipeline_value' => (float) SalesLead::where('status', 'open')->sum('value'),
+            'won_value'      => (float) SalesLead::where('status', 'won')->sum('value'),
+            'win_rate'       => (function () {
+                $won  = SalesLead::where('status', 'won')->count();
+                $lost = SalesLead::where('status', 'lost')->count();
+                $closed = $won + $lost;
+                return $closed ? (int) round($won / $closed * 100) : 0;
+            })(),
+            'avg_won'        => (function () {
+                $q = SalesLead::where('status', 'won')->whereNotNull('value')->where('value', '>', 0);
+                $c = (clone $q)->count();
+                return $c ? round((float) $q->sum('value') / $c, 2) : 0.0;
+            })(),
             'followups_due'  => SalesActivity::where('type', 'followup')->where('done', false)
                                     ->whereDate('due_date', '<=', now()->toDateString())->count(),
         ];
