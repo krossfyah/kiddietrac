@@ -61,6 +61,10 @@
       if (k === 'style') e.style.cssText = attrs[k];
       else if (k === 'html') e.innerHTML = attrs[k];
       else if (k.slice(0, 2) === 'on' && typeof attrs[k] === 'function') e.addEventListener(k.slice(2), attrs[k]);
+      // Set 'value' as a PROPERTY, not an attribute — textareas ignore the value
+      // attribute (their value is text content), so this is the only way the
+      // initial value shows for a <textarea> (plan descriptions, notes, etc.).
+      else if (k === 'value') e.value = attrs[k];
       else e.setAttribute(k, attrs[k]);
     });
     (kids || []).forEach(function (c) { if (c != null) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
@@ -614,12 +618,12 @@
   async function renderChat(container) {
     clear(container);
     container.appendChild(hero('Team chat', 'Private channel for the sales team and superadmins only.', '💬'));
-    var wrapEl = el('div', { style: 'max-width:920px' });
+    var wrapEl = el('div', {});
     var listBox = el('div', { style: 'background:#fff;border:1px solid #e6ebf1;border-radius:14px;padding:14px;height:min(58vh,540px);overflow-y:auto;display:flex;flex-direction:column;gap:9px' }, [el('div', { style: 'text-align:center;color:#94A3B8;padding:20px' }, ['Loading…'])]);
-    var inputEl = input({ placeholder: 'Message the sales team…', style: 'flex:1;min-width:0;padding:10px 12px;border:1px solid #d9e1ea;border-radius:10px;font-size:14px;box-sizing:border-box' });
+    var inputEl = input({ placeholder: 'Message the sales team…', style: 'flex:1;min-width:0;max-width:none !important;padding:10px 12px;border:1px solid #d9e1ea;border-radius:10px;font-size:14px;box-sizing:border-box' });
     var composer = el('form', { onsubmit: function (ev) { ev.preventDefault(); send(); }, style: 'display:flex;gap:8px;margin-top:10px' }, [inputEl, btn('Send', 'primary', function () { send(); })]);
     wrapEl.appendChild(listBox); wrapEl.appendChild(composer);
-    container.appendChild(wrapEl);
+    container.appendChild(wrap([wrapEl], 920));
     var lastId = 0;
     function bubble(m) {
       return el('div', { style: 'display:flex;flex-direction:column;align-items:' + (m.mine ? 'flex-end' : 'flex-start') }, [
@@ -648,7 +652,7 @@
   async function renderNews(container) {
     clear(container);
     container.appendChild(hero('Announcements', 'Company & sales-team news only — nothing to do with agencies or centres.', '📣'));
-    var host = el('div', { style: 'max-width:920px' }); container.appendChild(host);
+    var host = el('div', {}); container.appendChild(wrap([host], 920));
     var tI, bI, pinI;
     var composer = card([
       el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['📢 Post to the sales team']),
