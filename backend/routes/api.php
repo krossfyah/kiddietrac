@@ -1012,6 +1012,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
     // v22p55 photo feed + feedback + doc extractions list
     Route::get ('/photos/feed',        [\App\Http\Controllers\Api\PhotoFeedController::class, 'feed']);
+    // Authenticated media proxy → lets the app download cross-origin photos (which
+    // fetch() can't read for CORS reasons) as an attachment, like the payslip PDF.
+    Route::get ('/media/download',     [\App\Http\Controllers\Api\MediaController::class, 'download']);
     Route::post('/photos',             [\App\Http\Controllers\Api\PhotoFeedController::class, 'upload']);
     Route::get ('/feedback',           [\App\Http\Controllers\Api\FeedbackController::class, 'index']);
     Route::get ('/feedback/mine',      [\App\Http\Controllers\Api\FeedbackController::class, 'mine']);

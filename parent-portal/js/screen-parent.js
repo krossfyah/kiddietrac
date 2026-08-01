@@ -7,6 +7,27 @@
   'use strict';
 
   const { Api, Fmt, Dom, Shell } = window.KT;
+
+  // Open a specific invoice by id from anywhere in the app (e.g. the account
+  // ledger's clickable rows). Finds it across the family's children and reuses
+  // the same rich invoice detail sheet the Billing screen shows.
+  window.KT.openInvoiceById = async function (invoiceId) {
+    invoiceId = parseInt(invoiceId, 10); if (!invoiceId) return;
+    try {
+      var kids = (state && state.children && state.children.length)
+        ? state.children
+        : ((await Api.get('/parent/children')).children || []);
+      for (var i = 0; i < kids.length; i++) {
+        var r = await Api.get('/parent/children/' + kids[i].id + '/invoices').catch(function () { return null; });
+        var list = (r && r.invoices) || [];
+        var hit = list.find(function (v) { return String(v.id) === String(invoiceId); });
+        if (hit) { openInvoiceDetail(hit, kids[i]); return; }
+      }
+      if (window.KT && KT.toast) KT.toast('\u2139\uFE0F', 'Invoice unavailable', 'Open Billing to view it.', '#2C7BA0');
+    } catch (e) {
+      if (window.KT && KT.toast) KT.toast('\u26A0\uFE0F', 'Could not open the invoice', (e && e.message) || '', '#B91C1C');
+    }
+  };
   const { emptyState } = Shell;
 
   let state = {
@@ -15,7 +36,11 @@
     date: new Date().toISOString().split('T')[0],
   };
 
-  const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
+  // ≤768, NOT ≤600: the Android APK WebView reports an inflated ~601–768 width, so
+  // at ≤600 the parent rendered the DESKTOP layout on a real phone (uncondensed
+  // cards; didn't match ≤600 desktop-emulation). 768 matches the app's mobile CSS
+  // breakpoint + the bottom bar. Everything mobile in this app is ≤768.
+  const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
 
   // ── Instant navigation: cache-first GET with background revalidate ──────
   // First visit to a section fetches (brief load); every later visit renders
@@ -109,9 +134,11 @@
     if (hash === 'photos') await renderPhotosTab(wrap);
     else if (hash === 'messages') {
       // Desktop parents get the same rich chat as mobile (emoji picker, photo, voice
-      // notes) — the mobile conversation list + thread, centred in a tidy column.
-      wrap.appendChild(buildSubNav('messages'));
-      const _mcol = Dom.el('div', { style: 'max-width: 760px; margin: 0 auto;' });
+      // notes). The Today/Photos/Billing sub-nav is gone here — it duplicated the
+      // shell's own navigation and looked out of place — and the inbox now fills the
+      // whole window (matching the educator/home-visitor Messages), while opening a
+      // conversation still pops out the full-screen thread.
+      const _mcol = Dom.el('div');
       wrap.appendChild(_mcol);
       await renderMessagesMobile(_mcol);
     }
@@ -224,7 +251,7 @@
     dl.type = 'button';
     dl.textContent = '\u2b07\ufe0f  Download';
     dl.style.cssText = 'background:#159FB4;color:#fff;border:0;border-radius:24px;padding:10px 22px;font-weight:700;font-size:14px;cursor:pointer;';
-    dl.addEventListener('click', function () { downloadPhoto(url, caption); });
+    dl.addEventListener('click', function () { downloadPhoto(url, caption, dl); });
     var close = document.createElement('button');
     close.type = 'button';
     close.textContent = 'Close';
@@ -241,17 +268,76 @@
     if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, dismiss);
   }
 
-  // Save the image to the device. Fetch as a blob so the download attribute is honoured
-  // even for cross-path URLs; fall back to opening the image in a new tab.
-  function downloadPhoto(url, caption) {
+  // Save the image to the device.
+  // A cross-origin photo (external CDN, or api.kiddietrac.com from app.*) can be
+  // SHOWN by an <img> but NOT read by fetch() — CORS blocks it — so the old code
+  // dropped to a no-op window.open in the Capacitor WebView ("download did
+  // nothing"). Now: (1) same-origin / CORS-ok → Web Share the real file (Save to
+  // Photos/Files); (2) otherwise on the app open it in a Chrome Custom Tab where a
+  // long-press saves it; (3) desktop → classic blob download.
+  function ktIsNativeApp() {
+    try { var C = window.Capacitor; if (C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative)) return true; } catch (e) {}
+    return document.documentElement.classList.contains('kt-native');
+  }
+  function ktOpenImgExternal(url) {
+    try {
+      var C = window.Capacitor;
+      if (C && C.Plugins && C.Plugins.Browser && C.Plugins.Browser.open) { C.Plugins.Browser.open({ url: url }); return true; }
+    } catch (e) {}
+    if (!ktIsNativeApp()) {
+      try { var w = window.open(url, '_blank', 'noopener'); if (w) return true; } catch (e) {}
+      try { window.location.href = url; return true; } catch (e) {}
+    }
+    return false;
+  }
+  function downloadPhoto(url, caption, btn) {
     var name = ('kiddietrac-' + String(caption || 'photo').replace(/^\[Demo\] /, '').replace(/[^a-z0-9]+/gi, '-').slice(0, 40) || 'photo').replace(/-+$/, '') + '.jpg';
-    fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
+    var native = ktIsNativeApp();
+    var oldTxt = btn ? btn.textContent : null; if (btn) { btn.textContent = 'Preparing…'; btn.disabled = true; }
+    var reset = function () { if (btn) { btn.textContent = oldTxt; btn.disabled = false; } };
+    var toExternal = function () {
+      reset();
+      var ok = ktOpenImgExternal(url);
+      try {
+        if (window.KT && KT.toast) {
+          if (ok && native) KT.toast('⬇️', 'Opened in browser', 'Press and hold the photo, then tap Save.', '#159FB4');
+          else if (!ok) KT.toast('⚠️', 'Couldn’t open the photo', 'Please update the KiddieTrac app, then try again.', '#B45309');
+        }
+      } catch (e) {}
+    };
+    function handleBlob(b) {
+      var type = b.type || 'image/jpeg';
+      // 1) Web Share the actual file → native "Save image" / "Save to Files".
+      try {
+        if (navigator.canShare) {
+          var file = new File([b], name, { type: type });
+          if (navigator.canShare({ files: [file] })) {
+            return navigator.share({ files: [file], title: name }).then(reset, function () { reset(); /* cancelled */ });
+          }
+        }
+      } catch (e) { /* fall through */ }
+      // 2) App without Web Share → open in a Custom Tab to save.
+      if (native) { toExternal(); return; }
+      // 3) Desktop / PWA: classic blob download.
       var u = URL.createObjectURL(b);
       var a = document.createElement('a');
       a.href = u; a.download = name;
       document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(u); if (a.parentNode) a.parentNode.removeChild(a); }, 4000);
-    }).catch(function () { window.open(url, '_blank', 'noopener'); });
+      reset();
+    }
+    // The photo lives on a cross-origin CDN/storage with no CORS headers, so the
+    // direct fetch() below can't read the bytes. When that fails we route the URL
+    // THROUGH the API (auth + CORS + Content-Disposition: attachment) — the exact
+    // mechanism the payslip PDF uses — so the download works everywhere.
+    function viaProxy() {
+      var t; try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+      var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var p = base + '/media/download?url=' + encodeURIComponent(url) + '&name=' + encodeURIComponent(name);
+      return fetch(p, { headers: { Authorization: 'Bearer ' + (t || '') } }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); }).then(handleBlob);
+    }
+    fetch(url, { credentials: 'include' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); }).then(handleBlob)
+      .catch(function () { viaProxy().catch(function () { toExternal(); }); });
   }
 
   // Read-only child record. Parents can VIEW their child's full details (never edit them —
@@ -290,21 +376,21 @@
     }
     function section(title, inner) {
       if (!inner) return '';
-      return '<div style="padding:16px 24px;"><div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#94A3B8;margin-bottom:6px;">' + esc(title) + '</div>' + inner + '</div>';
+      return '<div style="padding:16px 24px;"><div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748B;margin-bottom:6px;">' + esc(title) + '</div>' + inner + '</div>';
     }
 
     var guardians = (d.guardians || []).map(function (g) {
       return '<div style="padding:8px 0;border-bottom:1px solid #F1F5F9;">'
         + '<div style="font-weight:600;color:#0F172A;font-size:14px;">' + esc((g.first_name || '') + ' ' + (g.last_name || '')) + (g.is_primary ? ' <span style="color:#159FB4;font-weight:700;font-size:11px;">· PRIMARY</span>' : '') + '</div>'
         + '<div style="color:#64748B;font-size:12.5px;">' + esc(g.relationship || 'guardian') + (g.can_pickup ? ' · can pick up' : ' · not authorised for pickup') + '</div>'
-        + (g.email ? '<div style="color:#94A3B8;font-size:12px;">' + esc(g.email) + '</div>' : '') + '</div>';
+        + (g.email ? '<div style="color:#64748B;font-size:12px;">' + esc(g.email) + '</div>' : '') + '</div>';
     }).join('');
 
     var health = [];
     if (d.medical_notes) health.push(row('Medical', d.medical_notes));
     if (d.dietary_notes) health.push(row('Dietary', d.dietary_notes));
     (d.health_flags || []).forEach(function (h) { health.push(row('Flag', h.label || h.name || h)); });
-    var healthHtml = health.length ? health.join('') : '<div style="color:#94A3B8;font-size:13px;padding:6px 0;">None on file.</div>';
+    var healthHtml = health.length ? health.join('') : '<div style="color:#64748B;font-size:13px;padding:6px 0;">None on file.</div>';
 
     var fam = d.family || {};
     var addr = [fam.address_line1, fam.address_line2, fam.city, fam.province, fam.postal_code].filter(Boolean).join(', ');
@@ -322,7 +408,7 @@
       + section('Guardians', guardians)
       + section('Health & dietary', healthHtml)
       + section('Family', row('Household', fam.family_name) + row('Address', addr) + row('Phone', fam.primary_phone) + row('Email', fam.primary_email))
-      + '<div style="padding:14px 24px 22px;color:#94A3B8;font-size:12px;">Need a change? Contact your childcare centre — these records are maintained by the agency.</div>';
+      + '<div style="padding:14px 24px 22px;color:#64748B;font-size:12px;">Need a change? Contact your childcare centre — these records are maintained by the agency.</div>';
 
     var cl = card.querySelector('#kt-cr-close');
     if (cl) cl.addEventListener('click', function () { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); });
@@ -375,12 +461,12 @@
     digestCard.appendChild(digestBody);
 
     // Stats strip + timeline (load in parallel)
-    const statsRow = Dom.el('div', { style: 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px;' });
+    const statsRow = Dom.el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px;' });
     main.appendChild(statsRow);
 
     const timelineCard = Dom.el('div', { class: 'card' });
     main.appendChild(timelineCard);
-    timelineCard.appendChild(Dom.el('h3', { style: 'margin: 0 0 4px 0;' }, 'Timeline'));
+    timelineCard.appendChild(Dom.el('h3', { style: 'margin:0 0 10px;background:linear-gradient(135deg,#EAF3FB,#F3F0FF);border:1px solid rgba(31,96,128,.10);padding:9px 13px;border-radius:10px;font-size:15px;color:#1F6080;' }, '🕒 Timeline'));
     timelineCard.appendChild(Dom.el('p', { style: 'color: var(--ink-600); margin: 0 0 16px 0; font-size: 13px;' }, 'Every moment logged by the educators'));
     const timelineBody = Dom.el('div'); timelineCard.appendChild(timelineBody);
 
@@ -393,7 +479,7 @@
 
     const obsCard = Dom.el('div', { class: 'card' });
     aside.appendChild(obsCard);
-    obsCard.appendChild(Dom.el('h3', { style: 'margin: 0 0 12px 0;' }, 'Recent observations'));
+    obsCard.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;background:linear-gradient(135deg,#F3F0FF,#EAF3FB);border:1px solid rgba(124,58,237,.12);padding:9px 13px;border-radius:10px;font-size:15px;color:#6D28D9;' }, '👀 Recent observations'));
     const obsBody = Dom.el('div'); obsCard.appendChild(obsBody);
     obsBody.appendChild(Dom.el('p', { style: 'color: var(--ink-600);' }, 'Loading...'));
 
@@ -409,12 +495,27 @@
       const naps = (timeline.events || []).filter(e => e.type === 'nap_end').length;
       const diapers = (timeline.events || []).filter(e => e.type === 'diaper' || e.type === 'bathroom').length;
       const activities = (timeline.events || []).filter(e => e.type === 'activity').length;
-      [['MEALS & SNACKS', meals, 'Logged today'], ['NAPS', naps, 'Completed'], ['DIAPER / BATHROOM', diapers, 'Total today'], ['ACTIVITIES', activities, 'Learning moments']].forEach(([label, n, sub]) => {
-        statsRow.appendChild(Dom.el('div', { class: 'card stat-tile', style: 'padding: 16px;' }, [
-          Dom.el('div', { style: 'font-size: 11px; font-weight: 700; color: var(--ink-500); letter-spacing: 1px; margin-bottom: 8px;' }, label),
-          Dom.el('div', { style: 'font-size: 32px; font-weight: 800; color: var(--brand-blue); line-height: 1;' }, String(n)),
-          Dom.el('div', { style: 'font-size: 12px; color: var(--ink-500); margin-top: 4px;' }, sub),
-        ]));
+      // Days-enrolled tile (replaced the balance-due tile — teal, distinct from
+      // the violet billing card). Days since the child's enrolment date.
+      const _enr = child.enrolled_at || child.enrollment_start || child.enrolled_on || child.enrollment_date || null;
+      const _enrMs = _enr ? new Date(String(_enr).replace(' ', 'T')).getTime() : NaN;
+      const _daysEnr = isNaN(_enrMs) ? null : Math.max(0, Math.floor((Date.now() - _enrMs) / 86400000));
+      const _enrSub = isNaN(_enrMs) ? 'enrolment date n/a' : ('since ' + new Date(_enrMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }));
+      [
+        { label: 'MEALS & SNACKS', n: meals, sub: 'Logged today', icon: '🍎', c1: '#FDBA74', c2: '#F97316', tint: '#FFF7ED', ink: '#C2410C' },
+        { label: 'NAPS', n: naps, sub: 'Completed', icon: '😴', c1: '#A5B4FC', c2: '#6366F1', tint: '#EEF2FF', ink: '#4338CA' },
+        { label: 'DIAPER / BATHROOM', n: diapers, sub: 'Total today', icon: '💧', c1: '#7DD3FC', c2: '#0EA5E9', tint: '#ECFEFF', ink: '#0369A1' },
+        { label: 'ACTIVITIES', n: activities, sub: 'Learning moments', icon: '🎨', c1: '#86EFAC', c2: '#16A34A', tint: '#F0FDF4', ink: '#15803D' },
+        { label: 'DAYS ENROLLED', n: _daysEnr == null ? '—' : _daysEnr, sub: _enrSub, icon: '📆', c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
+      ].forEach((s) => {
+        const tile = Dom.el('div', { style: 'position:relative;overflow:hidden;background:' + s.tint + ';border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:15px 15px 14px;transition:transform .15s ease, box-shadow .15s ease;' });
+        tile.addEventListener('mouseenter', () => { tile.style.transform = 'translateY(-3px)'; tile.style.boxShadow = '0 14px 24px -14px ' + s.c2; });
+        tile.addEventListener('mouseleave', () => { tile.style.transform = ''; tile.style.boxShadow = ''; });
+        tile.appendChild(Dom.el('div', { style: 'width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:11px;background:linear-gradient(135deg,' + s.c1 + ',' + s.c2 + ');box-shadow:0 6px 13px -6px ' + s.c2 + ';' }, s.icon));
+        tile.appendChild(Dom.el('div', { style: 'font-size:34px;font-weight:900;line-height:1;color:' + s.ink + ';' }, String(s.n)));
+        tile.appendChild(Dom.el('div', { style: 'font-size:10.5px;font-weight:800;letter-spacing:.6px;color:' + s.ink + ';opacity:.72;margin-top:9px;' }, s.label));
+        tile.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:var(--ink-500,#64748b);margin-top:2px;' }, s.sub));
+        statsRow.appendChild(tile);
       });
 
       // Timeline
@@ -422,9 +523,10 @@
       if (!timeline.events || timeline.events.length === 0) {
         timelineBody.appendChild(Dom.el('p', { style: 'color: var(--ink-500); padding: 24px 0;' }, 'No events logged yet today. Check back soon!'));
       } else {
-        timeline.events.forEach(ev => {
-          const row = Dom.el('div', { style: 'display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--ink-100);' });
-          row.appendChild(Dom.el('div', { style: 'background: var(--ink-50); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;' }, eventIcon(ev.type)));
+        timeline.events.forEach((ev, i) => {
+          // Zebra striping so the timeline reads clearly, especially on mobile/APK.
+          const row = Dom.el('div', { style: 'display: flex; gap: 12px; padding: 12px 10px; border-radius: 10px; align-items: flex-start; background: ' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
+          row.appendChild(Dom.el('div', { style: 'background: #fff; border: 1px solid var(--ink-100,#f1f5f9); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;' }, eventIcon(ev.type)));
           const text = Dom.el('div', { style: 'flex: 1;' });
           text.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, ev.display?.title || ev.type));
           if (ev.display?.detail) text.appendChild(Dom.el('div', { style: 'color: var(--ink-600); font-size: 13px;' }, ev.display.detail));
@@ -446,12 +548,14 @@
       Dom.clear(billingBody);
       const inv = (invoices.invoices || [])[0];
       if (inv) {
-        billingBody.appendChild(Dom.el('div', { style: 'font-size: 24px; font-weight: 800; color: var(--brand-blue);' }, '$' + (inv.balance_due ?? inv.total).toFixed(2)));
-        billingBody.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500); margin-bottom: 8px;' }, inv.is_estimate ? 'estimated for this month' : 'balance due'));
+        const amtBox = Dom.el('div', { style: 'background:linear-gradient(135deg,#EEF0FF,#F5EEFF);border:1px solid rgba(109,40,217,.12);border-radius:14px;padding:14px 16px;' });
+        amtBox.appendChild(Dom.el('div', { style: 'font-size: 30px; font-weight: 900; color:#6D28D9; line-height:1;' }, '$' + (inv.balance_due ?? inv.total).toFixed(2)));
+        amtBox.appendChild(Dom.el('div', { style: 'font-size: 12px; font-weight:700; color:#7C3AED; opacity:.8; margin-top:5px; text-transform:uppercase; letter-spacing:.5px;' }, inv.is_estimate ? 'estimated this month' : 'balance due'));
         if (!inv.is_estimate) {
-          billingBody.appendChild(Dom.el('div', { style: 'font-size: 12px; color: var(--ink-600);' }, `Invoice ${inv.invoice_number} · due ${inv.due_date}`));
+          amtBox.appendChild(Dom.el('div', { style: 'font-size: 12px; color: var(--ink-600); margin-top:6px;' }, `Invoice ${inv.invoice_number} · due ${inv.due_date}`));
         }
-        billingBody.appendChild(Dom.el('a', { href: '#billing', style: 'display: inline-block; margin-top: 12px; font-size: 13px; color: var(--brand-blue); font-weight: 600; text-decoration: none;' }, 'View billing →'));
+        billingBody.appendChild(amtBox);
+        billingBody.appendChild(Dom.el('a', { href: '#billing', style: 'display: inline-block; margin-top: 12px; font-size: 13px; color:#6D28D9; font-weight: 700; text-decoration: none;' }, 'View billing →'));
       } else {
         billingBody.appendChild(Dom.el('p', { style: 'color: var(--ink-500); font-size: 13px;' }, 'No invoices yet.'));
       }
@@ -476,7 +580,7 @@
   // ─── PHOTOS TAB ─────────────────────────────────────────────────
 
   async function renderPhotosTab(wrap) {
-    wrap.appendChild(buildSubNav('photos'));
+    // (Sub-nav removed — it duplicated the shell's own navigation; see Messages.)
     const child = state.children.find(c => c.id === state.selectedChildId);
     if (!child) return;
 
@@ -629,8 +733,295 @@
 
   // ─── BILLING TAB ────────────────────────────────────────────────
 
+  // iLearn (external) invoices — produced in iLearn, pushed into KiddieTrac
+  // (external_invoices) and served by GET /parent/external-invoices. Read-only:
+  // they're billed and paid in iLearn, so there's no in-app "pay" action. Rendered
+  // alongside any native KiddieTrac invoices. Returns true if it rendered any.
+  var _extMoney = (n) => '$' + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var _extStatusColor = (s) => s === 'paid' ? '#16a34a' : (s === 'overdue' ? '#c0392b' : (s === 'partial' ? '#B45309' : '#1F6FB2'));
+
+  // Build + open a clean, printable invoice (Save-as-PDF via the browser).
+  // iLearn doesn't produce a PDF file, so we render one from the invoice data.
+  function printExternalInvoice(inv, agency) {
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var u = (function () { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } })();
+    var parentName = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || (u.name || '');
+    var rows = (inv.items || []).map(function (it) {
+      var qty = it.qty != null ? it.qty : 1, price = it.price != null ? it.price : null;
+      var amount = it.amount != null ? it.amount : (it.total != null ? it.total : (price != null ? qty * price : 0));
+      var note = (it.at || it.by) ? '<div class="sub">' + esc((it.at ? it.at + ' · ' : '') + (it.by ? 'by ' + it.by : '')) + '</div>' : '';
+      return '<tr><td>' + esc(it.desc || it.description || 'Item') + note + '</td><td class="c">' + (price != null ? qty : '') + '</td><td class="r">' + (price != null ? _extMoney(price) : '') + '</td><td class="r">' + _extMoney(amount) + '</td></tr>';
+    }).join('');
+    var html = '<!doctype html><html><head><meta charset="utf-8"><title>Invoice ' + esc(inv.number || '') + '</title><style>'
+      + '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:32px;font-size:13px}'
+      + '.hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #2C7BA0;padding-bottom:14px;margin-bottom:18px}'
+      + '.ag{font-size:20px;font-weight:800;color:#2C7BA0}.meta{text-align:right;font-size:12px;color:#475569}'
+      + 'h1{font-size:16px;margin:0 0 2px}table{width:100%;border-collapse:collapse;margin-top:6px}'
+      + 'th,td{padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;color:#64748b}'
+      + '.r{text-align:right}.c{text-align:center}.sub{color:#64748B;font-size:11px;margin-top:2px}'
+      + '.tot{margin-top:14px;width:100%;max-width:280px;margin-left:auto}.tot td{border:0;padding:4px 6px}.tot .g td{font-weight:800;font-size:15px;border-top:2px solid #cbd5e1;padding-top:8px}'
+      + '.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:800;text-transform:uppercase;color:#fff;background:' + _extStatusColor(inv.status) + '}'
+      + '@media print{body{margin:12mm}}</style></head><body>'
+      + '<div class="hd"><div><div class="ag">' + esc(agency || 'Invoice') + '</div><div style="color:#64748b;font-size:12px;margin-top:2px">Childcare invoice</div></div>'
+      + '<div class="meta"><h1>Invoice ' + esc(inv.number || '') + '</h1><div>Issued: ' + esc(inv.issued_at || '—') + '</div><div>Due: ' + esc(inv.due_at || '—') + '</div><div style="margin-top:6px"><span class="badge">' + esc(inv.status || '') + '</span></div></div></div>'
+      + (parentName ? '<div style="margin-bottom:12px"><div style="font-size:11px;text-transform:uppercase;color:#64748b">Bill to</div><div style="font-weight:700">' + esc(parentName) + '</div></div>' : '')
+      + (inv.description ? '<div style="margin-bottom:8px;color:#475569">' + esc(inv.description) + '</div>' : '')
+      + '<table><thead><tr><th>Description</th><th class="c">Qty</th><th class="r">Unit</th><th class="r">Amount</th></tr></thead><tbody>' + (rows || '<tr><td colspan="4" style="color:#64748B">No line items</td></tr>') + '</tbody></table>'
+      + '<table class="tot"><tr><td>Total</td><td class="r">' + _extMoney(inv.total) + '</td></tr>'
+      + (inv.amount_paid > 0 ? '<tr><td>Paid</td><td class="r">−' + _extMoney(inv.amount_paid) + '</td></tr>' : '')
+      + '<tr class="g"><td>' + (inv.status === 'paid' ? 'Paid in full' : 'Balance due') + '</td><td class="r">' + _extMoney(inv.balance_due) + '</td></tr></table>'
+      + '<div style="margin-top:26px;font-size:11px;color:#64748B">Billed by ' + esc(agency || 'your provider') + '. Please pay directly with them.</div>'
+      + '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},350);};</scr' + 'ipt></body></html>';
+    var w = window.open('', '_blank');
+    if (!w) { if (KT.toast) KT.toast('⚠️', 'Pop-up blocked', 'Allow pop-ups to print or save the invoice.', '#B45309'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  // Detail view for one external (iLearn) invoice. opts: {stripeEnabled, onPay}.
+  function openExternalInvoice(inv, agency, opts) {
+    opts = opts || {};
+    var ov = Dom.el('div', { style: 'position:fixed;inset:0;z-index:9600;background:rgba(8,17,33,.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;' });
+    var panel = Dom.el('div', { style: 'background:#fff;width:100%;max-width:520px;max-height:90vh;overflow:auto;border-radius:18px;box-shadow:0 24px 60px -20px rgba(0,0,0,.6);margin:auto;' });
+    var paid = inv.status === 'paid';
+    var head = Dom.el('div', { style: 'background:linear-gradient(135deg,#4338CA 0%,#6D28D9 55%,#9333EA 120%);color:#fff;padding:18px 20px;position:sticky;top:0;' });
+    head.appendChild(Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;' }, [
+      Dom.el('div', {}, [
+        Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;opacity:.85;' }, agency || 'Invoice'),
+        Dom.el('div', { style: 'font-size:18px;font-weight:800;margin-top:2px;' }, inv.number || 'Invoice'),
+      ]),
+      Dom.el('button', { type: 'button', 'aria-label': 'Close', 'data-close': '1', style: 'background:rgba(255,255,255,.2);color:#fff;border:0;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;flex:0 0 auto;' }, ['×']),
+    ]));
+    panel.appendChild(head);
+    var body = Dom.el('div', { style: 'padding:18px 20px 26px;' });
+    // status + dates
+    body.appendChild(Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;' }, [
+      Dom.el('span', { style: 'background:' + _extStatusColor(inv.status) + ';color:#fff;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;' }, inv.status),
+      inv.due_at ? Dom.el('span', { style: 'font-size:13px;color:var(--ink-600,#475569);' }, 'Due ' + inv.due_at) : Dom.el('span', {}),
+      inv.issued_at ? Dom.el('span', { style: 'font-size:13px;color:var(--ink-500,#64748b);' }, '· Issued ' + inv.issued_at) : Dom.el('span', {}),
+    ]));
+    if (inv.description) body.appendChild(Dom.el('div', { style: 'font-size:14px;color:var(--ink-700,#334155);margin-bottom:14px;line-height:1.5;' }, inv.description));
+    // line items — with qty × unit price and adjustment notes (date / by whom)
+    if (inv.items && inv.items.length) {
+      body.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-500,#64748b);margin-bottom:6px;' }, 'Line items'));
+      var li = Dom.el('div', { style: 'border:1px solid var(--ink-200,#e2e8f0);border-radius:12px;overflow:hidden;margin-bottom:14px;' });
+      inv.items.forEach(function (it, i) {
+        var qty = it.qty != null ? it.qty : 1;
+        var price = it.price != null ? it.price : null;
+        var amount = it.amount != null ? it.amount : (it.total != null ? it.total : (price != null ? qty * price : 0));
+        var sub = [];
+        if (price != null) sub.push(qty + ' × ' + _extMoney(price));
+        if (it.adjustment) sub.push('adjustment');
+        if (it.at) sub.push(String(it.at));
+        if (it.by) sub.push('by ' + it.by);
+        li.appendChild(Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:12px;padding:11px 13px;font-size:13.5px;' + (i ? 'border-top:1px solid var(--ink-100,#f1f5f9);' : '') }, [
+          Dom.el('div', { style: 'min-width:0;' }, [
+            Dom.el('div', { style: 'color:var(--ink-700,#334155);' }, String(it.desc || it.description || it.label || 'Item')),
+            sub.length ? Dom.el('div', { style: 'color:var(--ink-500,#64748b);font-size:11.5px;margin-top:2px;' }, sub.join(' · ')) : Dom.el('span', {}),
+          ]),
+          Dom.el('div', { style: 'font-weight:700;white-space:nowrap;' + (it.adjustment ? 'color:#B45309;' : '') }, _extMoney(amount)),
+        ]));
+      });
+      body.appendChild(li);
+    }
+    // totals
+    var tot = Dom.el('div', { style: 'background:var(--ink-50,#f8fafc);border-radius:12px;padding:14px;display:grid;grid-template-columns:1fr auto;gap:8px;font-size:14px;' });
+    tot.appendChild(Dom.el('div', { style: 'color:var(--ink-600,#475569);' }, 'Invoice total'));
+    tot.appendChild(Dom.el('div', { style: 'text-align:right;font-weight:700;' }, _extMoney(inv.total)));
+    if (inv.amount_paid > 0) {
+      tot.appendChild(Dom.el('div', { style: 'color:var(--ink-600,#475569);' }, 'Paid'));
+      tot.appendChild(Dom.el('div', { style: 'text-align:right;color:#16a34a;font-weight:700;' }, '−' + _extMoney(inv.amount_paid)));
+    }
+    tot.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;border-top:1px solid var(--ink-200,#e2e8f0);padding-top:9px;' }, paid ? 'Paid in full' : 'Balance due'));
+    tot.appendChild(Dom.el('div', { style: 'text-align:right;font-weight:900;font-size:20px;border-top:1px solid var(--ink-200,#e2e8f0);padding-top:9px;color:' + (paid ? '#16a34a' : '#1F6FB2') + ';' }, _extMoney(inv.balance_due)));
+    body.appendChild(tot);
+    opts = opts || {};
+    var btnBase = 'width:100%;margin-top:12px;border-radius:12px;padding:13px;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;';
+    // Pay online (Stripe) — only when the agency has it enabled AND there's a balance.
+    if (opts.stripeEnabled && !paid && (inv.balance_due || 0) > 0) {
+      var payBtn = Dom.el('button', { type: 'button', style: btnBase + 'border:0;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);' }, ['Pay ' + _extMoney(inv.balance_due) + ' now']);
+      payBtn.addEventListener('click', () => { if (typeof opts.onPay === 'function') opts.onPay(inv); });
+      body.appendChild(payBtn);
+    }
+    // The official iLearn-generated invoice (opens the branded invoice; print/save from there).
+    if (inv.pdf_url) {
+      var pdfBtn = Dom.el('a', { href: inv.pdf_url, target: '_blank', rel: 'noopener', style: btnBase + 'text-decoration:none;border:0;color:#fff;background:#2C7BA0;' }, [
+        Dom.el('span', { style: 'font-size:16px;' }, '📄'), Dom.el('span', {}, 'View / download official invoice'),
+      ]);
+      body.appendChild(pdfBtn);
+    }
+    // Local quick-print fallback (works even if the official link is unavailable).
+    var printBtn = Dom.el('button', { type: 'button', style: btnBase + 'background:#fff;border:1.6px solid #cbd5e1;color:#475569;' }, [
+      Dom.el('span', { style: 'font-size:16px;' }, '🖨'), Dom.el('span', {}, inv.pdf_url ? 'Quick print' : 'Print / Save as PDF'),
+    ]);
+    printBtn.addEventListener('click', () => printExternalInvoice(inv, agency));
+    body.appendChild(printBtn);
+    body.appendChild(Dom.el('div', { style: 'margin-top:12px;font-size:12px;color:var(--ink-500,#64748b);text-align:center;' }, 'Billed by ' + (agency || 'your provider') + (opts.stripeEnabled ? '' : ' · pay directly with them')));
+    panel.appendChild(body);
+    ov.appendChild(panel);
+    document.body.appendChild(ov);
+    var close = () => ov.remove();
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    panel.querySelector('[data-close]').addEventListener('click', close);
+  }
+
+  // iLearn (external) invoices — summary + compact, clickable, paged list.
+  function startExternalPayment(inv) {
+    // Placeholder — only reached when the agency has Stripe enabled. The
+    // charge + reconcile-to-source flow is wired when Stripe is configured.
+    if (KT.toast) KT.toast('💳', 'Secure checkout', 'Opening secure payment for ' + _extMoney(inv.balance_due) + '…', '#1F6FB2');
+  }
+
+  async function appendExternalInvoices(container) {
+    const state = { page: 1, sort: '', dir: 'asc', search: '' };
+    let first;
+    try { first = await Api.get('/parent/external-invoices?page=1&per_page=8'); }
+    catch (e) { return false; }
+    if (!first || !first.invoices || (!first.invoices.length && !((first.meta || {}).total))) return false;
+
+    const wrap = Dom.el('div', { style: 'margin-top:6px;' });
+    container.appendChild(wrap);
+    const isDesktop = window.matchMedia('(min-width:768px)').matches;
+
+    function query() {
+      let q = '/parent/external-invoices?page=' + state.page + '&per_page=8';
+      if (state.sort) q += '&sort=' + encodeURIComponent(state.sort) + '&dir=' + state.dir;
+      if (state.search) q += '&search=' + encodeURIComponent(state.search);
+      return q;
+    }
+    function reload(scroll) {
+      wrap.style.opacity = '.5';
+      Api.get(query()).then((d) => { wrap.style.opacity = ''; paint(d); if (scroll) wrap.scrollIntoView({ block: 'nearest' }); }).catch(() => { wrap.style.opacity = ''; });
+    }
+    function setSort(key) {
+      if (state.sort === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+      else { state.sort = key; state.dir = (key === 'amount' || key === 'issued') ? 'desc' : 'asc'; }
+      state.page = 1; reload(false);
+    }
+
+    function paint(d) {
+      Dom.clear(wrap);
+      const st = d.stats || {}, meta = d.meta || { page: 1, pages: 1, total: 0 };
+      const agency = (d.invoices[0] && d.invoices[0].source_label) || 'Your provider';
+      const detailOpts = { stripeEnabled: !!meta.stripe_enabled, onPay: startExternalPayment };
+
+      // ── Summary: big total due + paid indicator ──
+      // Deliberately an indigo→violet "statement" look, distinct from the teal
+      // top/section banner so the two never read as the same block.
+      const sum = Dom.el('div', { style: 'position:relative;overflow:hidden;background:linear-gradient(135deg,#4338CA 0%,#6D28D9 55%,#9333EA 120%);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 16px 34px -18px rgba(109,40,217,.7);' });
+      sum.appendChild(Dom.el('div', { style: 'position:absolute;top:-70px;right:-50px;width:210px;height:210px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.16),transparent 62%);pointer-events:none;' }));
+      const sumTop = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;position:relative;' });
+      sumTop.appendChild(Dom.el('span', { style: 'font-size:16px;' }, '💳'));
+      sumTop.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;opacity:.88;' }, agency));
+      sum.appendChild(sumTop);
+      const nums = Dom.el('div', { style: 'display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-top:8px;flex-wrap:wrap;position:relative;' });
+      nums.appendChild(Dom.el('div', {}, [
+        Dom.el('div', { style: 'font-size:34px;font-weight:900;line-height:1;' }, _extMoney(st.open_total || 0)),
+        Dom.el('div', { style: 'font-size:12px;opacity:.85;margin-top:5px;' }, 'total due' + ((st.open_count) ? ' · ' + st.open_count + ' open' : '')),
+      ]));
+      nums.appendChild(Dom.el('div', { style: 'text-align:right;background:rgba(255,255,255,.14);border-radius:12px;padding:8px 12px;' }, [
+        Dom.el('div', { style: 'font-size:16px;font-weight:800;color:#86EFAC;line-height:1;' }, _extMoney(st.paid_total || 0)),
+        Dom.el('div', { style: 'font-size:11px;opacity:.85;margin-top:3px;' }, 'paid' + ((st.paid_count) ? ' · ' + st.paid_count : '')),
+      ]));
+      sum.appendChild(nums);
+      wrap.appendChild(sum);
+
+      // ── Controls: search (both) + sort dropdown (mobile) ──
+      const controls = Dom.el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;' });
+      const search = Dom.el('input', { type: 'search', placeholder: 'Search invoices…', value: state.search, style: 'flex:1;min-width:150px;padding:9px 12px;border:1px solid var(--ink-200,#e2e8f0);border-radius:10px;font-size:14px;box-sizing:border-box;' });
+      let t = null;
+      search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.search = search.value.trim(); state.page = 1; reload(false); }, 300); });
+      controls.appendChild(search);
+      if (!isDesktop) {
+        const sel = Dom.el('select', { style: 'padding:9px 10px;border:1px solid var(--ink-200,#e2e8f0);border-radius:10px;font-size:13px;background:#fff;' });
+        [['', 'Sort: Due soonest'], ['due', 'Due date'], ['amount', 'Amount'], ['status', 'Status'], ['number', 'Invoice #'], ['issued', 'Issued date']].forEach((o) => { const op = Dom.el('option', { value: o[0] }, o[1]); if (o[0] === state.sort) op.selected = true; sel.appendChild(op); });
+        sel.addEventListener('change', () => { state.sort = sel.value; state.dir = (state.sort === 'amount' || state.sort === 'issued') ? 'desc' : 'asc'; state.page = 1; reload(false); });
+        controls.appendChild(sel);
+      }
+      wrap.appendChild(controls);
+
+      if (!d.invoices.length) {
+        wrap.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-500,#64748b);padding:26px;background:#fff;border:1px dashed #cbd5e1;border-radius:14px;' }, state.search ? 'No invoices match “' + state.search + '”.' : 'No invoices.'));
+        setTimeout(() => { try { search.focus(); } catch (e) {} }, 0);
+        return;
+      }
+
+      if (isDesktop) {
+        // ── Sortable table (headers click to sort) ──
+        const scroll = Dom.el('div', { style: 'overflow-x:auto;border:1px solid var(--ink-200,#e2e8f0);border-radius:14px;background:#fff;' });
+        const table = Dom.el('table', { style: 'width:100%;border-collapse:collapse;font-size:13.5px;' });
+        const cols = [['number', 'Invoice #', 'left'], ['issued', 'Issued', 'left'], ['due', 'Due', 'left'], ['amount', 'Balance', 'right'], ['status', 'Status', 'left']];
+        const htr = Dom.el('tr');
+        cols.forEach((c) => {
+          const active = state.sort === c[0];
+          const th = Dom.el('th', { style: 'text-align:' + c[2] + ';padding:11px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:' + (active ? '#1F6FB2' : '#64748b') + ';cursor:pointer;white-space:nowrap;border-bottom:1px solid #e2e8f0;background:#f8fafc;user-select:none;' }, c[1] + (active ? (state.dir === 'asc' ? ' ▲' : ' ▼') : ''));
+          th.addEventListener('click', () => setSort(c[0]));
+          htr.appendChild(th);
+        });
+        htr.appendChild(Dom.el('th', { style: 'width:18px;border-bottom:1px solid #e2e8f0;background:#f8fafc;' }));
+        table.appendChild(Dom.el('thead', {}, [htr]));
+        const tb = Dom.el('tbody');
+        d.invoices.forEach((inv) => {
+          const paid = inv.status === 'paid';
+          const tr = Dom.el('tr', { style: 'cursor:pointer;border-bottom:1px solid #f1f5f9;' });
+          tr.addEventListener('mouseenter', () => tr.style.background = '#f8fafc');
+          tr.addEventListener('mouseleave', () => tr.style.background = '');
+          tr.addEventListener('click', () => openExternalInvoice(inv, agency, detailOpts));
+          const td = (txt, align, extra) => Dom.el('td', { style: 'padding:11px 14px;text-align:' + (align || 'left') + ';' + (extra || '') }, txt);
+          tr.appendChild(td(inv.number || 'Invoice', 'left', 'font-weight:700;color:#0f172a;'));
+          tr.appendChild(td(inv.issued_at || '—', 'left', 'color:#64748b;'));
+          tr.appendChild(td(inv.due_at || '—', 'left', 'color:' + (inv.status === 'overdue' ? '#c0392b' : '#334155') + ';'));
+          tr.appendChild(td(_extMoney(inv.balance_due), 'right', 'font-weight:800;color:' + (paid ? '#16a34a' : '#1F6FB2') + ';'));
+          const stTd = Dom.el('td', { style: 'padding:11px 14px;' });
+          stTd.appendChild(Dom.el('span', { style: 'background:' + _extStatusColor(inv.status) + ';color:#fff;padding:3px 9px;border-radius:10px;font-size:10.5px;font-weight:800;text-transform:uppercase;' }, inv.status));
+          tr.appendChild(stTd);
+          tr.appendChild(Dom.el('td', { style: 'padding:11px 8px;color:#cbd5e1;' }, '›'));
+          tb.appendChild(tr);
+        });
+        table.appendChild(tb); scroll.appendChild(table); wrap.appendChild(scroll);
+      } else {
+        // ── Mobile: compact clickable card rows ──
+        const list = Dom.el('div', { style: 'border:1px solid var(--ink-200,#e2e8f0);border-radius:14px;overflow:hidden;background:#fff;' });
+        d.invoices.forEach((inv, i) => {
+          const paid = inv.status === 'paid';
+          const row = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;' + (i ? 'border-top:1px solid var(--ink-100,#f1f5f9);' : '') });
+          row.addEventListener('click', () => openExternalInvoice(inv, agency, detailOpts));
+          row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:' + _extStatusColor(inv.status) + ';' }));
+          row.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;' }, [
+            Dom.el('div', { style: 'font-weight:800;font-size:14px;color:var(--ink-900,#0f172a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, inv.number || 'Invoice'),
+            Dom.el('div', { style: 'font-size:12px;color:var(--ink-500,#64748b);margin-top:1px;' }, (inv.due_at ? 'Due ' + inv.due_at : (inv.issued_at || '')) + (paid ? ' · paid' : (inv.status === 'overdue' ? ' · overdue' : ''))),
+          ]));
+          row.appendChild(Dom.el('div', { style: 'flex:0 0 auto;text-align:right;' }, [
+            Dom.el('div', { style: 'font-weight:900;font-size:15px;color:' + (paid ? '#16a34a' : '#1F6FB2') + ';' }, _extMoney(inv.balance_due)),
+            Dom.el('div', { style: 'font-size:11px;color:var(--ink-500,#64748b);' }, paid ? 'paid' : 'due'),
+          ]));
+          row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;color:var(--ink-300,#cbd5e1);font-size:18px;' }, '›'));
+          list.appendChild(row);
+        });
+        wrap.appendChild(list);
+      }
+
+      // ── Pagination ──
+      if ((meta.pages || 1) > 1) {
+        const pg = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px;' });
+        const btn = (label, disabled, onClick) => {
+          const b = Dom.el('button', { type: 'button', style: 'background:#fff;border:1px solid var(--ink-200,#e2e8f0);border-radius:9px;padding:7px 14px;font-size:13px;font-weight:700;cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';color:' + (disabled ? 'var(--ink-300,#cbd5e1)' : 'var(--brand-blue,#1F6FB2)') + ';' }, label);
+          if (disabled) b.disabled = true; else b.addEventListener('click', onClick);
+          return b;
+        };
+        pg.appendChild(btn('‹ Prev', meta.page <= 1, () => { state.page = meta.page - 1; reload(true); }));
+        pg.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500,#64748b);font-weight:700;' }, 'Page ' + meta.page + ' of ' + meta.pages));
+        pg.appendChild(btn('Next ›', meta.page >= meta.pages, () => { state.page = meta.page + 1; reload(true); }));
+        wrap.appendChild(pg);
+      }
+    }
+
+    paint(first);
+    return true;
+  }
+
   async function renderBillingTab(wrap) {
-    wrap.appendChild(buildSubNav('billing'));
+    // (Sub-nav removed — the Today/Photos/Messages/Billing pill bar duplicated the
+    // shell's own navigation and looked out of place; matches the Messages fix.)
     const child = state.children.find(c => c.id === state.selectedChildId);
     if (!child) return;
 
@@ -644,12 +1035,7 @@
       const data = await Api.get(`/parent/children/${child.id}/invoices`);
       Dom.clear(container);
 
-      if (!data.invoices || data.invoices.length === 0) {
-        container.appendChild(emptyState('📄', 'No invoices yet', 'When your monthly invoice is generated, it will appear here.'));
-        return;
-      }
-
-      data.invoices.forEach(inv => {
+      (data.invoices || []).forEach(inv => {
         const _payable = (inv.balance_due || 0) > 0 && inv.status !== 'paid';
         const card = Dom.el('div', { class: 'card', style: 'margin-bottom: 16px;' + (_payable ? ' cursor: pointer;' : '') });
         if (_payable) card.addEventListener('click', () => openInvoiceDetail(inv, child));
@@ -683,6 +1069,11 @@
         }
         container.appendChild(card);
       });
+
+      const hadExternal = await appendExternalInvoices(container);
+      if (!(data.invoices || []).length && !hadExternal) {
+        container.appendChild(emptyState('📄', 'No invoices yet', 'When your monthly invoice is generated, it will appear here.'));
+      }
     } catch (e) {
       Dom.clear(container);
       container.appendChild(emptyState('⚠️', 'Could not load billing', e.message));
@@ -756,7 +1147,7 @@
         style="width:100%;box-sizing:border-box;margin-top:12px;padding:11px;border:1.5px solid #E3EAF1;border-radius:10px;font-size:16px;min-height:64px;font-family:inherit;"></textarea>
       <div id="kt-abs-err" style="color:#B91C1C;font-size:12.5px;min-height:16px;margin-top:4px;"></div>
       <button id="kt-abs-send" style="width:100%;background:#159FB4;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">Tell the centre</button>
-      <button id="kt-abs-cancel" style="width:100%;background:none;border:none;color:#94A3B8;font-size:13px;font-weight:700;padding:11px;cursor:pointer;">Cancel</button>
+      <button id="kt-abs-cancel" style="width:100%;background:none;border:none;color:#64748B;font-size:13px;font-weight:700;padding:11px;cursor:pointer;">Cancel</button>
     `;
 
     let reason = null;
@@ -830,6 +1221,32 @@
     ]));
     status.appendChild(info);
     wrap.appendChild(status);
+
+    // Your team & centre — who's caring for your child, and where.
+    if (child.centre_name || (child.educators && child.educators.length)) {
+      const team = Dom.el('div', { style: card('padding:13px 15px;margin-bottom:13px;') });
+      if (child.centre_name) {
+        const cRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:9px;' });
+        cRow.appendChild(Dom.el('span', { style: 'font-size:18px;flex-shrink:0;' }, '\uD83C\uDFEB'));
+        const cTxt = Dom.el('div', { style: 'flex:1;min-width:0;' });
+        cTxt.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:800;color:var(--ink-900);line-height:1.2;' }, child.centre_name));
+        const sub = [child.agency_name, child.room_name].filter(Boolean).join(' \u00B7 ');
+        if (sub) cTxt.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:var(--ink-500);margin-top:1px;' }, sub));
+        cRow.appendChild(cTxt);
+        team.appendChild(cRow);
+      }
+      if (child.educators && child.educators.length) {
+        const eRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:9px;' + (child.centre_name ? 'margin-top:11px;padding-top:11px;border-top:1px solid var(--ink-100);' : '') });
+        eRow.appendChild(Dom.el('span', { style: 'font-size:18px;flex-shrink:0;' }, '\uD83E\uDDD1\u200D\uD83C\uDFEB'));
+        const eTxt = Dom.el('div', { style: 'flex:1;min-width:0;' });
+        eTxt.appendChild(Dom.el('div', { style: 'font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-500);' }, child.educators.length === 1 ? 'Your educator' : 'Your educators'));
+        eTxt.appendChild(Dom.el('div', { style: 'font-size:13.5px;font-weight:700;color:var(--ink-900);margin-top:1px;' }, child.educators.map(function (e) { return e.name; }).filter(Boolean).join(', ')));
+        eRow.appendChild(eTxt);
+        team.appendChild(eRow);
+      }
+      wrap.appendChild(team);
+    }
+
     wrap.appendChild(buildDateNav());
 
     // "Not attending today" — the centre has to chase every empty chair, and today
@@ -865,16 +1282,55 @@
     digest.appendChild(digestBody);
     wrap.appendChild(digest);
 
-    // 3 · At-a-glance stats
-    const stats = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px;' });
+    // 3 · At-a-glance stats (auto-fit so the 5th "days enrolled" tile fits a row)
+    const stats = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:18px;' });
     wrap.appendChild(stats);
 
-    // 4 · Timeline
-    wrap.appendChild(Dom.el('div', { style: 'font-size:15px;font-weight:800;color:var(--ink-900);margin:0 2px 9px;' }, "Today's timeline"));
+    // 4 · Timeline — tinted title header to pop.
+    wrap.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:800;color:#1F6080;margin:0 0 10px;background:linear-gradient(135deg,#EAF3FB,#F3F0FF);border:1px solid rgba(31,96,128,.10);padding:9px 13px;border-radius:10px;' }, "🕒 Today's timeline"));
     const tlCard = Dom.el('div', { style: card('padding:4px 14px;margin-bottom:16px;') });
     const tlBody = Dom.el('div'); tlCard.appendChild(tlBody);
-    tlBody.appendChild(Dom.el('div', { style: 'padding:20px 0;text-align:center;color:var(--ink-400);font-size:13px;' }, 'Loading…'));
+    tlBody.appendChild(Dom.el('div', { style: 'padding:20px 0;text-align:center;color:var(--ink-500);font-size:13px;' }, 'Loading…'));
     wrap.appendChild(tlCard);
+
+    // 4b · On the menu today — today's meals from the centre's published weekly
+    // menu, with a tap-through to the full week (#menu).
+    const menuCard = Dom.el('a', { href: '#menu', style: card('display:block;padding:14px;text-decoration:none;margin-bottom:16px;') });
+    menuCard.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;color:#0FA3B1;margin-bottom:8px;' }, '🍽️ ON THE MENU TODAY'));
+    const menuBody = Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' }, 'Loading…');
+    menuCard.appendChild(menuBody);
+    wrap.appendChild(menuCard);
+    (async () => {
+      try {
+        const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow);
+        const wk = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        const r = await cget(`/parent/menu?week_start=${wk}`);
+        const todayDow = ((new Date().getDay() + 6) % 7) + 1;
+        const openDays = (r && r.open_days) || [1, 2, 3, 4, 5];
+        const items = ((r && r.items) || []).filter(it => it.day_of_week === todayDow);
+        Dom.clear(menuBody);
+        if (openDays.indexOf(todayDow) === -1) {
+          menuBody.appendChild(Dom.el('div', {}, 'Centre closed today · tap to see the week →')); return;
+        }
+        if (!items.length) {
+          menuBody.appendChild(Dom.el('div', {}, (r && r.centre) ? "Today's menu isn't posted yet · tap to see the week →" : 'Tap to view the weekly menu →')); return;
+        }
+        const mealMeta = { breakfast: ['🍳', 'Breakfast'], morning_snack: ['🍎', 'Morning snack'], lunch: ['🍽️', 'Lunch'], afternoon_snack: ['🧃', 'Afternoon snack'], dinner: ['🍲', 'Dinner'] };
+        const map = {}; items.forEach(it => { map[it.meal_type] = it; });
+        ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'].forEach(mt => {
+          const it = map[mt]; if (!it) return;
+          const meta = mealMeta[mt] || ['•', mt];
+          const row = Dom.el('div', { style: 'display:flex;gap:9px;align-items:baseline;padding:5px 0;border-top:1px solid var(--ink-100);' });
+          row.appendChild(Dom.el('span', { style: 'font-size:15px;flex-shrink:0;' }, meta[0]));
+          const txt = Dom.el('div', { style: 'flex:1;min-width:0;' });
+          txt.appendChild(Dom.el('span', { style: 'font-size:13.5px;color:var(--ink-900);font-weight:600;' }, it.name));
+          if (it.allergens) txt.appendChild(Dom.el('span', { style: 'margin-left:6px;font-size:10.5px;color:#92400E;background:#FEF3C7;padding:1px 6px;border-radius:7px;' }, '⚠ ' + it.allergens));
+          row.appendChild(txt);
+          menuBody.appendChild(row);
+        });
+        menuBody.appendChild(Dom.el('div', { style: 'margin-top:8px;font-size:12px;color:#0FA3B1;font-weight:700;' }, 'View the full week →'));
+      } catch (e) { Dom.clear(menuBody); menuBody.appendChild(Dom.el('div', {}, 'Tap to view the weekly menu →')); }
+    })();
 
     // 5 · Billing quick link
     const bill = Dom.el('a', { href: '#billing', style: card('display:flex;align-items:center;gap:12px;padding:14px;text-decoration:none;margin-bottom:8px;') });
@@ -899,25 +1355,29 @@
       // filters that timeline instead of being a dead number. Tapping the active
       // tile again clears the filter.
       let activeFilter = null;
+      const _enrM = child.enrolled_at || child.enrollment_start || child.enrolled_on || child.enrollment_date || null;
+      const _enrMms = _enrM ? new Date(String(_enrM).replace(' ', 'T')).getTime() : NaN;
+      const _daysEnrM = isNaN(_enrMms) ? '—' : Math.max(0, Math.floor((Date.now() - _enrMms) / 86400000));
       const TILES = [
-        { icon: '🍽️', label: 'Meals',   types: ['meal', 'snack'] },
-        { icon: '😴', label: 'Naps',    types: ['nap_end'] },
-        { icon: '👶', label: 'Changes', types: ['diaper', 'bathroom'] },
-        { icon: '✨', label: 'Play',    types: ['activity'] },
+        { icon: '🍽️', label: 'Meals',   types: ['meal', 'snack'],      c1: '#FDBA74', c2: '#F97316', tint: '#FFF7ED', ink: '#C2410C' },
+        { icon: '😴', label: 'Naps',    types: ['nap_end'],            c1: '#A5B4FC', c2: '#6366F1', tint: '#EEF2FF', ink: '#4338CA' },
+        { icon: '👶', label: 'Changes', types: ['diaper', 'bathroom'], c1: '#7DD3FC', c2: '#0EA5E9', tint: '#ECFEFF', ink: '#0369A1' },
+        { icon: '✨', label: 'Play',    types: ['activity'],           c1: '#86EFAC', c2: '#16A34A', tint: '#F0FDF4', ink: '#15803D' },
+        { icon: '📆', label: 'Enrolled', noFilter: true, value: _daysEnrM, c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
       ];
       const tileEls = [];
       TILES.forEach((t) => {
-        const n = count(t.types);
+        const n = t.noFilter ? t.value : count(t.types);
         const el = Dom.el('button', {
           type: 'button',
-          style: card('padding:11px 4px;text-align:center;border:1.5px solid transparent;cursor:pointer;width:100%;font:inherit;'),
+          style: 'position:relative;overflow:hidden;background:' + t.tint + ';border:1.5px solid transparent;border-radius:16px;padding:12px 3px 11px;text-align:center;cursor:pointer;width:100%;font:inherit;',
         }, [
-          Dom.el('div', { style: 'font-size:19px;line-height:1;' }, t.icon),
-          Dom.el('div', { style: 'font-size:21px;font-weight:800;color:var(--brand-blue);margin-top:4px;line-height:1;' }, String(n)),
-          Dom.el('div', { style: 'font-size:10.5px;color:var(--ink-500);margin-top:3px;font-weight:600;' }, t.label),
+          Dom.el('div', { style: 'width:36px;height:36px;margin:0 auto 7px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background:linear-gradient(135deg,' + t.c1 + ',' + t.c2 + ');box-shadow:0 5px 11px -5px ' + t.c2 + ';' }, t.icon),
+          Dom.el('div', { style: 'font-size:20px;font-weight:900;line-height:1;white-space:nowrap;color:' + t.ink + ';' }, String(n)),
+          Dom.el('div', { style: 'font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:' + t.ink + ';opacity:.72;margin-top:5px;' }, t.label),
         ]);
         el.addEventListener('click', () => {
-          if (!n) return;                       // nothing logged → nothing to show
+          if (t.noFilter || !n) return;         // "days enrolled" isn't a filter; nothing logged → nothing to show
           activeFilter = (activeFilter === t.label) ? null : t.label;
           paintTiles();
           renderTimeline(activeFilter ? t.types : null, activeFilter ? t.label : null);
@@ -950,18 +1410,18 @@
           tlBody.appendChild(chip);
         }
         if (!rows.length) {
-          tlBody.appendChild(Dom.el('div', { style: 'padding:22px 0;text-align:center;color:var(--ink-400);font-size:13px;' },
+          tlBody.appendChild(Dom.el('div', { style: 'padding:22px 0;text-align:center;color:var(--ink-500);font-size:13px;' },
             types ? 'Nothing logged for this yet today.' : 'No moments logged yet today.'));
           return;
         }
         rows.forEach((e, i) => {
-          const row = Dom.el('div', { style: `display:flex;gap:12px;align-items:flex-start;padding:11px 0;${i < rows.length - 1 ? 'border-bottom:1px solid var(--ink-100);' : ''}` });
-          row.appendChild(Dom.el('div', { style: 'width:38px;height:38px;border-radius:12px;background:var(--ink-50);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' }, eventIcon(e.type)));
+          const row = Dom.el('div', { style: 'display:flex;gap:12px;align-items:flex-start;padding:10px 10px;border-radius:10px;background:' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
+          row.appendChild(Dom.el('div', { style: 'width:38px;height:38px;border-radius:12px;background:#fff;border:1px solid var(--ink-100,#f1f5f9);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' }, eventIcon(e.type)));
           const t = Dom.el('div', { style: 'flex:1;min-width:0;' });
           t.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:var(--ink-900);' }, e.display?.title || e.type));
           if (e.display?.detail) t.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:1px;' }, e.display.detail));
           row.appendChild(t);
-          row.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-400);flex-shrink:0;font-weight:600;' }, e.time_display));
+          row.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);flex-shrink:0;font-weight:600;' }, e.time_display));
           tlBody.appendChild(row);
         });
       }
@@ -969,11 +1429,13 @@
 
       const inv = (invoices.invoices || [])[0];
       Dom.clear(bill);
-      bill.appendChild(Dom.el('div', { style: 'width:40px;height:40px;border-radius:12px;background:rgba(31,96,128,.1);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;' }, '💳'));
+      bill.style.background = '#F5F3FF';
+      bill.style.border = '1px solid rgba(124,58,237,.16)';
+      bill.appendChild(Dom.el('div', { style: 'width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#C4B5FD,#7C3AED);color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;box-shadow:0 5px 11px -5px #7C3AED;' }, '💳'));
       const bt = Dom.el('div', { style: 'flex:1;' });
       if (inv) {
-        bt.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);font-weight:600;' }, inv.is_estimate ? 'Estimated this month' : 'Balance due'));
-        bt.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:var(--ink-900);' }, '$' + (inv.balance_due ?? inv.total).toFixed(2)));
+        bt.appendChild(Dom.el('div', { style: 'font-size:11px;color:#7C3AED;font-weight:800;text-transform:uppercase;letter-spacing:.4px;opacity:.85;' }, inv.is_estimate ? 'Estimated this month' : 'Balance due'));
+        bt.appendChild(Dom.el('div', { style: 'font-size:20px;font-weight:900;color:#6D28D9;' }, '$' + (inv.balance_due ?? inv.total).toFixed(2)));
       } else {
         bt.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:700;color:var(--ink-900);' }, 'Billing'));
         bt.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);' }, 'No invoices yet'));
@@ -991,7 +1453,7 @@
 
     const grid = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' });
     wrap.appendChild(grid);
-    grid.appendChild(Dom.el('div', { style: 'grid-column:1/-1;text-align:center;color:var(--ink-400);padding:20px;font-size:13px;' }, 'Loading photos…'));
+    grid.appendChild(Dom.el('div', { style: 'grid-column:1/-1;text-align:center;color:var(--ink-500);padding:20px;font-size:13px;' }, 'Loading photos…'));
     try {
       const data = await cget(`/parent/children/${child.id}/photos`);
       Dom.clear(grid);
@@ -1016,7 +1478,7 @@
         if (p.caption || p.date_display) {
           const b = Dom.el('div', { style: 'padding:8px 10px;' });
           if (p.caption) b.appendChild(Dom.el('div', { style: 'font-size:12.5px;line-height:1.35;color:var(--ink-800);' }, p.caption.replace(/^\[Demo\] /, '')));
-          if (p.date_display) b.appendChild(Dom.el('div', { style: 'font-size:11px;color:var(--ink-400);margin-top:3px;' }, p.date_display));
+          if (p.date_display) b.appendChild(Dom.el('div', { style: 'font-size:11px;color:var(--ink-500);margin-top:3px;' }, p.date_display));
           c.appendChild(b);
         }
         grid.appendChild(c);
@@ -1032,12 +1494,11 @@
     const child = state.children.find(c => c.id === state.selectedChildId);
     wrap.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:var(--ink-900);margin:2px 2px 12px;' }, 'Billing'));
     const cont = Dom.el('div'); wrap.appendChild(cont);
-    cont.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-400);padding:20px;font-size:13px;' }, 'Loading…'));
+    cont.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-500);padding:20px;font-size:13px;' }, 'Loading…'));
     try {
       const data = await cget(`/parent/children/${child.id}/invoices`);
       Dom.clear(cont);
-      if (!data.invoices || !data.invoices.length) { cont.appendChild(emptyState('📄', 'No invoices yet', 'Your monthly invoice will appear here.')); return; }
-      data.invoices.forEach(inv => {
+      (data.invoices || []).forEach(inv => {
         const c = Dom.el('div', { style: card('padding:15px;margin-bottom:12px;cursor:pointer;') });
         c.addEventListener('click', () => openInvoiceDetail(inv, child));
         const head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;' });
@@ -1068,6 +1529,10 @@
         ]));
         cont.appendChild(c);
       });
+      const hadExternal = await appendExternalInvoices(cont);
+      if (!(data.invoices || []).length && !hadExternal) {
+        cont.appendChild(emptyState('📄', 'No invoices yet', 'Your invoices will appear here.'));
+      }
     } catch (e) {
       Dom.clear(cont); cont.appendChild(emptyState('⚠️', 'Could not load billing', e.message));
     }
@@ -1097,7 +1562,7 @@
     sum.appendChild(Dom.el('span', { style: `display:inline-block;background:${sc};color:#fff;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;` }, inv.status_label || inv.status));
     sum.appendChild(Dom.el('div', { style: 'font-size:34px;font-weight:800;color:var(--ink-900);line-height:1;' }, money(inv.balance_due > 0 ? inv.balance_due : inv.total)));
     sum.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-top:5px;' }, inv.balance_due > 0 ? `Balance due · by ${inv.due_date}` : 'Total'));
-    if (child) sum.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-400);margin-top:6px;' }, `${child.display_name} · ${inv.issue_date ? 'Issued ' + inv.issue_date : ''}`));
+    if (child) sum.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:6px;' }, `${child.display_name} · ${inv.issue_date ? 'Issued ' + inv.issue_date : ''}`));
     body.appendChild(sum);
 
     // Breakdown
@@ -1162,7 +1627,7 @@
       Dom.el('span', {}, "Messages go to your child's room team at the centre — your educators and centre director all see and can reply."),
     ]));
     const listWrap = Dom.el('div'); wrap.appendChild(listWrap);
-    listWrap.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-400);padding:20px;font-size:13px;' }, 'Loading…'));
+    listWrap.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-500);padding:20px;font-size:13px;' }, 'Loading…'));
 
     let data;
     try { data = await cget('/parent/messages'); }
@@ -1182,12 +1647,12 @@
       const mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
       mid.appendChild(Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
         Dom.el('div', { style: 'font-weight:700;font-size:14.5px;color:var(--ink-900);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, title),
-        Dom.el('div', { style: 'font-size:11px;color:var(--ink-400);flex-shrink:0;' }, c.last_message_display || ''),
+        Dom.el('div', { style: 'font-size:11px;color:var(--ink-500);flex-shrink:0;' }, c.last_message_display || ''),
       ]));
       if (subtitle) mid.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-top:1px;' }, subtitle));
       if (c.last_message_preview) {
         const prev = c.last_message_preview.length > 54 ? c.last_message_preview.slice(0, 54) + '…' : c.last_message_preview;
-        mid.appendChild(Dom.el('div', { style: `font-size:12.5px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${c.unread_count > 0 ? 'color:var(--ink-800);font-weight:600;' : 'color:var(--ink-400);'}` }, prev));
+        mid.appendChild(Dom.el('div', { style: `font-size:12.5px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${c.unread_count > 0 ? 'color:var(--ink-800);font-weight:600;' : 'color:var(--ink-500);'}` }, prev));
       }
       row.appendChild(mid);
       if (c.unread_count > 0) row.appendChild(Dom.el('div', { style: 'min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--brand-green);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;' }, String(c.unread_count)));
@@ -1199,15 +1664,25 @@
   // Full-screen conversation thread. Uses the .kt-thread-* class names so the
   // mobile stylesheet's full-height flex treatment (and nav-hide) apply.
   // A small avatar element for a message sender (photo or coloured initials).
-  function msgAvatar(name, photoUrl) {
+  function msgAvatar(name, photoUrl, color) {
     const holder = document.createElement('span');
-    if (window.KT && KT.avatar) {
-      holder.innerHTML = KT.avatar(name || '?', { size: 30, photoUrl: photoUrl ? absUrl(photoUrl) : null });
+    // A real photo when we have one; otherwise a coloured initial using the
+    // SAME per-sender colour as the name label + bubble border (see senderColor).
+    if (photoUrl && window.KT && KT.avatar) {
+      holder.innerHTML = KT.avatar(name || '?', { size: 30, photoUrl: absUrl(photoUrl) });
       return holder.firstElementChild || holder;
     }
     holder.textContent = (name || '?').charAt(0).toUpperCase();
-    holder.style.cssText = 'width:30px;height:30px;border-radius:50%;background:#159FB4;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;';
+    holder.style.cssText = 'width:30px;height:30px;border-radius:50%;background:' + (color || '#159FB4') + ';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;';
     return holder;
+  }
+  // Deterministic colour per participant name — same person, same colour. Kept
+  // byte-identical to screen-chat.js so a person looks the same in both chats.
+  function senderColor(s) {
+    var pal = ['#1F6FB2', '#0FA3B1', '#E0699A', '#7C3AED', '#F59E0B', '#10B981', '#EF6C4D', '#0891B2', '#DB2777', '#4F8A3D'];
+    s = String(s || ''); var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return pal[h % pal.length];
   }
   function ktToast(icon, msg) {
     try { if (window.KT && KT.toast) return KT.toast(icon, msg, '', '#159FB4'); } catch (e) {}
@@ -1215,6 +1690,8 @@
     document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
   }
   const KT_EMOJIS = ['😀','😄','😊','🥰','😍','😘','😉','🤗','🙂','😢','😭','😔','😴','🤒','🤧','🥳','🎉','👍','👏','🙏','💚','❤️','🔥','✨','⭐','🌟','👋','🤝','💪','🙌','👶','🍼','🧸','🎨','📸','🎵','☀️','🌈','🍎','🥪','💤','✅','❓','❗'];
+
+  const QUICK_REACTS = ['👍','❤️','😂','😮','😢','🙏'];
 
   function openThreadMobile(convo) {
     const appMain = document.getElementById('appMain');
@@ -1226,9 +1703,15 @@
 
     const tw = Dom.el('div', { style: 'animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
 
-    const header = Dom.el('div', { class: 'kt-thread-header', style: 'display:flex;align-items:center;gap:8px;padding:12px 12px;border-bottom:1px solid var(--ink-100);background:#fff;' });
+    // Tinted header — matches the educator chat's tinted title bar so the two
+    // chats look like one product.
+    const header = Dom.el('div', { class: 'kt-thread-header', style: 'display:flex;align-items:center;gap:8px;padding:12px 12px;border-bottom:1px solid rgba(31,96,128,.12);background:linear-gradient(135deg,#EAF3FB,#F3F0FF);' });
     const back = Dom.el('button', { type: 'button', style: 'background:none;border:none;font-size:26px;color:#159FB4;cursor:pointer;padding:0 6px;line-height:1;flex-shrink:0;' }, '‹');
-    const closeThread = () => { try { if (pollTimer) clearInterval(pollTimer); } catch (e) {} if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove(); };
+    const closeThread = () => {
+      try { if (pollTimer) clearInterval(pollTimer); } catch (e) {}
+      if (tw.parentNode && tw.parentNode.classList && tw.parentNode.classList.contains('kt-cd-body')) { KT.ChatDock.close(); return; }
+      if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove();
+    };
     back.addEventListener('click', closeThread);
     header.appendChild(back);
     const convoTitle = convo.child_name || convo.subject || 'Conversation';
@@ -1253,7 +1736,7 @@
     tw.appendChild(header);
 
     const body = Dom.el('div', { class: 'kt-thread-body', style: 'padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--ink-50);' });
-    body.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-400);font-size:13px;padding:20px;' }, 'Loading…'));
+    body.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-500);font-size:13px;padding:20px;' }, 'Loading…'));
     tw.appendChild(body);
 
     // Emoji panel (hidden until toggled).
@@ -1273,12 +1756,19 @@
     attach.addEventListener('click', () => fileInput.click());
     const input = Dom.el('input', { class: 'kt-compose-input', type: 'text', placeholder: 'Message…', style: 'flex:1;min-width:0;padding:13px 15px;border:1px solid var(--ink-200);border-radius:24px;font-size:16px;min-height:46px;box-sizing:border-box;' });
     // One button that is Mic when empty, Send when there's text, Stop while recording.
-    const action = Dom.el('button', { type: 'button', style: 'background:#159FB4;color:#fff;border:none;width:46px;height:46px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;' }, '🎤');
+    const action = Dom.el('button', { type: 'button', style: 'background:#159FB4;color:#fff;border:none;width:46px;height:46px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;' }, '🎤');
     compose.appendChild(emojiBtn); compose.appendChild(attach); compose.appendChild(input); compose.appendChild(fileInput); compose.appendChild(action);
     tw.appendChild(compose);
 
-    appMain.appendChild(tw);
-    if (window.KT && KT.pushOverlay) KT.pushOverlay(tw, closeThread);
+    // Desktop: host the thread in the persistent, minimisable chat dock (survives
+    // navigation, flashes on new messages). Phones keep the full-screen takeover.
+    if (KT.ChatDock && KT.ChatDock.enabled()) {
+      KT.ChatDock.contentEl().appendChild(tw);
+      KT.ChatDock.show(convo.child_name || convo.subject || 'Messages', function () { try { if (pollTimer) clearInterval(pollTimer); } catch (e) {} });
+    } else {
+      appMain.appendChild(tw);
+      if (window.KT && KT.pushOverlay) KT.pushOverlay(tw, closeThread);
+    }
 
     function insertEmoji(em) {
       const s = input.selectionStart != null ? input.selectionStart : input.value.length;
@@ -1298,8 +1788,8 @@
     function updateAction() {
       if (recorder && recorder.state === 'recording') { action.textContent = '⏹'; action.style.background = '#EF4444'; return; }
       if (editingId) { action.textContent = '✓'; action.style.background = '#159FB4'; return; }
-      if (input.value.trim()) { action.textContent = '➤'; action.style.background = '#159FB4'; }
-      else { action.textContent = '🎤'; action.style.background = '#159FB4'; }
+      if (input.value.trim()) { action.textContent = '➤'; action.style.background = '#159FB4'; action.style.paddingLeft = '2px'; return; }
+      action.textContent = '🎤'; action.style.background = '#159FB4'; action.style.paddingLeft = '0';
     }
     input.addEventListener('input', updateAction);
     editBannerX.addEventListener('click', () => cancelEdit());
@@ -1366,9 +1856,42 @@
       startRec();
     });
 
+    // -- Emoji reactions: work on ANY message, incl. the other person's. --
+    var currentMsgs = [];
+    async function doReact(m, emoji) {
+      try {
+        const res = await Api.post('/parent/messages/' + convo.id + '/react/' + m.id, { emoji: emoji });
+        m.reactions = (res && res.reactions) || [];
+        const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 60;
+        const prevTop = body.scrollTop;
+        renderMsgs(currentMsgs);
+        body.scrollTop = atBottom ? body.scrollHeight : prevTop;
+      } catch (e) { ktToast('⚠️', (e && e.message) || 'Could not react'); }
+    }
+    function closeReactPicker() { document.querySelectorAll('.kt-react-pop').forEach((p) => p.remove()); }
+    function showReactPicker(anchor, m) {
+      closeReactPicker();
+      const pop = Dom.el('div', { class: 'kt-react-pop', style: 'position:fixed;z-index:15000;display:flex;gap:2px;background:#fff;border:1px solid rgba(0,0,0,.12);border-radius:22px;padding:4px 6px;box-shadow:0 8px 24px rgba(0,0,0,.18);' });
+      QUICK_REACTS.forEach((em) => {
+        const eb = Dom.el('button', { type: 'button', style: 'background:none;border:none;font-size:22px;line-height:1;padding:4px;cursor:pointer;border-radius:50%;' }, em);
+        eb.addEventListener('click', (ev) => { ev.stopPropagation(); closeReactPicker(); doReact(m, em); });
+        pop.appendChild(eb);
+      });
+      document.body.appendChild(pop);
+      const r = anchor.getBoundingClientRect();
+      let top = r.top - 46; if (top < 8) top = r.bottom + 6;
+      const pw = pop.offsetWidth || 220;
+      let left = r.left - 20;
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
+      if (left < 8) left = 8;
+      pop.style.top = top + 'px'; pop.style.left = left + 'px';
+      setTimeout(() => document.addEventListener('click', closeReactPicker, { once: true }), 0);
+    }
+
     function renderMsgs(msgs) {
+        currentMsgs = msgs;
         Dom.clear(body);
-        if (!msgs.length) { body.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-400);font-size:13px;padding:24px;' }, 'No messages yet — say hello 👋')); return; }
+        if (!msgs.length) { body.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-500);font-size:13px;padding:24px;' }, 'No messages yet — say hello 👋')); return; }
         msgs.forEach(m => {
           // System messages (e.g. a nudge) render as a centered pill in the history.
           if (m.is_system) {
@@ -1376,10 +1899,13 @@
             return;
           }
           const mine = m.is_mine;
+          const col = senderColor(m.sender_name);
           const row = Dom.el('div', { style: `display:flex;gap:6px;align-items:flex-end;max-width:100%;${mine ? 'flex-direction:row-reverse;' : ''}` });
-          row.appendChild(msgAvatar(m.sender_name, m.sender_photo_url));
-          const b = Dom.el('div', { style: `position:relative;max-width:74%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.4;${mine ? 'background:#E1F3F6;color:#0D1B2A;border-bottom-right-radius:5px;' : 'background:#fff;color:var(--ink-900);border-bottom-left-radius:5px;box-shadow:0 1px 3px rgba(15,23,42,.08);'}` });
-          if (!mine) b.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#159FB4;margin-bottom:3px;' }, m.sender_name));
+          if (!mine) row.appendChild(msgAvatar(m.sender_name, m.sender_photo_url, col));
+          // Outgoing = teal brand tint (right); incoming = violet brand tint (left).
+          // Two distinct filled bubbles, like a real chat.
+          const b = Dom.el('div', { style: `position:relative;max-width:74%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.4;${mine ? 'background:#DCF1F4;color:#0D1B2A;border-bottom-right-radius:5px;' : 'background:#EFEAFB;color:#1E1B34;border-bottom-left-radius:5px;'}` });
+          if (!mine) b.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:' + col + ';margin-bottom:3px;' }, m.sender_name));
           if (m.deleted) {
             b.appendChild(Dom.el('div', { style: `font-style:italic;opacity:.8;` }, '🚫 Message deleted'));
           } else {
@@ -1396,8 +1922,15 @@
               }
             });
           }
-          const foot = Dom.el('div', { style: `display:flex;align-items:center;gap:6px;font-size:10.5px;margin-top:3px;${mine ? 'color:rgba(13,27,42,.5);justify-content:flex-end;' : 'color:var(--ink-400);'}` });
+          const foot = Dom.el('div', { style: `display:flex;align-items:center;gap:6px;font-size:10.5px;margin-top:3px;${mine ? 'color:rgba(13,27,42,.5);justify-content:flex-end;' : 'color:var(--ink-500);'}` });
           foot.appendChild(Dom.el('span', {}, m.time_display + (m.edited ? ' · edited' : '')));
+          // Any non-deleted message can be reacted to — including the OTHER
+          // person's (previously you could only act on your own messages).
+          if (!m.deleted && !m.is_system) {
+            const reactBtn = Dom.el('button', { type: 'button', title: 'React', style: 'background:none;border:none;color:inherit;opacity:.7;font-size:14px;line-height:1;cursor:pointer;padding:0 2px;' }, '☺');
+            reactBtn.addEventListener('click', (ev) => { ev.stopPropagation(); showReactPicker(reactBtn, m); });
+            foot.appendChild(reactBtn);
+          }
           // Own, non-deleted messages get an edit/delete menu.
           if (mine && !m.deleted && (m.can_edit || m.can_delete)) {
             const menuBtn = Dom.el('button', { type: 'button', title: 'Options', style: 'background:none;border:none;color:inherit;opacity:.85;font-size:15px;line-height:1;cursor:pointer;padding:0 2px;' }, '⋯');
@@ -1405,6 +1938,16 @@
             foot.appendChild(menuBtn);
           }
           b.appendChild(foot);
+          // Existing reactions as tappable chips (tap your own to remove it).
+          if (m.reactions && m.reactions.length) {
+            const rx = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;' });
+            m.reactions.forEach((rr) => {
+              const chip = Dom.el('button', { type: 'button', style: 'display:inline-flex;align-items:center;gap:3px;border:1px solid ' + (rr.mine ? '#159FB4' : 'rgba(0,0,0,.12)') + ';background:' + (rr.mine ? '#DCF1F4' : '#fff') + ';border-radius:12px;padding:1px 7px;font-size:12px;cursor:pointer;line-height:1.6;' }, rr.emoji + (rr.count > 1 ? ' ' + rr.count : ''));
+              chip.addEventListener('click', (ev) => { ev.stopPropagation(); doReact(m, rr.emoji); });
+              rx.appendChild(chip);
+            });
+            b.appendChild(rx);
+          }
           row.appendChild(b);
           body.appendChild(row);
         });
@@ -1412,6 +1955,42 @@
     // Signature of the message list — lets the poller tell when something changed.
     function sigOf(msgs) { var last = msgs[msgs.length - 1]; return msgs.length + '|' + (last ? (last.id + ':' + (last.edited ? 1 : 0) + ':' + (last.deleted ? 1 : 0)) : ''); }
     let lastSig = null, pollTimer = null, lastLen = 0;
+    // ── Live "… is typing" indicator (driven by md.typing_users from the poll). ──
+    var typingEl = null;
+    function setTyping(names) {
+      if (!names || !names.length) { if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl); typingEl = null; return; }
+      var label = names.length === 1 ? (names[0].split(' ')[0] + ' is typing') : 'Several people are typing';
+      if (!document.getElementById('kt-typing-kf')) {
+        var st = document.createElement('style'); st.id = 'kt-typing-kf';
+        st.textContent = '@keyframes kt-typedot{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}';
+        document.head.appendChild(st);
+      }
+      if (!typingEl) {
+        typingEl = Dom.el('div', { style: 'display:flex;align-items:flex-end;gap:6px;max-width:100%;margin-top:2px;' });
+        var bub = Dom.el('div', { style: 'background:#EFEAFB;border-radius:16px;border-bottom-left-radius:5px;padding:10px 14px;display:inline-flex;align-items:center;gap:9px;' });
+        var dots = Dom.el('div', { style: 'display:inline-flex;gap:4px;' });
+        for (var i = 0; i < 3; i++) dots.appendChild(Dom.el('span', { style: 'width:6px;height:6px;border-radius:50%;background:#7C3AED;display:inline-block;animation:kt-typedot 1.2s infinite;animation-delay:' + (i * 0.2) + 's;' }));
+        bub.appendChild(dots);
+        bub.appendChild(Dom.el('span', { class: 'kt-typing-lbl', style: 'font-size:12px;font-weight:700;color:#6D28D9;' }, label));
+        typingEl.appendChild(bub);
+      } else {
+        var l = typingEl.querySelector('.kt-typing-lbl'); if (l) l.textContent = label;
+      }
+      // renderMsgs clears `body`, so always re-append the indicator as the last row.
+      if (typingEl.parentNode !== body) body.appendChild(typingEl);
+      else body.appendChild(typingEl);
+      var atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 80;
+      if (atBottom) body.scrollTop = body.scrollHeight;
+    }
+    // Throttled "I'm typing" ping to the server while composing.
+    var lastTypingPing = 0;
+    input.addEventListener('input', function () {
+      if (!childId) return;
+      var now = Date.now();
+      if (now - lastTypingPing < 2500) return;
+      lastTypingPing = now;
+      Api.post('/parent/messages/' + convo.id + '/typing', {}).catch(function () {});
+    });
     const load = async () => {
       try {
         const md = await Api.get('/parent/messages/' + convo.id);
@@ -1433,17 +2012,23 @@
         const md = await Api.get('/parent/messages/' + convo.id);
         const msgs = md.messages || [];
         const s = sigOf(msgs);
-        if (s === lastSig) return;
-        // A genuinely new message from the other side → play the loud chime.
-        const grew = msgs.length > lastLen;
-        const last = msgs[msgs.length - 1];
-        if (grew && last && !last.is_mine) { try { if (window.KT && KT.playPing) KT.playPing(); } catch (e) {} }
-        lastLen = msgs.length;
-        const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 60;
-        const prevTop = body.scrollTop;
-        lastSig = s;
-        renderMsgs(msgs);
-        body.scrollTop = atBottom ? body.scrollHeight : prevTop;
+        if (s !== lastSig) {
+          // A genuinely new message from the other side → play the loud chime.
+          const grew = msgs.length > lastLen;
+          const last = msgs[msgs.length - 1];
+          if (grew && last && !last.is_mine) {
+            try { if (window.KT && KT.playPing) KT.playPing(); } catch (e) {}
+            try { if (KT.ChatDock) KT.ChatDock.flashIncoming(); } catch (e) {}   // flash the dock if minimised
+          }
+          lastLen = msgs.length;
+          const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 60;
+          const prevTop = body.scrollTop;
+          lastSig = s;
+          renderMsgs(msgs);
+          body.scrollTop = atBottom ? body.scrollHeight : prevTop;
+        }
+        // Always refresh the typing indicator (independent of message changes).
+        setTyping(md.typing_users || []);
       } catch (e) {}
     };
     if (!childId) { input.disabled = true; input.placeholder = 'Read-only conversation'; action.disabled = true; attach.disabled = true; emojiBtn.disabled = true; }
@@ -1467,8 +2052,22 @@
       finally { action.disabled = false; attach.disabled = false; }
     };
     fileInput.addEventListener('change', () => { if (fileInput.files && fileInput.files[0]) { doSend(fileInput.files[0]); fileInput.value = ''; } });
+    // Paste a screenshot / image straight into the chat (Ctrl/⌘-V) → sends it.
+    input.addEventListener('paste', (ev) => {
+      const items = (ev.clipboardData && ev.clipboardData.items) || [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file' && /^image\//.test(items[i].type)) {
+          const blob = items[i].getAsFile();
+          if (!blob) continue;
+          ev.preventDefault();
+          const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+          doSend(new File([blob], 'pasted-' + Date.now() + '.' + ext, { type: blob.type }));
+          return;
+        }
+      }
+    });
     compose.addEventListener('submit', (ev) => { ev.preventDefault(); if (input.value.trim()) doSend(null); });
-    load().then(() => { pollTimer = setInterval(poll, 4000); });
+    load().then(() => { pollTimer = setInterval(poll, 10000); });
   }
 
   // Full-screen "compose a new message" — pick a child, write, optionally attach a photo.

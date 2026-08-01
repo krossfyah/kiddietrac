@@ -185,4 +185,64 @@ final class MediaController extends Controller
             ->where('centre_id', $family->centre_id)
             ->exists();
     }
+
+    // ---------------------------------------------------------------- Authenticated media proxy
+    // Photos live on external CDNs / storage that do NOT send CORS headers, so the
+    // browser can DISPLAY them in an <img> but the app's fetch() cannot read the bytes
+    // to trigger a Save (this is why parent photo "download" did nothing while payslips
+    // — which the API itself serves — worked). This streams a media URL back THROUGH the
+    // API (same-origin to the app, with the standard CORS + Content-Disposition:
+    // attachment), so the blob download works everywhere, exactly like the payslip PDF.
+    public function download(Request $request)
+    {
+        $url  = (string) $request->query('url', '');
+        $name = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) $request->query('name', 'photo'));
+        if ($name === '' || trim($name, '-') === '') {
+            $name = 'photo';
+        }
+
+        $parts = parse_url($url);
+        if (! $parts || ! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true) || empty($parts['host'])) {
+            return response()->json(['message' => 'Invalid URL.'], 422);
+        }
+        // SSRF guard: resolve the host and refuse private / reserved ranges.
+        $ip = @gethostbyname($parts['host']);
+        if (! filter_var($ip, FILTER_VALIDATE_IP)
+            || ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return response()->json(['message' => 'Host not allowed.'], 422);
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4, // this host has no IPv6 route
+            CURLOPT_USERAGENT      => 'KiddieTrac/1.0 (+media-proxy)',
+        ]);
+        $body   = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $ctype  = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+
+        if ($body === false || $status < 200 || $status >= 400) {
+            return response()->json(['message' => 'Could not fetch the file.'], 502);
+        }
+        if ($ctype && stripos($ctype, 'image/') !== 0) {
+            return response()->json(['message' => 'Not an image.'], 415);
+        }
+        if (! preg_match('/\.(jpg|jpeg|png|webp|gif)$/i', $name)) {
+            $ext = stripos($ctype, 'png') !== false ? 'png'
+                : (stripos($ctype, 'webp') !== false ? 'webp'
+                : (stripos($ctype, 'gif') !== false ? 'gif' : 'jpg'));
+            $name .= '.' . $ext;
+        }
+
+        return response($body, 200, [
+            'Content-Type'        => $ctype ?: 'image/jpeg',
+            'Content-Disposition' => 'attachment; filename="' . $name . '"',
+            'Cache-Control'       => 'private, max-age=0',
+        ]);
+    }
 }
