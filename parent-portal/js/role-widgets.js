@@ -11,13 +11,28 @@
      KT.RoleWidgets.mount(main, { prepend: false });  // bottom
 
    v22p35 changes:
-     - Insert AFTER the .kt-hero / .auth-greeting banner rather than
-       above it. Previously widgets pushed the goodnight greeting
-       below the fold.
-     - Glass-card design with subtle gradient, big icon bubble,
-       larger value typography, animated hover lift.
-     - Skip silently when the endpoint returns no cards (agency_admin
-       + platform_admin already have richer widget systems).
+     - Insert AFTER the .kt-hero / .auth-greeting banner rather than above
+       it. Glass-card design, big icon bubble, larger value typography.
+     - Skip silently when the endpoint returns no cards.
+
+   2026-07-20 "cards pop in after everything else" + "no cards after
+   Inbox→Home" fix — REWRITTEN to be event-driven instead of timer-raced:
+     The old code waited a blind 350ms then fetched then spliced the strip
+     in, so the stat cards always landed ~1s after the hero/buttons with a
+     layout shift. The first rAF rewrite raced the other way — it fired the
+     instant it saw ANY hero, which right after a nav is the OUTGOING
+     screen's hero, so it mounted the strip, Home re-rendered and wiped it,
+     and the cards only came back if the network fetch happened to land in a
+     still-attached container (on some paths it didn't → NO cards at all).
+     Now the strip is driven by a MutationObserver on #appMain:
+       - Whenever Home is actually rendered (its hero exists) and no strip is
+         present, we paint one IMMEDIATELY from a per-role sessionStorage
+         CACHE (real cards, instant) or a same-height skeleton (cold cache).
+       - This self-heals across re-renders: if Home re-renders and drops the
+         strip, the observer re-paints it the same frame.
+       - The network refresh is throttled and always targets the LIVE Home
+         container (re-found on completion), swapping in place only when the
+         value-signature changed — so it can never strand the cards.
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -26,41 +41,45 @@
   var Api = KT.Api;
   var Dom = KT.Dom;
 
+  var HERO_SEL = '.kt-hero, .auth-greeting, .auth-hero, [data-hero], .hero-banner';
+
   // Install styles once
   function installStyles() {
     if (document.getElementById('kt-role-widget-style')) return;
     var s = document.createElement('style');
     s.id = 'kt-role-widget-style';
+    // v23 (2026-07-20): unified with the portal-wide card theme — tinted card,
+    // gradient CIRCULAR icon badge, big accent number, hover lift. (Was a glass
+    // card with a top accent bar; now matches the agency/director/parent tiles.)
     s.textContent =
-      '.kt-rw-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:14px 0 18px;}' +
-      '.kt-rw-card{position:relative;background:linear-gradient(135deg,#FFFFFF 0%,#F8FAFC 100%);border-radius:16px;padding:18px 18px 16px;box-shadow:0 1px 3px rgba(15,23,42,.06),0 4px 12px rgba(15,23,42,.04);overflow:hidden;transition:transform .18s ease,box-shadow .18s ease;border:1px solid rgba(15,23,42,.04);}' +
-      '.kt-rw-card::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:var(--kt-rw-accent,#1F6080);}' +
-      '.kt-rw-card::after{content:"";position:absolute;top:-30px;right:-30px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle, color-mix(in srgb, var(--kt-rw-accent,#1F6080) 18%, transparent) 0%, transparent 70%);pointer-events:none;}' +
-      '.kt-rw-card:hover{transform:translateY(-3px);box-shadow:0 4px 8px rgba(15,23,42,.07),0 12px 28px rgba(15,23,42,.08);}' +
-      '.kt-rw-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;position:relative;z-index:1;}' +
-      '.kt-rw-label{font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1.2px;text-transform:uppercase;}' +
-      '.kt-rw-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;background:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 14%, white);color:var(--kt-rw-accent,#1F6080);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--kt-rw-accent,#1F6080) 22%, transparent);}' +
-      '.kt-rw-value{font-size:30px;font-weight:800;color:#0F172A;line-height:1.05;letter-spacing:-0.3px;position:relative;z-index:1;font-feature-settings:"tnum";}' +
-      '.kt-rw-hint{font-size:12px;color:#64748B;margin-top:4px;position:relative;z-index:1;line-height:1.35;}' +
-      // Linked cards: look and behave tappable (they were plain divs before).
+      '.kt-rw-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 18px;}' +
+      '.kt-rw-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:11px;background:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 8%, #ffffff);border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:12px 13px;transition:transform .15s ease, box-shadow .15s ease;}' +
+      '.kt-rw-body{flex:1 1 auto;min-width:0;}' +
+      '.kt-rw-card:hover{transform:translateY(-3px);box-shadow:0 14px 24px -14px rgba(15,23,42,.28);}' +
+      '.kt-rw-icon{width:38px;height:38px;flex:0 0 auto;align-self:center;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;margin:0;background:linear-gradient(135deg, color-mix(in srgb, var(--kt-rw-accent,#1F6080) 55%, #ffffff), var(--kt-rw-accent,#1F6080));box-shadow:0 6px 13px -6px var(--kt-rw-accent,#1F6080);}' +
+      '.kt-rw-value{font-size:21px;font-weight:900;line-height:1.1;letter-spacing:-0.3px;color:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 80%, #0f172a);font-feature-settings:"tnum";white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+      '.kt-rw-label{font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 80%, #0f172a);opacity:.72;margin-top:3px;}' +
+      '.kt-rw-hint{font-size:11.5px;color:#64748B;margin-top:2px;line-height:1.35;}' +
       '.kt-rw-link{display:block;text-decoration:none;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}' +
       '.kt-rw-link:active{transform:scale(.985);}' +
-      '.kt-rw-go{position:relative;z-index:1;margin-top:8px;font-size:11.5px;font-weight:800;color:var(--kt-rw-accent,#1F6080);opacity:.9;}';
+      '.kt-rw-go{margin-top:8px;font-size:11.5px;font-weight:800;color:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 80%, #0f172a);opacity:.9;}' +
+      // Skeleton placeholder — reserves the strip's space on a cold cache.
+      '.kt-rw-card.kt-rw-skel{min-height:104px;background:#FFFFFF;}' +
+      '.kt-rw-skel-line{border-radius:7px;background:linear-gradient(90deg,#EEF2F6 25%,#E2E8F0 37%,#EEF2F6 63%);background-size:400% 100%;animation:kt-rw-shimmer 1.3s ease infinite;}' +
+      '.kt-rw-skel-label{width:52%;height:11px;margin-bottom:16px;}' +
+      '.kt-rw-skel-value{width:40%;height:26px;}' +
+      '@keyframes kt-rw-shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}' +
+      '@media (prefers-reduced-motion: reduce){.kt-rw-skel-line{animation:none;}}';
     document.head.appendChild(s);
   }
 
-  // Where each stat card goes when tapped. A number with no way to see what's
-  // behind it is a dead end — "Signed in now: 0/9" should open the roster. The
-  // destination depends on the role (a director's Children screen is #children,
-  // an agency admin's is #admin-children), and a widget with no sensible
-  // destination for that role stays a plain, non-clickable card rather than
-  // becoming a link to a screen that doesn't exist.
+  // Where each stat card goes when tapped (role-dependent).
   var WIDGET_LINKS = {
     guardian: {
-      'today-status': 'today', 'balance': 'billing', 'photos-week': 'photos', 'children-count': 'today',
+      'today-status': 'today', 'balance': 'billing', 'photos-week': 'photos', 'children-count': 'today', 'open-tasks': 'my-tasks',
     },
     educator: {
-      'signed-in': 'today', 'meds-today': 'medications', 'observations': 'observations', 'enrolled': 'children',
+      'signed-in': 'today', 'meds-today': 'medications', 'observations': 'observations', 'enrolled': 'children', 'my-hours': 'my-hours', 'open-tasks': 'my-tasks',
     },
     centre_director: {
       'capacity': 'children', 'open-invoices': 'billing-setup', 'missing-checkin': 'today', 'enrolled-count': 'children',
@@ -84,113 +103,201 @@
     } catch (e) { return ''; }
   }
 
+  // ── Per-role widget cache (sessionStorage) ────────────────────────────
+  function cacheKey(role) { return 'kt_rw_cache_' + (role || 'x'); }
+  function readCache(role) {
+    try {
+      var raw = sessionStorage.getItem(cacheKey(role));
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      return (o && o.widgets && o.widgets.length) ? o : null;
+    } catch (e) { return null; }
+  }
+  function writeCache(role, data) {
+    try { sessionStorage.setItem(cacheKey(role), JSON.stringify({ widgets: data.widgets, role: data.role || role })); } catch (e) {}
+  }
+  function sigOf(widgets) {
+    return JSON.stringify((widgets || []).map(function (w) { return [w.id, w.value, w.hint]; }));
+  }
+
   function renderStrip(widgets, role) {
     installStyles();
     role = role || roleOf();
     var strip = Dom.el('div', { class: 'kt-role-widget-strip kt-rw-strip' });
+    strip.setAttribute('data-sig', sigOf(widgets));
     widgets.forEach(function (w) {
       var accent = w.accent || '#1F6080';
       var hash = linkFor(role, w.id);
-      // An <a> keeps it keyboard-focusable and long-pressable, and the shell
-      // routes on hashchange, so no click handler is needed.
       var card = hash
         ? Dom.el('a', { class: 'kt-rw-card kt-rw-link', href: '#' + hash, style: '--kt-rw-accent:' + accent + ';' })
         : Dom.el('div', { class: 'kt-rw-card', style: '--kt-rw-accent:' + accent + ';' });
-      var head = Dom.el('div', { class: 'kt-rw-head' });
-      head.appendChild(Dom.el('div', { class: 'kt-rw-label' }, w.label || ''));
-      if (w.icon) head.appendChild(Dom.el('div', { class: 'kt-rw-icon' }, w.icon));
-      card.appendChild(head);
-      card.appendChild(Dom.el('div', { class: 'kt-rw-value' }, String(w.value == null ? '—' : w.value)));
-      if (w.hint) card.appendChild(Dom.el('div', { class: 'kt-rw-hint' }, w.hint));
-      if (hash) card.appendChild(Dom.el('div', { class: 'kt-rw-go' }, 'View ›'));
+      // Icon and text SIDE BY SIDE: the badge sits to the left, everything else stacks
+      // in a body column to its right — tighter, less dead space (was icon-over-text).
+      if (w.icon) card.appendChild(Dom.el('div', { class: 'kt-rw-icon' }, w.icon));
+      var body = Dom.el('div', { class: 'kt-rw-body' });
+      body.appendChild(Dom.el('div', { class: 'kt-rw-value' }, String(w.value == null ? '—' : w.value)));
+      body.appendChild(Dom.el('div', { class: 'kt-rw-label' }, w.label || ''));
+      if (w.hint) body.appendChild(Dom.el('div', { class: 'kt-rw-hint' }, w.hint));
+      if (hash) body.appendChild(Dom.el('div', { class: 'kt-rw-go' }, 'View ›'));
+      card.appendChild(body);
       strip.appendChild(card);
     });
     return strip;
   }
 
-  // Find the right place to drop the strip in the role's dashboard.
-  // Prefer the FIRST hero-like banner (kt-hero, auth-greeting, .hero, [data-hero]);
-  // insert immediately AFTER it so the greeting/photo banner stays on top.
-  function findInsertionPoint(container) {
-    var hero = container.querySelector('.kt-hero, .auth-greeting, .auth-hero, [data-hero], .hero-banner');
-    return hero || null;
+  function renderSkeleton(count) {
+    installStyles();
+    var strip = Dom.el('div', { class: 'kt-role-widget-strip kt-rw-strip kt-rw-skeleton' });
+    for (var i = 0; i < count; i++) {
+      var card = Dom.el('div', { class: 'kt-rw-card kt-rw-skel' });
+      card.appendChild(Dom.el('div', { class: 'kt-rw-skel-line kt-rw-skel-label' }));
+      card.appendChild(Dom.el('div', { class: 'kt-rw-skel-line kt-rw-skel-value' }));
+      strip.appendChild(card);
+    }
+    return strip;
   }
 
-  var mounting = false;
-  function mount(container, opts) {
-    if (!container || !Api) return;
+  // ── DOM helpers ───────────────────────────────────────────────────────
+  function appMain() { return document.getElementById('appMain'); }
+  function heroIn(root) { return root ? root.querySelector(HERO_SEL) : null; }
+  // The element the strip lives in: the hero's parent (so it sits right after
+  // the banner), else #appMain. Always recomputed against the LIVE DOM.
+  function containerFor() {
+    var m = appMain(); if (!m) return null;
+    var h = heroIn(m);
+    return h ? h.parentElement : m;
+  }
+  function clearAllStrips() {
+    var m = appMain(); if (!m) return;
+    [].forEach.call(m.querySelectorAll('.kt-role-widget-strip'), function (s) { s.remove(); });
+  }
+  function currentStrip() {
+    var m = appMain(); return m ? m.querySelector('.kt-role-widget-strip') : null;
+  }
+  function placeStrip(container, strip, opts) {
     opts = opts || {};
-    // De-dupe: drop any prior strip first (handles re-renders)
-    var existing = container.querySelector('.kt-role-widget-strip');
-    if (existing) existing.remove();
-    // The check above happens BEFORE the fetch, so two mounts issued inside the
-    // same request window both passed it and both inserted — two strips. Hold a
-    // flag across the async gap, and sweep any strays right before inserting.
-    if (mounting) return;
-    mounting = true;
+    if (opts.prepend === true) { container.insertBefore(strip, container.firstChild); return; }
+    if (opts.prepend === false) { container.appendChild(strip); return; }
+    var hero = container.querySelector(HERO_SEL);
+    if (hero && hero.parentNode === container) { hero.insertAdjacentElement('afterend', strip); }
+    else if (hero) { hero.insertAdjacentElement('afterend', strip); }
+    else { container.insertBefore(strip, container.firstChild); }
+  }
 
+  // Paint from cache (real, instant) or skeleton (cold). De-dupes first.
+  function paint(container, opts) {
+    if (!container) return;
+    clearAllStrips();
+    var role = roleOf();
+    // These roles have their OWN full dashboards and /widgets/me serves them no
+    // cards — so the generic KPI strip would just sit as a stuck skeleton. Skip.
+    if (role === 'home_visitor' || role === 'agency_admin' || role === 'platform_admin' || role === 'sales_rep') return;
+    var cached = readCache(role);
+    if (cached) { placeStrip(container, renderStrip(cached.widgets, cached.role || role), opts); }
+    else { placeStrip(container, renderSkeleton(4), opts); }
+  }
+
+  // Throttled background refresh. Re-finds the live container on completion so
+  // a re-render between request and response can never strand the cards.
+  var fetching = false;
+  var lastFetchAt = 0;
+  var FETCH_THROTTLE_MS = 3000;
+  function revalidate(opts, force) {
+    if (!Api || fetching) return;
+    if (['home_visitor', 'agency_admin', 'platform_admin', 'sales_rep'].indexOf(roleOf()) !== -1) { clearAllStrips(); return; }
+    var now = Date.now();
+    if (!force && (now - lastFetchAt) < FETCH_THROTTLE_MS) return;
+    fetching = true; lastFetchAt = now;
+    var role = roleOf();
+    var settled = false;
+    // Hard timeout: a hung /widgets/me must NEVER leave a permanently stuck
+    // skeleton (it also latched `fetching` so no retry could ever fire). After 8s
+    // give up, drop a lingering skeleton if we have no cache, and free the lock.
+    var killer = setTimeout(function () {
+      if (settled) return;
+      settled = true; fetching = false;
+      var cur0 = currentStrip();
+      if (cur0 && cur0.classList.contains('kt-rw-skeleton') && !readCache(roleOf())) clearAllStrips();
+    }, 8000);
     Api.get('/widgets/me').then(function (data) {
-      mounting = false;
-      if (!data || !data.widgets || !data.widgets.length) return;
-      [].forEach.call(container.querySelectorAll('.kt-role-widget-strip'), function (s) { s.remove(); });
-      // The endpoint tells us which role it built the cards for — use that to
-      // pick each card's destination rather than re-deriving the role.
+      if (settled) return; settled = true; clearTimeout(killer);
+      fetching = false;
+      if (!isDashboardHash()) return;                       // navigated away
+      var container = containerFor();
+      if (!container || !heroIn(appMain())) return;          // home not up right now
+      if (!data || !data.widgets || !data.widgets.length) {  // role has no cards
+        clearAllStrips();
+        try { sessionStorage.removeItem(cacheKey(role)); } catch (e) {}
+        return;
+      }
+      writeCache(role, data);
+      var newSig = sigOf(data.widgets);
+      var cur = currentStrip();
+      // Real cards already up and unchanged → leave them (no flash).
+      if (cur && !cur.classList.contains('kt-rw-skeleton') && cur.getAttribute('data-sig') === newSig) return;
       var strip = renderStrip(data.widgets, data.role);
-
-      if (opts.prepend === true) {
-        container.insertBefore(strip, container.firstChild);
-        return;
-      }
-      if (opts.prepend === false) {
-        container.appendChild(strip);
-        return;
-      }
-      // Default: place AFTER the hero/banner so the welcome greeting reads first
-      var hero = findInsertionPoint(container);
-      if (hero && hero.parentNode === container) {
-        hero.insertAdjacentElement('afterend', strip);
-      } else if (hero) {
-        // Hero is nested inside a child wrap — insert right after it within its parent
-        hero.insertAdjacentElement('afterend', strip);
-      } else {
-        // No hero found — put strip at the top
-        container.insertBefore(strip, container.firstChild);
-      }
+      clearAllStrips();
+      placeStrip(container, strip, opts || {});
     }).catch(function (e) {
-      mounting = false;
+      if (settled) return; settled = true; clearTimeout(killer);
+      fetching = false;
+      // Drop a lingering skeleton if we have nothing cached to fall back on.
+      var cur = currentStrip();
+      if (cur && cur.classList.contains('kt-rw-skeleton') && !readCache(roleOf())) clearAllStrips();
       if (window.console) console.warn('Role widgets load failed', e);
     });
   }
 
+  // Public API: paint into the given container now, then revalidate.
+  function mount(container, opts) {
+    if (!container || !Api) return;
+    opts = opts || {};
+    paint(container, opts);
+    revalidate(opts, true);
+  }
+
   KT.RoleWidgets = { mount: mount, renderStrip: renderStrip };
 
-  // Auto-mount on dashboard-y hashes; non-dashboard hashes skip.
+  // ── Auto behaviour (parent/educator/etc. dashboards) ──────────────────
   function isDashboardHash() {
     var h = (window.location.hash || '').replace(/^#/, '').toLowerCase();
     if (!h) return true;
     return /^(dashboard|home|today|overview|platform-overview)$/.test(h);
   }
 
-  function autoMount() {
+  // Ensure the strip exists whenever Home is actually on screen. Idempotent:
+  // does nothing if a strip is already present (except throttled revalidate).
+  function ensure() {
     if (!isDashboardHash()) return;
-    var main = document.getElementById('appMain');
-    if (!main || !main.children.length) return;
-    // Use the deepest sensible container that wraps the hero
-    var hero = main.querySelector('.kt-hero, .auth-greeting, .auth-hero, [data-hero], .hero-banner');
-    var target = hero ? hero.parentElement : main;
-    mount(target);
+    var m = appMain();
+    if (!m || !heroIn(m)) return;            // Home not rendered yet — wait
+    if (!currentStrip()) paint(containerFor(), {});
+    revalidate({}, false);
   }
 
-  var pending = null;
-  function schedule() {
-    clearTimeout(pending);
-    pending = setTimeout(autoMount, 350);
+  // Drive `ensure` off DOM changes (self-heals re-renders) + navigation.
+  var scheduled = false;
+  function scheduleEnsure() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(function () { scheduled = false; ensure(); });
   }
 
+  var observer = new MutationObserver(scheduleEnsure);
+  function startObserver() {
+    var m = appMain();
+    if (m) { observer.observe(m, { childList: true }); return true; }
+    return false;
+  }
+  // #appMain is in the initial shell HTML, but retry briefly just in case.
+  (function waitForMain(tries) {
+    if (startObserver()) { scheduleEnsure(); return; }
+    if (tries > 60) return;
+    requestAnimationFrame(function () { waitForMain(tries + 1); });
+  })(0);
+
+  window.addEventListener('hashchange', scheduleEnsure);
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', schedule);
-  } else {
-    schedule();
+    document.addEventListener('DOMContentLoaded', scheduleEnsure);
   }
-  window.addEventListener('hashchange', schedule);
 })(window);

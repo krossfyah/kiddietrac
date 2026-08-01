@@ -288,6 +288,89 @@ class SalesController extends Controller
         return response()->json(['token' => $token, 'agency_id' => 6, 'user' => ['id' => $demoUser->id, 'name' => trim($demoUser->first_name . ' ' . $demoUser->last_name)]]);
     }
 
+    // ---------------------------------------------------------------- Sales team chat
+    // A single shared channel for the sales team. The whole /sales route group is
+    // gated to role:sales_rep,platform_admin, so only sales reps + superadmins reach it.
+
+    public function messagesIndex(Request $r)
+    {
+        $since = (int) $r->query('since', 0);
+        $q = \App\Models\SalesMessage::with('user:id,first_name,last_name')->orderBy('id', 'desc');
+        if ($since > 0) {
+            $rows = $q->where('id', '>', $since)->get()->sortBy('id')->values();
+        } else {
+            $rows = $q->limit(80)->get()->sortBy('id')->values();
+        }
+        $me = auth()->id();
+        return response()->json(['messages' => $rows->map(fn ($m) => [
+            'id'      => $m->id,
+            'body'    => $m->body,
+            'user_id' => $m->user_id,
+            'mine'    => $m->user_id === $me,
+            'author'  => $m->user ? trim($m->user->first_name . ' ' . $m->user->last_name) : 'Someone',
+            'at'      => optional($m->created_at)->toDateTimeString(),
+        ])->values()]);
+    }
+
+    public function messagesStore(Request $r)
+    {
+        $data = $r->validate(['body' => 'required|string|max:4000']);
+        $m = \App\Models\SalesMessage::create(['user_id' => auth()->id(), 'body' => trim($data['body'])]);
+        $m->load('user:id,first_name,last_name');
+        return response()->json([
+            'id' => $m->id, 'body' => $m->body, 'user_id' => $m->user_id, 'mine' => true,
+            'author' => trim($m->user->first_name . ' ' . $m->user->last_name),
+            'at' => optional($m->created_at)->toDateTimeString(),
+        ], 201);
+    }
+
+    // ---------------------------------------------------------------- Sales announcements
+    // Company / sales-team news only — nothing to do with agencies or centres.
+    // Any sales user can post; everyone on the team reads.
+
+    public function announcementsIndex()
+    {
+        $rows = \App\Models\SalesAnnouncement::with('user:id,first_name,last_name')
+            ->orderByDesc('pinned')->orderByDesc('id')->limit(100)->get();
+        return response()->json(['announcements' => $rows->map(fn ($a) => [
+            'id'     => $a->id,
+            'title'  => $a->title,
+            'body'   => $a->body,
+            'pinned' => (bool) $a->pinned,
+            'author' => $a->user ? trim($a->user->first_name . ' ' . $a->user->last_name) : 'Sales team',
+            'mine'   => $a->user_id === auth()->id(),
+            'at'     => optional($a->created_at)->toDateTimeString(),
+        ])->values()]);
+    }
+
+    public function announcementsStore(Request $r)
+    {
+        $data = $r->validate([
+            'title'  => 'required|string|max:180',
+            'body'   => 'required|string|max:8000',
+            'pinned' => 'nullable|boolean',
+        ]);
+        $a = \App\Models\SalesAnnouncement::create([
+            'user_id' => auth()->id(),
+            'title'   => trim($data['title']),
+            'body'    => trim($data['body']),
+            'pinned'  => (bool) ($data['pinned'] ?? false),
+        ]);
+        return response()->json(['id' => $a->id], 201);
+    }
+
+    public function announcementsDestroy(int $announcement)
+    {
+        $a = \App\Models\SalesAnnouncement::findOrFail($announcement);
+        // Author or any platform_admin can remove.
+        $roles = auth()->user() ? auth()->user()->roleAssignments->pluck('role')->all() : [];
+        if ($a->user_id !== auth()->id() && ! in_array('platform_admin', $roles, true)) {
+            return response()->json(['message' => 'Not allowed.'], 403);
+        }
+        $a->delete();
+        return response()->json(['ok' => true]);
+    }
+
     // ---------------------------------------------------------------- Quote PDF / send
 
     public function quotePdf(int $quote)
@@ -388,6 +471,15 @@ class SalesController extends Controller
             'phone'          => 'nullable|string|max:60',
             'title'          => 'nullable|string|max:120',
             'source'         => 'nullable|string|max:40',
+            'website'          => 'nullable|string|max:190',
+            'address'          => 'nullable|string|max:200',
+            'city'             => 'nullable|string|max:120',
+            'province'         => 'nullable|string|max:120',
+            'postal_code'      => 'nullable|string|max:30',
+            'country'          => 'nullable|string|max:120',
+            'current_solution' => 'nullable|string|max:200',
+            'num_children'     => 'nullable|integer|min:0|max:100000',
+            'num_locations'    => 'nullable|integer|min:0|max:10000',
             'stage'          => 'nullable|in:' . implode(',', array_keys(self::STAGES)),
             'owner_id'       => 'nullable|integer',
             'value'          => 'nullable|numeric|min:0',
@@ -491,7 +583,16 @@ class SalesController extends Controller
     private function leadDetail(SalesLead $l): array
     {
         return array_merge($this->leadRow($l), [
-            'title'       => $l->title,
+            'title'            => $l->title,
+            'website'          => $l->website,
+            'address'          => $l->address,
+            'city'             => $l->city,
+            'province'         => $l->province,
+            'postal_code'      => $l->postal_code,
+            'country'          => $l->country,
+            'current_solution' => $l->current_solution,
+            'num_children'     => $l->num_children,
+            'num_locations'    => $l->num_locations,
             'notes'       => $l->notes,
             'lost_reason' => $l->lost_reason,
             'activities'  => $l->activities->map(fn ($a) => [

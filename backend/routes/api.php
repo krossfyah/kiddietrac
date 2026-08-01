@@ -236,6 +236,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/demo-token', [\App\Http\Controllers\Api\SalesController::class, 'demoToken']);
             Route::get('/quotes/{quote}/pdf', [\App\Http\Controllers\Api\SalesController::class, 'quotePdf'])->where('quote','[0-9]+');
             Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\SalesController::class, 'quoteSend'])->where('quote','[0-9]+');
+            Route::get('/messages', [\App\Http\Controllers\Api\SalesController::class, 'messagesIndex']);
+            Route::post('/messages', [\App\Http\Controllers\Api\SalesController::class, 'messagesStore']);
+            Route::get('/announcements', [\App\Http\Controllers\Api\SalesController::class, 'announcementsIndex']);
+            Route::post('/announcements', [\App\Http\Controllers\Api\SalesController::class, 'announcementsStore']);
+            Route::delete('/announcements/{announcement}', [\App\Http\Controllers\Api\SalesController::class, 'announcementsDestroy'])->where('announcement','[0-9]+');
         });
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);

@@ -31,6 +31,12 @@
   var STAGE_LABEL = {}; var STAGE_COLOR = {};
   STAGES.forEach(function (s) { STAGE_LABEL[s.key] = s.label; STAGE_COLOR[s.key] = s.color; });
 
+  var SOURCES = [
+    { v: '', l: '— Lead source —' }, { v: 'website', l: 'Website' }, { v: 'referral', l: 'Referral' },
+    { v: 'cold', l: 'Cold outreach' }, { v: 'marketing', l: 'Marketing site' }, { v: 'event', l: 'Event / conference' },
+    { v: 'social', l: 'Social media' }, { v: 'partner', l: 'Partner' }, { v: 'other', l: 'Other' },
+  ];
+
   // Injected once: the kanban board must FIT the content column (no page-wide
   // horizontal scroll). On desktop the 7 stage columns share the width equally
   // (minmax(0,1fr) keeps min-content at 0 so #appMain — which has min-width:auto —
@@ -67,6 +73,7 @@
   function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
   function fmtDate(s) { if (!s) return ''; try { return new Date(s + (s.length <= 10 ? 'T00:00:00' : '')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return s; } }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function fmtTime(s) { if (!s) return ''; try { var d = new Date(s.replace(' ', 'T')); return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return s; } }
   function me() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function salesAuthed() { var r = (me().roles) || []; return r.indexOf('sales_rep') > -1 || r.indexOf('platform_admin') > -1; }
   function guarded(fn) {
@@ -140,6 +147,14 @@
   }
   function fieldWide(label, node) { var f = field(label, node); f.style.gridColumn = '1 / -1'; return f; }
   function formActions(kids) { var d = el('div', { style: 'display:flex;gap:8px;margin-top:2px' }, kids); d.style.gridColumn = '1 / -1'; return d; }
+  // A titled section with a responsive field grid — used to lay a wide form out
+  // across the full content width in tidy, labelled groups.
+  function formSection(title, kids) {
+    return el('div', { style: 'margin-bottom:4px' }, [
+      el('div', { style: 'font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#0C6070;margin:16px 0 11px' }, [title]),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 18px;align-items:start' }, kids),
+    ]);
+  }
 
   var META = null; // {owners, products, stats}
   function ownerOpts() { return [{ v: '', l: 'Unassigned' }].concat((META && META.owners || []).map(function (o) { return { v: o.id, l: o.name }; })); }
@@ -270,24 +285,55 @@
     clear(container);
     if (!META) { try { var d = await Api.get('/sales/leads'); META = { owners: d.owners || [], products: d.products || [] }; } catch (e) { META = { owners: [] }; } }
     container.appendChild(hero('New lead', 'Add a prospect to the pipeline.', '➕'));
+    container.appendChild(toolbar([btn('← Pipeline', 'light', function () { go('sales'); })]));
     var f = {};
-    var grid = formGrid([
-      field('Contact name *', f.name = input({ placeholder: 'Jane Doe' })),
-      field('Company / childcare', f.company = input({ placeholder: 'Sunshine Daycare' })),
-      field('Email', f.email = input({ type: 'email', placeholder: 'jane@example.com' })),
-      field('Phone', f.phone = input({ placeholder: '(555) 123-4567' })),
-      field('Stage', f.stage = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), 'new')),
-      field('Owner', f.owner_id = selectEl(ownerOpts(), (function () { try { return (JSON.parse(sessionStorage.getItem('kt_user') || '{}').id) || ''; } catch (e) { return ''; } })())),
-      field('Est. value ($)', f.value = input({ type: 'number', step: '0.01', min: '0', placeholder: '0.00' })),
-      field('Expected close', f.expected_close = input({ type: 'date' })),
-      field('Next follow-up', f.follow_up_date = input({ type: 'date' })),
-      fieldWide('Notes', f.notes = textarea({ placeholder: 'What are they looking for?' })),
-      formActions([
+    var myId = (function () { try { return (JSON.parse(sessionStorage.getItem('kt_user') || '{}').id) || ''; } catch (e) { return ''; } })();
+    var inner = el('div', {}, [
+      formSection('Contact', [
+        field('Contact name *', f.name = input({ placeholder: 'Jane Doe' })),
+        field('Job title', f.title = input({ placeholder: 'Owner / Director' })),
+        field('Email', f.email = input({ type: 'email', placeholder: 'jane@example.com' })),
+        field('Phone', f.phone = input({ placeholder: '(555) 123-4567' })),
+      ]),
+      formSection('Business', [
+        field('Company / childcare', f.company = input({ placeholder: 'Sunshine Daycare' })),
+        field('Website', f.website = input({ placeholder: 'sunshinedaycare.com' })),
+        field('Street address', f.address = input({ placeholder: '123 Main St' })),
+        field('City', f.city = input({ placeholder: 'Toronto' })),
+        field('Province / state', f.province = input({ placeholder: 'ON' })),
+        field('Postal / ZIP', f.postal_code = input({ placeholder: 'M5V 2T6' })),
+        field('Country', f.country = input({ placeholder: 'Canada' })),
+      ]),
+      formSection('What they use today', [
+        field('Current software / solution', f.current_solution = input({ placeholder: 'e.g. HiMama, spreadsheets, paper' })),
+        field('# children', f.num_children = input({ type: 'number', min: '0', placeholder: '0' })),
+        field('# locations / centres', f.num_locations = input({ type: 'number', min: '0', placeholder: '1' })),
+        field('Lead source', f.source = selectEl(SOURCES, '')),
+      ]),
+      formSection('Pipeline', [
+        field('Stage', f.stage = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), 'new')),
+        field('Owner', f.owner_id = selectEl(ownerOpts(), myId)),
+        field('Est. value ($)', f.value = input({ type: 'number', step: '0.01', min: '0', placeholder: '0.00' })),
+        field('Expected close', f.expected_close = input({ type: 'date' })),
+        field('Next follow-up', f.follow_up_date = input({ type: 'date' })),
+      ]),
+      el('div', { style: 'margin-top:14px' }, [field('Notes', f.notes = textarea({ placeholder: 'What are they looking for? Pain points, timeline, decision makers…', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:96px;resize:vertical' }))]),
+      el('div', { style: 'display:flex;gap:8px;margin-top:16px' }, [
         btn('Create lead', 'primary', async function (ev) {
           if (!f.name.value.trim()) { toast('⚠️', 'Name required', '', '#DC2626'); return; }
           ev.target.disabled = true; ev.target.textContent = 'Saving…';
           try {
-            var body = { name: f.name.value.trim(), company: f.company.value.trim(), email: f.email.value.trim(), phone: f.phone.value.trim(), stage: f.stage.value, owner_id: f.owner_id.value || null, value: f.value.value || null, expected_close: f.expected_close.value || null, follow_up_date: f.follow_up_date.value || null, notes: f.notes.value.trim() };
+            var body = {
+              name: f.name.value.trim(), title: f.title.value.trim(), company: f.company.value.trim(),
+              email: f.email.value.trim(), phone: f.phone.value.trim(), website: f.website.value.trim(),
+              address: f.address.value.trim(), city: f.city.value.trim(), province: f.province.value.trim(),
+              postal_code: f.postal_code.value.trim(), country: f.country.value.trim(),
+              current_solution: f.current_solution.value.trim(),
+              num_children: f.num_children.value || null, num_locations: f.num_locations.value || null,
+              source: f.source.value || null, stage: f.stage.value, owner_id: f.owner_id.value || null,
+              value: f.value.value || null, expected_close: f.expected_close.value || null,
+              follow_up_date: f.follow_up_date.value || null, notes: f.notes.value.trim(),
+            };
             var lead = await Api.post('/sales/leads', body);
             toast('✅', 'Lead created', 'Superadmin + sales team notified.');
             go('sales-lead?id=' + lead.id);
@@ -296,11 +342,10 @@
         btn('Cancel', 'ghost', function () { go('sales'); }),
       ]),
     ]);
-    // Wrap in a real <form> so kt-icon-buttons.js skips these buttons (it never
-    // reaches into a form), keeping the teal primary "Create lead" — matching the
-    // teal "Save changes" on the lead detail. onsubmit guard prevents a native submit.
-    var formEl = el('form', { onsubmit: function (ev) { ev.preventDefault(); } }, [card([grid])]);
-    container.appendChild(wrap([formEl], 720));
+    // Full-width card (no narrow wrap); wrapped in a real <form> so kt-icon-buttons.js
+    // skips the buttons and the teal primary "Create lead" is preserved.
+    var formEl = el('form', { onsubmit: function (ev) { ev.preventDefault(); }, style: 'max-width:none !important;width:100%' }, [card([inner])]);
+    container.appendChild(formEl);
   }
 
   // ─────────────────────────────── Lead detail ───────────────────────────────
@@ -340,9 +385,20 @@
       el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Details']),
       el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 14px;align-items:start' }, [
         field('Contact', e.name = input({ value: lead.name || '' })),
+        field('Job title', e.title = input({ value: lead.title || '' })),
         field('Company', e.company = input({ value: lead.company || '' })),
+        field('Website', e.website = input({ value: lead.website || '' })),
         field('Email', e.email = input({ value: lead.email || '' })),
         field('Phone', e.phone = input({ value: lead.phone || '' })),
+        field('Street address', e.address = input({ value: lead.address || '' })),
+        field('City', e.city = input({ value: lead.city || '' })),
+        field('Province / state', e.province = input({ value: lead.province || '' })),
+        field('Postal / ZIP', e.postal_code = input({ value: lead.postal_code || '' })),
+        field('Country', e.country = input({ value: lead.country || '' })),
+        field('Using today', e.current_solution = input({ value: lead.current_solution || '', placeholder: 'HiMama, paper…' })),
+        field('# children', e.num_children = input({ type: 'number', min: '0', value: lead.num_children == null ? '' : lead.num_children })),
+        field('# locations', e.num_locations = input({ type: 'number', min: '0', value: lead.num_locations == null ? '' : lead.num_locations })),
+        field('Lead source', e.source = selectEl(SOURCES, lead.source || '')),
         field('Owner', e.owner_id = selectEl(ownerOpts(), lead.owner_id || '')),
         field('Est. value ($)', e.value = input({ type: 'number', step: '0.01', value: lead.value == null ? '' : lead.value })),
         field('Expected close', e.expected_close = input({ type: 'date', value: lead.expected_close || '' })),
@@ -352,7 +408,18 @@
       el('div', { style: 'display:flex;gap:8px;margin-top:12px' }, [
         btn('Save changes', 'primary', async function (ev) {
           ev.target.disabled = true;
-          try { await Api.patch('/sales/leads/' + id, { name: e.name.value, company: e.company.value, email: e.email.value, phone: e.phone.value, owner_id: e.owner_id.value || null, value: e.value.value || null, expected_close: e.expected_close.value || null, follow_up_date: e.follow_up_date.value || null, notes: e.notes.value }); toast('✅', 'Saved'); renderDetail(container, ctx); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; }
+          try {
+            await Api.patch('/sales/leads/' + id, {
+              name: e.name.value, title: e.title.value, company: e.company.value, website: e.website.value,
+              email: e.email.value, phone: e.phone.value, address: e.address.value, city: e.city.value,
+              province: e.province.value, postal_code: e.postal_code.value, country: e.country.value,
+              current_solution: e.current_solution.value, num_children: e.num_children.value || null,
+              num_locations: e.num_locations.value || null, source: e.source.value || null,
+              owner_id: e.owner_id.value || null, value: e.value.value || null,
+              expected_close: e.expected_close.value || null, follow_up_date: e.follow_up_date.value || null, notes: e.notes.value,
+            });
+            toast('✅', 'Saved'); renderDetail(container, ctx);
+          } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; }
         }),
         btn('🗑 Delete', 'danger', async function () { if (!confirm('Delete this lead?')) return; try { await Api.delete('/sales/leads/' + id); toast('🗑', 'Deleted'); go('sales'); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); } }),
       ]),
@@ -395,7 +462,7 @@
     // RIGHT: quotes
     grid.appendChild(renderQuotesPanel(id, lead, container, ctx));
     body.appendChild(grid);
-    container.appendChild(wrap([body], 1120));
+    container.appendChild(wrap([body], 1320));
   }
 
   function renderQuotesPanel(id, lead, container, ctx) {
@@ -496,22 +563,30 @@
   async function renderPlans(container) {
     clear(container);
     container.appendChild(hero('Plans & pricing', 'Preset products used in proposals. Edit prices to match your offer.', '💲'));
-    var host = el('div'); container.appendChild(wrap([host], 940));
+    var host = el('div'); container.appendChild(host); // full width
     async function load() {
       clear(host);
       var products = await Api.get('/sales/products');
-      products.forEach(function (p) { host.appendChild(planRow(p, load)); });
-      host.appendChild(el('div', { style: 'margin-top:10px' }, [btn('+ Add plan', 'primary', function () { host.insertBefore(planRow({ name: '', description: '', price: 0, unit: 'month', active: true }, load, true), host.firstChild); })]));
+      var grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start' });
+      products.forEach(function (p) { grid.appendChild(planCard(p, load)); });
+      host.appendChild(grid);
+      host.appendChild(el('div', { style: 'margin-top:16px' }, [btn('➕ Add plan', 'primary', function () { grid.insertBefore(planCard({ name: '', description: '', price: 0, unit: 'month', active: true }, load, true), grid.firstChild); })]));
     }
-    function planRow(p, reload, isNew) {
-      var n = input({ value: p.name || '', placeholder: 'Plan name', style: 'flex:1 1 150px;min-width:0;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
-      var d = input({ value: p.description || '', placeholder: 'Description', style: 'flex:2 1 200px;min-width:0;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
-      var pr = input({ type: 'number', step: '0.01', value: p.price || 0, style: 'flex:0 0 100px;width:100px;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
-      var u = selectEl([{ v: 'month', l: '/month' }, { v: 'year', l: '/year' }, { v: 'one-time', l: 'one-time' }], p.unit || 'month', { style: 'flex:0 0 110px;width:110px;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
-      return card([el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [n, d, pr, u,
-        btn('Save', 'primary', async function (ev) { ev.target.disabled = true; try { var body = { name: n.value, description: d.value, price: pr.value || 0, unit: u.value, active: true }; if (p.id) await Api.patch('/sales/products/' + p.id, body); else await Api.post('/sales/products', body); toast('✅', 'Saved'); reload(); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; } }),
-        p.id ? el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:8px 10px;cursor:pointer', onclick: async function () { if (!confirm('Delete plan?')) return; try { await Api.delete('/sales/products/' + p.id); reload(); } catch (er) {} } }, ['🗑']) : null,
-      ])], 'padding:12px 14px;margin-bottom:8px');
+    // Each plan is its own card: name + price + unit on top, then a FULL-WIDTH
+    // multi-line description (so long descriptions are never cut off), then actions.
+    function planCard(p, reload, isNew) {
+      var n = input({ value: p.name || '', placeholder: 'Plan name', style: 'flex:1 1 auto;min-width:0;padding:9px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;font-weight:700;box-sizing:border-box' });
+      var pr = input({ type: 'number', step: '0.01', value: p.price || 0, style: 'flex:0 0 110px;width:110px;padding:9px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+      var u = selectEl([{ v: 'month', l: '/month' }, { v: 'year', l: '/year' }, { v: 'one-time', l: 'one-time' }], p.unit || 'month', { style: 'flex:0 0 118px;width:118px;padding:9px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+      var d = textarea({ value: p.description || '', placeholder: 'Description — shown on proposals. Full text is always visible here.', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:70px;resize:vertical' });
+      return card([
+        el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:11px' }, [n, pr, u]),
+        field('Description', d),
+        el('div', { style: 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end;align-items:center' }, [
+          p.id ? el('button', { title: 'Delete plan', style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:8px 11px;cursor:pointer;font-size:14px', onclick: async function () { if (!confirm('Delete plan?')) return; try { await Api.delete('/sales/products/' + p.id); reload(); } catch (er) {} } }, ['🗑 Delete']) : el('div', { style: 'flex:1' }),
+          btn('Save', 'primary', async function (ev) { ev.target.disabled = true; try { var body = { name: n.value, description: d.value, price: pr.value || 0, unit: u.value, active: true }; if (p.id) await Api.patch('/sales/products/' + p.id, body); else await Api.post('/sales/products', body); toast('✅', 'Saved'); reload(); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; } }),
+        ]),
+      ], 'padding:15px 16px');
     }
     load();
   }
@@ -535,6 +610,173 @@
     ])], 640));
   }
 
+  // ─────────────────────────────── Team chat (sales + superadmin only) ───────────────────────────────
+  async function renderChat(container) {
+    clear(container);
+    container.appendChild(hero('Team chat', 'Private channel for the sales team and superadmins only.', '💬'));
+    var wrapEl = el('div', { style: 'max-width:920px' });
+    var listBox = el('div', { style: 'background:#fff;border:1px solid #e6ebf1;border-radius:14px;padding:14px;height:min(58vh,540px);overflow-y:auto;display:flex;flex-direction:column;gap:9px' }, [el('div', { style: 'text-align:center;color:#94A3B8;padding:20px' }, ['Loading…'])]);
+    var inputEl = input({ placeholder: 'Message the sales team…', style: 'flex:1;min-width:0;padding:10px 12px;border:1px solid #d9e1ea;border-radius:10px;font-size:14px;box-sizing:border-box' });
+    var composer = el('form', { onsubmit: function (ev) { ev.preventDefault(); send(); }, style: 'display:flex;gap:8px;margin-top:10px' }, [inputEl, btn('Send', 'primary', function () { send(); })]);
+    wrapEl.appendChild(listBox); wrapEl.appendChild(composer);
+    container.appendChild(wrapEl);
+    var lastId = 0;
+    function bubble(m) {
+      return el('div', { style: 'display:flex;flex-direction:column;align-items:' + (m.mine ? 'flex-end' : 'flex-start') }, [
+        el('div', { style: 'font-size:10.5px;color:#94A3B8;margin:0 5px 2px' }, [(m.mine ? 'You' : m.author) + ' · ' + fmtTime(m.at)]),
+        el('div', { style: 'max-width:76%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.35;word-break:break-word;' + (m.mine ? 'background:' + ACCENT + ';color:#fff;border-bottom-right-radius:5px' : 'background:#F1F5F9;color:#0D1B2A;border-bottom-left-radius:5px') }, [m.body]),
+      ]);
+    }
+    function append(msgs) { msgs.forEach(function (m) { listBox.appendChild(bubble(m)); lastId = Math.max(lastId, m.id); }); listBox.scrollTop = listBox.scrollHeight; }
+    async function load() {
+      try {
+        var d = await Api.get('/sales/messages');
+        clear(listBox);
+        if (!d.messages.length) listBox.appendChild(el('div', { style: 'text-align:center;color:#94A3B8;padding:20px' }, ['No messages yet. Say hi 👋']));
+        else append(d.messages);
+      } catch (e) { clear(listBox); listBox.appendChild(el('div', { style: 'color:#DC2626' }, ['Could not load messages.'])); }
+    }
+    async function refresh() { if (!lastId) return; try { var d = await Api.get('/sales/messages', { since: lastId }); if (d.messages.length) append(d.messages); } catch (e) {} }
+    async function send() { var t = inputEl.value.trim(); if (!t) return; inputEl.value = ''; try { var m = await Api.post('/sales/messages', { body: t }); append([m]); } catch (e) { toast('⚠️', 'Send failed', e.message || '', '#DC2626'); inputEl.value = t; } }
+    await load();
+    var poll = setInterval(refresh, 5000);
+    var stop = function () { if (window.location.hash.indexOf('sales-chat') === -1) { clearInterval(poll); window.removeEventListener('hashchange', stop); } };
+    window.addEventListener('hashchange', stop);
+  }
+
+  // ─────────────────────────────── Announcements (company / sales only) ───────────────────────────────
+  async function renderNews(container) {
+    clear(container);
+    container.appendChild(hero('Announcements', 'Company & sales-team news only — nothing to do with agencies or centres.', '📣'));
+    var host = el('div', { style: 'max-width:920px' }); container.appendChild(host);
+    var tI, bI, pinI;
+    var composer = card([
+      el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['📢 Post to the sales team']),
+      field('Title', tI = input({ placeholder: 'e.g. New pricing effective Aug 1' })),
+      el('div', { style: 'margin-top:10px' }, [field('Message', bI = textarea({ placeholder: 'Share company or sales news with the team…' }))]),
+      el('div', { style: 'display:flex;gap:12px;align-items:center;margin-top:12px' }, [
+        el('label', { style: 'display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer' }, [pinI = el('input', { type: 'checkbox' }), '📌 Pin to top']),
+        el('div', { style: 'flex:1' }),
+        btn('Post', 'primary', async function (ev) {
+          if (!tI.value.trim() || !bI.value.trim()) { toast('⚠️', 'Title and message required', '', '#DC2626'); return; }
+          ev.target.disabled = true;
+          try { await Api.post('/sales/announcements', { title: tI.value.trim(), body: bI.value.trim(), pinned: pinI.checked }); toast('✅', 'Posted'); load(); } catch (e) { toast('⚠️', 'Failed', e.message || '', '#DC2626'); ev.target.disabled = false; }
+        }),
+      ]),
+    ], 'margin-bottom:14px');
+    host.appendChild(composer);
+    var listHost = el('div'); host.appendChild(listHost);
+    async function load() {
+      tI.value = ''; bI.value = ''; if (pinI) pinI.checked = false;
+      clear(listHost); listHost.appendChild(el('div', { style: 'padding:16px;color:#64748B' }, ['Loading…']));
+      var d;
+      try { d = await Api.get('/sales/announcements'); } catch (e) { clear(listHost); listHost.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Could not load.'])])); return; }
+      clear(listHost);
+      if (!d.announcements.length) { listHost.appendChild(card([el('div', { style: 'text-align:center;color:#64748B;padding:20px' }, ['No announcements yet.'])])); return; }
+      d.announcements.forEach(function (a) {
+        listHost.appendChild(card([
+          el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px' }, [
+            el('div', { style: 'font-weight:800;font-size:15px' }, [(a.pinned ? '📌 ' : '') + a.title]),
+            (a.mine || salesAuthed()) ? el('button', { title: 'Delete', style: 'border:0;background:none;color:#94A3B8;cursor:pointer;font-size:15px;flex:0 0 auto', onclick: async function () { if (!confirm('Delete this announcement?')) return; try { await Api.delete('/sales/announcements/' + a.id); load(); } catch (e) { toast('⚠️', 'Failed', e.message || '', '#DC2626'); } } }, ['🗑']) : null,
+          ]),
+          el('div', { style: 'font-size:11.5px;color:#94A3B8;margin:3px 0 8px' }, [a.author + ' · ' + fmtTime(a.at)]),
+          el('div', { style: 'font-size:14px;color:#334155;line-height:1.5;white-space:pre-wrap' }, [a.body]),
+        ], 'margin-bottom:10px'));
+      });
+    }
+    load();
+  }
+
+  // ─────────────────────────────── Home dashboard (charts + analytics) ───────────────────────────────
+  function statCardsRow(st) {
+    return el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px' }, [
+      statCard('🎯', 'Open leads', st.open || 0, '#EEF2FF', '#4338CA'),
+      statCard('💰', 'Pipeline value', money(st.pipeline_value || 0), '#ECFDF5', '#047857'),
+      statCard('🏆', 'Won', st.won || 0, '#F0FDF4', '#15803D'),
+      statCard('📈', 'Won revenue', money(st.won_value || 0), '#ECFEFF', '#0E7490'),
+      statCard('⏰', 'Follow-ups due', st.followups_due || 0, '#FFF7ED', '#C2410C'),
+      statCard('🙋', 'My open', st.my_open || 0, '#FDF2F8', '#BE185D'),
+    ]);
+  }
+  function funnelChart(leads) {
+    var by = {}; STAGES.forEach(function (s) { by[s.key] = { count: 0, value: 0 }; });
+    (leads || []).forEach(function (l) { if (by[l.stage]) { by[l.stage].count++; by[l.stage].value += Number(l.value || 0); } });
+    var maxC = 1; STAGES.forEach(function (s) { maxC = Math.max(maxC, by[s.key].count); });
+    var rows = STAGES.map(function (s) {
+      var c = by[s.key];
+      var pct = c.count ? Math.max(6, Math.round(c.count / maxC * 100)) : 0;
+      return el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:9px' }, [
+        el('div', { style: 'width:112px;flex:0 0 112px;font-size:12px;font-weight:700;color:' + s.color }, [s.label]),
+        el('div', { style: 'flex:1;min-width:0;background:#F1F5F9;border-radius:8px;height:26px;overflow:hidden' }, [
+          el('div', { style: 'height:100%;width:' + pct + '%;background:' + s.color + ';border-radius:8px' }),
+        ]),
+        el('div', { style: 'width:132px;flex:0 0 132px;text-align:right;font-size:12px;white-space:nowrap' }, [
+          el('span', { style: 'font-weight:800' }, [String(c.count)]), el('span', { style: 'color:#94A3B8' }, [' · ']), el('span', { style: 'color:#047857;font-weight:700' }, [money(c.value)]),
+        ]),
+      ]);
+    });
+    return card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['📊 Pipeline by stage'])].concat(rows));
+  }
+  function legendRow(color, label, val) {
+    return el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:9px' }, [
+      el('span', { style: 'width:11px;height:11px;border-radius:3px;background:' + color + ';flex:0 0 auto' }),
+      el('span', { style: 'flex:1;font-size:13px;color:#475569' }, [label]),
+      el('span', { style: 'font-weight:800;font-size:13.5px;color:#0D1B2A' }, [String(val)]),
+    ]);
+  }
+  function winDonut(st) {
+    var won = st.won || 0, lost = st.lost || 0, total = won + lost;
+    var pct = total ? won / total : 0;
+    var r = 54, circ = 2 * Math.PI * r, dash = (circ * pct).toFixed(1);
+    var svg = '<svg width="140" height="140" viewBox="0 0 140 140" aria-hidden="true">'
+      + '<circle cx="70" cy="70" r="' + r + '" fill="none" stroke="#F1F5F9" stroke-width="15"/>'
+      + '<circle cx="70" cy="70" r="' + r + '" fill="none" stroke="#10B981" stroke-width="15" stroke-linecap="round" stroke-dasharray="' + dash + ' ' + circ.toFixed(1) + '" transform="rotate(-90 70 70)"/>'
+      + '<text x="70" y="66" text-anchor="middle" font-size="28" font-weight="800" fill="#0D1B2A">' + (st.win_rate || 0) + '%</text>'
+      + '<text x="70" y="87" text-anchor="middle" font-size="11" fill="#64748B">win rate</text></svg>';
+    return card([
+      el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['🏆 Won vs lost']),
+      el('div', { style: 'display:flex;align-items:center;gap:18px;flex-wrap:wrap' }, [
+        el('div', { html: svg, style: 'flex:0 0 auto' }),
+        el('div', { style: 'flex:1;min-width:130px' }, [
+          legendRow('#10B981', 'Won', won),
+          legendRow('#EF4444', 'Lost', lost),
+          legendRow('#0E7490', 'Won revenue', money(st.won_value || 0)),
+          legendRow('#6D28D9', 'Avg won deal', money(st.avg_won || 0)),
+        ]),
+      ]),
+    ]);
+  }
+  function salesTiles() {
+    var tiles = [
+      { hash: 'sales', icon: '📊', label: 'Pipeline' }, { hash: 'sales-leads', icon: '🎯', label: 'Leads' },
+      { hash: 'sales-new', icon: '➕', label: 'New lead' }, { hash: 'sales-followups', icon: '⏰', label: 'Follow-ups' },
+      { hash: 'sales-chat', icon: '💬', label: 'Team chat' }, { hash: 'sales-news', icon: '📣', label: 'Announcements' },
+      { hash: 'sales-plans', icon: '💲', label: 'Plans & pricing' }, { hash: 'sales-demo', icon: '🚀', label: 'Launch demo' },
+      { hash: 'notifications', icon: '🔔', label: 'Inbox' }, { hash: 'help', icon: '📖', label: 'Help' },
+    ];
+    var grid = el('div', { class: 'kt-tile-grid' }, tiles.map(function (t) {
+      return el('a', { class: 'kt-tile', href: '#' + t.hash }, [el('span', { class: 'kt-tile-icon', 'aria-hidden': 'true' }, [t.icon]), el('span', { class: 'kt-tile-label' }, [t.label])]);
+    }));
+    return el('div', { style: 'margin-top:18px' }, [el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#0C6070;margin:6px 2px 12px' }, ['Quick access']), grid]);
+  }
+  async function renderSalesHome(container) {
+    clear(container); ensureSalesCss();
+    var u = me();
+    var greet = (KT.greetingForNow ? KT.greetingForNow((u.first_name || '')) : ('Welcome' + (u.first_name ? ', ' + u.first_name : '')));
+    container.appendChild(hero(greet, 'Your sales command centre — pipeline, wins and what needs attention.', '📊'));
+    var loading = el('div', { style: 'padding:26px;text-align:center;color:#64748B' }, ['Loading your numbers…']);
+    container.appendChild(loading);
+    var data;
+    try { data = await Api.get('/sales/leads'); }
+    catch (e) { loading.remove(); container.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Could not load: ' + (e.message || e)])])); container.appendChild(salesTiles()); return; }
+    META = { owners: data.owners || [], products: data.products || [], stats: data.stats || {} };
+    loading.remove();
+    var st = data.stats || {}, leads = data.leads || [];
+    container.appendChild(statCardsRow(st));
+    container.appendChild(el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;align-items:start' }, [funnelChart(leads), winDonut(st)]));
+    container.appendChild(salesTiles());
+  }
+
   // ─────────────────────────────── register ───────────────────────────────
   // sales_rep + superadmin (platform_admin resolves to the agency_admin shell, so
   // register there too; guarded() blocks any non-sales/non-platform agency_admin).
@@ -546,5 +788,10 @@
     KT.Shell.registerScreen(role + ':sales-followups', guarded(renderFollowups));
     KT.Shell.registerScreen(role + ':sales-plans', guarded(renderPlans));
     KT.Shell.registerScreen(role + ':sales-demo', guarded(renderDemo));
+    KT.Shell.registerScreen(role + ':sales-chat', guarded(renderChat));
+    KT.Shell.registerScreen(role + ':sales-news', guarded(renderNews));
   });
+  // Sales-rep home = the analytics dashboard (overrides the generic tile launcher,
+  // which is registered earlier in screen-role-home.js — this file loads after it).
+  KT.Shell.registerScreen('sales_rep:home', guarded(renderSalesHome));
 })(window);
