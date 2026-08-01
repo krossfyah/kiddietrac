@@ -39,6 +39,8 @@ final class HelpService
         $roleFolder = match ($role) {
             'agency_admin', 'centre_director', 'auditor' => 'director',
             'educator' => 'educator',
+            'home_visitor' => 'home_visitor',
+            'sales_rep' => 'sales',
             'guardian' => 'parent',
             default => 'parent',
         };

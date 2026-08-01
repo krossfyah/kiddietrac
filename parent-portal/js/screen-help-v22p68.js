@@ -24,6 +24,27 @@
     searchTerm: '',
   };
 
+  function catIcon(cat) {
+    var c = String(cat || '').toLowerCase();
+    if (/start|begin|welcome|intro|basic/.test(c)) return '🚀';
+    if (/attend|check|sign.?in|arriv/.test(c)) return '✅';
+    if (/messag|chat|communica/.test(c)) return '💬';
+    if (/bill|payment|invoice|financ|fee/.test(c)) return '💳';
+    if (/photo|media|gallery|video/.test(c)) return '📸';
+    if (/report|incident/.test(c)) return '⚠️';
+    if (/staff|educator|team|hr|employ/.test(c)) return '🧑‍🏫';
+    if (/child|kid|famil|parent|guardian/.test(c)) return '👶';
+    if (/setting|config|admin|manage/.test(c)) return '⚙️';
+    if (/health|medic|allerg|safe|wellness/.test(c)) return '🩺';
+    if (/menu|meal|food|nutri/.test(c)) return '🍽️';
+    if (/schedul|calendar|time|hour|shift/.test(c)) return '📅';
+    if (/form|document|paper|consent/.test(c)) return '📋';
+    if (/role|responsib|permiss|access/.test(c)) return '🔑';
+    if (/notif|alert|announc/.test(c)) return '🔔';
+    if (/room|centre|center|classroom/.test(c)) return '🏫';
+    return '📚';
+  }
+
   async function renderHelp(main) {
     Dom.clear(main);
     injectStyles();
@@ -214,6 +235,50 @@
       });
     }
 
+    function catTiles() {
+      var panel = Dom.el('div', { class: 'kt-help-panel' });
+      panel.appendChild(Dom.el('h3', { class: 'kt-help-panel-h' }, '📚 Browse topics'));
+      var grid = Dom.el('div', { class: 'kt-help-cattiles' });
+      var PAL = [['#EFF6FF', '#1D4ED8'], ['#F5F3FF', '#7C3AED'], ['#ECFDF5', '#047857'], ['#FFF7ED', '#C2410C'], ['#FDF2F8', '#BE185D'], ['#ECFEFF', '#0E7490']];
+      Object.keys(state.categorized).sort().forEach(function (cat, i) {
+        var arts = state.categorized[cat] || [];
+        var g = PAL[i % PAL.length];
+        var tile = Dom.el('button', { class: 'kt-help-cattile' });
+        tile.appendChild(Dom.el('span', { class: 'kt-help-cattile-ic', style: 'background:' + g[0] + ';color:' + g[1] + ';' }, catIcon(cat)));
+        var tx = Dom.el('div', { style: 'min-width:0;' });
+        tx.appendChild(Dom.el('div', { class: 'kt-help-cattile-nm' }, cat));
+        tx.appendChild(Dom.el('div', { class: 'kt-help-cattile-ct' }, arts.length + ' guide' + (arts.length === 1 ? '' : 's')));
+        tile.appendChild(tx);
+        tile.addEventListener('click', function () { showCategory(cat); });
+        grid.appendChild(tile);
+      });
+      panel.appendChild(grid);
+      return panel;
+    }
+
+    function showCategory(cat) {
+      Dom.clear(content); Dom.clear(toc);
+      state.currentSlug = null; state.currentArticle = null; state.expandedCategory = cat;
+      try { renderMobileSelect(); } catch (e) {}
+      var box = Dom.el('div', { class: 'kt-help-home' });
+      var back = Dom.el('button', { class: 'kt-help-catback' }, '‹  All topics');
+      back.addEventListener('click', function () { renderHomePanels(); });
+      box.appendChild(back);
+      box.appendChild(Dom.el('h2', { class: 'kt-help-home-h' }, catIcon(cat) + '  ' + cat));
+      var arts = state.categorized[cat] || [];
+      box.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, arts.length + ' guide' + (arts.length === 1 ? '' : 's') + ' in this topic'));
+      var grid = Dom.el('div', { class: 'kt-help-grid' });
+      arts.forEach(function (a) {
+        var card = Dom.el('button', { class: 'kt-help-card' });
+        card.appendChild(Dom.el('div', { class: 'kt-help-card-ttl' }, a.title || a.slug));
+        card.addEventListener('click', function () { loadArticle(a.slug); });
+        grid.appendChild(card);
+      });
+      box.appendChild(grid);
+      content.appendChild(box);
+      try { content.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+    }
+
     function renderHomePanels() {
       Dom.clear(content);
       Dom.clear(toc);
@@ -224,7 +289,8 @@
       content.appendChild(home);
 
       home.appendChild(Dom.el('h2', { class: 'kt-help-home-h' }, '👋  Where to start'));
-      home.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, 'Browse by category in the left sidebar, search above, or jump straight in:'));
+      home.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, 'Tap a topic below, search at the top, or ask our AI assistant anything.'));
+      if (Object.keys(state.categorized).length) home.appendChild(catTiles());
 
       if (state.featured.length) {
         home.appendChild(panelOfCards('⭐ Featured', state.featured));
@@ -633,7 +699,7 @@
       .kt-help-crumb { font-size: 13px; color: #6B7280; }
       .kt-help-crumb-link { color: #1F6080; text-decoration: none; }
       .kt-help-crumb-link:hover { text-decoration: underline; }
-      .kt-help-crumb-sep { margin: 0 8px; color: #9CA3AF; }
+      .kt-help-crumb-sep { margin: 0 8px; color:#64748B; }
       .kt-help-crumb-cat { font-weight: 600; color: #4B5563; }
       .kt-help-article-actions { display: flex; gap: 8px; }
       .kt-help-action-btn { background: #F3F4F6; border: none; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; font-size: 16px; transition: background 0.12s; }
@@ -715,7 +781,17 @@
         .kt-help-toc { display: none; }
       }
 
-      /* MOBILE — sidebar hides, select shows */
+      /* Friendly category tiles (home) */
+      .kt-help-cattiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 11px; }
+      .kt-help-cattile { display: flex; align-items: center; gap: 11px; background: #fff; border: 1px solid #E7EDF3; border-radius: 15px; padding: 13px 14px; cursor: pointer; text-align: left; transition: transform .15s, box-shadow .15s, border-color .15s; box-shadow: 0 2px 8px -4px rgba(15,23,42,.12); }
+      .kt-help-cattile:hover { border-color: #1F6080; transform: translateY(-2px); box-shadow: 0 8px 18px -6px rgba(31,96,128,.22); }
+      .kt-help-cattile-ic { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+      .kt-help-cattile-nm { font-size: 14px; font-weight: 800; color: #0F172A; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
+      .kt-help-cattile-ct { font-size: 11.5px; color: #64748B; margin-top: 2px; }
+      .kt-help-catback { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: #1F6080; font-weight: 800; font-size: 14px; cursor: pointer; padding: 6px 0; margin-bottom: 8px; }
+      .kt-help-catback:hover { color: #0E7C90; }
+
+      /* MOBILE — sidebar hides, friendly single column */
       @media (max-width: 768px) {
         .kt-help-wrap { padding: 12px; }
         .kt-help-hero { flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px; }
@@ -723,10 +799,26 @@
         .kt-help-layout { grid-template-columns: 1fr; gap: 12px; }
         .kt-help-sidebar { display: none; }
         .kt-help-mobile-select { display: block; }
-        .kt-help-content { padding: 20px; }
+        .kt-help-content { padding: 18px; }
         .kt-help-article-title { font-size: 24px; }
         .kt-help-search-wrap { position: static; }
+        .kt-help-home { gap: 22px; }
+        .kt-help-home-h { font-size: 22px; }
+        .kt-help-grid { grid-template-columns: 1fr; }
       }
+      /* The APK WebView can report a desktop width — apply the same single-column
+         friendly layout whenever we're in the native app, regardless of width. */
+      html.kt-native .kt-help-wrap { padding: 12px; }
+      html.kt-native .kt-help-hero { flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px; }
+      html.kt-native .kt-help-title { font-size: 22px; }
+      html.kt-native .kt-help-layout { grid-template-columns: 1fr; gap: 12px; }
+      html.kt-native .kt-help-sidebar { display: none; }
+      html.kt-native .kt-help-toc { display: none; }
+      html.kt-native .kt-help-mobile-select { display: block; }
+      html.kt-native .kt-help-content { padding: 18px; }
+      html.kt-native .kt-help-home { gap: 22px; }
+      html.kt-native .kt-help-home-h { font-size: 22px; }
+      html.kt-native .kt-help-grid { grid-template-columns: 1fr; }
     `;
     document.head.appendChild(style);
   }
@@ -748,6 +840,8 @@
   window.KT.renderHelp = renderHelp;
   window.KT.showAskModal = showAskModal;
   Shell.registerScreen("guardian:help", renderHelp);
+  Shell.registerScreen("home_visitor:help", renderHelp);
+  Shell.registerScreen("sales_rep:help", renderHelp);
   Shell.registerScreen("educator:help", renderHelp);
   Shell.registerScreen("centre_director:help", renderHelp);
   Shell.registerScreen("auditor:help", renderHelp);

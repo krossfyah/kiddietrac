@@ -346,6 +346,7 @@
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
+          { hash: 'help',          label: 'Help',          icon: '❓' },
           { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
         ]},
       ];

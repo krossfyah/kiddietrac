@@ -197,6 +197,8 @@ PROMPT;
                 'centre_director' => 'centre_director', 'director' => 'centre_director',
                 'agency_admin' => 'agency_admin',
                 'auditor' => 'auditor',
+                'home_visitor' => 'home_visitor',
+                'sales_rep' => 'sales_rep',
             ];
             $va = strtolower(trim((string) $request->header('X-View-As-Role')));
             if (isset($map[$va])) {
@@ -208,6 +210,8 @@ PROMPT;
             in_array('agency_admin', $roles, true) => 'agency_admin',
             in_array('centre_director', $roles, true) => 'centre_director',
             in_array('educator', $roles, true) => 'educator',
+            in_array('home_visitor', $roles, true) => 'home_visitor',
+            in_array('sales_rep', $roles, true) => 'sales_rep',
             in_array('guardian', $roles, true) => 'guardian',
             in_array('auditor', $roles, true) => 'auditor',
             default => 'guardian',
