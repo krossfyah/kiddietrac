@@ -234,6 +234,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::patch('/products/{product}', [\App\Http\Controllers\Api\SalesController::class, 'productSave'])->where('product','[0-9]+');
             Route::delete('/products/{product}', [\App\Http\Controllers\Api\SalesController::class, 'productDelete'])->where('product','[0-9]+');
             Route::post('/demo-token', [\App\Http\Controllers\Api\SalesController::class, 'demoToken']);
+            Route::get('/quotes/{quote}/pdf', [\App\Http\Controllers\Api\SalesController::class, 'quotePdf'])->where('quote','[0-9]+');
+            Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\SalesController::class, 'quoteSend'])->where('quote','[0-9]+');
         });
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);

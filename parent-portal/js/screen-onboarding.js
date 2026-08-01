@@ -119,6 +119,18 @@
         ],
       };
     }
+    if (r === 'sales_rep') {
+      return {
+        title: 'About you',
+        subtitle: 'A few details for your sales profile.',
+        fields: [
+          { k: 'job_title',     label: 'Job title',               type: 'text', placeholder: 'Account Executive' },
+          { k: 'work_phone',    label: 'Work phone',              type: 'tel' },
+          { k: 'territory',     label: 'Territory / region',      type: 'text', placeholder: 'e.g. Ontario' },
+          { k: 'calendar_link', label: 'Booking / calendar link', type: 'text', placeholder: 'https://calendly.com/' },
+        ],
+      };
+    }
     // guardian
     return {
       title: 'About your family',

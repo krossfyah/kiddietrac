@@ -284,7 +284,97 @@ class SalesController extends Controller
         }
         $token = $demoUser->createToken('sales-demo', ['*'], now()->addHours(8))->plainTextToken;
 
+
         return response()->json(['token' => $token, 'agency_id' => 6, 'user' => ['id' => $demoUser->id, 'name' => trim($demoUser->first_name . ' ' . $demoUser->last_name)]]);
+    }
+
+    // ---------------------------------------------------------------- Quote PDF / send
+
+    public function quotePdf(int $quote)
+    {
+        $q = SalesQuote::with('items', 'lead')->findOrFail($quote);
+        $pdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
+        $pdf->loadHtml($this->quoteHtml($q));
+        $pdf->setPaper('letter');
+        $pdf->render();
+
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . ($q->number ?: 'proposal') . '.pdf"',
+        ]);
+    }
+
+    public function quoteSend(int $quote)
+    {
+        $q = SalesQuote::with('items', 'lead')->findOrFail($quote);
+        $lead = $q->lead;
+        if (! $lead || ! $lead->email) {
+            return response()->json(['message' => 'This lead has no email address to send the proposal to.'], 422);
+        }
+        $pdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
+        $pdf->loadHtml($this->quoteHtml($q));
+        $pdf->setPaper('letter');
+        $pdf->render();
+        $bytes = $pdf->output();
+
+        try {
+            $body = '<div style="font-family:system-ui,Arial,sans-serif;color:#0D1B2A">'
+                . '<p>Hi ' . e($lead->name ?: 'there') . ',</p>'
+                . '<p>Thank you for your interest in KiddieTrac. Please find our proposal attached as a PDF.</p>'
+                . '<p>Happy to walk you through it — just reply to this email.</p>'
+                . '<p>Warm regards,<br>The KiddieTrac Team</p></div>';
+            Mail::html($body, function ($m) use ($lead, $q, $bytes) {
+                $m->to($lead->email, $lead->name ?: null)->subject('Your KiddieTrac proposal ' . ($q->number ?: ''));
+                $m->attachData($bytes, ($q->number ?: 'proposal') . '.pdf', ['mime' => 'application/pdf']);
+            });
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Could not send the email: ' . $e->getMessage()], 500);
+        }
+
+        if ($q->status === 'draft') {
+            $q->status = 'sent';
+            $q->sent_at = now();
+            $q->save();
+        }
+        $this->logActivity($lead, 'email', 'Proposal ' . ($q->number ?: '') . ' emailed to ' . $lead->email, null);
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function quoteHtml(SalesQuote $q): string
+    {
+        $lead = $q->lead;
+        $num = fn ($v) => number_format((float) $v, 2);
+        $rows = '';
+        foreach ($q->items as $it) {
+            $qty = rtrim(rtrim(number_format((float) $it->qty, 2), '0'), '.');
+            $rows .= '<tr><td style="padding:7px 10px;border-bottom:1px solid #e6ebf1">' . e($it->description) . '</td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:center">' . $qty . '</td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right">$' . $num($it->unit_price) . '</td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right">$' . $num($it->line_total) . '</td></tr>';
+        }
+        $disc = (float) $q->discount > 0
+            ? '<tr><td colspan="3" style="padding:6px 10px;text-align:right;color:#64748b">Discount</td><td style="padding:6px 10px;text-align:right">-$' . $num($q->discount) . '</td></tr>'
+            : '';
+        $valid = $q->valid_until ? '<p style="color:#64748b;font-size:12px;margin:2px 0 0">Valid until ' . e($q->valid_until->format('M j, Y')) . '</p>' : '';
+        $notes = $q->notes ? '<div style="margin-top:16px;font-size:12px;color:#334155"><strong>Notes</strong><br>' . nl2br(e($q->notes)) . '</div>' : '';
+        $forWhom = e($lead->company ?: ($lead->name ?? 'Prospect')) . ($lead->name && $lead->company ? ' (' . e($lead->name) . ')' : '');
+        $period = $q->billing_period ? ' <span style="font-weight:400;font-size:11px;color:#64748b">/' . e($q->billing_period) . '</span>' : '';
+
+        return '<html><body style="font-family:DejaVu Sans,sans-serif;color:#0D1B2A;padding:14px">'
+            . '<div style="background:#5B2A86;color:#fff;padding:20px 24px;border-radius:10px">'
+            . '<div style="font-size:24px;font-weight:800">KiddieTrac</div>'
+            . '<div style="opacity:.9;font-size:12px">Smart Childcare Management Platform</div></div>'
+            . '<h2 style="margin:18px 0 0">Proposal ' . e($q->number ?: '') . '</h2>' . $valid
+            . '<table style="margin:12px 0 6px;font-size:13px"><tr><td style="color:#64748b;padding-right:14px">Prepared for</td><td><strong>' . $forWhom . '</strong></td></tr>'
+            . ($lead->email ? '<tr><td style="color:#64748b">Email</td><td>' . e($lead->email) . '</td></tr>' : '') . '</table>'
+            . '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px">'
+            . '<thead><tr style="background:#f4f6f9;text-align:left"><th style="padding:8px 10px">Item</th><th style="padding:8px 10px;text-align:center">Qty</th><th style="padding:8px 10px;text-align:right">Unit</th><th style="padding:8px 10px;text-align:right">Amount</th></tr></thead>'
+            . '<tbody>' . ($rows ?: '<tr><td colspan="4" style="padding:10px;color:#94a3b8">No line items.</td></tr>') . '</tbody>'
+            . '<tfoot>' . $disc . '<tr><td colspan="3" style="padding:9px 10px;text-align:right;font-weight:800">Total</td><td style="padding:9px 10px;text-align:right;font-weight:800;color:#047857">$' . $num($q->total) . $period . '</td></tr></tfoot>'
+            . '</table>' . $notes
+            . '<p style="margin-top:26px;color:#94a3b8;font-size:11px">KiddieTrac · Smart Childcare Management Platform · kiddietrac.com</p>'
+            . '</body></html>';
     }
 
     // ---------------------------------------------------------------- helpers

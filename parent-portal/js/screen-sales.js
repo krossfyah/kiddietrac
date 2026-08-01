@@ -40,6 +40,22 @@
   function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
   function fmtDate(s) { if (!s) return ''; try { return new Date(s + (s.length <= 10 ? 'T00:00:00' : '')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return s; } }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function me() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
+  function salesAuthed() { var r = (me().roles) || []; return r.indexOf('sales_rep') > -1 || r.indexOf('platform_admin') > -1; }
+  function guarded(fn) {
+    return function (c, ctx) {
+      if (!salesAuthed()) { c.innerHTML = ''; c.appendChild(el('div', { style: 'padding:48px 20px;text-align:center;color:#64748B' }, ['🔒 The sales workspace is for the sales team and superadmins.'])); return; }
+      return fn(c, ctx);
+    };
+  }
+  function tok() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
+  function apiBase() { return (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
+  function downloadQuotePdf(id) {
+    fetch(apiBase() + '/sales/quotes/' + id + '/pdf', { headers: { Authorization: 'Bearer ' + tok() } })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+      .then(function (b) { var u = URL.createObjectURL(b); var a = document.createElement('a'); a.href = u; a.download = 'proposal-' + id + '.pdf'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 1500); })
+      .catch(function (e) { toast('⚠️', 'PDF failed', e.message || '', '#DC2626'); });
+  }
 
   function hero(title, sub, actions) {
     return el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#5B2A86,#9C3FA6);color:#fff;border-radius:18px;padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap' }, [
@@ -359,6 +375,8 @@
     var statusSel = quote ? selectEl([{ v: 'draft', l: 'Draft' }, { v: 'sent', l: 'Sent' }, { v: 'accepted', l: 'Accepted' }, { v: 'declined', l: 'Declined' }], quote.status) : null;
     box.appendChild(el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;align-items:center' }, [
       quote ? el('div', { style: 'margin-right:auto;display:flex;align-items:center;gap:6px' }, [el('span', { style: 'font-size:12px;color:#64748B' }, ['Status']), statusSel]) : null,
+      quote ? btn('⬇ PDF', 'light', function () { downloadQuotePdf(quote.id); }) : null,
+      quote && leadId ? btn('📧 Email', 'light', async function (ev) { ev.target.disabled = true; try { await Api.post('/sales/quotes/' + quote.id + '/send', {}); toast('📧', 'Proposal emailed', 'Sent to the prospect.'); } catch (e) { toast('⚠️', 'Email failed', e.message || '', '#DC2626'); ev.target.disabled = false; } }) : null,
       btn('Cancel', 'light', function () { ov.remove(); }),
       btn(quote ? 'Save proposal' : 'Create proposal', 'primary', async function (ev) {
         ev.target.disabled = true;
@@ -437,13 +455,15 @@
   }
 
   // ─────────────────────────────── register ───────────────────────────────
-  ['sales_rep', 'platform_admin'].forEach(function (role) {
-    KT.Shell.registerScreen(role + ':sales', renderPipeline);
-    KT.Shell.registerScreen(role + ':sales-leads', renderList);
-    KT.Shell.registerScreen(role + ':sales-new', renderNew);
-    KT.Shell.registerScreen(role + ':sales-lead', renderDetail);
-    KT.Shell.registerScreen(role + ':sales-followups', renderFollowups);
-    KT.Shell.registerScreen(role + ':sales-plans', renderPlans);
-    KT.Shell.registerScreen(role + ':sales-demo', renderDemo);
+  // sales_rep + superadmin (platform_admin resolves to the agency_admin shell, so
+  // register there too; guarded() blocks any non-sales/non-platform agency_admin).
+  ['sales_rep', 'platform_admin', 'agency_admin'].forEach(function (role) {
+    KT.Shell.registerScreen(role + ':sales', guarded(renderPipeline));
+    KT.Shell.registerScreen(role + ':sales-leads', guarded(renderList));
+    KT.Shell.registerScreen(role + ':sales-new', guarded(renderNew));
+    KT.Shell.registerScreen(role + ':sales-lead', guarded(renderDetail));
+    KT.Shell.registerScreen(role + ':sales-followups', guarded(renderFollowups));
+    KT.Shell.registerScreen(role + ':sales-plans', guarded(renderPlans));
+    KT.Shell.registerScreen(role + ':sales-demo', guarded(renderDemo));
   });
 })(window);

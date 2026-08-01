@@ -74,6 +74,9 @@
       '</a>' +
       '<a href="#platform-agencies" class="nav-link" data-hash="platform-agencies">' +
         '<span class="nav-icon">🏢</span><span class="nav-label">All agencies</span>' +
+      '</a>' +
+      '<a href="#sales" class="nav-link" data-hash="sales">' +
+        '<span class="nav-icon">💼</span><span class="nav-label">Sales</span>' +
       '</a>';
     navLinks.insertBefore(section, navLinks.firstChild);
   }

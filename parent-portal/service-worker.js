@@ -1,10 +1,20 @@
 /* ===================================================================
-   KIDDIETRAC service worker v15
+   KIDDIETRAC service worker v16
    v11: caching + offline; v14: + Web Push support
-   v15: network-first for HTML so deploys show up without a cache trap
-        (the old cache-first served a stale dashboard.html forever).
+   v15: network-first for HTML so deploys show up without a cache trap.
+   v16: on SW UPDATE, wipe caches AND reload open windows once, so a deploy
+        actually reaches the APK/PWA without the user manually clearing cache
+        (the app was holding stale JS: tiles/toasts/etc. didn't update).
+   v17 (2026-07-23): cache-bust — force stale clients onto the latest tasks tile,
+        chat avatars/card, top-bar tooltips and quick-add fixes.
+   v18 (2026-07-27): assets (JS/CSS/img) are now NETWORK-FIRST, not cache-first —
+        cache-first was serving stale scripts after a deploy (HTML updated but old
+        JS/CSS kept loading → the phone "didn't change"). Always online = always
+        fresh; cache is now only an offline fallback.
+   v19 (2026-07-27): SW fetch now uses {cache:'reload'} so network-first actually
+        bypasses the browser HTTP cache (max-age JS/CSS was being served stale).
    =================================================================== */
-const CACHE = 'kt-v22p98g-rt5';
+const CACHE = 'kt-v134-2026073118';
 const ASSETS = ['/', '/index.html', '/dashboard.html', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -13,12 +23,23 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  e.waitUntil((async () => {
+    var hadController = false;
+    try {
+      var keys = await caches.keys();
+      hadController = keys.some(function (k) { return k !== CACHE; });   // an OLD cache existed → this is an update
+      await Promise.all(keys.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+    } catch (e) {}
+    try { await self.clients.claim(); } catch (e) {}
+    // Only reload on a genuine UPDATE (old cache was present), never on the very
+    // first install — otherwise a fresh sign-in would double-load.
+    if (hadController) {
+      try {
+        var cs = await self.clients.matchAll({ type: 'window' });
+        cs.forEach(function (c) { try { c.navigate(c.url); } catch (e) {} });
+      } catch (e) {}
+    }
+  })());
 });
 
 self.addEventListener('fetch', (e) => {
@@ -31,8 +52,10 @@ self.addEventListener('fetch', (e) => {
   if (isDoc) {
     // Network-first for the app shell (HTML): always try the fresh page so a
     // deploy is picked up immediately; fall back to cache only when offline.
+    // {cache:'reload'} BYPASSES the browser HTTP cache — otherwise fetch() can
+    // return a stale copy that .htaccess marked max-age, defeating "network-first".
     e.respondWith(
-      fetch(e.request)
+      fetch(new Request(e.request, { cache: 'reload' }))
         .then(res => {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
@@ -43,11 +66,24 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Other GETs (assets): cache-first, fall back to network.
+  // Other GETs (assets = JS/CSS/img): NETWORK-FIRST. The APK/PWA is effectively
+  // always online, and cache-first was serving STALE scripts/styles even after a
+  // deploy (the HTML updated network-first but the old JS/CSS kept being served
+  // from cache → bar/gear/cards rendered with old code). Always try the network,
+  // refresh the cache, and fall back to cache only when the network truly fails
+  // (offline). This ends the recurring "fix deployed but the phone didn't change".
   e.respondWith(
-    caches.match(e.request).then(cached =>
-      cached || fetch(e.request).catch(() => caches.match('/dashboard.html'))
-    )
+    fetch(new Request(e.request, { cache: 'reload' }))   // bypass the browser HTTP cache so a stale max-age JS/CSS can't be served — TRUE network-first
+      .then(res => {
+        try {
+          if (res && res.status === 200 && (res.type === 'basic' || res.type === 'default')) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+          }
+        } catch (e) {}
+        return res;
+      })
+      .catch(() => caches.match(e.request).then(c => c || caches.match('/dashboard.html')))
   );
 });
 
