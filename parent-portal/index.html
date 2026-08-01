@@ -2,7 +2,8 @@
 <html lang="en-CA">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <script>window.KT_VERSION='4.2';</script>
   <title>Sign in · Kiddietrac</title>
   <meta name="description" content="Sign in to your Kiddietrac parent account">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -21,21 +22,61 @@
   <link rel="stylesheet" href="/css/kt-brand-v16.css">
   <link rel="stylesheet" href="/css/kt-login-v22.css">
   <link rel="stylesheet" href="/css/kt-login-pop.css">
-  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260711rt4">
+  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260729logo">
 </head>
 <body class="auth-body">
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
-<div id="kt-splash"><div class="kt-splash-in"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="" style="opacity:0;transition:opacity .25s ease" onload="this.style.opacity=1" onerror="this.style.display='none'"><div class="kt-splash-bar"><span></span></div></div></div>
+<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-splash-bar"><span></span></div></div></div>
 <style>
 #kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
 #kt-splash.kt-hide{opacity:0;pointer-events:none}
 #kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:26px;padding:0 28px}
-#kt-splash .kt-splash-logo{width:min(66vw,224px);height:auto;animation:kt-pulse 2.4s ease-in-out infinite}
+#kt-splash .kt-splash-logo{width:min(66vw,224px);height:auto}
 #kt-splash .kt-splash-bar{width:128px;height:3px;border-radius:99px;background:rgba(20,70,100,.13);overflow:hidden}
 #kt-splash .kt-splash-bar span{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,#13B7CC,#8EC73C);animation:kt-load 1.25s ease-in-out infinite}
 @keyframes kt-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
 @keyframes kt-load{0%{transform:translateX(-130%)}100%{transform:translateX(360%)}}
 @media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo,#kt-splash .kt-splash-bar span{animation:none}}
+
+/* ── KiddieTrac logo "write-on" animation (login + splash) ──────────────
+   The wordmark writes itself on left→right (Kiddie→Trac, then the swish),
+   an ink-pen glow rides the reveal edge, a sheen sweeps across the shape,
+   and a sparkle burst pops at the ticks. Super cool, works mobile+desktop. */
+.ktl-anim{position:relative;display:inline-block;line-height:0;}
+.ktl-anim > img{opacity:1 !important;transition:none !important;transform-origin:50% 60%;
+  animation:ktl-writeon 1.35s cubic-bezier(.62,.02,.34,1) .18s both;}
+@keyframes ktl-writeon{
+  0%{clip-path:inset(0 100% 0 0);transform:scale(.982);}
+  85%{transform:scale(1.018);}
+  100%{clip-path:inset(0 0 0 0);transform:scale(1);}
+}
+/* the glowing ink pen that rides the writing edge */
+.ktl-anim .ktl-pen{position:absolute;top:12%;bottom:24%;width:5px;left:0;border-radius:6px;
+  background:linear-gradient(180deg,#13B7CC,#8EC73C);opacity:0;pointer-events:none;z-index:2;
+  box-shadow:0 0 16px 5px rgba(19,183,204,.60),0 0 34px 10px rgba(142,199,60,.32);
+  animation:ktl-pen 1.35s cubic-bezier(.62,.02,.34,1) .18s both;}
+@keyframes ktl-pen{0%{left:0;opacity:0;}9%{opacity:1;}88%{opacity:1;}100%{left:100%;opacity:0;}}
+/* a light sheen sweeps across, masked to the logo shape */
+.ktl-anim .ktl-sheen{position:absolute;inset:0;pointer-events:none;z-index:3;opacity:0;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.7) 50%,transparent 58%);
+  background-size:250% 100%;background-position:170% 0;
+  -webkit-mask:url(/logo-wordmark-large.png) center/contain no-repeat;
+  mask:url(/logo-wordmark-large.png) center/contain no-repeat;
+  animation:ktl-sheen 1s ease 1.5s both;}
+@keyframes ktl-sheen{0%{background-position:170% 0;opacity:0;}25%{opacity:1;}100%{background-position:-70% 0;opacity:0;}}
+/* sparkle burst from the ticks (top-centre) — magic, not duplicate marks */
+.ktl-anim .ktl-spk{position:absolute;top:4%;left:47%;width:0;height:0;pointer-events:none;z-index:4;}
+.ktl-anim .ktl-spk b{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,#fff 0%,#8EC73C 42%,rgba(142,199,60,0) 72%);}
+.ktl-anim .ktl-spk b:nth-child(1){--tx:-26px;--ty:-20px;animation:ktl-spk .75s ease 1.32s both;}
+.ktl-anim .ktl-spk b:nth-child(2){--tx:2px;--ty:-30px;animation:ktl-spk .8s ease 1.42s both;}
+.ktl-anim .ktl-spk b:nth-child(3){--tx:26px;--ty:-18px;animation:ktl-spk .75s ease 1.5s both;}
+@keyframes ktl-spk{0%{transform:translate(0,0) scale(.2);opacity:0;}35%{opacity:1;}100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0;}}
+#kt-splash .ktl-anim > img{width:min(66vw,224px);height:auto;}
+@media(prefers-reduced-motion:reduce){
+  .ktl-anim > img{animation:none;clip-path:none;}
+  .ktl-anim .ktl-pen,.ktl-anim .ktl-sheen,.ktl-anim .ktl-spk{display:none !important;}
+}
 </style>
 <script>
 (function(){function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
@@ -76,12 +117,17 @@ setTimeout(hide,6000);})();
     <!-- ── Sign-in ── -->
     <section class="ktl-form-side">
       <div class="ktl-mobile-hero" aria-hidden="true">
-        <div class="ktl-mhero-card"><img src="/logo-wordmark-large.png" alt="KiddieTrac" style="opacity:0;transition:opacity .25s ease" onload="this.style.opacity=1" onerror="this.style.display='none'"></div>
+        <div class="ktl-mhero-card"><span class="ktl-anim"><img src="/logo-wordmark-large.png" alt="KiddieTrac" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span></div>
         <p class="ktl-mhero-tag">Every moment, beautifully captured.</p>
       </div>
       <div class="ktl-form-inner">
         <div class="auth-logo">
-          <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" class="ktl-logo" style="opacity:0;transition:opacity .25s ease" onload="this.style.opacity=1" onerror="this.style.display='none'">
+          <span class="ktl-anim">
+            <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" class="ktl-logo" onerror="this.style.display='none'">
+            <span class="ktl-pen" aria-hidden="true"></span>
+            <span class="ktl-sheen" aria-hidden="true"></span>
+            <span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span>
+          </span>
         </div>
         <!-- kt-v16-auth-logo-swapped -->
 
@@ -92,18 +138,24 @@ setTimeout(hide,6000);})();
 
         <form id="loginForm" class="auth-form" novalidate>
           <div class="form-row">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+            <label for="email">Email or username</label>
+            <input type="text" id="email" name="email" autocomplete="username" placeholder="you@example.com" required autofocus>
+          </div>
+
+          <!-- Shown only when an email is shared by more than one account (needs_username). -->
+          <div class="form-row" id="usernameRow" hidden>
+            <label for="loginUsername">Username</label>
+            <input type="text" id="loginUsername" name="loginUsername" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="your username" pattern="[A-Za-z0-9._\-]+">
           </div>
 
           <div class="form-row">
             <label for="password">
               Password
-              <a href="/forgot-password.html" class="forgot-link">Forgot?</a>
+              <a href="/forgot-password.html" class="forgot-link" tabindex="-1">Forgot?</a>
             </label>
             <div class="kt-pw-wrap" style="position:relative;">
               <input type="password" id="password" name="password" autocomplete="current-password" placeholder="••••••••••" minlength="10" required style="padding-right:46px;">
-              <button type="button" id="kt-pw-toggle" aria-label="Show password" title="Show password" style="position:absolute;top:0;right:0;height:100%;width:44px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;font-size:18px;color:#8A99A8;line-height:1;">👁️</button>
+              <button type="button" id="kt-pw-toggle" tabindex="-1" aria-label="Show password" title="Show password" style="position:absolute;top:0;right:0;height:100%;width:44px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;font-size:17px;color:#64748B;line-height:1;">👁</button>
             </div>
           </div>
           <script>
@@ -112,7 +164,7 @@ setTimeout(hide,6000);})();
             if(b&&p) b.addEventListener('click',function(){
               var show=p.type==='password';
               p.type=show?'text':'password';
-              b.textContent=show?'🙈':'👁️';
+              b.textContent=show?'🙈':'👁';
               b.setAttribute('aria-label',show?'Hide password':'Show password');
               b.title=show?'Hide password':'Show password';
               p.focus();
@@ -141,7 +193,8 @@ setTimeout(hide,6000);})();
           </p>
         </form>
       </div>
-      <div class="ktl-legal">© 2026 KiddieTrac · Smart Childcare Management Platform</div>
+      <div class="ktl-legal">© 2026 KiddieTrac · Smart Childcare Management Platform · <span id="ktl-ver"></span></div>
+      <script>(function(){var v=document.getElementById('ktl-ver');if(v)v.textContent='v'+(window.KT_VERSION||'');})();</script>
     </section>
 
     <!-- ── Brand showcase ── -->
@@ -200,6 +253,12 @@ setTimeout(hide,6000);})();
         device_platform: 'web',
       };
 
+      // If the username row is showing (shared email), send the username too.
+      const unameEl = document.getElementById('loginUsername');
+      if (unameEl && !document.getElementById('usernameRow').hidden && unameEl.value.trim()) {
+        data.username = unameEl.value.trim();
+      }
+
       // v22p7.2: include MFA code on the second-stage submit
       const mfaInput = document.getElementById('mfaCode');
       if (mfaInput && !document.getElementById('mfaRow').hidden && mfaInput.value.trim()) {
@@ -235,6 +294,24 @@ setTimeout(hide,6000);})();
           submitBtn.disabled = false;
           submitBtn.textContent = 'Verify code';
           setTimeout(function () { mfaInput.focus(); }, 50);
+          return;
+        }
+
+        // Shared email: the server can't tell which account — reveal the username
+        // field and ask them to sign in with it.
+        if (body.needs_username) {
+          document.getElementById('usernameRow').hidden = false;
+          // Wipe any browser-autofilled value so a stale saved username (e.g. from
+          // another account on the same email) can't silently sign you into the
+          // wrong account. The user must type the username for THIS account.
+          var uEl = document.getElementById('loginUsername');
+          if (uEl) { uEl.value = ''; }
+          errorMsg.textContent = body.message || 'More than one account uses this email — enter your username.';
+          errorMsg.style.color = '#1F6080';
+          errorMsg.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign in';
+          setTimeout(function () { if (uEl) { uEl.value = ''; uEl.focus(); } }, 50);
           return;
         }
 
@@ -297,10 +374,10 @@ setTimeout(hide,6000);})();
   <script src="/js/screen-admin-branding.js" defer></script>
   <script src="/js/screen-marketing-site.js" defer></script>
   <script src="/js/nav-additions-v15.js" defer></script>
-  <script src="/js/kt-social-login.js?v=20260708c"></script>
-  <script src="/js/kt-pin.js?v=20260714e" defer></script>
-  <script src="/js/kt-biometric.js?v=20260714e" defer></script>
-  <script src="/js/kt-crash-report.js?v=20260711bio3" defer></script>
+  <script src="/js/kt-social-login.js?v=20260721icons"></script>
+  <script src="/js/kt-pin.js?v=20260731lock" defer></script>
+  <script src="/js/kt-biometric.js?v=20260731lock" defer></script>
+  <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
   <script src="/js/kt-i18n.js?v=20260714i23" defer></script>
 </body>
 </html>
