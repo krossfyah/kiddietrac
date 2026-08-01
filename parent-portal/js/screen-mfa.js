@@ -132,7 +132,7 @@
   }
 
   function renderSetupInProgress(wrap, data) {
-    var qrBox = Dom.el('div', { style: 'width:196px;height:196px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #E5E7EB;border-radius:12px;color:#94A3B8;font-size:12px;flex-shrink:0;' }, 'Generating QR…');
+    var qrBox = Dom.el('div', { style: 'width:196px;height:196px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #E5E7EB;border-radius:12px;color:#64748B;font-size:12px;flex-shrink:0;' }, 'Generating QR…');
     var c1 = card('Step 1 — Scan the QR code', [
       Dom.el('p', { style: 'font-size:14px;margin:0 0 14px;color:#374151;line-height:1.55;' },
         'In Microsoft Authenticator, tap ➕ → "Other account (Google, Facebook, etc.)" → "Scan a QR code", then point your camera here. (Google Authenticator, Authy and 1Password work the same way.)'),
@@ -215,10 +215,10 @@
       placeholder: '000000 or recovery code',
       style: 'width:240px;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;font-family:ui-monospace,monospace;',
     });
-    var disableBtn = btn('🛑 Disable MFA', danger(), function () {
+    var disableBtn = btn('🛑 Disable MFA', danger(), async function () {
       var code = (codeInput.value || '').trim().toUpperCase();
       if (!code) { alert('Enter your current code or a recovery code to disable.'); return; }
-      if (!confirm('Disable MFA? Your account will be protected by password only.')) return;
+      if (!await KT.confirm('Disable MFA? Your account will be protected by password only.')) return;
       disableBtn.disabled = true;
       disableBtn.textContent = 'Disabling…';
       Api.post('/auth/mfa/disable', { code: code }).then(function () {
@@ -242,7 +242,9 @@
     Shell.registerScreen('agency_admin:mfa', renderMfa);
     Shell.registerScreen('centre_director:mfa', renderMfa);
     Shell.registerScreen('educator:mfa', renderMfa);
+    Shell.registerScreen('sales_rep:mfa', renderMfa);
     Shell.registerScreen('guardian:mfa', renderMfa);
+    Shell.registerScreen('home_visitor:mfa', renderMfa);
   }
 
   KT.MfaScreen = { render: renderMfa };

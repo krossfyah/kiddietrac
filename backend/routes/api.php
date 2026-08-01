@@ -102,10 +102,10 @@ Route::prefix('v1')->group(function () {
         return response()->json(['ok' => true]);
     })->middleware('throttle:120,1');
 
-    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
     Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
-    Route::post('/auth/reset', [AuthController::class, 'resetPassword']);
+    Route::post('/auth/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
     Route::post('/auth/set-password', [AuthController::class, 'setPasswordFromToken'])->middleware('throttle:10,1');
     Route::get('/auth/social/providers', [\App\Http\Controllers\Api\SocialAuthController::class, 'providers']);
     Route::get('/auth/social/{provider}/redirect', [\App\Http\Controllers\Api\SocialAuthController::class, 'redirect'])->where('provider', '[a-z]+')->middleware('throttle:20,1');
@@ -129,6 +129,8 @@ Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteContr
 Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat']);
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
+// Signed (session-less) e-document view — a mobile WebView can open this URL directly.
+Route::get('/edoc/{id}/view', [\App\Http\Controllers\Api\EDocumentController::class, 'signedStream'])->name('edoc.signed')->middleware('signed');
 
 // v22p49 — Public tour booking. Throttled aggressively because the public
 // endpoint is the most-likely target for spam — 8 requests per hour per IP.
@@ -161,6 +163,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p22: platform_admin cross-agency routes
         Route::prefix('platform')->middleware('role:platform_admin')->group(function () {
             Route::get('/overview', [\App\Http\Controllers\Api\PlatformController::class, 'overview']);
+            Route::get('/directory', [\App\Http\Controllers\Api\ImpersonationController::class, 'directory']);
+            Route::post('/impersonate/{user}', [\App\Http\Controllers\Api\ImpersonationController::class, 'start'])->where('user', '[0-9]+');
             Route::get('/social-config', [\App\Http\Controllers\Api\SocialAuthController::class, 'configGet']);
             Route::post('/social-config', [\App\Http\Controllers\Api\SocialAuthController::class, 'configSave']);
             Route::get('/security-alerts', [\App\Http\Controllers\Api\SecurityController::class, 'alerts']);
@@ -182,6 +186,55 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/marketing-site/chats', [\App\Http\Controllers\Api\MarketingSiteController::class, 'chats']);
         });
         Route::get('/auth/me', [AuthController::class, 'me']);
+        // Tasks — admins/directors assign to educators; educators mark progress/done.
+        Route::middleware('role:educator,home_visitor,guardian,centre_director,agency_admin,platform_admin')->prefix('tasks')->group(function () {
+            Route::get('/mine', [\App\Http\Controllers\Api\TaskController::class, 'mine']);
+            Route::patch('/{task}/status', [\App\Http\Controllers\Api\TaskController::class, 'updateStatus'])->where('task','[0-9]+');
+            Route::get('/assignees', [\App\Http\Controllers\Api\TaskController::class, 'assignees']);
+            Route::get('/', [\App\Http\Controllers\Api\TaskController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\TaskController::class, 'store']);
+            Route::patch('/{task}', [\App\Http\Controllers\Api\TaskController::class, 'update'])->where('task','[0-9]+');
+            Route::delete('/{task}', [\App\Http\Controllers\Api\TaskController::class, 'destroy'])->where('task','[0-9]+');
+        });
+
+        Route::middleware('role:home_visitor,agency_admin,centre_director,platform_admin')->prefix('home-visits')->group(function () {
+            Route::get('/centres', [\App\Http\Controllers\Api\HomeVisitReportController::class, 'centres']);
+            Route::get('/', [\App\Http\Controllers\Api\HomeVisitReportController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\HomeVisitReportController::class, 'store']);
+            Route::get('/{report}', [\App\Http\Controllers\Api\HomeVisitReportController::class, 'show'])->where('report','[0-9]+');
+            Route::get('/{report}/pdf', [\App\Http\Controllers\Api\HomeVisitReportController::class, 'pdf'])->where('report','[0-9]+');
+            Route::patch('/{report}', [\App\Http\Controllers\Api\HomeVisitReportController::class, 'update'])->where('report','[0-9]+');
+        });
+        // Home-visitor inspection forms (Monthly Monitoring + quarterly Standard Checklist).
+        Route::middleware('role:home_visitor,agency_admin,centre_director,platform_admin')->prefix('inspection-forms')->group(function () {
+            Route::get('/schemas', [\App\Http\Controllers\Api\HccFormController::class, 'schemas']);
+            Route::get('/schema/{key}', [\App\Http\Controllers\Api\HccFormController::class, 'schema']);
+            Route::get('/centres', [\App\Http\Controllers\Api\HccFormController::class, 'centres']);
+            Route::get('/', [\App\Http\Controllers\Api\HccFormController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Api\HccFormController::class, 'store']);
+            Route::patch('/{id}', [\App\Http\Controllers\Api\HccFormController::class, 'update'])->where('id','[0-9]+');
+            Route::get('/{id}', [\App\Http\Controllers\Api\HccFormController::class, 'show'])->where('id','[0-9]+');
+            Route::get('/{id}/pdf', [\App\Http\Controllers\Api\HccFormController::class, 'pdf'])->where('id','[0-9]+');
+        });
+
+        // Platform sales CRM (leads pipeline, activities/follow-ups, quotes). sales_rep + superadmin.
+        Route::middleware('role:sales_rep,platform_admin')->prefix('sales')->group(function () {
+            Route::get('/leads', [\App\Http\Controllers\Api\SalesController::class, 'index']);
+            Route::post('/leads', [\App\Http\Controllers\Api\SalesController::class, 'store']);
+            Route::get('/leads/{lead}', [\App\Http\Controllers\Api\SalesController::class, 'show'])->where('lead','[0-9]+');
+            Route::patch('/leads/{lead}', [\App\Http\Controllers\Api\SalesController::class, 'update'])->where('lead','[0-9]+');
+            Route::delete('/leads/{lead}', [\App\Http\Controllers\Api\SalesController::class, 'destroy'])->where('lead','[0-9]+');
+            Route::post('/leads/{lead}/activities', [\App\Http\Controllers\Api\SalesController::class, 'addActivity'])->where('lead','[0-9]+');
+            Route::patch('/activities/{activity}', [\App\Http\Controllers\Api\SalesController::class, 'updateActivity'])->where('activity','[0-9]+');
+            Route::post('/leads/{lead}/quotes', [\App\Http\Controllers\Api\SalesController::class, 'quoteStore'])->where('lead','[0-9]+');
+            Route::get('/quotes/{quote}', [\App\Http\Controllers\Api\SalesController::class, 'quoteShow'])->where('quote','[0-9]+');
+            Route::patch('/quotes/{quote}', [\App\Http\Controllers\Api\SalesController::class, 'quoteUpdate'])->where('quote','[0-9]+');
+            Route::get('/products', [\App\Http\Controllers\Api\SalesController::class, 'products']);
+            Route::post('/products', [\App\Http\Controllers\Api\SalesController::class, 'productSave']);
+            Route::patch('/products/{product}', [\App\Http\Controllers\Api\SalesController::class, 'productSave'])->where('product','[0-9]+');
+            Route::delete('/products/{product}', [\App\Http\Controllers\Api\SalesController::class, 'productDelete'])->where('product','[0-9]+');
+            Route::post('/demo-token', [\App\Http\Controllers\Api\SalesController::class, 'demoToken']);
+        });
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         // v22p3.5: onboarding wizard submission
@@ -207,6 +260,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             return response()->json(['photo_url' => $publicPath, 'message' => 'Avatar updated']);
         });
 
+        // v23: a user's own filed documents — their signed NDA and any files an
+        // admin attached to their record. Surfaced under "Forms" on mobile/APK.
+        Route::get('/auth/me/documents', function (\Illuminate\Http\Request $request) {
+            $docs = \Illuminate\Support\Facades\DB::table('documents')
+                ->where('scope_type', 'user')->where('scope_id', $request->user()->id)
+                ->orderByDesc('created_at')
+                ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at']);
+            return response()->json(['documents' => $docs]);
+        });
+        // Stream one of the caller's own documents through the API so the mobile
+        // WebView can open it (a cross-origin /storage link + target=_blank fails there).
+        Route::get('/auth/me/documents/{doc}/download', function (\Illuminate\Http\Request $request, int $doc) {
+            $row = \Illuminate\Support\Facades\DB::table('documents')->where('id', $doc)
+                ->where('scope_type', 'user')->where('scope_id', $request->user()->id)->first();
+            if (!$row) abort(404);
+            $rel = ltrim(str_replace('/storage/', '', (string) $row->file_url), '/');
+            $disk = \Illuminate\Support\Facades\Storage::disk('public');
+            if ($rel === '' || !$disk->exists($rel)) abort(404);
+            return response()->file($disk->path($rel));
+        });
+
         // ─── Help (available to all authenticated users) ───
         // v22p46: notifications inbox for ALL authenticated users (was
         // previously gated to guardian-only under /parent/notifications).
@@ -226,6 +300,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         // v22p33 — Per-role dashboard widget data
         Route::get('/widgets/me', [\App\Http\Controllers\Api\WidgetsController::class, 'me']);
+        Route::post('/me/account-deletion', [\App\Http\Controllers\Api\AccountController::class, 'requestDeletion']);
 
         // A parent's own notification preferences (email / SMS / in-app), e.g.
         // being told when their child is signed in or out. Scoped to the caller.
@@ -287,10 +362,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::prefix('parent')->middleware('role:guardian')->group(function () {
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
             Route::get('/children', [FamilyController::class, 'myChildren']);
+            Route::post('/withdrawals', [\App\Http\Controllers\Api\WithdrawalController::class, 'submit']);
+            Route::get('/withdrawals', [\App\Http\Controllers\Api\WithdrawalController::class, 'mine']);
             Route::get('/children/{child}', [ChildController::class, 'show']);
             Route::get('/children/{child}/timeline', [DailyEventController::class, 'timeline']);
             Route::get('/children/{child}/digest/{date}', [DailyEventController::class, 'digest']);
             Route::get('/children/{child}/invoices', [InvoiceController::class, 'forChild']);
+            Route::get('/external-invoices', [InvoiceController::class, 'externalForParent']);
             Route::get('/children/{child}/photos', [MediaController::class, 'forChild']);
             Route::get('/children/{child}/observations', [MediaController::class, 'observationsForChild']);
             Route::get('/messages', [MessageController::class, 'myConversations']);
@@ -298,6 +376,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/messages/unread-count', [MessageController::class, 'unreadCount']);
             Route::post('/messages/nudge', [MessageController::class, 'nudge'])->middleware('throttle:6,1');
             Route::get('/messages/{conversation}', [MessageController::class, 'show']);
+            Route::post('/messages/{conversation}/typing', [MessageController::class, 'typing'])->where('conversation','[0-9]+');
+            Route::post('/messages/{conversation}/react/{message}', [MessageController::class, 'reactMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
             Route::post('/messages', [MessageController::class, 'sendToRoom']);
             Route::patch('/messages/{message}', [MessageController::class, 'editMessage']);
             Route::delete('/messages/{message}', [MessageController::class, 'deleteMessage']);
@@ -316,6 +396,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             // v22p2.2: eDocuments (parent inbox + e-sign)
             Route::get('/edocuments',                       [EDocumentController::class, 'parentIndex']);
+            Route::get('/edocuments/{id}/link',             [EDocumentController::class, 'parentLink']);
             Route::post('/edocuments/{id}/sign',            [EDocumentController::class, 'sign']);
             Route::get('/edocuments/{id}/download',         [EDocumentController::class, 'parentDownload']);
         });
@@ -355,6 +436,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             Route::get('/conversations', [MessageController::class, 'educatorConversations']);
             Route::get('/conversations/{conversation}', [MessageController::class, 'show']);
+            Route::post('/conversations/{conversation}/typing', [MessageController::class, 'typing'])->where('conversation','[0-9]+');
             Route::post('/messages', [MessageController::class, 'educatorReply']);
 
             Route::post('/clock-in', [StaffController::class, 'clockIn']);
@@ -364,6 +446,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::prefix('director')->middleware('role:centre_director,agency_admin')->group(function () {
             // v20: AI digest status board (correctly placed in director group)
             Route::get('/digest-status', [DigestStatusController::class, 'index']);
+            Route::get('/withdrawals', [\App\Http\Controllers\Api\WithdrawalController::class, 'adminIndex']);
+            Route::post('/withdrawals/{id}/decide', [\App\Http\Controllers\Api\WithdrawalController::class, 'decide'])->where('id','[0-9]+');
             Route::post('/digest-status/regenerate', [DigestStatusController::class, 'regenerate']);
                         // v21: centre list for current director
             Route::get('/centres', [CentreController::class, 'myCentres']);
@@ -548,6 +632,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/centres/{centre}/logo', [AdminController::class, 'uploadCentreLogo']);
     
         Route::get('/users', [AdminController::class, 'listUsers']);
+        Route::get('/username-available', [AdminController::class, 'usernameAvailable']);
         Route::post('/users', [AdminController::class, 'createUser']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
         Route::get('/users/{user}/profile', [AdminController::class, 'userProfile']);
@@ -561,6 +646,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/users/{user}/resend-welcome', [AdminController::class, 'resendWelcome']);
         // v22p3.2: avatars
         Route::post('/users/{user}/avatar', [AdminController::class, 'uploadAvatar']);
+        // v23: per-user files / documents (NDA auto-filed here; admins can attach more)
+        Route::get('/users/{user}/documents', [AdminController::class, 'userDocuments']);
+        Route::post('/users/{user}/documents', [AdminController::class, 'uploadUserDocument']);
+        Route::get('/users/{user}/documents/{doc}/download', [AdminController::class, 'downloadUserDocument']);
+        Route::delete('/users/{user}/documents/{doc}', [AdminController::class, 'deleteUserDocument']);
         // v22p3.5: reopen onboarding wizard for a user
         Route::post('/users/{user}/reopen-onboarding', [AdminController::class, 'reopenOnboarding']);
     
@@ -622,6 +712,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/chats/start',                [ChatController::class, 'parentStart']);
         Route::get('/chats/{conversation}',        [ChatController::class, 'parentShow']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'parentSend']);
+        Route::delete('/chats/{conversation}/messages/{message}', [ChatController::class, 'parentDeleteMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
+        Route::post('/chats/{conversation}/messages/{message}/react', [ChatController::class, 'parentReactMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
+        Route::delete('/chats/{conversation}', [ChatController::class, 'parentDeleteConversation'])->where('conversation','[0-9]+');
+        Route::post('/chats/{conversation}/typing', [ChatController::class, 'parentTyping'])->where('conversation','[0-9]+');
     });
 
     // v22p43: parent-facing form endpoints (any authenticated user can submit;
@@ -636,13 +730,22 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
         // v22p47: audit trail — agency admins (whole agency) + directors (their centre)
         Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
+        // Top-bar notification / activity feed (agency-isolated; platform_admin sees all).
+        Route::get('/activity-feed', [AgencyController::class, 'activityFeed']);
     });
 
-    // PROVIDER chat routes (educator + centre_director + agency_admin)
-    Route::middleware('role:educator,centre_director,agency_admin')->prefix('provider')->group(function () {
+    // PROVIDER chat routes (educator + centre_director + agency_admin + home_visitor)
+    // home_visitor is agency-scoped in providerCentreIds so they message families
+    // across their agency. This group is chat-only — NOT the provider toolset.
+    Route::middleware('role:educator,centre_director,agency_admin,home_visitor')->prefix('provider')->group(function () {
         Route::get('/chats',                       [ChatController::class, 'providerList']);
         Route::get('/chats/{conversation}',        [ChatController::class, 'providerShow']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'providerSend']);
+        Route::delete('/chats/{conversation}/messages/{message}', [ChatController::class, 'providerDeleteMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
+        Route::post('/chats/{conversation}/messages/{message}/react', [ChatController::class, 'providerReactMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
+        Route::delete('/chats/{conversation}', [ChatController::class, 'providerDeleteConversation'])->where('conversation','[0-9]+');
+        Route::post('/chats/{conversation}/nudge',  [ChatController::class, 'providerNudge']);
+        Route::post('/chats/{conversation}/typing', [ChatController::class, 'providerTyping'])->where('conversation','[0-9]+');
         Route::post('/chats/start',                [ChatController::class, 'providerStart']);
     });
     
@@ -667,11 +770,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/waitlist',                      [WaitlistController::class, 'store']);
         Route::post('/waitlist/{child}/promote',      [WaitlistController::class, 'promote']);
         Route::post('/waitlist/{child}/decline',      [WaitlistController::class, 'decline']);
+        Route::post('/waitlist/{child}/remind',       [WaitlistController::class, 'remind']);
         Route::post('/waitlist/{child}/move',         [WaitlistController::class, 'move']);
     });
     
-    // PROVIDER — announcements compose + list
-    Route::middleware('role:educator,centre_director,agency_admin')->prefix('provider')->group(function () {
+    // PROVIDER — announcements compose + list (home_visitor may READ only; the
+    // controller guards store/destroy against home_visitor, and the UI hides
+    // compose for them — they see agency announcements but can't broadcast.)
+    Route::middleware('role:educator,centre_director,agency_admin,home_visitor')->prefix('provider')->group(function () {
         Route::get('/announcements',                  [AnnouncementController::class, 'indexProvider']);
         Route::post('/announcements',                 [AnnouncementController::class, 'store']);
         // Staff can delete announcements their own centre/agency owns (single or
@@ -768,10 +874,24 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch('/admin/time-off/{id}',   [\App\Http\Controllers\Api\TimeOffController::class, 'decide']);
     });
 
+    // ---- Staff pay / payslips (educators = hourly, home visitors = per visit) ----
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get('/me/payslips',              [\App\Http\Controllers\Api\PayController::class, 'myPayslips']);
+        Route::get('/me/payslips/{start}/pdf',  [\App\Http\Controllers\Api\PayController::class, 'payslipPdf']);
+    });
+    // Admins/directors set a staff member's pay rate + type.
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::patch('/admin/users/{user}/pay', [\App\Http\Controllers\Api\PayController::class, 'adminSetPay']);
+        // Configurable payslip wording (custom body note + confidential text).
+        Route::get ('/agency/payslip-settings', [\App\Http\Controllers\Api\PayController::class, 'payslipSettings']);
+        Route::post('/agency/payslip-settings', [\App\Http\Controllers\Api\PayController::class, 'savePayslipSettings']);
+    });
+
     // ---- Background checks ----
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/admin/background-checks',          [\App\Http\Controllers\Api\BackgroundCheckController::class, 'listAgency']);
         Route::post  ('/admin/background-checks',          [\App\Http\Controllers\Api\BackgroundCheckController::class, 'upsert']);
+        Route::post  ('/admin/background-checks/{id}/document', [\App\Http\Controllers\Api\BackgroundCheckController::class, 'uploadDocument']);
         Route::delete('/admin/background-checks/{id}',     [\App\Http\Controllers\Api\BackgroundCheckController::class, 'destroy']);
     });
 
@@ -849,11 +969,26 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'set']);
     Route::get ('/locale/strings/{lang}',   [\App\Http\Controllers\Api\LocaleController::class, 'strings']);
 
-    // Operations: meals, allergies, field trips, substitutes, inspection
-    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+    // Weekly menu — editable by educators too (each request is tenant-scoped by
+    // OperationsController::assertCentreAccess, which already allows educators for
+    // a centre in their agency). The rest of operations stays director/admin-only.
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get  ('/operations/my-centres',        [\App\Http\Controllers\Api\OperationsController::class, 'myCentres']);
         Route::get  ('/operations/menu',              [\App\Http\Controllers\Api\OperationsController::class, 'getMenuWeek']);
         Route::post ('/operations/menu',              [\App\Http\Controllers\Api\OperationsController::class, 'saveMenuWeek']);
+        // Educators also see allergy/dietary reminders for children at their
+        // centre (tenant-scoped by assertCentreAccess + active-agency filter).
         Route::get  ('/operations/allergy-alerts',    [\App\Http\Controllers\Api\OperationsController::class, 'allergyAlerts']);
+    });
+
+    // Parents see the PUBLISHED menu for their child's centre (read-only).
+    Route::middleware('role:guardian')->group(function () {
+        Route::get('/parent/menu', [\App\Http\Controllers\Api\OperationsController::class, 'parentMenu']);
+    });
+
+    // Operations: meals, allergies, field trips, substitutes, inspection
+    // (allergy-alerts moved above into the educator-inclusive group.)
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get  ('/operations/field-trips',       [\App\Http\Controllers\Api\OperationsController::class, 'listFieldTrips']);
         Route::post ('/operations/field-trips',       [\App\Http\Controllers\Api\OperationsController::class, 'createFieldTrip']);
         Route::get  ('/operations/field-trips/{id}/permissions', [\App\Http\Controllers\Api\OperationsController::class, 'listPermissionsForTrip']);
@@ -893,8 +1028,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'closures']);
         Route::post  ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'addClosure']);
         Route::delete('/operations/closures/{id}',     [\App\Http\Controllers\Api\OperationsV2Controller::class, 'removeClosure']);
+        });
+        // Late pickups are also logged/viewed by EDUCATORS (on the floor when a parent runs late).
+        Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
         Route::post  ('/operations/late-pickup',       [\App\Http\Controllers\Api\OperationsV2Controller::class, 'logLatePickup']);
         Route::get   ('/operations/late-pickups',      [\App\Http\Controllers\Api\OperationsV2Controller::class, 'lateHistory']);
+        Route::get   ('/operations/late-pickup-options', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'latePickupOptions']);
+        });
+        Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/operations/ratio-status',      [\App\Http\Controllers\Api\OperationsV2Controller::class, 'ratioStatus']);
         Route::get   ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'busRoutes']);
         Route::post  ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'createBusRoute']);
@@ -903,6 +1044,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/operations/rotation-candidates', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'rotationCandidates']);
         Route::post  ('/operations/room-rotations',    [\App\Http\Controllers\Api\OperationsV2Controller::class, 'planRotation']);
         Route::get   ('/billing/vacation-holds',       [\App\Http\Controllers\Api\BillingV2Controller::class, 'listHolds']);
+        Route::post  ('/billing/vacation-holds/for-family', [\App\Http\Controllers\Api\BillingV2Controller::class, 'createForFamily']);
         Route::patch ('/billing/vacation-holds/{id}',  [\App\Http\Controllers\Api\BillingV2Controller::class, 'decideHold']);
         Route::get   ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'listIncreases']);
         Route::post  ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'scheduleIncrease']);
@@ -918,6 +1060,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/engagement/nps',                   [\App\Http\Controllers\Api\EngagementController::class, 'submitNps']);
     Route::post('/engagement/sign-document',         [\App\Http\Controllers\Api\EngagementController::class, 'signDocument']);
     Route::get ('/engagement/signed-documents',      [\App\Http\Controllers\Api\EngagementController::class, 'listSignedDocs']);
+    Route::get ('/engagement/signed-documents/{id}/download', [\App\Http\Controllers\Api\EngagementController::class, 'downloadSignedDoc']);
 
     // v22p57 — combined features routes
     // Chat enhancements
@@ -1154,6 +1297,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/guardians', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertGuardian']);
         Route::post('/children', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertChild']);
         Route::post('/children/deactivate', [\App\Http\Controllers\Api\IntegrationController::class, 'deactivateChild']);
+        Route::post('/invoices', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertInvoice']);
         Route::post('/sync',     [\App\Http\Controllers\Api\IntegrationController::class, 'sync']);
     });
 

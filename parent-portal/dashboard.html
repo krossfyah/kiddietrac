@@ -2,7 +2,26 @@
 <html lang="en-CA">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- a11y: reflect the chosen locale on <html lang> so screen readers pronounce
+       fr/es/hi content correctly (the language picker reloads, so read it on boot). -->
+  <script>try{var _l=localStorage.getItem('kt_locale');if(_l&&_l!=='en')document.documentElement.lang=_l;}catch(e){}</script>
+  <!-- App release version (single source of truth; shown in Settings → About + login footer). -->
+  <script>window.KT_VERSION='4.64';</script>
+  <!-- Sales demo SSO: open Test Agency (#6) demo from a minted token (#__demo=). Runs before deferred app boot. -->
+  <script>(function(){try{var m=(location.hash||'').match(/__demo=([^&]+)/);if(!m)return;var tk=decodeURIComponent(m[1]);var x=new XMLHttpRequest();x.open('GET','https://api.kiddietrac.com/api/v1/auth/me',false);x.setRequestHeader('Authorization','Bearer '+tk);x.setRequestHeader('X-Active-Agency-Id','6');try{x.send(null);}catch(e){}if(x.status===200){var u;try{u=JSON.parse(x.responseText);u=u.user||u;}catch(e){u=null;}if(u){sessionStorage.setItem('kt_token',tk);sessionStorage.setItem('kt_user',JSON.stringify(u));sessionStorage.setItem('kt_active_agency_id','6');try{localStorage.setItem('kt_token',tk);localStorage.setItem('kt_active_agency_id','6');}catch(e){}}}try{history.replaceState(null,'',location.pathname);}catch(e){}}catch(e){}})();</script>
+  <!-- Mark the native Capacitor APK on <html> as EARLY as possible and from the
+       always-fresh HTML (network-first), so the mobile layout never depends on a
+       possibly-stale JS file. The APK's WebView can report a CSS width >768, which
+       would make every ≤768 media rule miss; html.kt-native lets CSS force the
+       phone layout regardless of width. -->
+  <script>try{var C=window.Capacitor;var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)));if(nat)document.documentElement.classList.add('kt-native');window.__KT_NATIVE=nat;}catch(e){}</script>
+  <!-- Clear a STALE kt_view_as: only a platform_admin can "view as" another role.
+       For everyone else a leftover kt_view_as (e.g. from previewing a parent account,
+       persisting across logout/login in the same WebView) wrongly overrides their real
+       role — it hid the educator clock-in bar and could mis-scope API calls. Drop it
+       unless the signed-in user actually holds the platform_admin role. -->
+  <script>try{var _u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}');var _r=(_u&&_u.roles)||[];if(sessionStorage.getItem('kt_view_as')&&_r.indexOf('platform_admin')===-1){sessionStorage.removeItem('kt_view_as');}}catch(e){}</script>
   <!-- v22p98: ensure EVERY API call carries the active-agency header. Legacy
        per-screen fetch wrappers (certifications, medications, schedule, etc.) omit
        X-Active-Agency-Id; without it, a platform_admin now resolves to "no agency"
@@ -51,6 +70,7 @@
   <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/css/styles.css?v=20260706p2">
+  <link rel="stylesheet" href="/css/kt-tokens.css?v=20260724tok">
   <link rel="stylesheet" href="/css/app-v2.css?v=20260706p2">
   <link rel="stylesheet" href="/css/kt-sidebar-v22.css?v=20260706p2">
   <link rel="stylesheet" href="/css/kt-polish-v22.css?v=20260706p2">
@@ -72,13 +92,14 @@
   <link rel="stylesheet" href="/css/kt-design-v22p66.css?v=20260706p2">
   <link rel="stylesheet" href="/css/kt-consistency-v22p71.css?v=20260714n1">
   <link rel="stylesheet" href="/css/kt-cards-v22p72.css?v=20260706p2">
-  <link rel="stylesheet" href="/css/kt-topnav-fix.css?v=20260715hb">
+  <link rel="stylesheet" href="/css/kt-topnav-fix.css?v=20260729set">
   <link rel="stylesheet" href="/css/kt-sidebar-brand.css?v=20260706p2">
   <link rel="stylesheet" href="/css/kt-hero-anim.css?v=20260706p2">
 
   <link rel="stylesheet" href="/css/kt-fullwidth.css?v=20260708fw2">
-  <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20260714s4">
-  <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20260715v">
+  <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20260729hdr">
+  <link rel="stylesheet" href="/css/kt-buttons.css?v=20260724btn">
+  <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20260729clk">
   <link rel="stylesheet" href="/css/kt-sidebar-compact.css?v=20260714logo2">
 </head>
 <body><!-- v17.2-shell -->
@@ -146,139 +167,162 @@ setTimeout(hide,6000);})();
 
   <div id="modalRoot"></div>
 
-  <script src="/js/app.js?v=20260710chat1" defer></script>
+  <script src="/js/app.js?v=20260724toast" defer></script>
   <script src="/js/kt-tz.js?v=20260714b" defer></script>
   <script src="/js/kt-back.js?v=20260714back" defer></script>
-  <script src="/js/kt-parent-chrome.js?v=20260715pc19" defer></script>
+  <script src="/js/kt-parent-chrome.js?v=20260724cfm" defer></script>
   <script src="/js/session-timeout.js?v=20260714e" defer></script>
   <script src="/js/kt-illustrations.js?v=20260706p2" defer></script>
-  <script src="/js/app-v2-shell.js?v=20260714hero19" defer></script>
-  <script src="/js/screen-parent.js?v=20260715pv9" defer></script>
-  <script src="/js/kt-checkin-scan.js?v=20260710fix1" defer></script>
-  <script src="/js/screen-role-home.js?v=20260714back" defer></script>
-  <script src="/js/screen-support.js?v=20260715d" defer></script>
-  <script src="/js/screen-settings.js?v=20260715fdir" defer></script>
-  <script src="/js/screen-agency-admin.js?v=20260709cc1" defer></script>
-  <script src="/js/screen-dashboard-widgets.js?v=20260711snd1" defer></script>
-  <script src="/js/screen-email.js?v=20260709email" defer></script>
-  <script src="/js/screen-director.js?v=20260706p2" defer></script>
-  <script src="/js/screen-educator.js?v=20260714c" defer></script>
-  <script src="/js/screen-educator-v4.js?v=20260706p2" defer></script>
-  <script src="/js/screen-educator-me.js?v=20260714q" defer></script>
+  <script src="/js/app-v2-shell.js?v=20260731sales1" defer></script>
+  <script src="/js/screen-parent.js?v=20260731photo" defer></script>
+  <script src="/js/kt-checkin-scan.js?v=20260729edu" defer></script>
+  <script src="/js/screen-role-home.js?v=20260731wd" defer></script>
+  <script src="/js/screen-support.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-settings.js?v=20260731sales1" defer></script>
+  <script src="/js/screen-agency-admin.js?v=20260728kpi3" defer></script>
+  <script src="/js/screen-dashboard-widgets.js?v=20260728e" defer></script>
+  <script src="/js/screen-email.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-director.js?v=20260720kpi" defer></script>
+  <script src="/js/kt-busy.js?v=20260728busy" defer></script>
+  <script src="/js/kt-card-pager.js?v=20260728f" defer></script>
+  <script src="/js/screen-educator.js?v=20260729clk" defer></script>
+  <script src="/js/screen-educator-v4.js?v=20260729clk" defer></script>
+  <script src="/js/screen-educator-me.js?v=20260729edu" defer></script>
+  <script src="/js/screen-tasks.js?v=20260728f" defer></script>
   <script src="/js/screen-director-v5a.js?v=20260706p2" defer></script>
-  <script src="/js/screen-help-v22p68.js?v=20260714help2" defer></script>
+  <script src="/js/screen-help-v22p68.js?v=20260731help" defer></script>
     <script src="js/kt-contextual-help.js?v=20260706p2" defer></script>
-    <script src="js/kt-onboarding-tour.js?v=20260706p2" defer></script>
+    <script src="js/kt-onboarding-tour.js?v=20260724onb" defer></script>
   <script src="/js/tooltips-v6.js?v=20260706p2" defer></script>
   <script src="/js/app-v2-init.js?v=20260706p2" defer></script>
   <script src="/js/branding-loader.js?v=20260706p2" defer></script>
   <script src="/js/api-helpers-v10.js?v=20260706p2" defer></script>
-  <script src="/js/screen-admin.js?v=20260714react" defer></script>
-  <script src="/js/screen-marketing.js?v=20260706p2" defer></script>
-  <script src="/js/screen-provider-map.js?v=20260708map" defer></script>
-  <script src="/js/screen-marketing-site.js?v=20260706p2" defer></script>
-  <script src="/js/screen-staff-calendar.js?v=20260706p2" defer></script>
-  <script src="/js/screen-audit-logs.js?v=20260714q" defer></script>
-  <script src="/js/screen-bulk-invoices.js?v=20260706p2" defer></script>
-  <script src="/js/screen-forms.js?v=20260706p2" defer></script>
-  <script src="/js/screen-fee-plans.js?v=20260706p2" defer></script>
-  <script src="/js/screen-expenses.js?v=20260706list" defer></script>
-  <script src="/js/screen-billing-setup.js?v=20260708sw" defer></script>
-  <script src="/js/screen-parent-forms.js?v=20260706p2" defer></script>
-  <script src="/js/screen-notifications.js?v=20260714r" defer></script>
-  <script src="/js/screen-compliance.js?v=20260706p2" defer></script>
-  <script src="/js/screen-care.js?v=20260714tours" defer></script>
-  <script src="/js/search-palette.js?v=20260706p2" defer></script>
-  <script src="/js/role-widgets.js?v=20260713edu5" defer></script>
+  <script src="/js/screen-admin.js?v=20260731sales1" defer></script>
+  <script src="/js/screen-marketing.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-provider-map.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-marketing-site.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-staff-calendar.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-audit-logs.js?v=20260727audit" defer></script>
+  <script src="/js/screen-bulk-invoices.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-forms.js?v=20260728h" defer></script>
+  <script src="/js/screen-fee-plans.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-expenses.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-billing-setup.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-parent-forms.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-notifications.js?v=20260731sales1" defer></script>
+  <script src="/js/screen-compliance.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-care.js?v=20260731clk" defer></script>
+  <script src="/js/search-palette.js?v=20260724a11y" defer></script>
+  <script src="/js/role-widgets.js?v=20260731hrs" defer></script>
+  <script src="/js/kt-animate.js?v=20260720a1" defer></script>
   <script src="/js/mobile-helper-v11.js?v=20260706p2" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/service-worker.js').catch(function (e) { console.warn('SW reg failed:', e); });
+        navigator.serviceWorker.register('/service-worker.js').then(function (reg) { try { reg.update(); } catch (e) {} document.addEventListener('visibilitychange', function () { if (!document.hidden) { try { reg.update(); } catch (e) {} } }); }).catch(function (e) { console.warn('SW reg failed:', e); });
       });
     }
   </script>
-  <script src="/js/screen-chat.js?v=20260714g" defer></script>
-  <script src="/js/screen-agencies.js?v=20260714n" defer></script>
+  <script src="/js/kt-chat-dock.js?v=20260723dock3" defer></script>
+  <script src="/js/screen-chat.js?v=20260729react" defer></script>
+  <script src="/js/screen-agencies.js?v=20260724cfm" defer></script>
   <script src="/js/nav-additions-v12.js?v=20260706p2" defer></script>
-  <script src="/js/screen-waitlist.js?v=20260706p2" defer></script>
-  <script src="/js/screen-announcements.js?v=20260714g" defer></script>
-  <script src="/js/screen-autopay.js?v=20260709cc1" defer></script>
+  <script src="/js/screen-waitlist.js?v=20260728act" defer></script>
+  <script src="/js/screen-announcements.js?v=20260731alert" defer></script>
+  <script src="/js/screen-autopay.js?v=20260731sw" defer></script>
   <script src="/js/nav-additions-v13.js?v=20260706p2" defer></script>
-  <script src="/js/screen-lesson-plans.js?v=20260706p2" defer></script>
-  <script src="/js/screen-schedule.js?v=20260706p2" defer></script>
-  <script src="/js/screen-certifications.js?v=20260706p2" defer></script>
+  <script src="/js/screen-lesson-plans.js?v=20260728sw1" defer></script>
+  <script src="/js/screen-schedule.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-certifications.js?v=20260728sw1" defer></script>
   <script src="/js/push-client.js?v=20260706p2" defer></script>
   <script src="/js/nav-additions-v14.js?v=20260706p2" defer></script>
-  <script src="/js/screen-admin-mrr.js?v=20260706p2" defer></script>
-  <script src="/js/screen-admin-features.js?v=20260706p2" defer></script>
-  <script src="/js/screen-admin-branding.js?v=20260706p2" defer></script>
-  <script src="/js/screen-lesson-plans-ai.js?v=20260706p2" defer></script>
-  <script src="/js/screen-observations.js?v=20260714q" defer></script>
-  <script src="/js/screen-incidents.js?v=20260710pm13" defer></script>
-  <script src="/js/screen-child-detail.js?v=20260706p2" defer></script>
+  <script src="/js/screen-admin-mrr.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-admin-features.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-admin-branding.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-lesson-plans-ai.js?v=20260728f" defer></script>
+  <script src="/js/screen-observations.js?v=20260728f" defer></script>
+  <script src="/js/screen-incidents.js?v=20260731inc3" defer></script>
+  <script src="/js/screen-child-detail.js?v=20260724a11y" defer></script>
   <script src="/js/search-widget.js?v=20260706p2" defer></script>
-  <script src="/js/screen-mfa.js?v=20260710pm8" defer></script>
+  <script src="/js/screen-mfa.js?v=20260731sales1" defer></script>
   <script src="/js/screen-sibling-discounts.js?v=20260706p2" defer></script>
-  <script src="/js/screen-roles.js?v=20260706p2" defer></script>
+  <script src="/js/screen-roles.js?v=20260724cfm" defer></script>
   <script src="/js/screen-admin-children.js?v=20260706p2" defer></script>
   <script src="/js/agency-switcher.js?v=20260714r" defer></script>
-  <script src="/js/screen-platform.js?v=20260709act" defer></script>
+  <script src="/js/screen-platform.js?v=20260728act" defer></script>
   <script src="/js/screen-digest-status.js?v=20260706p2" defer></script>
-  <script src="/js/nav-additions-v15.js?v=20260706p2" defer></script>
-  <script src="/js/screen-v22p51.js?v=20260714sms2" defer></script>
-  <script src="/js/screen-v22p53.js?v=20260706fw" defer></script>
+  <script src="/js/nav-additions-v15.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-v22p51.js?v=20260731tor" defer></script>
+  <script src="/js/screen-v22p53.js?v=20260729icons" defer></script>
   <script src="/js/screen-v22p54.js?v=20260708exp" defer></script>
-  <script src="/js/kt-table-filter.js?v=20260714f2" defer></script>
-  <script src="/js/kt-polish.js?v=20260708exp" defer></script>
-  <script src="/js/kt-list-controls.js?v=20260714lc3" defer></script>
+  <script src="/js/kt-sweep-bus.js?v=20260729smooth" defer></script>
+  <script src="/js/kt-icon-buttons.js?v=20260729bk2" defer></script>
+  <script src="/js/kt-switches.js?v=20260728sw1" defer></script>
+  <script src="/js/kt-table-filter.js?v=20260728f" defer></script>
+  <script src="/js/kt-polish.js?v=20260727bus" defer></script>
+  <script src="/js/kt-list-controls.js?v=20260728e" defer></script>
   <script src="/js/kt-mfa-nudge.js?v=20260710pm8" defer></script>
-  <script src="/js/kt-topbar.js?v=20260714lang2" defer></script>
-  <script src="/js/kt-pin.js?v=20260713mob1" defer></script>
-  <script src="/js/kt-biometric.js?v=20260713mob1" defer></script>
-  <script src="/js/kt-crash-report.js?v=20260714c1" defer></script>
+  <script src="/js/kt-topbar.js?v=20260731sales1" defer></script>
+  <script src="/js/kt-pin.js?v=20260731lock" defer></script>
+  <script src="/js/kt-biometric.js?v=20260731lock" defer></script>
+  <script src="/js/kt-impersonate.js?v=20260724a11y" defer></script>
+  <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
   <script src="/js/kt-progress.js?v=20260709prog" defer></script>
-  <script src="/js/kt-mobilenav.js?v=20260715i" defer></script>
-  <script src="/js/kt-clockbar.js?v=20260714g" defer></script>
-  <script src="/js/kt-mobile-tables.js?v=20260714j" defer></script>
-  <script src="/js/kt-urgent-alert.js?v=20260713edu7" defer></script>
-  <script src="/js/kt-agreement.js?v=20260714b" defer></script>
+  <script src="/js/kt-mobilenav.js?v=20260729edu" defer></script>
+  <script src="/js/kt-clockbar.js?v=20260731clock" defer></script>
+  <script src="/js/kt-mobile-tables.js?v=20260724a11y" defer></script>
+  <script src="/js/kt-urgent-alert.js?v=20260721takeover" defer></script>
+  <script src="/js/kt-agreement.js?v=20260724a11y" defer></script>
   <script src="/js/kt-native-push.js?v=20260714ios1" defer></script>
+  <script src="/js/kt-native-ui.js?v=20260727nofs" defer></script>
   <script src="/js/kt-appupdate.js?v=20260709ota" defer></script>
-  <script src="/js/kt-toasts.js?v=20260708rt" defer></script>
-  <script src="/js/kt-whatsnew.js?v=20260708wn" defer></script>
-  <script src="/js/kt-term.js?v=20260708loc" defer></script>
-  <script src="/js/kt-table-export.js?v=20260714x4" defer></script>
+  <script src="/js/kt-toasts.js?v=20260727toast2" defer></script>
+  <script src="/js/kt-whatsnew.js?v=20260724a11y" defer></script>
+  <script src="/js/kt-term.js?v=20260727bus" defer></script>
+  <script src="/js/kt-table-export.js?v=20260729ico3" defer></script>
   <script src="/js/kt-i18n.js?v=20260714i23" defer></script>
-  <script src="/js/kt-banner-normalize.js?v=20260714icon1" defer></script>
+  <script src="/js/kt-banner-normalize.js?v=20260727bus" defer></script>
   <script src="/js/kt-sidebar-collapse.js?v=20260711chat2" defer></script>
-  <script src="/js/kt-polish-v2.js?v=20260706p2" defer></script>
-  <script src="/js/kt-polish-v3.js?v=20260706p2" defer></script>
-  <script src="/js/kt-polish-v4.js?v=20260709x" defer></script>
+  <script src="/js/kt-polish-v2.js?v=20260727bus" defer></script>
+  <script src="/js/kt-polish-v3.js?v=20260727bus" defer></script>
+  <script src="/js/kt-polish-v4.js?v=20260727bus" defer></script>
   <script src="/js/kt-mailto.js?v=20260706p2" defer></script>
-  <script src="/js/kt-hero-emoji.js?v=20260706p2" defer></script>
+  <script src="/js/kt-hero-emoji.js?v=20260729lp" defer></script>
   <script src="/js/kt-modal-guard.js?v=20260715x1" defer></script>
-  <script src="/js/kt-qr.js?v=20260706p2" defer></script>
-  <script src="/js/screen-v22p55.js?v=20260714q" defer></script>
-  <script src="/js/screen-v22p56.js?v=20260706p2" defer></script>
-  <script src="/js/screen-v22p57.js?v=20260709pm4" defer></script>
-  <script src="/js/screen-v22p58.js?v=20260706p2" defer></script>
-  <script src="/js/screen-v22p59.js?v=20260715fdir" defer></script>
-    <script src="/js/fix-screen-v22p69.js?v=20260706p2" defer></script>
-  <script src="/js/screen-integrations-v22p72.js?v=20260709b" defer></script>
+  <script src="/js/kt-qr.js?v=20260729edu" defer></script>
+  <script src="/js/screen-v22p55.js?v=20260728f" defer></script>
+  <script src="/js/screen-v22p56.js?v=20260731ux" defer></script>
+  <script src="/js/screen-v22p57.js?v=20260724cfm" defer></script>
+  <script src="/js/screen-v22p58.js?v=20260731ux" defer></script>
+  <script src="/js/screen-withdrawals.js?v=20260731wd" defer></script>
+  <script src="/js/screen-v22p59.js?v=20260728b" defer></script>
+    <script src="/js/fix-screen-v22p69.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-integrations-v22p72.js?v=20260728sw1" defer></script>
   <script src="/js/kt-nav-collapse-v22p72.js?v=20260706p2" defer></script>
-  <script src="/js/kt-quickadd-v22p72.js?v=20260706p2" defer></script>
+  <script src="/js/kt-quickadd-v22p72.js?v=20260724a11y" defer></script>
   <script src="/js/kt-money-v22p74.js?v=20260706p2" defer></script>
-  <script src="/js/screen-v22p63.js?v=20260714pp3" defer></script>
-  <script src="/js/screen-legacy-shim.js?v=20260709pm2" defer></script>
-  <script src="/js/screen-reports.js?v=20260708xlsx" defer></script>
-  <script src="/js/screen-social-settings.js?v=20260708ss" defer></script>
+  <script src="/js/screen-v22p63.js?v=20260731ux" defer></script>
+  <script src="/js/screen-legacy-shim.js?v=20260729lp" defer></script>
+  <script src="/js/screen-reports.js?v=20260727icon" defer></script>
+  <script src="/js/screen-social-settings.js?v=20260724cfm" defer></script>
   <script src="/js/screen-security-alerts.js?v=20260708sec" defer></script>
-  <script src="/js/screen-data-retention.js?v=20260708dr" defer></script>
-  <script src="/js/screen-medications.js?v=20260709pm4" defer></script>
-  <script src="/js/screen-immunizations.js?v=20260706p2" defer></script>
+  <script src="/js/screen-data-retention.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-medications.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-immunizations.js?v=20260724a11y" defer></script>
   <script src="/js/screen-invitation-codes.js?v=20260706p2" defer></script>
-  <script src="/js/screen-edocuments.js?v=20260706p2" defer></script>
-  <script src="/js/screen-onboarding.js?v=20260706p2" defer></script>
+  <script src="/js/screen-edocuments.js?v=20260729capbrowser" defer></script>
+  <script src="/js/screen-onboarding.js?v=20260731sales1" defer></script>
+  <script src="/js/screen-home-visitor.js?v=20260729ico3" defer></script>
+  <script src="/js/screen-sales.js?v=20260731sales1" defer></script>
+  <script src="/js/screen-my-pay.js?v=20260724a11y" defer></script>
+  <script src="/js/screen-hcc-forms.js?v=20260729icons" defer></script>
+  <!-- Clock-in status glow (educators): orange border when not clocked in, green when clocked in. -->
+  <script src="/js/kt-clockglow.js?v=20260727glow1" defer></script>
+
+  <!-- TEMP diagnostic chip (2026-07-27): shows the loaded web version, the WebView's
+       reported CSS size, and whether the native app was detected — so a single
+       screenshot tells us exactly what's running. Remove once the APK is confirmed. -->
+  <div id="kt-diag-chip" style="position:fixed;left:6px;bottom:96px;z-index:2147483647;background:#0b1220;color:#7CFC00;font-family:monospace;font-size:11px;font-weight:700;line-height:1.25;padding:4px 8px;border-radius:6px;opacity:.92;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.4);"></div>
+  <script>(function(){try{var c=document.getElementById('kt-diag-chip');var probe=document.createElement('div');probe.style.cssText='position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top,0px);pointer-events:none;visibility:hidden;';document.body.appendChild(probe);function u(){var scan=document.querySelector('#kt-mobilenav button.scan')?'Y':'N';c.textContent='v'+(window.KT_VERSION||'?')+' '+window.innerWidth+'w '+(window.__KT_NATIVE?'NAT':'web')+' nav:'+(window.__KT_NAV_VER||'?')+' r:'+(window.__ktActiveRole?window.__ktActiveRole():'?')+' scan:'+scan+' sat:'+probe.offsetHeight+' clk:'+(document.getElementById('kt-clockpill')?'Y':'N')+' cv:'+(window.__KT_CLK_VER||'?')+' ['+(window.__KT_CLK||'?')+']';}u();window.addEventListener('resize',u);if(window.visualViewport)window.visualViewport.addEventListener('resize',u);var n=0,iv=setInterval(function(){u();if(++n>12)clearInterval(iv);},1500);}catch(e){}})();</script>
 </body>
 </html>

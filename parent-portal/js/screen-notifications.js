@@ -9,7 +9,7 @@
   // KT.confirm returns a PROMISE — it does not take a callback. Passing one meant
   // the action never ran: the confirm box appeared, you pressed Yes, and nothing
   // happened. This wraps both shapes safely.
-  function ktConfirmThen(message, onYes) {
+  async function ktConfirmThen(message, onYes) {
     try {
       if (window.KT && KT.confirm) {
         var r = KT.confirm(message);
@@ -17,7 +17,7 @@
         return;   // a non-promise KT.confirm would already have handled it
       }
     } catch (e) {}
-    if (window.confirm(message)) onYes();
+    if (await KT.confirm(message)) onYes();
   }
 
   if (!window.KT) return;
@@ -157,7 +157,7 @@
 
     var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
-    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     var cache = [];
 
@@ -221,7 +221,7 @@
       var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
       body.appendChild(Dom.el('div', { style: 'font-weight:' + (n.read_at ? '600' : '700') + ';font-size:14px;color:#111827;' }, n.title || '(no title)'));
       if (n.body) body.appendChild(Dom.el('div', { style: 'color:#6B7280;font-size:13px;margin-top:3px;line-height:1.4;' }, n.body));
-      var meta = Dom.el('div', { style: 'color:#9CA3AF;font-size:11px;margin-top:4px;' });
+      var meta = Dom.el('div', { style: 'color:#64748B;font-size:11px;margin-top:4px;' });
       meta.textContent = (n.type || 'system') + ' · ' + relTime(n.created_at) + ' · ' + fmtTime(n.created_at);
       body.appendChild(meta);
       row.appendChild(body);
@@ -291,10 +291,10 @@
 
     filter.addEventListener('change', paint);
 
-    markAll.addEventListener('click', function () {
+    markAll.addEventListener('click', async function () {
       var unread = cache.filter(function (r) { return !r.read_at; });
       if (!unread.length) return;
-      if (!confirm('Mark all ' + unread.length + ' as read?')) return;
+      if (!await KT.confirm('Mark all ' + unread.length + ' as read?')) return;
       markAll.disabled = true; markAll.textContent = 'Marking…';
       var done = 0;
       unread.forEach(function (n) {
@@ -325,7 +325,7 @@
   }
 
   if (Shell && Shell.registerScreen) {
-    ['agency_admin', 'centre_director', 'educator', 'guardian', 'platform_admin'].forEach(function (r) {
+    ['agency_admin', 'centre_director', 'educator', 'guardian', 'platform_admin', 'home_visitor', 'sales_rep'].forEach(function (r) {
       Shell.registerScreen(r + ':notifications', render);
     });
   }

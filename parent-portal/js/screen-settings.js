@@ -21,6 +21,18 @@
     (kids || []).forEach(function (c) { e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
     return e;
   }
+  // A real sliding toggle switch — used for the on/off settings that were plain
+  // pill buttons before (biometric, urgent alerts, autopay). .kt_set(bool) paints
+  // it; .kt_disabled(bool) greys it out when the feature isn't available.
+  function mkSwitch() {
+    var s = el('button', { type: 'button', 'aria-pressed': 'false', style: 'position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;box-sizing:border-box;border-radius:999px;border:none;background:#CBD5E1;cursor:pointer;padding:0;transition:background .18s ease;' });
+    var knob = el('span', {});
+    knob.style.cssText = 'position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.28);transition:transform .18s ease;';
+    s.appendChild(knob);
+    s.kt_set = function (on) { s.setAttribute('aria-pressed', on ? 'true' : 'false'); s.style.background = on ? '#159FB4' : '#CBD5E1'; knob.style.transform = on ? 'translateX(20px)' : 'translateX(0)'; };
+    s.kt_disabled = function (dis) { s.disabled = !!dis; s.style.opacity = dis ? '.4' : '1'; s.style.cursor = dis ? 'default' : 'pointer'; };
+    return s;
+  }
   var CARD = 'background:#fff;border-radius:16px;box-shadow:0 1px 6px rgba(15,23,42,.06);padding:16px;margin-bottom:14px;';
   var LABEL = 'font-size:12px;font-weight:800;letter-spacing:.4px;color:#475569;margin:0 0 5px;text-transform:uppercase;';
   var INPUT = 'width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border:1.5px solid #E3EAF1;border-radius:11px;background:#fff;color:#0D1B2A;';
@@ -35,13 +47,46 @@
     Dom.clear ? Dom.clear(main) : (main.innerHTML = '');
     // Extra bottom padding so the last controls (Remove PIN / Sign out) clear the
     // fixed mobile bottom bar instead of hiding behind it.
-    var wrap = el('div', { style: 'padding:2px 2px calc(env(safe-area-inset-bottom,0px) + 96px);max-width:520px;margin:0 auto;' });
+    var wrap = el('div', { style: 'padding:2px 2px 12px;max-width:520px;margin:0 auto;' });
     main.appendChild(wrap);
     // No in-screen "Settings" title: the shell's auto-hero already titles the
     // page, and rendering our own stacked a second "Settings" under it.
 
     var u = cachedUser();
     try { var fresh = await Api.get('/auth/me'); if (fresh) u = fresh.user || fresh; } catch (e) {}
+
+    // v23: tabbed settings — Profile / Documents / Payments (guardian) / Security.
+    // Consistent on desktop and mobile; each section below appends to a pane.
+    var isGuardian = (u.primary_role === 'guardian') || (Array.isArray(u.roles) && u.roles.indexOf('guardian') !== -1);
+    var tabBar = el('div', { style: 'display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid #E5E7EB;margin-bottom:16px;-webkit-overflow-scrolling:touch;' });
+    var paneProfile = el('div', {});
+    var paneDocs = el('div', { style: 'display:none;' });
+    var panePay = el('div', { style: 'display:none;' });
+    var paneSecurity = el('div', { style: 'display:none;' });
+    var _stabs = [];
+    function stab(label, pane) {
+      var b = el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:9px 8px;margin-bottom:-1px;font-size:14px;font-weight:700;color:#6B7280;cursor:pointer;white-space:nowrap;flex:0 0 auto;' }, [label]);
+      b.addEventListener('click', function () { _stabs.forEach(function (t) { t.b.style.color = '#6B7280'; t.b.style.borderBottomColor = 'transparent'; t.p.style.display = 'none'; }); b.style.color = '#1F6080'; b.style.borderBottomColor = '#1F6080'; pane.style.display = ''; });
+      _stabs.push({ b: b, p: pane }); tabBar.appendChild(b); return b;
+    }
+    var _t0 = stab('Profile', paneProfile);
+    stab('Documents', paneDocs);
+    if (isGuardian) stab('Payments', panePay);
+    stab('Security', paneSecurity);
+    wrap.appendChild(tabBar);
+    wrap.appendChild(paneProfile);
+    wrap.appendChild(paneDocs);
+    if (isGuardian) wrap.appendChild(panePay);
+    wrap.appendChild(paneSecurity);
+    _t0.style.color = '#1F6080'; _t0.style.borderBottomColor = '#1F6080';
+    // Payments (guardian only) — Autopay + Wallet, moved here from the home tiles.
+    if (isGuardian) {
+      var apBox = el('div', {});
+      var wBox = el('div', { style: 'margin-top:10px;' });
+      panePay.appendChild(apBox); panePay.appendChild(wBox);
+      try { if (KT.Autopay && KT.Autopay.render) KT.Autopay.render(apBox); } catch (e) {}
+      try { if (KT.V22p58 && KT.V22p58.renderWallet) KT.V22p58.renderWallet(wBox); } catch (e) {}
+    }
 
     // ── PROFILE ──
     var pc = el('div', { style: CARD });
@@ -75,18 +120,27 @@
     var dob = field(pc, 'Date of birth', 'date', (u.date_of_birth || '').slice(0, 10));
     var emailF = field(pc, 'Email', 'email', u.email || '');
     emailF.disabled = true; emailF.style.background = '#F1F5F9'; emailF.style.color = '#64748B';
+    var usernameF = field(pc, 'Username (optional)', 'text', u.username || '');
+    usernameF.setAttribute('placeholder', 'e.g. anthony.h');
+    pc.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin:8px 0 10px;line-height:1.4;' },
+      ['Set a username to sign in when one email is shared across more than one account.']));
 
     var pStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
     var pSave = el('button', { type: 'button', style: btn() }, ['Save profile']);
     function profileStatus(m, err) { pStatus.style.color = err ? '#B91C1C' : '#16A34A'; pStatus.textContent = m; }
     pSave.addEventListener('click', function () {
       pSave.disabled = true; pSave.textContent = 'Saving…'; pStatus.textContent = '';
-      Api.patch('/auth/me', { first_name: first.value.trim(), last_name: last.value.trim(), phone: phone.value.trim(), date_of_birth: dob.value || null })
-        .then(function () { pSave.disabled = false; pSave.textContent = 'Save profile'; profileStatus('✓ Saved.'); try { var ku = cachedUser(); ku.first_name = first.value.trim(); ku.last_name = last.value.trim(); ku.phone = phone.value.trim(); ku.date_of_birth = dob.value; sessionStorage.setItem('kt_user', JSON.stringify(ku)); } catch (e) {} })
+      Api.patch('/auth/me', { first_name: first.value.trim(), last_name: last.value.trim(), phone: phone.value.trim(), date_of_birth: dob.value || null, username: usernameF.value.trim() })
+        .then(function () { pSave.disabled = false; pSave.textContent = 'Save profile'; profileStatus('✓ Saved.'); try { var ku = cachedUser(); ku.first_name = first.value.trim(); ku.last_name = last.value.trim(); ku.phone = phone.value.trim(); ku.date_of_birth = dob.value; if (usernameF.value.trim()) ku.username = usernameF.value.trim(); sessionStorage.setItem('kt_user', JSON.stringify(ku)); } catch (e) {} })
         .catch(function (e) { pSave.disabled = false; pSave.textContent = 'Save profile'; profileStatus('Could not save: ' + (e && e.message ? e.message : 'try again'), true); });
     });
     pc.appendChild(pStatus); pc.appendChild(pSave);
-    wrap.appendChild(pc);
+    paneProfile.appendChild(pc);
+
+    // ── MY DOCUMENTS & AGREEMENTS (v23) ──
+    // Shared renderer (defined in screen-parent-forms.js) — the user's signed
+    // NDA and any files on their record. Also lives under Forms for parents.
+    if (KT.renderMyDocuments) { try { KT.renderMyDocuments(paneDocs); } catch (e) {} }
 
     // ── LANGUAGE ──
     // Parents/educators pick their app language here. It is saved to the server
@@ -118,7 +172,7 @@
       });
     });
     lc.appendChild(langSel); lc.appendChild(langStatus);
-    wrap.appendChild(lc);
+    paneProfile.appendChild(lc);
 
     // ── FAMILY DIRECTORY (guardian only) — moved here from the Directory screen so
     //    all of the user's preferences live in one place. ──
@@ -136,7 +190,7 @@
       var dStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
       var dSave = el('button', { type: 'button', style: btn() }, ['Save preferences']);
       fc.appendChild(dStatus); fc.appendChild(dSave);
-      wrap.appendChild(fc);
+      paneProfile.appendChild(fc);
       Api.get('/directory/me').then(function (r) { var o = (r && r.data) || {}; dEm.checked = !!o.share_email; dPh.checked = !!o.share_phone; dAd.checked = !!o.share_address; dKn.checked = (o.share_children_names !== 0); }).catch(function () {});
       dSave.addEventListener('click', function () {
         dSave.disabled = true; dSave.textContent = 'Saving\u2026'; dStatus.textContent = '';
@@ -177,9 +231,9 @@
     // biometric toggle (native only)
     sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
     var bioRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
-    var bioSub = el('div', { style: 'font-size:12px;color:#94A3B8;', id: 'kt-bio-sub' }, ['Checking…']);
+    var bioSub = el('div', { style: 'font-size:12px;color:#64748B;', id: 'kt-bio-sub' }, ['Checking…']);
     bioRow.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Fingerprint / Face sign-in']), bioSub]));
-    var bioToggle = el('button', { type: 'button', id: 'kt-bio-toggle', style: 'border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;background:#E2E8F0;color:#475569;' }, ['…']);
+    var bioToggle = mkSwitch(); bioToggle.id = 'kt-bio-toggle';
     bioRow.appendChild(bioToggle);
     sc.appendChild(bioRow);
     // Pass the element, never look it up by id: this card isn't in the document
@@ -193,7 +247,7 @@
     var pin = KT.pin;
     var pinHas = !!(pin && pin.isSet());
     var pinRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
-    var pinSub = el('div', { style: 'font-size:12px;color:#94A3B8;' },
+    var pinSub = el('div', { style: 'font-size:12px;color:#64748B;' },
       [!pin ? 'Not available on this device.' : (pinHas ? 'A PIN is set — use it to unlock the app.' : 'Unlock the app with a 4–6 digit PIN.')]);
     pinRow.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Quick-unlock PIN']), pinSub]));
     var pinBtn = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;' }, [pinHas ? 'Change' : 'Set PIN']);
@@ -222,7 +276,7 @@
       var nd = el('div', { style: 'background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px;margin-bottom:14px;' });
       nd.appendChild(el('div', { style: 'font-weight:800;font-size:14px;color:#0F172A;margin-bottom:4px;' }, ['🔔 Notifications']));
       nd.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' }, ['Send yourself a test push. Tip: background the app first — an open app shows it in-app, not in the bar.']));
-      var ntBtn = el('button', { type: 'button', style: 'background:linear-gradient(135deg,#0FA3B1,#1F6FB2);border:0;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:800;cursor:pointer;' }, ['Send test notification']);
+      var ntBtn = el('button', { type: 'button', style: 'display:block;margin-top:16px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);border:0;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:800;cursor:pointer;' }, ['Send test notification']);
       var ntMsg = el('div', { style: 'font-size:12px;margin-top:8px;min-height:16px;' });
       ntBtn.addEventListener('click', function () {
         ntBtn.disabled = true; var old = ntBtn.textContent; ntBtn.textContent = 'Sending…'; ntMsg.style.color = '#64748B'; ntMsg.textContent = '';
@@ -242,29 +296,27 @@
       try {
         if (KT.urgentAlert) {
           var ua = el('div', { style: 'border-top:1px solid #EEF2F6;margin-top:14px;padding-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;' });
-          var uaSub = el('div', { style: 'font-size:12px;color:#94A3B8;' },
+          var uaSub = el('div', { style: 'font-size:12px;color:#64748B;' },
             [KT.urgentAlert.isEnabled() ? 'New chats and alerts take over the screen with sound.' : 'New chats and alerts only show a badge.']);
           ua.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['🚨 Urgent alerts']), uaSub]));
-          var uaBtn = el('button', { type: 'button', style: 'border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;' }, ['…']);
+          var uaBtn = mkSwitch();
           var paintUa = function () {
             var on = KT.urgentAlert.isEnabled();
-            uaBtn.textContent = on ? 'On' : 'Off';
-            uaBtn.style.background = on ? '#159FB4' : '#E2E8F0';
-            uaBtn.style.color = on ? '#fff' : '#475569';
+            uaBtn.kt_set(on);
             uaSub.textContent = on ? 'New chats and alerts take over the screen with sound.' : 'New chats and alerts only show a badge.';
           };
           uaBtn.addEventListener('click', function () { KT.urgentAlert.setEnabled(!KT.urgentAlert.isEnabled()); paintUa(); });
           paintUa();
           ua.appendChild(uaBtn);
           nd.appendChild(ua);
-          var uaTest = el('button', { type: 'button', style: 'background:none;border:none;color:#159FB4;font-size:12px;font-weight:700;cursor:pointer;padding:8px 0 0;' }, ['Preview an urgent alert']);
+          var uaTest = el('button', { type: 'button', style: 'display:block;background:none;border:none;color:#159FB4;font-size:12px;font-weight:700;cursor:pointer;padding:10px 0 2px;' }, ['Preview an urgent alert']);
           uaTest.addEventListener('click', function () { KT.urgentAlert.test('message'); });
           nd.appendChild(uaTest);
         }
       } catch (e) {}
 
       nd.appendChild(ntBtn); nd.appendChild(ntMsg);
-      wrap.appendChild(nd);
+      paneProfile.appendChild(nd);
 
       // ── What you get told about, and how ──
       // Sign-in/out alerts: email and in-app on by default, SMS off — every text
@@ -274,15 +326,15 @@
         pc2.appendChild(el('div', { style: SECT }, ['Notify me about…']));
         var prefsBody = el('div', {});
         pc2.appendChild(prefsBody);
-        prefsBody.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px;padding:6px 0;' }, ['Loading…']));
-        wrap.appendChild(pc2);
+        prefsBody.appendChild(el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;' }, ['Loading…']));
+        paneProfile.appendChild(pc2);
 
         Api.get('/me/notification-prefs').then(function (res) {
           Dom.clear ? Dom.clear(prefsBody) : (prefsBody.innerHTML = '');
           (res.preferences || []).forEach(function (p) {
             var row = el('div', { style: 'padding:6px 0;' });
             row.appendChild(el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, [p.label]));
-            row.appendChild(el('div', { style: 'font-size:12px;color:#94A3B8;margin-bottom:9px;' }, [p.hint]));
+            row.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:9px;' }, [p.hint]));
 
             var chans = el('div', { style: 'display:flex;gap:7px;flex-wrap:wrap;' });
             var state = { email: !!p.email, push: !!p.push, sms: !!p.sms };
@@ -313,7 +365,7 @@
           });
         }).catch(function () {
           Dom.clear ? Dom.clear(prefsBody) : (prefsBody.innerHTML = '');
-          prefsBody.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px;' }, ['Could not load your notification settings.']));
+          prefsBody.appendChild(el('div', { style: 'color:#64748B;font-size:13px;' }, ['Could not load your notification settings.']));
         });
       } catch (e) {}
     } catch (e) {}
@@ -329,13 +381,71 @@
         var clr = el('button', { type: 'button', style: 'background:#F1F5F9;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;' }, ['Clear']);
         clr.addEventListener('click', function () { try { localStorage.removeItem('kt_last_crash'); } catch (e) {} dc.remove(); });
         dc.appendChild(clr);
-        wrap.appendChild(dc);
+        paneSecurity.appendChild(dc);
       }
     } catch (e) {}
 
-    wrap.appendChild(sc);
+    paneSecurity.appendChild(sc);
+
+    // Delete my account (App Store Guideline 5.1.1(v) in-app deletion path).
+    var dz = el('div', { style: CARD + 'border:1px solid #FECACA;' });
+    dz.appendChild(el('div', { style: 'font-size:15px;font-weight:800;color:#B91C1C;margin:0 0 8px;' }, ['Delete my account']));
+    dz.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:12px;' }, ['Your account is managed by your childcare agency. Request deletion and your agency administrator will permanently remove your account and personal data.']));
+    var dzStatus = el('div', { style: 'font-size:12.5px;min-height:16px;margin-bottom:8px;' });
+    var dzBtn = el('button', { type: 'button', style: 'background:#fff;color:#B91C1C;border:1.5px solid #FCA5A5;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:800;cursor:pointer;min-height:0;' }, ['Request account deletion']);
+    dzBtn.addEventListener('click', async function () {
+      var ok = (window.KT && KT.confirm) ? await KT.confirm('Request permanent deletion of your KiddieTrac account and data? Your agency administrator will be notified to complete it.') : window.confirm('Request account deletion?');
+      if (!ok) return;
+      dzBtn.disabled = true; dzBtn.textContent = 'Sending…';
+      try {
+        var r = await Api.post('/me/account-deletion', {});
+        dzStatus.style.color = '#16A34A'; dzStatus.textContent = (r && r.message) || 'Request sent to your agency administrator.';
+        dzBtn.textContent = 'Request sent';
+      } catch (e) {
+        dzBtn.disabled = false; dzBtn.textContent = 'Request account deletion';
+        dzStatus.style.color = '#B91C1C'; dzStatus.textContent = (e && e.message) || 'Could not send — please try again.';
+      }
+    });
+    dz.appendChild(dzStatus); dz.appendChild(dzBtn);
+    paneSecurity.appendChild(dz);
     // Sign out deliberately does NOT live here any more — there is exactly one
     // sign-out button, on the home screen, so it's always in the same place.
+
+    // About / build — the single place to confirm what's actually running on a
+    // device. Shows THREE things so we can tell installs from cache issues:
+    //   · Web build   = window.KT_VERSION (set in the page <head>) — the portal code.
+    //   · App build   = the installed APK versionName (versionCode), read live from
+    //                   Capacitor App.getInfo(). If this doesn't change after a
+    //                   reinstall, the install didn't take (signature conflict etc).
+    //   · assets      = the ?v= fingerprint the WebView actually loaded — if this is
+    //                   stale while Web build is new, it's a service-worker cache issue.
+    var about = el('div', { style: 'text-align:center;margin:10px 0 4px;font-size:11.5px;color:#64748B;line-height:1.7;' });
+    about.appendChild(el('div', { style: 'font-weight:800;color:#334155;font-size:12.5px;' }, ['KiddieTrac']));
+    about.appendChild(el('div', {}, ['Web build ' + (window.KT_VERSION || '—')]));
+    var appLine = el('div', { style: 'font-weight:700;color:#334155;' }, ['App build: checking…']);
+    about.appendChild(appLine);
+    try {
+      var _s = document.querySelector('script[src*="screen-settings.js"]');
+      var _m = _s && _s.src.match(/[?&]v=([^&"]+)/);
+      var _px = window.innerWidth + '×' + window.innerHeight + ' · ≤768:' + (window.matchMedia && window.matchMedia('(max-width:768px)').matches ? 'yes' : 'no');
+      about.appendChild(el('div', { style: 'color:#94A3B8;font-size:10px;' }, ['assets ' + (_m ? _m[1] : 'n/a') + ' · ' + _px]));
+    } catch (e) {}
+    try {
+      var _App = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App;
+      var _native = window.Capacitor && (Capacitor.isNativePlatform ? Capacitor.isNativePlatform() : Capacitor.isNative);
+      if (_App && _App.getInfo) {
+        _App.getInfo().then(function (info) {
+          appLine.textContent = 'App build: ' + (info.version || '?') + ' (' + (info.build || '?') + ')';
+        }).catch(function () { appLine.textContent = 'App build: native info unavailable'; });
+      } else if (_native) {
+        appLine.textContent = 'App build: (App plugin missing)';
+      } else {
+        appLine.textContent = 'Running in a web browser (not the installed app)';
+        appLine.style.color = '#94A3B8';
+        appLine.style.fontWeight = '400';
+      }
+    } catch (e) { appLine.textContent = 'App build: —'; }
+    wrap.appendChild(about);
   }
 
   function field(parent, label, type, val) {
@@ -380,11 +490,11 @@
     var bar = el('div', { style: 'height:6px;border-radius:99px;background:#E7EDF3;overflow:hidden;' });
     var fill = el('div', { style: 'height:100%;width:0;border-radius:99px;background:#EF4444;transition:width .2s ease,background .2s ease;' });
     bar.appendChild(fill);
-    var word = el('div', { style: 'font-size:12px;font-weight:700;margin-top:5px;min-height:15px;color:#94A3B8;' }, ['Enter a new password']);
+    var word = el('div', { style: 'font-size:12px;font-weight:700;margin-top:5px;min-height:15px;color:#64748B;' }, ['Enter a new password']);
     var list = el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;' });
     var marks = {};
     PW_RULES.forEach(function (r) {
-      var m = el('div', { style: 'font-size:11.5px;color:#94A3B8;display:flex;align-items:center;gap:4px;' }, ['○ ' + r.label]);
+      var m = el('div', { style: 'font-size:11.5px;color:#64748B;display:flex;align-items:center;gap:4px;' }, ['○ ' + r.label]);
       marks[r.key] = m; list.appendChild(m);
     });
     var gen = el('button', { type: 'button', style: 'background:none;border:none;color:#159FB4;font-size:12px;font-weight:700;cursor:pointer;padding:6px 0 0;' }, ['Suggest a strong password']);
@@ -436,38 +546,38 @@
 
   function wireBiometrics(toggle, sub) {
     var bio = KT && KT.biometric;
-    if (!bio) { if (sub) sub.textContent = 'Not available on this device.'; toggle.textContent = '—'; toggle.disabled = true; return; }
+    if (!bio) { if (sub) sub.textContent = 'Not available on this device.'; toggle.kt_disabled(true); return; }
     Promise.resolve(bio.available && bio.available()).then(function (kind) {
-      if (!kind) { if (sub) sub.textContent = 'Available only in the KiddieTrac app.'; toggle.textContent = '—'; toggle.disabled = true; return; }
-      // Both the native plugin and WebAuthn just report "biometric" — they don't
-      // say which sensor the phone has — so the generic case names both.
+      var enabledNow = !!(bio.isEnabled && bio.isEnabled());
+      // If the availability probe hiccups (KtBio can return a transient false) but
+      // biometric IS already enabled, reflect the real stored state and still let
+      // the user turn it off — don't show it as unavailable.
+      if (!kind && !enabledNow) { if (sub) sub.textContent = 'Available only in the KiddieTrac app.'; toggle.kt_disabled(true); return; }
       var label = /face/i.test(kind) ? 'Face ID' : (/touch|finger/i.test(kind) ? 'Fingerprint' : 'Fingerprint / face');
+      toggle.kt_disabled(false);
       function paint() {
         var on = bio.isEnabled && bio.isEnabled();
         if (sub) sub.textContent = on ? label + ' sign-in is on.' : 'Sign in with your ' + label.toLowerCase() + '.';
-        toggle.textContent = on ? 'On' : 'Off';
-        toggle.style.background = on ? '#0E7C90' : '#E2E8F0';
-        toggle.style.color = on ? '#fff' : '#475569';
+        toggle.kt_set(on);
       }
       paint();
       toggle.addEventListener('click', function () {
-        toggle.disabled = true;
+        if (toggle.disabled) return;
+        toggle.kt_disabled(true);
         var was = bio.isEnabled && bio.isEnabled();
         var act = was ? bio.disable() : bio.enroll();
         Promise.resolve(act).then(function (ok) {
-          toggle.disabled = false; paint();
-          // Surface why enabling didn't take (cancelled / device error) instead of
-          // failing silently — helps diagnose device-specific biometric issues.
+          toggle.kt_disabled(false); paint();
           if (!was && ok === false && sub) {
             var err = (bio.lastError && bio.lastError()) || '';
-            sub.textContent = err ? ('Couldn’t enable: ' + err) : 'Enable was cancelled — tap On to try again.';
+            sub.textContent = err ? ('Couldn’t enable: ' + err) : 'Enable was cancelled — tap the switch to try again.';
           }
         }).catch(function (e) {
-          toggle.disabled = false; paint();
+          toggle.kt_disabled(false); paint();
           if (sub) sub.textContent = 'Biometric error: ' + ((e && e.message) || e);
         });
       });
-    }).catch(function () { if (sub) sub.textContent = 'Available only in the KiddieTrac app.'; toggle.disabled = true; toggle.textContent = '—'; });
+    }).catch(function () { if (sub) sub.textContent = 'Available only in the KiddieTrac app.'; toggle.kt_disabled(true); });
   }
 
   function pinFlow(area, onDone) {
@@ -501,6 +611,9 @@
   }
 
   Shell.registerScreen('guardian:settings', render);
+  Shell.registerScreen('home_visitor:settings', render);
+  Shell.registerScreen('sales_rep:settings', render);
+  Shell.registerScreen('platform_admin:settings', render);
   Shell.registerScreen('educator:settings', render);
   window.KT.renderSettings = render;
 })(window);

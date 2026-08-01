@@ -16,7 +16,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function firstName(u) { var n = (u && (u.name || u.first_name || '')) || ''; return n.split(' ')[0] || 'there'; }
 
-  var ROLE = { platform_admin: 'Super Admin', agency_admin: 'Agency Admin', centre_director: 'Centre Director', educator: 'Educator', guardian: 'Parent', auditor: 'Auditor' };
+  var ROLE = { platform_admin: 'Super Admin', agency_admin: 'Agency Admin', centre_director: 'Centre Director', educator: 'Educator', guardian: 'Parent', home_visitor: 'Home Visitor', sales_rep: 'Sales Rep', auditor: 'Auditor' };
   function roleLabel(u) {
     var roles = (u && u.roles) || [];
     var order = ['platform_admin', 'agency_admin', 'centre_director', 'educator', 'auditor', 'guardian'];
@@ -36,7 +36,7 @@
   function buildViewAs(host) {
     if (document.getElementById('kt-tb-viewas')) return;
     var cur = ''; try { cur = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
-    var roles = [['', 'Super admin (default)'], ['agency_admin', '🏢 Agency admin'], ['centre_director', '🏫 Centre director'], ['educator', '🎓 Educator'], ['guardian', '👪 Parent / guardian'], ['auditor', '🔍 Auditor']];
+    var roles = [['', 'Super admin (default)'], ['agency_admin', '🏢 Agency admin'], ['centre_director', '🏫 Centre director'], ['educator', '🎓 Educator'], ['guardian', '👪 Parent / guardian'], ['home_visitor', '🏡 Home visitor'], ['sales_rep', '💼 Sales rep'], ['auditor', '🔍 Auditor']];
     var wrap = ctl('kt-tb-viewas'); if (cur) wrap.classList.add('kt-tb-ctl-active');
     var lab = document.createElement('span'); lab.className = 'kt-tb-ctl-lab'; lab.textContent = cur ? '👁 Viewing as' : '👁 View as';
     var sel = document.createElement('select'); sel.className = 'kt-tb-ctl-sel'; sel.title = 'Preview the portal as another role';
@@ -104,6 +104,104 @@
   function openQuickAdd() { var f = document.querySelector('.kt-qa-fab'); if (f) f.click(); }
   function openAI() { var h = document.getElementById('kt-floating-help'); if (h) { h.click(); return; } try { if (window.KT && typeof window.KT.openChatbot === 'function') return window.KT.openChatbot(); } catch (e) {} var f = document.getElementById('kt-chatbot-fab'); if (f) f.click(); }
   function go(hash) { location.hash = hash; }
+
+  // ── Notification / activity feed (admins + directors; platform_admin sees ALL
+  //    agencies, everyone else only their own — the backend isolates it). ────────
+  function notifSeen() { try { return localStorage.getItem('kt_notif_seen') || ''; } catch (e) { return ''; } }
+  function setNotifSeen(v) { try { if (v) localStorage.setItem('kt_notif_seen', v); } catch (e) {} }
+  function relTime(iso) {
+    if (!iso) return '';
+    // MySQL timestamps come back UTC with NO zone marker; without appending 'Z' the
+    // browser parses them as LOCAL time, which for anyone west of UTC lands the
+    // event in the FUTURE → negative age → the bell was stuck on "just now" forever.
+    // (Matches the fix already in screen-notifications.js.)
+    var v = String(iso).replace(' ', 'T');
+    if (!/(Z|[+-]\d{2}:?\d{2})$/.test(v)) v += 'Z';
+    var d = new Date(v); if (isNaN(d.getTime())) return '';
+    var s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 0) s = 0;
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  function loadFeed(cb) {
+    var t = store('kt_token'); if (!t) { cb(null); return; }
+    fetch(API + '/admin/activity-feed', { headers: { 'Authorization': 'Bearer ' + t } })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(cb).catch(function () { cb(null); });
+  }
+  function setNotifBadge(n) {
+    var b = document.getElementById('kt-tb-notif-badge'); if (!b) return;
+    if (n > 0) { b.textContent = n > 99 ? '99+' : String(n); b.hidden = false; } else { b.hidden = true; }
+  }
+  function refreshNotifBadge() {
+    loadFeed(function (d) {
+      if (!d || !d.events) return;
+      var seen = notifSeen();
+      var unread = d.events.filter(function (e) { return e.when && (!seen || e.when > seen); }).length;
+      setNotifBadge(unread);
+    });
+  }
+  var __notifStarted = false;
+  function startNotif() {
+    if (__notifStarted) return; __notifStarted = true;
+    setTimeout(refreshNotifBadge, 1500);
+    setInterval(refreshNotifBadge, 60000);
+  }
+  var notifPanel = null;
+  function closeNotif() { if (notifPanel) { notifPanel.remove(); notifPanel = null; document.removeEventListener('click', outsideNotif, true); } }
+  function outsideNotif(e) {
+    if (!notifPanel) return;
+    if (notifPanel.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('[data-kttip="Notifications"]')) return;
+    closeNotif();
+  }
+  function toggleNotif() {
+    if (notifPanel) { closeNotif(); return; }
+    notifPanel = document.createElement('div');
+    notifPanel.id = 'kt-notif-panel';
+    notifPanel.style.cssText = 'position:fixed;top:52px;right:14px;width:360px;max-width:calc(100vw - 20px);max-height:70vh;background:#fff;border:1px solid #E5E7EB;border-radius:14px;box-shadow:0 20px 50px -12px rgba(15,23,42,.4);z-index:10050;display:flex;flex-direction:column;overflow:hidden;font-family:inherit;';
+    notifPanel.innerHTML = '<div style="padding:13px 16px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
+      + '<strong style="font-size:14.5px;color:#0D1B2A;">🔔 Notifications</strong>'
+      + '<span id="kt-notif-scope" style="font-size:11px;color:#94A3B8;font-weight:600;"></span></div>'
+      + '<div id="kt-notif-list" style="overflow-y:auto;padding:6px 0;"><div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">Loading…</div></div>';
+    document.body.appendChild(notifPanel);
+    setTimeout(function () { document.addEventListener('click', outsideNotif, true); }, 0);
+    loadFeed(function (d) {
+      var list = document.getElementById('kt-notif-list'); if (!list) return;
+      var scopeEl = document.getElementById('kt-notif-scope');
+      if (scopeEl && d && d.scope === 'all') scopeEl.textContent = 'Across all agencies';
+      var events = (d && d.events) || [];
+      if (!events.length) { list.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;font-size:13px;">Nothing new yet.</div>'; return; }
+      var seen = notifSeen();
+      list.innerHTML = '';
+      events.forEach(function (e) {
+        var isNew = e.when && (!seen || e.when > seen);
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:11px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid #F8FAFC;cursor:' + (e.link ? 'pointer' : 'default') + ';' + (isNew ? 'background:#F0F9FF;' : '');
+        row.onmouseover = function () { row.style.background = '#F1F5F9'; };
+        row.onmouseout = function () { row.style.background = isNew ? '#F0F9FF' : ''; };
+        // A child/staff photo (e.avatar) shows as a round thumbnail; the emoji is the
+        // fallback (photoless people, or a broken image via onerror).
+        var iconHtml;
+        if (e.avatar) {
+          var av = /^https?:\/\//i.test(e.avatar) ? e.avatar : (API.replace(/\/api\/v1\/?$/, '') + e.avatar);
+          iconHtml = '<img src="' + esc(av) + '" alt="" onerror="this.style.display=\'none\';if(this.nextSibling)this.nextSibling.style.display=\'\';" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block;">'
+            + '<span style="font-size:17px;line-height:1.25;flex-shrink:0;display:none;">' + (e.icon || '•') + '</span>';
+        } else {
+          iconHtml = '<span style="font-size:17px;line-height:1.25;flex-shrink:0;">' + (e.icon || '•') + '</span>';
+        }
+        row.innerHTML = iconHtml
+          + '<div style="min-width:0;flex:1;"><div style="font-size:13px;color:#1E293B;line-height:1.4;">' + esc(e.text || '') + '</div>'
+          + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + esc(relTime(e.when)) + '</div></div>';
+        if (e.link) row.onclick = function () { closeNotif(); go(e.link); };
+        list.appendChild(row);
+      });
+      if (events[0] && events[0].when) setNotifSeen(events[0].when);
+      setNotifBadge(0);
+    });
+  }
   function openProfile() { location.hash = '#onboarding'; }   // profile editor (name / photo / contact)
   function openHome() { location.hash = '#dashboard'; }
   function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
@@ -127,6 +225,8 @@
       '.kt-tb-ico{position:relative;width:31px;height:31px;border:1px solid rgba(15,23,42,.1);background:rgba(15,23,42,.03);',
       'border-radius:9px;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;color:#334155;padding:0;transition:background .14s;}',
       '.kt-tb-ico:hover{background:rgba(15,23,42,.08);}',
+      // Consistent custom tooltip BELOW the icon (same as the parent/educator bar).
+      '.kt-tb-ico[data-kttip]:hover::after{content:attr(data-kttip);position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:4px 9px;border-radius:6px;z-index:10001;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28);}',
       '.kt-tb-badge{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;',
       'background:#EF4444;color:#fff;font-size:9.5px;font-weight:800;line-height:15px;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.8);}',
       '.kt-tb-sep{width:1px;height:18px;background:rgba(15,23,42,.12);margin:0 2px;}',
@@ -156,7 +256,10 @@
 
   function iconBtn(emoji, title, fn, badgeId) {
     var b = document.createElement('button');
-    b.className = 'kt-tb-ico'; b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
+    // Custom tooltip (data-kttip) instead of the native `title` — native tooltips
+    // are positioned by the browser (they showed ABOVE the icons here but BELOW for
+    // other roles), so a CSS tooltip keeps them consistently below across roles.
+    b.className = 'kt-tb-ico'; b.type = 'button'; b.setAttribute('data-kttip', title); b.setAttribute('aria-label', title);
     b.textContent = emoji;
     if (badgeId) { var bd = document.createElement('span'); bd.className = 'kt-tb-badge'; bd.id = badgeId; bd.hidden = true; b.appendChild(bd); }
     b.addEventListener('click', function (e) { e.preventDefault(); fn(); });
@@ -227,7 +330,7 @@
     // Top bar is for admins / directors / super admins only. While a platform
     // admin previews a lower role via "View as", honour that (hide the bar too).
     var viewAs = ''; try { viewAs = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
-    if (!isAdminRole(u) || (viewAs && ['educator', 'guardian', 'auditor'].indexOf(viewAs) !== -1)) return;
+    if (!isAdminRole(u) || (viewAs && ['educator', 'guardian', 'auditor', 'home_visitor', 'sales_rep'].indexOf(viewAs) !== -1)) return;
     injectStyle();
     var pod = greetEmoji(new Date().getHours());
     var bar = document.createElement('div');
@@ -243,6 +346,7 @@
     right.appendChild(iconBtn('⚡', 'Quick add', openQuickAdd));
     right.appendChild(iconBtn('💬', 'Messages', function () { go('#chat'); }, 'kt-tb-msg-badge'));
     right.appendChild(iconBtn('📣', 'Announcements', function () { go('#announcements'); }));
+    if (isAdminRole(u)) { right.appendChild(iconBtn('🔔', 'Notifications', toggleNotif, 'kt-tb-notif-badge')); startNotif(); }
     right.appendChild(iconBtn('🤖', 'AI assistant', openAI));
     if (isAdminRole(u)) right.appendChild(iconBtn('🎁', "What's new", function () { if (window.KT && window.KT.openWhatsNew) window.KT.openWhatsNew(); }, 'kt-tb-wn-badge'));
     var sep = document.createElement('div'); sep.className = 'kt-tb-sep'; right.appendChild(sep);
@@ -310,7 +414,7 @@
   setInterval(function () { var c = document.getElementById('kt-tb-clock'); if (c) c.textContent = fmtClock(); var d = document.getElementById('kt-tb-date'); if (d) d.textContent = fmtDate(); }, 15000);
   setInterval(ensure, 1200);   // safety net; the shell now calls ensure() on every render
   setInterval(buildSelectors, 1400);   // rebuild View-as + agency switcher in the bar after any nav
-  setInterval(refreshUnread, 15000);   // near-real-time unread badge
+  setInterval(refreshUnread, 60000);   // near-real-time unread badge
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ensure(); refreshUser(); });
   else { ensure(); refreshUser(); }
 })();

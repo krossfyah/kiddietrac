@@ -106,6 +106,19 @@
         ],
       };
     }
+    if (r === 'home_visitor') {
+      return {
+        title: 'About your role',
+        subtitle: 'A few details about your home-visiting practice.',
+        fields: [
+          { k: 'credentials',      label: 'Credentials / certification',        type: 'text', placeholder: 'e.g. RECE, ECE diploma' },
+          { k: 'first_aid_expiry', label: 'First aid certification expiry',      type: 'date' },
+          { k: 'languages_spoken', label: 'Languages spoken (comma-separated)',  type: 'text', placeholder: 'English, French' },
+          { k: 'coverage_area',    label: 'Coverage area / neighbourhoods',      type: 'text' },
+          { k: 'caseload',         label: 'Approximate caseload (families)',     type: 'number' },
+        ],
+      };
+    }
     // guardian
     return {
       title: 'About your family',
@@ -161,6 +174,7 @@
         preferred_name: user.preferred_name || '',
         phone:         user.phone || '',
         photo_url:     user.photo_url || '',
+        username:      user.username || '',
       },
       role_extras: (user.profile_extras && user.profile_extras.role_extras) || {},
       address: (function () {
@@ -194,7 +208,7 @@
           '<div id="kt-step-msg" style="font-size:13px;min-height:20px;margin-top:12px;"></div>' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;padding-top:18px;border-top:1px solid #E5E7EB;">' +
             '<button id="kt-back" type="button" style="padding:10px 18px;background:white;color:#475569;border:1.5px solid #CBD5E1;border-radius:10px;font-weight:600;cursor:pointer;">Back</button>' +
-            '<div style="font-size:12px;color:#94A3B8;">Step <span id="kt-step-n">1</span> of ' + steps.length + '</div>' +
+            '<div style="font-size:12px;color:#64748B;">Step <span id="kt-step-n">1</span> of ' + steps.length + '</div>' +
             '<button id="kt-next" type="button" style="padding:10px 24px;background:linear-gradient(135deg,#081C41,#1F6080);color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer;">Next</button>' +
           '</div>' +
         '</div>' +
@@ -239,6 +253,9 @@
     });
     container.querySelector('#kt-next').addEventListener('click', async function () {
       collectCurrentStep(state, container);
+      // Validate the CURRENT step before moving on (previously validation only
+      // ran at the very end, so users breezed past missing required fields).
+      if (!validateStep(state, container)) return;
       if (state.step < steps.length - 1) {
         state.step++;
         drawStep();
@@ -250,24 +267,26 @@
     drawStep();
   }
 
-  function input(label, key, value, type, placeholder, options) {
+  function input(label, key, value, type, placeholder, options, required) {
     type = type || 'text';
+    var req = required ? ' data-req="1"' : '';
     var html;
     if (type === 'textarea') {
-      html = '<textarea data-k="' + esc(key) + '" rows="3" placeholder="' + esc(placeholder || '') + '" style="' + inputStyle() + 'font-family:inherit;resize:vertical;">' + esc(value || '') + '</textarea>';
+      html = '<textarea data-k="' + esc(key) + '"' + req + ' rows="3" placeholder="' + esc(placeholder || '') + '" style="' + inputStyle() + 'font-family:inherit;resize:vertical;">' + esc(value || '') + '</textarea>';
     } else if (type === 'select') {
-      html = '<select data-k="' + esc(key) + '" style="' + inputStyle() + 'background:white;">' +
+      html = '<select data-k="' + esc(key) + '"' + req + ' style="' + inputStyle() + 'background:white;">' +
         '<option value="">Select…</option>' +
         (options || []).map(function (o) {
           return '<option value="' + esc(o) + '"' + (value === o ? ' selected' : '') + '>' + esc(o) + '</option>';
         }).join('') +
       '</select>';
     } else {
-      html = '<input data-k="' + esc(key) + '" type="' + esc(type) + '" placeholder="' + esc(placeholder || '') + '" value="' + esc(value || '') + '" style="' + inputStyle() + '">';
+      html = '<input data-k="' + esc(key) + '"' + req + ' type="' + esc(type) + '" placeholder="' + esc(placeholder || '') + '" value="' + esc(value || '') + '" style="' + inputStyle() + '">';
     }
     var wrap = document.createElement('div');
     wrap.style.cssText = 'margin-bottom:14px;';
-    wrap.innerHTML = '<label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;">' + esc(label) + '</label>' + html;
+    var star = required ? ' <span style="color:#DC2626;font-weight:800;" title="Required">*</span>' : '';
+    wrap.innerHTML = '<label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;">' + esc(label) + star + '</label>' + html;
     return wrap;
   }
   function inputStyle() {
@@ -282,19 +301,26 @@
     av.style.cssText = 'display:flex;align-items:center;gap:16px;margin-bottom:18px;';
     var prevBg = state.data.photo_url ? "background:#F1F5F9 url('" + absUrlO(state.data.photo_url) + "') center/cover no-repeat;" : 'background:#F1F5F9;';
     av.innerHTML =
-      '<div id="kt-av-prev" style="width:72px;height:72px;border-radius:50%;' + prevBg + 'display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:26px;flex-shrink:0;border:2px solid #E2E8F0;">' + (state.data.photo_url ? '' : '👤') + '</div>' +
+      '<div id="kt-av-prev" style="width:72px;height:72px;border-radius:50%;' + prevBg + 'display:flex;align-items:center;justify-content:center;color:#64748B;font-size:26px;flex-shrink:0;border:2px solid #E2E8F0;">' + (state.data.photo_url ? '' : '👤') + '</div>' +
       '<div><button type="button" id="kt-av-btn" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">Upload avatar</button>' +
         '<input id="kt-av-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">' +
-        '<div id="kt-av-msg" style="font-size:11px;color:#94A3B8;margin-top:5px;">JPG/PNG, max 2 MB</div></div>';
+        '<div id="kt-av-msg" style="font-size:11px;color:#64748B;margin-top:5px;">Required · JPG/PNG, max 2 MB</div></div>';
+    var avLabel = document.createElement('div');
+    avLabel.style.cssText = 'font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;';
+    avLabel.innerHTML = 'Profile photo <span style="color:#DC2626;font-weight:800;" title="Required">*</span>';
+    box.appendChild(avLabel);
     box.appendChild(av);
 
     var row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
-    row.appendChild(input('First name',    'first_name',     state.data.first_name));
-    row.appendChild(input('Last name',     'last_name',      state.data.last_name));
+    row.appendChild(input('First name',    'first_name',     state.data.first_name, 'text', null, null, true));
+    row.appendChild(input('Last name',     'last_name',      state.data.last_name,  'text', null, null, true));
     box.appendChild(row);
     box.appendChild(input('Preferred name (optional, what we call you)', 'preferred_name', state.data.preferred_name));
-    box.appendChild(input('Phone (optional)', 'phone', state.data.phone, 'tel'));
+    box.appendChild(input('Phone', 'phone', state.data.phone, 'tel', null, null, true));
+    // Optional username — lets one person keep several accounts under one email
+    // and sign in to the right one. Letters, numbers, and . _ - only.
+    box.appendChild(input('Username (optional — sign in with this if you share an email across accounts)', 'username', state.data.username, 'text'));
 
     setTimeout(function () {
       var fileEl = box.querySelector('#kt-av-file');
@@ -365,10 +391,10 @@
     var prevBg = wl.brand_logo_url ? "background:#F8FAFC url('" + absUrlO(wl.brand_logo_url) + "') center/contain no-repeat;" : 'background:#F8FAFC;';
     box.innerHTML =
       '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">' +
-        '<div id="kt-wl-prev" style="width:120px;height:64px;border:1px solid #E2E8F0;border-radius:10px;' + prevBg + 'display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:22px;flex-shrink:0;">' + (wl.brand_logo_url ? '' : '🖼') + '</div>' +
+        '<div id="kt-wl-prev" style="width:120px;height:64px;border:1px solid #E2E8F0;border-radius:10px;' + prevBg + 'display:flex;align-items:center;justify-content:center;color:#64748B;font-size:22px;flex-shrink:0;">' + (wl.brand_logo_url ? '' : '🖼') + '</div>' +
         '<div><button type="button" id="kt-wl-btn" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">Upload your logo</button>' +
           '<input id="kt-wl-file" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">' +
-          '<div id="kt-wl-msg" style="font-size:11px;color:#94A3B8;margin-top:5px;">PNG/SVG, max 2 MB</div></div>' +
+          '<div id="kt-wl-msg" style="font-size:11px;color:#64748B;margin-top:5px;">PNG/SVG, max 2 MB</div></div>' +
       '</div>';
     box.appendChild(input('Primary colour (hex)', 'brand_primary_color', wl.brand_primary_color, 'text', '#1F6080'));
     box.appendChild(input('Support email', 'brand_support_email', wl.brand_support_email, 'email'));
@@ -405,9 +431,11 @@
     var box = document.createElement('div');
     box.appendChild(input('Street address',  'address_line1', state.address.address_line1));
     box.appendChild(input('Apt / unit (optional)', 'address_line2', state.address.address_line2));
+    // City full-width, then Province + Postal side by side — the old 3-across
+    // row squished the postal field on phones (it truncated "L9V1C4").
+    box.appendChild(input('City', 'city', state.address.city));
     var row = document.createElement('div');
-    row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;';
-    row.appendChild(input('City', 'city', state.address.city));
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
     row.appendChild(input('Province', 'province', state.address.province, 'select', null,
       ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT']));
     row.appendChild(input('Postal code', 'postal_code', state.address.postal_code, 'text', 'M5G 1Z4'));
@@ -417,6 +445,33 @@
     row2.appendChild(input('Emergency contact name', 'emergency_contact_name', state.address.emergency_contact_name));
     row2.appendChild(input('Emergency contact phone', 'emergency_contact_phone', state.address.emergency_contact_phone, 'tel'));
     box.appendChild(row2);
+
+    // Additional emergency contacts (optional) — add as many as needed.
+    var extraWrap = document.createElement('div');
+    extraWrap.style.cssText = 'margin-top:10px;';
+    box.appendChild(extraWrap);
+    state.address.extra_contacts = Array.isArray(state.address.extra_contacts) ? state.address.extra_contacts : [];
+    function addContactRow(preset) {
+      var idx = extraWrap.querySelectorAll('.kt-ec-row').length;
+      var r = document.createElement('div');
+      r.className = 'kt-ec-row';
+      r.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-top:8px;';
+      r.innerHTML =
+        '<div><label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:5px;">Contact name</label>'
+        + '<input data-ec="name" value="' + esc((preset && preset.name) || '') + '" style="' + inputStyle() + '"></div>'
+        + '<div><label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:5px;">Phone</label>'
+        + '<input data-ec="phone" type="tel" value="' + esc((preset && preset.phone) || '') + '" style="' + inputStyle() + '"></div>'
+        + '<button type="button" class="kt-ec-del" title="Remove" style="height:44px;width:40px;border:1px solid #E2E8F0;background:#fff;color:#B91C1C;border-radius:10px;font-size:16px;cursor:pointer;">✕</button>';
+      r.querySelector('.kt-ec-del').addEventListener('click', function () { r.remove(); });
+      extraWrap.appendChild(r);
+    }
+    (state.address.extra_contacts || []).forEach(function (c) { addContactRow(c); });
+    var addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.textContent = '＋ Add another emergency contact';
+    addBtn.style.cssText = 'margin-top:12px;background:#fff;border:1.5px dashed #CBD5E1;color:#1F6080;border-radius:10px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;width:100%;';
+    addBtn.addEventListener('click', function () { addContactRow(null); });
+    box.appendChild(addBtn);
     return box;
   }
   function renderRoleStep(state, roleStep) {
@@ -439,6 +494,15 @@
       else if (id === 'whitelabel') state.whitelabel[k] = v;
     });
     if (id === 'team') collectTeam(state, body);
+    if (id === 'address') {
+      var extras = [];
+      body.querySelectorAll('.kt-ec-row').forEach(function (row) {
+        var n = row.querySelector('[data-ec="name"]'); var p = row.querySelector('[data-ec="phone"]');
+        var nm = n ? n.value.trim() : ''; var ph = p ? p.value.trim() : '';
+        if (nm || ph) extras.push({ name: nm, phone: ph });
+      });
+      state.address.extra_contacts = extras;
+    }
   }
 
   // Pull the team-invite rows out of the DOM into state.team.
@@ -459,6 +523,36 @@
     state.team = rows;
   }
 
+  // Validate the CURRENT step's required fields; highlight + message if any are
+  // missing. Returns true when the step is complete enough to advance.
+  function validateStep(state, container) {
+    var msg = container.querySelector('#kt-step-msg');
+    var body = container.querySelector('#kt-step-body');
+    var id = state.steps[state.step].id;
+    var missing = [];
+    var firstBad = null;
+    body.querySelectorAll('[data-req]').forEach(function (el) {
+      var v = (el.value || '').trim();
+      var labelEl = el.parentNode ? el.parentNode.querySelector('label') : null;
+      var label = labelEl ? labelEl.textContent.replace(/\*/g, '').trim() : 'A required field';
+      if (!v) { missing.push(label); el.style.borderColor = '#DC2626'; if (!firstBad) firstBad = el; }
+      else { el.style.borderColor = '#E2E8F0'; }
+    });
+    if (id === 'profile' && !state.data.photo_url) {
+      missing.push('Profile photo');
+      var avMsg = body.querySelector('#kt-av-msg');
+      if (avMsg) { avMsg.textContent = 'Profile photo is required'; avMsg.style.color = '#DC2626'; }
+    }
+    if (missing.length) {
+      msg.style.color = '#DC2626';
+      msg.textContent = 'Please complete: ' + missing.join(', ') + '.';
+      if (firstBad && firstBad.focus) try { firstBad.focus(); } catch (e) {}
+      return false;
+    }
+    msg.textContent = '';
+    return true;
+  }
+
   async function submit(state, container) {
     var btn = container.querySelector('#kt-next');
     var msg = container.querySelector('#kt-step-msg');
@@ -471,6 +565,14 @@
       state.step = 0;
       // Re-draw step 0 so user sees the missing fields
       var ev = new CustomEvent('redraw'); container.dispatchEvent(ev);
+      return;
+    }
+    // A profile photo is mandatory (marked with a red asterisk in the form).
+    if (!state.data.photo_url) {
+      msg.textContent = 'A profile photo is required — tap “Upload avatar”.'; msg.style.color = '#DC2626';
+      btn.disabled = false; btn.textContent = 'Save and continue';
+      state.step = 0;
+      var evp = new CustomEvent('redraw'); container.dispatchEvent(evp);
       return;
     }
 
@@ -497,8 +599,13 @@
         }
         if (invited) notes.push(invited + ' invite' + (invited === 1 ? '' : 's') + ' sent');
       }
+      // Branding lives behind the "Make it yours" step, which is ONLY shown to
+      // agency admins — and the /features endpoint is admin-only (403 otherwise).
+      // brand_support_email defaults to the user's own email for every role, so
+      // without this role gate an educator/director/parent finishing onboarding
+      // silently PATCHed the admin endpoint → a 403 in the audit log.
       var wl = state.whitelabel || {};
-      if (state.agencyId && (wl.brand_logo_url || wl.brand_privacy_url || wl.brand_terms_url || wl.brand_support_email)) {
+      if (role() === 'agency_admin' && state.agencyId && (wl.brand_logo_url || wl.brand_privacy_url || wl.brand_terms_url || wl.brand_support_email)) {
         try {
           await agencyPatch('/admin/agencies/' + state.agencyId + '/features', {
             brand_logo_url: wl.brand_logo_url || null,
@@ -511,11 +618,18 @@
         } catch (e) { /* non-fatal */ }
       }
 
-      // Done! Redirect to the role's dashboard. Hashchange will trigger the
-      // shell to render the proper screen.
-      msg.textContent = '✓ All set' + (notes.length ? ' — ' + notes.join(' · ') : '') + ' — taking you to your dashboard…';
+      // Done! Redirect to the ROLE's own home screen — not a hardcoded
+      // #dashboard (a home visitor has no dashboard screen, which produced a
+      // "Required role: Guardian" 403 when it fell through to a guardian view).
+      var landing = 'dashboard';
+      try {
+        var rr = role();
+        if (window.KT && KT.Shell && typeof KT.Shell.homeHashForRole === 'function') landing = KT.Shell.homeHashForRole(rr);
+        else landing = (rr === 'home_visitor') ? 'home' : ((rr === 'guardian' || rr === 'educator') ? 'today' : 'dashboard');
+      } catch (e) {}
+      msg.textContent = '✓ All set' + (notes.length ? ' — ' + notes.join(' · ') : '') + ' — taking you to your home…';
       msg.style.color = '#16A34A';
-      setTimeout(function () { window.location.hash = '#dashboard'; }, 800);
+      setTimeout(function () { window.location.hash = '#' + landing; }, 800);
     } catch (e) {
       msg.textContent = 'Could not save: ' + e.message;
       msg.style.color = '#DC2626';
@@ -531,26 +645,79 @@
   // setTimeout after DOMContentLoaded, which raced the dashboard's async
   // /agency/dashboard fetch — the dashboard append resolved last and
   // overwrote the wizard.
-  function maybeAutoTrigger() {
+  // ── Onboarding GATE ─────────────────────────────────────────────────
+  // Until onboarding is complete the user must not reach any other screen —
+  // not via the back button (browser OR Android hardware), a deep link, a
+  // reload on another hash, or in-app nav. `onboarded_at` (set server-side ONLY
+  // when the wizard finishes) is the single source of truth. Skipped entirely
+  // for a super admin using "View as". Sign-out still works: it's a full-page
+  // navigation to /index.html, not a hash change, so it isn't intercepted.
+  function onboardingIncomplete() {
+    try { if (sessionStorage.getItem('kt_impersonating') === '1') return false; } catch (e) {}
     var u = getUser();
-    if (!u || !u.id) return;
-    if (u.onboarded_at) return;
-    var hash = (window.location.hash || '').replace('#', '').split('?')[0];
-    // Allow the auto-trigger only when the user hasn't deep-linked anywhere
-    // specific (empty hash or default dashboard).
-    if (hash && hash !== 'dashboard') return;
-    window.location.hash = '#onboarding';
+    return !!(u && u.id && !u.onboarded_at);
   }
+  function forceGate() {
+    if (!token()) return;                 // not signed in → nothing to gate
+    if (!onboardingIncomplete()) return;  // done (or impersonating) → free to navigate
+    var hash = (window.location.hash || '').replace('#', '').split('?')[0];
+    if (hash !== 'onboarding') window.location.hash = '#onboarding'; // bounce back
+  }
+  // Kept for back-compat (called eagerly + by the shell); now the full gate.
+  function maybeAutoTrigger() { forceGate(); }
 
   // Register screen for every role
   if (Shell && Shell.registerScreen) {
-    ['agency_admin', 'centre_director', 'educator', 'guardian', 'auditor'].forEach(function (r) {
+    ['agency_admin', 'centre_director', 'educator', 'guardian', 'auditor', 'home_visitor', 'sales_rep'].forEach(function (r) {
       Shell.registerScreen(r + ':onboarding', render);
     });
   }
   window.KT = window.KT || {};
-  window.KT.Onboarding = { render: render, maybeAutoTrigger: maybeAutoTrigger };
+  window.KT.Onboarding = { render: render, maybeAutoTrigger: maybeAutoTrigger, forceGate: forceGate };
 
-  // Eager check at script-eval time (before Shell.startApp runs).
-  maybeAutoTrigger();
+  // Install the navigation guard ONCE: every hash change while onboarding is
+  // incomplete bounces straight back to #onboarding — this catches the browser
+  // back button AND the Android hardware back button (both fire hashchange).
+  if (!window.__ktOnbGuard) {
+    window.__ktOnbGuard = true;
+    window.addEventListener('hashchange', forceGate);
+    try {
+      var CapApp = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App;
+      if (CapApp && CapApp.addListener) {
+        CapApp.addListener('backButton', function () { if (onboardingIncomplete()) window.location.hash = '#onboarding'; });
+      }
+    } catch (e) {}
+  }
+
+  // Eager check at script-eval time (before Shell.startApp runs) + once more
+  // after the shell boots (covers a kt_user that loads a beat later).
+  forceGate();
+  setTimeout(forceGate, 1200);
+
+  // The SERVER is the source of truth for onboarding — the cached kt_user can go
+  // stale or partial (app resume, re-auth, an older cache that predates the
+  // onboarded_at field), which was re-prompting already-onboarded users on
+  // sign-in. Sync kt_user from /auth/me and, if the server says onboarded,
+  // release any gate that fired off the stale cache.
+  function syncOnboardingFromServer() {
+    if (!token()) return;
+    fetch(apiBase() + '/auth/me', { headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (fresh) {
+        if (!fresh || !fresh.id) return;
+        var u = getUser(); if (!u || !u.id) u = {};
+        setUser(Object.assign({}, u, fresh));   // fresh (incl. onboarded_at) wins
+        if (fresh.onboarded_at) {
+          var h = (window.location.hash || '').replace('#', '').split('?')[0];
+          if (h === 'onboarding') {              // stuck on the wizard but actually done → release
+            window.location.hash = '';
+            if (window.KT && KT.Shell && KT.Shell.renderScreen) { try { KT.Shell.renderScreen(); } catch (e) {} }
+          }
+        } else {
+          forceGate();                            // genuinely not onboarded → keep gating
+        }
+      })
+      .catch(function () { /* offline / transient — leave the eager gate as-is */ });
+  }
+  syncOnboardingFromServer();
 })(window);

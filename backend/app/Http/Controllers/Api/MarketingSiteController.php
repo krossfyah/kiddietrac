@@ -173,6 +173,17 @@ final class MarketingSiteController extends Controller
             'source' => $source,
             'ip'     => substr((string) $request->ip(), 0, 45),
         ]);
+        // Capture into the sales CRM pipeline (dedupe by email while open). Guarded.
+        try {
+            if (! \App\Models\SalesLead::where('email', $email)->where('status', 'open')->exists()) {
+                $lead = \App\Models\SalesLead::create([
+                    'name' => $name ?: $email, 'company' => $agency ?: null, 'email' => $email,
+                    'source' => 'marketing-site', 'stage' => 'new', 'status' => 'open', 'last_activity_at' => now(),
+                    'notes' => 'Auto-captured from the marketing site' . ($source ? " (source: {$source})" : '') . '.',
+                ]);
+                \App\Models\SalesActivity::create(['lead_id' => $lead->id, 'type' => 'stage', 'body' => 'Captured from marketing site', 'done' => true]);
+            }
+        } catch (\Throwable $e) {}
         // v22p96: route every marketing-site contact/lead submission to the sales
         // inbox so the team can follow up. Reply-To is the prospect so a reply goes
         // straight back to them. Wrapped in try/catch — a mail hiccup must never

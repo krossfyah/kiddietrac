@@ -50,6 +50,8 @@ Schedule::command('kiddietrac:checkin-reminders --window=evening')
     ->onOneServer();
 
 // Daily morning digest — 07:00 in the agency's timezone (Toronto default).
+Schedule::command('kiddietrac:apply-withdrawals')->dailyAt('01:00');
+
 Schedule::command('kiddietrac:digest-daily')
     ->dailyAt('07:00')
     ->timezone('America/Toronto')
@@ -110,6 +112,10 @@ Schedule::command('birthdays:celebrate')->dailyAt('07:30');
 Schedule::command('staff:clock-reminders --mode=clock_in')->weekdays()->dailyAt('10:00');
 Schedule::command('staff:clock-reminders --mode=clock_out')->weekdays()->dailyAt('18:30');
 
+// Weekly portal tips — a rotating "did you know?" push to parents + educators
+// (APK notification + in-app bell). Wednesday mid-morning for good engagement.
+Schedule::command('kiddietrac:portal-tips')->weeklyOn(3, '10:00')->withoutOverlapping();
+
 // SOC 2 — security monitoring: scan the audit log for auth anomalies.
 Schedule::command('security:alerts')->everyFifteenMinutes()->withoutOverlapping();
 
@@ -126,3 +132,7 @@ Schedule::command('billing:reminders')->hourly()->withoutOverlapping();
 // keeps each run under a minute so the next tick restarts it.
 Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=55 --tries=3 --sleep=2 --backoff=30")
     ->everyMinute()->withoutOverlapping()->runInBackground();
+
+
+// Daily sales-lead follow-up reminders (email owner/superadmin about due/overdue follow-ups).
+Schedule::command('kiddietrac:sales-followups')->dailyAt('08:00');

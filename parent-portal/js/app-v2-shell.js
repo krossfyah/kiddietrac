@@ -22,7 +22,7 @@
     primaryRoleOf(user) {
       if (!user || !user.roles) return null;
       var _va = null; try { _va = sessionStorage.getItem('kt_view_as'); } catch (e) {}
-      if (_va && user.roles.indexOf('platform_admin') !== -1 && ['agency_admin','centre_director','educator','guardian','auditor'].indexOf(_va) !== -1) return _va;
+      if (_va && user.roles.indexOf('platform_admin') !== -1 && ['agency_admin','centre_director','educator','guardian','auditor','home_visitor','sales_rep'].indexOf(_va) !== -1) return _va;
       // v22p39: platform_admin gets routed through the agency_admin shell
       // so a user who holds ONLY the platform role still gets a nav and
       // dashboard rendered. Previously primary_role came back as null and
@@ -34,6 +34,8 @@
       if (user.roles.includes('centre_director')) return 'centre_director';
       if (user.roles.includes('educator'))        return 'educator';
       if (user.roles.includes('guardian'))        return 'guardian';
+      if (user.roles.includes('home_visitor'))    return 'home_visitor';
+      if (user.roles.includes('sales_rep'))       return 'sales_rep';
       if (user.roles.includes('auditor'))         return 'auditor';
       return null;
     },
@@ -72,6 +74,10 @@
       var viewAs_v22p98 = (function () { try { return sessionStorage.getItem('kt_view_as') || ''; } catch (e) { return ''; } })();
       var isPlatformAdmin_v22p34 = Array.isArray(u_v22p34.roles) && u_v22p34.roles.indexOf('platform_admin') !== -1
         && (viewAs_v22p98 === '' || viewAs_v22p98 === 'platform_admin');
+      // Home-visitor inspection forms are limited to iLearn (2) + Test Agency (6).
+      // Fail-open when the active agency is unknown; the screen itself re-checks server-side.
+      var _hccAg_v = parseInt(sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id') || '0', 10);
+      var hccEnabled_v = (!_hccAg_v) || _hccAg_v === 2 || _hccAg_v === 6 || isPlatformAdmin_v22p34;
       var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }, { hash: 'provider-map', label: 'Provider map', icon: '🗺️' }];
       if (!isPlatformAdmin_v22p34) overviewItems.push({ hash: 'agencies', label: 'Agencies', icon: '🏢' });
       return [
@@ -89,6 +95,7 @@
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
           { hash: 'waitlist',       label: 'Waitlist',         icon: '⏳' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
+          { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
         ]},
@@ -106,11 +113,17 @@
           { hash: 'allergy-alerts',      label: 'Allergy alerts',  icon: '⚠' },
         ]},
         { label: 'Staff', items: [
+          { hash: 'tasks',              label: 'Tasks',              icon: '📋' },
           { hash: 'staff-calendar',     label: 'Calendar',           icon: '📅' },
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🛡' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🔄' },
+        ]},
+        // Home Visitors — own section (moved out of Compliance for clarity).
+        { label: 'Home Visitors', items: [
+          { hash: 'home-visit-reports', label: 'Home visit reports', icon: '📋' },
+          ...(hccEnabled_v ? [{ hash: 'hcc-forms', label: 'Inspection forms', icon: '🏡' }] : []),
         ]},
         { label: 'Compliance', items: [
           { hash: 'inspection',         label: 'Inspection checklist', icon: '✅' },
@@ -203,6 +216,12 @@
           { hash: 'families',       label: 'Families',         icon: '👨‍👩‍👧' },
           { hash: 'staff',          label: 'Staff',            icon: '👥' },
         ]},
+        // Home Visitors — directors review their agency's home-visit reports +
+        // inspection forms (screens are registered for centre_director too).
+        { label: 'Home Visitors', items: [
+          { hash: 'home-visit-reports', label: 'Home visit reports', icon: '📋' },
+          { hash: 'hcc-forms',          label: 'Inspection forms',   icon: '🏡' },
+        ]},
         { label: 'Operations', items: [
           { hash: 'today',          label: 'Today',            icon: '✨' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
@@ -218,6 +237,7 @@
           { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
           { hash: 'waitlist',       label: 'Waitlist',         icon: '⏳' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
+          { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
@@ -230,6 +250,7 @@
           { hash: 'ai-docs',            label: 'AI doc extract', icon: '🪄' },
         ]},
         { label: 'Staff', items: [
+          { hash: 'tasks',             label: 'Tasks',              icon: '📋' },
           { hash: 'staff-calendar',    label: 'Calendar',           icon: '📅' },
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
@@ -272,6 +293,7 @@
         { label: 'Menu', items: [
           { hash: 'home',          label: 'Home',          icon: '🏠' },
           { hash: 'today',         label: 'Today',         icon: '✨' },
+          { hash: 'my-tasks',      label: 'My tasks',      icon: '📋' },
           // v22p98: educators clock in/out here — needed for ratio compliance,
           // payroll and reporting. The time-clock screen was already built and
           // registered for the educator role; it was just missing from this nav.
@@ -289,6 +311,42 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
           { hash: 'help',          label: 'Help',          icon: '📖' },
+        ]},
+      ];
+    }
+    if (role === 'home_visitor') {
+      // Home visitor: agency-attached practitioner who files home-visit reports
+      // against any centre in their agency.
+      return [
+        { label: 'Menu', items: [
+          { hash: 'home',           label: 'Home',             icon: '🏠' },
+          { hash: 'new-home-visit', label: 'New visit report', icon: '📝' },
+          { hash: 'home-visits',    label: 'My reports',       icon: '📋' },
+          { hash: 'my-tasks',       label: 'My tasks',         icon: '✅' },
+        ]},
+        { label: 'Account', items: [
+          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
+          { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
+          { hash: 'help',          label: 'Help',          icon: '📖' },
+        ]},
+      ];
+    }
+    if (role === 'sales_rep') {
+      // Platform sales CRM: pipeline, leads, quotes, follow-ups + demo launcher.
+      return [
+        { label: 'Sales', items: [
+          { hash: 'sales',           label: 'Pipeline',        icon: '📊' },
+          { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
+          { hash: 'sales-new',       label: 'New lead',        icon: '➕' },
+          { hash: 'sales-followups', label: 'Follow-ups',      icon: '⏰' },
+          { hash: 'sales-plans',     label: 'Plans & pricing', icon: '💲' },
+          { hash: 'sales-demo',      label: 'Launch demo',     icon: '🚀' },
+        ]},
+        { label: 'Account', items: [
+          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
+          { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
         ]},
       ];
     }
@@ -313,6 +371,7 @@
         { hash: 'today',              label: 'Today',      icon: '✨' },
         { hash: 'photos',             label: 'Photos',     icon: '📸' },
         { hash: 'messages',           label: 'Messages',   icon: '💬', badgeKey: 'chat_unread' },
+        { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
         { hash: 'checkin',            label: 'Check-in',   icon: '☀' },
         { hash: 'parent-forms',       label: 'Forms',      icon: '📝' },
         { hash: 'billing',            label: 'Billing',    icon: '💳' },
@@ -453,6 +512,8 @@
     'hdlh-gaps': 'Where your programme is light against How Does Learning Happen.',
     'schedule': 'Who is working, and where.',
     'staff-calendar': 'Shifts, leave and coverage across the team.',
+    'tasks': 'Assign tasks to educators and track them to completion.',
+    'my-tasks': 'Tasks assigned to you — mark them in progress or done.',
     'certifications': 'Staff qualifications and their expiry dates.',
     'timesheets': 'Hours worked, ready for payroll.',
     'time-clock': 'Clock in and out.',
@@ -500,6 +561,8 @@
     'signed-docs': 'Agreements that have been signed.',
     'doc-workflows': 'Who has to sign what, and in which order.',
     'compliance': 'Licensing obligations and the evidence for them.',
+    'hcc-forms': 'Monitoring & quarterly inspection forms submitted by home visitors.',
+    'home-visit-reports': 'Home-visit reports filed by your home visitors, with edit history.',
     'inspection': 'Walk the licensing checklist before an inspector does.',
     'renewals': 'Licences and certificates coming up for renewal.',
     'cwelcc': 'CWELCC subsidy funding and claims.',
@@ -766,7 +829,7 @@
     if (!user || !Array.isArray(user.roles) || user.roles.indexOf('platform_admin') === -1) return;
     var cur = ''; try { cur = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
     var old = document.getElementById('kt-view-as'); if (old) old.remove();
-    var roles = [['', 'Super admin (default)'], ['agency_admin', '\uD83C\uDFE2 Agency admin'], ['centre_director', '\uD83C\uDFEB Centre director'], ['educator', '\uD83C\uDF93 Educator'], ['guardian', '\uD83D\uDC6A Parent / guardian'], ['auditor', '\uD83D\uDD0D Auditor']];
+    var roles = [['', 'Super admin (default)'], ['agency_admin', '\uD83C\uDFE2 Agency admin'], ['centre_director', '\uD83C\uDFEB Centre director'], ['educator', '\uD83C\uDF93 Educator'], ['guardian', '\uD83D\uDC6A Parent / guardian'], ['home_visitor', '\uD83C\uDFE1 Home visitor'], ['sales_rep', '\uD83D\uDCBC Sales rep'], ['auditor', '\uD83D\uDD0D Auditor']];
     var wrap = document.createElement('div'); wrap.id = 'kt-view-as';
     // Embedded in the sidebar (not a floating overlay) so it never blocks content.
     wrap.style.cssText = 'margin:10px 8px 8px;background:' + (cur ? '#7C3AED' : '#0f2233') + ';color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;display:flex;align-items:center;gap:8px;font-family:inherit;flex-wrap:wrap;';
@@ -891,26 +954,54 @@
     open({ title, body, actions = [], onClose = null, large = false }) {
       const root = Dom.$('#modalRoot');
       Dom.clear(root);
+      // a11y: remember what had focus so we can restore it when the modal closes.
+      const prevFocus = document.activeElement;
 
       const close = () => {
+        document.removeEventListener('keydown', onKeyDown, true);
         Dom.clear(root);
+        try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
         if (onClose) onClose();
       };
 
-      const backdrop = Dom.el('div', {
-        class: 'modal-backdrop',
-        onClick: (e) => { if (e.target === backdrop) close(); },
-      });
+      // Esc closes; Tab is trapped inside the dialog so keyboard focus can't wander
+      // onto the page behind the backdrop — standard accessible-dialog behaviour.
+      function onKeyDown(e) {
+        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key === 'Tab') {
+          const f = modal.querySelectorAll('a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),[tabindex]:not([tabindex="-1"])');
+          if (!f.length) return;
+          const first = f[0], last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+      }
+
+      const backdrop = Dom.el('div', { class: 'modal-backdrop' });
+      // Close only when a click BOTH starts and ends on the backdrop. Tracking the
+      // mousedown origin stops a text-selection drag that begins inside a field and
+      // releases on the backdrop from closing the dialog mid-edit (annoying bug).
+      let _downOnBackdrop = false;
+      backdrop.addEventListener('mousedown', (e) => { _downOnBackdrop = (e.target === backdrop); });
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop && _downOnBackdrop) close(); });
 
       const modal = Dom.el('div', { class: 'modal' + (large ? ' modal-large' : '') });
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'kt-modal-title');
+      modal.setAttribute('tabindex', '-1');
 
       // Header
       const header = Dom.el('div', { class: 'modal-header' });
-      header.appendChild(Dom.el('h2', {}, title));
-      header.appendChild(Dom.el('button', {
+      const titleEl = Dom.el('h2', {}, title);
+      titleEl.id = 'kt-modal-title';
+      header.appendChild(titleEl);
+      const xBtn = Dom.el('button', {
         class: 'modal-close',
         onClick: close,
-      }, '×'));
+      }, '×');
+      xBtn.setAttribute('aria-label', 'Close');
+      header.appendChild(xBtn);
       modal.appendChild(header);
 
       // Body
@@ -967,6 +1058,15 @@
 
       backdrop.appendChild(modal);
       root.appendChild(backdrop);
+
+      // Trap focus + wire Esc, then move focus into the dialog (prefer the first
+      // field for data entry, else the first non-close button, else the dialog).
+      document.addEventListener('keydown', onKeyDown, true);
+      const focusables = modal.querySelectorAll('a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),[tabindex]:not([tabindex="-1"])');
+      let toFocus = null;
+      for (let i = 0; i < focusables.length; i++) { if (/^(INPUT|TEXTAREA|SELECT)$/.test(focusables[i].tagName)) { toFocus = focusables[i]; break; } }
+      if (!toFocus) { for (let j = 0; j < focusables.length; j++) { if (!focusables[j].classList.contains('modal-close')) { toFocus = focusables[j]; break; } } }
+      try { (toFocus || modal).focus(); } catch (e) {}
 
       return { close };
     },
@@ -1077,13 +1177,22 @@
     }
     if (navName)   navName.textContent   = user.name?.split(' ').slice(0, 2).join(' ') || 'You';
     if (navRole && role) {
-      const roleLabel = {
-        agency_admin:    'Platform admin',
-        centre_director: 'Director',
-        educator:        'Educator',
-        guardian:        'Parent',
-        auditor:         'Auditor',
-      }[role] || role;
+      // Distinguish a platform_admin (primaryRoleOf resolves them to agency_admin)
+      // from a genuine agency admin — a real agency admin was mislabelled "Platform
+      // admin". home_visitor was missing → the pill showed the raw enum. Aligns with
+      // kt-topbar.js's ROLE map.
+      const _roles = (user.roles || []);
+      const roleLabel = _roles.indexOf('platform_admin') !== -1
+        ? 'Platform admin'
+        : ({
+            agency_admin:    'Agency admin',
+            centre_director: 'Director',
+            educator:        'Educator',
+            guardian:        'Parent',
+            home_visitor:    'Home visitor',
+            sales_rep:       'Sales rep',
+            auditor:         'Auditor',
+          }[role] || role);
       navRole.textContent = roleLabel;
     }
 
@@ -1110,5 +1219,6 @@
     buildNav,
     setBadge,
     startApp,
+    homeHashForRole,
   };
 })(window);

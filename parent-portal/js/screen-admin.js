@@ -21,10 +21,26 @@
     const wrap = Dom.el('div', { style: 'max-width: 1800px; margin: 0 auto; padding: 24px;' });
     main.appendChild(wrap);
 
-    // Header
+    // Resolve which section we're on from the hash BEFORE drawing anything. Deep-links are
+    // "admin-<tab>" (each is now its own sidebar item); the bare "#admin" is the legacy hub.
+    const hash = (window.location.hash || '').replace('#', '');
+    const isDeepLink = hash.startsWith('admin-') || hash.startsWith('admin/');
+    if (hash.startsWith('admin-')) state.activeTab = hash.replace('admin-', '');
+    else if (hash.startsWith('admin/')) state.activeTab = hash.replace('admin/', '');
+
+    // Header — a section-specific title when arriving via a sidebar deep-link (a clean
+    // standalone view), else the legacy hub title.
+    const SECTION = {
+      centres:  ['Centres / Rooms', 'Manage your centres and their rooms.'],
+      users:    ['User management', 'Manage staff and admin user accounts.'],
+      families: ['Families', 'Manage enrolled families and their children.'],
+      branding: ['Branding', 'Customise your portal logo and colours.'],
+      billing:  ['Billing', 'Manage your subscription and payment settings.'],
+    };
+    const sec = SECTION[state.activeTab] || ['Admin', 'Manage centres, users, families, and branding'];
     const header = Dom.el('div', { style: 'margin-bottom: 24px;' });
-    header.appendChild(Dom.el('h1', { style: 'font-size: 28px; font-weight: 800; margin: 0;' }, 'Admin'));
-    header.appendChild(Dom.el('div', { style: 'color: var(--ink-500); margin-top: 4px;' }, 'Manage centres, users, families, and branding'));
+    header.appendChild(Dom.el('h1', { style: 'font-size: 28px; font-weight: 800; margin: 0;' }, isDeepLink ? sec[0] : 'Admin'));
+    header.appendChild(Dom.el('div', { style: 'color: var(--ink-500); margin-top: 4px;' }, isDeepLink ? sec[1] : 'Manage centres, users, families, and branding'));
     wrap.appendChild(header);
 
     // Tab strip
@@ -56,20 +72,16 @@
     tabs.appendChild(tabBtn('families', '👪 Families'));
     tabs.appendChild(tabBtn('branding', '🎨 Branding'));
     tabs.appendChild(tabBtn('billing', '💳 Billing'));
-    wrap.appendChild(tabs);
+    // Only the bare "#admin" hub shows the tab strip. Each admin-<tab> deep-link is its own
+    // sidebar item now, so drawing all 5 tabs on top of e.g. "User management" was the
+    // reported redundancy — suppress it on deep-links so each shows just its own content.
+    if (!isDeepLink) wrap.appendChild(tabs);
 
     // Tab content container
     const content = Dom.el('div', { id: 'admin-tab-content' });
     wrap.appendChild(content);
 
-    // Route to tab renderer. Honour both legacy "admin/<tab>" and v22p2.3 "admin-<tab>".
-    const hash = (window.location.hash || '').replace('#', '');
-    if (hash.startsWith('admin-')) {
-      state.activeTab = hash.replace('admin-', '');
-    } else if (hash.startsWith('admin/')) {
-      state.activeTab = hash.replace('admin/', '');
-    }
-
+    // Route to tab renderer (active tab was already resolved from the hash above).
     switch (state.activeTab) {
       case 'centres': await renderCentresTab(content); break;
       case 'users': await renderUsersTab(content); break;
@@ -304,6 +316,28 @@
     cwellWrap.appendChild(Dom.el('label', { style: 'font-size: 14px;' }, 'CWELCC enrolled (Ontario subsidy)'));
     form.appendChild(cwellWrap);
 
+    // Open days — which days the centre operates. Drives which day columns the
+    // weekly menu shows (staff editor + parent view). Defaults to Mon–Fri.
+    const openWrap = Dom.el('div', { style: 'margin: 14px 0;' });
+    openWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:6px;' }, 'Open days'));
+    const dayDefs = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']];
+    const initialDays = (centre && Array.isArray(centre.open_days) && centre.open_days.length) ? centre.open_days.slice() : [1, 2, 3, 4, 5];
+    const selectedDays = new Set(initialDays);
+    const chipRow = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;' });
+    const paintChip = (btn, on) => { btn.style.cssText = 'padding:6px 13px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ' + (on ? '#1F6080' : '#D1D5DB') + ';background:' + (on ? '#1F6080' : '#fff') + ';color:' + (on ? '#fff' : '#4B5563') + ';'; };
+    dayDefs.forEach(function (pair) {
+      const btn = Dom.el('button', { type: 'button' }, pair[1]);
+      paintChip(btn, selectedDays.has(pair[0]));
+      btn.addEventListener('click', function () {
+        if (selectedDays.has(pair[0])) selectedDays.delete(pair[0]); else selectedDays.add(pair[0]);
+        paintChip(btn, selectedDays.has(pair[0]));
+      });
+      chipRow.appendChild(btn);
+    });
+    openWrap.appendChild(chipRow);
+    openWrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#6B7280;margin-top:5px;' }, 'Only these days appear on the weekly menu.'));
+    form.appendChild(openWrap);
+
     // v22p3.4: branding section (logo + colours + tagline). Only shown on edit
     // since the centre needs to exist before we can attach an image.
     if (isEdit) {
@@ -428,8 +462,8 @@
           type: 'button',
           style: 'padding:7px 12px;background:#FEF3C7;color:#92400E;border:1.5px solid #FCD34D;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;',
         }, kioskState.token ? '↻ Rotate token' : 'Generate token');
-        rotBtn.addEventListener('click', function () {
-          if (kioskState.token && !window.confirm('Rotate the kiosk token? The current URL will stop working immediately — any tablet using the old link will need the new one.')) return;
+        rotBtn.addEventListener('click', async function () {
+          if (kioskState.token && !await KT.confirm('Rotate the kiosk token? The current URL will stop working immediately — any tablet using the old link will need the new one.')) return;
           rotBtn.disabled = true; rotBtn.textContent = 'Rotating…';
           Api.post('/director/centres/' + centre.id + '/kiosk-token', {}).then(function (r) {
             kioskState.token = r.kiosk_token;
@@ -450,7 +484,7 @@
             + '<strong>2.</strong> Tap your child’s name.<br>'
             + '<strong>3.</strong> Enter your 4–6 digit PIN to sign in or out.';
           var qrRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin:6px 0 10px;padding:12px;border:1px solid var(--ink-100,#E5E7EB);border-radius:10px;background:#FAFCFD;' });
-          var qrBox = Dom.el('div', { style: 'width:96px;height:96px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:11px;' }, 'QR…');
+          var qrBox = Dom.el('div', { style: 'width:96px;height:96px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:11px;' }, 'QR…');
           qrRow.appendChild(qrBox);
           var qrSide = Dom.el('div', { style: 'flex:1;min-width:0;' });
           qrSide.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:13px;margin-bottom:2px;' }, '📲 QR check-in'));
@@ -569,6 +603,7 @@
               return;
             }
             if (data.license_capacity) data.license_capacity = parseInt(data.license_capacity, 10);
+            data.open_days = Array.from(selectedDays).sort(function (a, b) { return a - b; });
 
             status.style.color = '#1F6080';
             status.textContent = 'Saving...';
@@ -631,19 +666,21 @@
     bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, 'All accounts in your agency'));
 
     // v22p45: CSV download
-    const csvBtn = Dom.el('button', { style: 'background: white; color: #16A34A; border: 1px solid #16A34A; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, '⤓ CSV');
+    const csvBtn = Dom.el('button', { class: 'kt-act-icon kt-act-ok kt-icon-tip kt-legacy-export', title: 'Download CSV', 'data-kttip': 'Download CSV', 'aria-label': 'Download CSV' }, '📄');
     csvBtn.addEventListener('click', () => downloadCsv('/admin/users', 'users.csv', csvBtn));
     bar.appendChild(csvBtn);
 
+    // Deactivated toggle + Invite share ONE pill style — identical to what
+    // applyAddStyle (kt-add-btn-std) applies to the Invite button, so the two are
+    // pixel-consistent (auto height, matching padding/line-height).
+    var _barPill = 'background:#fff;color:#475569;border:1px solid #CBD5E1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;line-height:1.1;display:inline-flex;align-items:center;box-sizing:border-box;';
     // Toggle between active accounts and the deactivated (soft-deleted) ones.
-    const toggleBtn = Dom.el('button', {
-      style: 'background: white; color: #475569; border: 1px solid #CBD5E1; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;',
-    }, showDeactivated ? '← Active users' : '🗄 Deactivated');
+    const toggleBtn = Dom.el('button', { style: _barPill }, showDeactivated ? '← Active users' : '🗄 Deactivated');
     toggleBtn.addEventListener('click', () => renderUsersTab(content, { deactivated: !showDeactivated }));
     bar.appendChild(toggleBtn);
 
     if (!showDeactivated) {
-      const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Invite user');
+      const addBtn = Dom.el('button', { class: 'kt-add-btn-std', style: _barPill }, '+ Invite user');
       addBtn.addEventListener('click', () => showInviteModal(content));
       bar.appendChild(addBtn);
     }
@@ -669,7 +706,7 @@
     async function bulkRun(label, fn) {
       const ids = Array.from(selectedIds);
       if (!ids.length) return;
-      if (!confirm(label + ' for ' + ids.length + ' user' + (ids.length === 1 ? '' : 's') + '?')) return;
+      if (!await KT.confirm(label + ' for ' + ids.length + ' user' + (ids.length === 1 ? '' : 's') + '?')) return;
       bulkResend.disabled = true; bulkDelete.disabled = true;
       let ok = 0, fail = 0;
       for (const id of ids) { try { await fn(id); ok++; } catch (e) { fail++; } }
@@ -696,7 +733,7 @@
     headCheck.appendChild(selectAll);
     headRow.appendChild(headCheck);
 
-    ['Name', 'Email', 'Roles', 'Status', 'Last login', ''].forEach(h => {
+    ['Name', 'Username', 'Email', 'Roles', 'Status', 'Last login', ''].forEach(h => {
       headRow.appendChild(Dom.el('th', { style: 'text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.5px;' }, h));
     });
     thead.appendChild(headRow);
@@ -747,6 +784,8 @@
       nameWrap.appendChild(Dom.el('span', {}, u.name));
       nameCell.appendChild(nameWrap);
       row.appendChild(nameCell);
+      // Username column (mono, muted em-dash when none)
+      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: ' + (u.username ? 'var(--ink-700,#334155)' : 'var(--ink-300,#CBD5E1)') + '; font-size: 13px; font-family: ui-monospace,Menlo,monospace;' }, u.username || '—'));
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px;' }, u.email));
 
       const rolesCell = Dom.el('td', { style: 'padding: 14px 16px;' });
@@ -764,7 +803,7 @@
       if (showDeactivated) {
         const reBtn = Dom.el('button', { style: 'background: #16A34A; color: #fff; border: 0; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;' }, '♻ Reactivate');
         reBtn.addEventListener('click', async () => {
-          if (!confirm('Reactivate ' + (u.name || u.email) + '? They will regain access and their previous roles.')) return;
+          if (!await KT.confirm('Reactivate ' + (u.name || u.email) + '? They will regain access and their previous roles.')) return;
           reBtn.disabled = true; reBtn.textContent = 'Reactivating…';
           try {
             await Api.post('/admin/users/' + u.id + '/reactivate', {});
@@ -776,9 +815,20 @@
         });
         actionEl = reBtn;
       } else {
-        const editBtn = Dom.el('button', { style: 'background: transparent; border: 1px solid var(--ink-300); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;' }, 'Manage');
-        editBtn.addEventListener('click', () => showUserModal(u, content));
-        actionEl = editBtn;
+        // Icon actions to keep the row clean: View (read-only) + Manage (edit).
+        var iconBtn = function (glyph, label, onClick) {
+          var b = Dom.el('button', { title: label, 'aria-label': label, style: 'background: transparent; border: 1px solid var(--ink-200,#E2E8F0); width:32px; height:32px; border-radius: 8px; cursor: pointer; font-size: 15px; line-height:1; display:inline-flex; align-items:center; justify-content:center;' }, glyph);
+          b.addEventListener('mouseenter', function () { b.style.background = 'var(--ink-50,#F8FAFC)'; });
+          b.addEventListener('mouseleave', function () { b.style.background = 'transparent'; });
+          b.addEventListener('click', onClick);
+          return b;
+        };
+        actionEl = Dom.el('div', { style: 'display:inline-flex; gap:6px; justify-content:flex-end;' }, [
+          iconBtn('ℹ️', 'View details', function () { showUserView(u, content); }),
+          iconBtn('⚙️', 'Manage', function () { showUserModal(u, content); }),
+          iconBtn('✉️', 'Resend welcome invite', function () { rowResendWelcome(u); }),
+          iconBtn('🔑', 'Reset password', function () { rowResetPassword(u); }),
+        ]);
       }
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, actionEl));
 
@@ -795,6 +845,7 @@
       first_name: { label: 'First name', required: true },
       last_name: { label: 'Last name', required: true },
       email: { label: 'Email', type: 'email', required: true },
+      username: { label: 'Username (optional — lets one email have several accounts)' },
       phone: { label: 'Phone' },
     };
 
@@ -812,6 +863,26 @@
       body.appendChild(wrap);
     });
 
+    // Live username-availability check (unique across active accounts).
+    var uOK = true;
+    var uHint = Dom.el('div', { style: 'font-size: 12px; margin: -6px 0 12px; min-height: 15px;' });
+    inputs.username.parentNode.appendChild(uHint);
+    var uTimer = null;
+    inputs.username.addEventListener('input', function () {
+      var v = inputs.username.value.trim();
+      clearTimeout(uTimer);
+      if (!v) { uHint.textContent = ''; uOK = true; return; }
+      if (!/^[A-Za-z0-9._-]{3,50}$/.test(v)) { uHint.style.color = '#DC2626'; uHint.textContent = '3–50 characters: letters, numbers, . _ -'; uOK = false; return; }
+      uHint.style.color = '#64748B'; uHint.textContent = 'Checking availability…'; uOK = false;
+      uTimer = setTimeout(function () {
+        Api.get('/admin/username-available?username=' + encodeURIComponent(v)).then(function (r) {
+          if (inputs.username.value.trim() !== v) return; // stale
+          if (r && r.available) { uHint.style.color = '#059669'; uHint.textContent = '✓ “' + v + '” is available'; uOK = true; }
+          else { uHint.style.color = '#DC2626'; uHint.textContent = '✗ “' + v + '” is already taken — choose another'; uOK = false; }
+        }).catch(function () { uHint.textContent = ''; uOK = true; });
+      }, 350);
+    });
+
     // Role select
     const roleWrap = Dom.el('div', { style: 'margin-bottom: 12px;' });
     roleWrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, 'Role *'));
@@ -820,6 +891,8 @@
     var inviteRoleOpts = [
       { v: 'centre_director', l: 'Centre director' },
       { v: 'educator', l: 'Educator' },
+      { v: 'home_visitor', l: 'Home visitor' },
+      { v: 'sales_rep', l: '💼 Sales rep' },
       { v: 'agency_admin', l: 'Agency admin' },
       { v: 'auditor', l: 'Auditor (read-only)' },
     ];
@@ -867,6 +940,8 @@
         onClick: async () => {
           const data = {};
           ['first_name', 'last_name', 'email', 'phone', 'role'].forEach(k => { data[k] = inputs[k].value; });
+          if (inputs.username && inputs.username.value.trim()) data.username = inputs.username.value.trim();
+          if (data.username && !uOK) { status.style.color = '#DC2626'; status.textContent = 'That username is taken — please choose an available one.'; return; }
           if (inputs.centre_id.value) data.centre_id = parseInt(inputs.centre_id.value, 10);
           // Always request the set-password invite email. Without this flag the
           // backend created the user but emailed nothing — invited users never
@@ -891,8 +966,95 @@
     });
   }
 
+  // Read-only user details (the "View" eye icon). Kept separate from Manage so
+  // most look-ups don't open the full editing surface.
+  function showUserView(u, content) {
+    var fmtDT = function (d) { if (!d) return '—'; try { return new Date(d).toLocaleString(); } catch (e) { return d; } };
+    var rowEl = function (label, val, mono) {
+      return Dom.el('div', { style: 'display:grid;grid-template-columns:130px 1fr;gap:6px 14px;padding:9px 0;border-top:1px solid var(--ink-100,#EEF2F6);' }, [
+        Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500,#64748B);font-weight:600;' }, label),
+        Dom.el('div', { style: 'font-size:13.5px;color:var(--ink-800,#0f172a);' + (mono ? 'font-family:ui-monospace,Menlo,monospace;' : '') }, val || '—'),
+      ]);
+    };
+    var body = Dom.el('div', {});
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:6px;' });
+    head.appendChild(avatarCircle(u, 52));
+    head.appendChild(Dom.el('div', {}, [
+      Dom.el('div', { style: 'font-size:18px;font-weight:800;color:#0f172a;' }, u.name || u.email),
+      Dom.el('div', { style: 'margin-top:4px;' }, statusBadge(u.status)),
+    ]));
+    body.appendChild(head);
+    body.appendChild(rowEl('Username', u.username || '—', true));
+    body.appendChild(rowEl('Email', u.email));
+    body.appendChild(rowEl('Phone', u.phone));
+    body.appendChild(rowEl('Roles', (u.roles || []).map(function (r) { return r.replace(/_/g, ' '); }).join(', ') || '—'));
+    body.appendChild(rowEl('Last login', fmtDT(u.last_login_at)));
+    body.appendChild(rowEl('Onboarded', u.onboarded_at ? fmtDT(u.onboarded_at) : 'Not yet'));
+    body.appendChild(rowEl('Created', fmtDT(u.created_at)));
+    Shell.Modal.open({
+      title: 'User details',
+      body: body,
+      actions: [
+        { label: 'Manage', primary: true, onClick: function () { Shell.Modal.close(); setTimeout(function () { showUserModal(u, content); }, 60); } },
+        { label: 'Close', onClick: function () { Shell.Modal.close(); } },
+      ],
+    });
+  }
+
+  function _toast(icon, title, body, color) {
+    if (window.KT && KT.toast) KT.toast(icon, title, body, color);
+    else window.alert(title + (body ? ' — ' + body : ''));
+  }
+  async function _confirm(msg) {
+    return (window.KT && KT.confirm) ? await KT.confirm(msg) : window.confirm(msg);
+  }
+  // Per-row account actions (also available inside the Manage modal).
+  async function rowResendWelcome(u) {
+    if (!await _confirm('Resend the welcome invite to ' + (u.email || u.name) + '? A new temporary password will be generated.')) return;
+    try {
+      var r = await Api.post('/admin/users/' + u.id + '/resend-welcome', {});
+      _toast(r && r.email_sent ? '✅' : '⚠️', r && r.email_sent ? 'Welcome email sent' : 'Email failed',
+        r && r.email_sent ? (u.email || '') : ('Share temp password: ' + ((r && r.temp_password) || '')),
+        r && r.email_sent ? '#16A34A' : '#B45309');
+    } catch (e) { _toast('⚠️', 'Resend failed', e && e.message ? e.message : 'error', '#DC2626'); }
+  }
+  async function rowResetPassword(u) {
+    if (!await _confirm("Reset " + (u.name || u.email) + "'s password? A new temporary password will be emailed to " + (u.email || 'them') + '.')) return;
+    try {
+      var r = await Api.post('/admin/users/' + u.id + '/reset-password', { send_email: true });
+      _toast(r && r.email_sent ? '✅' : '⚠️', r && r.email_sent ? 'Password reset & emailed' : 'Reset done — email failed',
+        r && r.email_sent ? (u.email || '') : ('Share manually: ' + ((r && r.temp_password) || '')),
+        r && r.email_sent ? '#16A34A' : '#B45309');
+    } catch (e) { _toast('⚠️', 'Reset failed', e && e.message ? e.message : 'error', '#DC2626'); }
+  }
+
   function showUserModal(user, content) {
-    const body = Dom.el('div', {});
+    const root = Dom.el('div', {});
+    // v23: two-tab layout so the record isn't one long scroll. "Details" holds
+    // profile/status/roles/notes/etc.; "Files" holds documents (incl. signed NDA).
+    const tabBar = Dom.el('div', { style: 'display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
+    const paneDetails = Dom.el('div', {});
+    const paneFiles = Dom.el('div', { style: 'display:none;' });
+    const _tabs = [];
+    function mkTab(label, pane) {
+      const b = Dom.el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:8px 4px;margin-bottom:-1px;font-size:13.5px;font-weight:700;color:#6B7280;cursor:pointer;' }, label);
+      b.addEventListener('click', function () {
+        _tabs.forEach(function (t) { t.btn.style.color = '#6B7280'; t.btn.style.borderBottomColor = 'transparent'; t.pane.style.display = 'none'; });
+        b.style.color = '#1F6080'; b.style.borderBottomColor = '#1F6080'; pane.style.display = '';
+      });
+      _tabs.push({ btn: b, pane: pane });
+      tabBar.appendChild(b);
+      return b;
+    }
+    const _detailsTab = mkTab('Details', paneDetails);
+    mkTab('📎 Files & documents', paneFiles);
+    root.appendChild(tabBar);
+    root.appendChild(paneDetails);
+    root.appendChild(paneFiles);
+    _detailsTab.style.color = '#1F6080'; _detailsTab.style.borderBottomColor = '#1F6080';
+    // Existing sections all append to `body` → point it at the Details pane so the
+    // rest of this function is unchanged; only the Files card targets paneFiles.
+    const body = paneDetails;
 
     // v22p3.2: avatar row at the top — current avatar + "Change avatar" file picker
     const avatarRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
@@ -929,6 +1091,115 @@
     avatarSide.appendChild(avatarMsg);
     avatarRow.appendChild(avatarSide);
     body.appendChild(avatarRow);
+
+    // v23 (2026-07-20) — Files & documents filed against this user. The signed
+    // Terms/Privacy/NDA lands here automatically (category 'agreement'); admins
+    // can attach contracts, certificates, ID, etc. Same list the user sees on
+    // mobile under Forms → My documents (/auth/me/documents).
+    (function () {
+      var uid = user.id;
+      var card = Dom.el('div', { style: 'background:#F9FAFB;border-radius:10px;padding:14px;margin-bottom:14px;' });
+      card.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;' }, '📎 Files & documents'));
+      card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' }, 'The signed Terms, Privacy & NDA is filed here automatically. Attach contracts, certificates, ID and more.'));
+      var list = Dom.el('div', {});
+      card.appendChild(list);
+
+      var catLabels = { agreement: 'NDA / Agreement', file: 'File', contract: 'Contract', certificate: 'Certificate', id: 'ID document', other: 'Other' };
+      // Files are public (unguessable /storage paths) — open the direct URL. On
+      // the Capacitor APK target=_blank does nothing, so use the in-app Browser
+      // plugin when present; else a new tab; else same-window navigation.
+      function openDoc(d) {
+        var url = avatarSrc(d.file_url);
+        if (!url) return;
+        var C = window.Capacitor;
+        var native = C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative);
+        var B = C && C.Plugins && C.Plugins.Browser;
+        if (native && B && B.open) { try { B.open({ url: url }); return; } catch (e) {} }
+        if (native) { try { window.location.href = url; } catch (e) {} return; }
+        var w = null;
+        try { w = window.open(url, '_blank', 'noopener'); } catch (e) {}
+        if (!w) { try { window.location.href = url; } catch (e) {} }
+      }
+      function fmtSize(n) { n = Number(n || 0); if (n < 1024) return n + ' B'; if (n < 1048576) return Math.round(n / 1024) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
+      function docIcon(d) {
+        if (d.category === 'agreement') return '🔏';
+        var t = (d.file_type || '') + ' ' + (d.file_url || '');
+        if (/pdf/i.test(t)) return '📄';
+        if (/(png|jpe?g|webp|gif|image)/i.test(t)) return '🖼️';
+        if (/(doc|word)/i.test(t)) return '📃';
+        if (/(xls|sheet|excel|csv)/i.test(t)) return '📊';
+        return '📎';
+      }
+      function paint(docs) {
+        Dom.clear(list);
+        if (!docs.length) { list.appendChild(Dom.el('div', { style: 'font-size:13px;color:#64748B;padding:8px 0;' }, 'No files yet.')); return; }
+        docs.forEach(function (d) {
+          var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;padding:9px 10px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px;' });
+          row.appendChild(Dom.el('span', { style: 'font-size:20px;flex:0 0 auto;' }, docIcon(d)));
+          var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
+          mid.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:13.5px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, d.title || 'Document'));
+          var bits = [catLabels[d.category] || d.category || 'File'];
+          if (d.file_size) bits.push(fmtSize(d.file_size));
+          if (d.signed_at) bits.push('signed ' + String(d.signed_at).slice(0, 10));
+          else if (d.created_at) bits.push(String(d.created_at).slice(0, 10));
+          mid.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:1px;' }, bits.join(' · ')));
+          row.appendChild(mid);
+          var openBtn = Dom.el('button', { type: 'button', style: 'flex:0 0 auto;font-size:12px;font-weight:700;color:#1F6080;background:#fff;cursor:pointer;padding:5px 10px;border:1px solid #1F6080;border-radius:6px;' }, 'Open');
+          openBtn.addEventListener('click', function () { openDoc(d); });
+          row.appendChild(openBtn);
+          if (d.category === 'agreement') {
+            row.appendChild(Dom.el('span', { title: 'Legal record — cannot be deleted', style: 'flex:0 0 auto;font-size:13px;color:#64748B;padding:4px 6px;' }, '🔒'));
+          } else {
+            var del = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-danger kt-icon-tip', title: 'Remove', 'data-kttip': 'Remove', 'aria-label': 'Remove', style: 'flex:0 0 auto;' }, '🗑');
+            del.addEventListener('click', async function () {
+              if (!await KT.confirm('Remove "' + (d.title || 'this file') + '"?')) return;
+              del.disabled = true;
+              try { await Api.delete('/admin/users/' + uid + '/documents/' + d.id); load(); }
+              catch (e) { del.disabled = false; if (Dom.toast) Dom.toast(e.message || 'Delete failed', 'error'); }
+            });
+            row.appendChild(del);
+          }
+          list.appendChild(row);
+        });
+      }
+      function load() {
+        Dom.clear(list); list.appendChild(Dom.el('div', { style: 'font-size:13px;color:#64748B;padding:8px 0;' }, 'Loading…'));
+        Api.get('/admin/users/' + uid + '/documents')
+          .then(function (r) { paint((r && r.documents) || []); })
+          .catch(function () { Dom.clear(list); list.appendChild(Dom.el('div', { style: 'font-size:13px;color:#B91C1C;' }, 'Could not load files.')); });
+      }
+
+      var up = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px dashed #E5E7EB;' });
+      var titleIn = Dom.el('input', { type: 'text', placeholder: 'Title (optional)', style: 'flex:1;min-width:120px;padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;' });
+      var catSel = Dom.el('select', { style: 'padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;background:#fff;' });
+      [['file', 'File'], ['contract', 'Contract'], ['certificate', 'Certificate'], ['id', 'ID document'], ['other', 'Other']].forEach(function (o) { catSel.appendChild(Dom.el('option', { value: o[0] }, o[1])); });
+      var fileIn = Dom.el('input', { type: 'file', accept: '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx', style: 'display:none;' });
+      var upBtn = Dom.el('button', { type: 'button', style: 'padding:7px 14px;background:#1F6080;color:#fff;border:0;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;' }, '＋ Attach file');
+      var upMsg = Dom.el('span', { style: 'font-size:12px;color:#6B7280;' });
+      upBtn.addEventListener('click', function () { fileIn.click(); });
+      fileIn.addEventListener('change', async function () {
+        var f = fileIn.files[0]; if (!f) return;
+        if (f.size > 10 * 1024 * 1024) { upMsg.style.color = '#B91C1C'; upMsg.textContent = 'Max 10 MB'; return; }
+        upBtn.disabled = true; upMsg.style.color = '#6B7280'; upMsg.textContent = 'Uploading…';
+        try {
+          var fd = new FormData();
+          fd.append('file', f);
+          if (titleIn.value.trim()) fd.append('title', titleIn.value.trim());
+          fd.append('category', catSel.value);
+          await Api.postForm('/admin/users/' + uid + '/documents', fd);
+          titleIn.value = ''; upMsg.style.color = '#16A34A'; upMsg.textContent = '✓ Attached'; load();
+        } catch (e) {
+          upMsg.style.color = '#B91C1C'; upMsg.textContent = e.message || 'Upload failed';
+        } finally {
+          upBtn.disabled = false; fileIn.value = '';
+        }
+      });
+      up.appendChild(titleIn); up.appendChild(catSel); up.appendChild(upBtn); up.appendChild(fileIn); up.appendChild(upMsg);
+      card.appendChild(up);
+
+      paneFiles.appendChild(card);
+      load();
+    })();
     // v22 (2026-06) — account status / deactivate, profile extras & timestamped notes
     (function () {
       var uid = user.id;
@@ -937,9 +1208,9 @@
       var statusRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;' });
       var statusLabel = Dom.el('span', { style: 'font-size:13px;font-weight:700;text-transform:capitalize;' }, (user.status || 'active'));
       var toggleBtn = Dom.el('button', { style: 'padding:7px 14px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:' + (user.status === 'deactivated' ? '#16A34A' : '#DC2626') + ';' }, user.status === 'deactivated' ? 'Reactivate' : 'Deactivate');
-      toggleBtn.addEventListener('click', function () {
+      toggleBtn.addEventListener('click', async function () {
         var to = user.status === 'deactivated' ? 'active' : 'deactivated';
-        if (to === 'deactivated' && !confirm('Deactivate ' + (user.name || 'this user') + '? They lose access until reactivated.')) return;
+        if (to === 'deactivated' && !await KT.confirm('Deactivate ' + (user.name || 'this user') + '? They lose access until reactivated.')) return;
         toggleBtn.disabled = true;
         Api.patch('/admin/users/' + uid, { status: to }).then(function () {
           user.status = to; statusLabel.textContent = to;
@@ -969,6 +1240,59 @@
       });
       pf.appendChild(pfSave); pf.appendChild(pfMsg); body.appendChild(pf);
 
+      // Read-only "Onboarding details" — the structured info the user gave at onboarding
+      // (users.phone + users.profile_extras JSON), which the editable panel above doesn't show.
+      (function () {
+        var pe = (user && user.profile_extras) || {};
+        var rows = [];
+        if (user && user.phone) rows.push(['Phone', user.phone]);
+        var addr = [pe.address_line1, pe.address_line2, pe.city, pe.province, pe.postal_code].filter(Boolean).join(', ');
+        if (addr) rows.push(['Address', addr]);
+        if (pe.emergency_contact_name) rows.push(['Emergency contact', pe.emergency_contact_name + (pe.emergency_contact_phone ? ' · ' + pe.emergency_contact_phone : '')]);
+        (pe.extra_contacts || []).forEach(function (c) { if (c && c.name) rows.push(['Contact', c.name + (c.phone ? ' · ' + c.phone : '')]); });
+        var re = pe.role_extras || {};
+        Object.keys(re).forEach(function (k) { if (re[k]) rows.push([k.replace(/_/g, ' ').replace(/\b\w/g, function (m) { return m.toUpperCase(); }), re[k]]); });
+        if (!rows.length) return;
+        var ob = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
+        ob.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Onboarding details'));
+        var tbl = Dom.el('table', { style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+        rows.forEach(function (r) {
+          var tr = Dom.el('tr', {});
+          tr.appendChild(Dom.el('td', { style: 'padding:4px 12px 4px 0;color:#64748B;white-space:nowrap;vertical-align:top;' }, r[0]));
+          tr.appendChild(Dom.el('td', { style: 'padding:4px 0;font-weight:600;color:#0F172A;' }, String(r[1])));
+          tbl.appendChild(tr);
+        });
+        ob.appendChild(tbl); body.appendChild(ob);
+      })();
+
+      // This user's background-check records (managed on the Background checks screen).
+      (function () {
+        var bc = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
+        bc.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, '🛡️ Background checks'));
+        var bcBody = Dom.el('div', { style: 'font-size:13px;color:#64748B;' }, 'Loading…');
+        bc.appendChild(bcBody); body.appendChild(bc);
+        Api.get('/admin/background-checks').then(function (d) {
+          var rows = (d.data || d || []).filter(function (r) { return String(r.user_id) === String(user.id); });
+          if (!rows.length) { bcBody.textContent = 'No background checks on file.'; return; }
+          bcBody.innerHTML = ''; bcBody.style.color = '';
+          var apiHost = ((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
+          rows.forEach(function (r) {
+            var col = r.status_bucket === 'expired' ? '#B91C1C' : r.status_bucket === 'expiring' ? '#D97706' : '#047857';
+            var line = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #EEF2F5;font-size:13px;' });
+            var left = Dom.el('div', {});
+            left.appendChild(Dom.el('div', { style: 'font-weight:700;text-transform:uppercase;' }, r.check_type || ''));
+            left.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;' }, 'Expires ' + (r.expires_at || '—') + (r.reference ? ' · ' + r.reference : '')));
+            line.appendChild(left);
+            var right = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+            right.appendChild(Dom.el('span', { style: 'color:' + col + ';font-weight:700;' }, r.status_bucket || ''));
+            if (r.document_url) {
+              right.appendChild(Dom.el('a', { href: (/^https?:/.test(r.document_url) ? r.document_url : apiHost + r.document_url), target: '_blank', rel: 'noopener', title: 'Open document', style: 'color:#1D4ED8;font-weight:600;text-decoration:none;font-size:15px;' }, '📄'));
+            }
+            line.appendChild(right); bcBody.appendChild(line);
+          });
+        }).catch(function () { bcBody.textContent = 'Could not load background checks.'; });
+      })();
+
       var nb = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
       nb.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Notes'));
       var noteList = Dom.el('div', { style: 'margin-bottom:10px;' }); nb.appendChild(noteList);
@@ -976,11 +1300,11 @@
       var noteBtn = Dom.el('button', { style: 'padding:8px 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Add note');
       function renderNotes(notes) {
         noteList.innerHTML = '';
-        if (!notes || !notes.length) { noteList.appendChild(Dom.el('div', { style: 'font-size:13px;color:#9CA3AF;' }, 'No notes yet.')); return; }
+        if (!notes || !notes.length) { noteList.appendChild(Dom.el('div', { style: 'font-size:13px;color:#64748B;' }, 'No notes yet.')); return; }
         notes.forEach(function (n) {
           var d = Dom.el('div', { style: 'padding:8px 0;border-bottom:1px solid #EEF2F5;' });
           d.appendChild(Dom.el('div', { style: 'font-size:13px;color:#0a1e2c;white-space:pre-wrap;' }, n.note));
-          d.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;margin-top:2px;' }, (n.created_by_name || 'Admin') + ' · ' + (n.created_at ? new Date(n.created_at).toLocaleString() : '')));
+          d.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;margin-top:2px;' }, (n.created_by_name || 'Admin') + ' · ' + (n.created_at ? new Date(n.created_at).toLocaleString() : '')));
           noteList.appendChild(d);
         });
       }
@@ -998,6 +1322,40 @@
       }).catch(function () { renderNotes([]); });
     })();
 
+    // ── Pay rate (drives the staff member's payslips) ───────────────────
+    (function () {
+      var uid2 = user.id;
+      var roles = user.roles || [];
+      var defType = (roles.indexOf && roles.indexOf('home_visitor') > -1 && roles.indexOf('educator') < 0) ? 'per_visit' : 'hourly';
+      var sec = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
+      sec.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, '💵 Pay rate'));
+      var row = Dom.el('div', { style: 'display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;' });
+      var rateWrap = Dom.el('div', {});
+      rateWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;color:#374151;font-weight:600;margin-bottom:4px;' }, 'Rate ($)'));
+      var rate = Dom.el('input', { type: 'number', min: '0', step: '0.01', placeholder: '0.00', style: 'width:120px;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;' });
+      if (user.pay_rate != null) rate.value = user.pay_rate;
+      rateWrap.appendChild(rate);
+      var typeWrap = Dom.el('div', {});
+      typeWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;color:#374151;font-weight:600;margin-bottom:4px;' }, 'Type'));
+      var type = Dom.el('select', { style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;background:#fff;' });
+      [['hourly', 'Hourly (× hours)'], ['per_visit', 'Per visit (× visits)'], ['salary', 'Salary / flat (per period)']].forEach(function (t) { type.appendChild(Dom.el('option', { value: t[0] }, t[1])); });
+      type.value = user.pay_type || defType;
+      typeWrap.appendChild(type);
+      var save = Dom.el('button', { type: 'button', style: 'background:#1F6080;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;' }, 'Save rate');
+      var msg = Dom.el('span', { style: 'font-size:12.5px;color:#16A34A;margin-left:4px;' });
+      save.addEventListener('click', function () {
+        save.disabled = true; msg.style.color = '#6B7280'; msg.textContent = 'Saving…';
+        Api.patch('/admin/users/' + uid2 + '/pay', { pay_rate: rate.value === '' ? null : parseFloat(rate.value), pay_type: type.value })
+          .then(function () { msg.style.color = '#16A34A'; msg.textContent = '✓ Saved'; })
+          .catch(function (e) { msg.style.color = '#DC2626'; msg.textContent = (e && e.message) || 'Failed'; })
+          .then(function () { save.disabled = false; });
+      });
+      row.appendChild(rateWrap); row.appendChild(typeWrap); row.appendChild(save); row.appendChild(msg);
+      sec.appendChild(row);
+      sec.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:8px;' }, 'Set for educators, directors, admins or contractors. Hourly (× hours worked), per-visit (× visits logged), or salary/flat (fixed amount each pay period). Drives their payslips.'));
+      body.appendChild(sec);
+    })();
+
 
     // ── Rooms this educator may see ─────────────────────────────────────
     // An educator sees ONLY the rooms assigned here. With none assigned they see
@@ -1011,9 +1369,9 @@
         style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;',
       }, 'Rooms this educator can see'));
       const roomBody = Dom.el('div', {});
-      roomBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'Loading…'));
+      roomBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' }, 'Loading…'));
       roomSection.appendChild(roomBody);
-      content.appendChild(roomSection);
+      body.appendChild(roomSection);
 
       Api.get('/admin/users/' + user.id + '/rooms').then(function (d) {
         Dom.clear(roomBody);
@@ -1068,7 +1426,7 @@
         roomBody.appendChild(status);
       }).catch(function () {
         Dom.clear(roomBody);
-        roomBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' },
+        roomBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' },
           'Room assignment applies to educators at a centre.'));
       });
     })();
@@ -1084,15 +1442,15 @@
         style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;',
       }, 'Clock in / out history'));
       const clockBody = Dom.el('div', {});
-      clockBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'Loading…'));
+      clockBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' }, 'Loading…'));
       clockSection.appendChild(clockBody);
-      content.appendChild(clockSection);
+      body.appendChild(clockSection);
 
       Api.get('/admin/users/' + user.id + '/punches').then(function (d) {
         Dom.clear(clockBody);
         const rows = d.punches || [];
         if (!rows.length) {
-          clockBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'No clock records for this user.'));
+          clockBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' }, 'No clock records for this user.'));
           return;
         }
         clockBody.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-bottom:8px;' },
@@ -1106,7 +1464,7 @@
           });
           row.appendChild(Dom.el('div', {}, [
             Dom.el('div', { style: 'font-weight:700;color:#111827;' }, p.day || ''),
-            Dom.el('div', { style: 'font-size:11.5px;color:#9CA3AF;' },
+            Dom.el('div', { style: 'font-size:11.5px;color:#64748B;' },
               (p.in_time || '—') + ' – ' + (open ? 'still clocked in' : (p.out_time || '—'))),
           ]));
           row.appendChild(Dom.el('div', {
@@ -1117,7 +1475,7 @@
         clockBody.appendChild(list);
       }).catch(function () {
         Dom.clear(clockBody);
-        clockBody.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:13px;' }, 'Could not load clock records.'));
+        clockBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' }, 'Could not load clock records.'));
       });
     })();
 
@@ -1131,7 +1489,7 @@
     const pillsWrap = Dom.el('div', { style: 'display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;' });
     var roleLabels = {
       agency_admin: 'Agency admin', centre_director: 'Centre director',
-      educator: 'Educator', guardian: 'Parent / guardian',
+      educator: 'Educator', guardian: 'Parent / guardian', home_visitor: 'Home visitor', sales_rep: 'Sales rep',
       auditor: 'Auditor', platform_admin: '🌐 Platform admin',
     };
     (user.roles || []).forEach(function (r) {
@@ -1154,6 +1512,8 @@
     var changeRoleOpts = [
       { v: 'centre_director', l: 'Centre director' },
       { v: 'educator', l: 'Educator' },
+      { v: 'home_visitor', l: 'Home visitor' },
+      { v: 'sales_rep', l: '💼 Sales rep' },
       { v: 'agency_admin', l: 'Agency admin' },
       { v: 'auditor', l: 'Auditor' },
     ];
@@ -1234,6 +1594,7 @@
     const fields = {
       first_name: user.first_name,
       last_name: user.last_name,
+      email: user.email || '',
       phone: user.phone || '',
     };
     const inputs = {};
@@ -1276,7 +1637,7 @@
       style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
     }, '🔑 Reset password');
     resetBtn.addEventListener('click', async () => {
-      if (!confirm('Reset ' + user.name + "'s password? A new temporary password will be emailed to " + user.email + '.')) return;
+      if (!await KT.confirm('Reset ' + user.name + "'s password? A new temporary password will be emailed to " + user.email + '.')) return;
       resetBtn.disabled = true; resetBtn.textContent = 'Resetting...';
       try {
         const r = await Api.post('/admin/users/' + user.id + '/reset-password', { send_email: true });
@@ -1298,7 +1659,7 @@
       style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
     }, '🪄 Reopen onboarding');
     reopenBtn.addEventListener('click', async () => {
-      if (!confirm('Reopen the onboarding wizard for ' + user.name + '? They will be prompted to complete their profile on their next sign-in.')) return;
+      if (!await KT.confirm('Reopen the onboarding wizard for ' + user.name + '? They will be prompted to complete their profile on their next sign-in.')) return;
       reopenBtn.disabled = true; reopenBtn.textContent = 'Reopening...';
       try {
         await Api.post('/admin/users/' + user.id + '/reopen-onboarding', {});
@@ -1317,7 +1678,7 @@
       style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
     }, '✉ Resend welcome');
     resendBtn.addEventListener('click', async () => {
-      if (!confirm('Resend the welcome invite to ' + user.email + '? A new temporary password will be generated.')) return;
+      if (!await KT.confirm('Resend the welcome invite to ' + user.email + '? A new temporary password will be generated.')) return;
       resendBtn.disabled = true; resendBtn.textContent = 'Sending...';
       try {
         const r = await Api.post('/admin/users/' + user.id + '/resend-welcome', {});
@@ -1338,7 +1699,7 @@
       style: 'padding: 8px 14px; background: white; color: #B91C1C; border: 1.5px solid #FCA5A5; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-left: auto;',
     }, '🗑 Delete user');
     deleteBtn.addEventListener('click', async () => {
-      const c1 = confirm('Delete ' + user.name + ' (' + user.email + ')?\n\nThey will be unable to sign in. Their family/child records stay intact for audit.');
+      const c1 = await KT.confirm('Delete ' + user.name + ' (' + user.email + ')?\n\nThey will be unable to sign in. Their family/child records stay intact for audit.');
       if (!c1) return;
       const c2 = prompt('Type "delete" to confirm:');
       if (c2 !== 'delete') return;
@@ -1360,13 +1721,17 @@
 
     Shell.Modal.open({
       title: 'Manage ' + user.name,
-      body: body,
+      body: root,
       actions: [{
         label: 'Save changes',
         primary: true,
         onClick: async () => {
           const data = {};
-          Object.keys(inputs).forEach(k => { data[k] = inputs[k].value; });
+          Object.keys(inputs).forEach(k => { var val = inputs[k].value; data[k] = (typeof val === 'string') ? val.trim() : val; });
+          if (data.email === '') delete data.email; // never blank out the login email
+          if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+            status.style.color = '#DC2626'; status.textContent = 'Enter a valid email address.'; return;
+          }
           status.style.color = '#1F6080';
           status.textContent = 'Saving...';
           try {
@@ -1415,7 +1780,7 @@
     bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, 'All enrolled families'));
 
     // v22p45: CSV download
-    const famCsvBtn = Dom.el('button', { style: 'background: white; color: #16A34A; border: 1px solid #16A34A; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, '⤓ CSV');
+    const famCsvBtn = Dom.el('button', { class: 'kt-act-icon kt-act-ok kt-icon-tip kt-legacy-export', title: 'Download CSV', 'data-kttip': 'Download CSV', 'aria-label': 'Download CSV' }, '📄');
     famCsvBtn.addEventListener('click', () => downloadCsv('/admin/families', 'families.csv', famCsvBtn));
     bar.appendChild(famCsvBtn);
 
@@ -1525,7 +1890,7 @@
     bulkDelete.addEventListener('click', async function () {
       var ids = Array.from(selectedIds);
       if (!ids.length) return;
-      if (!confirm('Delete ' + ids.length + ' family record(s)? Children + audit history are preserved; only the family-level row is removed.')) return;
+      if (!await KT.confirm('Delete ' + ids.length + ' family record(s)? Children + audit history are preserved; only the family-level row is removed.')) return;
       bulkDelete.disabled = true;
       var ok = 0, fail = 0;
       for (const id of ids) { try { await Api.delete('/admin/families/' + id); ok++; } catch (e) { fail++; } }
@@ -1667,7 +2032,7 @@
         var cur = i === step, done = i < step;
         stepper.appendChild(Dom.el('div', {
           style: 'flex:1;text-align:center;font-size:12px;font-weight:700;padding:8px 6px;border-radius:8px;'
-            + (cur ? 'background:#1F6080;color:white;' : done ? 'background:#DCEAF1;color:#1F6080;' : 'background:#F1F5F9;color:#94A3B8;'),
+            + (cur ? 'background:#1F6080;color:white;' : done ? 'background:#DCEAF1;color:#1F6080;' : 'background:#F1F5F9;color:#64748B;'),
         }, (i + 1) + '. ' + s));
       });
     }
@@ -2343,7 +2708,7 @@
         item.appendChild(tag); item.appendChild(txt);
         panel.appendChild(item);
       });
-      panel.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#94A3B8;margin-top:6px;' }, 'These frameworks are indicative defaults to guide setup — your agency remains responsible for verifying local legal compliance.'));
+      panel.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:6px;' }, 'These frameworks are indicative defaults to guide setup — your agency remains responsible for verifying local legal compliance.'));
     }
     renderPack(info.pack, info.currency, info.locale);
 
@@ -2437,7 +2802,7 @@
 
       const cancelBtn = Dom.el('button', { style: btnSecondary() }, 'Cancel subscription');
       cancelBtn.addEventListener('click', async () => {
-        if (!confirm('Cancel your subscription? This will suspend the account at the end of the billing period.')) return;
+        if (!await KT.confirm('Cancel your subscription? This will suspend the account at the end of the billing period.')) return;
         try {
           await Api.post('/admin/billing/cancel', {});
           await renderBillingTab(content);

@@ -149,11 +149,34 @@ final class AdminController extends Controller
                 'family_count' => $familyCount,
                 'staff_count' => $staffCount,
                 'capacity_pct' => $c->license_capacity > 0 ? round(($childrenCount / $c->license_capacity) * 100) : 0,
+                // Days the centre is open (1=Mon..7=Sun); default Mon–Fri. Drives
+                // which day columns the weekly-menu shows.
+                'open_days' => self::openDaysFromSettings($c->settings ?? null),
                 'created_at' => $c->created_at,
             ];
         });
 
         return response()->json(['centres' => $result->all()]);
+    }
+
+    /** Normalise an incoming open_days array to sorted unique ints in 1..7. */
+    private static function normaliseOpenDays($raw): array
+    {
+        if (!is_array($raw)) return [];
+        $days = array_values(array_unique(array_filter(array_map('intval', $raw), fn ($d) => $d >= 1 && $d <= 7)));
+        sort($days);
+        return $days;
+    }
+
+    /** Read open_days from a centre's settings JSON; default Mon–Fri when unset. */
+    private static function openDaysFromSettings($settings): array
+    {
+        $arr = $settings ? json_decode($settings, true) : null;
+        if (is_array($arr) && !empty($arr['open_days']) && is_array($arr['open_days'])) {
+            $d = self::normaliseOpenDays($arr['open_days']);
+            if ($d) return $d;
+        }
+        return [1, 2, 3, 4, 5];
     }
 
     public function createCentre(Request $request): JsonResponse
@@ -174,6 +197,8 @@ final class AdminController extends Controller
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:180'],
             'cwelcc_enrolled' => ['nullable', 'boolean'],
+            'open_days' => ['nullable', 'array'],
+            'open_days.*' => ['integer', 'between:1,7'],
         ]);
 
         $slug = Str::slug($data['name']);
@@ -200,6 +225,7 @@ final class AdminController extends Controller
             'phone' => $data['phone'] ?? null,
             'email' => $data['email'] ?? null,
             'cwelcc_enrolled' => !empty($data['cwelcc_enrolled']) ? 1 : 0,
+            'settings' => !empty($data['open_days']) ? json_encode(['open_days' => self::normaliseOpenDays($data['open_days'])]) : null,
             'status' => 'onboarding',
             'created_at' => now(),
             'updated_at' => now(),
@@ -232,7 +258,18 @@ final class AdminController extends Controller
             'brand_color'  => ['sometimes', 'nullable', 'string', 'max:20'],
             'accent_color' => ['sometimes', 'nullable', 'string', 'max:20'],
             'tagline'      => ['sometimes', 'nullable', 'string', 'max:200'],
+            'open_days'    => ['sometimes', 'array'],
+            'open_days.*'  => ['integer', 'between:1,7'],
         ]);
+
+        // open_days lives inside the settings JSON, not a column — merge it in so
+        // other settings keys survive, and don't pass it to the column update.
+        if (array_key_exists('open_days', $data)) {
+            $settings = json_decode($centre->settings ?? '{}', true) ?: [];
+            $settings['open_days'] = self::normaliseOpenDays($data['open_days']);
+            unset($data['open_days']);
+            $data['settings'] = json_encode($settings);
+        }
 
         $data['updated_at'] = now();
         DB::table('centres')->where('id', $centreId)->update($data);
@@ -378,6 +415,12 @@ final class AdminController extends Controller
     {
         $data = $payload ? (json_decode($payload, true) ?: []) : [];
         if (! is_array($data)) return null;
+        // Any controller can supply a ready-made, human-readable summary in its audit
+        // payload — prefer it verbatim (e.g. "Anthony Hosein clocked IN at Sunny
+        // Meadows · shift 6h 12m"). This is how per-event detail is surfaced cleanly.
+        if (isset($data['summary']) && is_string($data['summary']) && $data['summary'] !== '') {
+            return $data['summary'];
+        }
         $bits = [];
         if (isset($data['status']) && ((int) $data['status'] < 200 || (int) $data['status'] >= 300)) {
             $bits[] = 'HTTP ' . $data['status'];
@@ -387,6 +430,10 @@ final class AdminController extends Controller
         $fields = [];
         foreach ($input as $k => $v) {
             if (in_array($k, $skip, true) || ! is_scalar($v) || $v === '' || $v === null) continue;
+            // Resolve id references to the actual record's NAME so an auditor reads
+            // "child: Aria Hosein" instead of "child_id: 6".
+            $ref = $this->resolveAuditRef((string) $k, $v);
+            if ($ref !== null) { $fields[] = $ref; if (count($fields) >= 5) break; continue; }
             $val = is_bool($v) ? ($v ? 'yes' : 'no') : (string) $v;
             if (mb_strlen($val) > 40) $val = mb_substr($val, 0, 40) . '…';
             $fields[] = $k . ': ' . $val;
@@ -397,6 +444,75 @@ final class AdminController extends Controller
         }
         if ($fields) $bits[] = implode(', ', $fields);
         return $bits ? implode(' · ', $bits) : null;
+    }
+
+    /** Per-request cache of resolved id→name lookups so the audit list isn't N+1 heavy. */
+    private array $auditRefCache = [];
+
+    /**
+     * If a payload key is a reference to another record (child_id, family_id,
+     * user_id, centre_id, agency_id, assigned_to, …), return a readable
+     * "label: Name" string instead of "key: 6". Returns null for non-reference
+     * fields so the caller prints them normally.
+     */
+    private function resolveAuditRef(string $key, $value): ?string
+    {
+        if (! is_scalar($value)) return null;
+        $id = (int) $value;
+        if ((string) $id !== (string) $value || $id <= 0) return null;   // only plain positive ids
+        $k = strtolower($key);
+
+        // key → [display label, users|children|families|centres|agencies]
+        static $userKeys = ['user_id', 'assigned_to', 'assigned_by', 'guardian_id', 'educator_id',
+            'home_visitor_id', 'staff_id', 'target_user_id', 'impersonated_user_id', 'created_by', 'updated_by', 'reviewer_id'];
+        if (in_array($k, $userKeys, true)) $spec = [$this->auditRefLabel($k), 'users'];
+        elseif (in_array($k, ['child_id', 'children_id'], true)) $spec = ['child', 'children'];
+        elseif ($k === 'family_id') $spec = ['family', 'families'];
+        elseif ($k === 'centre_id') $spec = ['centre', 'centres'];
+        elseif ($k === 'agency_id') $spec = ['agency', 'agencies'];
+        else return null;
+
+        $name = $this->auditRefName($spec[1], $id);
+        return $name !== null ? ($spec[0] . ': ' . $name) : null;
+    }
+
+    private function auditRefLabel(string $key): string
+    {
+        $map = ['user_id' => 'user', 'assigned_to' => 'assigned to', 'assigned_by' => 'assigned by',
+            'guardian_id' => 'parent', 'educator_id' => 'educator', 'home_visitor_id' => 'home visitor',
+            'staff_id' => 'staff', 'target_user_id' => 'user', 'impersonated_user_id' => 'viewing as',
+            'created_by' => 'created by', 'updated_by' => 'updated by', 'reviewer_id' => 'reviewer'];
+        return $map[$key] ?? str_replace('_', ' ', preg_replace('/_id$/', '', $key));
+    }
+
+    /** Cached id→display-name lookup for the audit reference tables. */
+    private function auditRefName(string $table, int $id): ?string
+    {
+        $cacheKey = $table . ':' . $id;
+        if (array_key_exists($cacheKey, $this->auditRefCache)) return $this->auditRefCache[$cacheKey];
+        $name = null;
+        try {
+            switch ($table) {
+                case 'users':
+                    $r = DB::table('users')->where('id', $id)->first(['first_name', 'last_name', 'email']);
+                    if ($r) { $n = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')); $name = $n !== '' ? $n : $r->email; }
+                    break;
+                case 'children':
+                    $r = DB::table('children')->where('id', $id)->first(['first_name', 'last_name']);
+                    if ($r) $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: null;
+                    break;
+                case 'families':
+                    $name = DB::table('families')->where('id', $id)->value('family_name') ?: null;
+                    break;
+                case 'centres':
+                    $name = DB::table('centres')->where('id', $id)->value('name') ?: null;
+                    break;
+                case 'agencies':
+                    $name = DB::table('agencies')->where('id', $id)->value('name') ?: null;
+                    break;
+            }
+        } catch (\Throwable $e) { $name = null; }
+        return $this->auditRefCache[$cacheKey] = $name;
     }
 
     public function auditLogs(Request $request)
@@ -501,7 +617,12 @@ final class AdminController extends Controller
         if ($until)      $base->where('al.created_at', '<=', $until);
         if ($q !== '')   $base->where(function ($x) use ($q) {
             $x->where('al.action', 'like', "%{$q}%")
-              ->orWhere('al.payload', 'like', "%{$q}%");
+              ->orWhere('al.payload', 'like', "%{$q}%")
+              ->orWhere('u.first_name', 'like', "%{$q}%")
+              ->orWhere('u.last_name', 'like', "%{$q}%")
+              ->orWhere('u.username', 'like', "%{$q}%")
+              ->orWhere('u.email', 'like', "%{$q}%")
+              ->orWhereRaw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) like ?", ["%{$q}%"]);
         });
 
         $total = (clone $base)->count('al.id');
@@ -800,10 +921,17 @@ final class AdminController extends Controller
 
     public function listUsers(Request $request)
     {
-        $agencyId = $this->getAgencyId($request);
-        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        // Platform admins can pick the aggregate "All agencies" scope — the agency
+        // switcher sends X-Active-Agency-Id: all. In that mode the Users list spans
+        // every agency; otherwise it stays strictly scoped to the active agency.
+        $isPlatform = DB::table('role_assignments')->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+        $allMode = $isPlatform && strtolower(trim((string) $request->header('X-Active-Agency-Id'))) === 'all';
 
-        $centreIds = $this->getCentreIds($agencyId);
+        $agencyId = $allMode ? null : $this->getAgencyId($request);
+        if (!$allMode && !$agencyId) return response()->json(['message' => 'No agency access'], 403);
+
+        $centreIds = $allMode ? [] : $this->getCentreIds($agencyId);
         $roleFilter = $request->input('role');
         $searchQuery = $request->input('q');
 
@@ -822,11 +950,13 @@ final class AdminController extends Controller
 
         $userIdsQuery = DB::table('role_assignments')
             ->when(! $deactivated, function ($q) { $q->where('active', true); })
-            ->where(function ($q) use ($agencyId, $centreIds) {
-                $q->where('agency_id', $agencyId);
-                if (!empty($centreIds)) {
-                    $q->orWhereIn('centre_id', $centreIds);
-                }
+            ->when(! $allMode, function ($q) use ($agencyId, $centreIds) {
+                $q->where(function ($qq) use ($agencyId, $centreIds) {
+                    $qq->where('agency_id', $agencyId);
+                    if (!empty($centreIds)) {
+                        $qq->orWhereIn('centre_id', $centreIds);
+                    }
+                });
             });
 
         if ($roleFilter) {
@@ -838,10 +968,14 @@ final class AdminController extends Controller
         // Also include guardians of families at this agency's centres
         // (v22p96: always scoped to the active agency, platform_admin included).
         if ($roleFilter === null || $roleFilter === 'guardian') {
-            $guardianQuery = DB::table('guardians')
-                ->join('families', 'families.id', '=', 'guardians.family_id')
-                ->whereIn('families.centre_id', $centreIds ?: [0]);
-            $guardianUserIds = $guardianQuery->pluck('guardians.user_id')->all();
+            if ($allMode) {
+                $guardianUserIds = DB::table('guardians')->whereNotNull('user_id')->pluck('user_id')->all();
+            } else {
+                $guardianUserIds = DB::table('guardians')
+                    ->join('families', 'families.id', '=', 'guardians.family_id')
+                    ->whereIn('families.centre_id', $centreIds ?: [0])
+                    ->pluck('guardians.user_id')->all();
+            }
             $userIds = array_unique(array_merge($userIds, $guardianUserIds));
         }
 
@@ -897,6 +1031,7 @@ final class AdminController extends Controller
             return [
                 'id' => $u->id,
                 'email' => $u->email,
+                'username' => $u->username ?? null,
                 'first_name' => $u->first_name,
                 'last_name' => $u->last_name,
                 'name' => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')),
@@ -950,23 +1085,47 @@ final class AdminController extends Controller
         ]);
     }
 
+    /**
+     * GET /admin/username-available?username=X[&exclude_id=N]
+     * Live check so the admin knows a username is free before submitting.
+     * Case-insensitive, ignores soft-deleted rows; matches the create/update rules.
+     */
+    public function usernameAvailable(Request $request): JsonResponse
+    {
+        $u = trim((string) $request->query('username', ''));
+        $exclude = (int) $request->query('exclude_id', 0);
+        if ($u === '') {
+            return response()->json(['available' => false, 'reason' => 'empty']);
+        }
+        if (! preg_match('/^[A-Za-z0-9._-]{3,50}$/', $u)) {
+            return response()->json(['available' => false, 'reason' => 'invalid']);
+        }
+        $taken = DB::table('users')
+            ->whereRaw('LOWER(username) = ?', [mb_strtolower($u)])
+            ->whereNull('deleted_at')
+            ->when($exclude > 0, fn ($q) => $q->where('id', '!=', $exclude))
+            ->exists();
+        return response()->json(['available' => ! $taken]);
+    }
+
     public function createUser(Request $request): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $data = $request->validate([
-            // v22p31: uniqueness check ignores soft-deleted rows so re-creating
-            // a previously-deleted user reuses the same record (see revive
-            // block below). Without this rule, the previous Safia Ali deletion
-            // would 422 'email already taken' on every recreate attempt.
-            'email' => ['required', 'email', 'max:180', Rule::unique('users', 'email')->whereNull('deleted_at')],
+            // v23: email no longer has to be unique — one person can hold several
+            // accounts under one email, told apart by an optional username at login.
+            'email' => ['required', 'email', 'max:180'],
             'first_name' => ['required', 'string', 'max:80'],
             'last_name' => ['required', 'string', 'max:80'],
             'phone' => ['nullable', 'string', 'max:40'],
-            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor,platform_admin'],
+            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor,platform_admin,home_visitor,sales_rep'],
             'centre_id' => ['nullable', 'integer'],
             'send_invite' => ['nullable', 'boolean'],
+            // Optional per-account username (unique). Needed when a person has more
+            // than one account on the same email so they can sign in to the right one.
+            'username' => ['nullable', 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/', Rule::unique('users', 'username')->whereNull('deleted_at')],
         ]);
 
         // v22p23: only platform_admin can mint another platform_admin.
@@ -987,7 +1146,7 @@ final class AdminController extends Controller
         // v22p18: non-admin roles MUST be tied to a specific centre — otherwise
         // the role_assignment row has no scope and the user becomes invisible
         // in listUsers (its WHERE clause requires agency_id OR centre_id).
-        if (! in_array($data['role'], ['agency_admin', 'platform_admin'], true) && empty($data['centre_id'])) {
+        if (! in_array($data['role'], ['agency_admin', 'platform_admin', 'sales_rep'], true) && empty($data['centre_id'])) {
             return response()->json([
                 'message' => 'Centre is required for this role.',
                 'errors' => ['centre_id' => ['Please pick a centre for centre directors, educators, and auditors.']],
@@ -1008,19 +1167,24 @@ final class AdminController extends Controller
         // most natural admin workflow for fixing a misadded user, and persisting
         // a stable user.id keeps audit logs, payments, and message history
         // attached to the same person on re-add.
-        $existing = DB::table('users')->where('email', $data['email'])->whereNotNull('deleted_at')->first();
+        // v23: only revive a soft-deleted row by email when there is NO active
+        // account already using that email. If an active account exists, this is a
+        // deliberate SECOND account for the same person/email → create a new row.
+        $activeSameEmail = DB::table('users')->where('email', $data['email'])->whereNull('deleted_at')->exists();
+        $existing = $activeSameEmail ? null : DB::table('users')->where('email', $data['email'])->whereNotNull('deleted_at')->first();
         $isRevive = (bool) $existing;
         if ($isRevive) {
             $userId = (int) $existing->id;
-            DB::table('users')->where('id', $userId)->update([
+            DB::table('users')->where('id', $userId)->update(array_filter([
                 'deleted_at' => null,
                 'password' => Hash::make($tempPassword),
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
                 'phone' => $data['phone'] ?? null,
+                'username' => $data['username'] ?? null,
                 'status' => 'invited',
                 'updated_at' => now(),
-            ]);
+            ], fn ($v) => $v !== null) + ['deleted_at' => null]);
             // Drop the old (deactivated) role_assignment rows for this user; a
             // fresh one is inserted below. This avoids a recreated educator
             // accidentally inheriting a stale platform_admin row.
@@ -1031,6 +1195,7 @@ final class AdminController extends Controller
         } else {
             $userId = DB::table('users')->insertGetId([
                 'email' => $data['email'],
+                'username' => $data['username'] ?? null,
                 'password' => Hash::make($tempPassword),
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
@@ -1045,7 +1210,7 @@ final class AdminController extends Controller
         // listUsers (filter requires agency_id OR centre_id). platform_admin
         // is exempt and gets both NULL since it spans the entire platform.
         $assignmentAgencyId = $data['role'] === 'platform_admin' ? null : $agencyId;
-        $assignmentCentreId = (! in_array($data['role'], ['agency_admin', 'platform_admin'], true))
+        $assignmentCentreId = (! in_array($data['role'], ['agency_admin', 'platform_admin', 'sales_rep'], true))
             ? ($data['centre_id'] ?? null)
             : null;
         DB::table('role_assignments')->insert([
@@ -1073,6 +1238,7 @@ final class AdminController extends Controller
                 $token = bin2hex(random_bytes(32));
                 DB::table('password_resets')->insert([
                     'email'      => $data['email'],
+                    'user_id'    => $userId,
                     'token'      => hash('sha256', $token),
                     'expires_at' => now()->addDays(7),
                     'created_at' => now(),
@@ -1169,6 +1335,9 @@ final class AdminController extends Controller
         $data = $request->validate([
             'first_name' => ['sometimes', 'string', 'max:80'],
             'last_name' => ['sometimes', 'string', 'max:80'],
+            // Email is intentionally NOT globally unique (multi-account-per-email); validate
+            // format only. Admins/directors/super-admin can correct a user's login email.
+            'email' => ['sometimes', 'email', 'max:190'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'status' => ['sometimes', 'in:active,invited,suspended,deactivated'],
         ]);
@@ -1252,7 +1421,7 @@ final class AdminController extends Controller
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $data = $request->validate([
-            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor,platform_admin'],
+            'role' => ['required', 'in:agency_admin,centre_director,educator,auditor,platform_admin,home_visitor,sales_rep'],
             'centre_id' => ['nullable', 'integer'],
             'active' => ['nullable', 'boolean'],
         ]);
@@ -1280,7 +1449,7 @@ final class AdminController extends Controller
         // v22p23: scope handling mirrors createUser — platform_admin spans all
         // (both NULL); agency_admin scopes by agency only; others by centre too.
         $assignmentAgencyId = $data['role'] === 'platform_admin' ? null : $agencyId;
-        $assignmentCentreId = (! in_array($data['role'], ['agency_admin', 'platform_admin'], true))
+        $assignmentCentreId = (! in_array($data['role'], ['agency_admin', 'platform_admin', 'sales_rep'], true))
             ? ($data['centre_id'] ?? null)
             : null;
 
@@ -2119,5 +2288,110 @@ final class AdminController extends Controller
             ]);
             return false;
         }
+    }
+
+    // ── Per-user files / documents (v23, 2026-07-20) ─────────────────────
+    // Files filed against a user's record live in the polymorphic `documents`
+    // table (scope_type='user'). The signed NDA is auto-filed there by
+    // AgreementController (category='agreement'), so it shows up here without
+    // any extra work; admins can also attach their own files (contracts,
+    // certificates, ID, etc.).
+
+    /** Can the caller manage this user's record? Platform admins: any user; others: same-agency only. */
+    private function canManageUser(Request $request, int $userId): bool
+    {
+        $isPlatform = DB::table('role_assignments')->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+        if ($isPlatform) return true;
+        $agencyId = $this->getAgencyId($request);
+        return $agencyId && $this->userBelongsToAgency($userId, $agencyId);
+    }
+
+    /** List every document filed against a user's record. */
+    public function userDocuments(Request $request, int $userId): JsonResponse
+    {
+        if (!$this->canManageUser($request, $userId)) return response()->json(['message' => 'No access to this user'], 403);
+
+        $docs = DB::table('documents')
+            ->where('scope_type', 'user')->where('scope_id', $userId)
+            ->orderByDesc('created_at')
+            ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'signature_url', 'expires_at', 'created_at']);
+
+        return response()->json(['documents' => $docs]);
+    }
+
+    /** Attach a file to a user's record. */
+    public function uploadUserDocument(Request $request, int $userId): JsonResponse
+    {
+        if (!$this->canManageUser($request, $userId)) return response()->json(['message' => 'No access to this user'], 403);
+
+        $data = $request->validate([
+            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx', 'max:10240'],
+            'title' => ['nullable', 'string', 'max:200'],
+            'category' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $file = $request->file('file');
+        $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $name = (string) Str::uuid() . '.' . $ext;
+        // Public disk so the file lands under the /storage symlink (Laravel 11).
+        $file->storeAs('user-documents/' . $userId, $name, 'public');
+        $publicPath = '/storage/user-documents/' . $userId . '/' . $name;
+
+        $title = trim((string) ($data['title'] ?? '')) ?: ($file->getClientOriginalName() ?: 'Document');
+        $id = DB::table('documents')->insertGetId([
+            'scope_type'     => 'user',
+            'scope_id'       => $userId,
+            'category'       => $data['category'] ?? 'file',
+            'title'          => mb_substr($title, 0, 200),
+            'file_url'       => $publicPath,
+            'file_type'      => $file->getClientMimeType() ?: 'application/octet-stream',
+            'file_size'      => $file->getSize(),
+            'uploaded_by_id' => $request->user()->id,
+            'created_at'     => now(),
+        ]);
+
+        $this->audit($request->user()->id, 'user.document_uploaded', 'user', $userId, ['document_id' => $id, 'title' => $title]);
+
+        return response()->json(['id' => $id, 'file_url' => $publicPath, 'message' => 'File attached']);
+    }
+
+    /** Remove an attached file. Signed agreements (the NDA) are a legal record and can't be deleted. */
+    public function deleteUserDocument(Request $request, int $userId, int $docId): JsonResponse
+    {
+        if (!$this->canManageUser($request, $userId)) return response()->json(['message' => 'No access to this user'], 403);
+
+        $doc = DB::table('documents')->where('id', $docId)
+            ->where('scope_type', 'user')->where('scope_id', $userId)->first();
+        if (!$doc) return response()->json(['message' => 'Not found'], 404);
+        if (($doc->category ?? '') === 'agreement') {
+            return response()->json(['message' => 'Signed agreements are a legal record and cannot be deleted.'], 422);
+        }
+
+        try {
+            $rel = ltrim(str_replace('/storage/', '', (string) $doc->file_url), '/');
+            if ($rel !== '') \Illuminate\Support\Facades\Storage::disk('public')->delete($rel);
+        } catch (\Throwable $e) {
+            // File may already be gone; the DB row is what matters.
+        }
+        DB::table('documents')->where('id', $docId)->delete();
+
+        $this->audit($request->user()->id, 'user.document_deleted', 'user', $userId, ['document_id' => $docId]);
+
+        return response()->json(['message' => 'File removed']);
+    }
+
+    /** Stream a user's document through the API (so the mobile WebView can open it). */
+    public function downloadUserDocument(Request $request, int $userId, int $docId)
+    {
+        if (!$this->canManageUser($request, $userId)) return response()->json(['message' => 'No access to this user'], 403);
+
+        $doc = DB::table('documents')->where('id', $docId)
+            ->where('scope_type', 'user')->where('scope_id', $userId)->first();
+        if (!$doc) abort(404);
+        $rel = ltrim(str_replace('/storage/', '', (string) $doc->file_url), '/');
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        if ($rel === '' || !$disk->exists($rel)) abort(404);
+        return response()->file($disk->path($rel));
     }
 }

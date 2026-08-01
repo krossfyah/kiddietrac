@@ -23,17 +23,49 @@ final class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            // "email" is really the login identifier now — an email OR a username
+            // (usernames let one person hold several accounts under one email).
+            'email' => ['required', 'string', 'max:180'],
             'password' => ['required', 'string'],
             'device_name' => ['required', 'string', 'max:120'],
             'device_platform' => ['required', 'string', 'in:ios,android,web,unknown'],
             'code' => ['nullable', 'string', 'min:6', 'max:14'],
+            'username' => ['nullable', 'string', 'max:50'],   // optional disambiguator
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $login = trim((string) $data['email']);
+        $uname = ! empty($data['username']) ? mb_strtolower(trim((string) $data['username'])) : '';
+        $user = null;
+        if ($uname !== '') {
+            // v22p101 — STRICT email + username. A username disambiguator was
+            // provided; resolve by username, and when an email was ALSO entered
+            // (the "Email or username" field held a real email), require BOTH to
+            // belong to the SAME account. This closes a bug where a mismatched /
+            // browser-autofilled username on a shared email signed the user into
+            // the wrong account. If the pair doesn't match one account → invalid.
+            $q = User::whereRaw('LOWER(username) = ?', [$uname]);
+            if (strpos($login, '@') !== false) {
+                $q->whereRaw('LOWER(email) = ?', [mb_strtolower($login)]);
+            }
+            $user = $q->first();
+        } elseif (strpos($login, '@') !== false) {
+            // Looks like an email. One match → use it; shared by several → ask for
+            // the username so we sign them into the right account.
+            $matches = User::where('email', $login)->get();
+            if ($matches->count() > 1) {
+                return response()->json([
+                    'needs_username' => true,
+                    'message' => 'More than one account uses this email. Enter your username to sign in.',
+                ], 200);
+            }
+            $user = $matches->first();
+        } else {
+            // No "@" → treat the identifier as a username.
+            $user = User::whereRaw('LOWER(username) = ?', [mb_strtolower($login)])->first();
+        }
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
-            $this->audit($request, null, 'login_failed', null, null, "email: {$data['email']}");
+            $this->audit($request, null, 'login_failed', null, null, "login: {$login}");
             return response()->json([
                 'message' => 'Invalid credentials.',
                 'errors' => ['email' => ['Invalid credentials.']],
@@ -191,11 +223,30 @@ final class AuthController extends Controller
             'first_name' => ['string', 'max:80'],
             'last_name' => ['string', 'max:80'],
             'preferred_name' => ['nullable', 'string', 'max:80'],
-            'phone' => ['nullable', 'string', 'max:40'],
+            'phone' => ['required', 'string', 'max:40'],
             'date_of_birth' => ['nullable', 'date'],
             'locale' => ['nullable', 'string', 'max:10'],
             'timezone' => ['nullable', 'string', 'max:60'],
+            // Optional username — settable/changeable here after the fact.
+            'username' => ['nullable', 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/'],
         ]);
+
+        if (array_key_exists('username', $data) && $data['username'] !== null && $data['username'] !== '') {
+            $taken = DB::table('users')
+                ->whereRaw('LOWER(username) = ?', [mb_strtolower(trim($data['username']))])
+                ->where('id', '!=', $request->user()->id)
+                ->whereNull('deleted_at')->exists();
+            if ($taken) {
+                return response()->json([
+                    'message' => 'That username is already taken.',
+                    'errors' => ['username' => ['That username is already taken — try another.']],
+                ], 422);
+            }
+            $data['username'] = trim($data['username']);
+        } else {
+            // Empty/absent → don't overwrite an existing username on a partial save.
+            unset($data['username']);
+        }
 
         DB::table('users')
             ->where('id', $request->user()->id)
@@ -311,7 +362,9 @@ final class AuthController extends Controller
             ], 422);
         }
 
-        $user = DB::table('users')->where('email', $data['email'])->first();
+        $user = ($record->user_id ?? null)
+            ? DB::table('users')->where('id', $record->user_id)->first()
+            : DB::table('users')->where('email', $data['email'])->first();
         if (! $user) {
             return response()->json(['message' => 'Account not found.'], 422);
         }
@@ -371,7 +424,11 @@ final class AuthController extends Controller
             return response()->json(['message' => 'This link is invalid or has expired. Ask for a new invite.'], 422);
         }
 
-        $user = User::where('email', $record->email)->first();
+        // Prefer the exact account the token was minted for (emails can be shared
+        // across accounts now); fall back to email for older tokens.
+        $user = ($record->user_id ?? null)
+            ? User::find((int) $record->user_id)
+            : User::where('email', $record->email)->first();
         if (! $user) {
             return response()->json(['message' => 'Account not found for this link.'], 422);
         }
@@ -386,8 +443,11 @@ final class AuthController extends Controller
                 'updated_at' => now(),
             ]);
             DB::table('password_resets')->where('id', $record->id)->update(['used_at' => now()]);
-            // Invalidate any other outstanding invite/reset tokens for this email.
-            DB::table('password_resets')->where('email', $record->email)->whereNull('used_at')->update(['used_at' => now()]);
+            // Invalidate any other outstanding invite/reset tokens for THIS account
+            // (by user id when we have it, so a shared email's other accounts keep theirs).
+            DB::table('password_resets')
+                ->when($record->user_id ?? null, fn ($q) => $q->where('user_id', $record->user_id), fn ($q) => $q->where('email', $record->email))
+                ->whereNull('used_at')->update(['used_at' => now()]);
         });
         \App\Services\PasswordPolicy::record($user->id, $newHash);
 
@@ -442,6 +502,7 @@ final class AuthController extends Controller
         return [
             'id' => $user->id,
             'email' => $user->email,
+            'username' => $user->username ?? null,
             'agency_timezone' => $agencyTz ?: 'America/Toronto',
             // Which agency a platform admin lands in by default. Without this the
             // switcher fell back to agencies[0] — alphabetically the LIVE agency —
@@ -503,11 +564,35 @@ final class AuthController extends Controller
             // grow the users table for every new field a role needs.
             'role_extras'     => ['nullable', 'array'],
 
+            // Additional emergency contacts (optional): [{name, phone}, ...]
+            'extra_contacts'            => ['nullable', 'array'],
+            'extra_contacts.*.name'     => ['nullable', 'string', 'max:120'],
+            'extra_contacts.*.phone'    => ['nullable', 'string', 'max:40'],
+
+            // Optional username — lets one person hold several accounts under one
+            // email and sign in to the right one. Letters/numbers/._- only.
+            'username'        => ['nullable', 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/'],
+
             // Mark as done (default true)
             'complete'        => ['nullable', 'boolean'],
         ]);
 
         $user = $request->user();
+
+        // Username uniqueness (case-insensitive), ignoring this user's own row.
+        if (! empty($data['username'])) {
+            $taken = DB::table('users')
+                ->whereRaw('LOWER(username) = ?', [mb_strtolower(trim($data['username']))])
+                ->where('id', '!=', $user->id)
+                ->whereNull('deleted_at')
+                ->exists();
+            if ($taken) {
+                return response()->json([
+                    'message' => 'That username is already taken.',
+                    'errors' => ['username' => ['That username is already taken — try another.']],
+                ], 422);
+            }
+        }
         $existingExtras = is_string($user->profile_extras ?? null)
             ? (json_decode($user->profile_extras, true) ?: [])
             : (is_array($user->profile_extras ?? null) ? $user->profile_extras : []);
@@ -520,6 +605,9 @@ final class AuthController extends Controller
             'postal_code'             => $data['postal_code']     ?? null,
             'emergency_contact_name'  => $data['emergency_contact_name']  ?? null,
             'emergency_contact_phone' => $data['emergency_contact_phone'] ?? null,
+            'extra_contacts'          => !empty($data['extra_contacts'])
+                ? array_values(array_filter($data['extra_contacts'], fn ($c) => !empty($c['name']) || !empty($c['phone'])))
+                : null,
             'role_extras'             => $data['role_extras']     ?? null,
         ], fn ($v) => $v !== null && $v !== ''));
 
@@ -532,6 +620,9 @@ final class AuthController extends Controller
             'timezone'       => $data['timezone']       ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
+        if (! empty($data['username'])) {
+            $userUpdate['username'] = trim($data['username']);
+        }
         $userUpdate['profile_extras'] = json_encode($extras);
         $userUpdate['updated_at']     = now();
         if (($data['complete'] ?? true) === true) {
@@ -558,6 +649,8 @@ final class AuthController extends Controller
             in_array('centre_director', $roles, true) => 'centre_director',
             in_array('educator', $roles, true) => 'educator',
             in_array('guardian', $roles, true) => 'guardian',
+            in_array('home_visitor', $roles, true) => 'home_visitor',
+            in_array('sales_rep', $roles, true) => 'sales_rep',
             in_array('auditor', $roles, true) => 'auditor',
             default => $roles[0] ?? null,
         };
