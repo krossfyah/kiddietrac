@@ -31,6 +31,24 @@
   var STAGE_LABEL = {}; var STAGE_COLOR = {};
   STAGES.forEach(function (s) { STAGE_LABEL[s.key] = s.label; STAGE_COLOR[s.key] = s.color; });
 
+  // Injected once: the kanban board must FIT the content column (no page-wide
+  // horizontal scroll). On desktop the 7 stage columns share the width equally
+  // (minmax(0,1fr) keeps min-content at 0 so #appMain — which has min-width:auto —
+  // never grows past the viewport). Below 900px it becomes a swipeable strip.
+  function ensureSalesCss() {
+    if (document.getElementById('kt-sales-css')) return;
+    var s = document.createElement('style');
+    s.id = 'kt-sales-css';
+    s.textContent =
+      '.kt-sales-board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;align-items:start;}' +
+      '.kt-sales-col{min-width:0;background:var(--kt-bg,#f4f6f9);border-radius:14px;padding:9px 8px;}' +
+      '.kt-sales-col-head{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:8px;padding:2px 4px;}' +
+      '.kt-sales-col-head .t{font-weight:800;font-size:12px;line-height:1.15;min-width:0;overflow-wrap:anywhere;}' +
+      '.kt-sales-leadcard{min-width:0;overflow-wrap:anywhere;}' +
+      '@media (max-width:900px){.kt-sales-board{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(78vw,1fr);overflow-x:auto;padding-bottom:10px;scroll-snap-type:x mandatory;}.kt-sales-col{scroll-snap-align:start;}}';
+    document.head.appendChild(s);
+  }
+
   function el(tag, attrs, kids) {
     var e = document.createElement(tag);
     if (attrs) Object.keys(attrs).forEach(function (k) {
@@ -129,6 +147,7 @@
   // ─────────────────────────────── Pipeline (kanban) ───────────────────────────────
   async function renderPipeline(container) {
     clear(container);
+    ensureSalesCss();
     container.appendChild(hero('Sales pipeline', 'Track prospects from first contact to won.', '💼'));
     container.appendChild(toolbar([
       btn('➕ New lead', 'primary', function () { go('sales-new'); }),
@@ -161,15 +180,15 @@
     ]);
     container.appendChild(analytics);
 
-    var board = el('div', { style: 'display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;align-items:flex-start' });
+    var board = el('div', { class: 'kt-sales-board' });
     var byStage = {}; STAGES.forEach(function (s) { byStage[s.key] = []; });
     (data.leads || []).forEach(function (l) { (byStage[l.stage] || (byStage[l.stage] = [])).push(l); });
     STAGES.forEach(function (s) {
       var leads = byStage[s.key] || [];
-      var col = el('div', { style: 'flex:0 0 260px;min-width:260px;background:var(--kt-bg,#f4f6f9);border-radius:14px;padding:10px' }, [
-        el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:2px 4px' }, [
-          el('span', { style: 'font-weight:800;font-size:13px;color:' + s.color }, [s.label]),
-          el('span', { style: 'font-size:12px;font-weight:700;color:#64748B' }, [String(leads.length)]),
+      var col = el('div', { class: 'kt-sales-col' }, [
+        el('div', { class: 'kt-sales-col-head' }, [
+          el('span', { class: 't', style: 'color:' + s.color }, [s.label]),
+          el('span', { style: 'font-size:12px;font-weight:700;color:#64748B;flex:0 0 auto' }, [String(leads.length)]),
         ]),
       ]);
       if (!leads.length) col.appendChild(el('div', { style: 'padding:14px;text-align:center;color:#94A3B8;font-size:12px' }, ['—']));
@@ -200,7 +219,7 @@
   }
   function leadCard(l) {
     var due = l.follow_up_date && l.follow_up_date <= todayISO();
-    var c = el('div', { style: 'background:var(--kt-card,#fff);border:1px solid var(--kt-border,#e6ebf1);border-left:3px solid ' + (STAGE_COLOR[l.stage] || '#94A3B8') + ';border-radius:11px;padding:11px 12px;margin-bottom:9px;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.05)', onclick: function () { go('sales-lead?id=' + l.id); } }, [
+    var c = el('div', { class: 'kt-sales-leadcard', style: 'background:var(--kt-card,#fff);border:1px solid var(--kt-border,#e6ebf1);border-left:3px solid ' + (STAGE_COLOR[l.stage] || '#94A3B8') + ';border-radius:11px;padding:10px 11px;margin-bottom:8px;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.05)', onclick: function () { go('sales-lead?id=' + l.id); } }, [
       el('div', { style: 'font-weight:800;font-size:13.5px;color:var(--kt-ink,#0D1B2A)' }, [l.company || l.name || 'Lead #' + l.id]),
       l.company && l.name ? el('div', { style: 'font-size:12px;color:#64748B' }, [l.name]) : null,
       el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap' }, [

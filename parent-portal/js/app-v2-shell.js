@@ -336,6 +336,7 @@
       // Platform sales CRM: pipeline, leads, quotes, follow-ups + demo launcher.
       return [
         { label: 'Sales', items: [
+          { hash: 'home',            label: 'Home',            icon: '🏠' },
           { hash: 'sales',           label: 'Pipeline',        icon: '📊' },
           { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
           { hash: 'sales-new',       label: 'New lead',        icon: '➕' },
