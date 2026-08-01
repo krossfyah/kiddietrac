@@ -3,12 +3,21 @@
    Platform sales pipeline for selling KiddieTrac to prospective agencies.
    Screens: pipeline (kanban), leads list, new lead, lead detail (activities,
    follow-ups, quotes), follow-ups, plans editor, launch-demo. Backend: /sales/*.
+
+   Banners reuse the shell's CANONICAL hero markup (.kt-hero.kt-hero-auto.
+   kt-banner-fx + h1/.kt-hero-sub/.kt-hero-emoji) so they inherit the brand
+   gradient, shimmer, alignment and floating emoji — identical to every other
+   screen — and survive the self-triggered re-renders in the lead detail.
+   Forms are laid out in a nested, width-constrained 2-column grid so they clear
+   the portal's global rules (#appMain input caps at 480px; a direct #appMain
+   child with an inline max-width is flattened to 100%).
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
   var KT = window.KT;
   if (!KT || !KT.Shell || !KT.Shell.registerScreen) return;
   var Api = KT.Api;
+  var ACCENT = '#1F6080'; // KiddieTrac brand teal (matches the hero gradient)
 
   var STAGES = [
     { key: 'new',         label: 'New',           color: '#64748B' },
@@ -35,7 +44,7 @@
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function toast(i, t, m, c) { try { KT.toast && KT.toast(i, t, m || '', c || '#7C3AED'); } catch (e) {} }
+  function toast(i, t, m, c) { try { KT.toast && KT.toast(i, t, m || '', c || ACCENT); } catch (e) {} }
   function go(hash) { window.location.hash = '#' + hash; }
   function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
   function fmtDate(s) { if (!s) return ''; try { return new Date(s + (s.length <= 10 ? 'T00:00:00' : '')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return s; } }
@@ -57,35 +66,62 @@
       .catch(function (e) { toast('⚠️', 'PDF failed', e.message || '', '#DC2626'); });
   }
 
-  function hero(title, sub, actions) {
-    return el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#5B2A86,#9C3FA6);color:#fff;border-radius:18px;padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap' }, [
-      el('div', { style: 'flex:1;min-width:200px' }, [
-        el('div', { style: 'font-size:20px;font-weight:800' }, [title]),
-        el('div', { style: 'font-size:13.5px;opacity:.92;margin-top:4px' }, [sub || '']),
-      ]),
-      actions ? el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, actions) : null,
-    ]);
+  // ── Banner: the shell's canonical hero component. No inline styling — it inherits
+  //    the brand gradient, shimmer, left-aligned text and floating emoji watermark,
+  //    so it matches every other screen and re-renders cleanly. Buttons never go
+  //    inside the banner (see toolbar()).
+  function hero(title, sub, icon) {
+    var b = el('div', { class: 'kt-hero kt-hero-auto kt-banner-fx' }, [el('h1', {}, [title])]);
+    if (sub) b.appendChild(el('div', { class: 'kt-hero-sub' }, [sub]));
+    b.appendChild(el('div', { class: 'kt-hero-emoji', 'aria-hidden': 'true' }, [icon || '✨']));
+    return b;
+  }
+  // A left-aligned action toolbar that sits beneath the banner (mirrors the shell's
+  // .kt-page-actions), but self-styled so the primary CTA keeps its emphasis.
+  function toolbar(actions) {
+    var a = (actions || []).filter(Boolean);
+    if (!a.length) return null;
+    return el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px' }, a);
   }
   function btn(label, kind, on) {
-    var bg = kind === 'primary' ? '#7C3AED' : (kind === 'ghost' ? 'rgba(255,255,255,.16)' : '#fff');
-    var col = kind === 'primary' ? '#fff' : (kind === 'ghost' ? '#fff' : '#5B2A86');
-    return el('button', { class: 'btn', style: 'background:' + bg + ';color:' + col + ';border:0;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:13.5px', onclick: on }, [label]);
+    var K = {
+      primary: 'background:' + ACCENT + ';color:#fff;border:1px solid ' + ACCENT,
+      light:   'background:#fff;color:' + ACCENT + ';border:1px solid #CBD5E1',
+      ghost:   'background:#F1F5F9;color:#334155;border:1px solid #E2E8F0',
+      danger:  'background:#FEE2E2;color:#B91C1C;border:1px solid #FCA5A5',
+    };
+    return el('button', { type: 'button', class: 'btn', style: (K[kind] || K.light) + ';border-radius:9px;padding:9px 15px;font-weight:700;cursor:pointer;font-size:13.5px;line-height:1', onclick: on }, [label]);
   }
   function field(label, node) {
-    return el('div', { style: 'margin-bottom:12px' }, [
-      el('label', { style: 'display:block;font-size:12px;font-weight:700;color:var(--kt-muted,#5a7080);margin-bottom:4px' }, [label]),
+    return el('div', { style: 'margin-bottom:0' }, [
+      el('label', { style: 'display:block;font-size:12px;font-weight:700;color:var(--kt-muted,#5a7080);margin-bottom:5px' }, [label]),
       node,
     ]);
   }
   function input(attrs) { return el('input', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' }, attrs || {})); }
-  function textarea(attrs) { return el('textarea', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:70px;resize:vertical' }, attrs || {})); }
+  function textarea(attrs) { return el('textarea', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:76px;resize:vertical' }, attrs || {})); }
   function selectEl(opts, val, attrs) {
     var s = el('select', Object.assign({ class: 'input select', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' }, attrs || {}));
     opts.forEach(function (o) { var op = el('option', { value: o.v }, [o.l]); if (String(o.v) === String(val)) op.selected = true; s.appendChild(op); });
     return s;
   }
   function stageChip(k) { return el('span', { style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;color:#fff;background:' + (STAGE_COLOR[k] || '#94A3B8') }, [STAGE_LABEL[k] || k]); }
-  function card(kids, extra) { return el('div', { style: 'background:var(--kt-card,#fff);border:1px solid var(--kt-border,#e6ebf1);border-radius:16px;padding:16px 18px;box-shadow:0 1px 3px rgba(15,23,42,.05);' + (extra || '') }, kids); }
+  function card(kids, extra) { return el('div', { style: 'background:var(--kt-card,#fff);border:1px solid var(--kt-border,#e6ebf1);border-radius:16px;padding:18px 20px;box-shadow:0 1px 3px rgba(15,23,42,.05);' + (extra || '') }, kids); }
+
+  // Centred, width-constrained wrapper. Nests ONE level deep so the portal's global
+  // `#appMain > div[style*="max-width"] { max-width:100% !important }` polish rule
+  // (direct children only) does not flatten it.
+  function wrap(kids, maxW) {
+    return el('div', {}, [el('div', { style: 'max-width:' + (maxW || 880) + 'px;margin:0 auto' }, kids)]);
+  }
+  // A tidy 2-column form grid. Columns stay under the 480px input cap, so every input
+  // fills its cell and all fields line up. Full-width fields (textareas, action rows)
+  // opt in with gridColumn '1 / -1' via fieldWide()/formActions().
+  function formGrid(kids) {
+    return el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px 18px;align-items:start' }, kids);
+  }
+  function fieldWide(label, node) { var f = field(label, node); f.style.gridColumn = '1 / -1'; return f; }
+  function formActions(kids) { var d = el('div', { style: 'display:flex;gap:8px;margin-top:2px' }, kids); d.style.gridColumn = '1 / -1'; return d; }
 
   var META = null; // {owners, products, stats}
   function ownerOpts() { return [{ v: '', l: 'Unassigned' }].concat((META && META.owners || []).map(function (o) { return { v: o.id, l: o.name }; })); }
@@ -93,14 +129,14 @@
   // ─────────────────────────────── Pipeline (kanban) ───────────────────────────────
   async function renderPipeline(container) {
     clear(container);
-    container.appendChild(hero('💼 Sales pipeline', 'Track prospects from first contact to won.', [
-      btn('➕ New lead', 'light', function () { go('sales-new'); }),
-      btn('📋 List view', 'ghost', function () { go('sales-leads'); }),
+    container.appendChild(hero('Sales pipeline', 'Track prospects from first contact to won.', '💼'));
+    container.appendChild(toolbar([
+      btn('➕ New lead', 'primary', function () { go('sales-new'); }),
     ]));
     var loading = el('div', { style: 'padding:30px;text-align:center;color:#64748B' }, ['Loading pipeline…']);
     container.appendChild(loading);
     var data;
-    try { data = await Api.get('/sales/leads'); } catch (e) { clear(container); container.appendChild(hero('💼 Sales pipeline', '')); container.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Could not load leads: ' + (e.message || e)])])); return; }
+    try { data = await Api.get('/sales/leads'); } catch (e) { loading.remove(); container.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Could not load leads: ' + (e.message || e)])])); return; }
     META = { owners: data.owners || [], products: data.products || [], stats: data.stats || {} };
     loading.remove();
 
@@ -155,11 +191,11 @@
   // ─────────────────────────────── Leads list ───────────────────────────────
   async function renderList(container) {
     clear(container);
-    container.appendChild(hero('🎯 Leads', 'All leads in the pipeline.', [
-      btn('➕ New lead', 'light', function () { go('sales-new'); }),
-      btn('📊 Pipeline', 'ghost', function () { go('sales'); }),
+    container.appendChild(hero('Leads', 'Every prospect in the pipeline.', '🎯'));
+    container.appendChild(toolbar([
+      btn('➕ New lead', 'primary', function () { go('sales-new'); }),
     ]));
-    var search = input({ type: 'search', placeholder: '🔍 Search name, company, email…', style: 'max-width:320px;padding:9px 11px;border:1px solid #d9e1ea;border-radius:9px' });
+    var search = input({ type: 'search', placeholder: '🔍 Search name, company, email…', style: 'width:100%;max-width:340px;padding:9px 11px;border:1px solid #d9e1ea;border-radius:9px;font-size:14px;box-sizing:border-box' });
     container.appendChild(el('div', { style: 'margin-bottom:12px' }, [search]));
     var host = el('div'); container.appendChild(host);
     async function load() {
@@ -167,7 +203,7 @@
       var data = await Api.get('/sales/leads', search.value ? { q: search.value } : {});
       META = { owners: data.owners || [], products: data.products || [], stats: data.stats || {} };
       clear(host);
-      if (!data.leads || !data.leads.length) { host.appendChild(card([el('div', { style: 'text-align:center;color:#64748B;padding:20px' }, ['No leads yet. ', el('a', { href: '#sales-new', style: 'color:#7C3AED;font-weight:700' }, ['Add one →'])])])); return; }
+      if (!data.leads || !data.leads.length) { host.appendChild(card([el('div', { style: 'text-align:center;color:#64748B;padding:20px' }, ['No leads yet. ', el('a', { href: '#sales-new', style: 'color:' + ACCENT + ';font-weight:700' }, ['Add one →'])])])); return; }
       var tbl = el('table', { style: 'width:100%;border-collapse:collapse;background:#fff;border:1px solid #e6ebf1;border-radius:12px;overflow:hidden' });
       tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#f4f6f9;text-align:left' }, ['Company / contact', 'Stage', 'Value', 'Owner', 'Follow-up'].map(function (h) { return el('th', { style: 'padding:10px 12px;font-size:12px;color:#5a7080' }, [h]); }))]));
       var tb = el('tbody');
@@ -190,26 +226,20 @@
   async function renderNew(container) {
     clear(container);
     if (!META) { try { var d = await Api.get('/sales/leads'); META = { owners: d.owners || [], products: d.products || [] }; } catch (e) { META = { owners: [] }; } }
-    container.appendChild(hero('➕ New lead', 'Add a prospect to the pipeline.'));
+    container.appendChild(hero('New lead', 'Add a prospect to the pipeline.', '➕'));
     var f = {};
-    var form = card([
+    var grid = formGrid([
       field('Contact name *', f.name = input({ placeholder: 'Jane Doe' })),
       field('Company / childcare', f.company = input({ placeholder: 'Sunshine Daycare' })),
-      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' }, [
-        field('Email', f.email = input({ type: 'email', placeholder: 'jane@example.com' })),
-        field('Phone', f.phone = input({ placeholder: '(555) 123-4567' })),
-      ]),
-      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px' }, [
-        field('Stage', f.stage = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), 'new')),
-        field('Owner', f.owner_id = selectEl(ownerOpts(), (function () { try { return (JSON.parse(sessionStorage.getItem('kt_user') || '{}').id) || ''; } catch (e) { return ''; } })())),
-        field('Est. value ($)', f.value = input({ type: 'number', step: '0.01', min: '0', placeholder: '0.00' })),
-      ]),
-      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' }, [
-        field('Expected close', f.expected_close = input({ type: 'date' })),
-        field('Next follow-up', f.follow_up_date = input({ type: 'date' })),
-      ]),
-      field('Notes', f.notes = textarea({ placeholder: 'What are they looking for?' })),
-      el('div', { style: 'display:flex;gap:8px;margin-top:6px' }, [
+      field('Email', f.email = input({ type: 'email', placeholder: 'jane@example.com' })),
+      field('Phone', f.phone = input({ placeholder: '(555) 123-4567' })),
+      field('Stage', f.stage = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), 'new')),
+      field('Owner', f.owner_id = selectEl(ownerOpts(), (function () { try { return (JSON.parse(sessionStorage.getItem('kt_user') || '{}').id) || ''; } catch (e) { return ''; } })())),
+      field('Est. value ($)', f.value = input({ type: 'number', step: '0.01', min: '0', placeholder: '0.00' })),
+      field('Expected close', f.expected_close = input({ type: 'date' })),
+      field('Next follow-up', f.follow_up_date = input({ type: 'date' })),
+      fieldWide('Notes', f.notes = textarea({ placeholder: 'What are they looking for?' })),
+      formActions([
         btn('Create lead', 'primary', async function (ev) {
           if (!f.name.value.trim()) { toast('⚠️', 'Name required', '', '#DC2626'); return; }
           ev.target.disabled = true; ev.target.textContent = 'Saving…';
@@ -220,10 +250,14 @@
             go('sales-lead?id=' + lead.id);
           } catch (e) { toast('⚠️', 'Save failed', e.message || '', '#DC2626'); ev.target.disabled = false; ev.target.textContent = 'Create lead'; }
         }),
-        btn('Cancel', 'light', function () { go('sales'); }),
+        btn('Cancel', 'ghost', function () { go('sales'); }),
       ]),
-    ], 'max-width:640px');
-    container.appendChild(form);
+    ]);
+    // Wrap in a real <form> so kt-icon-buttons.js skips these buttons (it never
+    // reaches into a form), keeping the teal primary "Create lead" — matching the
+    // teal "Save changes" on the lead detail. onsubmit guard prevents a native submit.
+    var formEl = el('form', { onsubmit: function (ev) { ev.preventDefault(); } }, [card([grid])]);
+    container.appendChild(wrap([formEl], 720));
   }
 
   // ─────────────────────────────── Lead detail ───────────────────────────────
@@ -233,20 +267,21 @@
     if (!id) { go('sales'); return; }
     container.appendChild(el('div', { style: 'padding:20px;color:#64748B' }, ['Loading lead…']));
     var lead;
-    try { lead = await Api.get('/sales/leads/' + id); } catch (e) { clear(container); container.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Lead not found.'])])); return; }
+    try { lead = await Api.get('/sales/leads/' + id); } catch (e) { clear(container); container.appendChild(hero('Lead', '', '🏢')); container.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Lead not found.'])])); return; }
     if (!META) { try { var d = await Api.get('/sales/leads'); META = { owners: d.owners || [], products: d.products || [] }; } catch (e) { META = { owners: [], products: [] }; } }
     clear(container);
 
-    container.appendChild(hero('💬 ' + (lead.company || lead.name), (lead.company && lead.name ? lead.name + ' · ' : '') + (lead.email || ''), [
-      btn('← Pipeline', 'ghost', function () { go('sales'); }),
-    ]));
+    container.appendChild(hero(lead.company || lead.name || ('Lead #' + id), (lead.company && lead.name ? lead.name + ' · ' : '') + (lead.email || 'Lead details, activity and proposals.'), '🏢'));
+    container.appendChild(toolbar([btn('← Pipeline', 'light', function () { go('sales'); })]));
+
+    var body = el('div');
 
     // Stage mover
-    var stageSel = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), lead.stage);
+    var stageSel = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), lead.stage, { style: 'width:auto;min-width:170px;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px' });
     stageSel.addEventListener('change', async function () {
       try { await Api.patch('/sales/leads/' + id, { stage: stageSel.value }); lead.stage = stageSel.value; toast('✅', 'Stage updated', STAGE_LABEL[stageSel.value]); renderDetail(container, ctx); } catch (e) { toast('⚠️', 'Failed', e.message || '', '#DC2626'); }
     });
-    container.appendChild(card([
+    body.appendChild(card([
       el('div', { style: 'display:flex;gap:14px;align-items:center;flex-wrap:wrap' }, [
         el('div', {}, [el('div', { style: 'font-size:11px;color:#5a7080;font-weight:700;margin-bottom:3px' }, ['STAGE']), stageSel]),
         el('div', { style: 'flex:1' }),
@@ -254,13 +289,13 @@
       ]),
     ], 'margin-bottom:14px'));
 
-    var grid = el('div', { style: 'display:grid;grid-template-columns:1.1fr .9fr;gap:14px;align-items:start' });
+    var grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;align-items:start' });
     // LEFT: editable details + activities
     var left = el('div');
     var e = {};
     left.appendChild(card([
-      el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['Details']),
-      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' }, [
+      el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Details']),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 14px;align-items:start' }, [
         field('Contact', e.name = input({ value: lead.name || '' })),
         field('Company', e.company = input({ value: lead.company || '' })),
         field('Email', e.email = input({ value: lead.email || '' })),
@@ -270,23 +305,23 @@
         field('Expected close', e.expected_close = input({ type: 'date', value: lead.expected_close || '' })),
         field('Next follow-up', e.follow_up_date = input({ type: 'date', value: lead.follow_up_date || '' })),
       ]),
-      field('Notes', e.notes = textarea({ value: lead.notes || '' })),
-      el('div', { style: 'display:flex;gap:8px' }, [
+      el('div', { style: 'margin-top:12px' }, [field('Notes', e.notes = textarea({ value: lead.notes || '' }))]),
+      el('div', { style: 'display:flex;gap:8px;margin-top:12px' }, [
         btn('Save changes', 'primary', async function (ev) {
           ev.target.disabled = true;
           try { await Api.patch('/sales/leads/' + id, { name: e.name.value, company: e.company.value, email: e.email.value, phone: e.phone.value, owner_id: e.owner_id.value || null, value: e.value.value || null, expected_close: e.expected_close.value || null, follow_up_date: e.follow_up_date.value || null, notes: e.notes.value }); toast('✅', 'Saved'); renderDetail(container, ctx); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; }
         }),
-        btn('🗑 Delete', 'light', async function () { if (!confirm('Delete this lead?')) return; try { await Api.delete('/sales/leads/' + id); toast('🗑', 'Deleted'); go('sales'); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); } }),
+        btn('🗑 Delete', 'danger', async function () { if (!confirm('Delete this lead?')) return; try { await Api.delete('/sales/leads/' + id); toast('🗑', 'Deleted'); go('sales'); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); } }),
       ]),
     ], 'margin-bottom:14px'));
 
     // Activity + follow-up composer
-    var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['Activity & follow-ups'])], '');
-    var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }], 'note');
+    var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Activity & follow-ups'])], '');
+    var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }], 'note', { style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' });
     var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up…' });
     var dueIn = input({ type: 'date' }); dueIn.style.display = 'none';
     typeSel.addEventListener('change', function () { dueIn.style.display = typeSel.value === 'followup' ? 'block' : 'none'; });
-    acWrap.appendChild(el('div', { style: 'display:grid;grid-template-columns:150px 1fr;gap:8px;margin-bottom:8px' }, [typeSel, dueIn]));
+    acWrap.appendChild(el('div', { style: 'display:grid;grid-template-columns:minmax(150px,180px) 1fr;gap:8px;margin-bottom:8px' }, [typeSel, dueIn]));
     acWrap.appendChild(bodyIn);
     acWrap.appendChild(el('div', { style: 'margin-top:8px' }, [btn('Add', 'primary', async function (ev) {
       var b = { type: typeSel.value, body: bodyIn.value.trim() };
@@ -304,7 +339,7 @@
           el('span', { style: 'font-weight:700;color:#334155' }, [a.type === 'stage' ? 'Stage' : a.type.charAt(0).toUpperCase() + a.type.slice(1)]),
           a.user_name ? ' · ' + a.user_name : '', a.created_at ? ' · ' + fmtDate((a.created_at || '').slice(0, 10)) : '',
           isFu && a.due_date ? el('span', { style: 'margin-left:6px;font-weight:700;color:' + (a.done ? '#15803D' : '#C2410C') }, [a.done ? '✓ done' : ('due ' + fmtDate(a.due_date))]) : '',
-          isFu && !a.done ? el('a', { href: '#', style: 'margin-left:8px;color:#7C3AED;font-weight:700', onclick: async function (ev2) { ev2.preventDefault(); try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} } }, ['mark done']) : '',
+          isFu && !a.done ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: async function (ev2) { ev2.preventDefault(); try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} } }, ['mark done']) : '',
         ]),
         a.body ? el('div', { style: 'font-size:13px;color:#0D1B2A;margin-top:2px' }, [a.body]) : null,
       ]));
@@ -316,11 +351,12 @@
 
     // RIGHT: quotes
     grid.appendChild(renderQuotesPanel(id, lead, container, ctx));
-    container.appendChild(grid);
+    body.appendChild(grid);
+    container.appendChild(wrap([body], 1120));
   }
 
   function renderQuotesPanel(id, lead, container, ctx) {
-    var panel = card([el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px' }, [
+    var panel = card([el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [
       el('div', { style: 'font-weight:800' }, ['Proposals']),
       btn('+ New', 'light', function () { openQuoteBuilder(id, null, container, ctx); }),
     ])]);
@@ -354,11 +390,11 @@
     function drawItems() {
       clear(itemsHost);
       items.forEach(function (it, idx) {
-        var d = input({ value: it.description || '', placeholder: 'Line item', style: 'flex:1;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px' });
-        var q = input({ type: 'number', step: '0.01', value: it.qty == null ? 1 : it.qty, style: 'width:60px;padding:7px;border:1px solid #d9e1ea;border-radius:8px' });
-        var p = input({ type: 'number', step: '0.01', value: it.unit_price == null ? 0 : it.unit_price, style: 'width:90px;padding:7px;border:1px solid #d9e1ea;border-radius:8px' });
+        var d = input({ value: it.description || '', placeholder: 'Line item', style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+        var q = input({ type: 'number', step: '0.01', value: it.qty == null ? 1 : it.qty, style: 'width:60px;flex:0 0 60px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+        var p = input({ type: 'number', step: '0.01', value: it.unit_price == null ? 0 : it.unit_price, style: 'width:90px;flex:0 0 90px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
         d.addEventListener('input', function () { it.description = d.value; }); q.addEventListener('input', function () { it.qty = q.value; recalc(); }); p.addEventListener('input', function () { it.unit_price = p.value; recalc(); });
-        itemsHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' }, [d, q, p, el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer', onclick: function () { items.splice(idx, 1); drawItems(); recalc(); } }, ['×'])]));
+        itemsHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' }, [d, q, p, el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer;flex:0 0 auto', onclick: function () { items.splice(idx, 1); drawItems(); recalc(); } }, ['×'])]));
       });
     }
     drawItems(); recalc(); discIn.addEventListener('input', recalc);
@@ -366,18 +402,18 @@
     planSel.addEventListener('change', function () { var p = products.filter(function (x) { return String(x.id) === planSel.value; })[0]; if (p) { items.push({ description: p.name + (p.description ? ' — ' + p.description : ''), qty: 1, unit_price: Number(p.price), product_id: p.id }); drawItems(); recalc(); planSel.value = ''; } });
     box.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [el('div', { style: 'font-size:18px;font-weight:800' }, [quote ? ('Proposal ' + (quote.number || '')) : 'New proposal']), el('button', { style: 'border:0;background:none;font-size:22px;cursor:pointer;color:#64748B', onclick: function () { ov.remove(); } }, ['×'])]));
     box.appendChild(field('Title', titleIn));
-    box.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:6px' }, [el('div', { style: 'flex:1' }, ['Line items']), el('div', { style: 'width:60px;font-size:11px;color:#64748B;text-align:center' }, ['Qty']), el('div', { style: 'width:90px;font-size:11px;color:#64748B;text-align:center' }, ['Price']), el('div', { style: 'width:34px' })]));
+    box.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;margin:14px 0 6px' }, [el('div', { style: 'flex:1;font-size:12px;font-weight:700;color:#5a7080' }, ['Line items']), el('div', { style: 'width:60px;font-size:11px;color:#64748B;text-align:center' }, ['Qty']), el('div', { style: 'width:90px;font-size:11px;color:#64748B;text-align:center' }, ['Price']), el('div', { style: 'width:34px' })]));
     box.appendChild(itemsHost);
-    box.appendChild(el('div', { style: 'display:flex;gap:8px;margin-bottom:10px' }, [el('div', { style: 'flex:1' }, [planSel]), btn('+ Blank line', 'light', function () { items.push({ description: '', qty: 1, unit_price: 0 }); drawItems(); })]));
-    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' }, [field('Discount ($)', discIn), field('Valid until', validIn)]));
-    box.appendChild(field('Notes', notesIn));
+    box.appendChild(el('div', { style: 'display:flex;gap:8px;margin-bottom:14px' }, [el('div', { style: 'flex:1;min-width:0' }, [planSel]), btn('+ Blank line', 'light', function () { items.push({ description: '', qty: 1, unit_price: 0 }); drawItems(); })]));
+    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px' }, [field('Discount ($)', discIn), field('Valid until', validIn)]));
+    box.appendChild(el('div', { style: 'margin-top:14px' }, [field('Notes', notesIn)]));
     box.appendChild(totalEl);
-    var statusSel = quote ? selectEl([{ v: 'draft', l: 'Draft' }, { v: 'sent', l: 'Sent' }, { v: 'accepted', l: 'Accepted' }, { v: 'declined', l: 'Declined' }], quote.status) : null;
-    box.appendChild(el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;align-items:center' }, [
+    var statusSel = quote ? selectEl([{ v: 'draft', l: 'Draft' }, { v: 'sent', l: 'Sent' }, { v: 'accepted', l: 'Accepted' }, { v: 'declined', l: 'Declined' }], quote.status, { style: 'width:auto;padding:7px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:13px' }) : null;
+    box.appendChild(el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:16px;align-items:center;flex-wrap:wrap' }, [
       quote ? el('div', { style: 'margin-right:auto;display:flex;align-items:center;gap:6px' }, [el('span', { style: 'font-size:12px;color:#64748B' }, ['Status']), statusSel]) : null,
       quote ? btn('⬇ PDF', 'light', function () { downloadQuotePdf(quote.id); }) : null,
       quote && leadId ? btn('📧 Email', 'light', async function (ev) { ev.target.disabled = true; try { await Api.post('/sales/quotes/' + quote.id + '/send', {}); toast('📧', 'Proposal emailed', 'Sent to the prospect.'); } catch (e) { toast('⚠️', 'Email failed', e.message || '', '#DC2626'); ev.target.disabled = false; } }) : null,
-      btn('Cancel', 'light', function () { ov.remove(); }),
+      btn('Cancel', 'ghost', function () { ov.remove(); }),
       btn(quote ? 'Save proposal' : 'Create proposal', 'primary', async function (ev) {
         ev.target.disabled = true;
         var body = { title: titleIn.value, discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: items.filter(function (i) { return (i.description || '').trim(); }) };
@@ -394,28 +430,30 @@
   // ─────────────────────────────── Follow-ups ───────────────────────────────
   async function renderFollowups(container) {
     clear(container);
-    container.appendChild(hero('⏰ Follow-ups', 'Open follow-up tasks across your leads.'));
+    container.appendChild(hero('Follow-ups', 'Open follow-up tasks across your leads.', '⏰'));
+    var body = el('div');
     var data = await Api.get('/sales/leads');
     META = { owners: data.owners || [], products: data.products || [] };
-    // gather open follow-ups by fetching each lead? Too heavy — instead show leads with a due follow_up_date.
+    // Show leads with a due follow_up_date (fetching every lead's activities would be too heavy).
     var due = (data.leads || []).filter(function (l) { return l.follow_up_date && l.status === 'open'; }).sort(function (a, b) { return (a.follow_up_date || '') < (b.follow_up_date || '') ? -1 : 1; });
-    if (!due.length) { container.appendChild(card([el('div', { style: 'text-align:center;color:#64748B;padding:20px' }, ['🎉 No follow-ups scheduled.'])])); return; }
+    if (!due.length) { container.appendChild(wrap([card([el('div', { style: 'text-align:center;color:#64748B;padding:20px' }, ['🎉 No follow-ups scheduled.'])])], 820)); return; }
     var list = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
     due.forEach(function (l) {
       var overdue = l.follow_up_date < todayISO();
-      list.appendChild(card([el('div', { style: 'display:flex;justify-content:space-between;align-items:center;cursor:pointer', onclick: function () { go('sales-lead?id=' + l.id); } }, [
-        el('div', {}, [el('div', { style: 'font-weight:700' }, [l.company || l.name]), el('div', { style: 'font-size:12px;color:#64748B' }, [stageChip(l.stage), l.owner_name ? '  · ' + l.owner_name : ''])]),
+      list.appendChild(card([el('div', { style: 'display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:12px', onclick: function () { go('sales-lead?id=' + l.id); } }, [
+        el('div', {}, [el('div', { style: 'font-weight:700' }, [l.company || l.name]), el('div', { style: 'font-size:12px;color:#64748B;margin-top:3px' }, [stageChip(l.stage), l.owner_name ? '  · ' + l.owner_name : ''])]),
         el('div', { style: 'text-align:right' }, [el('div', { style: 'font-weight:700;color:' + (overdue ? '#C2410C' : '#334155') }, [(overdue ? '⏰ overdue · ' : '') + fmtDate(l.follow_up_date)])]),
-      ])], 'padding:12px 16px'));
+      ])], 'padding:14px 18px'));
     });
-    container.appendChild(list);
+    body.appendChild(list);
+    container.appendChild(wrap([body], 820));
   }
 
   // ─────────────────────────────── Plans / pricing ───────────────────────────────
   async function renderPlans(container) {
     clear(container);
-    container.appendChild(hero('💲 Plans & pricing', 'Preset products used in proposals. Edit prices to match your offer.'));
-    var host = el('div'); container.appendChild(host);
+    container.appendChild(hero('Plans & pricing', 'Preset products used in proposals. Edit prices to match your offer.', '💲'));
+    var host = el('div'); container.appendChild(wrap([host], 940));
     async function load() {
       clear(host);
       var products = await Api.get('/sales/products');
@@ -423,14 +461,14 @@
       host.appendChild(el('div', { style: 'margin-top:10px' }, [btn('+ Add plan', 'primary', function () { host.insertBefore(planRow({ name: '', description: '', price: 0, unit: 'month', active: true }, load, true), host.firstChild); })]));
     }
     function planRow(p, reload, isNew) {
-      var n = input({ value: p.name || '', placeholder: 'Plan name', style: 'flex:1.2;padding:8px;border:1px solid #d9e1ea;border-radius:8px' });
-      var d = input({ value: p.description || '', placeholder: 'Description', style: 'flex:2;padding:8px;border:1px solid #d9e1ea;border-radius:8px' });
-      var pr = input({ type: 'number', step: '0.01', value: p.price || 0, style: 'width:100px;padding:8px;border:1px solid #d9e1ea;border-radius:8px' });
-      var u = selectEl([{ v: 'month', l: '/month' }, { v: 'year', l: '/year' }, { v: 'one-time', l: 'one-time' }], p.unit || 'month', { style: 'width:110px;padding:8px;border:1px solid #d9e1ea;border-radius:8px' });
+      var n = input({ value: p.name || '', placeholder: 'Plan name', style: 'flex:1 1 150px;min-width:0;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+      var d = input({ value: p.description || '', placeholder: 'Description', style: 'flex:2 1 200px;min-width:0;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+      var pr = input({ type: 'number', step: '0.01', value: p.price || 0, style: 'flex:0 0 100px;width:100px;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+      var u = selectEl([{ v: 'month', l: '/month' }, { v: 'year', l: '/year' }, { v: 'one-time', l: 'one-time' }], p.unit || 'month', { style: 'flex:0 0 110px;width:110px;padding:8px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
       return card([el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [n, d, pr, u,
         btn('Save', 'primary', async function (ev) { ev.target.disabled = true; try { var body = { name: n.value, description: d.value, price: pr.value || 0, unit: u.value, active: true }; if (p.id) await Api.patch('/sales/products/' + p.id, body); else await Api.post('/sales/products', body); toast('✅', 'Saved'); reload(); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; } }),
         p.id ? el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:8px 10px;cursor:pointer', onclick: async function () { if (!confirm('Delete plan?')) return; try { await Api.delete('/sales/products/' + p.id); reload(); } catch (er) {} } }, ['🗑']) : null,
-      ])], 'padding:10px 12px;margin-bottom:8px');
+      ])], 'padding:12px 14px;margin-bottom:8px');
     }
     load();
   }
@@ -438,9 +476,9 @@
   // ─────────────────────────────── Launch demo ───────────────────────────────
   async function renderDemo(container) {
     clear(container);
-    container.appendChild(hero('🚀 Launch demo', 'Open the KiddieTrac Test Agency to walk a prospect through the product.'));
-    container.appendChild(card([
-      el('p', { style: 'color:#334155;margin:0 0 14px' }, ['This opens the live demo environment (Test Agency) in a new tab, signed in as a demo admin so you can show attendance, billing, the parent app and more. No real family data.']),
+    container.appendChild(hero('Launch demo', 'Open the KiddieTrac Test Agency to walk a prospect through the product.', '🚀'));
+    container.appendChild(wrap([card([
+      el('p', { style: 'color:#334155;margin:0 0 14px;line-height:1.5' }, ['This opens the live demo environment (Test Agency) in a new tab, signed in as a demo admin so you can show attendance, billing, the parent app and more. No real family data.']),
       btn('🚀 Open demo in a new tab', 'primary', async function (ev) {
         ev.target.disabled = true; ev.target.textContent = 'Preparing demo…';
         try {
@@ -451,7 +489,7 @@
         } catch (e) { toast('⚠️', 'Could not start demo', e.message || '', '#DC2626'); }
         ev.target.disabled = false; ev.target.textContent = '🚀 Open demo in a new tab';
       }),
-    ], 'max-width:560px'));
+    ])], 640));
   }
 
   // ─────────────────────────────── register ───────────────────────────────
