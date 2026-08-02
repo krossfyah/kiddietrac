@@ -339,7 +339,7 @@
           { hash: 'home',            label: 'Home',            icon: '🏠' },
           { hash: 'sales',           label: 'Pipeline',        icon: '📊' },
           { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
-          { hash: 'sales-new',       label: 'New lead',        icon: '➕' },
+          { hash: 'sales-new',       label: 'New lead',        icon: '➕', sub: true },
           { hash: 'sales-followups', label: 'Follow-ups',      icon: '⏰' },
           { hash: 'sales-plans',     label: 'Plans & pricing', icon: '💲' },
           { hash: 'sales-demo',      label: 'Launch demo',     icon: '🚀' },
@@ -425,9 +425,12 @@
   function buildNavLink(item) {
     const a = Dom.el('a', {
       href: '#' + item.hash,
-      class: 'nav-link',
+      class: 'nav-link' + (item.sub ? ' nav-link--sub' : ''),
       'data-hash': item.hash,
     });
+    // Sub-items sit indented under their parent (e.g. "New lead" under "Leads").
+    // The collapsed rail zeroes side padding, so the indent only shows when expanded.
+    if (item.sub) a.style.paddingLeft = '30px';
     if (item.icon) {
       a.appendChild(Dom.el('span', { class: 'nav-icon' }, item.icon));
     }

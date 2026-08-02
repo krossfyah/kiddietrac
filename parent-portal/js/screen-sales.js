@@ -716,7 +716,7 @@
   }
   async function renderChat(container) {
     clear(container);
-    container.appendChild(hero('Team chat', 'Private channel for the sales team and superadmins only.', '💬'));
+    container.appendChild(hero('Messages', 'Your portal chat — the sales team and superadmins only.', '💬'));
     var wrapEl = el('div', {}); container.appendChild(wrap([wrapEl], 920));
     var stop = renderChatThread(wrapEl, false);
     var onLeave = function () { if (window.location.hash.indexOf('sales-chat') === -1) { stop(); window.removeEventListener('hashchange', onLeave); } };
@@ -728,7 +728,7 @@
     if (KT.ChatDock && KT.ChatDock.enabled && KT.ChatDock.enabled()) {
       if (_dockStop) { try { _dockStop(); } catch (e) {} _dockStop = null; }
       _dockStop = renderChatThread(KT.ChatDock.contentEl(), true);
-      KT.ChatDock.show('💬 Team chat', function () { if (_dockStop) { _dockStop(); _dockStop = null; } });
+      KT.ChatDock.show('💬 Messages', function () { if (_dockStop) { _dockStop(); _dockStop = null; } });
     } else { go('sales-chat'); }   // phone / no dock → full screen
   }
   async function pollChatUnread() {
@@ -852,9 +852,8 @@
   function salesTiles() {
     var tiles = [
       { hash: 'sales', icon: '📊', label: 'Pipeline' }, { hash: 'sales-leads', icon: '🎯', label: 'Leads' },
-      { hash: 'sales-new', icon: '➕', label: 'New lead' }, { hash: 'sales-followups', icon: '⏰', label: 'Follow-ups' },
-      { hash: 'sales-chat', icon: '💬', label: 'Team chat' }, { hash: 'sales-news', icon: '📣', label: 'Announcements' },
-      { hash: 'sales-plans', icon: '💲', label: 'Plans & pricing' }, { hash: 'sales-demo', icon: '🚀', label: 'Launch demo' },
+      { hash: 'sales-followups', icon: '⏰', label: 'Follow-ups' }, { hash: 'sales-plans', icon: '💲', label: 'Plans & pricing' },
+      { hash: 'sales-demo', icon: '🚀', label: 'Launch demo' },
       { hash: 'notifications', icon: '🔔', label: 'Inbox' }, { hash: 'help', icon: '📖', label: 'Help' },
     ];
     var grid = el('div', { class: 'kt-tile-grid' }, tiles.map(function (t) {
@@ -892,7 +891,10 @@
     KT.Shell.registerScreen(role + ':sales-plans', guarded(renderPlans));
     KT.Shell.registerScreen(role + ':sales-demo', guarded(renderDemo));
     KT.Shell.registerScreen(role + ':sales-chat', guarded(renderChat));
-    KT.Shell.registerScreen(role + ':sales-news', guarded(renderNews));
+    // NOTE: sales Announcements + the standalone "Team chat" section were retired per
+    // product direction — sales messaging now lives in the shared portal chat dock
+    // (top-bar 💬), restricted to the sales team + superadmins. sales-news is no longer
+    // registered so #sales-news resolves to nothing.
   });
   // Sales-rep home = the analytics dashboard (overrides the generic tile launcher,
   // which is registered earlier in screen-role-home.js — this file loads after it).

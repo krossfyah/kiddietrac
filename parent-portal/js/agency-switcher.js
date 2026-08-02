@@ -89,14 +89,10 @@
         '<span class="nav-icon">📊</span><span class="nav-label">Pipeline</span></a>' +
       '<a href="#sales-leads" class="nav-link" data-hash="sales-leads">' +
         '<span class="nav-icon">🎯</span><span class="nav-label">Leads</span></a>' +
-      '<a href="#sales-new" class="nav-link" data-hash="sales-new">' +
+      '<a href="#sales-new" class="nav-link nav-link--sub" data-hash="sales-new" style="padding-left:30px">' +
         '<span class="nav-icon">➕</span><span class="nav-label">New lead</span></a>' +
       '<a href="#sales-followups" class="nav-link" data-hash="sales-followups">' +
         '<span class="nav-icon">⏰</span><span class="nav-label">Follow-ups</span></a>' +
-      '<a href="#sales-chat" class="nav-link" data-hash="sales-chat">' +
-        '<span class="nav-icon">💬</span><span class="nav-label">Team chat</span></a>' +
-      '<a href="#sales-news" class="nav-link" data-hash="sales-news">' +
-        '<span class="nav-icon">📣</span><span class="nav-label">Announcements</span></a>' +
       '<a href="#sales-plans" class="nav-link" data-hash="sales-plans">' +
         '<span class="nav-icon">💲</span><span class="nav-label">Plans &amp; pricing</span></a>' +
       '<a href="#sales-demo" class="nav-link" data-hash="sales-demo">' +

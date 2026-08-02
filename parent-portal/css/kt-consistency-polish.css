@@ -103,7 +103,7 @@
         a slim rail that keeps every section's ICON (still clickable for quick
         access); » expands it again. State persists in localStorage. ── */
 .app-shell.app-shell--sidebar { transition: grid-template-columns 0.22s ease; }
-body.kt-sidebar-collapsed .app-shell.app-shell--sidebar { grid-template-columns: 66px 1fr !important; }
+body.kt-sidebar-collapsed .app-shell.app-shell--sidebar { grid-template-columns: 76px 1fr !important; }
 body.kt-sidebar-collapsed #appSidebar { overflow: visible; }
 /* Hide the chrome that can't shrink to a rail; keep the nav sections' icons. */
 body.kt-sidebar-collapsed #kt-search-widget,
@@ -115,21 +115,23 @@ body.kt-sidebar-collapsed #navLinks > *:not(.sidebar-section),
 body.kt-sidebar-collapsed #navLinks .sidebar-section-label,
 body.kt-sidebar-collapsed #navLinks .nav-label { display: none !important; }
 body.kt-sidebar-collapsed #navLinks { padding-top: 44px; }
-body.kt-sidebar-collapsed #navLinks .nav-link { justify-content: center !important; padding-left: 0 !important; padding-right: 0 !important; }
-body.kt-sidebar-collapsed #navLinks .nav-icon { margin: 0 !important; font-size: 19px; }
+body.kt-sidebar-collapsed #navLinks .nav-link { justify-content: center !important; padding-left: 0 !important; padding-right: 0 !important; padding-top: 11px !important; padding-bottom: 11px !important; }
+body.kt-sidebar-collapsed #navLinks .nav-icon { margin: 0 !important; font-size: 27px; line-height: 1; width: auto; }
 body.kt-sidebar-collapsed #navLinks .sidebar-section { margin-top: 6px; }
 
 #kt-sb-collapse, #kt-sb-toggle {
-  position: fixed; top: 14px; z-index: 9002;
-  width: 32px; height: 32px; border-radius: 9px;
-  cursor: pointer; font-size: 17px; line-height: 1;
+  position: fixed; top: 16px; z-index: 9002;
+  width: 22px; height: 22px; border-radius: 6px;
+  cursor: pointer; font-size: 12px; line-height: 1;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
-  transition: left 0.22s ease, background 0.15s ease;
+  transition: left 0.22s ease, background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
 }
-#kt-sb-collapse { left: 192px; border: 1px solid #E2E8F0; background: #fff; color: #64748B; }
-#kt-sb-collapse:hover { background: #F1F5F9; color: #1F6080; }
-#kt-sb-toggle { left: 17px; border: 0; background: #1F6080; color: #fff; display: none; }
+/* Deliberately understated — a faint chevron at the sidebar edge, not a button
+   that competes with the nav. Brightens on hover. */
+#kt-sb-collapse { left: 196px; border: 0; background: transparent; color: #B4C0CE; opacity: 0.6; box-shadow: none; }
+#kt-sb-collapse:hover { opacity: 1; background: #F1F5F9; color: #1F6080; }
+#kt-sb-toggle { left: 14px; border: 0; background: #1F6080; color: #fff; opacity: 0.85; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15); display: none; }
+#kt-sb-toggle:hover { opacity: 1; }
 body.kt-sidebar-collapsed #kt-sb-collapse { display: none; }
 body.kt-sidebar-collapsed #kt-sb-toggle { display: flex; }
 @media (max-width: 920px) { #kt-sb-collapse, #kt-sb-toggle { display: none !important; } }
@@ -276,3 +278,90 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
   /* Comfortable spacing + full-width action buttons in cards. */
   .app-shell--sidebar .app-main { padding: 10px 14px !important; }
 }
+
+/* ── Icon-button hover tooltip (2026-07-27) ──────────────────────────────
+   Shared `.kt-icon-tip[data-kttip]` tooltip for icon-only buttons (export bar,
+   Reports, New-announcement, etc.). Native `title` is always the fallback; this
+   is the nicer dark bubble above the button. */
+.kt-icon-tip[data-kttip] { position: relative; }
+.kt-icon-tip[data-kttip]:hover::after {
+  content: attr(data-kttip); position: absolute; bottom: calc(100% + 7px); left: 50%;
+  transform: translateX(-50%); background: #0F172A; color: #fff; font-size: 11px;
+  font-weight: 600; white-space: nowrap; padding: 4px 9px; border-radius: 6px;
+  z-index: 10001; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.28);
+}
+.kt-icon-tip[data-kttip]:hover::before {
+  content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%;
+  transform: translateX(-50%); border: 5px solid transparent; border-top-color: #0F172A;
+  z-index: 10001; pointer-events: none;
+}
+
+/* ── Launcher tile section header (2026-07-29) — labels the icon grid on the
+   home/launcher view (guardian/educator/etc.). */
+.kt-tile-sectionhead {
+  font-size: 12px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase;
+  color: #64748B; margin: 2px 4px 12px; display: flex; align-items: center; gap: 8px;
+}
+.kt-tile-sectionhead::after {
+  content: ""; flex: 1; height: 1px;
+  background: linear-gradient(90deg, rgba(100,116,139,.28), rgba(100,116,139,0));
+}
+@media (prefers-color-scheme: dark) {
+  .kt-tile-sectionhead { color: #94A3B8; }
+}
+
+/* ── Canonical row-action icon button (2026-07-28) ───────────────────────
+   ONE size/shape for icon-only table & list actions portal-wide (view / edit /
+   pdf / resend / suspend / enroll / decline / remove…). 32×32 to match the
+   admin-table icon buttons. Works on <button> and <a>. Pair with .kt-icon-tip +
+   data-kttip for the hover label. Tone modifiers set colour only. */
+.kt-act-icon {
+  width: 32px; height: 32px; min-width: 32px; padding: 0; margin: 0 2px 0 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--ink-200, #E2E8F0); background: #fff; color: #475569;
+  box-sizing: border-box; vertical-align: middle; text-decoration: none;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.kt-act-icon:hover { background: #F1F5F9; border-color: #CBD5E1; }
+.kt-act-icon:disabled { opacity: .45; cursor: not-allowed; }
+/* Tone = glyph colour + hover tint ONLY. Every button keeps the SAME neutral
+   square outline so the row reads as one consistent set (2026-07-28). */
+.kt-act-icon.kt-act-info   { color: #1D4ED8; }
+.kt-act-icon.kt-act-info:hover   { background: #EFF6FF; border-color: #BFDBFE; }
+.kt-act-icon.kt-act-edit   { color: #7C3AED; }
+.kt-act-icon.kt-act-edit:hover   { background: #F5F3FF; border-color: #DDD6FE; }
+.kt-act-icon.kt-act-ok     { color: #16A34A; }
+.kt-act-icon.kt-act-ok:hover     { background: #DCFCE7; border-color: #86EFAC; }
+.kt-act-icon.kt-act-danger { color: #DC2626; }
+.kt-act-icon.kt-act-danger:hover { background: #FEE2E2; border-color: #FCA5A5; }
+.kt-act-icon.kt-act-warn   { color: #B45309; }
+.kt-act-icon.kt-act-warn:hover   { background: #FEF3C7; border-color: #FCD34D; }
+.kt-act-icon.kt-act-teal   { color: #0891A6; }
+.kt-act-icon.kt-act-teal:hover   { background: #ECFEFF; border-color: #A5E8F0; }
+
+/* Row actions live in the RIGHT-most table column, so a centre-anchored tooltip
+   overflows the viewport and pops a horizontal scrollbar. Anchor the bubble to
+   the button's right edge (extends left) so it stays on-screen. */
+.kt-act-icon.kt-icon-tip[data-kttip]:hover::after  { left: auto; right: 0; transform: none; }
+.kt-act-icon.kt-icon-tip[data-kttip]:hover::before { left: auto; right: 11px; transform: none; }
+
+/* ── On/off toggle switch (2026-07-28) ───────────────────────────────────
+   kt-switches.js adds .kt-switchified to on/off setting checkboxes so every
+   yes/no setting reads as a physical toggle (desktop + mobile/APK). Restyles
+   the native checkbox in place — state, name and handlers are preserved. */
+input.kt-switchified {
+  -webkit-appearance: none; appearance: none; box-sizing: border-box;
+  width: 42px; height: 24px; min-width: 42px; border-radius: 24px; background: #CBD5E1;
+  position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0;
+  margin: 0; border: none; display: inline-block; transition: background .16s ease;
+}
+input.kt-switchified::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.35);
+  transition: transform .16s ease;
+}
+input.kt-switchified:checked { background: #16A34A; }
+input.kt-switchified:checked::after { transform: translateX(18px); }
+input.kt-switchified:disabled { opacity: .5; cursor: not-allowed; }
+input.kt-switchified:focus-visible { outline: 2px solid #1F6080; outline-offset: 2px; }

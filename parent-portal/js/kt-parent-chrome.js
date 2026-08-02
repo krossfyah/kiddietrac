@@ -240,10 +240,10 @@
       // launcher, so Home now takes every role there.
       wrap.appendChild(iconBtn('🏠', 'Home', function () { location.hash = '#home'; }));
       if (role === 'sales_rep') {
-        // Sales rep has no Messages / Announcements — give the pipeline, the pop-out
-        // team chat (with unread indicator), and the inbox instead.
+        // Sales rep messaging is the shared portal chat dock (restricted to the sales
+        // team + superadmins). Pipeline + Messages (unread indicator) + inbox.
         wrap.appendChild(iconBtn('📊', 'Pipeline', function () { location.hash = '#sales'; }));
-        wrap.appendChild(iconBtn('💬', 'Team chat', function () { if (window.KT && KT.SalesChat) KT.SalesChat.open(); else location.hash = '#sales-chat'; }, 'kt-sales-chat-badge'));
+        wrap.appendChild(iconBtn('💬', 'Messages', function () { if (window.KT && KT.SalesChat) KT.SalesChat.open(); else location.hash = '#sales-chat'; }, 'kt-sales-chat-badge'));
         wrap.appendChild(iconBtn('🔔', 'Inbox', function () { location.hash = '#notifications'; }));
       } else {
         wrap.appendChild(iconBtn('💬', 'Messages', function () { location.hash = msgHash; }, 'kt-pc-msg-badge'));
