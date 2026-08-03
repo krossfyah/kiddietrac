@@ -404,6 +404,29 @@
     attachAddressAutocomplete(f.address, { city: f.city, province: f.province, postal_code: f.postal_code, country: f.country });
   }
 
+  // Render an activity's body — multi-line "Field: old → new" change logs (type 'edit'
+  // or quote edits) become a small list with bold field names; everything else is plain.
+  function activityBodyNode(a) {
+    if (!a.body) return null;
+    var lines = String(a.body).split('\n');
+    if (lines.length === 1 && a.type !== 'edit') {
+      return el('div', { style: 'font-size:13px;color:#0D1B2A;margin-top:2px' }, [a.body]);
+    }
+    var box = el('div', { style: 'margin-top:3px;display:flex;flex-direction:column;gap:1px' });
+    lines.forEach(function (ln) {
+      var idx = ln.indexOf(': ');
+      if (idx > 0 && ln.indexOf(' → ') > -1) {
+        box.appendChild(el('div', { style: 'font-size:12.5px;color:#0D1B2A' }, [
+          el('span', { style: 'font-weight:700;color:#334155' }, [ln.slice(0, idx)]), ' ',
+          ln.slice(idx + 2),
+        ]));
+      } else {
+        box.appendChild(el('div', { style: 'font-size:13px;color:#0D1B2A' + (lines.length > 1 ? ';font-weight:700' : '') }, [ln]));
+      }
+    });
+    return box;
+  }
+
   // ─────────────────────────────── Lead detail ───────────────────────────────
   async function renderDetail(container, ctx) {
     clear(container);
@@ -489,7 +512,7 @@
     attachAddressAutocomplete(e.address, { city: e.city, province: e.province, postal_code: e.postal_code, country: e.country });
 
     // Activity + follow-up composer
-    var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Activity & follow-ups'])], '');
+    var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Activity & history'])], '');
     var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }], 'note', { style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' });
     var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up…' });
     var dueIn = input({ type: 'date' }); dueIn.style.display = 'none';
@@ -504,17 +527,20 @@
       try { await Api.post('/sales/leads/' + id + '/activities', b); toast('✅', 'Added'); renderDetail(container, ctx); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; }
     })]));
     var timeline = el('div', { style: 'margin-top:14px;display:flex;flex-direction:column;gap:8px' });
+    var ACT_ICON = { note: '📝', call: '📞', email: '📧', meeting: '🤝', followup: '⏰', stage: '↗️', edit: '✏️' };
+    var ACT_LABEL = { note: 'Note', call: 'Call', email: 'Email', meeting: 'Meeting', followup: 'Follow-up', stage: 'Stage change', edit: 'Field change' };
     (lead.activities || []).forEach(function (a) {
       var isFu = a.type === 'followup';
-      timeline.appendChild(el('div', { style: 'border-left:2px solid ' + (isFu && !a.done ? '#F59E0B' : '#e6ebf1') + ';padding:2px 0 2px 10px' }, [
+      var accent = isFu && !a.done ? '#F59E0B' : (a.type === 'edit' ? '#8B5CF6' : '#e6ebf1');
+      timeline.appendChild(el('div', { style: 'border-left:2px solid ' + accent + ';padding:2px 0 2px 10px' }, [
         el('div', { style: 'font-size:12px;color:#64748B' }, [
-          ({ note: '📝', call: '📞', email: '📧', meeting: '🤝', followup: '⏰', stage: '↗️' }[a.type] || '•') + ' ',
-          el('span', { style: 'font-weight:700;color:#334155' }, [a.type === 'stage' ? 'Stage' : a.type.charAt(0).toUpperCase() + a.type.slice(1)]),
+          (ACT_ICON[a.type] || '•') + ' ',
+          el('span', { style: 'font-weight:700;color:#334155' }, [ACT_LABEL[a.type] || (a.type.charAt(0).toUpperCase() + a.type.slice(1))]),
           a.user_name ? ' · ' + a.user_name : '', a.created_at ? ' · ' + fmtDate((a.created_at || '').slice(0, 10)) : '',
           isFu && a.due_date ? el('span', { style: 'margin-left:6px;font-weight:700;color:' + (a.done ? '#15803D' : '#C2410C') }, [a.done ? '✓ done' : ('due ' + fmtDate(a.due_date))]) : '',
           isFu && !a.done ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: async function (ev2) { ev2.preventDefault(); try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} } }, ['mark done']) : '',
         ]),
-        a.body ? el('div', { style: 'font-size:13px;color:#0D1B2A;margin-top:2px' }, [a.body]) : null,
+        activityBodyNode(a),
       ]));
     });
     if (!(lead.activities || []).length) timeline.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No activity yet.']));

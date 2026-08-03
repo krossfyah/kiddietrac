@@ -103,7 +103,7 @@
         a slim rail that keeps every section's ICON (still clickable for quick
         access); » expands it again. State persists in localStorage. ── */
 .app-shell.app-shell--sidebar { transition: grid-template-columns 0.22s ease; }
-body.kt-sidebar-collapsed .app-shell.app-shell--sidebar { grid-template-columns: 76px 1fr !important; }
+body.kt-sidebar-collapsed .app-shell.app-shell--sidebar { grid-template-columns: 92px 1fr !important; }
 body.kt-sidebar-collapsed #appSidebar { overflow: visible; }
 /* Hide the chrome that can't shrink to a rail; keep the nav sections' icons. */
 body.kt-sidebar-collapsed #kt-search-widget,
@@ -115,8 +115,10 @@ body.kt-sidebar-collapsed #navLinks > *:not(.sidebar-section),
 body.kt-sidebar-collapsed #navLinks .sidebar-section-label,
 body.kt-sidebar-collapsed #navLinks .nav-label { display: none !important; }
 body.kt-sidebar-collapsed #navLinks { padding-top: 44px; }
-body.kt-sidebar-collapsed #navLinks .nav-link { justify-content: center !important; padding-left: 0 !important; padding-right: 0 !important; padding-top: 11px !important; padding-bottom: 11px !important; }
-body.kt-sidebar-collapsed #navLinks .nav-icon { margin: 0 !important; font-size: 27px; line-height: 1; width: auto; }
+body.kt-sidebar-collapsed #navLinks .nav-link { justify-content: center !important; padding-left: 0 !important; padding-right: 0 !important; padding-top: 13px !important; padding-bottom: 13px !important; }
+/* Override kt-sidebar-compact.css `#appSidebar .nav-link .nav-icon{font-size:14px!important;width:18px!important}`
+   — match its selector depth + add the collapsed body class so this wins on specificity. */
+body.kt-sidebar-collapsed #appSidebar .nav-link .nav-icon { margin: 0 !important; font-size: 32px !important; line-height: 1 !important; width: auto !important; height: auto !important; }
 body.kt-sidebar-collapsed #navLinks .sidebar-section { margin-top: 6px; }
 
 #kt-sb-collapse, #kt-sb-toggle {

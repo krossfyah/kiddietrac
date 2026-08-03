@@ -107,9 +107,16 @@ class SalesController extends Controller
             }
         }
 
+        // Salesforce-style field history — capture what changed before we overwrite.
+        $edits = $this->diffLeadChanges($l, $data);
+
         $l->fill($data);
         $l->last_activity_at = now();
         $l->save();
+
+        if ($edits) {
+            $this->logActivity($l, 'edit', $edits, null);
+        }
 
         // A new quick follow-up date opens a follow-up task.
         if (array_key_exists('follow_up_date', $data) && $data['follow_up_date']) {
@@ -210,6 +217,17 @@ class SalesController extends Controller
         $q = SalesQuote::findOrFail($quote);
         $data = $this->validateQuote($r);
 
+        // Snapshot for the change history (before we overwrite).
+        $qLabels = ['title' => 'Title', 'billing_period' => 'Billing period', 'valid_until' => 'Valid until', 'discount' => 'Discount', 'notes' => 'Notes', 'status' => 'Status'];
+        $qFmt = function ($k, $v) {
+            if ($v === null || $v === '') { return '—'; }
+            if ($k === 'discount') { return '$' . number_format((float) $v, 2); }
+            if ($k === 'valid_until') { return $v instanceof \DateTimeInterface ? $v->format('Y-m-d') : substr((string) $v, 0, 10); }
+            return (string) $v;
+        };
+        $qBefore = [];
+        foreach ($qLabels as $k => $lb) { $qBefore[$k] = $qFmt($k, $q->getAttribute($k)); }
+
         $q->fill(array_intersect_key($data, array_flip(['title', 'billing_period', 'valid_until', 'discount', 'notes'])));
         if (in_array($r->input('status'), ['draft', 'sent', 'accepted', 'declined'], true)) {
             $q->status = $r->input('status');
@@ -230,6 +248,23 @@ class SalesController extends Controller
         $q->save();
         if ($r->has('items')) {
             $this->syncItems($q, $data['items'] ?? []);
+        }
+
+        // Log field-level edits to the lead's change history (Salesforce-style).
+        if ($lead = SalesLead::find($q->lead_id)) {
+            $qLines = [];
+            foreach ($qLabels as $k => $lb) {
+                $after = $qFmt($k, $q->getAttribute($k));
+                if ($qBefore[$k] !== $after) {
+                    $qLines[] = $lb . ': ' . $qBefore[$k] . ' → ' . $after;
+                }
+            }
+            if ($r->has('items')) {
+                $qLines[] = 'Line items updated';
+            }
+            if ($qLines) {
+                $this->logActivity($lead, 'edit', "Proposal {$q->number} updated\n" . implode("\n", $qLines), null);
+            }
         }
 
         return response()->json($q->fresh('items'));
@@ -534,6 +569,80 @@ class SalesController extends Controller
         $q->subtotal = round($subtotal, 2);
         $q->total = round($subtotal - (float) $q->discount, 2);
         $q->save();
+    }
+
+    /** Human labels for the lead fields we track in the change history. */
+    private function leadFieldLabels(): array
+    {
+        return [
+            'name' => 'Contact', 'title' => 'Job title', 'company' => 'Company',
+            'website' => 'Website', 'email' => 'Email', 'phone' => 'Phone',
+            'address' => 'Street address', 'city' => 'City', 'province' => 'Province/State',
+            'postal_code' => 'Postal/ZIP', 'country' => 'Country', 'current_solution' => 'Using today',
+            'owner_name' => 'Owner name', 'owner_title' => 'Owner title', 'owner_email' => 'Owner email',
+            'owner_phone' => 'Owner phone', 'num_children' => '# children', 'num_locations' => '# locations',
+            'source' => 'Lead source', 'owner_id' => 'Deal owner', 'value' => 'Est. value',
+            'expected_close' => 'Expected close', 'follow_up_date' => 'Next follow-up', 'notes' => 'Notes',
+        ];
+    }
+
+    /** Build a "Field: old → new" list (one per line) for a lead update, or null if nothing changed. */
+    private function diffLeadChanges(SalesLead $l, array $data): ?string
+    {
+        $lines = [];
+        foreach ($this->leadFieldLabels() as $key => $label) {
+            if (! array_key_exists($key, $data)) {
+                continue;
+            }
+            $old = $l->getOriginal($key);
+            $new = $data[$key];
+            if ($this->normValue($key, $old) === $this->normValue($key, $new)) {
+                continue;
+            }
+            $lines[] = $label . ': ' . $this->displayValue($key, $old) . ' → ' . $this->displayValue($key, $new);
+        }
+
+        return $lines ? implode("\n", $lines) : null;
+    }
+
+    /** Canonical comparable form so "7200.00" == "7200" and dates ignore time. */
+    private function normValue(string $key, $v): string
+    {
+        if ($v === null || $v === '') {
+            return '';
+        }
+        if ($key === 'value') {
+            return number_format((float) $v, 2, '.', '');
+        }
+        if (in_array($key, ['num_children', 'num_locations', 'owner_id'], true)) {
+            return (string) (int) $v;
+        }
+        if (in_array($key, ['expected_close', 'follow_up_date'], true)) {
+            return substr((string) ($v instanceof \DateTimeInterface ? $v->format('Y-m-d') : $v), 0, 10);
+        }
+
+        return trim((string) $v);
+    }
+
+    /** Pretty value for display in the history feed. */
+    private function displayValue(string $key, $v): string
+    {
+        if ($v === null || $v === '') {
+            return '—';
+        }
+        if ($key === 'value') {
+            return '$' . number_format((float) $v, 2);
+        }
+        if ($key === 'owner_id') {
+            $u = User::find((int) $v);
+
+            return $u ? (trim($u->first_name . ' ' . $u->last_name) ?: ('User #' . $v)) : ('User #' . $v);
+        }
+        if (in_array($key, ['expected_close', 'follow_up_date'], true)) {
+            return $v instanceof \DateTimeInterface ? $v->format('Y-m-d') : substr((string) $v, 0, 10);
+        }
+
+        return (string) $v;
     }
 
     private function logActivity(SalesLead $lead, string $type, ?string $body, ?string $due): SalesActivity
