@@ -12,8 +12,50 @@
   if (!KT || !KT.Shell || !KT.Shell.registerScreen) return;
   var Shell = KT.Shell;
 
-  // Global avatar helper — initials in a deterministic colour, or a photo.
-  // Usage: KT.avatar('Jane Doe', { size: 32, photoUrl: '/storage/...' }) → HTML string.
+  // Normalise a stored sex/gender value to 'male' | 'female' | '' (unknown).
+  KT.normSex = KT.normSex || function (v) {
+    var s = String(v == null ? '' : v).trim().toLowerCase();
+    if (/^(m|male|boy|man)$/.test(s)) return 'male';
+    if (/^(f|female|girl|woman)$/.test(s)) return 'female';
+    return '';
+  };
+
+  // When sex is unknown, ASSUME one (deterministically by name, so it's stable
+  // per person) rather than falling back to initials — every photo-less avatar
+  // shows a male/female silhouette. Self-corrects once the person onboards, where
+  // choosing a sex is mandatory. Pass an explicit sex to override the guess.
+  KT.guessSex = KT.guessSex || function (name) {
+    var s = String(name == null ? '' : name);
+    var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
+    return (h % 2 === 0) ? 'male' : 'female';
+  };
+
+  // Person EMOJI for a sex (+ child variant). This is the platform-wide default
+  // "face" avatar used wherever there's no photo — instead of initials.
+  KT.emojiFor = KT.emojiFor || function (sex, isChild) {
+    var s = KT.normSex(sex);
+    if (isChild) return s === 'female' ? '👧' : s === 'male' ? '👦' : '🧒';
+    return s === 'female' ? '👩' : s === 'male' ? '👨' : '🧑';
+  };
+
+  // Emoji avatar: a coloured circle (deterministic by name, for visual variety)
+  // with a person emoji. Sex is used when known, else assumed by name so it's
+  // still a face, not letters — self-corrects once a real sex is on file.
+  KT.emojiAvatar = KT.emojiAvatar || function (name, size, sex, isChild) {
+    size = size || 32;
+    var nm = String(name == null ? '' : name).trim();
+    var palette = ['#7C3AED', '#E91E8C', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#0f9d6b', '#DB2777', '#0891B2'];
+    var h = 0; for (var i = 0; i < nm.length; i++) { h = (h * 31 + nm.charCodeAt(i)) >>> 0; }
+    var bg = palette[h % palette.length];
+    var em = KT.emojiFor(KT.normSex(sex) || KT.guessSex(nm), isChild);
+    return '<span class="kt-avatar kt-avatar-emoji" title="' + nm.replace(/"/g, '') + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;vertical-align:middle;background:' + bg + ';font-size:' + Math.round(size * 0.6) + 'px;line-height:1;">' + em + '</span>';
+  };
+  // Back-comat alias for the earlier silhouette API.
+  KT.sexAvatarSvg = KT.sexAvatarSvg || function (sex, size) { return KT.emojiAvatar('', size, sex, false); };
+
+  // Global avatar helper — a photo, else a sex-based silhouette (when sex known),
+  // else initials in a deterministic colour.
+  // Usage: KT.avatar('Jane Doe', { size: 32, photoUrl: '/storage/...', sex: 'female' }) → HTML string.
   if (!KT.avatar) {
     KT.avatar = function (name, opts) {
       opts = opts || {};
@@ -26,7 +68,11 @@
       var base = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:' + Math.round(size * 0.4) + 'px;color:#fff;background:' + bg + ';overflow:hidden;vertical-align:middle;';
       var p = opts.photoUrl;
       if (p) return '<span class="kt-avatar" title="' + nm.replace(/"/g, '') + '" style="' + base + 'background-image:url(' + p + ');background-size:cover;background-position:center;"></span>';
-      return '<span class="kt-avatar" title="' + nm.replace(/"/g, '') + '" style="' + base + '">' + initials + '</span>';
+      // No photo → an emoji face avatar (never initials). Known sex when given,
+      // else assumed by name. Pass opts.kind:'child' for a child face. Set
+      // opts.initials:true to force the old initials look for a specific caller.
+      if (opts.initials === true) return '<span class="kt-avatar" title="' + nm.replace(/"/g, '') + '" style="' + base + '">' + initials + '</span>';
+      return KT.emojiAvatar(nm, size, opts.sex, opts.kind === 'child' || opts.child === true);
     };
   }
 
@@ -39,6 +85,9 @@
       primary: [
         { hash: 'today',              icon: '✨', label: 'Today',        sub: "Your child's day" },
         { hash: 'photos',             icon: '📸', label: 'Photos' },
+        { hash: 'walks',              icon: '🚶', label: 'Walks',        sub: 'Live location' },
+        { hash: 'awards',             icon: '🏆', label: 'Awards' },
+        { hash: 'my-forms',           icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'messages',           icon: '💬', label: 'Messages' },
         { hash: 'my-tasks',           icon: '📋', label: 'My tasks' },
         { hash: 'menu',               icon: '🍽️', label: 'Menu' },
@@ -75,8 +124,12 @@
         { hash: 'my-tasks',      icon: '📋', label: 'My tasks' },
         { hash: 'children',      icon: '🧒', label: 'Child records' },
         { hash: 'care-log',      icon: '✅', label: 'Daily log' },
+        { hash: 'walk',          icon: '🚶', label: 'Walk / outing', sub: 'Share live GPS' },
         { hash: 'observations',  icon: '👀', label: 'Observations' },
+        { hash: 'awards',        icon: '🏆', label: 'Awards',       sub: 'Celebrate a child' },
         { hash: 'lesson-plans',  icon: '📚', label: 'Lesson plans' },
+        { hash: 'report-cards',  icon: '📑', label: 'Report cards', sub: 'Sign & submit' },
+        { hash: 'my-forms',      icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'menu',          icon: '🍽️', label: 'Weekly menu' },
         { hash: 'chat',          icon: '💬', label: 'Messages' },
         { hash: 'forms',         icon: '📝', label: 'Forms' },
@@ -143,7 +196,7 @@
     announcements: 'Latest news from your centre', support: 'Get help or report an issue',
     help: 'Guides and answers', children: 'Child records & details',
     'my-tasks': 'Tasks assigned to you', tasks: 'Assign and track educator tasks',
-    'care-log': 'Log daily care moments', observations: 'Learning observations',
+    'care-log': 'Log daily care moments', walk: 'Start a walk & share your live location', observations: 'Learning observations',
     'lesson-plans': 'Weekly lesson plans', menu: "This week's meals", incidents: 'Report & view incidents',
     'time-clock': 'Clock in and out', 'my-schedule': 'Your work schedule',
     'my-hours': 'Your logged hours', 'time-off': 'Request time off',
