@@ -39,21 +39,62 @@
   }
 
   /* ───────── LIBRARY: upload + list ───────── */
+  var FIELD = 'width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;box-sizing:border-box;background:#fff;color:#0F172A;font-family:inherit;';
+  var LBL = 'display:block;font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.3px;margin:0 0 6px;';
   function renderLibrary(body) {
     body.innerHTML =
-      '<div class="kt-card" style="background:#fff;border:1px solid #E7EBF0;border-radius:16px;padding:20px 22px;margin-bottom:18px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
-      + '<div style="font-weight:800;font-size:14px;margin-bottom:12px;">⬆️ Upload a new form</div>'
-      + '<input id="fm-title" placeholder="Form title (e.g. Consent to photograph)" style="width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:10px;">'
-      + '<textarea id="fm-desc" placeholder="Short description (optional)" rows="2" style="width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:9px;font-size:13.5px;box-sizing:border-box;margin-bottom:10px;font-family:inherit;"></textarea>'
-      + '<div style="font-size:12.5px;font-weight:700;color:#475569;margin-bottom:6px;">Who must sign it?</div>'
-      + '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;">'
-      + AUD.map(function (a) { return '<label style="display:flex;align-items:center;gap:6px;font-size:13.5px;cursor:pointer;"><input type="checkbox" class="fm-aud" value="' + a[0] + '">' + a[2] + ' ' + a[1] + '</label>'; }).join('')
-      + '</div>'
-      + '<input id="fm-file" type="file" accept="application/pdf" style="font-size:13px;margin-bottom:12px;">'
-      + '<div><button id="fm-upload" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 22px;font-weight:800;font-size:13.5px;cursor:pointer;">Upload &amp; assign</button>'
-      + '<span id="fm-upout" style="font-size:13px;font-weight:700;margin-left:12px;"></span></div>'
-      + '</div>'
+      '<div class="kt-card" style="background:#fff;border:1px solid #E7EBF0;border-radius:16px;padding:22px 24px;margin-bottom:18px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
+      + '<div style="font-weight:800;font-size:15px;margin:0 0 4px;color:#0F172A;">⬆️ Upload a new form</div>'
+      + '<div style="font-size:12.5px;color:#94A3B8;margin-bottom:18px;">Add a PDF, choose who signs it, then assign.</div>'
+      + '<div style="display:flex;flex-direction:column;gap:16px;">'
+      // Title
+      + '<div><label for="fm-title" style="' + LBL + '">Form title</label>'
+      + '<input id="fm-title" placeholder="e.g. Consent to photograph" style="' + FIELD + '"></div>'
+      // Description
+      + '<div><label for="fm-desc" style="' + LBL + '">Description <span style="color:#CBD5E1;font-weight:600;text-transform:none;letter-spacing:0;">(optional)</span></label>'
+      + '<textarea id="fm-desc" placeholder="A short note about this form" rows="2" style="' + FIELD + 'resize:vertical;min-height:52px;"></textarea></div>'
+      // Audience chips
+      + '<div><label style="' + LBL + '">Who must sign it?</label>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+      + AUD.map(function (a) {
+          return '<label class="fm-audchip" style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:#334155;cursor:pointer;border:1.5px solid #E2E8F0;border-radius:999px;padding:8px 14px;user-select:none;transition:all .12s;">'
+            + '<input type="checkbox" class="fm-aud" value="' + a[0] + '" style="accent-color:#1F6FB2;width:16px;height:16px;margin:0;">'
+            + '<span>' + a[2] + ' ' + a[1] + '</span></label>';
+        }).join('')
+      + '</div></div>'
+      // File
+      + '<div><label style="' + LBL + '">PDF file</label>'
+      + '<label id="fm-drop" for="fm-file" style="display:flex;align-items:center;gap:12px;border:1.5px dashed #CBD5E1;border-radius:10px;padding:14px 16px;cursor:pointer;background:#F8FAFC;transition:all .12s;">'
+      + '<span style="font-size:22px;line-height:1;">📄</span>'
+      + '<span id="fm-fname" style="font-size:13.5px;color:#64748B;font-weight:600;">Choose a PDF…</span>'
+      + '<span style="margin-left:auto;font-size:12px;font-weight:800;color:#1F6FB2;border:1.5px solid #BFDBFE;background:#EFF6FF;border-radius:8px;padding:6px 12px;">Browse</span>'
+      + '</label>'
+      + '<input id="fm-file" type="file" accept="application/pdf" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"></div>'
+      // Action row
+      + '<div style="display:flex;align-items:center;gap:14px;border-top:1px solid #F1F5F9;padding-top:16px;">'
+      + '<button id="fm-upload" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 24px;font-weight:800;font-size:13.5px;cursor:pointer;">Upload &amp; assign</button>'
+      + '<span id="fm-upout" style="font-size:13px;font-weight:700;"></span></div>'
+      + '</div></div>'
       + '<div id="fm-list"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+
+    // Chip active-state highlight + filename echo + dropzone accent.
+    body.querySelectorAll('.fm-audchip').forEach(function (chip) {
+      var cb = chip.querySelector('input');
+      function sync() {
+        chip.style.borderColor = cb.checked ? '#1F6FB2' : '#E2E8F0';
+        chip.style.background = cb.checked ? '#EFF6FF' : '#fff';
+        chip.style.color = cb.checked ? '#1E40AF' : '#334155';
+      }
+      cb.addEventListener('change', sync); sync();
+    });
+    var fileIn = body.querySelector('#fm-file'), drop = body.querySelector('#fm-drop');
+    fileIn.addEventListener('change', function () {
+      var f = fileIn.files[0];
+      body.querySelector('#fm-fname').textContent = f ? f.name : 'Choose a PDF…';
+      body.querySelector('#fm-fname').style.color = f ? '#0F172A' : '#64748B';
+      drop.style.borderColor = f ? '#1F6FB2' : '#CBD5E1';
+      drop.style.background = f ? '#EFF6FF' : '#F8FAFC';
+    });
 
     body.querySelector('#fm-upload').onclick = function () {
       var out = body.querySelector('#fm-upout');
