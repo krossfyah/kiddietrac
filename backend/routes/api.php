@@ -366,6 +366,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // payroll routes stay centre-wide and stay director-gated.
         Route::get   ('/provider/shifts/me',        [\App\Http\Controllers\Api\EducatorSelfController::class, 'myShifts']);
         Route::get   ('/provider/children',          [\App\Http\Controllers\Api\EducatorSelfController::class, 'children']);
+        // ── Forms Manager: upload PDF → assign to roles → e-sign → track sign-offs ──
+        Route::get   ('/admin/managed-forms/signoffs',           [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffs']);
+        Route::get   ('/admin/managed-forms/{id}/signoff/{sid}',  [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffDetail']);
+        Route::get   ('/admin/managed-forms',                     [\App\Http\Controllers\Api\ManagedFormController::class, 'index']);
+        Route::post  ('/admin/managed-forms',                     [\App\Http\Controllers\Api\ManagedFormController::class, 'store']);
+        Route::patch ('/admin/managed-forms/{id}',                [\App\Http\Controllers\Api\ManagedFormController::class, 'update']);
+        Route::delete('/admin/managed-forms/{id}',                [\App\Http\Controllers\Api\ManagedFormController::class, 'destroy']);
+        Route::get   ('/managed-forms/assigned',                  [\App\Http\Controllers\Api\ManagedFormController::class, 'assigned']);
+        Route::post  ('/managed-forms/{id}/sign',                 [\App\Http\Controllers\Api\ManagedFormController::class, 'sign']);
         Route::get   ('/provider/children/{child}',  [\App\Http\Controllers\Api\EducatorSelfController::class, 'childRecord']);
         Route::get   ('/admin/tours',               [\App\Http\Controllers\Api\CareController::class, 'listTours']);
         Route::patch ('/admin/tours/{id}',          [\App\Http\Controllers\Api\CareController::class, 'updateTour']);

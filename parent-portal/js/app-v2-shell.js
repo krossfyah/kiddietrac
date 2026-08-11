@@ -78,7 +78,7 @@
       // Fail-open when the active agency is unknown; the screen itself re-checks server-side.
       var _hccAg_v = parseInt(sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id') || '0', 10);
       var hccEnabled_v = (!_hccAg_v) || _hccAg_v === 2 || _hccAg_v === 6 || isPlatformAdmin_v22p34;
-      var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }, { hash: 'provider-map', label: 'Provider map', icon: '🗺️' }];
+      var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }, { hash: 'admin-centres', label: 'Centres', icon: '🏫' }, { hash: 'provider-day', label: 'Daily Overview', icon: '🗓️' }, { hash: 'provider-map', label: 'Provider map', icon: '🗺️' }];
       if (!isPlatformAdmin_v22p34) overviewItems.push({ hash: 'agencies', label: 'Agencies', icon: '🏢' });
       return [
         { label: 'Overview', items: overviewItems },
@@ -86,14 +86,16 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'team-messages',  label: 'Team messages',    icon: '👥', badgeKey: 'team_unread' },
+          { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
+          { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'lesson-plans-ai', label: 'AI Lesson Plans',  icon: '\ud83d\udcd6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '📅' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
-          { hash: 'waitlist',       label: 'Waitlist',         icon: '⏳' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
@@ -139,18 +141,21 @@
           { hash: 'admin-features', label: 'Feature flags',    icon: '⚙️' },
           { hash: 'admin-branding', label: 'Branding',         icon: '🎨' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
+          { hash: 'maintenance',   label: 'Maintenance',      icon: '🛠️' },
+          { hash: 'mail-settings', label: 'Email',            icon: '✉️' },
         ]}] : []),
         ...(isPlatformAdmin_v22p34 ? [{ label: 'Website', items: [{ hash: 'marketing-site', label: 'Website', icon: '🌐' }] }] : []),
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
+          { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},
         { label: 'Finance', items: [
           { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
+          { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
         ]},
         { label: 'Administration', items: [
           { hash: 'admin-users',      label: 'User management',  icon: '👥' },
-          { hash: 'admin-centres',    label: 'Centres / Rooms',  icon: '🏫' },
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
           { hash: 'admin-billing',    label: 'Billing (Stripe)', icon: '💳' },
@@ -190,6 +195,7 @@
           { hash: 'videos',           label: 'Video feed',      icon: '🎬' },
           { hash: 'photo-tagging',    label: 'Photo AI tagging',icon: '🪄' },
           { hash: 'conferences',      label: 'Conferences',     icon: '🗣' },
+          { hash: 'forms-manager',    label: 'Forms Manager',   icon: '🗂️' },
         ]},
         { label: 'Settings', items: [
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -197,6 +203,7 @@
           { hash: 'tuition-plans',      label: 'Tuition plans',       icon: '💵' },
           { hash: 'billing-setup',      label: 'Billing',             icon: '💳' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
+          { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
 
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
@@ -227,20 +234,24 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'team-messages',  label: 'Team messages',    icon: '👥', badgeKey: 'team_unread' },
+          { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
+          { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'lesson-plans-ai', label: 'AI Lesson Plans',  icon: '\ud83d\udcd6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '📅' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
           { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
-          { hash: 'waitlist',       label: 'Waitlist',         icon: '⏳' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
+          { hash: 'maintenance',   label: 'Maintenance',      icon: '🛠️' },
+          { hash: 'mail-settings', label: 'Email',            icon: '✉️' },
         ]},
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📣' },
@@ -274,6 +285,10 @@
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
+          { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
+        ]},
+        { label: 'Finance', items: [
+          { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
         ]},
         { label: 'Settings', items: [
           { hash: 'billing-setup', label: 'Billing reminders', icon: '💳' },
@@ -361,6 +376,7 @@
           { hash: 'audit-logs', label: 'Audit logs', icon: '📋' },
           { hash: 'children',   label: 'Children',   icon: '🧒' },
           { hash: 'forms',      label: 'Forms',      icon: '📝' },
+          { hash: 'forms-manager', label: 'Forms Manager', icon: '🗂️' },
           { hash: 'help',       label: 'Help',       icon: '📖' },
         ]},
       ];
@@ -494,7 +510,10 @@
         if (items[j].hash === base) return { icon: items[j].icon || '', label: items[j].label || base, section: secs[i].label || '' };
       }
     }
-    return { icon: '', label: base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }), section: '' };
+    // Icons for screens reached outside the sidebar nav (home tiles, deep links)
+    // so their auto-banner gets a unique glyph instead of the generic ✨ default.
+    var EXTRA_ICONS = { 'awards': '🏆', 'walk': '🚶' };
+    return { icon: EXTRA_ICONS[base] || '', label: base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }), section: '' };
   }
   // One-line description under each banner. Keyed by screen hash, so the wording lives
   // in one place instead of being re-invented per screen (which is why some banners had
@@ -510,6 +529,7 @@
     'chat': 'Conversations with families and staff.',
     'messages': 'Conversations with families and staff.',
     'announcements': 'Broadcast news to a centre, a room, or the whole agency.',
+    'awards': 'Celebrate a child’s effort — daily, weekly or monthly. Parents see it too, and you can print a certificate.',
     'lesson-plans': 'Weekly plans for each room.',
     'lesson-plans-ai': 'HDLH-aware weekly plans, drafted in seconds.',
     'observations': 'Learning stories and developmental observations for each child.',
@@ -562,6 +582,7 @@
     'admin-features': 'Turn features on and off per agency.',
     'admin-mrr': 'Recurring revenue across the platform.',
     'invitation-codes': 'Codes that let a family or educator join.',
+    'synced-waitlist': 'Waitlist leads and enquiries.',
     'edocuments': 'Documents on file, and what is still outstanding.',
     'signed-docs': 'Agreements that have been signed.',
     'doc-workflows': 'Who has to sign what, and in which order.',
@@ -577,6 +598,7 @@
     'anomalies': 'Unusual activity worth a second look.',
 
     'admin-billing': 'Invoices, payments and Stripe.',
+    'external-billing': 'Invoices and balances for the agency.',
     'billing': 'Invoices, payments and balances.',
     'billing-setup': 'Fees, schedules and automatic reminders.',
     'billing-schedule': 'When invoices go out, and when payment is due.',
@@ -598,6 +620,8 @@
     'ai-churn': 'Families at risk of leaving.',
     'ai-docs': 'Pull the details out of an uploaded document.',
     'digest-status': 'Whether the daily AI summaries went out.',
+    'maintenance': 'Schedule downtime and notify users by email.',
+    'email-log': 'Every email the system sent — preview the exact message + open tracking.',
 
     'marketing-campaigns': 'Campaigns to fill your empty spaces.',
     'drip-campaigns': 'Automated follow-up with prospective families.',
@@ -883,7 +907,17 @@
     const screenKey = `${role}:${hash}`;
     const fallbackKey = `${role}:dashboard`;
 
-    const fn = screens[screenKey] || screens[fallbackKey] || screens['guardian:today'];
+    // Super-admins operate under the resolved `agency_admin` role, but several
+    // screens (Maintenance, Email/mail-settings, and other super-admin-only
+    // Reseller tools) are registered ONLY under `platform_admin:`. Try that key
+    // before falling back to the dashboard — otherwise those nav items silently
+    // landed on the home screen ("Maintenance / Email don't open").
+    const isPlatform = !!(user && Array.isArray(user.roles) && user.roles.indexOf('platform_admin') !== -1)
+      || sessionStorage.getItem('kt_is_platform_admin') === '1';
+
+    const fn = screens[screenKey]
+      || (isPlatform ? screens['platform_admin:' + hash] : null)
+      || screens[fallbackKey] || screens['guardian:today'];
 
     if (!fn) {
       main.appendChild(emptyState('🤔', 'Screen not available', 'No screen registered for this role + page.'));
@@ -914,7 +948,10 @@
         // folds them INTO it. That is why AI Lesson Plans looked nothing like the rest
         // of the site and Tours stacked two banners.
         var __hasHero = function () {
-          return !!main.querySelector('.kt-hero, .kt-page-hero');
+          // A screen can opt out of the auto-hero explicitly (educator Today renders
+          // its own "Today at a glance" banner in that slot) via data-kt-no-autohero,
+          // without needing a .kt-hero element that global banner-fx would decorate.
+          return !!main.querySelector('.kt-hero, .kt-page-hero, [data-kt-no-autohero]');
         };
         var __ensure = function () {
           // The budget is GLOBAL per screen visit, not per render pass. A screen that
@@ -962,8 +999,15 @@
       // a11y: remember what had focus so we can restore it when the modal closes.
       const prevFocus = document.activeElement;
 
+      // Lock the page behind the modal so a mouse-wheel scroll inside the dialog
+      // doesn't scroll the whole window — it stays focused on the popup.
+      const _htmlEl = document.documentElement;
+      const _prevOverflow = _htmlEl.style.overflow;
+      _htmlEl.style.overflow = 'hidden';
+
       const close = () => {
         document.removeEventListener('keydown', onKeyDown, true);
+        _htmlEl.style.overflow = _prevOverflow;
         Dom.clear(root);
         try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
         if (onClose) onClose();
@@ -1009,8 +1053,12 @@
       header.appendChild(xBtn);
       modal.appendChild(header);
 
-      // Body
+      // Body — scrolls inside the dialog (overscroll-behavior:contain stops the
+      // scroll from chaining to the page once the body hits its top/bottom).
       const bodyEl = Dom.el('div', { class: 'modal-body' });
+      bodyEl.style.overflowY = 'auto';
+      bodyEl.style.overscrollBehavior = 'contain';
+      if (!bodyEl.style.maxHeight) bodyEl.style.maxHeight = 'calc(90vh - 128px)';
       if (typeof body === 'string') {
         bodyEl.innerHTML = body;
       } else if (body instanceof Node) {
@@ -1081,6 +1129,8 @@
     close() {
       const root = Dom.$('#modalRoot');
       if (root) Dom.clear(root);
+      // Release the background scroll lock set in open().
+      try { document.documentElement.style.overflow = ''; } catch (e) {}
     },
 
     confirm({ title, message, confirmLabel = 'Confirm', destructive = false, onConfirm }) {
@@ -1225,5 +1275,15 @@
     setBadge,
     startApp,
     homeHashForRole,
+    // Lift any action buttons out of the current screen's banner into the toolbar
+    // beneath it. Screens that RE-RENDER themselves (e.g. a Refresh button that
+    // rebuilds its own hero) must call this afterwards — the shell's automatic
+    // normalisation is budget-capped per visit and its observer disconnects after a
+    // few seconds, so a late self-re-render would otherwise leave the buttons sitting
+    // inside the banner artwork. Idempotent: a no-op once the buttons are already out.
+    liftHeroButtons: function (m) {
+      try { return liftBannerButtons(m || document.getElementById('appMain')); }
+      catch (e) { return false; }
+    },
   };
 })(window);
