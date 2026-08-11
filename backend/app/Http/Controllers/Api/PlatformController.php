@@ -159,7 +159,78 @@ final class PlatformController extends Controller
             'top_agencies' => $topAgencies,
             'recent_events' => $recentEvents,
             'business_metrics' => $this->businessMetrics($mrrCents, $mrrTrend, $children, $agencies, $thirtyDaysAgo),
+            'platform_performance' => $this->platformPerformance($thirtyDaysAgo),
         ]);
+    }
+
+    /**
+     * Operational health + usage/engagement for the platform overview.
+     * All cheap aggregates over email_logs / audit_logs / check_events.
+     */
+    private function platformPerformance($thirtyDaysAgo): array
+    {
+        $now = now();
+        $sevenDaysAgo = $now->copy()->subDays(7);
+        $today = $now->copy()->startOfDay();
+        $dayAgo = $now->copy()->subDay();
+
+        // ── Email deliverability (last 7 days) ──
+        $emailTotal = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->count();
+        $emailFailed = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->whereIn('status', ['failed', 'error'])->count();
+        $emailSuppressed = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->where('status', 'suppressed')->count();
+        $emailOpened = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->whereNotNull('opened_at')->count();
+        $emailDelivered = max(0, $emailTotal - $emailFailed - $emailSuppressed);
+        $openRate = $emailDelivered > 0 ? (int) round(($emailOpened / $emailDelivered) * 100) : 0;
+        $failRate = $emailTotal > 0 ? round(($emailFailed / $emailTotal) * 100, 1) : 0.0;
+
+        // ── Usage & engagement ──
+        $loginsToday = DB::table('audit_logs')->where('action', 'login')->where('created_at', '>=', $today)->count();
+        $logins7d = DB::table('audit_logs')->where('action', 'login')->where('created_at', '>=', $sevenDaysAgo)->count();
+        $activeUsers24h = DB::table('audit_logs')->where('created_at', '>=', $dayAgo)->whereNotNull('user_id')->distinct()->count('user_id');
+
+        // Active agencies = those with a child check-in in the last 30 days.
+        $activeAgencies = DB::table('check_events as ce')
+            ->join('rooms as r', 'r.id', '=', 'ce.room_id')
+            ->join('centres as c', 'c.id', '=', 'r.centre_id')
+            ->where('ce.occurred_at', '>=', $thirtyDaysAgo)
+            ->whereNull('c.deleted_at')
+            ->distinct()->count('c.agency_id');
+        $totalAgencies = DB::table('agencies')->whereNull('deleted_at')->count();
+        $dormantAgencies = max(0, $totalAgencies - $activeAgencies);
+
+        // ── System ──
+        $dbMb = 0;
+        try {
+            $r = DB::selectOne('SELECT ROUND(SUM(data_length + index_length) / 1048576) AS mb FROM information_schema.tables WHERE table_schema = DATABASE()');
+            $dbMb = (int) ($r->mb ?? 0);
+        } catch (\Throwable $e) {
+        }
+
+        return [
+            'email' => [
+                'window_days' => 7,
+                'total' => $emailTotal,
+                'delivered' => $emailDelivered,
+                'opened' => $emailOpened,
+                'failed' => $emailFailed,
+                'suppressed' => $emailSuppressed,
+                'open_rate_pct' => $openRate,
+                'fail_rate_pct' => $failRate,
+            ],
+            'usage' => [
+                'logins_today' => $loginsToday,
+                'logins_7d' => $logins7d,
+                'active_users_24h' => $activeUsers24h,
+                'active_agencies_30d' => $activeAgencies,
+                'dormant_agencies' => $dormantAgencies,
+                'total_agencies' => $totalAgencies,
+            ],
+            'system' => [
+                'db_size_mb' => $dbMb,
+                'api_ok' => true,
+                'generated_at' => $now->toIso8601String(),
+            ],
+        ];
     }
 
     /**
@@ -283,6 +354,9 @@ final class PlatformController extends Controller
                 'brand_address' => $set['brand_address'] ?? null,
                 'country' => $set['country'] ?? null,
                 'default_locale' => $set['default_locale'] ?? ($a->locale ?? null),
+                // Explicit agency owner (super-admin editable) for the Edit modal.
+                'owner_name' => $set['owner']['name'] ?? null,
+                'owner_email' => $set['owner']['email'] ?? null,
                 'centre_count' => (int) ($centresPerAgency[$a->id] ?? 0),
                 'family_count' => $familyCount,
                 'child_count' => $childCount,
@@ -542,10 +616,13 @@ final class PlatformController extends Controller
         try {
             Mail::html($html, function ($m) use ($data) {
                 $m->to($data['admin_email'], $data['admin_first_name'].' '.$data['admin_last_name'])
-                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject('Welcome to Kiddietrac — set your password');
                 $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
+                // Exempt from the not-onboarded gate — an invite must reach a user
+                // who hasn't accepted yet.
+                $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
                 $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
             });
             if (Schema::hasTable('email_logs')) {
@@ -633,8 +710,115 @@ final class PlatformController extends Controller
     public function emailLogs(Request $request): JsonResponse
     {
         if (! Schema::hasTable('email_logs')) return response()->json(['logs' => []]);
-        $logs = DB::table('email_logs')->orderByDesc('id')->limit(300)->get();
-        return response()->json(['logs' => $logs]);
+        // Never ship the (potentially huge) stored HTML body in the LIST — expose a
+        // has_body flag; the actual preview is fetched per-row via emailPreview().
+        $cols = ['id', 'to_email', 'to_name', 'from_email', 'subject', 'mailer', 'status', 'error', 'created_at', 'opened_at', 'opens'];
+        // STRICT per-tenant isolation: when the platform admin has switched INTO a
+        // specific agency (X-Active-Agency-Id is a numeric id), show ONLY that
+        // agency's emails. 'all'/unset = the platform-wide super-admin view. Previously
+        // this returned every agency's emails regardless of the active agency (leak).
+        $q = DB::table('email_logs')->orderByDesc('id');
+        $active = $request->header('X-Active-Agency-Id');
+        if (Schema::hasColumn('email_logs', 'agency_id') && $active !== null && $active !== '' && strtolower((string) $active) !== 'all' && ctype_digit((string) $active)) {
+            $q->where('agency_id', (int) $active);
+        }
+        $logs = $q->limit(300)->get($cols);
+        if (Schema::hasColumn('email_logs', 'body_html') && $logs->isNotEmpty()) {
+            $withBody = DB::table('email_logs')->whereIn('id', $logs->pluck('id')->all())
+                ->whereNotNull('body_html')->where('body_html', '!=', '')->pluck('id')->flip();
+            $logs = $logs->map(function ($r) use ($withBody) { $r->has_body = isset($withBody[$r->id]); return $r; });
+        } else {
+            $logs = $logs->map(function ($r) { $r->has_body = false; return $r; });
+        }
+        return response()->json(['logs' => $logs->values()]);
+    }
+
+    /** GET /platform/email-logs/{id}/preview — the actual sent HTML for one email. */
+    public function emailPreview(Request $request, int $id): JsonResponse
+    {
+        if (! Schema::hasColumn('email_logs', 'body_html')) {
+            return response()->json(['message' => 'Email previews are not available.'], 404);
+        }
+        $row = DB::table('email_logs')->where('id', $id)
+            ->first(['id', 'subject', 'to_email', 'to_name', 'from_email', 'status', 'created_at', 'body_html']);
+        if (! $row) return response()->json(['message' => 'Not found'], 404);
+        return response()->json([
+            'id'         => $row->id,
+            'subject'    => $row->subject,
+            'to_email'   => $row->to_email,
+            'to_name'    => $row->to_name,
+            'from_email' => $row->from_email,
+            'status'     => $row->status,
+            'created_at' => $row->created_at,
+            'html'       => $row->body_html ?: null,
+        ]);
+    }
+
+    /**
+     * Resend a previously-sent email (from the email log) to its recipient.
+     * Uses the stored HTML verbatim; bypasses the per-agency suppression gate since
+     * a platform admin is deliberately re-sending an operational message.
+     */
+    public function emailResend(Request $request, int $id): JsonResponse
+    {
+        if (! Schema::hasColumn('email_logs', 'body_html')) {
+            return response()->json(['message' => 'Resend is not available for this system.'], 400);
+        }
+        $row = DB::table('email_logs')->where('id', $id)->first();
+        if (! $row) return response()->json(['message' => 'Not found'], 404);
+        if (empty($row->body_html)) {
+            return response()->json(['message' => 'No stored content to resend for this message.'], 422);
+        }
+        $to = trim((string) ($request->input('to_email') ?: $row->to_email));
+        if ($to === '') return response()->json(['message' => 'No recipient email on file.'], 422);
+
+        try {
+            Mail::html($row->body_html, function ($m) use ($to, $row) {
+                $m->to($to, $row->to_name ?: null)->subject((string) ($row->subject ?: 'Message from KiddieTrac'));
+                if (! empty($row->from_email)) { try { $m->from($row->from_email); } catch (\Throwable $e) {} }
+                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            });
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Could not resend: ' . $e->getMessage()], 500);
+        }
+
+        return response()->json(['ok' => true, 'message' => 'Resent to ' . $to]);
+    }
+
+    /**
+     * GET /platform/crash-reports — recent SERVER errors (HTTP 5xx) across every
+     * agency: who hit it, in which agency, what endpoint, and the request input.
+     * Sourced from the write-audit middleware, which stamps failing requests
+     * "<method>:<path> [fail]" with a payload {method,path,status,input}.
+     */
+    public function crashReports(Request $request): JsonResponse
+    {
+        if (! Schema::hasTable('audit_logs')) return response()->json(['reports' => [], 'count_24h' => 0]);
+        $base = DB::table('audit_logs')->where('action', 'like', '%[fail]%')->where('payload', 'like', '%"status":5%');
+        $rows = (clone $base)
+            ->leftJoin('users as u', 'u.id', '=', 'audit_logs.user_id')
+            ->leftJoin('agencies as ag', 'ag.id', '=', 'audit_logs.agency_id')
+            ->orderByDesc('audit_logs.id')->limit(100)
+            ->get([
+                'audit_logs.action', 'audit_logs.payload', 'audit_logs.created_at', 'audit_logs.ip_address',
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as who"),
+                'u.email as who_email', 'ag.name as agency',
+            ]);
+        $reports = $rows->map(function ($r) {
+            $p = json_decode((string) $r->payload, true) ?: [];
+            return [
+                'at'     => $r->created_at,
+                'who'    => trim((string) $r->who) ?: ($r->who_email ?: 'Unknown'),
+                'agency' => $r->agency,
+                'method' => $p['method'] ?? null,
+                'path'   => $p['path'] ?? preg_replace('/\s*\[fail\]$/', '', (string) $r->action),
+                'status' => $p['status'] ?? null,
+                'input'  => isset($p['input']) ? mb_substr(json_encode($p['input']), 0, 400) : null,
+                'ip'     => $r->ip_address,
+            ];
+        })->values();
+        $count24 = (clone $base)->where('audit_logs.created_at', '>=', now()->subDay())->count();
+        return response()->json(['reports' => $reports, 'count_24h' => $count24]);
     }
 
     /**
@@ -650,6 +834,10 @@ final class PlatformController extends Controller
             'name' => ['sometimes', 'string', 'max:180'],
             'contact_email' => ['sometimes', 'nullable', 'email', 'max:180'],
             'contact_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            // Explicit agency owner (super-admin editable) — corrects the derived
+            // "earliest admin" owner when it's wrong. Stored in the settings JSON.
+            'owner_name' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'owner_email' => ['sometimes', 'nullable', 'email', 'max:180'],
             // The agency's timezone drives every displayed time and every daily
             // bucket (care logs, reports, the end-of-day parent summary). It was
             // settable at creation but NOT here, so editing it silently did nothing.
@@ -690,6 +878,19 @@ final class PlatformController extends Controller
             DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings)]);
             \Illuminate\Support\Facades\Cache::forget('kt.agency_notifications:' . $agencyId);
             unset($data['notifications_enabled']);
+        }
+
+        // Explicit owner → settings.owner (name/email). Empty clears it (falls back
+        // to the derived owner, which now excludes super admins).
+        if (array_key_exists('owner_name', $data) || array_key_exists('owner_email', $data)) {
+            $row = DB::table('agencies')->where('id', $agencyId)->first(['settings']);
+            $settings = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
+            $owner = is_array($settings['owner'] ?? null) ? $settings['owner'] : [];
+            if (array_key_exists('owner_name', $data))  $owner['name']  = trim((string) $data['owner_name']) ?: null;
+            if (array_key_exists('owner_email', $data)) $owner['email'] = trim((string) $data['owner_email']) ?: null;
+            $settings['owner'] = $owner;
+            DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings)]);
+            unset($data['owner_name'], $data['owner_email']);
         }
 
 

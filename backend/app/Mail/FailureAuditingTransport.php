@@ -46,17 +46,22 @@ final class FailureAuditingTransport implements TransportInterface
             if ($message instanceof Email) {
                 $to = collect($message->getTo())->map(fn ($a) => $a->getAddress())->filter()->implode(', ');
                 $subject = $message->getSubject();
+                try { $h = $message->getHtmlBody(); if (! is_string($h)) $h = $message->getTextBody(); $bodyHtml = (is_string($h) && $h !== '') ? mb_substr($h, 0, 500000) : null; } catch (\Throwable $eb) { $bodyHtml = null; }
             }
             $err = substr($e->getMessage(), 0, 1000);
 
             if (Schema::hasTable('email_logs')) {
+                $failAgency = null;
+                try { if (Schema::hasColumn('email_logs', 'agency_id') && $to) { $ft = trim(explode(',', (string) $to)[0]); if ($ft !== '') $failAgency = \App\Support\AgencyMail::agencyOfEmail($ft); } } catch (\Throwable $e) {}
                 DB::table('email_logs')->insert([
+                    'agency_id'  => $failAgency,
                     'to_email'   => $to ?: null,
                     'from_email' => 'noreply@kiddietrac.com',
                     'subject'    => $subject,
                     'mailer'     => config('mail.default'),
                     'status'     => 'failed',
                     'error'      => $err,
+                    'body_html'  => $bodyHtml ?? null,
                     'created_at' => now(),
                 ]);
             }

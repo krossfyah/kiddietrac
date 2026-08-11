@@ -41,14 +41,91 @@ class SuppressAgencyMail
 
     public function handle(MessageSending $event): bool
     {
+        // Explicit admin test sends carry a one-off bypass header — they target a
+        // specific address on purpose (e.g. the tester's own inbox) and must not
+        // be caught by the live-agency kill-switch. Only manual test commands set
+        // it; the header is stripped so it never rides along on the wire.
+        try {
+            $hdrs = $event->message->getHeaders();
+            if ($hdrs && $hdrs->has('X-KT-Bypass-Suppression')) {
+                $hdrs->remove('X-KT-Bypass-Suppression');
+                Log::info('Email suppression bypassed for an explicit test send.', [
+                    'subject' => (string) ($event->message->getSubject() ?? ''),
+                ]);
+                return true;
+            }
+        } catch (\Throwable $e) {
+        }
+
         $recipients = $this->recipientsOf($event);
         if (! $recipients) {
             return true;
         }
 
-        // An agency that has switched notifications off in its own settings is
-        // silenced too, not just the .env kill-switch — so check the recipients
-        // against BOTH rules via the shared Suppression service.
+        // 0) NOT-ONBOARDED gate. A parent/user who hasn't accepted their invite yet
+        //    (users.status = 'invited') must receive NOTHING except the invite /
+        //    welcome email itself — no digests, reminders or announcements. The
+        //    invite carries an X-KT-Invite header so it's exempt (and reaches them).
+        // Detect the invite/account-email exemption ONCE. An invite must reach a
+        // not-yet-onboarded user AND skip the pre-boarding centre/room gate (an
+        // invite IS the pre-boarding step) — while still respecting the agency's
+        // master toggle below.
+        $isInvite = false;
+        try {
+            $hdrs2 = $event->message->getHeaders();
+            $isInvite = (bool) ($hdrs2 && $hdrs2->has('X-KT-Invite'));
+            if ($isInvite && $hdrs2) {
+                $hdrs2->remove('X-KT-Invite');
+            }
+        } catch (\Throwable $e) {
+        }
+
+        if (! $isInvite) {
+            try {
+                $pending = DB::table('users')
+                    // Not-yet-onboarded states: 'invited' (invite sent, awaiting
+                    // acceptance) and 'not_invited' (imported, never invited). Both
+                    // get NOTHING but the invite/account email itself.
+                    ->whereIn('status', ['invited', 'not_invited'])
+                    ->whereNotNull('email')
+                    ->whereIn(DB::raw('LOWER(TRIM(email))'), $recipients)
+                    ->pluck('email')
+                    ->map(fn ($e) => mb_strtolower(trim((string) $e)))
+                    ->values()->all();
+                if ($pending) {
+                    $this->cancel($event, $pending, 'Recipient has not accepted their invite yet (not onboarded).');
+                    return false;
+                }
+            } catch (\Throwable $e) {
+                // never let this gate break the mail layer
+            }
+        }
+
+        // 1) The agency's OWN toggle ("Send notifications and emails") is
+        //    ABSOLUTE — off means off, even for allowlisted addresses. This is
+        //    what the Settings switch strictly controls.
+        foreach ($recipients as $addr) {
+            $uid = DB::table('users')->where('email', $addr)->value('id');
+            if (! $uid) {
+                continue;
+            }
+            if (\App\Support\Suppression::agencyOff((int) $uid)) {
+                $this->cancel($event, [$addr]);
+                return false;
+            }
+            // 1a) Centre / room switch (pre-boarding). A recipient whose every
+            //     centre / room is switched off for email is held back even while
+            //     the agency master switch is on. SKIPPED for invites — an invite
+            //     is the pre-boarding step itself and must reach the recipient.
+            if (! $isInvite && \App\Support\Suppression::blockedByCentreRoom((int) $uid)) {
+                $this->cancel($event, [$addr]);
+                return false;
+            }
+        }
+
+        // 2) The .env testing kill-switch (MAIL_SUPPRESS_AGENCIES) — here the
+        //    allowlist DOES exempt the tester's own inbox so requested test
+        //    sends still arrive while an agency's own toggle is still ON.
         foreach ($recipients as $addr) {
             if (in_array($addr, $this->allowlist(), true)) {
                 continue;
@@ -82,11 +159,12 @@ class SuppressAgencyMail
     }
 
     /** Record what we stopped — silence with no trail is its own hazard. */
-    private function cancel(MessageSending $event, array $hits): void
+    private function cancel(MessageSending $event, array $hits, ?string $reason = null): void
     {
         $subject = (string) ($event->message->getSubject() ?? '(no subject)');
+        $reason = $reason ?: 'Recipient belongs to a suppressed agency (MAIL_SUPPRESS_AGENCIES).';
 
-        Log::warning('Email SUPPRESSED — recipient belongs to a suppressed agency', [
+        Log::warning('Email SUPPRESSED — ' . $reason, [
             'blocked_recipients' => $hits,
             'subject' => $subject,
         ]);
@@ -94,14 +172,17 @@ class SuppressAgencyMail
         // Leave a visible trail of what would have been sent.
         try {
             if (Schema::hasTable('email_logs')) {
+                $supAgency = null;
+                try { if (Schema::hasColumn('email_logs', 'agency_id') && ! empty($hits[0])) $supAgency = \App\Support\AgencyMail::agencyOfEmail($hits[0]); } catch (\Throwable $e) {}
                 DB::table('email_logs')->insert([
+                    'agency_id' => $supAgency,
                     'to_email' => implode(', ', array_slice($hits, 0, 3)),
                     'to_name' => 'SUPPRESSED (live agency)',
                     'from_email' => 'noreply@kiddietrac.com',
                     'subject' => '[SUPPRESSED] ' . $subject,
                     'mailer' => config('mail.default'),
                     'status' => 'suppressed',
-                    'error' => 'Recipient belongs to a suppressed agency (MAIL_SUPPRESS_AGENCIES).',
+                    'error' => $reason,
                     'tracking_token' => \Illuminate\Support\Str::random(32),
                     'opens' => 0,
                     'created_at' => now(),
@@ -123,7 +204,7 @@ class SuppressAgencyMail
      */
     private function allowlist(): array
     {
-        $raw = (string) env('MAIL_SUPPRESS_ALLOWLIST', '');
+        $raw = (string) config('suppression.allowlist', '');
         if (trim($raw) === '') {
             return [];
         }
@@ -137,15 +218,9 @@ class SuppressAgencyMail
     /** @return int[] */
     private function suppressedAgencyIds(): array
     {
-        $raw = (string) env('MAIL_SUPPRESS_AGENCIES', '');
-        if (trim($raw) === '') {
-            return [];
-        }
-
-        return array_values(array_filter(array_map(
-            fn ($v) => (int) trim($v),
-            explode(',', $raw)
-        )));
+        // Single source of truth (mode-aware: denylist env list, or the allowlist
+        // complement). Keeps the listener in step with push / SMS / scheduled jobs.
+        return \App\Support\Suppression::agencyIds();
     }
 
     /** Every address the message is addressed to, lower-cased. @return string[] */
@@ -174,9 +249,38 @@ class SuppressAgencyMail
     private function blockedAddresses(array $agencyIds): array
     {
         sort($agencyIds);
-        $key = self::CACHE_KEY . ':' . implode(',', $agencyIds);
+        $allow = \App\Support\Suppression::allowedAgencyIds();
+        sort($allow);
+        $key = self::CACHE_KEY . ':' . implode(',', $agencyIds) . '|a:' . implode(',', $allow);
 
-        return Cache::remember($key, self::CACHE_TTL, function () use ($agencyIds) {
+        return Cache::remember($key, self::CACHE_TTL, function () use ($agencyIds, $allow) {
+            $blocked = $this->addressesAtAgencies($agencyIds);
+            if (! $blocked) {
+                return [];
+            }
+
+            // Subtract anyone ALSO reachable at an allowed agency, so a shared /
+            // duplicate email address still receives its allowed agency's mail.
+            $allowed = $this->addressesAtAgencies($allow);
+
+            return array_values(array_diff($blocked, $allowed));
+        });
+    }
+
+    /**
+     * Every address reachable at the given agencies: staff (role_assignments),
+     * guardians (through their family's centre), and the agencies' own contacts.
+     *
+     * @param int[] $agencyIds
+     * @return string[]
+     */
+    private function addressesAtAgencies(array $agencyIds): array
+    {
+        if (! $agencyIds) {
+            return [];
+        }
+
+        return Cache::remember(self::CACHE_KEY . '.at:' . implode(',', $agencyIds), self::CACHE_TTL, function () use ($agencyIds) {
             $emails = [];
 
             // Staff and admins holding a role at the agency.
