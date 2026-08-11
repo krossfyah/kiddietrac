@@ -55,10 +55,28 @@
     var paintStatusBar = function () {
       try {
         var SB = C.Plugins && C.Plugins.StatusBar;
-        if (!SB) return;
-        if (SB.setOverlaysWebView) { try { SB.setOverlaysWebView({ overlay: false }); } catch (e) {} }
-        if (SB.setBackgroundColor) { try { SB.setBackgroundColor({ color: '#081C41' }); } catch (e) {} }
-        if (SB.setStyle) { try { SB.setStyle({ style: 'DARK' }); } catch (e) {} }
+        if (SB) {
+          // Android 15/16 IGNORES setStatusBarColor — the bars are forced transparent.
+          // So a solid NATIVE navy bar is impossible; instead draw the WebView BEHIND
+          // the (transparent) status bar and paint that region ourselves. overlay:true
+          // = edge-to-edge (makes env(safe-area-inset-top) non-zero); DARK style =
+          // white icons for the navy strip.
+          if (SB.setOverlaysWebView) { try { SB.setOverlaysWebView({ overlay: true }); } catch (e) {} }
+          if (SB.setStyle) { try { SB.setStyle({ style: 'DARK' }); } catch (e) {} }
+        }
+      } catch (e) {}
+      // Navy strips covering the TOP (status-bar) and BOTTOM (Android nav-bar) insets
+      // — matches the PWA theme-color (#081C41). Heights follow the real safe-area
+      // insets, so each is exactly the system bar. The bottom one sits UNDER the
+      // fixed app bottom-nav (higher z is fine — it only fills the inset the app
+      // already pads for, behind the home/back/recents buttons).
+      try {
+        var top = document.getElementById('kt-statusfill');
+        if (!top) { top = document.createElement('div'); top.id = 'kt-statusfill'; (document.body || document.documentElement).appendChild(top); }
+        top.style.cssText = 'position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:#081C41;z-index:2147483600;pointer-events:none;';
+        var bot = document.getElementById('kt-navfill');
+        if (!bot) { bot = document.createElement('div'); bot.id = 'kt-navfill'; (document.body || document.documentElement).appendChild(bot); }
+        bot.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:env(safe-area-inset-bottom,0px);background:#081C41;z-index:2147483600;pointer-events:none;';
       } catch (e) {}
     };
     paintStatusBar();
