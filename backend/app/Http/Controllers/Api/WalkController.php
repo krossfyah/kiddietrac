@@ -30,6 +30,16 @@ final class WalkController extends Controller
             ->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
     }
 
+    /** The agency-local timezone for this user's centre (America/Toronto default).
+     *  Used for EVERY walk date/time so trip dates + depart/return times are stored
+     *  and compared in the centre's zone, not the server's UTC (the recurring tz bug).
+     *  Returns the default zone for non-staff (e.g. a parent), which is fine here. */
+    private function staffTz(int $userId): string
+    {
+        $ids = $this->staffCentreIds($userId);
+        return \App\Support\AgencyTime::tzForCentre($ids[0] ?? null);
+    }
+
     /** Children currently checked in (today, not yet checked out) in these centres. */
     private function presentChildIds(array $centreIds): array
     {
@@ -117,7 +127,7 @@ final class WalkController extends Controller
         $trip = DB::table('field_trips')
             ->where('staff_lead_id', $u->id)
             ->where('status', 'active')
-            ->whereDate('trip_date', now())
+            ->whereDate('trip_date', \Illuminate\Support\Carbon::now($this->staffTz($u->id))->toDateString())
             ->orderByDesc('id')->first();
         if (! $trip) {
             return response()->json(['active' => null]);
@@ -145,8 +155,11 @@ final class WalkController extends Controller
         if (empty($ids)) {
             return response()->json(['children' => []]);
         }
+        // NB: the children table has `gender`, NOT `sex` — selecting `sex` threw a
+        // 1054 "Unknown column 'sex'" 500, so eligibleChildren ALWAYS errored and the
+        // walk/outing form showed no children. The dot avatar only needs photo/name.
         $rows = DB::table('children')->whereIn('id', $ids)
-            ->select('id', 'photo_url', 'sex',
+            ->select('id', 'photo_url', 'gender',
                 DB::raw("TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) as name"))
             ->orderBy('first_name')->get();
 
@@ -180,7 +193,7 @@ final class WalkController extends Controller
 
         // Reuse an already-active walk if the educator double-taps Start.
         $existing = DB::table('field_trips')->where('staff_lead_id', $u->id)
-            ->where('status', 'active')->whereDate('trip_date', now())
+            ->where('status', 'active')->whereDate('trip_date', \Illuminate\Support\Carbon::now($this->staffTz($u->id))->toDateString())
             ->orderByDesc('id')->first();
         if ($existing) {
             $tripId = (int) $existing->id;
@@ -191,8 +204,8 @@ final class WalkController extends Controller
                 'title' => ($data['title'] ?? '') !== '' ? $data['title'] : 'Walk / outing',
                 // destination is NOT NULL — default it for a spontaneous walk.
                 'destination' => ($data['destination'] ?? '') !== '' ? $data['destination'] : 'Local walk',
-                'trip_date' => now()->toDateString(),
-                'depart_time' => now()->format('H:i:s'),
+                'trip_date' => \Illuminate\Support\Carbon::now($this->staffTz($u->id))->toDateString(),
+                'depart_time' => \Illuminate\Support\Carbon::now($this->staffTz($u->id))->format('H:i:s'),
                 'transport_method' => 'walking',
                 'cost_per_child' => 0,
                 'staff_lead_id' => $u->id,
@@ -253,7 +266,7 @@ final class WalkController extends Controller
         );
         DB::table('field_trips')->where('id', $id)->update([
             'status' => 'completed',
-            'return_time' => now()->format('H:i:s'),
+            'return_time' => \Illuminate\Support\Carbon::now($this->staffTz($u->id))->format('H:i:s'),
             'updated_at' => now(),
         ]);
 
@@ -277,7 +290,7 @@ final class WalkController extends Controller
             ->join('children as c', 'c.id', '=', 'p.child_id')
             ->whereIn('p.child_id', $childIds)
             ->where('p.status', 'approved')
-            ->whereDate('t.trip_date', '>=', now()->subDays(30)->toDateString())
+            ->whereDate('t.trip_date', '>=', \Illuminate\Support\Carbon::now($this->staffTz($u->id))->subDays(30)->toDateString())
             ->orderByDesc('t.trip_date')->orderByDesc('t.id')
             ->select('t.id as trip_id', 't.title', 't.destination', 't.status', 't.trip_date',
                 DB::raw("TRIM(CONCAT(c.first_name, ' ', COALESCE(c.last_name, ''))) as child_name"))
@@ -315,7 +328,7 @@ final class WalkController extends Controller
             ->whereIn('p.child_id', $childIds)
             ->where('p.status', 'approved')
             ->where('t.status', 'active')
-            ->whereDate('t.trip_date', now())
+            ->whereDate('t.trip_date', \Illuminate\Support\Carbon::now($this->staffTz($u->id))->toDateString())
             ->select(
                 't.id as trip_id',
                 't.title',
