@@ -483,7 +483,7 @@
       { key: 'enrolled', icon: '👶', value: t.enrolled ?? 0, label: 'Total enrolled', sub: capacityPct + '% of capacity', c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
       { key: 'present', icon: '📍', value: t.present_now ?? 0, label: 'Here right now', sub: presentPct + '% of enrolled', c1: '#93C5FD', c2: '#2563EB', tint: '#EFF6FF', ink: '#1D4ED8' },
       { key: 'staff_floor', icon: '🧑‍🏫', value: t.staff_on_floor ?? 0, label: 'Staff on floor', sub: _noStaff ? 'No one clocked in' : 'Active', c1: _noStaff ? '#FCA5A5' : '#FCD34D', c2: _noStaff ? '#DC2626' : '#D97706', tint: _noStaff ? '#FEF2F2' : '#FFFBEB', ink: _noStaff ? '#B91C1C' : '#B45309' },
-      { key: 'receivables', icon: '💳', value: '$' + Number(t.receivables || 0).toFixed(2), label: 'Receivables', sub: _owed ? 'Outstanding' : 'All collected', c1: _owed ? '#FCA5A5' : '#86EFAC', c2: _owed ? '#DC2626' : '#16A34A', tint: _owed ? '#FEF2F2' : '#F0FDF4', ink: _owed ? '#B91C1C' : '#15803D' },
+      { key: 'receivables', icon: '💳', value: '$' + Number(t.receivables || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), label: 'Receivables', sub: _owed ? 'Outstanding' : 'All collected', c1: _owed ? '#FCA5A5' : '#86EFAC', c2: _owed ? '#DC2626' : '#16A34A', tint: _owed ? '#FEF2F2' : '#F0FDF4', ink: _owed ? '#B91C1C' : '#15803D' },
       { key: 'centres', icon: '🏫', value: _centresCount, label: 'Centres', sub: _roomsSum + ' room' + (_roomsSum === 1 ? '' : 's'), c1: '#C4B5FD', c2: '#7C3AED', tint: '#F5F3FF', ink: '#6D28D9' },
       { key: 'capacity', icon: '📊', value: capacitySum, label: 'Licensed capacity', sub: capacityPct + '% filled', c1: '#7DD3FC', c2: '#0284C7', tint: '#F0F9FF', ink: '#0369A1' },
       { key: 'families', icon: '👪', value: t.families ?? 0, label: 'Families', sub: 'enrolled', c1: '#FDBA74', c2: '#EA580C', tint: '#FFF7ED', ink: '#C2410C' },
@@ -599,15 +599,21 @@
     // card, hover lift. Receivables stays red when money is owed (a real signal).
     // Values carry data-kpi/data-kpi-sub so the live poll updates them in place.
     const _kpis = overviewKpis(data);
-    const _kpiHtml = _kpis.map((k) => `
+    const _kpiHtml = _kpis.map((k) => {
+      // Adaptive value size: long money totals (e.g. "$34,339.63") overflowed the
+      // ~132px tile at a fixed 27px. Shrink by length + allow a break so it fits.
+      const _vs = String(k.value == null ? '' : k.value);
+      const _vfs = _vs.length >= 10 ? '16px' : (_vs.length >= 8 ? '19px' : (_vs.length >= 6 ? '22px' : '27px'));
+      return `
         <div class="kt-kpi-tile" style="position:relative;overflow:hidden;background:${k.tint};border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:13px 16px;display:flex;align-items:center;gap:13px;transition:transform .15s ease, box-shadow .15s ease;">
           <div style="width:44px;height:44px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:21px;background:linear-gradient(135deg,${k.c1},${k.c2});box-shadow:0 6px 13px -6px ${k.c2};">${k.icon}</div>
-          <div style="min-width:0;">
-            <div data-kpi="${k.key}" style="font-size:27px;font-weight:900;line-height:1.05;color:${k.ink};transition:color .3s ease;">${k.value}</div>
+          <div style="min-width:0;flex:1;">
+            <div data-kpi="${k.key}" style="font-size:${_vfs};font-weight:900;line-height:1.05;color:${k.ink};overflow-wrap:anywhere;transition:color .3s ease;">${k.value}</div>
             <div style="font-size:10.5px;font-weight:800;letter-spacing:.6px;color:${k.ink};opacity:.72;margin-top:3px;text-transform:uppercase;">${k.label}</div>
             <div data-kpi-sub="${k.key}" style="font-size:11.5px;color:#64748b;margin-top:1px;">${k.sub}</div>
           </div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
     wrap.insertAdjacentHTML('beforeend', `
       <style>.kt-kpi-tile:hover{transform:translateY(-3px);box-shadow:0 14px 24px -14px rgba(15,23,42,.28);}</style>
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:20px;">${_kpiHtml}</div>
