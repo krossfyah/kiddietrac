@@ -174,6 +174,14 @@ class SuppressAgencyMail
             if (Schema::hasTable('email_logs')) {
                 $supAgency = null;
                 try { if (Schema::hasColumn('email_logs', 'agency_id') && ! empty($hits[0])) $supAgency = \App\Support\AgencyMail::agencyOfEmail($hits[0]); } catch (\Throwable $e) {}
+                // Capture the HTML that WOULD have been sent so the email log's 👁
+                // preview works for suppressed rows too (previously stored no body).
+                $supBody = null;
+                try {
+                    $h = $event->message->getHtmlBody();
+                    if (! is_string($h)) $h = $event->message->getTextBody();
+                    if (is_string($h) && $h !== '') $supBody = mb_substr($h, 0, 500000);
+                } catch (\Throwable $e) {}
                 DB::table('email_logs')->insert([
                     'agency_id' => $supAgency,
                     'to_email' => implode(', ', array_slice($hits, 0, 3)),
@@ -183,6 +191,7 @@ class SuppressAgencyMail
                     'mailer' => config('mail.default'),
                     'status' => 'suppressed',
                     'error' => $reason,
+                    'body_html' => $supBody,
                     'tracking_token' => \Illuminate\Support\Str::random(32),
                     'opens' => 0,
                     'created_at' => now(),
