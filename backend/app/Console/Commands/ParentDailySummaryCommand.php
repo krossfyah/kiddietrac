@@ -75,10 +75,26 @@ class ParentDailySummaryCommand extends Command
                 ? Carbon::parse((string) $this->option('date'), $tz)
                 : Carbon::now($tz);
 
-            $day = $this->collect($child, $date, $tz, $ai);
+            // Only email on the provider's OPERATING days — Mon–Fri by default (or the
+            // centre's configured schedule), evaluated in the AGENCY's timezone. A
+            // weekend / non-operating day gets NO email (parents shouldn't get a daily
+            // summary for a day the centre was never open). EXCEPTION: if the centre
+            // was CLOSED on a day it SHOULD have been open (a closure/holiday), we
+            // still send — with a clear "closed today" banner — so nobody's left
+            // wondering why there's no activity.
+            $open = $this->openStatus((int) $child->centre_id, $date);
+            if (!$open['is_open_day']) {
+                $this->line("· {$child->first_name}: {$date->format('D')} is not an operating day, skipping");
+                continue;
+            }
 
-            // Nothing happened → don't email. A summary of an empty day is noise.
-            if (!$override && !$day['has_anything']) {
+            $day = $this->collect($child, $date, $tz, $ai);
+            $day['closed_today'] = $open['is_closed'];
+            $day['closure_reason'] = $open['closure_reason'] ?? null;
+
+            // Empty operating day → don't email (noise). But a CLOSURE day we DO send
+            // (with the banner) even when nothing was logged.
+            if (!$override && !$open['is_closed'] && !$day['has_anything']) {
                 $this->line("· {$child->first_name}: nothing logged, skipping");
                 continue;
             }
@@ -112,6 +128,48 @@ class ParentDailySummaryCommand extends Command
 
         $this->info("Done. {$sent} email(s) queued.");
         return self::SUCCESS;
+    }
+
+    /**
+     * Is the centre supposed to be OPEN on this date, and was it closed anyway?
+     * Operating days default to Mon–Fri; a centre can override via
+     * settings.operating_days (iso day numbers 1–7 or day-name prefixes). A
+     * centre_closures row covering the date marks it closed.
+     *
+     * @return array{is_open_day:bool,is_closed:bool,closure_reason:?string}
+     */
+    private function openStatus(int $centreId, Carbon $date): array
+    {
+        $dow = (int) $date->isoWeekday();   // 1=Mon … 7=Sun
+        $isOpenDay = $dow >= 1 && $dow <= 5; // default: Monday–Friday
+        try {
+            $settings = DB::table('centres')->where('id', $centreId)->value('settings');
+            if ($settings) {
+                $st = json_decode((string) $settings, true);
+                if (is_array($st) && !empty($st['operating_days']) && is_array($st['operating_days'])) {
+                    $names = ['mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7];
+                    $days = array_filter(array_map(function ($d) use ($names) {
+                        return is_numeric($d) ? (int) $d : ($names[strtolower(substr((string) $d, 0, 3))] ?? 0);
+                    }, $st['operating_days']));
+                    if ($days) $isOpenDay = in_array($dow, $days, true);
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        $isClosed = false; $reason = null;
+        if ($isOpenDay) {
+            try {
+                $d = $date->toDateString();
+                $cl = DB::table('centre_closures')->where('centre_id', $centreId)
+                    ->whereDate('closure_date', '<=', $d)
+                    ->where(function ($q) use ($d) {
+                        $q->whereNull('end_date')->orWhereDate('end_date', '>=', $d);
+                    })
+                    ->orderByDesc('closure_date')->first(['reason', 'closure_type']);
+                if ($cl) { $isClosed = true; $reason = $cl->reason ?: ($cl->closure_type ?: 'Closed'); }
+            } catch (\Throwable $e) {}
+        }
+        return ['is_open_day' => $isOpenDay, 'is_closed' => $isClosed, 'closure_reason' => $reason];
     }
 
     /** Everything that happened to this child on this day, in the agency's timezone. */
@@ -201,6 +259,25 @@ class ParentDailySummaryCommand extends Command
             ->orderBy('created_at')
             ->get(['title', 'body', 'created_at']);
 
+        // Awards this child earned today — a highlight parents love to see. Keyed on
+        // awarded_on (a date), not created_at, so a daily award shows on its own day.
+        $awards = DB::table('child_awards as aw')
+            ->leftJoin('users as u', 'u.id', '=', 'aw.awarded_by_id')
+            ->where('aw.child_id', $child->id)
+            ->whereDate('aw.awarded_on', $ymd)
+            ->orderBy('aw.created_at')
+            ->get([
+                'aw.title', 'aw.badge', 'aw.period', 'aw.note', 'aw.created_at',
+                DB::raw("NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))),'') as by_name"),
+            ]);
+
+        // A late pickup logged today (if any) — shown gently, with the fee if charged.
+        $latePickup = DB::table('late_pickup_charges')
+            ->where('child_id', $child->id)
+            ->whereBetween('pickup_at', [$start, $end])
+            ->orderByDesc('pickup_at')
+            ->first(['pickup_at', 'close_time', 'minutes_late', 'fee_amount', 'notes']);
+
         // The note home: written by the AI from the WHOLE day (logs, photo
         // captions, messages, times), addressed to the parent. It sits at the top
         // of the email, above the detail — so it has to pull the day together,
@@ -229,6 +306,7 @@ class ParentDailySummaryCommand extends Command
                             'said' => $m->body,
                         ])->values()->all(),
                         'centre_announcements' => $announcements->pluck('title')->values()->all(),
+                        'awards' => $awards->map(fn ($a) => trim(($a->badge ? $a->badge . ' ' : '') . $a->title))->values()->all(),
                     ],
                 ]);
             }
@@ -259,8 +337,10 @@ class ParentDailySummaryCommand extends Command
             'photos' => $photos,
             'messages' => $messages,
             'announcements' => $announcements,
+            'awards' => $awards,
+            'late_pickup' => $latePickup,
             'digest' => $digest,
-            'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $digest),
+            'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $awards->count() || $latePickup || $digest),
         ];
     }
 
@@ -381,7 +461,7 @@ class ParentDailySummaryCommand extends Command
         dispatch(function () use ($agencyId, $email, $name, $subject, $html) {
             AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($email, $name, $subject) {
                 $m->to($email, $name)
-                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
                 $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
@@ -389,10 +469,17 @@ class ParentDailySummaryCommand extends Command
         })->onQueue('mail');
 
         if (\Illuminate\Support\Facades\Schema::hasTable('email_logs')) {
+            $agid = null;
+            try { $agid = \App\Support\AgencyMail::agencyOfEmail($email) ?: (int) $agencyId; } catch (\Throwable $e) { $agid = (int) $agencyId; }
             DB::table('email_logs')->insert([
+                'agency_id' => $agid,
                 'to_email' => $email, 'to_name' => $name,
                 'from_email' => 'noreply@kiddietrac.com', 'subject' => $subject,
                 'mailer' => config('mail.default'), 'status' => 'sent',
+                // Store the rendered HTML so the email log's 👁 preview works (these
+                // digests self-log with X-KT-Logged, so the global logger skips them —
+                // without this they had no body to preview).
+                'body_html' => mb_substr($html, 0, 500000),
                 'tracking_token' => \Illuminate\Support\Str::random(32), 'opens' => 0, 'created_at' => now(),
             ]);
         }
@@ -405,8 +492,40 @@ class ParentDailySummaryCommand extends Command
         $name = e($child->preferred_name ?: $child->first_name);
         $t = fn ($ts) => $ts ? Carbon::parse($ts)->timezone($tz)->format('g:i A') : '—';
 
-        $body = '<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Here is how <strong>' . $name . '</strong>\'s day went at '
-            . e($child->centre_name) . '.</p>';
+        // Opening greeting + intro come from the agency-editable "parent-daily-summary"
+        // template (Settings → Email templates, #77). Falls back to the original line
+        // if anything goes wrong — a nightly email must never break over wording.
+        $greeting = '';
+        $intro = 'Here is how <strong>' . $name . '</strong>\'s day went at ' . e($child->centre_name) . '.';
+        $signoff = '';
+        try {
+            $tplData = [
+                'child_name'  => $name,
+                'centre_name' => $child->centre_name,
+                'agency_name' => $child->agency_name ?? '',
+            ];
+            $g = trim(\App\Support\EmailTemplates::block((int) $child->agency_id, 'parent-daily-summary', 'greeting', $tplData));
+            $i = trim(\App\Support\EmailTemplates::block((int) $child->agency_id, 'parent-daily-summary', 'intro', $tplData));
+            $s = trim(\App\Support\EmailTemplates::block((int) $child->agency_id, 'parent-daily-summary', 'signoff', $tplData));
+            if ($g !== '') $greeting = $g;
+            if ($i !== '') $intro = $i;
+            if ($s !== '') $signoff = $s;
+        } catch (\Throwable $e) { /* keep the safe defaults */ }
+        $day['_signoff'] = $signoff;   // rendered near the foot, before the quote
+        $body = ($greeting !== '' ? '<div style="font-size:19px;font-weight:800;color:#0B2545;margin:0 0 8px;">' . $greeting . '</div>' : '')
+            . '<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">' . $intro . '</p>';
+
+        // Closed-today banner: the centre should have been open but was closed
+        // (holiday / snow day / other closure). We send anyway so parents know why
+        // there's no activity, rather than leaving them wondering.
+        if (!empty($day['closed_today'])) {
+            $reason = !empty($day['closure_reason']) ? (' — ' . e($day['closure_reason'])) : '';
+            $body = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>'
+                . '<td style="background:#FEF3C7;border:1px solid #FCD34D;border-left:5px solid #F59E0B;border-radius:12px;padding:14px 16px;">'
+                . '<div style="font-size:14.5px;font-weight:800;color:#92400E;">🚪 ' . e($child->centre_name) . ' was closed today' . $reason . '</div>'
+                . '<div style="font-size:13px;color:#92400E;margin-top:3px;line-height:1.5;">There were no activities to report. Your normal daily update resumes on the next open day.</div>'
+                . '</td></tr></table>' . $body;
+        }
 
         // Sign in / out — with WHO did it, which is the part parents actually want
         // and the part a compliance audit asks for.
@@ -419,12 +538,47 @@ class ParentDailySummaryCommand extends Command
             EmailTemplate::statTile('Signed out', $out, $outBy ? 'by ' . $outBy : '', '#1F6080')
         );
 
+        // Late pickup — a factual, non-scolding note. Shows minutes over and the fee
+        // if one was charged, so the line item on the invoice is never a surprise.
+        if (!empty($day['late_pickup'])) {
+            $lp = $day['late_pickup'];
+            $mins = (int) ($lp->minutes_late ?? 0);
+            $fee = (float) ($lp->fee_amount ?? 0);
+            $body .= '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;margin:14px 0;">'
+                . '<div style="font-size:13.5px;font-weight:800;color:#9A3412;">🕒 Late pickup</div>'
+                . '<div style="font-size:13px;color:#7C2D12;line-height:1.5;margin-top:3px;">'
+                . 'Picked up at ' . $t($lp->pickup_at) . ($mins > 0 ? ' — ' . $mins . ' minute' . ($mins === 1 ? '' : 's') . ' after close' : '') . '.'
+                . ($fee > 0 ? ' A late fee of $' . number_format($fee, 2) . ' has been added to your invoice.' : '')
+                . '</div>'
+                . ($lp->notes ? '<div style="font-size:12px;color:#9A3412;margin-top:4px;">' . e((string) $lp->notes) . '</div>' : '')
+                . '</div>';
+        }
+
         // The AI story
         if (!empty($day['digest'])) {
             $body .= '<div style="background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border-radius:14px;padding:18px;margin:18px 0;">'
                 . '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:#a3d977;margin-bottom:7px;">✨ TODAY\'S STORY</div>'
                 . '<div style="font-size:14.5px;line-height:1.6;">' . nl2br(e($day['digest'])) . '</div>'
                 . '</div>';
+        }
+
+        // Awards earned today — a celebratory highlight. A gold card per award with
+        // its badge, title, the educator who gave it, and any note.
+        if (!empty($day['awards']) && count($day['awards'])) {
+            $body .= $this->section('🏆 ' . $name . '\'s awards today');
+            foreach ($day['awards'] as $a) {
+                $badge = trim((string) ($a->badge ?? '')) ?: '🏆';
+                $period = $a->period ? ucfirst((string) $a->period) . ' award' : 'Award';
+                $body .= '<div style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:1px solid #FDE68A;border-radius:12px;padding:13px 15px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;">'
+                    . '<div style="font-size:30px;line-height:1;">' . e($badge) . '</div>'
+                    . '<div>'
+                    . '<div style="font-size:11px;font-weight:800;letter-spacing:.6px;color:#B45309;text-transform:uppercase;">' . e($period) . '</div>'
+                    . '<div style="font-size:15px;font-weight:800;color:#78350F;margin-top:1px;">' . e((string) $a->title) . '</div>'
+                    . ($a->note ? '<div style="font-size:13px;color:#92400E;line-height:1.5;margin-top:3px;">' . e((string) $a->note) . '</div>' : '')
+                    . ($a->by_name ? '<div style="font-size:11.5px;color:#A16207;margin-top:4px;">— ' . e((string) $a->by_name) . '</div>' : '')
+                    . '</div>'
+                    . '</div>';
+            }
         }
 
         // Photos
@@ -492,6 +646,14 @@ class ParentDailySummaryCommand extends Command
             }
         }
 
+        // Agency-editable sign-off line (from the parent-daily-summary template).
+        if (! empty($day['_signoff'])) {
+            $body .= '<div style="margin-top:18px;font-size:15px;color:#334155;line-height:1.6;">' . $day['_signoff'] . '</div>';
+        }
+
+        // A warm daily inspirational quote (same for everyone that day, rotates daily).
+        $body .= EmailTemplate::dailyQuote((int) $day['date']->format('Ymd'));
+
         $body .= '<p style="margin:22px 0 0;font-size:12px;color:#94A3B8;line-height:1.5;">'
             . 'All times are ' . e($tz) . ' (your centre\'s local time). '
             . 'Open the KiddieTrac app to reply, see full-size photos, or view earlier days.</p>';
@@ -500,7 +662,7 @@ class ParentDailySummaryCommand extends Command
             'eyebrow' => 'DAILY SUMMARY',
             'title' => $name . '\'s day',
             'subtitle' => $day['date']->format('l, j F Y'),
-            'preheader' => $name . ': ' . count($day['photos']) . ' photos, ' . count($day['logs']) . ' moments logged.',
+            'preheader' => $name . ': ' . (count($day['awards'] ?? []) ? '🏆 award earned · ' : '') . count($day['photos']) . ' photos, ' . count($day['logs']) . ' moments logged.',
         ]);
     }
 

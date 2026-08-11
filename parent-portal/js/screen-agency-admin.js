@@ -149,7 +149,7 @@
       grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;';
       if (!enabled.length) {
         const e = document.createElement('div');
-        e.style.cssText = 'grid-column:1/-1;color:#94A3B8;font-size:13px;padding:14px;text-align:center;border:1px dashed #E2E8F0;border-radius:10px;';
+        e.style.cssText = 'grid-column:1/-1;color:#64748B;font-size:13px;padding:14px;text-align:center;border:1px dashed #E2E8F0;border-radius:10px;';
         e.textContent = 'No widgets yet — add some below.';
         grid.appendChild(e);
       }
@@ -158,8 +158,8 @@
         const tile = document.createElement('div');
         tile.setAttribute('draggable', 'true');
         tile.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;background:#EFF7FA;border:1.5px solid #BEE0EA;border-radius:10px;cursor:grab;font-size:13px;font-weight:600;color:#0F172A;transition:outline .1s,opacity .1s;outline-offset:2px;';
-        tile.innerHTML = '<span style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="color:#94A3B8;flex-shrink:0;">⠿</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(def.title) + '</span></span>' +
-          '<button data-rm="' + id + '" title="Remove" style="border:none;background:transparent;color:#94A3B8;font-size:17px;cursor:pointer;line-height:1;flex-shrink:0;padding:0 2px;">×</button>';
+        tile.innerHTML = '<span style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="color:#64748B;flex-shrink:0;">⠿</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(def.title) + '</span></span>' +
+          '<button data-rm="' + id + '" title="Remove" style="border:none;background:transparent;color:#64748B;font-size:17px;cursor:pointer;line-height:1;flex-shrink:0;padding:0 2px;">×</button>';
         tile.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', id); tile.style.opacity = '.4'; });
         tile.addEventListener('dragend', () => { tile.style.opacity = ''; });
         tile.addEventListener('dragover', (e) => { e.preventDefault(); tile.style.outline = '2px dashed #1F6080'; });
@@ -183,7 +183,7 @@
       av.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
       if (!available.length) {
         const e = document.createElement('div');
-        e.style.cssText = 'grid-column:1/-1;color:#94A3B8;font-size:13px;padding:8px;';
+        e.style.cssText = 'grid-column:1/-1;color:#64748B;font-size:13px;padding:8px;';
         e.textContent = 'All widgets are on your dashboard.';
         av.appendChild(e);
       }
@@ -215,7 +215,7 @@
   // ── New widget builders ──
   function widgetCentreOccupancy(data) {
     const centres = (data && data.centres) || [];
-    if (!centres.length) return widgetCard('Centre occupancy', '', '<div style="color:#94A3B8;flex:1;display:flex;align-items:center;">No centres yet.</div>');
+    if (!centres.length) return widgetCard('Centre occupancy', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No centres yet.</div>');
     const rows = centres.slice(0, 6).map(c => {
       const cap = c.license_capacity || 0;
       const enrolled = c.enrolled || 0;
@@ -223,7 +223,7 @@
       const color = pct >= 90 ? '#DC2626' : pct >= 70 ? '#F59E0B' : '#16A34A';
       return '<div style="margin-bottom:8px;">' +
         '<div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:3px;">' +
-          '<span style="font-weight:600;">' + esc(c.name) + '</span><span style="color:#94A3B8;">' + enrolled + ' / ' + cap + '</span>' +
+          '<span style="font-weight:600;">' + esc(c.name) + '</span><span style="color:#64748B;">' + enrolled + ' / ' + cap + '</span>' +
         '</div>' +
         '<div style="height:6px;background:#F1F5F9;border-radius:3px;overflow:hidden;">' +
           '<div style="height:100%;width:' + Math.min(100, pct) + '%;background:' + color + ';"></div>' +
@@ -281,11 +281,11 @@
   }
   function widgetRecentActivityMini(data) {
     const events = (data && data.recent_activity) || [];
-    if (!events.length) return widgetCard('Activity feed', '', '<div style="color:#94A3B8;flex:1;display:flex;align-items:center;">No recent activity.</div>');
+    if (!events.length) return widgetCard('Activity feed', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No recent activity.</div>');
     const rows = events.slice(0, 5).map(a => {
       return '<div style="padding:8px 0;border-bottom:1px solid #F1F5F9;font-size:12px;">' +
         '<div style="color:#0F172A;"><b>' + esc(a.actor) + '</b> <span style="color:#64748B;">' + esc(a.action) + '</span></div>' +
-        '<div style="color:#94A3B8;font-size:11px;margin-top:2px;">' + esc(a.display_time) + (a.centre_name ? ' · ' + esc(a.centre_name) : '') + '</div>' +
+        '<div style="color:#64748B;font-size:11px;margin-top:2px;">' + esc(a.display_time) + (a.centre_name ? ' · ' + esc(a.centre_name) : '') + '</div>' +
       '</div>';
     }).join('');
     return widgetCard('Activity feed', 'Latest 5 events', rows + '<div style="margin-top:auto;text-align:center;padding-top:10px;"><a href="#admin-billing" style="color:#1F6080;font-size:12px;font-weight:600;">See all activity →</a></div>');
@@ -296,7 +296,7 @@
     const present = centres.reduce((a, c) => a + (c.present_now || 0), 0);
     const enrolled = centres.reduce((a, c) => a + (c.enrolled || 0), 0);
     const pct = enrolled ? Math.round((present / enrolled) * 100) : 0;
-    const html = '<div style="display:flex;align-items:baseline;gap:8px;"><div style="font-size:40px;font-weight:800;color:#1F6080;line-height:1;">' + present + '</div><div style="font-size:15px;color:#94A3B8;">/ ' + enrolled + ' enrolled</div></div>' +
+    const html = '<div style="display:flex;align-items:baseline;gap:8px;"><div style="font-size:40px;font-weight:800;color:#1F6080;line-height:1;">' + present + '</div><div style="font-size:15px;color:#64748B;">/ ' + enrolled + ' enrolled</div></div>' +
       '<div style="height:8px;background:#F1F5F9;border-radius:4px;overflow:hidden;margin-top:12px;"><div style="height:100%;width:' + Math.min(100, pct) + '%;background:#16A34A;"></div></div>' +
       '<div style="font-size:12px;color:#64748B;margin-top:6px;">' + pct + '% of enrolled children checked in right now</div>';
     return widgetCard('Attendance today', 'Children currently checked in', html);
@@ -326,7 +326,7 @@
       : (data.summary && data.summary.receivables_cents))));
     const dollars = (data && data.receivables != null) ? data.receivables : (cents != null ? cents / 100 : null);
     const amt = dollars != null ? '$' + Number(dollars).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-    const html = '<div style="font-size:36px;font-weight:800;color:#B45309;line-height:1;">' + amt + '</div>' +
+    const html = '<div style="font-size:clamp(20px,6.2vw,34px);font-weight:800;color:#B45309;line-height:1.05;overflow-wrap:anywhere;word-break:break-word;max-width:100%;">' + amt + '</div>' +
       '<div style="font-size:12px;color:#64748B;margin-top:8px;">Total unpaid balance across all families.</div>' +
       '<div style="margin-top:auto;padding-top:12px;"><a href="#admin-billing" style="color:#1F6080;font-size:12px;font-weight:600;">Open billing →</a></div>';
     return widgetCard('Outstanding receivables', 'Money owed to your agency', html);
@@ -338,14 +338,14 @@
     card.style.cssText = 'background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,0.05);min-height:160px;display:flex;flex-direction:column;';
     card.innerHTML =
       '<div style="font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">' + esc(title) + '</div>' +
-      (subtitle ? '<div style="font-size:13px;color:#94A3B8;margin-bottom:10px;">' + esc(subtitle) + '</div>' : '') +
+      (subtitle ? '<div style="font-size:13px;color:#64748B;margin-bottom:10px;">' + esc(subtitle) + '</div>' : '') +
       contentHtml;
     return card;
   }
 
   function widgetMrrSparkline(mrr) {
     if (!mrr || !mrr.mrr_history_12mo) {
-      return widgetCard('Recurring revenue', 'No data yet', '<div style="color:#94A3B8;font-size:14px;flex:1;display:flex;align-items:center;">No MRR data available.</div>');
+      return widgetCard('Recurring revenue', 'No data yet', '<div style="color:#64748B;font-size:14px;flex:1;display:flex;align-items:center;">No MRR data available.</div>');
     }
     const series = mrr.mrr_history_12mo;
     const vals = series.map(s => s.mrr_cents || 0);
@@ -369,13 +369,13 @@
         '<polyline fill="rgba(31,96,128,0.10)" stroke="none" points="' + pad + ',' + (H-pad) + ' ' + points.join(' ') + ' ' + (W-pad) + ',' + (H-pad) + '" />' +
       '</svg>';
     const big = '<div style="font-size:28px;font-weight:800;color:#0F172A;line-height:1;">' + money(last) +
-      '<span style="font-size:11px;color:#94A3B8;font-weight:600;margin-left:4px;">' + (mrr.currency || 'CAD') + '/mo</span></div>' +
+      '<span style="font-size:11px;color:#64748B;font-weight:600;margin-left:4px;">' + (mrr.currency || 'CAD') + '/mo</span></div>' +
       '<div style="font-size:12px;color:' + trendColor + ';font-weight:700;margin-top:4px;">' + (delta >= 0 ? '▲' : '▼') + ' ' + Math.abs(deltaPct) + '% vs last month</div>';
     return widgetCard('Recurring revenue', 'Trailing 12 months', big + sparkSvg);
   }
 
   function widgetArrAgencies(mrr) {
-    if (!mrr) return widgetCard('ARR & agencies', '', '<div style="color:#94A3B8;flex:1;display:flex;align-items:center;">No data.</div>');
+    if (!mrr) return widgetCard('ARR & agencies', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No data.</div>');
     const status = (mrr.agencies && mrr.agencies.by_status) || {};
     const total  = (mrr.agencies && mrr.agencies.total) || 0;
     const bar = (label, count, color) => {
@@ -388,7 +388,7 @@
     };
     const html =
       '<div style="font-size:28px;font-weight:800;color:#0F172A;line-height:1;">' + money(mrr.arr_cents) +
-      '<span style="font-size:11px;color:#94A3B8;font-weight:600;margin-left:4px;">ARR</span></div>' +
+      '<span style="font-size:11px;color:#64748B;font-weight:600;margin-left:4px;">ARR</span></div>' +
       '<div style="font-size:12px;color:#475569;margin:6px 0 12px;">' + total + ' agency' + (total === 1 ? '' : 'ies') + ' · ARPU ' + money(mrr.arpu_cents || 0) + '</div>' +
       bar('Active',    status.active || 0,    '#16A34A') +
       bar('Trial',     status.trial || 0,     '#F59E0B') +
@@ -399,13 +399,13 @@
 
   function widgetUsersByRole(an) {
     if (!an || !an.users_by_role) {
-      return widgetCard('Users by role', '', '<div style="color:#94A3B8;flex:1;display:flex;align-items:center;">No data.</div>');
+      return widgetCard('Users by role', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No data.</div>');
     }
     const roles = an.users_by_role;
     const labels = { agency_admin: 'Admins', centre_director: 'Directors', educator: 'Educators', guardian: 'Parents', auditor: 'Auditors' };
     const colors = { agency_admin: '#1F6080', centre_director: '#0891B2', educator: '#8EC73C', guardian: '#F59E0B', auditor: '#7C3AED' };
     const total = Object.values(roles).reduce((a, b) => a + b, 0);
-    if (!total) return widgetCard('Users by role', '', '<div style="color:#94A3B8;flex:1;display:flex;align-items:center;">No users yet.</div>');
+    if (!total) return widgetCard('Users by role', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No users yet.</div>');
     // Donut chart
     const R = 36, INNER = 22, CX = 50, CY = 50;
     let acc = 0;
@@ -461,11 +461,44 @@
         '<div><div style="font-size:18px;font-weight:700;color:' + (e.withdrawals ? '#DC2626' : '#9CA3AF') + ';line-height:1;">-' + (e.withdrawals || 0) + '</div>' +
           '<div style="font-size:11px;color:#6B7280;margin-top:4px;font-weight:600;">WITHDRAWALS</div></div>' +
       '</div>' +
-      '<div style="font-size:11px;color:#94A3B8;margin-top:auto;padding-top:10px;border-top:1px solid #F1F5F9;">Outstanding receivables: $' + ((tm.outstanding || 0).toLocaleString()) + '</div>';
+      '<div style="font-size:11px;color:#64748B;margin-top:auto;padding-top:10px;border-top:1px solid #F1F5F9;">Outstanding receivables: $' + ((tm.outstanding || 0).toLocaleString()) + '</div>';
     return widgetCard('Enrollment & revenue', 'Trailing 30 days', html);
   }
 
+  // The overview KPI tiles, computed from a /agency/dashboard payload. Each carries a
+  // stable `key` so the live poll (below) can update its number in place without a
+  // full, scroll-jumping re-render.
+  function overviewKpis(data) {
+    const t = data.totals || {};
+    const capacitySum = (data.centres || []).reduce((acc, c) => acc + (c.license_capacity || 0), 0);
+    const capacityPct = capacitySum > 0 ? Math.round((t.enrolled / capacitySum) * 100) : 0;
+    const presentPct  = t.enrolled > 0 ? Math.round((t.present_now / t.enrolled) * 100) : 0;
+    const _owed = Number(t.receivables || 0) > 0;
+    const _noStaff = (t.staff_on_floor ?? 0) === 0;
+    const _centresCount = (data.centres || []).length;
+    const _roomsSum = (data.centres || []).reduce((acc, c) => acc + (c.room_count || 0), 0);
+    const _breachSum = (data.centres || []).reduce((acc, c) => acc + (c.rooms_in_breach || 0), 0);
+    const _overdue = t.overdue_invoices ?? 0;
+    return [
+      { key: 'enrolled', icon: '👶', value: t.enrolled ?? 0, label: 'Total enrolled', sub: capacityPct + '% of capacity', c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
+      { key: 'present', icon: '📍', value: t.present_now ?? 0, label: 'Here right now', sub: presentPct + '% of enrolled', c1: '#93C5FD', c2: '#2563EB', tint: '#EFF6FF', ink: '#1D4ED8' },
+      { key: 'staff_floor', icon: '🧑‍🏫', value: t.staff_on_floor ?? 0, label: 'Staff on floor', sub: _noStaff ? 'No one clocked in' : 'Active', c1: _noStaff ? '#FCA5A5' : '#FCD34D', c2: _noStaff ? '#DC2626' : '#D97706', tint: _noStaff ? '#FEF2F2' : '#FFFBEB', ink: _noStaff ? '#B91C1C' : '#B45309' },
+      { key: 'receivables', icon: '💳', value: '$' + Number(t.receivables || 0).toFixed(2), label: 'Receivables', sub: _owed ? 'Outstanding' : 'All collected', c1: _owed ? '#FCA5A5' : '#86EFAC', c2: _owed ? '#DC2626' : '#16A34A', tint: _owed ? '#FEF2F2' : '#F0FDF4', ink: _owed ? '#B91C1C' : '#15803D' },
+      { key: 'centres', icon: '🏫', value: _centresCount, label: 'Centres', sub: _roomsSum + ' room' + (_roomsSum === 1 ? '' : 's'), c1: '#C4B5FD', c2: '#7C3AED', tint: '#F5F3FF', ink: '#6D28D9' },
+      { key: 'capacity', icon: '📊', value: capacitySum, label: 'Licensed capacity', sub: capacityPct + '% filled', c1: '#7DD3FC', c2: '#0284C7', tint: '#F0F9FF', ink: '#0369A1' },
+      { key: 'families', icon: '👪', value: t.families ?? 0, label: 'Families', sub: 'enrolled', c1: '#FDBA74', c2: '#EA580C', tint: '#FFF7ED', ink: '#C2410C' },
+      { key: 'team', icon: '👥', value: t.staff_total ?? 0, label: 'Team members', sub: 'educators + directors', c1: '#F9A8D4', c2: '#DB2777', tint: '#FDF2F8', ink: '#BE185D' },
+      { key: 'overdue', icon: '🧾', value: _overdue, label: 'Overdue invoices', sub: _overdue > 0 ? 'Need follow-up' : 'All current', c1: _overdue > 0 ? '#FCA5A5' : '#86EFAC', c2: _overdue > 0 ? '#DC2626' : '#16A34A', tint: _overdue > 0 ? '#FEF2F2' : '#F0FDF4', ink: _overdue > 0 ? '#B91C1C' : '#15803D' },
+      { key: 'ratio', icon: '⚖️', value: _breachSum, label: 'Ratio alerts', sub: _breachSum > 0 ? 'Rooms over ratio' : 'All within ratio', c1: _breachSum > 0 ? '#FCA5A5' : '#86EFAC', c2: _breachSum > 0 ? '#DC2626' : '#16A34A', tint: _breachSum > 0 ? '#FEF2F2' : '#F0FDF4', ink: _breachSum > 0 ? '#B91C1C' : '#15803D' },
+    ];
+  }
+
+  // One live poll per screen visit — cleared when the overview re-renders or the user
+  // navigates away (the tiles leave the DOM).
+  let _overviewPollTimer = null;
+
   async function renderAgencyDashboard(main) {
+    if (_overviewPollTimer) { clearInterval(_overviewPollTimer); _overviewPollTimer = null; }
     Dom.clear(main);
 
     // Skeleton loading state (cleaner than "Loading...")
@@ -489,6 +522,18 @@
       main.appendChild(emptyState('⚠️', 'Could not load', e.message || 'Server error'));
       return;
     }
+
+    // Email delivery state (master + per-centre) for the on/off badges. Non-fatal.
+    const emailInfo = { master_enabled: true, byCentre: {} };
+    try {
+      const ed = await Api.get('/admin/email-delivery');
+      emailInfo.master_enabled = ed.master_enabled !== false;
+      (ed.centres || []).forEach(c => { emailInfo.byCentre[c.id] = c.email_enabled !== false; });
+    } catch (e) { /* badges just default to "on" */ }
+    // Small on/off pill (HTML string) reused by the hero + centre cards.
+    const emailPillHtml = (on, text) => '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;white-space:nowrap;padding:2px 9px;border-radius:20px;'
+      + (on ? 'color:#15803D;background:#DCFCE7;' : 'color:#B45309;background:#FEF3C7;') + '">'
+      + (on ? '✉️ ' : '🔕 ') + esc(text || (on ? 'Email on' : 'Email off')) + '</span>';
 
     Dom.clear(main);
     const wrap = document.createElement('div');
@@ -522,6 +567,11 @@
           <strong>${centreCount}</strong> centre${centreCount === 1 ? '' : 's'} ·
           <strong>${totalEnrolled}</strong> children enrolled ·
           last updated just now
+          <div style="margin-top:9px;">
+            <a href="#email-settings" title="Manage email delivery" style="text-decoration:none;">
+              ${emailPillHtml(emailInfo.master_enabled, emailInfo.master_enabled ? 'Agency email ON' : 'Agency email OFF')}
+            </a>
+          </div>
         </div>
         <div class="kt-hero-actions">
           <button class="kt-hero-btn primary" id="kt-add-centre-btn">+ Add centre</button>
@@ -536,36 +586,55 @@
     wrap.querySelector('#kt-add-centre-btn')?.addEventListener('click', () => openAddCentre(main));
     wrap.querySelector('#kt-edit-agency-btn')?.addEventListener('click', () => openEditAgency(main, data.agency || {}));
 
-    // ─── KPI strip ────────────────────────────────────────────
-    const t = data.totals || {};
-    const capacitySum = (data.centres || []).reduce((acc, c) => acc + (c.license_capacity || 0), 0);
-    const capacityPct = capacitySum > 0 ? Math.round((t.enrolled / capacitySum) * 100) : 0;
-    const presentPct  = t.enrolled > 0 ? Math.round((t.present_now / t.enrolled) * 100) : 0;
+    // This screen re-renders itself (the ↻ Refresh button rebuilds the hero with the
+    // action buttons back INSIDE it). The shell only lifts banner buttons into the
+    // toolbar during the initial visit — its budget/observer are long spent by the time
+    // someone clicks Refresh — so lift them ourselves after every render. Buttons keep
+    // their bound listeners (the lift moves the same nodes); idempotent on first mount.
+    try { window.KT && KT.Shell && KT.Shell.liftHeroButtons && KT.Shell.liftHeroButtons(main); } catch (e) {}
 
+    // ─── KPI strip ────────────────────────────────────────────
+    // v23 (2026-07-20): KPI tiles restyled to match the colourful card theme
+    // used across the portal — gradient icon badge, big accent number, tinted
+    // card, hover lift. Receivables stays red when money is owed (a real signal).
+    // Values carry data-kpi/data-kpi-sub so the live poll updates them in place.
+    const _kpis = overviewKpis(data);
+    const _kpiHtml = _kpis.map((k) => `
+        <div class="kt-kpi-tile" style="position:relative;overflow:hidden;background:${k.tint};border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:13px 16px;display:flex;align-items:center;gap:13px;transition:transform .15s ease, box-shadow .15s ease;">
+          <div style="width:44px;height:44px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:21px;background:linear-gradient(135deg,${k.c1},${k.c2});box-shadow:0 6px 13px -6px ${k.c2};">${k.icon}</div>
+          <div style="min-width:0;">
+            <div data-kpi="${k.key}" style="font-size:27px;font-weight:900;line-height:1.05;color:${k.ink};transition:color .3s ease;">${k.value}</div>
+            <div style="font-size:10.5px;font-weight:800;letter-spacing:.6px;color:${k.ink};opacity:.72;margin-top:3px;text-transform:uppercase;">${k.label}</div>
+            <div data-kpi-sub="${k.key}" style="font-size:11.5px;color:#64748b;margin-top:1px;">${k.sub}</div>
+          </div>
+        </div>`).join('');
     wrap.insertAdjacentHTML('beforeend', `
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:20px;">
-        <div class="stat-tile-v17 accent-teal">
-          <div class="label">Total enrolled</div>
-          <div class="value">${t.enrolled ?? 0}</div>
-          <div class="delta muted">${capacityPct}% of capacity</div>
-        </div>
-        <div class="stat-tile-v17 accent-navy">
-          <div class="label">Here right now</div>
-          <div class="value">${t.present_now ?? 0}</div>
-          <div class="delta muted">${presentPct}% of enrolled</div>
-        </div>
-        <div class="stat-tile-v17 ${(t.staff_on_floor ?? 0) === 0 ? 'accent-warn' : 'accent-success'}">
-          <div class="label">Staff on floor</div>
-          <div class="value">${t.staff_on_floor ?? 0}</div>
-          <div class="delta muted">${(t.staff_on_floor ?? 0) === 0 ? 'No one clocked in' : 'Active'}</div>
-        </div>
-        <div class="stat-tile-v17 ${Number(t.receivables) > 0 ? 'accent-danger' : 'accent-success'}">
-          <div class="label">Receivables</div>
-          <div class="value">$${Number(t.receivables || 0).toFixed(2)}</div>
-          <div class="delta ${Number(t.receivables) > 0 ? 'down' : 'up'}">${Number(t.receivables) > 0 ? 'Outstanding' : 'All collected'}</div>
-        </div>
-      </div>
+      <style>.kt-kpi-tile:hover{transform:translateY(-3px);box-shadow:0 14px 24px -14px rgba(15,23,42,.28);}</style>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:20px;">${_kpiHtml}</div>
     `);
+
+    // ── Live KPIs ─────────────────────────────────────────────
+    // Refresh the tile numbers in place every 30s so "Here right now", "Staff on
+    // floor", receivables, etc. stay current without a full, scroll-jumping re-render.
+    // Self-stops once the tiles leave the DOM (navigation away or a manual refresh,
+    // which clears the timer up front). A changed number briefly fades in as a cue.
+    _overviewPollTimer = setInterval(async () => {
+      if (!document.body.contains(wrap)) { clearInterval(_overviewPollTimer); _overviewPollTimer = null; return; }
+      let fresh;
+      try { fresh = await Api.get('/agency/dashboard'); } catch (e) { return; }
+      if (!document.body.contains(wrap)) return;
+      overviewKpis(fresh).forEach((k) => {
+        const el = wrap.querySelector('[data-kpi="' + k.key + '"]');
+        if (el) {
+          const changed = String(el.textContent) !== String(k.value);
+          el.textContent = k.value;
+          el.style.color = k.ink;                       // state can flip (e.g. staff → red at 0)
+          if (changed && el.animate) el.animate([{ opacity: 0.3 }, { opacity: 1 }], { duration: 650 });
+        }
+        const sub = wrap.querySelector('[data-kpi-sub="' + k.key + '"]');
+        if (sub) sub.textContent = k.sub;
+      });
+    }, 30000);
 
     // ─── v22p4.1: Customizable business widgets ──────────────
     // 8 widget options, user chooses which to display via localStorage.
@@ -634,9 +703,19 @@
         // to the initial-in-a-tile when no logo is uploaded. Each centre gets a
         // distinct colour band (its brand colour, or a deterministic one by name).
         const brand = c.brand_color || cardColour(c.name);
-        const logoBlock = c.logo_url
-          ? `<img src="${esc(absUrl(c.logo_url))}" alt="${esc(c.name)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
-          : `<div style="width:44px;height:44px;border-radius:10px;background:${brand};color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">${esc((c.name || '?').charAt(0).toUpperCase())}</div>`;
+        // Provider (home childcare person) avatar: their logo when set, else an
+        // adult emoji face — sex assumed from the provider name (a person), never
+        // an initial. A rounded tile, not a circle, so the global emoji sweeper
+        // (circles only) doesn't reach it — hence the explicit emoji here.
+        const provEmoji = (window.KT && KT.emojiFor) ? KT.emojiFor(KT.guessSex(c.provider_name || c.name || ''), false) : '🧑';
+        // Prefer the provider's PHOTO (a face → cover) matched by email, then the
+        // centre LOGO (branding → contain), then an emoji face. Consistent with the
+        // Providers & rooms list so a provider's uploaded photo shows everywhere.
+        const logoBlock = c.provider_photo_url
+          ? `<img src="${esc(absUrl(c.provider_photo_url))}" alt="${esc(c.name)}" loading="lazy" style="width:44px;height:44px;border-radius:10px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
+          : (c.logo_url
+            ? `<img src="${esc(absUrl(c.logo_url))}" alt="${esc(c.name)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
+            : `<div style="width:44px;height:44px;border-radius:10px;background:${brand};display:flex;align-items:center;justify-content:center;font-size:26px;line-height:1;">${provEmoji}</div>`);
         // Capacity donut (circle graph). Shows capacity % when a licence cap is
         // set, else the enrolled count with a full ring.
         const _ringPct = c.license_capacity ? cap : (c.enrolled ? 100 : 0);
@@ -662,8 +741,8 @@
           if (r.status === 'out') return `<span style="color:#64748B;white-space:nowrap;">${esc(r.check_in_at || '')} → ${esc(r.check_out_at || '')}</span>`;
           return `<span style="color:#B45309;background:#FEF3C7;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not in</span>`;
         };
-        const _rosterRows = _roster.map(r => `
-              <div style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12px;border-bottom:1px solid #F4F6F9;${r.status === 'absent' ? 'opacity:.72;' : ''}">
+        const _rosterRows = _roster.map((r, i) => `
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:12px;border-radius:6px;background:${i % 2 ? '#F4F8FC' : '#FFFFFF'};${r.status === 'absent' ? 'opacity:.72;' : ''}">
                 ${_av(r)}
                 <span style="flex:1;font-weight:600;color:var(--kt-text,#0D1B2A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.name)}</span>
                 ${_statusHtml(r)}
@@ -682,7 +761,8 @@
               <div style="display:flex;align-items:center;gap:12px;">
                 ${logoBlock}
                 <div>
-                  <div class="name">${esc(c.name)}</div>
+                  <div class="name">${esc(c.provider_name || c.name)}</div>
+                  ${c.provider_name && c.provider_name !== c.name ? `<div style="font-size:11.5px;color:var(--kt-text-muted);font-weight:500;">${esc(c.name)}</div>` : ''}
                   ${c.tagline
                     ? `<div style="font-size:12px;color:var(--kt-text-muted);font-weight:500;margin-top:1px;">${esc(c.tagline)}</div>`
                     : (c.city ? `<div class="city">${esc(c.city)}</div>` : '')}
@@ -696,22 +776,26 @@
               </div>
             </div>
             <div class="stats">
-              <div class="item">
-                <div class="ilabel">Enrolled</div>
-                <div class="ivalue">${c.enrolled || 0}${c.license_capacity ? ` <span style="font-size:13px; color:var(--kt-text-faint); font-weight:500;">/ ${c.license_capacity}</span>` : ''}</div>
+              <div class="item" style="background:#EFF6FF;border-radius:10px;padding:8px 10px;">
+                <div class="ilabel" style="color:#1D4ED8;">Enrolled</div>
+                <div class="ivalue" style="color:#1D4ED8;">${c.enrolled || 0}${c.license_capacity ? ` <span style="font-size:13px; color:#60A5FA; font-weight:500;">/ ${c.license_capacity}</span>` : ''}</div>
               </div>
-              <div class="item" title="${esc(_presentTip)}" style="cursor:help;">
-                <div class="ilabel">Present ⓘ</div>
-                <div class="ivalue">${c.present_now ?? 0}</div>
+              <div class="item" title="${esc(_presentTip)}" style="cursor:help;background:#F0FDF4;border-radius:10px;padding:8px 10px;">
+                <div class="ilabel" style="color:#15803D;">Present ⓘ</div>
+                <div class="ivalue" style="color:#16A34A;">${c.present_now ?? 0}</div>
               </div>
-              <div class="item" title="${esc(_staffTip)}" style="cursor:help;">
-                <div class="ilabel">Staff ⓘ</div>
-                <div class="ivalue">${c.staff_on_floor ?? 0}</div>
+              <div class="item" title="${esc(_staffTip)}" style="cursor:help;background:${(c.staff_on_floor ?? 0) === 0 ? '#FEF2F2' : '#FFFBEB'};border-radius:10px;padding:8px 10px;">
+                <div class="ilabel" style="color:${(c.staff_on_floor ?? 0) === 0 ? '#B91C1C' : '#B45309'};">Staff ⓘ</div>
+                <div class="ivalue" style="color:${(c.staff_on_floor ?? 0) === 0 ? '#B91C1C' : '#B45309'};">${c.staff_on_floor ?? 0}</div>
               </div>
             </div>
             ${checkinHtml}
-            <div class="footer">
-              <button class="manage-btn" data-centre-id="${c.id}">Manage this centre →</button>
+            <div class="footer" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              ${emailPillHtml(emailInfo.byCentre[c.id] !== false, emailInfo.byCentre[c.id] !== false ? 'Email on' : 'Email off')}
+              <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
+                <button class="review-day-btn" data-centre-id="${c.id}" title="Open this provider's daily overview" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#13B7CC,#1F6080);color:#fff;border:0;border-radius:10px;padding:8px 15px;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 10px -4px rgba(31,96,128,.6);white-space:nowrap;">📅 Review day</button>
+                <button class="manage-btn" data-centre-id="${c.id}">Manage this centre →</button>
+              </div>
             </div>
           </div>
         `);
@@ -722,9 +806,31 @@
       // reloaded — but agency_admin:dashboard is the SAME screen so the page
       // visibly didn't change. Now we route to the admin Centres tab and
       // stash an auto-open hint so the centre's edit modal opens on arrival.
-      centresSection.querySelectorAll('.manage-btn').forEach(btn => {
+      // Shortcut → this provider's Daily Overview, pre-selected to their centre.
+      centresSection.querySelectorAll('.review-day-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+          try { sessionStorage.setItem('kt_pd_centre', btn.getAttribute('data-centre-id')); } catch (e) {}
+          window.location.hash = 'provider-day';
+        });
+      });
+      centresSection.querySelectorAll('.manage-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-centre-id');
+          // Open the centre edit modal IN PLACE — no teleport to the
+          // Administration › Centres tab (which reads as a stray background
+          // screen). The dashboard payload lacks the editable fields, so pull
+          // the full record first, then hand it to the shared modal with an
+          // overview refresh callback.
+          if (window.KT && window.KT.showCentreModal) {
+            let full = null;
+            try {
+              const r = await Api.get('/admin/centres');
+              full = (r.centres || []).find(x => String(x.id) === String(id));
+            } catch (e) { /* fall through to the old navigation */ }
+            if (full) { window.KT.showCentreModal(full, main, () => renderAgencyDashboard(main)); return; }
+          }
+          // Fallback: route to the Administration Centres tab (a real sidebar
+          // screen) and auto-open the modal there.
           sessionStorage.setItem('kt_centre_id', id);
           sessionStorage.setItem('kt_admin_open_centre', id);
           window.location.hash = 'admin-centres';
@@ -743,7 +849,7 @@
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${archived.map(c => `
             <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;">
-              <div style="flex:1;font-weight:600;color:#374151;">${esc(c.name)}${c.city ? ` <span style="font-weight:400;color:#9CA3AF;font-size:13px;">· ${esc(c.city)}</span>` : ''}</div>
+              <div style="flex:1;font-weight:600;color:#374151;">${esc(c.name)}${c.city ? ` <span style="font-weight:400;color:#64748B;font-size:13px;">· ${esc(c.city)}</span>` : ''}</div>
               <button class="kt-restore-centre" data-centre-id="${c.id}" style="background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Restore</button>
               <button class="kt-delete-centre" data-centre-id="${c.id}" data-centre-name="${esc(c.name)}" style="background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Delete</button>
             </div>`).join('')}
@@ -764,6 +870,87 @@
       });
       wrap.appendChild(archSection);
     }
+
+    // ─── Team & family demographics (onboarding analytics) ────
+    // Self-reported race/ethnicity + auto-detected device type, captured at
+    // onboarding into profile_extras. Loaded async so it never delays the board.
+    const demoSection = document.createElement('div');
+    demoSection.style.cssText = 'margin-bottom:26px;';
+    demoSection.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px;">
+        <h2 style="font-family:var(--kt-font-display); font-weight:700; font-size:20px; margin:0;">Team &amp; family demographics</h2>
+        <span style="font-size:12px; color:var(--kt-text-faint);">self-reported at onboarding · optional</span>
+      </div>
+      <div id="kt-demo-body" style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:var(--kt-radius); padding:18px 20px; color:var(--kt-text-muted); font-size:13px;">Loading…</div>
+    `;
+    wrap.appendChild(demoSection);
+    (async () => {
+      const body = demoSection.querySelector('#kt-demo-body');
+      let d;
+      try { d = await Api.get('/admin/analytics/demographics'); }
+      catch (e) { demoSection.style.display = 'none'; return; }   // endpoint absent → hide quietly
+      if (!d || ((d.ethnicity || []).length === 0 && (d.devices || []).length === 0)) {
+        body.innerHTML = '<div style="text-align:center; padding:14px 8px;"><span style="font-size:24px;">📊</span><div style="margin-top:6px;">No demographic data yet — it fills in as your people complete onboarding'
+          + (d && d.total ? ` (0 of ${d.total} reported so far)` : '') + '.</div></div>';
+        return;
+      }
+      const PAL = ['#1F6080', '#13B7CC', '#8B5CF6', '#F59E0B', '#10B981', '#EF4444', '#EC4899', '#6366F1', '#0EA5E9', '#84CC16', '#F97316', '#14B8A6', '#A855F7', '#64748B'];
+      // Compact horizontal bars (tighter than before — the old ones were needlessly tall).
+      const bars = (rows) => {
+        if (!rows || !rows.length) return '<div style="color:var(--kt-text-faint); font-size:12px; padding:4px 0;">No responses yet.</div>';
+        const max = Math.max.apply(null, rows.map(r => r.count)) || 1;
+        return rows.map((r, i) => {
+          const pct = Math.round((r.count / max) * 100);
+          const c = PAL[i % PAL.length];
+          return `<div style="display:flex; align-items:center; gap:9px; margin-bottom:6px;">
+            <span style="flex:0 0 108px; font-size:12px; color:var(--kt-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(r.label)}</span>
+            <span style="flex:1; height:6px; background:var(--kt-border); border-radius:5px; overflow:hidden;"><span style="display:block; height:100%; width:${pct}%; background:${c}; border-radius:5px;"></span></span>
+            <span style="flex:0 0 auto; font-size:12px; font-weight:700; color:var(--kt-text-muted); font-variant-numeric:tabular-nums;">${r.count}</span>
+          </div>`;
+        }).join('');
+      };
+      // Device type → compact tiles with the real Apple / Android brand marks.
+      const APPLE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M17.05 12.04c-.03-2.65 2.16-3.92 2.26-3.98-1.23-1.8-3.15-2.05-3.83-2.08-1.63-.16-3.18.96-4.01.96-.82 0-2.1-.94-3.46-.91-1.78.03-3.42 1.03-4.34 2.62-1.85 3.21-.47 7.96 1.33 10.56.88 1.27 1.93 2.7 3.31 2.65 1.33-.05 1.83-.86 3.44-.86 1.61 0 2.06.86 3.46.83 1.43-.03 2.34-1.31 3.22-2.58.7-1.02.98-1.55 1.53-2.71-4.02-1.53-3.09-6.31.36-7.97zM14.53 4.5c.73-.89 1.22-2.12 1.09-3.35-1.05.04-2.32.7-3.07 1.58-.67.78-1.26 2.03-1.1 3.23 1.17.09 2.36-.6 3.08-1.46z"/></svg>';
+      const ANDROID = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85a.637.637 0 0 0-.83.22l-1.88 3.24a11.43 11.43 0 0 0-8.94 0L5.65 5.67a.643.643 0 0 0-.87-.2c-.28.18-.37.54-.22.83L6.4 9.48A10.78 10.78 0 0 0 1 18h22a10.78 10.78 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>';
+      const devMeta = (label) => {
+        const l = String(label || '').toLowerCase();
+        if (/apple|ios|iphone|ipad|mac/.test(l)) return { icon: APPLE, color: '#111827', name: 'Apple / iOS' };
+        if (/android/.test(l)) return { icon: ANDROID, color: '#3DDC84', name: 'Android' };
+        if (/web|desktop|browser|windows/.test(l)) return { icon: '🌐', color: '#0EA5E9', name: label || 'Web' };
+        return { icon: '💻', color: '#64748B', name: label || 'Other' };
+      };
+      const deviceTiles = (rows) => {
+        if (!rows || !rows.length) return '<div style="color:var(--kt-text-faint); font-size:12px; padding:4px 0;">No responses yet.</div>';
+        const total = rows.reduce((a, r) => a + (r.count || 0), 0) || 1;
+        return '<div style="display:flex; flex-wrap:wrap; gap:10px;">' + rows.map(r => {
+          const m = devMeta(r.label);
+          const pct = Math.round((r.count / total) * 100);
+          const glyph = m.icon.charAt(0) === '<'
+            ? `<span style="color:${m.color}; display:flex; align-items:center;">${m.icon}</span>`
+            : `<span style="font-size:19px; line-height:1;">${m.icon}</span>`;
+          return `<div style="flex:1 1 130px; min-width:120px; display:flex; align-items:center; gap:11px; padding:10px 13px; border:1px solid var(--kt-border); border-radius:12px; background:var(--kt-surface);">
+            ${glyph}
+            <div style="min-width:0;">
+              <div style="font-size:19px; font-weight:800; line-height:1; color:var(--kt-text); font-variant-numeric:tabular-nums;">${r.count}</div>
+              <div style="font-size:11px; color:var(--kt-text-muted); margin-top:3px; white-space:nowrap;">${esc(m.name)} · ${pct}%</div>
+            </div>
+          </div>`;
+        }).join('') + '</div>';
+      };
+      const cover = d.total ? ` · ${d.reported}/${d.total} shared` : '';
+      body.style.color = 'inherit';
+      body.innerHTML = `
+        <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:22px; align-items:start;">
+          <div>
+            <div style="font-weight:700; font-size:12.5px; color:var(--kt-text); margin-bottom:10px;">🌍 Race / ethnicity <span style="font-weight:500; color:var(--kt-text-faint);">${cover}</span></div>
+            ${bars(d.ethnicity)}
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:12.5px; color:var(--kt-text); margin-bottom:10px;">📱 Device type</div>
+            ${deviceTiles(d.devices)}
+          </div>
+        </div>`;
+    })();
 
     // ─── Recent activity feed ─────────────────────────────────
     const activitySection = document.createElement('div');
@@ -807,13 +994,28 @@
       const pager = document.createElement('div');
       pager.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;border-top:1px solid var(--kt-border);background:var(--kt-surface);';
       const btnCss = 'font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--kt-border);background:#fff;color:#1F6080;cursor:pointer;';
+      // Person avatar for a feed row: uploaded photo, else a coloured initial
+      // circle. A small emoji badge (check-in/out, clock, etc.) sits on the corner.
+      // NOTE: the centres-block `cardColour` is const-scoped to that block, so it
+      // is NOT in scope here — a photo-less feed row (e.g. a sign-in event) threw
+      // "cardColour is not defined" and broke the whole overview. Local copy:
+      const _FEED_PAL = ['#1F6FB2', '#0FA3B1', '#E0699A', '#7C3AED', '#F59E0B', '#10B981', '#EF6C4D', '#0891B2', '#DB2777', '#4F8A3D'];
+      const cardColour = (s) => { s = String(s || ''); let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return _FEED_PAL[h % _FEED_PAL.length]; };
+      const feedAvatar = (a) => {
+        const nm = a.name || a.text || '?';
+        const badge = `<span style="position:absolute;right:-3px;bottom:-3px;font-size:13px;line-height:1;background:#fff;border-radius:50%;box-shadow:0 0 0 1.5px #fff;">${esc(a.icon || '•')}</span>`;
+        const inner = a.photo_url
+          ? `<img src="${esc(absUrl(a.photo_url))}" alt="" loading="lazy" style="width:32px;height:32px;border-radius:50%;object-fit:cover;background:#EEF2F7;">`
+          : `<div style="width:32px;height:32px;border-radius:50%;background:${cardColour(nm)};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;">${esc(String(nm).trim().charAt(0).toUpperCase() || '•')}</div>`;
+        return `<div style="position:relative;flex-shrink:0;">${inner}${badge}</div>`;
+      };
       function renderPage() {
         feed.innerHTML = '';
         events.slice(page * PAGE, page * PAGE + PAGE).forEach(a => {
           feed.insertAdjacentHTML('beforeend', `
             <div class="row">
               <div style="display:flex; align-items:center; gap:10px;">
-                <span style="font-size:18px; line-height:1; flex-shrink:0;">${esc(a.icon || '•')}</span>
+                ${feedAvatar(a)}
                 <div class="who">${esc(a.text || a.action || '')}</div>
               </div>
               <div class="when">${esc(relTime(a.created_at))}</div>
@@ -931,6 +1133,13 @@
     const agencyId = eaActiveAgencyId(agency.id);
     if (!agencyId) { if (Dom && Dom.toast) Dom.toast('No active agency selected', 'error'); return; }
 
+    // Local avatar-colour helper. The owner card below uses it when the owner has
+    // no photo; the module's other cardColour is scoped to a different function,
+    // so referencing it here threw "cardColour is not defined" and broke the whole
+    // Edit-agency modal (only surfaced once an owner without an avatar existed).
+    const _EA_PAL = ['#1F6FB2', '#0FA3B1', '#E0699A', '#7C3AED', '#F59E0B', '#10B981', '#EF6C4D', '#0891B2', '#DB2777', '#4F8A3D'];
+    const cardColour = (s) => { s = String(s || ''); let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return _EA_PAL[h % _EA_PAL.length]; };
+
     // Prefill from the agencies list (name/contact_email/subdomain). contact_phone
     // is not in that payload, so it starts blank and is only saved if edited.
     const rec = { name: agency.name || '', contact_email: '', contact_phone: '', subdomain: '' };
@@ -955,7 +1164,7 @@
       return `<div style="margin-bottom:14px;">
         <label style="display:block;font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">${esc(label)}</label>
         <input id="${id}" type="text" value="${esc(val || '')}" placeholder="${esc(ph || '')}" style="width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;">
-        ${hint ? `<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">${hint}</div>` : ''}
+        ${hint ? `<div style="font-size:11px;color:#64748B;margin-top:4px;">${hint}</div>` : ''}
       </div>`;
     }
     modal.innerHTML = `
@@ -964,17 +1173,37 @@
         <button id="kt-ea-close" style="background:transparent;border:none;font-size:22px;color:#6B7280;cursor:pointer;line-height:1;padding:4px 10px;">×</button>
       </div>
       <div style="padding:20px 24px;">
-        ${fld('Agency name', 'kt-ea-name', rec.name, 'iLearn Home Childcare')}
+        ${fld('Agency name', 'kt-ea-name', rec.name, 'Your agency name')}
         ${fld('Contact email', 'kt-ea-email', rec.contact_email, 'info@youragency.com')}
         ${fld('Contact phone', 'kt-ea-phone', rec.contact_phone, '(555) 123-4567')}
         ${fld('Subdomain', 'kt-ea-subdomain', rec.subdomain, 'youragency', 'Your portal address: <strong>&lt;subdomain&gt;.kiddietrac.com</strong> — lowercase letters, numbers, hyphens.')}
+        ${agency.owner ? (function (o) {
+          var roleLabel = o.role === 'agency_admin' ? 'Owner / admin' : (o.role === 'centre_director' ? 'Primary director' : '');
+          var hasPerson = !!o.name;
+          var line2 = [o.email, o.phone].filter(Boolean).join(' · ');
+          var contactLine = (o.contact_email || o.contact_phone) ? [o.contact_email, o.contact_phone].filter(Boolean).join(' · ') : '';
+          var avatar = hasPerson
+            ? (o.photo_url
+                ? '<img src="' + esc(absUrl(o.photo_url)) + '" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;background:#EEF2F7;flex-shrink:0;">'
+                : '<div style="width:38px;height:38px;border-radius:50%;flex-shrink:0;background:' + cardColour(o.name || '?') + ';color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;">' + esc((o.name || '?').charAt(0).toUpperCase()) + '</div>')
+            : '<div style="width:38px;height:38px;border-radius:50%;flex-shrink:0;background:#E2E8F0;display:flex;align-items:center;justify-content:center;font-size:18px;">🏢</div>';
+          return '<div style="margin:2px 0 16px;padding:12px 14px;background:#F8FAFC;border:1px solid #E5E7EB;border-radius:10px;">'
+            + '<div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">👤 Agency owner</div>'
+            + '<div style="display:flex;align-items:center;gap:10px;">' + avatar
+            + '<div style="min-width:0;">'
+            + '<div style="font-weight:700;color:#0F172A;">' + esc(o.name || 'No owner assigned') + (roleLabel ? ' <span style="font-weight:500;color:#64748B;font-size:12px;">(' + roleLabel + ')</span>' : '') + '</div>'
+            + (line2 ? '<div style="font-size:12.5px;color:#64748B;word-break:break-word;">' + esc(line2) + '</div>' : '')
+            + (contactLine ? '<div style="font-size:11.5px;color:#94A3B8;word-break:break-word;margin-top:2px;">Agency contact: ' + esc(contactLine) + '</div>' : '')
+            + '</div></div></div>';
+        })(agency.owner) : ''}
         <div style="margin-bottom:14px;">
           <label style="display:block;font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">Facilities are called</label>
           <select id="kt-ea-term" style="width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;">
             <option value="centre">Centres</option>
             <option value="room">Rooms</option>
+            <option value="provider">Providers</option>
           </select>
-          <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">Switches the word used throughout the portal — "Centres" ⇄ "Rooms". Applies instantly.</div>
+          <div style="font-size:11px;color:#64748B;margin-top:4px;">Switches the word used throughout the portal — Centres, Rooms, or Providers. Applies instantly.</div>
         </div>
         <div style="margin-bottom:14px;">
           <label style="display:block;font-size:13px;font-weight:700;color:#374151;margin-bottom:6px;">Country</label>
@@ -986,7 +1215,7 @@
             <option value="NZ">New Zealand</option>
             <option value="IE">Ireland</option>
           </select>
-          <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">Sets currency, locale, compliance pack, and address fields — e.g. <strong>State / ZIP code</strong> (US) vs <strong>Province / Postal code</strong> (Canada).</div>
+          <div style="font-size:11px;color:#64748B;margin-top:4px;">Sets currency, locale, compliance pack, and address fields — e.g. <strong>State / ZIP code</strong> (US) vs <strong>Province / Postal code</strong> (Canada).</div>
         </div>
         <div style="background:#F9FAFB;border:1px solid #EEF0F2;border-radius:8px;padding:12px;font-size:12px;color:#6B7280;">
           Logo, colours, business address, bank details, and privacy / terms links live under <strong>Branding</strong>.
@@ -1013,7 +1242,7 @@
         const val = termSel.value;
         Api.post('/admin/centre-term', { term: val }).then(() => {
           if (window.KT && KT.setCentreTerm) KT.setCentreTerm(val);
-          if (Dom.toast) Dom.toast('Terminology updated — "' + (val === 'room' ? 'Rooms' : 'Centres') + '"', 'success');
+          if (Dom.toast) Dom.toast('Terminology updated — "' + ({ room: 'Rooms', provider: 'Providers' }[val] || 'Centres') + '"', 'success');
         }).catch((e) => { if (Dom.toast) Dom.toast('Could not update: ' + (e.message || 'error'), 'error'); });
       });
     }

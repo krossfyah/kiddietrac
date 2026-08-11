@@ -175,17 +175,21 @@ class CheckinReminderCommand extends Command
         dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
             AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($to, $toName, $title) {
                 $m->to($to, $toName ?: null)
-                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->subject($title);
                 $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
             });
         })->onQueue('mail');
 
         if (\Illuminate\Support\Facades\Schema::hasTable('email_logs')) {
+            $agid = null;
+            try { $agid = \App\Support\AgencyMail::agencyOfEmail($to) ?: (int) $agencyId; } catch (\Throwable $e) { $agid = (int) $agencyId; }
             DB::table('email_logs')->insert([
+                'agency_id' => $agid,
                 'to_email' => $to, 'to_name' => $toName,
                 'from_email' => 'noreply@kiddietrac.com', 'subject' => $title,
                 'mailer' => config('mail.default'), 'status' => 'sent',
+                'body_html' => mb_substr($html, 0, 500000),
                 'tracking_token' => Str::random(32), 'opens' => 0, 'created_at' => now(),
             ]);
         }
