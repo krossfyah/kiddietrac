@@ -73,6 +73,43 @@ class EducatorSelfController extends Controller
     }
 
     /**
+     * All children currently enrolled in the caller's centre(s)/room(s). For pickers
+     * like Report cards where a room educator must choose one of THEIR children —
+     * the admin-only /admin/children 403s for educators, leaving the list empty.
+     * Self-scoped: only the educator's own centres (role_assignments + educator_rooms).
+     */
+    public function children(Request $request): JsonResponse
+    {
+        $userId = (int) $request->user()->id;
+
+        $centreIds = DB::table('role_assignments')
+            ->where('user_id', $userId)->where('active', 1)->whereNotNull('centre_id')
+            ->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
+        $roomCentreIds = DB::table('educator_rooms as er')
+            ->join('rooms as r', 'r.id', '=', 'er.room_id')
+            ->where('er.user_id', $userId)
+            ->pluck('r.centre_id')->map(fn ($v) => (int) $v)->all();
+        $centreIds = array_values(array_unique(array_filter(array_merge($centreIds, $roomCentreIds))));
+        if (empty($centreIds)) {
+            return response()->json(['children' => []]);
+        }
+
+        $rows = DB::table('children as c')
+            ->join('enrollments as e', 'e.child_id', '=', 'c.id')
+            ->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->leftJoin('centres as ce', 'ce.id', '=', 'r.centre_id')
+            ->whereIn('r.centre_id', $centreIds)
+            ->whereNull('e.end_date')
+            ->whereNull('c.deleted_at')
+            ->distinct()
+            ->orderBy('c.first_name')
+            ->select('c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.photo_url', 'ce.name as centre_name')
+            ->get();
+
+        return response()->json(['children' => $rows]);
+    }
+
+    /**
      * One child's record, for staff who already have access to that child.
      * canAccessChildScoped() is the audited tenant-isolation check (agency +
      * centre + family), so a child from another centre or agency 403s here.

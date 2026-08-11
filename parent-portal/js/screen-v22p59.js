@@ -43,7 +43,7 @@
             ${f.primary_phone ? `<div style="color:#475569;font-size:13px;margin-top:4px;">📞 ${esc(f.primary_phone)}</div>` : ''}
             ${f.city ? `<div style="color:#475569;font-size:13px;margin-top:4px;">📍 ${esc(f.city)}</div>` : ''}
           </div>`).join('')}
-        </div>` : '<div style="color:#94A3B8;padding:20px;text-align:center;">No other families have opted in yet.</div>'}
+        </div>` : '<div style="color:#64748B;padding:20px;text-align:center;">No other families have opted in yet.</div>'}
       </div>
     </div>`;
     // Privacy preferences now live on the Settings screen (Family directory section).
@@ -67,12 +67,12 @@
         <table>
           <thead><tr><th>When</th><th>Teacher</th><th>Status</th>${isStaff ? '<th>Booked by</th>' : ''}<th></th></tr></thead>
           <tbody>${slots.map(s => `<tr>
-            <td><strong>${fmtDate(s.slot_at)}</strong><div style="color:#94A3B8;font-size:12px;">${fmtTime(s.slot_at)} · ${s.duration_minutes} min</div></td>
+            <td><strong>${fmtDate(s.slot_at)}</strong><div style="color:#64748B;font-size:12px;">${fmtTime(s.slot_at)} · ${s.duration_minutes} min</div></td>
             <td>${esc(s.teacher_name || 'Any teacher')}</td>
             <td><span class="kt-pill ${s.status === 'open' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(s.status)}</span></td>
             ${isStaff ? `<td>${esc(s.booked_by_name || '')} ${s.booked_child_name ? '(' + esc(s.booked_child_name) + ')' : ''}</td>` : ''}
             <td>${s.status === 'open' && !isStaff ? `<button class="kt-btn kt-btn-primary" data-book="${s.id}">Book</button>` : s.status === 'booked' ? `<button class="kt-btn kt-btn-danger" data-cancel="${s.id}" style="font-size:12px;">Cancel</button>` : ''}</td>
-          </tr>`).join('') || '<tr><td colspan="' + (isStaff ? 5 : 4) + '" style="text-align:center;padding:40px;color:#94A3B8;">No slots scheduled.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="' + (isStaff ? 5 : 4) + '" style="text-align:center;padding:40px;color:#64748B;">No slots scheduled.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -85,7 +85,7 @@
       renderConferences(main);
     });
     main.querySelectorAll('button[data-cancel]').forEach(b => b.onclick = async () => {
-      if (!confirm('Cancel this conference?')) return;
+      if (!await KT.confirm('Cancel this conference?')) return;
       await Api.post(`/conferences/slots/${b.dataset.cancel}/cancel`, {});
       renderConferences(main);
     });
@@ -149,7 +149,7 @@
       if (!tid) return;
       const r = await Api.get(`/field-trips/${tid}/location`);
       const det = document.getElementById('ft-detail');
-      if (!r.latest) { det.innerHTML = '<div style="color:#94A3B8;padding:14px;">No location pings yet.</div>'; return; }
+      if (!r.latest) { det.innerHTML = '<div style="color:#64748B;padding:14px;">No location pings yet.</div>'; return; }
       det.innerHTML = `<div class="kt-kpi-grid">
         <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Latitude</div><div class="kt-kpi-value">${parseFloat(r.latest.lat).toFixed(5)}</div></div>
         <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Longitude</div><div class="kt-kpi-value">${parseFloat(r.latest.lon).toFixed(5)}</div></div>
@@ -159,7 +159,7 @@
       <div style="margin-top:18px;">
         <iframe width="100%" height="500" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"
           src="https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(r.latest.lon)-0.01},${parseFloat(r.latest.lat)-0.01},${parseFloat(r.latest.lon)+0.01},${parseFloat(r.latest.lat)+0.01}&layer=mapnik&marker=${r.latest.lat},${r.latest.lon}"></iframe>
-        <div style="margin-top:8px;font-size:12px;color:#94A3B8;">
+        <div style="margin-top:8px;font-size:12px;color:#64748B;">
           <a href="https://www.openstreetmap.org/?mlat=${r.latest.lat}&mlon=${r.latest.lon}#map=15/${r.latest.lat}/${r.latest.lon}" target="_blank" style="color:#1F6080;">View larger map</a>
         </div>
       </div>`;
@@ -172,7 +172,7 @@
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const childrenRes = await Api.get('/parent/children').catch(() => Api.get('/admin/children').catch(() => ({ data: [] })));
     const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
-    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children.</div>'; return; }
+    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children.</div>'; return; }
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>📅 Multi-day attendance pattern</h2>
@@ -190,23 +190,44 @@
       const r = await Api.get(`/attendance/pattern/${cid}`);
       const p = r.data || { monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 0, sunday: 0 };
       document.getElementById('ap-detail').innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:14px;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
           ${['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d => {
             const label = d.charAt(0).toUpperCase() + d.slice(1, 3);
-            return `<label style="text-align:center;cursor:pointer;background:${p[d] ? '#DCFCE7' : '#F1F5F9'};padding:14px 8px;border-radius:10px;border:2px solid ${p[d] ? '#10B981' : '#E2E8F0'};">
-              <div style="font-weight:700;font-size:12px;color:#64748B;text-transform:uppercase;">${label}</div>
-              <input type="checkbox" data-day="${d}" ${p[d] ? 'checked' : ''} style="margin-top:8px;width:22px;height:22px;cursor:pointer;">
-            </label>`;
+            const on = !!p[d];
+            return `<button type="button" class="ap-day" data-day="${d}" data-on="${on ? '1' : '0'}" aria-pressed="${on ? 'true' : 'false'}"
+              style="flex:1 1 0;min-width:60px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;box-sizing:border-box;
+              padding:12px 6px;border-radius:12px;font-family:inherit;transition:background .14s,border-color .14s,color .14s,box-shadow .14s;
+              border:1.5px solid ${on ? '#159FB4' : '#E2E8F0'};background:${on ? 'linear-gradient(135deg,#0FA3B1,#1F6FB2)' : '#F8FAFC'};
+              color:${on ? '#fff' : '#64748B'};box-shadow:${on ? '0 6px 14px -8px rgba(31,111,178,.7)' : 'none'};">
+              <span style="font-weight:800;font-size:13.5px;letter-spacing:.3px;">${label}</span>
+              <span class="ap-day-state" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;opacity:.9;">${on ? 'In' : 'Off'}</span>
+            </button>`;
           }).join('')}
         </div>
         <label style="display:block;font-size:13px;font-weight:600;margin:18px 0 4px;">Effective from</label>
-        <input id="ap-from" type="date" value="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
+        <input id="ap-from" type="date" value="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;max-width:220px;">
         <button id="ap-save" class="kt-btn kt-btn-primary" style="margin-top:14px;">Save pattern</button>
       `;
+      // Each day is a single toggle button (was a raw checkbox stacked under the
+      // label — visually inconsistent with the platform's pill toggles). Clicking
+      // flips data-on and restyles to the selected/unselected states.
+      const styleDay = (btn, on) => {
+        btn.setAttribute('data-on', on ? '1' : '0');
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.style.border = '1.5px solid ' + (on ? '#159FB4' : '#E2E8F0');
+        btn.style.background = on ? 'linear-gradient(135deg,#0FA3B1,#1F6FB2)' : '#F8FAFC';
+        btn.style.color = on ? '#fff' : '#64748B';
+        btn.style.boxShadow = on ? '0 6px 14px -8px rgba(31,111,178,.7)' : 'none';
+        const st = btn.querySelector('.ap-day-state');
+        if (st) st.textContent = on ? 'In' : 'Off';
+      };
+      document.querySelectorAll('#ap-detail .ap-day').forEach(btn => {
+        btn.addEventListener('click', () => styleDay(btn, btn.getAttribute('data-on') !== '1'));
+      });
       document.getElementById('ap-save').onclick = async () => {
         const days = {};
         ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(d => {
-          days[d] = document.querySelector(`input[data-day="${d}"]`).checked;
+          days[d] = document.querySelector(`.ap-day[data-day="${d}"]`).getAttribute('data-on') === '1';
         });
         await Api.post(`/attendance/pattern/${cid}`, { ...days, effective_from: document.getElementById('ap-from').value });
         (window.KT && window.KT.toast) ? KT.toast('Saved.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Saved.') ? 'success' : 'info') : alert('Saved.');
@@ -219,55 +240,171 @@
   // ============================ Report cards (staff) ============================
   async function renderReportCards(main) {
     main.setAttribute('data-kt-pretty', '1');
+    main.innerHTML = '<div style="padding:24px;">Loading…</div>';
+    // Children DROPDOWN (was a raw "Child ID" number box — with nowhere in the app to
+    // look that number up, it was unusable). Pull the agency's children so staff pick a
+    // name; /admin/children is agency-scoped and returns {children:[...]} (empty if no
+    // active agency is selected; 403 for a platform_admin with none).
+    let kids = [];
+    let kidsErr = 0;
+    try {
+      const kr = await Api.get('/admin/children');
+      kids = (kr && Array.isArray(kr.children)) ? kr.children
+           : Array.isArray(kr) ? kr
+           : (kr && Array.isArray(kr.data)) ? kr.data : [];
+    } catch (e) { kidsErr = (e && e.status) || 0; }
+    // Educators / home-visitors can't hit /admin/children (agency-admin only) → it
+    // 403s and the picker was empty. Fall back to their own centre roster.
+    if (!kids.length) {
+      try {
+        const pr = await Api.get('/provider/children');
+        if (pr && Array.isArray(pr.children) && pr.children.length) { kids = pr.children; kidsErr = 0; }
+      } catch (e2) {}
+    }
+    const kidLabel = (c) => {
+      const nm = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.preferred_name || ('Child #' + c.id);
+      return esc(nm) + (c.centre_name ? ' · ' + esc(c.centre_name) : '');
+    };
+    const kidOptions = kids.map(c => `<option value="${c.id}">${kidLabel(c)}</option>`).join('');
+    const noKidsMsg = kids.length ? '' :
+      `<div style="margin-top:6px;color:#64748B;font-size:12.5px;">${kidsErr === 403 ? 'Select an agency (top-bar switcher) to load its children.' : 'No children found for this agency.'}</div>`;
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>📑 Report cards</h2>
-        <p>Generate AI-drafted narratives per HDLH domain. Review + edit + send to family.</p>
+        <p>Generate AI-drafted narratives per HDLH domain. Educators sign &amp; submit; a director/admin signs &amp; approves before it reaches the family.</p>
       </div>
+      <div id="rc-pending"></div>
       <div class="kt-card">
-        <label style="font-size:13px;font-weight:600;">Child ID</label>
-        <input id="rc-cid" type="number" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-        <label style="display:block;font-size:13px;font-weight:600;margin-top:10px;">Term</label>
-        <input id="rc-term" placeholder="e.g. 2026 Year-End" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-        <button id="rc-gen" class="kt-btn kt-btn-primary" style="margin-top:14px;">Generate via AI</button>
-        <div id="rc-out" style="margin-top:18px;"></div>
+        <div style="max-width:920px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:620px;">
+            <div>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Child</label>
+              <select id="rc-cid" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;font-size:14px;">
+                <option value="">Select a child…</option>
+                ${kidOptions}
+              </select>
+              ${noKidsMsg}
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Term</label>
+              <input id="rc-term" placeholder="e.g. 2026 Year-End" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;">
+            </div>
+          </div>
+          <button id="rc-gen" class="kt-btn kt-btn-primary" style="margin-top:18px;">Generate via AI</button>
+          <div id="rc-out" style="margin-top:20px;"></div>
+        </div>
       </div>
     </div>`;
     document.getElementById('rc-gen').onclick = async () => {
       const cid = +document.getElementById('rc-cid').value;
       const term = document.getElementById('rc-term').value;
-      if (!cid || !term) { (window.KT && window.KT.toast) ? KT.toast('Child ID + term required', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Child ID + term required') ? 'success' : 'info') : alert('Child ID + term required'); return; }
+      if (!cid || !term) { (window.KT && window.KT.toast) ? KT.toast('Select a child and enter a term', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Select a child and enter a term') ? 'success' : 'info') : alert('Select a child and enter a term'); return; }
       const btn = document.getElementById('rc-gen');
       btn.disabled = true; btn.textContent = 'Generating… (15-30 sec)';
       try {
         const r = await Api.post('/report-cards/generate', { child_id: cid, term });
         document.getElementById('rc-out').innerHTML = ['belonging', 'wellbeing', 'engagement', 'expression'].map(d => `
-          <h4 style="margin-top:14px;color:#1F6080;text-transform:capitalize;">${d.replace('wellbeing', 'Well-being')}</h4>
-          <textarea id="rc-${d}" rows="5" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;">${esc((r.narratives || {})[d] || '')}</textarea>
+          <h4 style="margin:16px 0 6px;color:#1F6080;text-transform:capitalize;">${d.replace('wellbeing', 'Well-being')}</h4>
+          <textarea id="rc-${d}" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc((r.narratives || {})[d] || '')}</textarea>
         `).join('') + `
-          <h4 style="margin-top:14px;color:#F59E0B;">Next steps</h4>
-          <textarea id="rc-next" rows="5" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;">${esc(r.next_steps || '')}</textarea>
-          <button id="rc-save" class="kt-btn kt-btn-primary" style="margin-top:14px;">Save edits</button>
-          <button id="rc-send" class="kt-btn kt-btn-success" style="margin-top:14px;margin-left:8px;">Mark as sent + notify family</button>
+          <h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4>
+          <textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(r.next_steps || '')}</textarea>
+          <div id="rc-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"></div>
+          <p style="font-size:12px;color:#94A3B8;margin-top:8px;line-height:1.5;">Educators sign &amp; submit for their director/admin to review, sign and send to the family.</p>
         `;
-        document.getElementById('rc-save').onclick = async () => {
+        var _rcRoles = []; try { _rcRoles = (JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) {}
+        var _rcApprover = ['centre_director', 'agency_admin', 'platform_admin'].some(function (x) { return _rcRoles.indexOf(x) !== -1; });
+        var saveEdits = async function (status) {
           await Api.patch(`/report-cards/${r.id}`, {
             narrative_belonging: document.getElementById('rc-belonging').value,
             narrative_wellbeing: document.getElementById('rc-wellbeing').value,
             narrative_engagement: document.getElementById('rc-engagement').value,
             narrative_expression: document.getElementById('rc-expression').value,
             next_steps: document.getElementById('rc-next').value,
-            status: 'reviewed',
+            status: status || 'reviewed',
           });
-          (window.KT && window.KT.toast) ? KT.toast('Saved.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Saved.') ? 'success' : 'info') : alert('Saved.');
         };
-        document.getElementById('rc-send').onclick = async () => {
-          await Api.post(`/report-cards/${r.id}/send`, {});
-          (window.KT && window.KT.toast) ? KT.toast('Sent. Family was notified.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Sent. Family was notified.') ? 'success' : 'info') : alert('Sent. Family was notified.');
-        };
+        var _acts = document.getElementById('rc-actions');
+        _acts.innerHTML = '<button id="rc-save" class="kt-btn kt-btn-primary">💾 Save edits</button>'
+          + (_rcApprover
+            ? '<button id="rc-approve" class="kt-btn kt-btn-success">✍️ Sign, approve &amp; send</button>'
+            : '<button id="rc-submit" class="kt-btn kt-btn-success">✍️ Sign &amp; submit for approval</button>');
+        document.getElementById('rc-save').onclick = async () => { await saveEdits('reviewed'); (window.KT && KT.toast) ? KT.toast('Saved.', 'success') : alert('Saved.'); };
+        if (_rcApprover) {
+          document.getElementById('rc-approve').onclick = async () => {
+            await saveEdits('reviewed');
+            var sig = await KT.signaturePad({ title: 'Director / admin sign-off', subtitle: 'Your signature approves this report card and sends it to the family.', okLabel: 'Approve & send' });
+            if (!sig) return;
+            try { await Api.post(`/report-cards/${r.id}/approve`, { admin_signature: sig }); (window.KT && KT.toast) ? KT.toast('Approved & sent to the family. ✓', 'success') : alert('Approved & sent.'); }
+            catch (e) { (window.KT && KT.toast) ? KT.toast(e.message || 'Could not approve', 'error') : alert(e.message); }
+          };
+        } else {
+          document.getElementById('rc-submit').onclick = async () => {
+            await saveEdits('reviewed');
+            var sig = await KT.signaturePad({ title: 'Educator signature', subtitle: 'Sign to submit this report card to your director/admin for review & approval.', okLabel: 'Sign & submit' });
+            if (!sig) return;
+            try { await Api.post(`/report-cards/${r.id}/submit`, { educator_signature: sig }); (window.KT && KT.toast) ? KT.toast('Submitted for approval — your director/admin was notified. ✓', 'success') : alert('Submitted for approval.'); }
+            catch (e) { (window.KT && KT.toast) ? KT.toast(e.message || 'Could not submit', 'error') : alert(e.message); }
+          };
+        }
       } catch (e) { const _m = 'AI failed: ' + (e.message || e); (window.KT && window.KT.toast) ? KT.toast(_m, 'error') : alert(_m); }
       finally { btn.disabled = false; btn.textContent = 'Generate via AI'; }
     };
+
+    // ── Director/admin: report cards awaiting approval ──────────────────
+    async function reviewCard(childId, cardId) {
+      let list; try { list = await Api.get('/report-cards/child/' + childId); } catch (e) { alert('Could not load the card.'); return; }
+      const card = ((list && list.data) || []).find(c => +c.id === cardId);
+      if (!card) { alert('Card not found.'); return; }
+      const out = document.getElementById('rc-out'); if (!out) return;
+      out.innerHTML = ['belonging', 'wellbeing', 'engagement', 'expression'].map(d =>
+        `<h4 style="margin:16px 0 6px;color:#1F6080;text-transform:capitalize;">${d.replace('wellbeing', 'Well-being')}</h4>` +
+        `<textarea id="rc-${d}" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(card['narrative_' + d] || '')}</textarea>`).join('') +
+        `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(card.next_steps || '')}</textarea>` +
+        (card.educator_signature ? `<div style="margin-top:14px;font-size:12px;color:#64748B;">Educator signature</div><img src="${esc(card.educator_signature)}" style="height:66px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:2px;">` : '') +
+        `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
+          <button id="rc-r-save" class="kt-btn kt-btn-primary">💾 Save edits</button>
+          <button id="rc-r-approve" class="kt-btn kt-btn-success">✍️ Sign, approve &amp; send</button>
+          <button id="rc-r-reject" class="kt-btn" style="background:#FEE2E2;color:#B91C1C;">↩ Send back for changes</button>
+        </div>`;
+      out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const save = () => Api.patch('/report-cards/' + cardId, {
+        narrative_belonging: document.getElementById('rc-belonging').value,
+        narrative_wellbeing: document.getElementById('rc-wellbeing').value,
+        narrative_engagement: document.getElementById('rc-engagement').value,
+        narrative_expression: document.getElementById('rc-expression').value,
+        next_steps: document.getElementById('rc-next').value,
+      });
+      document.getElementById('rc-r-save').onclick = async () => { await save(); (window.KT && KT.toast) ? KT.toast('Saved.', 'success') : alert('Saved.'); };
+      document.getElementById('rc-r-approve').onclick = async () => {
+        await save();
+        const sig = await KT.signaturePad({ title: 'Director / admin sign-off', subtitle: 'Your signature approves this report card and sends it to the family.', okLabel: 'Approve & send' });
+        if (!sig) return;
+        try { await Api.post('/report-cards/' + cardId + '/approve', { admin_signature: sig }); (window.KT && KT.toast) ? KT.toast('Approved & sent to the family. ✓', 'success') : alert('Approved & sent.'); renderReportCards(main); }
+        catch (e) { alert(e.message || 'Could not approve.'); }
+      };
+      document.getElementById('rc-r-reject').onclick = async () => {
+        const note = prompt('What needs changing? The educator will see this note.'); if (note === null) return;
+        try { await Api.post('/report-cards/' + cardId + '/reject', { note: note }); (window.KT && KT.toast) ? KT.toast('Sent back to the educator.', 'success') : alert('Sent back.'); renderReportCards(main); }
+        catch (e) { alert(e.message || 'Could not send back.'); }
+      };
+    }
+
+    (async () => {
+      let roles = []; try { roles = (JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) {}
+      if (!['centre_director', 'agency_admin', 'platform_admin'].some(x => roles.indexOf(x) !== -1)) return;
+      const host = document.getElementById('rc-pending'); if (!host) return;
+      let r; try { r = await Api.get('/report-cards/pending'); } catch (e) { return; }
+      const pend = (r && r.data) || [];
+      if (!pend.length) return;
+      host.innerHTML = '<div class="kt-card" style="border-left:4px solid #F59E0B;margin-bottom:16px;">' +
+        `<h3 style="margin:0 0 4px;">✍️ Awaiting your approval <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${pend.length}</span></h3>` +
+        '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Educators submitted these report cards for your review, signature and approval.</p>' +
+        pend.map(p => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
+          <div><b>${esc(p.child)}</b> — ${esc(p.term)}<div style="font-size:12px;color:#92400E;">Submitted by ${esc(p.submitted_by || 'an educator')}</div></div>
+          <button class="kt-btn kt-btn-primary rc-review" data-id="${p.id}" data-cid="${p.child_id}">Review &amp; sign</button></div>`).join('') + '</div>';
+      host.querySelectorAll('.rc-review').forEach(b => { b.onclick = () => reviewCard(+b.getAttribute('data-cid'), +b.getAttribute('data-id')); });
+    })();
   }
 
   // ============================ Activity zones ============================
@@ -275,7 +412,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
-    if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No centres.</div>'; return; }
+    if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No centres.</div>'; return; }
     const cid = centres[0].id;
     const today = new Date().toISOString().slice(0, 10);
     const [zones, report] = await Promise.all([
@@ -298,7 +435,7 @@
             <div style="font-weight:700;color:#0F172A;margin-top:6px;">${esc(z.name)}</div>
             <div style="color:${esc(z.color)};font-weight:700;font-size:22px;margin-top:4px;">${byZone[z.name] || 0}</div>
             <button class="kt-btn kt-btn-primary" data-log="${z.id}" data-name="${esc(z.name)}" style="margin-top:10px;font-size:12px;padding:6px 14px;">+ Log visit</button>
-          </div>`).join('') || '<div style="color:#94A3B8;padding:40px;text-align:center;grid-column:1/-1;">No zones set up.</div>'}
+          </div>`).join('') || '<div style="color:#64748B;padding:40px;text-align:center;grid-column:1/-1;">No zones set up.</div>'}
         </div>
       </div>
       <div class="kt-card">
@@ -309,7 +446,7 @@
             <td><strong>${esc(name)}</strong></td>
             <td>${visits.map(v => `<span class="kt-pill kt-pill-info">${v.icon} ${esc(v.zone)} <span style="opacity:.7">@ ${v.time}</span></span>`).join(' ')}</td>
           </tr>`).join('')}</tbody>
-        </table>` : '<div style="color:#94A3B8;padding:20px;text-align:center;">No visits logged today.</div>'}
+        </table>` : '<div style="color:#64748B;padding:20px;text-align:center;">No visits logged today.</div>'}
       </div>
     </div>`;
     document.getElementById('z-new').onclick = () => openZoneModal(cid);
@@ -369,7 +506,7 @@
             <td><span class="kt-pill ${t.priority === 'urgent' ? 'kt-pill-danger' : t.priority === 'high' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.priority)}</span></td>
             <td><span class="kt-pill ${t.status === 'resolved' || t.status === 'closed' ? 'kt-pill-success' : t.status === 'awaiting_user' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.status)}</span></td>
             <td>${esc(t.raised_by_name)}</td>
-            <td>${fmtDate(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#94A3B8;">No tickets yet.</td></tr>'}</tbody>
+            <td>${fmtDate(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No tickets yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -429,8 +566,8 @@
       <div style="background:#F8FAFC;padding:14px;border-radius:8px;font-size:14px;">${esc(t.body || '')}</div>
       <h4 style="margin:18px 0 10px;color:#0F172A;font-size:14px;">Replies</h4>
       <div style="max-height:240px;overflow:auto;">${msgs.map(msg => `<div style="padding:10px;background:#FAFCFE;border-radius:8px;margin-bottom:8px;">
-        <div style="font-size:12px;color:#94A3B8;font-weight:600;">${esc(msg.author_name)} · ${fmtDate(msg.created_at)}</div>
-        <div style="margin-top:4px;font-size:14px;">${esc(msg.body)}</div></div>`).join('') || '<div style="color:#94A3B8;font-size:13px;">No replies yet.</div>'}
+        <div style="font-size:12px;color:#64748B;font-weight:600;">${esc(msg.author_name)} · ${fmtDate(msg.created_at)}</div>
+        <div style="margin-top:4px;font-size:14px;">${esc(msg.body)}</div></div>`).join('') || '<div style="color:#64748B;font-size:13px;">No replies yet.</div>'}
       </div>
       <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Reply</label>
       <textarea id="tk-reply" rows="3" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
