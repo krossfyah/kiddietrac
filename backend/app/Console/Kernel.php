@@ -74,6 +74,14 @@ class Kernel extends ConsoleKernel
             ->hourly()
             ->timezone('America/Toronto');
 
+        // ─── QR check-in nudges ──────────────────────────────
+        // Weekly friendly nudge to parents whose child was checked in/out MANUALLY
+        // (by staff) more than twice in the trailing 7 days — encouraging the QR
+        // barcode. Per-agency toggle (default ON) under Email settings.
+        $schedule->command('kiddietrac:manual-checkin-reminders')
+            ->weeklyOn(1, '08:00')
+            ->timezone('America/Toronto');
+
         // ─── Ratio violation check ──────────────────────────
         // Every 15 minutes during centre hours, detect rooms in breach.
         $schedule->command('kiddietrac:check-ratios')

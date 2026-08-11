@@ -174,6 +174,14 @@
       + '</div>'
       + '<div id="es-onboard-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
       + '</div>'
+      // ── QR check-in nudge (manual-check-in reminder) ──
+      + '<div class="kt-card" style="max-width:680px;margin-bottom:18px;">'
+      + '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0;">'
+      + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">📷 QR check-in nudges</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">A friendly weekly email to parents whose child was checked in/out <strong>manually more than twice in a week</strong>, encouraging the QR barcode — personalised with their &amp; their children’s names, and CC’d to you.</span></span>'
+      + '<input type="checkbox" id="es-qrnudge" data-kt-switch="1"' + (s.manual_checkin_reminders_enabled !== false ? ' checked' : '') + '></label>'
+      + '<div id="es-qrnudge-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
+      + '</div>'
       // ── Per-centre / per-room delivery control (pre-boarding switchboard) ──
       + '<div id="es-delivery" style="max-width:680px;margin-bottom:18px;"></div>'
       + '<div class="kt-card" style="max-width:680px;">'
@@ -283,6 +291,20 @@
     };
     if (obHour) obHour.onchange = function () {
       saveOb({ onboarding_reminder_hour: parseInt(obHour.value, 10) }, '✓ Reminder time saved (' + obHour.options[obHour.selectedIndex].text + ').').catch(function () {});
+    };
+
+    // QR check-in nudge toggle — saves immediately.
+    var qrNudge = document.getElementById('es-qrnudge');
+    var qrOut = document.getElementById('es-qrnudge-out');
+    if (qrNudge) qrNudge.onchange = async function () {
+      qrNudge.disabled = true;
+      try {
+        await patch('/admin/email-settings', { manual_checkin_reminders_enabled: qrNudge.checked });
+        if (qrOut) { qrOut.style.color = '#047857'; qrOut.textContent = qrNudge.checked ? '✓ QR check-in nudges ON.' : '✓ QR check-in nudges OFF.'; }
+      } catch (e) {
+        qrNudge.checked = !qrNudge.checked;
+        if (qrOut) { qrOut.style.color = '#B91C1C'; qrOut.textContent = '✗ ' + (e.message || 'Could not save.'); }
+      } finally { qrNudge.disabled = false; }
     };
 
     document.getElementById('es-save').onclick = async function () {

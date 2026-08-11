@@ -279,7 +279,8 @@
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:620px;">
             <div>
               <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Child</label>
-              <select id="rc-cid" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;font-size:14px;">
+              <style>#rc-cid,#rc-cid option{background:#fff !important;color:#0F172A !important;}</style>
+              <select id="rc-cid" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;color:#0F172A;color-scheme:light;font-size:14px;">
                 <option value="">Select a child…</option>
                 ${kidOptions}
               </select>

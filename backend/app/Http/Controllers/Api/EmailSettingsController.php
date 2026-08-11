@@ -86,6 +86,8 @@ final class EmailSettingsController extends Controller
             // Onboarding-reminder daily email (absent = ON, default 7am agency-local).
             'onboarding_reminders_enabled' => ($settingsTop['onboarding_reminders_enabled'] ?? true) !== false,
             'onboarding_reminder_hour'     => (int) ($settingsTop['onboarding_reminder_hour'] ?? 7),
+            // Weekly nudge to parents over-using MANUAL (staff) check-in vs the QR.
+            'manual_checkin_reminders_enabled' => ($settingsTop['manual_checkin_reminders_enabled'] ?? true) !== false,
             'email_from_name'       => $row->email_from_name,
             'email_from_address'    => $row->email_from_address,
             'email_smtp_encryption' => $row->email_smtp_encryption ?: 'tls',
@@ -126,6 +128,7 @@ final class EmailSettingsController extends Controller
             'mail_enabled'          => ['sometimes', 'boolean'],
             'onboarding_reminders_enabled' => ['sometimes', 'boolean'],
             'onboarding_reminder_hour'     => ['sometimes', 'integer', 'min:0', 'max:23'],
+            'manual_checkin_reminders_enabled' => ['sometimes', 'boolean'],
         ]);
 
         // Legacy "from" columns
@@ -167,6 +170,15 @@ final class EmailSettingsController extends Controller
             if (array_key_exists('onboarding_reminders_enabled', $data)) $settings3['onboarding_reminders_enabled'] = (bool) $data['onboarding_reminders_enabled'];
             if (array_key_exists('onboarding_reminder_hour', $data))     $settings3['onboarding_reminder_hour'] = (int) $data['onboarding_reminder_hour'];
             DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings3), 'updated_at' => now()]);
+        }
+
+        // Manual-check-in (QR-nudge) reminder toggle (top-level, read by the
+        // kiddietrac:manual-checkin-reminders command). Default: enabled.
+        if (array_key_exists('manual_checkin_reminders_enabled', $data)) {
+            $row5 = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
+            $settings5 = ($row5 && $row5->settings) ? (json_decode($row5->settings, true) ?: []) : [];
+            $settings5['manual_checkin_reminders_enabled'] = (bool) $data['manual_checkin_reminders_enabled'];
+            DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings5), 'updated_at' => now()]);
         }
 
         return response()->json(['ok' => true]);
