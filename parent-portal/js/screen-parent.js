@@ -404,7 +404,7 @@
       + '<button type="button" id="kt-cr-close" aria-label="Close" style="position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);color:#fff;border:0;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">&times;</button>'
       + '<span style="position:absolute;bottom:12px;right:18px;background:rgba(255,255,255,.16);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 9px;border-radius:20px;">VIEW ONLY</span></div>'
       + section('Child', row('Full name', d.full_name) + row('Date of birth', d.date_of_birth) + row('Age', d.age && d.age.human) + row('Gender', gender) + row('Status', d.is_at_centre ? 'At the centre' : 'At home'))
-      + section('Enrolment', row('Room', d.room && d.room.name) + row('Centre', d.centre && d.centre.name) + row('Schedule', sched) + row('Start date', d.enrollment && d.enrollment.start_date) + row('CWELCC', d.enrollment && d.enrollment.cwelcc_eligible ? 'Eligible' : ''))
+      + section('Enrolment', row('Room', d.room && d.room.name) + row((KT.centreWord ? KT.centreWord(false) : 'Centre'), d.centre && d.centre.name) + row('Schedule', sched) + row('Start date', d.enrollment && d.enrollment.start_date) + row('CWELCC', d.enrollment && d.enrollment.cwelcc_eligible ? 'Eligible' : ''))
       + section('Guardians', guardians)
       + section('Health & dietary', healthHtml)
       + section('Family', row('Household', fam.family_name) + row('Address', addr) + row('Phone', fam.primary_phone) + row('Email', fam.primary_email))
@@ -518,12 +518,13 @@
         statsRow.appendChild(tile);
       });
 
-      // Timeline
+      // Timeline (moments + sign-in/out times, chronological)
       Dom.clear(timelineBody);
-      if (!timeline.events || timeline.events.length === 0) {
+      const _tlEntries = mergeTimelineChecks(timeline);
+      if (!_tlEntries.length) {
         timelineBody.appendChild(Dom.el('p', { style: 'color: var(--ink-500); padding: 24px 0;' }, 'No events logged yet today. Check back soon!'));
       } else {
-        timeline.events.forEach((ev, i) => {
+        _tlEntries.forEach((ev, i) => {
           // Zebra striping so the timeline reads clearly, especially on mobile/APK.
           const row = Dom.el('div', { style: 'display: flex; gap: 12px; padding: 12px 10px; border-radius: 10px; align-items: flex-start; background: ' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
           row.appendChild(Dom.el('div', { style: 'background: #fff; border: 1px solid var(--ink-100,#f1f5f9); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;' }, eventIcon(ev.type)));
@@ -1193,7 +1194,7 @@
           sourceBtn.style.color = '#0E7C90';
           sourceBtn.style.background = '#F0FBFD';
         }
-        if (KT.toast) KT.toast('✅', 'Centre told', 'Your centre knows they are not coming in today.', '#16A34A');
+        if (KT.toast) { var _w = KT.centreWord ? KT.centreWord(false, true) : 'centre'; KT.toast('✅', (KT.centreWord ? KT.centreWord(false) : 'Centre') + ' told', 'Your ' + _w + ' knows they are not coming in today.', '#16A34A'); }
       }).catch((e) => {
         btn.disabled = false; btn.textContent = 'Tell the centre';
         sheet.querySelector('#kt-abs-err').textContent = (e && e.message) || 'Could not send — please try again.';
@@ -1217,7 +1218,7 @@
     info.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:2px;' }, `${child.age?.human || '—'} · ${child.room_name || 'No room'}`));
     info.appendChild(Dom.el('div', { style: `display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.3px;${atCentre ? 'background:rgba(142,199,60,.16);color:#4d7c0f;' : 'background:var(--ink-100);color:var(--ink-600);'}` }, [
       Dom.el('span', { style: `width:7px;height:7px;border-radius:50%;background:${atCentre ? '#65a30d' : 'var(--ink-400)'};` }),
-      atCentre ? 'At centre' : 'At home',
+      atCentre ? ('At ' + (KT.centreWord ? KT.centreWord(false, true) : 'centre')) : 'At home',
     ]));
     status.appendChild(info);
     wrap.appendChild(status);
@@ -1232,6 +1233,18 @@
         cTxt.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:800;color:var(--ink-900);line-height:1.2;' }, child.centre_name));
         const sub = [child.agency_name, child.room_name].filter(Boolean).join(' \u00B7 ');
         if (sub) cTxt.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:var(--ink-500);margin-top:1px;' }, sub));
+        if (child.centre_address) {
+          const addr = Dom.el('div', { style: 'font-size:11.5px;color:var(--ink-500);margin-top:3px;display:flex;align-items:flex-start;gap:4px;' });
+          addr.appendChild(Dom.el('span', { style: 'flex-shrink:0;' }, '\uD83D\uDCCD'));
+          addr.appendChild(Dom.el('span', {}, child.centre_address));
+          cTxt.appendChild(addr);
+        }
+        if (child.centre_phone) {
+          const ph = Dom.el('a', { href: 'tel:' + String(child.centre_phone).replace(/[^0-9+]/g, ''), style: 'font-size:11.5px;color:var(--brand-600,#0d9488);font-weight:700;margin-top:2px;display:inline-flex;align-items:center;gap:4px;text-decoration:none;' });
+          ph.appendChild(Dom.el('span', {}, '\uD83D\uDCDE'));
+          ph.appendChild(Dom.el('span', {}, child.centre_phone));
+          cTxt.appendChild(ph);
+        }
         cRow.appendChild(cTxt);
         team.appendChild(cRow);
       }
@@ -1310,7 +1323,7 @@
         const items = ((r && r.items) || []).filter(it => it.day_of_week === todayDow);
         Dom.clear(menuBody);
         if (openDays.indexOf(todayDow) === -1) {
-          menuBody.appendChild(Dom.el('div', {}, 'Centre closed today · tap to see the week →')); return;
+          menuBody.appendChild(Dom.el('div', {}, (KT.centreWord ? KT.centreWord(false) : 'Centre') + ' closed today · tap to see the week →')); return;
         }
         if (!items.length) {
           menuBody.appendChild(Dom.el('div', {}, (r && r.centre) ? "Today's menu isn't posted yet · tap to see the week →" : 'Tap to view the weekly menu →')); return;
@@ -1348,7 +1361,7 @@
       cget(`/parent/children/${child.id}/digest/${state.date}`),
       cget(`/parent/children/${child.id}/invoices?status=current`),
     ]).then(([timeline, dg, invoices]) => {
-      const ev = timeline.events || [];
+      const ev = mergeTimelineChecks(timeline);
       const count = (types) => ev.filter(e => types.includes(e.type)).length;
 
       // The tiles summarise the timeline directly below them, so tapping one
@@ -1363,7 +1376,7 @@
         { icon: '😴', label: 'Naps',    types: ['nap_end'],            c1: '#A5B4FC', c2: '#6366F1', tint: '#EEF2FF', ink: '#4338CA' },
         { icon: '👶', label: 'Changes', types: ['diaper', 'bathroom'], c1: '#7DD3FC', c2: '#0EA5E9', tint: '#ECFEFF', ink: '#0369A1' },
         { icon: '✨', label: 'Play',    types: ['activity'],           c1: '#86EFAC', c2: '#16A34A', tint: '#F0FDF4', ink: '#15803D' },
-        { icon: '📆', label: 'Enrolled', noFilter: true, value: _daysEnrM, c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
+        { icon: '📆', label: 'Days enrolled', noFilter: true, value: _daysEnrM, c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
       ];
       const tileEls = [];
       TILES.forEach((t) => {
@@ -2151,7 +2164,27 @@
       'meal': '🍽️', 'snack': '🍎', 'nap_start': '😴', 'nap_end': '🌅',
       'diaper': '👶', 'bathroom': '🚽', 'activity': '✨', 'mood': '😊',
       'note': '📝', 'milestone': '🌟', 'bottle': '🍼',
+      'check_in': '✅', 'check_out': '👋',
     })[type] || '•';
+  }
+
+  // The timeline endpoint returns sign-in / sign-out records SEPARATELY in
+  // `checks` (the actual check-in & check-out times). Parents were only shown a
+  // live "AT CENTRE / AT HOME" badge, never the times — so merge the checks into
+  // the timeline as first-class entries, sorted chronologically with the rest.
+  function mergeTimelineChecks(timeline) {
+    var events = (timeline && timeline.events) || [];
+    var checks = ((timeline && timeline.checks) || []).map(function (c) {
+      return {
+        type: c.type,
+        display: { title: c.type === 'check_out' ? 'Signed out' : 'Signed in', detail: c.by || '' },
+        time_display: c.time_display,
+        occurred_at: c.occurred_at,
+      };
+    });
+    return events.concat(checks).sort(function (a, b) {
+      return String(a.occurred_at || '').localeCompare(String(b.occurred_at || ''));
+    });
   }
 
   window.KT = window.KT || {};

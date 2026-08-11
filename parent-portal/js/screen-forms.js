@@ -54,7 +54,7 @@
 
     var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
-    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     // v22p86: client-side search + prev/next pagination over the agency's forms.
     var allForms = [], query = '', page = 0;
@@ -122,26 +122,84 @@
     body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;' }, fields + ' field' + (fields === 1 ? '' : 's') + ' · ' + (f.audience || '').replace('_', ' ') + ' · updated ' + fmtDate(f.updated_at)));
     row.appendChild(body);
 
-    function iconBtn(label, title, handler) {
-      var b = Dom.el('button', { title: title, style: 'background:white;color:#374151;border:1px solid #D1D5DB;padding:6px 10px;border-radius:8px;font-size:13px;cursor:pointer;flex-shrink:0;' }, label);
-      b.addEventListener('click', function (e) { e.stopPropagation(); handler(); });
-      b.addEventListener('mouseenter', function () { b.style.background = '#F1F5F9'; });
-      b.addEventListener('mouseleave', function () { b.style.background = 'white'; });
-      return b;
-    }
-    // v22p86: preview + email-to-parents
-    row.appendChild(iconBtn('👁 Preview', 'Preview as a parent sees it', function () { openPreview(f); }));
-    row.appendChild(iconBtn('✉ Email', 'Email this form to parents', function () { emailForm(f); }));
-
-    var respBtn = Dom.el('button', {
-      style: 'background:white;color:#1F6080;border:1px solid #1F6080;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;',
+    // Compact response-count pill (informative) + status, then a SINGLE ⋮ kebab
+    // holding every row action (edit / preview / email / responses / delete) — a
+    // DIRECT kebab, not a menu-within-a-menu.
+    var respPill = Dom.el('button', {
+      type: 'button', title: 'View responses', 'data-kt-iconized': '1',
+      style: 'background:#EFF6FB;color:#1F6080;border:1px solid #CFE3EE;padding:5px 11px;border-radius:20px;font-size:11.5px;font-weight:700;flex-shrink:0;white-space:nowrap;cursor:pointer;',
     }, (f.response_count || 0) + ' response' + (f.response_count === 1 ? '' : 's'));
-    respBtn.addEventListener('click', function (e) { e.stopPropagation(); openResponses(f, container); });
-    row.appendChild(respBtn);
+    respPill.addEventListener('click', function (e) { e.stopPropagation(); openResponses(f, container); });
+    row.appendChild(respPill);
 
     row.appendChild(statusPill(f.status));
+    row.appendChild(makeFormKebab(f, container, refresh));
+
+    // Clicking the row (anywhere but the kebab / pills) opens the builder to edit.
     row.addEventListener('click', function () { openBuilder(f, container); });
     return row;
+  }
+
+  // A single, DIRECT ⋮ kebab for a form row. Body-appended + fixed-positioned so
+  // the list's overflow can't clip it; closes on outside click / scroll / resize.
+  function makeFormKebab(f, container, refresh) {
+    var reload = refresh || function () { render(container); };
+    var btn = Dom.el('button', {
+      type: 'button', title: 'Actions', 'aria-label': 'Form actions', 'data-kt-iconized': '1',
+      style: 'flex-shrink:0;width:34px;height:34px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;color:#475569;font-size:18px;line-height:1;cursor:pointer;',
+    }, '⋮');
+    var menu = null;
+    function close() {
+      if (!menu) return;
+      menu.remove(); menu = null;
+      document.removeEventListener('click', onDoc, true);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    }
+    function onDoc(e) { if (menu && !menu.contains(e.target) && e.target !== btn) close(); }
+    function item(icon, label, danger, handler) {
+      var mi = Dom.el('button', {
+        type: 'button',
+        style: 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;padding:10px 15px;font-size:13.5px;cursor:pointer;font-family:inherit;white-space:nowrap;color:' + (danger ? '#B91C1C' : '#111827') + ';',
+      }, [Dom.el('span', { style: 'width:18px;text-align:center;font-size:15px;' }, icon), Dom.el('span', {}, label)]);
+      mi.addEventListener('mouseenter', function () { mi.style.background = danger ? '#FEF2F2' : '#F1F5F9'; });
+      mi.addEventListener('mouseleave', function () { mi.style.background = 'none'; });
+      mi.addEventListener('click', function (e) { e.stopPropagation(); close(); handler(); });
+      return mi;
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (menu) { close(); return; }
+      menu = Dom.el('div', {
+        style: 'position:fixed;z-index:2147483000;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);padding:6px 0;min-width:200px;',
+      });
+      menu.appendChild(item('✏️', 'Edit form', false, function () { openBuilder(f, container); }));
+      menu.appendChild(item('👁', 'Preview', false, function () { openPreview(f); }));
+      menu.appendChild(item('✉️', 'Email to parents', false, function () { emailForm(f); }));
+      menu.appendChild(item('📥', 'View responses (' + (f.response_count || 0) + ')', false, function () { openResponses(f, container); }));
+      menu.appendChild(Dom.el('div', { style: 'height:1px;background:#F1F5F9;margin:5px 0;' }));
+      menu.appendChild(item('🗑️', 'Delete form', true, function () {
+        Promise.resolve(window.KT && KT.confirm ? KT.confirm('Delete "' + (f.title || 'this form') + '"? Existing responses are preserved.') : window.confirm('Delete this form?')).then(function (ok) {
+          if (!ok) return;
+          Api.delete('/admin/forms/' + f.id).then(function () {
+            if (window.KT && KT.toast) KT.toast('🗑️', 'Form deleted', '"' + (f.title || 'Form') + '" was removed.', '#B91C1C');
+            reload();
+          }).catch(function (err) { if (window.KT && KT.toast) KT.toast('⚠️', 'Delete failed', (err && err.message) || 'error', '#B91C1C'); });
+        });
+      }));
+      document.body.appendChild(menu);
+      var r = btn.getBoundingClientRect();
+      var mw = menu.offsetWidth || 200, mh = menu.offsetHeight || 250;
+      var left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+      var top = (r.bottom + 6 + mh > window.innerHeight - 8) ? Math.max(8, r.top - mh - 6) : r.bottom + 6;
+      menu.style.left = left + 'px'; menu.style.top = top + 'px';
+      setTimeout(function () {
+        document.addEventListener('click', onDoc, true);
+        window.addEventListener('resize', close);
+        window.addEventListener('scroll', close, true);
+      }, 0);
+    });
+    return btn;
   }
 
   // ── White-label branding (cached) ─────────────────────────────────
@@ -160,7 +218,7 @@
     var sheet = Dom.el('div', { style: 'background:#F8FAFC;border-radius:16px;max-width:560px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.3);overflow:hidden;position:relative;' });
     overlay.appendChild(sheet);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
-    sheet.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'Loading preview…'));
+    sheet.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'Loading preview…'));
     document.body.appendChild(overlay);
     getBranding().then(function (b) {
       Dom.clear(sheet);
@@ -194,7 +252,7 @@
     bodyEl.appendChild(submit);
     root.appendChild(bodyEl);
 
-    var foot = Dom.el('div', { style: 'padding:12px 26px 20px;text-align:center;font-size:11px;color:#9CA3AF;' });
+    var foot = Dom.el('div', { style: 'padding:12px 26px 20px;text-align:center;font-size:11px;color:#64748B;' });
     if (whiteLabel) {
       var bits = [];
       if (b.product_name) bits.push(b.product_name);
@@ -210,7 +268,7 @@
   function previewField(fld) {
     var wrap = Dom.el('div', { style: 'margin-bottom:16px;' });
     wrap.appendChild(Dom.el('div', { style: 'font-size:13px;font-weight:700;color:#0F172A;margin-bottom:6px;' }, (fld.label || fld.id) + (fld.required ? ' *' : '')));
-    var ph = 'width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;background:white;color:#9CA3AF;';
+    var ph = 'width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;background:white;color:#64748B;';
     if (fld.type === 'textarea') wrap.appendChild(Dom.el('div', { style: ph + 'min-height:64px;' }, fld.placeholder || ''));
     else if (fld.type === 'select' || fld.type === 'radio') {
       (fld.options || []).forEach(function (o) {
@@ -232,12 +290,12 @@
   }
 
   // ── Email to parents ──────────────────────────────────────────────
-  function emailForm(f) {
+  async function emailForm(f) {
     if (f.status !== 'published') {
       alert('Publish this form first — only published forms can be emailed to parents.');
       return;
     }
-    if (!confirm('Email “' + f.title + '” to all parents in its audience (' + (f.audience || '').replace('_', ' ') + ')?')) return;
+    if (!await KT.confirm('Email “' + f.title + '” to all parents in its audience (' + (f.audience || '').replace('_', ' ') + ')?')) return;
     Api.post('/admin/forms/' + f.id + '/email', {}).then(function (r) {
       if (Dom.toast) Dom.toast('Form emailed to ' + (r.sent || 0) + ' parent' + (r.sent === 1 ? '' : 's') + '.', 'success');
       else alert('Form emailed to ' + (r.sent || 0) + ' parents.');
@@ -304,7 +362,7 @@
     [['draft','Draft (only you see it)'],['published','Published (live for audience)'],['archived','Archived (hidden, kept for records)']].forEach(function (o) {
       var opt = Dom.el('option', { value: o[0] }, o[1]);
       if (existing && existing.status === o[0]) opt.selected = true;
-      statusWrap.appendChild(opt);
+      statusSel.appendChild(opt);
     });
     statusWrap.appendChild(statusSel);
     row2.appendChild(statusWrap);
@@ -341,8 +399,8 @@
     var leftAct = Dom.el('div');
     if (existing) {
       var del = Dom.el('button', { style: btnDanger() }, 'Delete');
-      del.addEventListener('click', function () {
-        if (!confirm('Delete this form? Existing responses are preserved.')) return;
+      del.addEventListener('click', async function () {
+        if (!await KT.confirm('Delete this form? Existing responses are preserved.')) return;
         Api.delete('/admin/forms/' + existing.id).then(function () { overlay.remove(); render(container); });
       });
       leftAct.appendChild(del);
@@ -566,7 +624,7 @@
     modal.appendChild(header);
 
     var bodyEl = Dom.el('div', { style: 'padding:20px 24px;' });
-    bodyEl.appendChild(Dom.el('div', { style: 'padding:24px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    bodyEl.appendChild(Dom.el('div', { style: 'padding:24px;text-align:center;color:#64748B;' }, 'Loading…'));
     modal.appendChild(bodyEl);
 
     Api.get('/admin/forms/' + form.id + '/responses').then(function (data) {

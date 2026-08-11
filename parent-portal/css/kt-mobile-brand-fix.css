@@ -1,0 +1,25 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Mobile top-header — RESTORE (2026-08-10, v6)
+
+   v4 of this file hid the whole mobile top header on phones:
+       body.role-educator/guardian/home-visitor #appSidebar { display:none }
+   The intent was only to kill a squished-wordmark "scissors" swish — but
+   #appSidebar IS the mobile header, and hiding it took the KiddieTrac logo,
+   the signed-in name, and the date/time greeting eyebrow (kt-pc-navgreet /
+   kt-pc-mobmeta, built by kt-parent-chrome.js) down with it. The floating ⚙
+   settings gear (kt-mobilenav.js #kt-gear) lives on <body> so it survived, but
+   the header it belonged to was gone.
+
+   v6 simply STOPS hiding the header. Everything in it — logo, name, greeting +
+   date/time, and the gear at its right edge — is already built and returns as it
+   was. No new markup, no new component. Desktop (≥769px) was never touched.
+
+   (If the wordmark ever reads as a "scissors" swish again, the right fix is to
+   swap #appSidebar #navBrand img to the square /logo-mark.png via JS src — NOT
+   CSS content:url(), which does not render in the Android WebView — never to
+   hide the entire bar.)
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Intentionally no rules: this file's previous job (hiding the header) is undone
+   by removing that job. Left in place as a documented restore point so the SW
+   cache-bust + dashboard version bump have a file to point at. */

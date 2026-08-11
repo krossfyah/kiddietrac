@@ -277,7 +277,7 @@ final class FamilyController extends Controller
             ->whereIn('child_id', $childIds)
             ->whereNull('end_date')
             ->leftJoin('rooms', 'rooms.id', '=', 'enrollments.room_id')
-            ->select('enrollments.*', 'rooms.name as room_name', 'rooms.color_hex as room_color', 'rooms.age_group')
+            ->select('enrollments.*', 'rooms.name as room_name', 'rooms.color_hex as room_color', 'rooms.age_group', 'rooms.centre_id as centre_id')
             ->get()
             ->keyBy('child_id');
 
@@ -289,10 +289,39 @@ final class FamilyController extends Controller
             ->get()
             ->groupBy('child_id');
 
-        return $children->map(function ($c) use ($enrollments, $checkEvents) {
+        // Centre + agency names, and the room's educators — for the "your team"
+        // card on the parent home/Today screen.
+        $roomIds = $enrollments->pluck('room_id')->filter()->unique()->values()->all();
+        $centreIds = $enrollments->pluck('centre_id')->filter()->unique()->values()->all();
+        $centres = empty($centreIds) ? collect() : DB::table('centres')->whereIn('id', $centreIds)->get()->keyBy('id');
+        $agencyIds = $centres->pluck('agency_id')->filter()->unique()->values()->all();
+        $agencies = empty($agencyIds) ? collect() : DB::table('agencies')->whereIn('id', $agencyIds)->get()->keyBy('id');
+        $educatorsByRoom = empty($roomIds) ? collect() : DB::table('educator_rooms as er')
+            ->join('users as u', 'u.id', '=', 'er.user_id')
+            ->whereIn('er.room_id', $roomIds)
+            ->whereNull('u.deleted_at')
+            ->orderBy('u.first_name')
+            ->select('er.room_id', 'u.first_name', 'u.last_name', 'u.preferred_name', 'u.photo_url')
+            ->get()
+            ->groupBy('room_id');
+
+        return $children->map(function ($c) use ($enrollments, $checkEvents, $centres, $agencies, $educatorsByRoom) {
             $enrollment = $enrollments[$c->id] ?? null;
             $check = $checkEvents->get($c->id, collect())->first();
             $isAtCentre = $check && $check->event_type === 'check_in';
+
+            $centre = ($enrollment && $enrollment->centre_id) ? ($centres[$enrollment->centre_id] ?? null) : null;
+            $agency = ($centre && $centre->agency_id) ? ($agencies[$centre->agency_id] ?? null) : null;
+            $eds = ($enrollment && $enrollment->room_id) ? ($educatorsByRoom[$enrollment->room_id] ?? collect()) : collect();
+            $educatorList = collect($eds)->map(function ($e) {
+                return [
+                    // Parents see the FULL name of their own child's provider/educator
+                    // (not a "Sarah M." initial — that privacy-trim is only for the
+                    // PUBLIC marketing map, never a family's own assigned team).
+                    'name' => trim(($e->preferred_name ?: $e->first_name ?: '').' '.($e->last_name ?: '')),
+                    'photo_url' => $e->photo_url ?? null,
+                ];
+            })->filter(fn ($e) => $e['name'] !== '')->values()->all();
 
             return [
                 'id' => $c->id,
@@ -306,8 +335,20 @@ final class FamilyController extends Controller
                 'room_id' => $enrollment?->room_id,
                 'room_name' => $enrollment?->room_name,
                 'room_color' => $enrollment?->room_color,
+                'centre_id' => $enrollment?->centre_id,
+                'centre_name' => $centre?->name,
+                'centre_address' => $centre ? trim(implode(', ', array_filter([
+                    trim(($centre->address_line1 ?? '').' '.($centre->address_line2 ?? '')),
+                    $centre->city ?? null,
+                    trim(($centre->province ?? '').' '.($centre->postal_code ?? '')),
+                ]))) : null,
+                'centre_phone' => $centre->phone ?? null,
+                'centre_supervisor' => $centre ? trim(($centre->supervisor_first_name ?? '').' '.($centre->supervisor_last_name ?? '')) : null,
+                'agency_name' => $agency?->name,
+                'educators' => $educatorList,
+                'enrollment_start' => $enrollment?->start_date,
                 'is_at_centre' => $isAtCentre,
-                'arrived_at' => $isAtCentre ? Carbon::parse($check->occurred_at)->format('g:i A') : null,
+                'arrived_at' => $isAtCentre ? \App\Support\AgencyTime::fmt($check->occurred_at, \App\Support\AgencyTime::tzForCentre($enrollment?->centre_id)) : null,
             ];
         })->all();
     }

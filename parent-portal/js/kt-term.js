@@ -16,7 +16,11 @@
 
   var TERM = 'centre', ready = false;
   var STATE = 'Province', ZIP = 'Postal code';   // country-specific address labels
-  function chosen(plural) { return TERM === 'room' ? (plural ? 'Rooms' : 'Room') : (plural ? 'Centres' : 'Centre'); }
+  function chosen(plural) {
+    if (TERM === 'room') return plural ? 'Rooms' : 'Room';
+    if (TERM === 'provider') return plural ? 'Providers' : 'Provider';
+    return plural ? 'Centres' : 'Centre';
+  }
 
   function transform(t) {
     var out = t;
@@ -24,9 +28,10 @@
       // Combined "Centres / Rooms" + "Centre / Room" → the single chosen term.
       out = out.replace(/Centres\s*\/\s*Rooms/g, chosen(true)).replace(/centres\s*\/\s*rooms/g, chosen(true).toLowerCase());
       out = out.replace(/Centre\s*\/\s*Room/g, chosen(false)).replace(/centre\s*\/\s*room/g, chosen(false).toLowerCase());
-      if (TERM === 'room') {
-        out = out.replace(/\bCentres\b/g, 'Rooms').replace(/\bCentre\b/g, 'Room')
-          .replace(/\bcentres\b/g, 'rooms').replace(/\bcentre\b/g, 'room');
+      if (TERM === 'room' || TERM === 'provider') {
+        var _p = chosen(true), _s = chosen(false);
+        out = out.replace(/\bCentres\b/g, _p).replace(/\bCentre\b/g, _s)
+          .replace(/\bcentres\b/g, _p.toLowerCase()).replace(/\bcentre\b/g, _s.toLowerCase());
       }
     }
     // Country address labels (base is CA: Province / Postal code).
@@ -88,11 +93,20 @@
       }).catch(function () {});
   }
 
-  setInterval(sweep, 1000);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 4000);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load); else load();
   var CLABELS = { CA: ['Province', 'Postal code'], US: ['State', 'ZIP code'], GB: ['County', 'Postcode'], AU: ['State', 'Postcode'], NZ: ['Region', 'Postcode'], IE: ['County', 'Eircode'] };
   window.KT = window.KT || {};
   window.KT.setCentreTerm = function (term) { TERM = term; try { sessionStorage.setItem('kt_centre_term', term); } catch (e) {} ready = true; sweep(); };
+  // Render-time helper so JS that builds DOM nodes can use the agency's chosen
+  // facility word directly, instead of relying on the (label/th-scoped) DOM sweep.
+  // KT.centreWord()      -> 'Centre' | 'Provider' | 'Room'   (capitalised, singular)
+  // KT.centreWord(true)  -> plural;  KT.centreWord(false,true) -> lowercase.
+  window.KT.centreWord = function (plural, lower) {
+    try { var c = sessionStorage.getItem('kt_centre_term'); if (c) TERM = c; } catch (e) {}
+    var w = chosen(!!plural);
+    return lower ? w.toLowerCase() : w;
+  };
   window.KT.setCountry = function (code) {
     var L = CLABELS[code] || CLABELS.CA; STATE = L[0]; ZIP = L[1];
     try { sessionStorage.setItem('kt_country', code); sessionStorage.setItem('kt_state_label', STATE); sessionStorage.setItem('kt_zip_label', ZIP); } catch (e) {}
