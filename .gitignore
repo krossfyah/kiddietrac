@@ -70,3 +70,7 @@ backend/storage/firebase-sa.json
 error_log
 **/error_log
 *.orig
+
+# Generated JS bundle (parent-portal/build-bundle.php rebuilds it; cron self-heals).
+# Derived from the individual js/*.js files — do not commit the 3.6MB artifact.
+parent-portal/js/app.bundle.js
