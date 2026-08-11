@@ -24,6 +24,20 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
+        // NOTE: the database-queue worker that drains ->queue() mail (invite /
+        // welcome / password-reset / onboarding-confirmation via AccountNotice) is
+        // scheduled in routes/console.php, so it is intentionally NOT duplicated
+        // here (two definitions would double-process the same jobs).
+
+        // ─── Mail health guard ──────────────────────────────
+        // Daily: verify Microsoft Graph auth works and warn superadmins BEFORE the
+        // client secret expires. (Sending already fails over to sendmail, so this
+        // is the "rotate the secret in time" alert, not a delivery dependency.)
+        $schedule->command('kiddietrac:mail-health')
+            ->dailyAt('07:30')
+            ->timezone('America/Toronto')
+            ->withoutOverlapping();
+
         // ─── Daily digests ──────────────────────────────────
         // Runs at 6 PM in centre's timezone. Generates AI summary for every
         // enrolled child based on the day's logged events.
@@ -47,6 +61,14 @@ class Kernel extends ConsoleKernel
         $schedule->command('kiddietrac:cert-reminders')
             ->mondays()
             ->at('08:00')
+            ->timezone('America/Toronto');
+
+        // ─── Onboarding reminders ────────────────────────────
+        // Daily nudge to users who were invited but never set up their account
+        // (onboarded_at IS NULL). White-labelled per agency; exempt from the
+        // not-onboarded gate via X-KT-Invite so it actually reaches them.
+        $schedule->command('kiddietrac:onboarding-reminders')
+            ->dailyAt('09:00')
             ->timezone('America/Toronto');
 
         // ─── Ratio violation check ──────────────────────────
