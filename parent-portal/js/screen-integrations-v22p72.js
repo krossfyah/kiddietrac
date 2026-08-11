@@ -62,8 +62,13 @@
       + '<p style="color:#64748B;font-size:13px;margin:0 0 14px;">Create an app at <a href="https://developer.intuit.com" target="_blank" rel="noopener" style="color:#1F6080;">developer.intuit.com</a>, then paste its keys here. '
       + 'Set the redirect URI below in your Intuit app.</p>'
       + (cfg.using_platform_fallback ? '<div style="background:#FEF3C7;color:#92400E;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px;">Currently using the platform\'s shared Intuit app. Enter your own credentials below to use your agency\'s app.</div>' : '')
+      // Wrapped so the browser / password managers can't autofill the empty
+      // credential fields with the signed-in user's saved email + password
+      // (which made this section look pre-filled though nothing was entered).
+      + '<div data-kt-noautofill="1">'
       + field('Client ID', 'qc-id', cfg.client_id || '', 'ABxxxxxxxxxxxxxxxxxxxx')
       + field('Client Secret', 'qc-secret', '', cfg.has_secret ? '•••••••• (saved — leave blank to keep)' : 'Enter client secret', 'password')
+      + '</div>'
       + '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Environment</label>'
       + '<select id="qc-env" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;">'
       + '<option value="production"' + ((cfg.environment || 'production') === 'production' ? ' selected' : '') + '>Production</option>'
@@ -96,7 +101,7 @@
     };
     var clearBtn = document.getElementById('qc-clear');
     if (clearBtn) clearBtn.onclick = async function () {
-      if (!confirm('Clear your Intuit credentials and disconnect QuickBooks?')) return;
+      if (!await KT.confirm('Clear your Intuit credentials and disconnect QuickBooks?')) return;
       try { await del('/admin/qbo-config'); toast('Credentials cleared.', 'success'); renderQuickbooks(main); }
       catch (e) { toast(e.message || 'Failed', 'error'); }
     };
@@ -113,7 +118,7 @@
 
     var discBtn = document.getElementById('qbo-disc');
     if (discBtn) discBtn.onclick = async function () {
-      if (!confirm('Disconnect QuickBooks? Invoices will stop syncing.')) return;
+      if (!await KT.confirm('Disconnect QuickBooks? Invoices will stop syncing.')) return;
       try { await api().post('/qbo/disconnect', {}); toast('Disconnected.', 'success'); renderQuickbooks(main); }
       catch (e) { toast(e.message || 'Disconnect failed', 'error'); }
     };
@@ -147,6 +152,30 @@
     main.innerHTML = '<div style="padding:24px;max-width:1800px;margin:0 auto;">'
       + '<div class="kt-page-hero"><h2>✉️ Email settings</h2>'
       + '<p>How outgoing emails appear to families for <strong>' + esc(s.agency_name) + '</strong>.</p></div>'
+      // ── Master mail/notifications switch (agency admin + super user) ──
+      + '<div class="kt-card" style="max-width:680px;margin-bottom:18px;">'
+      + '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0;">'
+      + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">📬 Mail &amp; notifications</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">Master switch for every outgoing email and notification for this agency. Turn it <strong>OFF</strong> and nothing goes out to families or staff.</span></span>'
+      + '<input type="checkbox" id="es-mailenabled" data-kt-switch="1"' + (s.mail_enabled !== false ? ' checked' : '') + '></label>'
+      + '<div id="es-mailenabled-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
+      + '</div>'
+      // ── Onboarding-reminder daily email (configurable) ──
+      + '<div class="kt-card" style="max-width:680px;margin-bottom:18px;">'
+      + '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0;">'
+      + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">📨 Onboarding reminders</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">A daily branded email to users who were <strong>invited but haven’t finished setting up</strong> their account — sent until they do.</span></span>'
+      + '<input type="checkbox" id="es-onboardremind" data-kt-switch="1"' + (s.onboarding_reminders_enabled !== false ? ' checked' : '') + '></label>'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;">'
+      + '<label for="es-onboardhour" style="font-size:12.5px;color:#475569;font-weight:600;">Send each day at</label>'
+      + '<select id="es-onboardhour" style="padding:8px 10px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;">'
+      + (function(){var o='';var cur=(s.onboarding_reminder_hour==null?7:s.onboarding_reminder_hour);for(var h=0;h<24;h++){var ap=h<12?'AM':'PM';var hh=h%12;if(hh===0)hh=12;o+='<option value="'+h+'"'+(cur===h?' selected':'')+'>'+hh+':00 '+ap+'</option>';}return o;})()
+      + '</select><span style="font-size:11.5px;color:#94A3B8;">agency local time</span>'
+      + '</div>'
+      + '<div id="es-onboard-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
+      + '</div>'
+      // ── Per-centre / per-room delivery control (pre-boarding switchboard) ──
+      + '<div id="es-delivery" style="max-width:680px;margin-bottom:18px;"></div>'
       + '<div class="kt-card" style="max-width:680px;">'
       + field('From name', 'es-name', s.email_from_name || '', 'e.g. ' + esc(s.agency_name) + ' Childcare')
       + field('From address', 'es-addr', s.email_from_address || '', s.default_from || 'noreply@youragency.com', 'email')
@@ -156,7 +185,7 @@
       + '<option value="ssl"' + (enc === 'ssl' ? ' selected' : '') + '>SSL</option>'
       + '<option value="none"' + (enc === 'none' ? ' selected' : '') + '>None</option>'
       + '</select>'
-      + '<p style="color:#94A3B8;font-size:12px;margin:10px 0 0;">If left blank, the platform default sender (' + esc(s.default_from || 'system default') + ') is used.</p>'
+      + '<p style="color:#64748B;font-size:12px;margin:10px 0 0;">If left blank, the platform default sender (' + esc(s.default_from || 'system default') + ') is used.</p>'
       + '<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">'
       + '<button id="es-save" class="kt-btn kt-btn-primary">Save settings</button>'
       + '<button id="es-test" class="kt-btn" style="background:#F1F5F9;color:#1F2937;">Send test email to me</button>'
@@ -187,7 +216,7 @@
       + '</select></div></div>'
       + field('Username', 'es-user', s.smtp_username || '', 'you@gmail.com')
       + field('Password' + (s.has_smtp_password ? ' (leave blank to keep)' : ''), 'es-pass', '', s.has_smtp_password ? '••••••••' : 'app password', 'password')
-      + '<p style="color:#94A3B8;font-size:12px;margin:8px 0 0;">Gmail &amp; Microsoft with 2-factor on need an <strong>app password</strong>, not your normal password.</p>'
+      + '<p style="color:#64748B;font-size:12px;margin:8px 0 0;">Gmail &amp; Microsoft with 2-factor on need an <strong>app password</strong>, not your normal password.</p>'
       + '</div>'
       + '</div>'
       // ── Microsoft 365 mailbox (Graph) — powers the in-portal Email client ──
@@ -197,7 +226,7 @@
       + field('Directory (tenant) ID', 'es-gt', s.graph_tenant_id || '', '00000000-0000-0000-0000-000000000000')
       + field('Application (client) ID', 'es-gc', s.graph_client_id || '', '00000000-0000-0000-0000-000000000000')
       + field('Client secret' + (s.has_graph_secret ? ' (leave blank to keep)' : ''), 'es-gs', '', s.has_graph_secret ? '••••••••' : 'secret value', 'password')
-      + '<p style="color:#94A3B8;font-size:12px;margin:8px 0 0;">Azure Portal → App registrations → Certificates &amp; secrets. Needs Graph <em>Mail.Read</em> / <em>Mail.Send</em>.</p>'
+      + '<p style="color:#64748B;font-size:12px;margin:8px 0 0;">Azure Portal → App registrations → Certificates &amp; secrets. Needs Graph <em>Mail.Read</em> / <em>Mail.Send</em>.</p>'
       + '</div>'
       + '</div>';
 
@@ -214,6 +243,47 @@
         else { h.value = ''; pt.value = '587'; en.value = 'tls'; }
       };
     });
+
+    // Per-centre / per-room delivery switchboard (async).
+    loadDelivery();
+
+    // Master mail switch — saves immediately on toggle (reverts on failure).
+    var mailToggle = document.getElementById('es-mailenabled');
+    if (mailToggle) mailToggle.onchange = async function () {
+      var out = document.getElementById('es-mailenabled-out');
+      mailToggle.disabled = true;
+      try {
+        await patch('/admin/email-settings', { mail_enabled: mailToggle.checked });
+        if (out) { out.style.color = '#047857'; out.textContent = mailToggle.checked ? '✓ Mail enabled for this agency.' : '✓ Mail disabled — nothing will be sent.'; }
+        if (window.KT && KT.toast) KT.toast(mailToggle.checked ? '📬' : '🔕', 'Mail ' + (mailToggle.checked ? 'enabled' : 'disabled'), 'Saved for this agency.', mailToggle.checked ? '#16A34A' : '#B45309');
+      } catch (e) {
+        mailToggle.checked = !mailToggle.checked;
+        if (out) { out.style.color = '#B91C1C'; out.textContent = '✗ ' + (e.message || 'Could not save.'); }
+      } finally { mailToggle.disabled = false; }
+    };
+
+    // Onboarding reminders — enabled toggle + send-hour, both save immediately.
+    var obRemind = document.getElementById('es-onboardremind');
+    var obHour = document.getElementById('es-onboardhour');
+    var obOut = document.getElementById('es-onboard-out');
+    var saveOb = async function (body, okMsg) {
+      try {
+        await patch('/admin/email-settings', body);
+        if (obOut) { obOut.style.color = '#047857'; obOut.textContent = okMsg; }
+      } catch (e) {
+        if (obOut) { obOut.style.color = '#B91C1C'; obOut.textContent = '✗ ' + (e.message || 'Could not save.'); }
+        throw e;
+      }
+    };
+    if (obRemind) obRemind.onchange = async function () {
+      obRemind.disabled = true;
+      try { await saveOb({ onboarding_reminders_enabled: obRemind.checked }, obRemind.checked ? '✓ Onboarding reminders ON.' : '✓ Onboarding reminders OFF.'); }
+      catch (e) { obRemind.checked = !obRemind.checked; }
+      finally { obRemind.disabled = false; }
+    };
+    if (obHour) obHour.onchange = function () {
+      saveOb({ onboarding_reminder_hour: parseInt(obHour.value, 10) }, '✓ Reminder time saved (' + obHour.options[obHour.selectedIndex].text + ').').catch(function () {});
+    };
 
     document.getElementById('es-save').onclick = async function () {
       var v = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
@@ -244,6 +314,61 @@
         out.innerHTML = '<div style="background:#FEE2E2;color:#B91C1C;padding:12px;border-radius:9px;">' + esc(e.message || 'Send failed') + '</div>';
       }
     };
+  }
+
+  /* ───────────── Centre / room email delivery switchboard ───────────── */
+  async function loadDelivery() {
+    var host = document.getElementById('es-delivery');
+    if (!host) return;
+    host.innerHTML = '<div class="kt-card" style="color:#64748B;">Loading centres…</div>';
+    var d;
+    try { d = await api().get('/admin/email-delivery'); }
+    catch (e) { host.innerHTML = '<div class="kt-card" style="color:#B91C1C;">Could not load centres: ' + esc(e.message) + '</div>'; return; }
+
+    var centres = d.centres || [];
+    var sw = function (on, attr, id) {
+      return '<input type="checkbox" data-kt-switch="1" ' + attr + '="' + id + '"' + (on ? ' checked' : '') + '>';
+    };
+    var rowsHtml = centres.length ? centres.map(function (c) {
+      var roomsHtml = (c.rooms || []).map(function (rm) {
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px 9px 34px;border-top:1px solid #F1F5F9;' + (c.email_enabled ? '' : 'opacity:.5;') + '">'
+          + '<span style="font-size:13px;color:#334155;">🚪 ' + esc(rm.name) + (rm.active ? '' : ' <span style="color:#94A3B8;font-size:11px;">(inactive)</span>') + '</span>'
+          + sw(rm.email_enabled, 'data-room', rm.id)
+          + '</div>';
+      }).join('');
+      return '<div style="border:1.5px solid #E2E8F0;border-radius:12px;margin-bottom:10px;overflow:hidden;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:#F8FAFC;">'
+        + '<span style="font-size:14px;font-weight:700;color:#0F172A;">🏫 ' + esc(c.name) + '</span>'
+        + sw(c.email_enabled, 'data-centre', c.id)
+        + '</div>'
+        + (roomsHtml || '<div style="padding:9px 12px 9px 34px;color:#94A3B8;font-size:12px;">No rooms yet.</div>')
+        + '</div>';
+    }).join('') : '<div style="color:#64748B;font-size:13px;">No centres yet.</div>';
+
+    host.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">🎛️ Centre &amp; room email delivery</h3></div>'
+      + '<p style="color:#64748B;font-size:12.5px;margin:0 0 12px;">Switch email on only for the centres and rooms that are live. A switched-<strong>off</strong> centre or room holds back every email to its educators and the parents of its children — ideal while pre-boarding a new agency. Rooms follow their centre: a room can’t send while its centre is off.</p>'
+      + (d.master_enabled ? '' : '<div style="background:#FEF3C7;color:#92400E;padding:9px 11px;border-radius:8px;font-size:12.5px;margin-bottom:12px;">⚠️ The agency master switch above is <strong>OFF</strong>, so nothing sends regardless of these switches. Turn it on to use per-centre control.</div>')
+      + rowsHtml
+      + '<div id="ed-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
+      + '</div>';
+
+    host.querySelectorAll('[data-centre],[data-room]').forEach(function (cb) {
+      cb.addEventListener('change', async function () {
+        var isRoom = cb.hasAttribute('data-room');
+        var id = cb.getAttribute(isRoom ? 'data-room' : 'data-centre');
+        var out = document.getElementById('ed-out');
+        cb.disabled = true;
+        try {
+          await patch('/admin/email-delivery/' + (isRoom ? 'room' : 'centre') + '/' + id, { enabled: cb.checked });
+          if (window.KT && KT.toast) KT.toast(cb.checked ? '📬' : '🔕', 'Email ' + (cb.checked ? 'on' : 'off'), 'Saved for this agency.', cb.checked ? '#16A34A' : '#B45309');
+          if (!isRoom) loadDelivery(); // re-render so the centre's rooms dim / undim
+        } catch (e) {
+          cb.checked = !cb.checked;
+          if (out) { out.style.color = '#B91C1C'; out.textContent = '✗ ' + (e.message || 'Could not save.'); }
+        } finally { cb.disabled = false; }
+      });
+    });
   }
 
   // PATCH/DELETE helpers (Api.request shape varies across builds)

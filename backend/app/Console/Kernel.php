@@ -64,11 +64,14 @@ class Kernel extends ConsoleKernel
             ->timezone('America/Toronto');
 
         // ─── Onboarding reminders ────────────────────────────
-        // Daily nudge to users who were invited but never set up their account
+        // Nudge users who were invited but never set up their account
         // (onboarded_at IS NULL). White-labelled per agency; exempt from the
         // not-onboarded gate via X-KT-Invite so it actually reaches them.
+        // Runs HOURLY — the command self-gates per agency by their configured
+        // send-hour (default 07:00 ET) + enabled flag (default ON), both editable
+        // in the portal under Email settings.
         $schedule->command('kiddietrac:onboarding-reminders')
-            ->dailyAt('09:00')
+            ->hourly()
             ->timezone('America/Toronto');
 
         // ─── Ratio violation check ──────────────────────────

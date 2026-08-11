@@ -24,9 +24,9 @@ use Illuminate\Support\Str;
  */
 class OnboardingReminderCommand extends Command
 {
-    protected $signature = 'kiddietrac:onboarding-reminders {--test= : send a single white-labelled sample to this address and exit}';
+    protected $signature = 'kiddietrac:onboarding-reminders {--test= : send a single white-labelled sample to this address and exit} {--force : ignore each agency\'s configured send-hour and send now}';
 
-    protected $description = 'Remind invited-but-not-onboarded users to finish setting up (white-labelled per agency).';
+    protected $description = 'Remind invited-but-not-onboarded users to finish setting up (white-labelled per agency; configurable per agency).';
 
     public function handle(): int
     {
@@ -44,42 +44,58 @@ class OnboardingReminderCommand extends Command
             return self::SUCCESS;
         }
 
-        $users = DB::table('users as u')
-            ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-            ->whereNull('u.onboarded_at')
-            ->whereNull('u.deleted_at')
-            ->whereNotNull('u.email')
-            ->where('ra.active', 1)
-            ->groupBy('u.id', 'u.email', 'u.first_name', 'u.last_name')
-            ->select('u.id', 'u.email', 'u.first_name', 'u.last_name', DB::raw('MIN(ra.agency_id) as agency_id'))
-            ->get();
+        // Runs HOURLY (see Kernel). Each agency configures whether reminders are on
+        // and which hour to send — defaults: ENABLED, 07:00 agency-local (Eastern).
+        // The command self-gates so only the agencies due this hour actually send.
+        $force = (bool) $this->option('force');
+        $nowHour = (int) \Illuminate\Support\Carbon::now('America/Toronto')->format('G'); // 0-23 Eastern
 
-        $sent = 0;
-        foreach ($users as $u) {
-            $agencyId = (int) ($u->agency_id ?: 0);
-            if (! $agencyId) {
+        $agencies = DB::table('agencies')->get(['id', 'name', 'settings']);
+        $totalSent = 0;
+        $agenciesRun = 0;
+        foreach ($agencies as $ag) {
+            $s = json_decode($ag->settings ?? '{}', true) ?: [];
+            $enabled = array_key_exists('onboarding_reminders_enabled', $s) ? (bool) $s['onboarding_reminders_enabled'] : true; // default ON
+            $hour = isset($s['onboarding_reminder_hour']) ? (int) $s['onboarding_reminder_hour'] : 7;                            // default 7am
+            if (! $enabled) {
                 continue;
             }
-            try {
-                // Fresh 7-day set-password token — mirrors the invite flow.
-                $token = bin2hex(random_bytes(32));
-                DB::table('password_resets')->insert([
-                    'email'      => $u->email,
-                    'user_id'    => $u->id,
-                    'token'      => hash('sha256', $token),
-                    'expires_at' => now()->addDays(7),
-                    'created_at' => now(),
-                ]);
-                $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'Your agency');
-                $link = 'https://app.kiddietrac.com/set-password.html?token=' . $token;
-                $this->send($u->email, (string) ($u->first_name ?: 'there'), $agencyName, $agencyId, $link, false);
-                $sent++;
-            } catch (\Throwable $e) {
-                Log::warning('Onboarding reminder failed', ['user' => $u->id, 'error' => $e->getMessage()]);
+            if (! $force && $hour !== $nowHour) {
+                continue;
+            }
+            $agenciesRun++;
+
+            $users = DB::table('users as u')
+                ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                ->whereNull('u.onboarded_at')
+                ->whereNull('u.deleted_at')
+                ->whereNotNull('u.email')
+                ->where('ra.active', 1)
+                ->where('ra.agency_id', $ag->id)
+                ->groupBy('u.id', 'u.email', 'u.first_name', 'u.last_name')
+                ->select('u.id', 'u.email', 'u.first_name', 'u.last_name')
+                ->get();
+
+            foreach ($users as $u) {
+                try {
+                    $token = bin2hex(random_bytes(32));
+                    DB::table('password_resets')->insert([
+                        'email'      => $u->email,
+                        'user_id'    => $u->id,
+                        'token'      => hash('sha256', $token),
+                        'expires_at' => now()->addDays(7),
+                        'created_at' => now(),
+                    ]);
+                    $link = 'https://app.kiddietrac.com/set-password.html?token=' . $token;
+                    $this->send($u->email, (string) ($u->first_name ?: 'there'), (string) $ag->name, (int) $ag->id, $link, false);
+                    $totalSent++;
+                } catch (\Throwable $e) {
+                    Log::warning('Onboarding reminder failed', ['user' => $u->id, 'error' => $e->getMessage()]);
+                }
             }
         }
 
-        $this->info("Onboarding reminders sent: {$sent} / {$users->count()} pending user(s).");
+        $this->info("Onboarding reminders — hour {$nowHour} ET, {$agenciesRun} agency(ies) due, {$totalSent} email(s) sent.");
 
         return self::SUCCESS;
     }

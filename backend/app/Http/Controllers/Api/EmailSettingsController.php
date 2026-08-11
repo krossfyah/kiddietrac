@@ -26,9 +26,10 @@ final class EmailSettingsController extends Controller
 {
     private function resolveAgencyId(Request $request): int
     {
-        $header = $request->header('X-Active-Agency-Id');
-        if ($header) {
-            return (int) $header;
+        $header = (int) $request->header('X-Active-Agency-Id');
+        if ($header && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                ->where(function ($q) use ($header) { $q->where('role', 'platform_admin')->orWhere('agency_id', $header); })->exists()) {
+            return $header;
         }
         $u = $request->user();
         return (int) DB::table('role_assignments')
@@ -73,10 +74,18 @@ final class EmailSettingsController extends Controller
             ->first();
         abort_unless($row, 404, 'Agency not found');
         $cfg = $this->readConfig($agencyId);
+        $settingsRaw = DB::table('agencies')->where('id', $agencyId)->value('settings');
+        $settingsTop = $settingsRaw ? (json_decode((string) $settingsRaw, true) ?: []) : [];
+        $mailEnabled = ($settingsTop['notifications_enabled'] ?? true) !== false;
 
         return response()->json([
             'agency_id'             => $row->id,
             'agency_name'           => $row->name,
+            // Master mail/notifications switch (absent = ON).
+            'mail_enabled'          => $mailEnabled,
+            // Onboarding-reminder daily email (absent = ON, default 7am agency-local).
+            'onboarding_reminders_enabled' => ($settingsTop['onboarding_reminders_enabled'] ?? true) !== false,
+            'onboarding_reminder_hour'     => (int) ($settingsTop['onboarding_reminder_hour'] ?? 7),
             'email_from_name'       => $row->email_from_name,
             'email_from_address'    => $row->email_from_address,
             'email_smtp_encryption' => $row->email_smtp_encryption ?: 'tls',
@@ -114,6 +123,9 @@ final class EmailSettingsController extends Controller
             'graph_tenant_id'       => ['nullable', 'string', 'max:120'],
             'graph_client_id'       => ['nullable', 'string', 'max:120'],
             'graph_client_secret'   => ['nullable', 'string', 'max:500'],
+            'mail_enabled'          => ['sometimes', 'boolean'],
+            'onboarding_reminders_enabled' => ['sometimes', 'boolean'],
+            'onboarding_reminder_hour'     => ['sometimes', 'integer', 'min:0', 'max:23'],
         ]);
 
         // Legacy "from" columns
@@ -136,6 +148,26 @@ final class EmailSettingsController extends Controller
         if (array_key_exists('graph_client_id', $data)) $cfg['graph_client_id'] = $data['graph_client_id'];
         if (!empty($data['graph_client_secret']))       $cfg['graph_client_secret'] = Crypt::encryptString($data['graph_client_secret']);
         $this->writeConfig($agencyId, $cfg);
+
+        // Master mail/notifications switch lives at the TOP level of settings (the
+        // same flag the kill-switch reads), NOT inside email_config. Absent = ON.
+        if (array_key_exists('mail_enabled', $data)) {
+            $row2 = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
+            $settings = ($row2 && $row2->settings) ? (json_decode($row2->settings, true) ?: []) : [];
+            $settings['notifications_enabled'] = (bool) $data['mail_enabled'];
+            DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings), 'updated_at' => now()]);
+            \Illuminate\Support\Facades\Cache::forget('kt.agency_notifications:' . $agencyId);
+        }
+
+        // Onboarding-reminder daily email settings (top-level, read by the
+        // kiddietrac:onboarding-reminders command). Defaults: enabled, 07:00.
+        if (array_key_exists('onboarding_reminders_enabled', $data) || array_key_exists('onboarding_reminder_hour', $data)) {
+            $row3 = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
+            $settings3 = ($row3 && $row3->settings) ? (json_decode($row3->settings, true) ?: []) : [];
+            if (array_key_exists('onboarding_reminders_enabled', $data)) $settings3['onboarding_reminders_enabled'] = (bool) $data['onboarding_reminders_enabled'];
+            if (array_key_exists('onboarding_reminder_hour', $data))     $settings3['onboarding_reminder_hour'] = (int) $data['onboarding_reminder_hour'];
+            DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings3), 'updated_at' => now()]);
+        }
 
         return response()->json(['ok' => true]);
     }
