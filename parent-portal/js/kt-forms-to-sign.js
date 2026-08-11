@@ -64,4 +64,61 @@
     });
   } catch (e) {}
   KT.renderMyForms = render;
+
+  /* ── Count badge on the "Forms to sign" tile + educator Today alert ── */
+  var _cnt = null, _fetching = false;
+  function fetchCount() {
+    if (_fetching) return; _fetching = true;
+    Api.get('/managed-forms/assigned').then(function (d) { _cnt = (d && d.count) || 0; _fetching = false; paint(); }).catch(function () { _fetching = false; });
+  }
+  KT.refreshMyFormsCount = function () { _cnt = null; fetchCount(); };
+  function paint() {
+    if (_cnt == null) return;
+    // Tile badge (any role's home).
+    document.querySelectorAll('a.kt-tile[href="#my-forms"]').forEach(function (a) {
+      var b = a.querySelector('.kt-mf-badge');
+      if (_cnt > 0) {
+        if (!b) {
+          b = document.createElement('span'); b.className = 'kt-mf-badge';
+          b.style.cssText = 'position:absolute;top:8px;right:8px;min-width:20px;height:20px;padding:0 5px;border-radius:11px;background:#DC2626;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(220,38,38,.45);z-index:2;';
+          if (getComputedStyle(a).position === 'static') a.style.position = 'relative';
+          a.appendChild(b);
+        }
+        b.textContent = _cnt > 9 ? '9+' : String(_cnt);
+      } else if (b) { b.remove(); }
+    });
+    // Educator "Today at a glance" alert banner.
+    try {
+      var brief = document.getElementById('kt-day-brief');
+      var existing = document.getElementById('kt-mf-alert');
+      if (brief && _cnt > 0) {
+        if (!existing) {
+          var al = document.createElement('div');
+          al.id = 'kt-mf-alert';
+          al.style.cssText = 'background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:12px;padding:11px 14px;margin:0 0 12px;font-size:13.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;';
+          al.innerHTML = '✍️ You have ' + _cnt + ' form' + (_cnt === 1 ? '' : 's') + ' that need your signature — tap to review.';
+          al.onclick = function () { location.hash = 'my-forms'; };
+          brief.parentNode.insertBefore(al, brief);
+        }
+      } else if (existing) { existing.remove(); }
+    } catch (e) {}
+  }
+  function tick() { if (_cnt == null) fetchCount(); else paint(); }
+  if (window.KT && KT.sweepBus && KT.sweepBus.on) { KT.sweepBus.on(paint); }
+  setInterval(tick, 5000);
+  window.addEventListener('hashchange', function () { setTimeout(tick, 300); });
+  setTimeout(fetchCount, 1500);
+
+  // Re-count after a successful sign so the badge/alert clear.
+  var _origSign = signForm;
+  signForm = function (id, title, el) {
+    if (!KT.signaturePad) { if (KT.toast) KT.toast('⚠️', 'Unavailable', 'Signature pad is not available.', '#B91C1C'); return; }
+    KT.signaturePad({ title: 'Sign: ' + title, subtitle: 'Draw your signature below to confirm you have read this form.', okLabel: 'Submit signature' }).then(function (dataUrl) {
+      if (!dataUrl) return;
+      Api.post('/managed-forms/' + id + '/sign', { signature: dataUrl }).then(function () {
+        if (KT.toast) KT.toast('✅', 'Signed', 'Thank you — your signature has been recorded.', '#16A34A');
+        _cnt = null; fetchCount(); load(el);
+      }).catch(function (e) { if (KT.toast) KT.toast('⚠️', 'Could not submit', e.message || '', '#B91C1C'); });
+    });
+  };
 })();

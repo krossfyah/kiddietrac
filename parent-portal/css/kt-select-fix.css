@@ -1,0 +1,31 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Dropdown readability (2026-08-11).
+   On the Android APK WebView (and any dark-mode client) <select> menus and their
+   <option> lists rendered TRANSPARENT / dark-on-dark and were unreadable (e.g. the
+   report-card "select a child" picker). This forces a LIGHT colour-scheme + solid
+   white background + dark text on every dropdown, portal-wide. The <option> list is
+   OS-rendered, so `color-scheme:light` is what actually fixes the popup itself.
+   ───────────────────────────────────────────────────────────────────────── */
+select {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #0F172A !important;
+}
+select option,
+select optgroup {
+  background-color: #ffffff !important;
+  color: #0F172A !important;
+}
+select:disabled,
+select option:disabled {
+  color: #94A3B8 !important;
+}
+/* Native date/time inputs suffer the same dark-mode invisibility. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"] {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #0F172A !important;
+}
