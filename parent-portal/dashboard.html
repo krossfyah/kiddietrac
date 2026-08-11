@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- Warm the API connection so the first boot call skips the TLS/DNS handshake. -->
+  <link rel="preconnect" href="https://api.kiddietrac.com" crossorigin>
+  <link rel="dns-prefetch" href="https://api.kiddietrac.com">
   <!-- a11y: reflect the chosen locale on <html lang> so screen readers pronounce
        fr/es/hi content correctly (the language picker reloads, so read it on boot). -->
   <script>try{var _l=localStorage.getItem('kt_locale');if(_l&&_l!=='en')document.documentElement.lang=_l;}catch(e){}</script>
