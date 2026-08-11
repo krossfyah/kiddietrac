@@ -30,11 +30,29 @@
   ExpiresByType application/manifest+json "access plus 1 day"
 </IfModule>
 
+# Flag fingerprinted (?v=) JS/CSS requests so the header block below can cache them
+# forever. mod_rewrite is the reliable way to inspect the query string in .htaccess.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{QUERY_STRING} (^|&)v=
+  RewriteRule \.(js|css)$ - [E=KT_VERSIONED:1]
+</IfModule>
+
 <IfModule mod_headers.c>
   # Don't let the HTML shell get cached anywhere.
   <FilesMatch "\.(html)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
+
+  # ─── Fingerprinted assets cache for a year, immutable ─────────────
+  # Any request carrying a ?v= cache-buster (every JS/CSS <script>/<link> in
+  # dashboard.html is stamped) is safe to cache forever: a deploy bumps the ?v=,
+  # which is a NEW url the browser must fetch. This turns repeat/return loads of
+  # the ~180 assets into instant memory-cache hits instead of a day-long
+  # revalidation. Scoped to the query string so UN-stamped files (service-worker.js,
+  # the HTML shell) are untouched and keep their short/no-cache rules below.
+  # NOTE: SetEnvIf cannot read the query string, so the env is set via mod_rewrite.
+  Header set Cache-Control "public, max-age=31536000, immutable" env=KT_VERSIONED
 
   # ─── Security headers ─────────────────────────────────────────────
   Header always set X-Content-Type-Options "nosniff"
@@ -50,3 +68,19 @@
   # so it can't affect other subdomains that may not be HTTPS. 1 year.
   Header always set Strict-Transport-Security "max-age=31536000"
 </IfModule>
+
+# ─── Service worker: NEVER HTTP-cache it ─────────────────────────────
+# service-worker.js is requested un-versioned (/service-worker.js). The blanket
+# .js rule above gave it max-age=1day, so a browser/WebView treated the OLD worker
+# as "fresh" and didn't re-fetch it for up to a day — meaning deploys (and their
+# SW cache-version bump) never activated on the device. Force a fresh fetch every
+# load so a new worker installs immediately.
+<FilesMatch "service-worker\.js$">
+  <IfModule mod_expires.c>
+    ExpiresActive Off
+  </IfModule>
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header unset Expires
+  </IfModule>
+</FilesMatch>

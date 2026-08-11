@@ -578,6 +578,7 @@
     'admin-families': 'Families, guardians and contact details.',
     'admin-roles': 'What each role is allowed to do.',
     'admin-forms': 'Forms families and staff are asked to complete.',
+    'forms-manager': 'Upload a form, assign it to parents, educators or home visitors, and track who has signed it.',
     'admin-branding': 'Your logo, colours and the name families see.',
     'admin-features': 'Turn features on and off per agency.',
     'admin-mrr': 'Recurring revenue across the platform.',

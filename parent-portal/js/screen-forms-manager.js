@@ -22,9 +22,8 @@
 
   function render(container) {
     container.innerHTML =
-      '<div style="padding:24px;max-width:1080px;margin:0 auto;color:#0F172A;">'
-      + '<div class="kt-page-hero"><h2>🗂️ Forms Manager</h2><p>Upload a fillable form, assign it to parents, educators or home visitors, and track who has signed it.</p></div>'
-      + '<div style="display:flex;gap:8px;margin:6px 0 16px;">'
+      '<div style="padding:0 24px 24px;max-width:1080px;margin:0 auto;color:#0F172A;">'
+      + '<div style="display:flex;gap:8px;margin:16px 0 16px;">'
       + '<button class="fm-tab" data-t="library" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📚 Library</button>'
       + '<button class="fm-tab" data-t="completed" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">✅ Completed</button>'
       + '</div><div id="fm-body"></div></div>';
