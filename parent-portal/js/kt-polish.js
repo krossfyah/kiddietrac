@@ -75,6 +75,28 @@
   KT.confirm = function (opts) {
     if (typeof opts === 'string') opts = { title: opts };
     opts = opts || {};
+    // Auto-flag clearly DESTRUCTIVE actions with the danger (red ⚠) tone + a
+    // matching action label, unless the caller set a tone explicitly. This makes
+    // the ~47 migrated confirm() sites visually honest with no per-site edits.
+    // Kept conservative: only unambiguous destructive verbs (not 'cancel', which
+    // collides with the Cancel button, nor 'reset'/'sign out').
+    if (!opts.tone) {
+      var _dtxt = ((opts.title || '') + ' ' + (opts.description || '')).toLowerCase();
+      if (/\b(delete|remove|permanently|deactivate|disconnect|discard|revoke|void|suspend|archive|soft-delete)\b/.test(_dtxt)) {
+        opts.tone = 'danger';
+        if (!opts.okLabel) {
+          opts.okLabel = /\bdelete\b/.test(_dtxt) ? 'Delete'
+            : /\bremove\b/.test(_dtxt) ? 'Remove'
+            : /\bdisconnect\b/.test(_dtxt) ? 'Disconnect'
+            : /\bdiscard\b/.test(_dtxt) ? 'Discard'
+            : /\bdeactivate\b/.test(_dtxt) ? 'Deactivate'
+            : /\barchive\b/.test(_dtxt) ? 'Archive'
+            : /\bvoid\b/.test(_dtxt) ? 'Void'
+            : /\bsuspend\b/.test(_dtxt) ? 'Suspend'
+            : 'Confirm';
+        }
+      }
+    }
     return new Promise((resolve) => {
       const o = buildOverlay();
       const m = document.createElement('div');
@@ -118,29 +140,54 @@
   }
 
   // ============================ Table polish: sort + CSV + sticky header + ISO date format ============================
+  /**
+   * Reformat a date-looking table cell — in the AGENCY's timezone.
+   *
+   * This used to call toLocaleDateString/toLocaleTimeString with `undefined` as the
+   * locale-and-zone, i.e. the VIEWER'S DEVICE zone, and it parsed the zone-less
+   * "2026-05-20 12:34:56" MySQL form with `new Date(...)`, which reads it as local
+   * time. So a UTC value stored by the server was mis-parsed AND then re-rendered
+   * in whatever zone the laptop happened to be in — wrong twice, and wrong on the
+   * one screen that must never drift. Every displayed time in the portal is
+   * agency-local; kt-tz.js owns that zone.
+   *
+   * Non-dates are returned untouched: this runs over EVERY cell in EVERY table, so
+   * it has to be a no-op for anything that isn't a timestamp.
+   */
   function fmtDateMaybe(s) {
     if (typeof s !== 'string') return s;
-    // ISO with time: 2026-05-20T12:34:56...
+    var zone;
+    try { zone = (window.KT && KT.tz && KT.tz()) || undefined; } catch (e) { zone = undefined; }
+
+    var dateOpts = { timeZone: zone, year: 'numeric', month: 'short', day: 'numeric' };
+    var timeOpts = { timeZone: zone, hour: '2-digit', minute: '2-digit' };
+
+    // ISO with time: 2026-05-20T12:34:56[.mmm][Z|±hh:mm]
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
       try {
-        const d = new Date(s);
-        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
-          ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        // No zone marker means the server sent UTC — say so explicitly.
+        var iso = /(Z|[+-]\d{2}:?\d{2})$/.test(s) ? s : s + 'Z';
+        var d = new Date(iso);
+        if (isNaN(d)) return s;
+        return d.toLocaleDateString(undefined, dateOpts) + ' ' + d.toLocaleTimeString(undefined, timeOpts);
       } catch (e) { return s; }
     }
-    // ISO date 2026-05-20
+    // Date only: 2026-05-20. A bare date has no time to shift, so render it as
+    // written rather than converting it into the previous day.
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
       try {
-        const d = new Date(s + 'T00:00:00');
-        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        var parts = s.split('-');
+        var dd = new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
+        if (isNaN(dd)) return s;
+        return dd.toLocaleDateString(undefined, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
       } catch (e) { return s; }
     }
-    // Datetime with space: 2026-05-20 12:34:56
+    // MySQL datetime: 2026-05-20 12:34:56 — zone-less, therefore UTC.
     if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
       try {
-        const d = new Date(s.replace(' ', 'T'));
-        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
-          ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        var d2 = new Date(s.replace(' ', 'T') + 'Z');
+        if (isNaN(d2)) return s;
+        return d2.toLocaleDateString(undefined, dateOpts) + ' ' + d2.toLocaleTimeString(undefined, timeOpts);
       } catch (e) { return s; }
     }
     return s;
@@ -276,10 +323,14 @@
   }
 
   function sweep() {
-    document.querySelectorAll('[data-kt-pretty] table').forEach(polishTable);
+    // EVERY table under #appMain, matching kt-table-filter's sweep. Gating on
+    // [data-kt-pretty] meant sortable columns only appeared on screens that opted
+    // in — the Forms Manager tables (and every other unflagged screen) got a search
+    // box from kt-table-filter but no sortable headers, which reads as a bug.
+    document.querySelectorAll('#appMain table').forEach(polishTable);
   }
   window.addEventListener('hashchange', () => setTimeout(sweep, 400));
-  setInterval(sweep, 2200);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 4000);
   setTimeout(sweep, 900);
 
   // ============================ "Loading…" → skeleton ============================
@@ -293,7 +344,7 @@
       }
     });
   }
-  setInterval(sweepLoading, 600);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweepLoading) : setInterval(sweepLoading, 4000);
 
   // ============================ Mobile sidebar toggle ============================
   function mobileSidebar() {
@@ -312,5 +363,9 @@
 
   // Expose helpers
   KT.csv = exportTableAsCsv;
-  KT.fmtDate = fmtDateMaybe;
+  // NOT KT.fmtDate: kt-tz.js owns that name and resolves the agency zone from
+  // /auth/me. This file loads AFTER kt-tz.js, so exporting it here overwrote the
+  // canonical helper with this cell-formatter and quietly pushed every caller
+  // back onto the device timezone. Exposed under its own name instead.
+  KT.fmtCellDate = fmtDateMaybe;
 })(window);
