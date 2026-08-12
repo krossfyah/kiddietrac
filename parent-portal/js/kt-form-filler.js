@@ -592,35 +592,74 @@
             } catch (e) { /* a field we can't set must not abort the rest */ }
           });
         }
-        // Signature block on the last page: the drawn signature, the signer's full
-        // name, and the date signed — a signature image alone is not a record of
-        // who signed or when.
+        // Signature block on the last page. Presented as a bordered panel with
+        // labelled rows — the previous version drew the image, a rule and two lines
+        // of text at fixed offsets, so the signature could sit on top of the rule
+        // and nothing said what the values were. A signature record has to read as
+        // a record: who signed, their mark, and when.
         return (sigDataUrl ? pdfDoc.embedPng(sigDataUrl) : Promise.resolve(null)).then(function (png) {
-          return pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica).then(function (font) {
+          return Promise.all([
+            pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica),
+            pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold),
+          ]).then(function (fonts) {
+            var font = fonts[0], bold = fonts[1];
             var pages = pdfDoc.getPages();
             var last = pages[pages.length - 1];
             var pw = last.getWidth();
-            var boxW = Math.min(240, pw * 0.46);
+
+            var PAD = 12;
+            var boxW = Math.min(260, pw - 72);
+            var sigAreaH = 46;                    // room for the drawn signature
+            var boxH = PAD + 10 + sigAreaH + 10 + 12 + 4 + 11 + PAD;   // label+sig+rule+name+date
             var x = pw - boxW - 36;
-            var y = 40;                      // above the bottom margin
+            var y = 34;
+
             var ink = PDFLib.rgb(0.06, 0.09, 0.16);
             var grey = PDFLib.rgb(0.42, 0.47, 0.55);
+            var line = PDFLib.rgb(0.80, 0.84, 0.89);
 
+            // Panel: white ground so it stays legible over any page content.
+            last.drawRectangle({
+              x: x, y: y, width: boxW, height: boxH,
+              color: PDFLib.rgb(1, 1, 1), borderColor: line, borderWidth: 1,
+            });
+
+            var cy = y + boxH - PAD;              // walk DOWN from the top edge
+
+            // Heading
+            cy -= 8;
+            last.drawText('ELECTRONICALLY SIGNED', {
+              x: x + PAD, y: cy, size: 6.5, font: bold, color: grey,
+            });
+
+            // Signature, scaled to fit the area without ever overflowing the panel
+            cy -= sigAreaH;
             if (png) {
+              var maxW = boxW - PAD * 2;
               var ratio = png.height / png.width;
-              var sigH = Math.min(52, boxW * ratio);
-              last.drawImage(png, { x: x, y: y + 34, width: sigH / ratio, height: sigH });
+              var w2 = Math.min(maxW, sigAreaH / ratio);
+              var h2 = w2 * ratio;
+              if (h2 > sigAreaH) { h2 = sigAreaH; w2 = h2 / ratio; }
+              last.drawImage(png, { x: x + PAD, y: cy + (sigAreaH - h2) / 2, width: w2, height: h2 });
             }
-            // Rule under the signature, then the printed name and date beneath it.
+
+            // Rule under the signature
+            cy -= 10;
             last.drawLine({
-              start: { x: x, y: y + 28 }, end: { x: x + boxW, y: y + 28 },
-              thickness: 0.8, color: grey,
+              start: { x: x + PAD, y: cy }, end: { x: x + boxW - PAD, y: cy },
+              thickness: 0.8, color: line,
             });
-            last.drawText(String(signerName || '').slice(0, 60), {
-              x: x, y: y + 15, size: 10, font: font, color: ink,
+
+            // Name
+            cy -= 12;
+            last.drawText(String(signerName || '').slice(0, 44) || '—', {
+              x: x + PAD, y: cy, size: 10, font: bold, color: ink,
             });
-            last.drawText('Signed ' + signedOn, {
-              x: x, y: y + 3, size: 8, font: font, color: grey,
+
+            // Date
+            cy -= 11;
+            last.drawText('Date signed: ' + signedOn, {
+              x: x + PAD, y: cy, size: 8, font: font, color: grey,
             });
 
             if (formObj) { try { formObj.flatten(); } catch (e) {} }
