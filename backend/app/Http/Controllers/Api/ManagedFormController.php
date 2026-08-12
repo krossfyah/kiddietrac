@@ -229,7 +229,7 @@ class ManagedFormController extends Controller
             ->orderByDesc('s.signed_at')
             ->select([
                 's.id', 's.managed_form_id', 's.signer_name', 's.signed_at',
-                'f.title as form_title', 'f.file_url',
+                'f.title as form_title', 'f.file_url', 's.filled_file_url',
                 'u.first_name', 'u.last_name', 'u.email',
             ])
             ->limit(500)

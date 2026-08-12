@@ -471,8 +471,15 @@
           mi.onclick = function (ev) { ev.stopPropagation(); close(); fn(); };
           return mi;
         }
-        menu.appendChild(item('👁', 'View signed record', false, function () { viewSignoff(r); }));
-        menu.appendChild(item('⬇️', 'Download form (PDF)', false, function () { openUrl(fileUrl(r.file_url)); }));
+        // The signature-only view is gone: the signature is embedded in the document
+        // itself (with the signer's name and date), so a separate "here is the
+        // squiggle" screen shows less than the PDF does.
+        // Download the COMPLETED copy — r.file_url is the blank original, which is
+        // why this opened an empty form. Fall back to the original only when no
+        // completed copy exists, and say so rather than pretending.
+        menu.appendChild(item('⬇️', r.filled_file_url ? 'Download completed form' : 'Download blank form (not completed)', false, function () {
+          openUrl(fileUrl(r.filled_file_url || r.file_url));
+        }));
         menu.appendChild(item('✉️', 'Email the signer', false, function () {
           var to = r.email || ''; var subj = encodeURIComponent('Re: ' + (r.form_title || 'signed form'));
           window.location.href = 'mailto:' + to + '?subject=' + subj;
