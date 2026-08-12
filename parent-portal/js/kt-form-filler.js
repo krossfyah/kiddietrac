@@ -592,75 +592,92 @@
             } catch (e) { /* a field we can't set must not abort the rest */ }
           });
         }
-        // Signature block on the last page. Presented as a bordered panel with
-        // labelled rows — the previous version drew the image, a rule and two lines
-        // of text at fixed offsets, so the signature could sit on top of the rule
-        // and nothing said what the values were. A signature record has to read as
-        // a record: who signed, their mark, and when.
+        // ── Signature page ───────────────────────────────────────────────────
+        // Stamping the block into a corner of the last page kept colliding with the
+        // form's own content — there is no reliable way to know what is already
+        // printed there. So the signature gets CLEAN SPACE: if the last page has a
+        // clear band at the foot (no form field within it, and the page is tall
+        // enough) the block goes there; otherwise a dedicated page is appended.
+        // Either way it is never drawn over anything.
         return (sigDataUrl ? pdfDoc.embedPng(sigDataUrl) : Promise.resolve(null)).then(function (png) {
           return Promise.all([
             pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica),
             pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold),
           ]).then(function (fonts) {
             var font = fonts[0], bold = fonts[1];
-            var pages = pdfDoc.getPages();
-            var last = pages[pages.length - 1];
-            var pw = last.getWidth();
-
-            var PAD = 12;
-            var boxW = Math.min(260, pw - 72);
-            var sigAreaH = 46;                    // room for the drawn signature
-            var boxH = PAD + 10 + sigAreaH + 10 + 12 + 4 + 11 + PAD;   // label+sig+rule+name+date
-            var x = pw - boxW - 36;
-            var y = 34;
-
             var ink = PDFLib.rgb(0.06, 0.09, 0.16);
             var grey = PDFLib.rgb(0.42, 0.47, 0.55);
             var line = PDFLib.rgb(0.80, 0.84, 0.89);
 
-            // Panel: white ground so it stays legible over any page content.
-            last.drawRectangle({
-              x: x, y: y, width: boxW, height: boxH,
+            var pages = pdfDoc.getPages();
+            var last = pages[pages.length - 1];
+            var pw = last.getWidth(), ph = last.getHeight();
+
+            var BLOCK_H = 120;                 // the band the block needs
+            var MARGIN = 36;
+
+            // Is the foot of the last page clear? Any field widget dipping into the
+            // band means it is not, and we would be drawing over the form.
+            var footClear = ph > BLOCK_H + 140;
+            if (footClear && formObj) {
+              try {
+                var fields = formObj.getFields();
+                for (var fi = 0; fi < fields.length && footClear; fi++) {
+                  var widgets = fields[fi].acroField.getWidgets();
+                  for (var wi = 0; wi < widgets.length; wi++) {
+                    var r = widgets[wi].getRectangle();
+                    if (r && r.y < MARGIN + BLOCK_H + 10) { footClear = false; break; }
+                  }
+                }
+              } catch (e) { footClear = false; }   // can't tell -> take the safe route
+            }
+
+            var page, top;
+            if (footClear) {
+              page = last;
+              top = MARGIN + BLOCK_H;
+            } else {
+              page = pdfDoc.addPage([pw, ph]);   // same paper size as the document
+              top = ph - MARGIN - 40;
+              page.drawText('Signature', { x: MARGIN, y: ph - MARGIN - 14, size: 15, font: bold, color: ink });
+              page.drawText('This page forms part of the completed document.', {
+                x: MARGIN, y: ph - MARGIN - 30, size: 9, font: font, color: grey,
+              });
+            }
+
+            var boxW = Math.min(340, pw - MARGIN * 2);
+            var x = MARGIN;
+            var y = top - BLOCK_H;
+
+            page.drawRectangle({
+              x: x, y: y, width: boxW, height: BLOCK_H,
               color: PDFLib.rgb(1, 1, 1), borderColor: line, borderWidth: 1,
             });
 
-            var cy = y + boxH - PAD;              // walk DOWN from the top edge
+            var PAD = 14;
+            var cy = y + BLOCK_H - PAD - 6;
+            page.drawText('ELECTRONICALLY SIGNED', { x: x + PAD, y: cy, size: 7, font: bold, color: grey });
 
-            // Heading
-            cy -= 8;
-            last.drawText('ELECTRONICALLY SIGNED', {
-              x: x + PAD, y: cy, size: 6.5, font: bold, color: grey,
-            });
-
-            // Signature, scaled to fit the area without ever overflowing the panel
-            cy -= sigAreaH;
+            // Signature, scaled on BOTH axes so it can never spill out of the panel.
+            var sigAreaH = 46, sigAreaW = boxW - PAD * 2;
+            cy -= (sigAreaH + 8);
             if (png) {
-              var maxW = boxW - PAD * 2;
               var ratio = png.height / png.width;
-              var w2 = Math.min(maxW, sigAreaH / ratio);
-              var h2 = w2 * ratio;
+              var w2 = sigAreaW, h2 = w2 * ratio;
               if (h2 > sigAreaH) { h2 = sigAreaH; w2 = h2 / ratio; }
-              last.drawImage(png, { x: x + PAD, y: cy + (sigAreaH - h2) / 2, width: w2, height: h2 });
+              page.drawImage(png, { x: x + PAD, y: cy + (sigAreaH - h2) / 2, width: w2, height: h2 });
             }
 
-            // Rule under the signature
-            cy -= 10;
-            last.drawLine({
-              start: { x: x + PAD, y: cy }, end: { x: x + boxW - PAD, y: cy },
-              thickness: 0.8, color: line,
+            cy -= 8;
+            page.drawLine({ start: { x: x + PAD, y: cy }, end: { x: x + boxW - PAD, y: cy }, thickness: 0.8, color: line });
+
+            cy -= 14;
+            page.drawText(String(signerName || '').slice(0, 44) || '\u2014', {
+              x: x + PAD, y: cy, size: 11, font: bold, color: ink,
             });
 
-            // Name
-            cy -= 12;
-            last.drawText(String(signerName || '').slice(0, 44) || '—', {
-              x: x + PAD, y: cy, size: 10, font: bold, color: ink,
-            });
-
-            // Date
-            cy -= 11;
-            last.drawText('Date signed: ' + signedOn, {
-              x: x + PAD, y: cy, size: 8, font: font, color: grey,
-            });
+            cy -= 13;
+            page.drawText('Date signed: ' + signedOn, { x: x + PAD, y: cy, size: 9, font: font, color: grey });
 
             if (formObj) { try { formObj.flatten(); } catch (e) {} }
             return pdfDoc.saveAsBase64();
