@@ -722,7 +722,57 @@ final class PlatformController extends Controller
         if (Schema::hasColumn('email_logs', 'agency_id') && $active !== null && $active !== '' && strtolower((string) $active) !== 'all' && ctype_digit((string) $active)) {
             $q->where('agency_id', (int) $active);
         }
-        $logs = $q->limit(300)->get($cols);
+
+        // ── Search / filter, applied in SQL across the WHOLE table ───────────────
+        // This used to return a flat `limit(300)` with no search at all, so the log
+        // only ever showed the last day or two of sending and the client-side box
+        // could only filter what happened to be loaded. With thousands of rows that
+        // makes any older message unfindable — it reads as "the email was never
+        // logged" when in fact it is just past the cut-off. Searching has to happen
+        // here, over every row, not in the browser over a window.
+        $term = trim((string) $request->query('q', ''));
+        if ($term !== '') {
+            $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $term).'%';
+            $q->where(function ($w) use ($like) {
+                $w->where('to_email', 'like', $like)
+                  ->orWhere('to_name', 'like', $like)
+                  ->orWhere('subject', 'like', $like)
+                  ->orWhere('from_email', 'like', $like);
+            });
+        }
+
+        $status = trim((string) $request->query('status', ''));
+        if ($status !== '' && $status !== 'all') $q->where('status', $status);
+
+        // Date bounds arrive as agency-local YYYY-MM-DD; created_at is stored UTC,
+        // so convert the local day boundaries rather than comparing raw strings
+        // (an Eastern evening send is already "tomorrow" in UTC).
+        // Resolve through AgencyTime with a null id when there is no agency context
+        // (the platform-wide view): it then returns the same DEFAULT_TZ that KT.tz()
+        // falls back to in the browser, so the dates you filter on and the dates you
+        // SEE are always the same zone. Defaulting to UTC here instead made "Aug 11"
+        // select a window that displayed as Aug 10 evening.
+        $tz = 'UTC';
+        try {
+            $agencyId = (ctype_digit((string) $active) && (int) $active > 0)
+                ? (int) $active
+                : (int) (optional($request->user())->agency_id ?? 0);
+            $tz = \App\Support\AgencyTime::tz($agencyId > 0 ? $agencyId : null) ?: 'UTC';
+        } catch (\Throwable $e) { $tz = 'UTC'; }
+
+        $from = trim((string) $request->query('from', ''));
+        $to   = trim((string) $request->query('to', ''));
+        try {
+            if ($from !== '') $q->where('created_at', '>=', \Carbon\Carbon::parse($from, $tz)->startOfDay()->utc());
+            if ($to !== '')   $q->where('created_at', '<=', \Carbon\Carbon::parse($to, $tz)->endOfDay()->utc());
+        } catch (\Throwable $e) { /* unparseable date — ignore rather than 500 */ }
+
+        // Count BEFORE paging so the UI can say "showing 50 of 2,568 matches".
+        $total = (clone $q)->count();
+
+        $limit  = max(1, min(500, (int) $request->query('limit', 100)));
+        $offset = max(0, (int) $request->query('offset', 0));
+        $logs = $q->offset($offset)->limit($limit)->get($cols);
         if (Schema::hasColumn('email_logs', 'body_html') && $logs->isNotEmpty()) {
             $withBody = DB::table('email_logs')->whereIn('id', $logs->pluck('id')->all())
                 ->whereNotNull('body_html')->where('body_html', '!=', '')->pluck('id')->flip();
@@ -730,7 +780,13 @@ final class PlatformController extends Controller
         } else {
             $logs = $logs->map(function ($r) { $r->has_body = false; return $r; });
         }
-        return response()->json(['logs' => $logs->values()]);
+        return response()->json([
+            'logs'   => $logs->values(),
+            'total'  => $total,
+            'limit'  => $limit,
+            'offset' => $offset,
+            'tz'     => $tz,
+        ]);
     }
 
     /** GET /platform/email-logs/{id}/preview — the actual sent HTML for one email. */

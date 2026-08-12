@@ -47,6 +47,14 @@
     // parent's Today timeline and Recent observations, which are short, already
     // chronological, and read as a story rather than a searchable dataset.
     if (container.hasAttribute('data-kt-no-controls')) return;
+    // NEVER take over a <table>. This module treats the container's element
+    // children as the "items", and a table's children are <thead>/<tbody> — so it
+    // would report "Filter 2 items…" and, on any keystroke, hide the entire tbody
+    // (the whole dataset) because the two "items" don't match. That is exactly what
+    // broke search on the email log, and it also stacked a SECOND filter box on top
+    // of the one kt-table-filter already adds to every #appMain table. Tables belong
+    // to kt-table-filter (search + pagination) and kt-polish (column sorting).
+    if (container.tagName === 'TABLE') return;
     if (container.dataset.ktListified) return;
     var kids = elChildren(container);
     if (kids.length < 2) return; // not worth it (or empty-state) — retried next sweep

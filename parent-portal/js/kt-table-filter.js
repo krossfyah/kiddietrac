@@ -18,6 +18,14 @@
     return host;
   }
   function showToast(msg, kind = 'info', ttl = 4000) {
+    // Unified toast: hand off to the canonical KT.toast (kt-toasts.js) so these
+    // match every other toast. Guard against delegating to ourselves — we assign
+    // window.KT.toast = showToast below, before kt-toasts.js overrides it, so a
+    // bare delegation could recurse if kt-toasts.js hadn't loaded.
+    if (window.KT && typeof window.KT.toast === 'function' && window.KT.toast !== showToast) {
+      var _m = ({ info: ['ℹ️', '#1F6080'], success: ['✅', '#16A34A'], warning: ['⚠️', '#D97706'], error: ['⚠️', '#DC2626'] })[kind] || ['ℹ️', '#1F6080'];
+      return window.KT.toast(_m[0], msg, '', _m[1]);
+    }
     const host = ensureToastHost();
     const t = document.createElement('div');
     const colors = {
@@ -44,8 +52,17 @@
   window.KT = window.KT || {};
   window.KT.toast = showToast;
 
-  // ============================ Table filter ============================
+  // ============================ Table filter + pagination ============================
+  // Rows-per-page for the client-side pager. Tables at or below this show no pager
+  // (everything fits on one page); larger tables get numbered page buttons + a jump box.
+  const PAGE_SIZE = 25;
+
   function attachFilter(table) {
+    // Opt-out for screens that own their own search. The email log, for one, searches
+    // SERVER-side across every row — bolting this client-side box (which can only see
+    // the rows currently loaded) beside it gives the user two search fields that
+    // disagree with each other.
+    if (table.hasAttribute('data-kt-no-filter')) return;
     if (table.dataset.ktFiltered) return;
     table.dataset.ktFiltered = '1';
     const tbody = table.querySelector('tbody');
@@ -53,7 +70,7 @@
 
     const wrap = document.createElement('div');
     wrap.className = 'kt-table-filter';
-    wrap.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;gap:12px;margin:0 0 10px;flex-wrap:wrap;';
+    wrap.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;gap:12px;margin:14px 0 10px;flex-wrap:wrap;';
 
     const left = document.createElement('div');
     left.style.cssText = 'position:relative;flex:1;min-width:240px;max-width:380px;';
@@ -90,19 +107,108 @@
     }
     (sc ? sc.parentElement : table.parentElement).insertBefore(wrap, sc || table);
 
-    input.addEventListener('input', () => {
-      const q = input.value.trim().toLowerCase();
-      const rows = tbody.children;
-      let visible = 0;
-      for (const row of rows) {
-        if (!q) { row.style.display = ''; visible++; continue; }
-        const text = (row.textContent || '').toLowerCase();
-        if (text.includes(q)) { row.style.display = ''; visible++; }
-        else row.style.display = 'none';
+    // Pagination footer — inserted BELOW the scroll container so it's always visible.
+    const pager = document.createElement('div');
+    pager.className = 'kt-table-pager';
+    pager.style.cssText = 'display:none;justify-content:center;align-items:center;gap:6px;margin:12px 0 2px;flex-wrap:wrap;font-size:13px;';
+    const anchor = sc || table;
+    anchor.parentElement.insertBefore(pager, anchor.nextSibling);
+
+    let page = 1;
+
+    function pageBtn(label, target, active) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      const base = 'min-width:34px;padding:6px 10px;border-radius:7px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;';
+      b.style.cssText = active ? base + 'background:#1F6080;color:#fff;border-color:#1F6080;' : base;
+      if (target == null) { b.disabled = true; b.style.opacity = '0.4'; b.style.cursor = 'default'; }
+      else b.addEventListener('click', () => { page = target; render(); });
+      return b;
+    }
+
+    // Windowed page list: first, last, and a few around the current page, with … gaps.
+    function pageWindow(cur, tot) {
+      const keep = new Set([1, tot, cur, cur - 1, cur + 1, cur - 2, cur + 2]);
+      const arr = [...keep].filter(p => p >= 1 && p <= tot).sort((a, b) => a - b);
+      const out = [];
+      let prev = 0;
+      for (const p of arr) { if (p - prev > 1) out.push('…'); out.push(p); prev = p; }
+      return out;
+    }
+
+    function buildPager(totalPages) {
+      if (totalPages <= 1) { pager.style.display = 'none'; pager.innerHTML = ''; return; }
+      pager.style.display = 'flex';
+      pager.innerHTML = '';
+      pager.appendChild(pageBtn('‹ Prev', page > 1 ? page - 1 : null));
+      for (const p of pageWindow(page, totalPages)) {
+        if (p === '…') {
+          const s = document.createElement('span');
+          s.textContent = '…'; s.style.cssText = 'padding:0 4px;color:#94A3B8;';
+          pager.appendChild(s);
+        } else {
+          pager.appendChild(pageBtn(String(p), p, p === page));
+        }
       }
-      counter.textContent = visible + ' / ' + rows.length;
-      counter.style.color = visible ? '#64748B' : '#EF4444';
-    });
+      pager.appendChild(pageBtn('Next ›', page < totalPages ? page + 1 : null));
+      const jl = document.createElement('span');
+      jl.textContent = 'Go to'; jl.style.cssText = 'margin-left:10px;color:#64748B;font-weight:600;';
+      const jump = document.createElement('input');
+      jump.type = 'number'; jump.min = '1'; jump.max = String(totalPages); jump.value = String(page);
+      jump.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #E2E8F0;border-radius:7px;font-size:13px;text-align:center;';
+      const go = () => { const v = parseInt(jump.value, 10); if (v >= 1 && v <= totalPages) { page = v; render(); } };
+      jump.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+      jump.addEventListener('change', go);
+      pager.appendChild(jl); pager.appendChild(jump);
+    }
+
+    // Single source of truth for row visibility: a row shows iff it matches the
+    // filter AND falls on the current page (of the matched subset). Called on input,
+    // on page change, and whenever the tbody changes (sort / screen re-render).
+    let renderScheduled = false;
+    function render() {
+      renderScheduled = false;
+      const q = (input.value || '').trim().toLowerCase();
+      const rows = Array.from(tbody.children);
+      const matched = q ? rows.filter(r => (r.textContent || '').toLowerCase().includes(q)) : rows;
+      const total = matched.length;
+      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      if (page > totalPages) page = totalPages;
+      if (page < 1) page = 1;
+      const start = (page - 1) * PAGE_SIZE, end = start + PAGE_SIZE;
+      let mi = 0;
+      for (const r of rows) {
+        const ok = !q || (r.textContent || '').toLowerCase().includes(q);
+        if (!ok) { r.style.display = 'none'; continue; }
+        r.style.display = (mi >= start && mi < end) ? '' : 'none';
+        mi++;
+      }
+      const from = total ? start + 1 : 0;
+      const to = Math.min(end, total);
+      counter.textContent = (total === rows.length)
+        ? (from + '–' + to + ' of ' + total)
+        : (from + '–' + to + ' of ' + total + ' (filtered from ' + rows.length + ')');
+      counter.style.color = total ? '#64748B' : '#EF4444';
+      buildPager(totalPages);
+    }
+    function scheduleRender() {
+      if (renderScheduled) return;
+      renderScheduled = true;
+      setTimeout(render, 40);
+    }
+
+    input.addEventListener('input', () => { page = 1; render(); });
+
+    // Re-paginate when the tbody's rows change (column-header sort reorders them;
+    // a screen re-render replaces them). We watch childList only — render() itself
+    // only flips style.display (an attribute change), so it can't retrigger this.
+    try {
+      const mo = new MutationObserver(scheduleRender);
+      mo.observe(tbody, { childList: true });
+    } catch (e) {}
+
+    render();
   }
 
   function sweepTables() {
@@ -129,7 +235,7 @@
     sweepTimer = setTimeout(sweepTables, 350);
   }
   window.addEventListener('hashchange', scheduleSweep);
-  setInterval(sweepTables, 500);    // was 2000ms — the toolbar landed long after the table
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweepTables) : setInterval(sweepTables, 4000);    // was 2000ms — the toolbar landed long after the table
   setTimeout(sweepTables, 700);
 
   // ============================ Better empty states ============================
@@ -149,7 +255,7 @@
       }
     });
   }
-  setInterval(sweepEmptyStates, 2000);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweepEmptyStates) : setInterval(sweepEmptyStates, 4000);
   setTimeout(sweepEmptyStates, 800);
 
   // ============================ Loading skeleton ============================
