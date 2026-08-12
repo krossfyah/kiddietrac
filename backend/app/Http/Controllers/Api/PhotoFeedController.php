@@ -82,6 +82,9 @@ final class PhotoFeedController extends Controller
             'caption' => 'nullable|string|max:500',
             'child_ids' => 'nullable',
             'centre_id' => 'nullable|integer',
+            // A still captured from the video in the browser. There is no ffmpeg here,
+            // so without this a video tile has nothing to show until the file downloads.
+            'poster' => 'nullable|file|mimetypes:image/jpeg,image/png|max:2048',
         ]);
         $hasUpload = DB::table('role_assignments')->where('user_id', $u->id)
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator', 'platform_admin'])
@@ -121,7 +124,23 @@ final class PhotoFeedController extends Controller
             }
         }
 
+        // A video's poster arrives as its own upload; shrink it like any other image
+        // so the tile stays light.
         $thumb = null;
+        if ($isVideo && $request->hasFile('poster')) {
+            try {
+                $pPath = $request->file('poster')->storeAs(
+                    'photos/' . now()->format('Y/m'),
+                    $u->id . '-' . time() . '-poster.jpg',
+                    'public'
+                );
+                $pAbs = \Illuminate\Support\Facades\Storage::disk('public')->path($pPath);
+                $made = \App\Support\MediaThumb::make($pAbs);
+                $thumb = $made ? \App\Support\MediaThumb::webPath($made) : '/storage/' . $pPath;
+            } catch (\Throwable $e) {
+                $thumb = null;
+            }
+        }
         if (! $isVideo) {
             try {
                 $abs = \Illuminate\Support\Facades\Storage::disk('public')->path($path);
@@ -136,7 +155,7 @@ final class PhotoFeedController extends Controller
             'centre_id' => $centreId,
             'uploaded_by_id' => $u->id,
             'url' => '/storage/' . $path,
-            'thumbnail_url' => $isVideo ? null : ($thumb ?: '/storage/' . $path),
+            'thumbnail_url' => $thumb ?: ($isVideo ? null : '/storage/' . $path),
             'media_type' => $isVideo ? 'video' : 'image',
             'caption' => $request->input('caption'),
             'child_ids' => json_encode($childIds),

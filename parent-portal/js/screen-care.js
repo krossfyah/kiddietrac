@@ -34,6 +34,52 @@
    * Always resolves: if anything about the decode/encode fails we hand back the
    * ORIGINAL file, because a slow upload beats a failed one.
    */
+  /**
+   * Grab a still from a chosen video, in the browser, to use as its poster.
+   *
+   * ffmpeg is not installed on the host, so a video tile had no image at all and the
+   * player had to pull actual video data before it could show a first frame. Seeking
+   * a hidden <video> to just past the start and painting it to a canvas gives us a
+   * real frame for about 20 KB.
+   *
+   * Always resolves — null on any failure, because a missing poster must never stop
+   * the upload.
+   */
+  function ktVideoPoster(file) {
+    return new Promise(function (resolve) {
+      try {
+        if (!file || !/^video\//.test(file.type)) return resolve(null);
+        var done = false;
+        var finish = function (b) { if (!done) { done = true; resolve(b); } };
+        setTimeout(function () { finish(null); }, 8000);   // never hang the upload
+
+        var url = URL.createObjectURL(file);
+        var v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.preload = 'metadata';
+        v.onloadedmetadata = function () {
+          // 0.4s in: frame zero is often a black or half-exposed frame.
+          try { v.currentTime = Math.min(0.4, (v.duration || 1) / 2); } catch (e) { finish(null); }
+        };
+        v.onseeked = function () {
+          try {
+            var w = v.videoWidth, h = v.videoHeight;
+            if (!w || !h) return finish(null);
+            var scale = Math.min(1, 640 / Math.max(w, h));
+            var cv = document.createElement('canvas');
+            cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+            cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+            cv.toBlob(function (blob) {
+              try { URL.revokeObjectURL(url); } catch (e) {}
+              finish(blob ? new File([blob], 'poster.jpg', { type: 'image/jpeg' }) : null);
+            }, 'image/jpeg', 0.78);
+          } catch (e) { finish(null); }
+        };
+        v.onerror = function () { try { URL.revokeObjectURL(url); } catch (e) {} finish(null); };
+        v.src = url;
+      } catch (e) { resolve(null); }
+    });
+  }
+
   function ktShrinkImage(file, maxEdge, quality) {
     return new Promise(function (resolve) {
       try {
@@ -521,7 +567,7 @@
         }
         send.disabled = true; send.textContent = 'Uploading…';
         msg.style.color = '#64748B'; msg.textContent = 'Uploading — please keep this open.';
-        ktShrinkImage(chosen, 1600, 0.82).then(function (toSend) {
+        ktShrinkImage(chosen, 1600, 0.82).then(async function (toSend) {
         if (toSend !== chosen) {
           msg.style.color = '#64748B';
           msg.textContent = 'Optimised ' + (chosen.size / 1048576).toFixed(1) + ' MB \u2192 '
@@ -529,6 +575,8 @@
         }
         var fd = new FormData();
         fd.append('photo', toSend);
+        var _poster = await ktVideoPoster(toSend);
+        if (_poster) fd.append('poster', _poster);
         fd.append('caption', cap.value.trim());
         fd.append('child_ids', JSON.stringify([childId]));
         fetch(_careApiBase() + '/photos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _careToken() }, body: fd })
@@ -783,13 +831,15 @@
           mediaMsg.textContent = 'Uploading ' + (/^video\//.test(mediaFile.type) ? 'video' : 'photo') + '…';
           // Shrink first (see ktShrinkImage): a phone photo is 4-6MB and every view
           // of it is a few hundred pixels wide.
-          return ktShrinkImage(mediaFile, 1600, 0.82).then(function (toSend) {
+          return ktShrinkImage(mediaFile, 1600, 0.82).then(async function (toSend) {
           if (toSend !== mediaFile) {
             mediaMsg.textContent = 'Optimised ' + (mediaFile.size / 1048576).toFixed(1) + ' MB → '
               + (toSend.size / 1048576).toFixed(1) + ' MB, uploading…';
           }
           var fd = new FormData();
           fd.append('photo', toSend);
+          var _poster2 = await ktVideoPoster(toSend);
+          if (_poster2) fd.append('poster', _poster2);
           // Caption priority: the dedicated description, else the note, else the
           // picked detail — the parent should never see an untitled photo.
           fd.append('caption', capIn.value.trim());
