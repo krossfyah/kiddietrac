@@ -181,6 +181,13 @@
       { type: 'bottle',    icon: '🍼', label: 'Bottle',    color: '#8EC73C' },
       { type: 'sunscreen', icon: '☀️', label: 'Sunscreen', color: '#F59E0B' },
       { type: 'mood',      icon: '🙂', label: 'Mood',      color: '#7C3AED' },
+      // Media tiles. These are NOT care logs — `daily_care_logs.log_type` is a
+      // MySQL enum of the eight types above, so filing a photo there would need a
+      // schema change. They post straight to /photos (the table the parent gallery,
+      // the admin/director daily overview and the daily digest all read), which is
+      // the whole point: one upload, visible everywhere.
+      { type: 'photo',     icon: '📸', label: 'Photo',     color: '#0E7C90', media: 'image' },
+      { type: 'video',     icon: '🎬', label: 'Video',     color: '#7C3AED', media: 'video' },
     ];
     TYPES.forEach(function (t) {
       var btn = Dom.el('button', {
@@ -192,7 +199,8 @@
       btn.addEventListener('mouseleave', function () { btn.style.borderColor = '#E5E7EB'; btn.style.background = 'white'; });
       btn.addEventListener('click', function () {
         if (!childSel.value || childSel.value === '__all__') { alert('Pick a child to log for.'); return; }
-        openDetailsModal(t, parseInt(childSel.value, 10));
+        if (t.media) openMediaModal(t, parseInt(childSel.value, 10));
+        else openDetailsModal(t, parseInt(childSel.value, 10));
       });
       grid.appendChild(btn);
     });
@@ -382,6 +390,102 @@
       sunscreen: ['Applied', 'Reapplied'],
       mood:      ['Happy', 'Calm', 'Playful', 'Tired', 'Fussy', 'Upset', 'Unwell'],
     };
+
+    // ── Photo / Video tiles ──────────────────────────────────────────────
+    // Media-first sibling of openDetailsModal. One upload lands in the parent's
+    // "Photos & video", the admin/director daily overview and that evening's
+    // digest email, and pushes a notification to the child's guardians — because
+    // all four read the same `photos` table this posts to.
+    function openMediaModal(t, childId) {
+      var isVideo = t.media === 'video';
+      var MEDIA_MAX = 30 * 1024 * 1024;
+      var kid = (CHILDREN || []).filter(function (c) { return String(c.id) === String(childId); })[0];
+      var kidName = kid ? kid.name : 'this child';
+
+      var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px;' });
+      var modal = Dom.el('div', { style: 'background:white;border-radius:16px;max-width:440px;width:100%;padding:20px;max-height:88vh;overflow-y:auto;' });
+      overlay.appendChild(modal);
+      modal.innerHTML = '<h2 style="margin:0 0 4px;font-size:18px;">' + t.icon + ' ' + (isVideo ? 'Share a video' : 'Share a photo') + '</h2>'
+        + '<p style="margin:0 0 14px;font-size:13px;color:#64748B;line-height:1.45;">'
+        + esc(kidName) + '’s family sees this in Photos &amp; video, and it appears in the daily overview and tonight’s summary email.</p>';
+
+      var file = Dom.el('input', {
+        type: 'file',
+        accept: isVideo ? 'video/mp4,video/quicktime,video/webm,video/3gpp' : 'image/jpeg,image/png,image/webp',
+        style: 'display:none;',
+      });
+      var pick = Dom.el('button', {
+        type: 'button',
+        style: 'width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px dashed #CBD5E1;color:' + t.color + ';border-radius:12px;padding:22px 12px;font-size:14.5px;font-weight:800;cursor:pointer;',
+      }, isVideo ? '🎬 Choose a video' : '📷 Choose a photo');
+      var preview = Dom.el('div', { style: 'display:none;margin-top:10px;' });
+      modal.appendChild(pick); modal.appendChild(file); modal.appendChild(preview);
+
+      modal.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;' }, 'Description'));
+      var cap = Dom.el('input', {
+        type: 'text', maxlength: '500', placeholder: 'What is happening in this ' + (isVideo ? 'video' : 'photo') + '?',
+        style: 'width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:16px;',
+      });
+      modal.appendChild(cap);
+      var msg = Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:8px;min-height:16px;' });
+      modal.appendChild(msg);
+
+      var chosen = null;
+      pick.addEventListener('click', function () { file.click(); });
+      file.addEventListener('change', function () {
+        var f = file.files && file.files[0];
+        if (!f) return;
+        if (f.size > MEDIA_MAX) {
+          msg.style.color = '#DC2626';
+          msg.textContent = 'That file is ' + (f.size / 1048576).toFixed(1) + ' MB — the limit is 30 MB (about 30 seconds of video).';
+          file.value = ''; chosen = null; return;
+        }
+        chosen = f;
+        msg.style.color = '#64748B';
+        msg.textContent = f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' MB';
+        pick.textContent = '🔁 Choose a different file';
+        Dom.clear(preview);
+        var url = URL.createObjectURL(f);
+        preview.appendChild(/^video\//.test(f.type)
+          ? Dom.el('video', { src: url, controls: true, preload: 'metadata', playsInline: true, style: 'width:100%;max-height:210px;border-radius:12px;background:#0F172A;display:block;' })
+          : Dom.el('img', { src: url, alt: 'Preview', style: 'width:100%;max-height:210px;object-fit:cover;border-radius:12px;display:block;' }));
+        preview.style.display = 'block';
+      });
+
+      var actions = Dom.el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px;' });
+      var cancel = Dom.el('button', { style: 'background:white;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;' }, 'Cancel');
+      cancel.addEventListener('click', function () { overlay.remove(); });
+      var send = Dom.el('button', { style: 'background:' + t.color + ';color:white;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Share it');
+      send.addEventListener('click', function () {
+        if (!chosen) { msg.style.color = '#B45309'; msg.textContent = 'Pick a ' + (isVideo ? 'video' : 'photo') + ' first.'; return; }
+        send.disabled = true; send.textContent = 'Uploading…';
+        msg.style.color = '#64748B'; msg.textContent = 'Uploading — please keep this open.';
+        var fd = new FormData();
+        fd.append('photo', chosen);
+        fd.append('caption', cap.value.trim() || (isVideo ? 'A moment from today' : 'A photo from today'));
+        fd.append('child_ids', JSON.stringify([childId]));
+        fetch(_careApiBase() + '/photos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _careToken() }, body: fd })
+          .then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (d) {
+              if (!r.ok) throw new Error((d && d.message) || ('Upload failed (' + r.status + ')'));
+              return d;
+            });
+          })
+          .then(function () {
+            overlay.remove();
+            loadRecent();
+            if (KT.toast) KT.toast(t.icon, isVideo ? 'Video shared' : 'Photo shared', kidName + '’s family can see it now.', 'success');
+          })
+          .catch(function (e) {
+            msg.style.color = '#DC2626';
+            msg.textContent = (e && e.message) || 'Upload failed — please try again.';
+            send.disabled = false; send.textContent = 'Share it';
+          });
+      });
+      actions.appendChild(cancel); actions.appendChild(send);
+      modal.appendChild(actions);
+      document.body.appendChild(overlay);
+    }
 
     function openDetailsModal(t, childId) {
       var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px;' });
