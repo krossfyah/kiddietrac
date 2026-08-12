@@ -100,9 +100,25 @@
     s.textContent = [
       // The single greeting now lives INSIDE the user block, on the far left.
       '.kt-pc-user-left{margin-left:14px !important;cursor:pointer;}',
+      // Desktop matches the admin/director bar exactly (kt-topbar.js .kt-tb-greet):
+      // one row reading "<emoji> Good evening, <name>" followed by the role pill,
+      // instead of the old stacked eyebrow / name / pill.
       '.kt-pc-navgreet{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#64748B;line-height:1.15;}',
+      '@media(min-width:769px){',
+      '  body.role-guardian #appSidebar #navUser .nav-user-text,body.role-educator #appSidebar #navUser .nav-user-text,'
+      + 'body.role-home-visitor #appSidebar #navUser .nav-user-text,body.role-sales-rep #appSidebar #navUser .nav-user-text'
+      + '{display:flex !important;flex-direction:row !important;align-items:center !important;gap:6px;flex-wrap:nowrap;}',
+      '  .kt-pc-navgreet{font-size:14px !important;font-weight:700 !important;letter-spacing:normal !important;text-transform:none !important;color:#1E293B !important;white-space:nowrap;}',
+      '  body.role-guardian #appSidebar #navUser .nav-user-name,body.role-educator #appSidebar #navUser .nav-user-name,'
+      + 'body.role-home-visitor #appSidebar #navUser .nav-user-name,body.role-sales-rep #appSidebar #navUser .nav-user-name'
+      + '{font-size:14px !important;font-weight:700 !important;color:#0E7C90 !important;white-space:nowrap;margin:0 !important;}',
+      '  body.role-guardian #appSidebar #navUser .avatar,body.role-educator #appSidebar #navUser .avatar,'
+      + 'body.role-home-visitor #appSidebar #navUser .avatar,body.role-sales-rep #appSidebar #navUser .avatar'
+      + '{width:32px !important;height:32px !important;min-width:32px !important;min-height:32px !important;font-size:13px !important;'
+      + 'box-shadow:0 1px 3px rgba(15,23,42,.18) !important;}',
+      '}',
       // Role shown as a pill (like admin / director / super admin), not hidden.
-      'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role{display:inline-block !important;margin-top:3px;font-size:9.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;background:rgba(14,124,144,.12);color:#0C6070;border:1px solid rgba(14,124,144,.22);padding:2px 9px;border-radius:100px;white-space:nowrap;align-self:flex-start;}',
+      'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role,body.role-home-visitor #appSidebar #navUser .nav-user-role,body.role-sales-rep #appSidebar #navUser .nav-user-role{display:inline-block !important;margin-top:0;font-size:9.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;background:rgba(14,124,144,.12);color:#0C6070;border:1px solid rgba(14,124,144,.22);padding:2px 9px;border-radius:100px;white-space:nowrap;align-self:center;}',
       // Tighter top bar (less whitespace): smaller logo + slimmer vertical padding — DESKTOP only.
       '@media(min-width:601px){body.role-guardian #appSidebar,body.role-educator #appSidebar{padding-top:6px !important;padding-bottom:6px !important;}body.role-guardian #appSidebar #navBrand img,body.role-educator #appSidebar #navBrand img{height:60px !important;}}',
       // Home launcher: stop the banner replaying its fade-in (a "pop") when the
@@ -138,8 +154,12 @@
       // own intrinsic space and no language can ever clip again.
       '.kt-pc-lang{border:1px solid rgba(15,23,42,.10);border-radius:10px;background:#fff;padding:5px 8px 5px 10px !important;font-size:12px;font-weight:600;color:#334155;cursor:pointer;max-width:none;box-shadow:0 1px 2px rgba(16,40,64,.05);}',
       '.kt-pc-wx{font-size:12.5px;font-weight:600;color:#475569;white-space:nowrap;}',
-      '.kt-pc-date{font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;}',
-      '.kt-pc-clock{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;background:#fff;padding:5px 11px;border-radius:9px;border:1px solid rgba(15,23,42,.08);box-shadow:0 1px 3px rgba(16,40,64,.12);}',
+      '.kt-pc-date{font-size:12.5px;font-weight:600;color:#475569;white-space:nowrap;}',
+      // Identical to the admin/director bar's .kt-tb-clock so the two top bars read
+      // as one product: monospace tabular figures on a flat tinted chip (the old
+      // white raised card sat differently from every admin screen).
+      '.kt-pc-clock{font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:13px;font-weight:700;color:#334155;'
+      + 'font-variant-numeric:tabular-nums;background:rgba(15,23,42,.05);padding:5px 10px;border-radius:9px;white-space:nowrap;}',
       '.kt-pc-sep{width:1px;height:24px;background:rgba(15,23,42,.10);margin:0 2px;}',
       '.kt-back-inbar{position:static !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;margin:0 12px 0 0 !important;box-shadow:none !important;align-self:center !important;z-index:auto !important;}',
       // The in-page bottom "Sign out" is redundant now it's a top-bar icon (desktop).
@@ -311,7 +331,9 @@
   function paintGreeting() {
     var gr = document.getElementById('kt-pc-navgreet');
     if (!gr) return;
-    if (isDesktop()) { gr.textContent = greetWord(); return; }
+    // Trailing comma so the row reads "🌆 Good evening, Harjit Singh" — the name
+    // is the shell's own .nav-user-name element sitting directly after us.
+    if (isDesktop()) { gr.textContent = greetWord() + ','; return; }
     // Phones: fold date + time into the eyebrow so the full name below keeps its width.
     gr.textContent = greetWord() + ' \u00b7 ' + fmtClock();
   }
