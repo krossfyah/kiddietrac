@@ -75,7 +75,12 @@ class EducatorDailySummaryCommand extends Command
             $monthAgo  = $this->statsFor((int) $ed->id, $tz, $date->copy()->subDays(28));
 
             $html = $this->buildHtml($ed, $today, $yesterday, $monthAgo, $date, $tz);
-            $subject = 'Your day at a glance — ' . $date->format('D j M Y') . ' 💛';
+            [$sPlace] = $this->placeFor((int) $ed->id, (int) $ed->agency_id);
+            // Name the place: an agency admin CC'd on several of these needs to tell
+            // them apart at a glance, and a provider's day is about their own home.
+            // NOTE double quotes - \u{...} is not an escape inside single quotes.
+            $subject = "Your day at a glance \u{2014} " . ($sPlace ? $sPlace . " \u{2014} " : '')
+                . $date->format('D j M Y') . " \u{1F49B}";
             $to = $override ?: $ed->email;
 
             if ($dry) {
@@ -146,6 +151,99 @@ class EducatorDailySummaryCommand extends Command
         ];
     }
 
+    /**
+     * A single headline number for the day, 0-100.
+     *
+     * Six stat tiles tell an educator what they did but not how the day WENT; a score
+     * gives them one thing to feel, and something to beat tomorrow. Each component is
+     * capped so a big day in one area cannot mask a missing one, and the weights follow
+     * what the role is actually judged on: moments logged for the families, children
+     * covered, observations written, and time on the floor.
+     *
+     * @return array{score:int, label:string, colour:string, blurb:string}
+     */
+    private function dayScore(array $t): array
+    {
+        $moments = min(1.0, $t['moments'] / 12);        // ~12 logged moments = full marks
+        $kids    = min(1.0, $t['children'] / 6);        // ~6 children cared for
+        $obs     = min(1.0, $t['observations'] / 2);    // 2 observations is a strong day
+        $hours   = min(1.0, ($t['minutes'] / 60) / 7);  // ~7h on the floor
+
+        $score = (int) round(100 * (0.40 * $moments + 0.25 * $kids + 0.20 * $obs + 0.15 * $hours));
+        $score = max(0, min(100, $score));
+
+        if ($score >= 85)      return ['score' => $score, 'label' => 'Outstanding day', 'colour' => '#16A34A', 'blurb' => 'Everything logged, everyone cared for. Brilliant.'];
+        if ($score >= 70)      return ['score' => $score, 'label' => 'Great day',       'colour' => '#0EA5E9', 'blurb' => 'A strong, steady day with the children.'];
+        if ($score >= 50)      return ['score' => $score, 'label' => 'Solid day',       'colour' => '#7C3AED', 'blurb' => 'Good work today — a moment or two more tomorrow.'];
+        if ($score >= 25)      return ['score' => $score, 'label' => 'Quieter day',     'colour' => '#F59E0B', 'blurb' => 'A lighter day. Logging a little more helps families feel close.'];
+        return ['score' => $score, 'label' => 'Light day', 'colour' => '#94A3B8', 'blurb' => 'Not much logged today — tomorrow is a fresh page.'];
+    }
+
+    /**
+     * The educator's place, and the agency's own word for it.
+     *
+     * settings.centre_term is 'centre', 'room' or 'provider' — and a home-provider
+     * agency's centre record IS the provider, so it is one lookup with three labels.
+     *
+     * @return array{0: ?string, 1: string}
+     */
+    private function placeFor(int $userId, int $agencyId): array
+    {
+        $word = 'centre';
+        try {
+            $settings = DB::table('agencies')->where('id', $agencyId)->value('settings');
+            $arr = $settings ? (json_decode($settings, true) ?: []) : [];
+            $t = $arr['centre_term'] ?? 'centre';
+            if (in_array($t, ['centre', 'room', 'provider'], true)) $word = $t;
+        } catch (\Throwable $e) {
+        }
+        try {
+            $centreId = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)
+                ->whereNotNull('centre_id')->value('centre_id');
+            if (! $centreId && Schema::hasTable('educator_rooms')) {
+                $centreId = DB::table('educator_rooms as er')->join('rooms as r', 'r.id', '=', 'er.room_id')
+                    ->where('er.user_id', $userId)->value('r.centre_id');
+            }
+            if (! $centreId) return [null, $word];
+            return [DB::table('centres')->where('id', $centreId)->value('name') ?: null, $word];
+        } catch (\Throwable $e) {
+            return [null, $word];
+        }
+    }
+
+    /** The hero: one big score, the place it belongs to, and a progress arc. */
+    private function heroCard(array $sc, ?string $place, string $placeWord, Carbon $date): string
+    {
+        $pct = max(0, min(100, $sc['score']));
+        // Email clients will not render a conic gradient or SVG arc reliably, so the
+        // meter is a plain two-cell table: a coloured bar over a track. Works in Outlook.
+        $bar = '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="border-collapse:collapse;">'
+             . '<tr><td width="' . $pct . '%" style="background:' . $sc['colour'] . ';height:10px;border-radius:6px 0 0 6px;font-size:0;line-height:0;">&nbsp;</td>'
+             . '<td style="background:#E6EDF5;height:10px;border-radius:0 6px 6px 0;font-size:0;line-height:0;">&nbsp;</td></tr></table>';
+
+        return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+             . 'style="border-collapse:separate;background:linear-gradient(135deg,#0B2545 0%,#12315C 60%,#0E7C90 140%);'
+             . 'border-radius:18px;margin:6px 0 22px;"><tr><td style="padding:22px 24px;">'
+             . ($place
+                 ? '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.4px;color:#8FB3D9;text-transform:uppercase;margin-bottom:10px;">'
+                   . htmlspecialchars(strtoupper($placeWord)) . ' &middot; ' . htmlspecialchars($place) . '</div>'
+                 : '')
+             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation"><tr>'
+             . '<td valign="middle" style="width:96px;">'
+             .   '<div style="width:88px;height:88px;border-radius:50%;background:rgba(255,255,255,.10);'
+             .   'border:3px solid ' . $sc['colour'] . ';text-align:center;">'
+             .   '<div style="font-size:30px;font-weight:800;color:#fff;line-height:1.05;padding-top:19px;">' . $pct . '</div>'
+             .   '<div style="font-size:9px;font-weight:800;letter-spacing:1px;color:#9FC4E8;text-transform:uppercase;">/ 100</div>'
+             .   '</div></td>'
+             . '<td valign="middle" style="padding-left:18px;">'
+             .   '<div style="font-size:19px;font-weight:800;color:#fff;line-height:1.25;">' . htmlspecialchars($sc['label']) . '</div>'
+             .   '<div style="font-size:13px;color:#BBD3EC;line-height:1.5;margin-top:4px;">' . htmlspecialchars($sc['blurb']) . '</div>'
+             .   '<div style="margin-top:12px;">' . $bar . '</div>'
+             . '</td></tr></table>'
+             . '<div style="font-size:11.5px;color:#8FB3D9;margin-top:14px;">' . $date->format('l, j F Y') . '</div>'
+             . '</td></tr></table>';
+    }
+
     /** A bright, iconed stat card cell for the "day in numbers" grid. */
     private function card(string $icon, string $label, string $value, string $accent): string
     {
@@ -192,8 +290,14 @@ class EducatorDailySummaryCommand extends Command
             'You poured so much heart into today. Take a moment to see everything you accomplished.',
             'Another day of shaping little lives — here\'s a look at all the good you did.',
         ]);
-        $body = '<p style="font-size:16px;font-weight:700;color:#0F172A;">' . $greet . '</p>'
-            . '<p>' . $opener . '</p>';
+        // Score + place lead the email: the first thing you see is how the day went and
+        // whose room it was, not a wall of six equal tiles.
+        $sc = $this->dayScore($t);
+        [$placeName, $placeWord] = $this->placeFor((int) $ed->id, (int) $ed->agency_id);
+
+        $body = '<p style="font-size:16px;font-weight:700;color:#0F172A;margin:0 0 4px;">' . $greet . '</p>'
+            . $this->heroCard($sc, $placeName, $placeWord, $date)
+            . '<p style="margin:0 0 4px;">' . $opener . '</p>';
 
         // A fresh inspirational quote each day (same for everyone that day).
         $body .= EmailTemplate::dailyQuote(crc32($date->toDateString()));
