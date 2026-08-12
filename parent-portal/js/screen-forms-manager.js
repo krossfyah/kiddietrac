@@ -339,14 +339,30 @@
     loadList(body.querySelector('#fm-list'));
   }
 
-  /** "12 Aug 2026 · 3:41 PM" — a form's provenance needs a real date, not "today". */
+  /**
+   * A timestamp in the AGENCY's timezone — never UTC, never the viewer's device.
+   * This used to call toLocaleDateString/toLocaleTimeString straight on the server
+   * string, which renders in whatever zone the viewer happens to be in, so an
+   * evening upload could show the wrong DAY entirely. kt-tz.js owns the agency zone
+   * (from /auth/me) and is the single source of truth for this everywhere.
+   */
   function fmtStamp(ts) {
     if (!ts) return '';
     try {
-      var d = new Date(String(ts).replace(' ', 'T'));
+      // Server datetimes are UTC and carry no zone marker, so they must be told
+      // they are UTC before being rendered in the agency zone. Formatted in ONE
+      // Intl call against KT.tz() — composing KT.fmtDate + KT.fmtTime produced
+      // "Aug 12, 2026 05:10 a.m. · 1:10 a.m.", i.e. the UTC time and the agency
+      // time side by side.
+      var iso = String(ts).trim().replace(' ', 'T');
+      if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(iso)) iso += 'Z';
+      var d = new Date(iso);
       if (isNaN(d.getTime())) return String(ts);
-      return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-        + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      var zone = (KT.tz && KT.tz()) || undefined;
+      return new Intl.DateTimeFormat(undefined, {
+        timeZone: zone, day: 'numeric', month: 'short', year: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+      }).format(d);
     } catch (e) { return String(ts); }
   }
 
@@ -438,13 +454,13 @@
       var rows = (d && d.signoffs) || [];
       if (!rows.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms have been signed yet.</div>'; return; }
       el.innerHTML = '<table data-kt-no-kebab="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Signed by', 'Date', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Signed by', 'Signed (agency time)', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || '—';
           return '<tr style="border-top:1px solid #F3F4F6;">'
             + '<td style="padding:9px 14px;font-weight:600;color:#111827;">' + esc(r.form_title) + '</td>'
             + '<td style="padding:9px 14px;">' + esc(who) + (r.email ? '<div style="font-size:11px;color:#94A3B8;">' + esc(r.email) + '</div>' : '') + '</td>'
-            + '<td style="padding:9px 14px;color:#374151;white-space:nowrap;">' + esc(fmtDate(r.signed_at)) + '</td>'
+            + '<td style="padding:9px 14px;color:#374151;white-space:nowrap;">' + esc(fmtStamp(r.signed_at)) + '</td>'
             + '<td style="padding:9px 8px;text-align:right;">' + kebab(r) + '</td></tr>';
         }).join('') + '</tbody></table>';
       wireKebabs(el, rows);
