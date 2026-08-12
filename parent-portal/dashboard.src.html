@@ -146,7 +146,7 @@
       'position:fixed;inset:0;z-index:2147483600;background:#081C41;display:flex;'
       + 'align-items:center;justify-content:center;');
     cover.innerHTML = '<img src="/icon-192.png" alt="" style="width:104px;height:104px;border-radius:24px;"'
-      + ' onerror="this.style.display='none'">';
+      + ' onerror="this.style.display=\'none\'">';
     (document.body || document.documentElement).appendChild(cover);
     location.replace('/index.html');
   } catch (e) {}
@@ -245,10 +245,32 @@ try{sessionStorage.setItem('kt_splash_seen','1');}catch(e){}
 var _hasSession=false;try{_hasSession=!!(sessionStorage.getItem('kt_token')||localStorage.getItem('kt_token'));}catch(e){_hasSession=false;}
 if(!_hasSession){var _ns=document.getElementById('kt-splash');if(_ns&&_ns.parentNode)_ns.parentNode.removeChild(_ns);}
 else if(_seen){var _s=document.getElementById('kt-splash');if(_s)_s.style.display='none';showReloadGate();}
-else{var MIN=2300,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}/* Hold until a screen has actually rendered, not just MIN ms: the portal is 162
-   scripts and dropping the splash early exposed the bare shell underneath. */
-if(document.readyState==='complete')go();else window.addEventListener('load',go);
-setTimeout(hide,7000);}
+else{
+/* Hold the splash until a screen is really on the page. window 'load' only means the
+   ~160 scripts downloaded; the SPA still has to boot, call /auth/me, resolve the role
+   and render. During that gap #appMain shows its .loading-state placeholder - the light
+   shell with "Loading your workspace..." that kept being reported after a FIRST login,
+   when nothing is warm and every boot call is a cold round trip.
+   portalReady() therefore waits for the placeholder to be REPLACED by real content, with
+   a hard cap so a failed boot can never trap anyone behind the splash. */
+var MIN=2300,CAP=15000,t0=Date.now();
+function portalReady(){
+  try{
+    var m=document.getElementById('appMain');
+    if(!m) return false;
+    if(m.querySelector('.loading-state')) return false;      // placeholder still up
+    return (m.innerText||'').trim().length>40;                // a screen actually drew
+  }catch(e){ return true; }                                   // never trap on an error
+}
+function settle(){
+  var waited=Date.now()-t0;
+  if(waited<MIN) return setTimeout(settle,120);               // minimum brand moment
+  if(portalReady()||waited>CAP) return hide();
+  setTimeout(settle,150);
+}
+if(document.readyState==='complete')settle();else window.addEventListener('load',settle);
+setTimeout(hide,CAP);                                          // belt and braces
+}
 if(!_hasSession){try{document.documentElement.classList.remove('kt-gating');}catch(e){}}
 /* In-session RELOAD (SW update, pull-to-refresh, F5): skip the long animated splash
    but still GATE the portal behind a dimmed scrim + spinner so the user never sees a
