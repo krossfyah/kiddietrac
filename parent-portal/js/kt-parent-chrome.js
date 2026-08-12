@@ -258,8 +258,10 @@
         wrap.appendChild(iconBtn('🔔', 'Inbox', function () { location.hash = '#notifications'; }));
       } else {
         wrap.appendChild(iconBtn('💬', 'Messages', function () { location.hash = msgHash; }, 'kt-pc-msg-badge'));
-        // Team messages (staff-to-staff DM) — educators + home visitors, NOT parents.
-        if (role !== 'guardian') wrap.appendChild(iconBtn('👥', 'Team messages', function () { location.hash = '#team-messages'; }, 'kt-pc-team-badge'));
+        // Team messages icon REMOVED (2026-08-11, per request): the portal keeps ONE
+        // messaging surface — Messages/chat above. The #team-messages screen is left
+        // registered so any existing deep link or notification still resolves, but it
+        // is no longer advertised anywhere in the UI.
         wrap.appendChild(iconBtn('📣', 'Announcements', function () { location.hash = '#announcements'; }));
         // Notification bell for educators + home visitors (their role-relevant
         // inbox). Parents keep just Messages/Announcements.

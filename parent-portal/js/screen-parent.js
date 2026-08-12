@@ -617,7 +617,7 @@
           // the detail is short. Zebra striping is kept for scanability.
           const row = Dom.el('div', { style: 'display:flex; gap:9px; padding:6px 9px; border-radius:8px; align-items:baseline; background:' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
           row.appendChild(Dom.el('div', { style: 'width:62px;flex-shrink:0;color:var(--ink-500);font-size:12px;font-variant-numeric:tabular-nums;' }, ev.time_display || ''));
-          row.appendChild(Dom.el('div', { style: 'width:20px;flex-shrink:0;font-size:15px;line-height:1.25;' }, eventIcon(ev.type)));
+          row.appendChild(Dom.el('div', { style: 'width:20px;flex-shrink:0;font-size:15px;line-height:1.25;' }, eventIcon(ev.type, ev)));
           const text = Dom.el('div', { style: 'flex:1;min-width:0;line-height:1.35;' });
           text.appendChild(Dom.el('span', { style: 'font-weight:600;font-size:13.5px;' }, ev.display?.title || ev.type));
           if (ev.display?.detail) {
@@ -1612,7 +1612,7 @@
         }
         rows.forEach((e, i) => {
           const row = Dom.el('div', { style: 'display:flex;gap:12px;align-items:flex-start;padding:10px 10px;border-radius:10px;background:' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
-          row.appendChild(Dom.el('div', { style: 'width:38px;height:38px;border-radius:12px;background:#fff;border:1px solid var(--ink-100,#f1f5f9);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' }, eventIcon(e.type)));
+          row.appendChild(Dom.el('div', { style: 'width:38px;height:38px;border-radius:12px;background:#fff;border:1px solid var(--ink-100,#f1f5f9);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' }, eventIcon(e.type, e)));
           const t = Dom.el('div', { style: 'flex:1;min-width:0;' });
           t.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:var(--ink-900);' }, e.display?.title || e.type));
           if (e.display?.detail) t.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:1px;' }, e.display.detail));
@@ -2343,7 +2343,14 @@
     setTimeout(() => ta.focus(), 120);
   }
 
-  function eventIcon(type) {
+  // `ev` is optional: a photo/video is filed as a `note` event carrying
+  // payload.kind === 'media', so it gets a camera/film icon instead of the
+  // generic 📝 (the backend title deliberately carries no emoji of its own).
+  function eventIcon(type, ev) {
+    var pl = ev && ev.payload;
+    if (type === 'note' && pl && pl.kind === 'media') {
+      return pl.media_type === 'video' ? '🎬' : '📸';
+    }
     return ({
       'meal': '🍽️', 'snack': '🍎', 'nap_start': '😴', 'nap_end': '🌅',
       'diaper': '👶', 'bathroom': '🚽', 'activity': '✨', 'mood': '😊',

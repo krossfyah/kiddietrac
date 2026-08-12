@@ -117,6 +117,38 @@ final class PhotoFeedController extends Controller
             'created_at' => now(),
         ]);
 
+        // Put the moment on the child's TIMELINE too, so the day reads as a story
+        // rather than the photo living only in the gallery. daily_events.event_type
+        // is an enum, so we file it as 'note' and carry the real shape in payload —
+        // formatEvent() turns that into "A new photo was shared" for the parent.
+        // photo_id is an existing column on daily_events, made for exactly this.
+        // Best-effort: a timeline hiccup must never fail an upload that succeeded.
+        foreach ($childIds as $cid) {
+            try {
+                $roomId = DB::table('enrollments')->where('child_id', $cid)
+                    ->whereNull('end_date')->value('room_id');
+                DB::table('daily_events')->insert([
+                    'child_id' => (int) $cid,
+                    'room_id' => $roomId,
+                    'event_type' => 'note',
+                    'occurred_at' => now(),
+                    'payload' => json_encode([
+                        'kind' => 'media',
+                        'media_type' => $isVideo ? 'video' : 'photo',
+                        'photo_id' => $id,
+                        'note' => (string) $request->input('caption'),
+                    ]),
+                    'notes' => (string) $request->input('caption'),
+                    'photo_id' => $id,
+                    'recorded_by_id' => $u->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
         // notify guardians for tagged children
         if (!empty($childIds)) {
             $familyIds = DB::table('children')->whereIn('id', $childIds)->pluck('family_id')->unique();

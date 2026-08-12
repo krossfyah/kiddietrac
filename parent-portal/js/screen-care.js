@@ -421,7 +421,7 @@
       var preview = Dom.el('div', { style: 'display:none;margin-top:10px;' });
       modal.appendChild(pick); modal.appendChild(file); modal.appendChild(preview);
 
-      modal.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;' }, 'Description'));
+      modal.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;' }, 'Description (required)'));
       var cap = Dom.el('input', {
         type: 'text', maxlength: '500', placeholder: 'What is happening in this ' + (isVideo ? 'video' : 'photo') + '?',
         style: 'width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:16px;',
@@ -458,11 +458,19 @@
       var send = Dom.el('button', { style: 'background:' + t.color + ';color:white;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Share it');
       send.addEventListener('click', function () {
         if (!chosen) { msg.style.color = '#B45309'; msg.textContent = 'Pick a ' + (isVideo ? 'video' : 'photo') + ' first.'; return; }
+        // A description is mandatory: an untitled photo tells the parent nothing,
+        // and the caption is what carries the moment into the digest email.
+        if (!cap.value.trim()) {
+          msg.style.color = '#B45309';
+          msg.textContent = 'Add a short description so the family knows what they are looking at.';
+          cap.style.borderColor = '#F59E0B'; cap.focus();
+          return;
+        }
         send.disabled = true; send.textContent = 'Uploading…';
         msg.style.color = '#64748B'; msg.textContent = 'Uploading — please keep this open.';
         var fd = new FormData();
         fd.append('photo', chosen);
-        fd.append('caption', cap.value.trim() || (isVideo ? 'A moment from today' : 'A photo from today'));
+        fd.append('caption', cap.value.trim());
         fd.append('child_ids', JSON.stringify([childId]));
         fetch(_careApiBase() + '/photos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _careToken() }, body: fd })
           .then(function (r) {
@@ -616,7 +624,7 @@
       }, '📷 Add a photo or video');
       var mediaPreview = Dom.el('div', { style: 'display:none;margin-top:10px;' });
       var capIn = Dom.el('input', {
-        type: 'text', maxlength: '500', placeholder: 'Describe this moment for the parent…',
+        type: 'text', maxlength: '500', placeholder: 'Describe this moment for the parent… (required)',
         style: 'width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #159FB4;border-radius:10px;font-size:16px;margin-top:9px;display:none;',
       });
       var mediaMsg = Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:6px;min-height:15px;' });
@@ -693,6 +701,14 @@
           var whenIso = _careIsoAt(whenIn.value);
           if (whenIso) body.occurred_at = whenIso;
         }
+        // Media requires a description. Checked BEFORE any POST so we never file the
+        // care log and then refuse the upload, which would leave the two out of step.
+        if (mediaFile && !capIn.value.trim()) {
+          mediaMsg.style.color = '#B45309';
+          mediaMsg.textContent = 'Add a short description for the photo or video before saving.';
+          capIn.style.borderColor = '#F59E0B'; capIn.focus();
+          return;
+        }
         save.disabled = true; save.textContent = 'Saving…';
         // `logSaved` makes "Retry upload" retry ONLY the upload. Without it, a
         // failed upload followed by a retry would POST /care/logs a second time and
@@ -709,7 +725,7 @@
           fd.append('photo', mediaFile);
           // Caption priority: the dedicated description, else the note, else the
           // picked detail — the parent should never see an untitled photo.
-          fd.append('caption', capIn.value.trim() || notesIn.value.trim() || detail || (t.label + ' moment'));
+          fd.append('caption', capIn.value.trim());
           fd.append('child_ids', JSON.stringify([childId]));
           return fetch(_careApiBase() + '/photos', {
             method: 'POST',

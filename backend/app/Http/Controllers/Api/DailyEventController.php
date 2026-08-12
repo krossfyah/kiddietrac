@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Services\AnthropicService;
+use App\Support\AgencyTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -35,30 +36,42 @@ final class DailyEventController extends Controller
         // SECURITY (v22p94): only the child's centre staff (or guardian) may log.
         abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
 
-        $eventId = DB::table('daily_events')->insertGetId([
-            'child_id' => $data['child_id'],
-            'room_id' => $data['room_id'],
-            'event_type' => $data['event_type'],
-            'occurred_at' => $data['occurred_at'] ?? now(),
-            'payload' => json_encode($data['payload'] ?? [], JSON_THROW_ON_ERROR),
-            'notes' => $data['notes'] ?? null,
-            'recorded_by_id' => $request->user()->id,
-            'voice_logged' => false,
-            'synced_at' => now(),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // The app sends ISO-8601 ("2026-08-10T15:50:00.000Z"); inserting that raw
+        // string into a MySQL datetime column 500s (invalid format). Carbon
+        // normalises it to 'Y-m-d H:i:s'. (Same trap already fixed in CareController.)
+        $occurredAt = ! empty($data['occurred_at']) ? Carbon::parse($data['occurred_at']) : now();
 
-        // Invalidate today's digest since new info is available
-        $today = now()->toDateString();
-        DB::table('ai_daily_digests')
-            ->where('child_id', $data['child_id'])
-            ->where('digest_date', $today)
-            ->delete();
+        try {
+            $eventId = DB::table('daily_events')->insertGetId([
+                'child_id' => $data['child_id'],
+                'room_id' => $data['room_id'],
+                'event_type' => $data['event_type'],
+                'occurred_at' => $occurredAt,
+                'payload' => json_encode($data['payload'] ?? [], JSON_THROW_ON_ERROR),
+                'notes' => $data['notes'] ?? null,
+                'recorded_by_id' => $request->user()->id,
+                'voice_logged' => false,
+                'synced_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Never leak a raw 500 to the educator mid-log — surface a clear message.
+            \Log::error('daily_events store failed', ['err' => $e->getMessage(), 'input' => $data]);
+            return response()->json(['message' => 'Could not save this entry. Please try again.'], 422);
+        }
+
+        // Invalidate today's digest since new info is available (best-effort).
+        try {
+            DB::table('ai_daily_digests')
+                ->where('child_id', $data['child_id'])
+                ->where('digest_date', now()->toDateString())
+                ->delete();
+        } catch (\Throwable $e) { /* non-fatal */ }
 
         return response()->json([
             'event_id' => $eventId,
-            'occurred_at' => $data['occurred_at'] ?? now()->toIso8601String(),
+            'occurred_at' => $occurredAt->toIso8601String(),
         ], 201);
     }
 
@@ -80,11 +93,20 @@ final class DailyEventController extends Controller
         if (array_key_exists('payload', $data)) {
             $data['payload'] = json_encode($data['payload'] ?? [], JSON_THROW_ON_ERROR);
         }
+        // Normalise an ISO occurred_at to MySQL datetime (see store()).
+        if (! empty($data['occurred_at'])) {
+            $data['occurred_at'] = Carbon::parse($data['occurred_at']);
+        }
 
-        DB::table('daily_events')->where('id', $eventId)->update([
-            ...$data,
-            'updated_at' => now(),
-        ]);
+        try {
+            DB::table('daily_events')->where('id', $eventId)->update([
+                ...$data,
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('daily_events update failed', ['err' => $e->getMessage(), 'id' => $eventId]);
+            return response()->json(['message' => 'Could not update this entry. Please try again.'], 422);
+        }
 
         return response()->json(['message' => 'Updated']);
     }
@@ -110,30 +132,88 @@ final class DailyEventController extends Controller
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
 
         $date = $request->input('date', now()->toDateString());
+        $tz = $this->tzForChild($childId);
+
+        // v22p98: a "day" is the centre-LOCAL day, not the UTC day. whereDate()
+        // compared the raw UTC date, so an evening-Eastern entry (stamped after
+        // midnight UTC) filed under the next day and vanished from the correct
+        // day's timeline. Build a UTC window from the centre's local midnight.
+        $dayStart = Carbon::parse($date, $tz)->startOfDay();
+        $startUtc = $dayStart->copy()->utc()->format('Y-m-d H:i:s');
+        $endUtc   = $dayStart->copy()->addDay()->utc()->format('Y-m-d H:i:s');
 
         $events = DB::table('daily_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', $date)
+            ->whereNull('deleted_at')
+            ->where('occurred_at', '>=', $startUtc)
+            ->where('occurred_at', '<', $endUtc)
             ->orderBy('occurred_at')
             ->get();
 
+        // v22p98: "Log a moment" writes daily_care_logs — a SEPARATE table from
+        // daily_events. The parent timeline only ever read daily_events, so every
+        // nappy/meal/nap/bottle an educator logged from "Log a moment" was
+        // invisible to parents. Merge both, shaped like a daily_event, so the
+        // parent sees the child's full day.
+        $careEvents = DB::table('daily_care_logs')
+            ->where('child_id', $childId)
+            ->where('occurred_at', '>=', $startUtc)
+            ->where('occurred_at', '<', $endUtc)
+            ->orderBy('occurred_at')
+            ->get()
+            ->map(function ($r) {
+                $lt = (string) $r->log_type;
+                if (in_array($lt, ['meal', 'snack'], true)) {
+                    $payload = ['meal' => ucfirst($lt), 'amount' => (string) ($r->details ?? '')];
+                } elseif ($lt === 'diaper') {
+                    $payload = ['type' => (string) ($r->details ?: 'changed')];
+                } else {
+                    $payload = $r->details ? ['detail' => (string) $r->details] : [];
+                }
+                $extra = [];
+                if (!empty($r->amount_ml)) { $extra[] = $r->amount_ml . ' ml'; }
+                if (!empty($r->amount_oz)) { $extra[] = $r->amount_oz . ' oz'; }
+                $note = trim((string) ($r->notes ?? ''));
+                if ($extra) { $note = trim($note . ($note !== '' ? ' · ' : '') . implode(' · ', $extra)); }
+                return (object) [
+                    'id'          => 'care-' . $r->id,
+                    'event_type'  => $lt,
+                    'occurred_at' => $r->occurred_at,
+                    'payload'     => json_encode($payload),
+                    'notes'       => $note !== '' ? $note : null,
+                ];
+            });
+
+        $events = $events->concat($careEvents)->sortBy('occurred_at')->values();
+
         $checks = DB::table('check_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', $startUtc)
+            ->where('occurred_at', '<', $endUtc)
             ->orderBy('occurred_at')
             ->get();
 
         return response()->json([
             'date' => $date,
-            'events' => $events->map(fn ($e) => $this->formatEvent($e))->all(),
+            'events' => $events->map(fn ($e) => $this->formatEvent($e, $tz))->all(),
             'checks' => $checks->map(fn ($c) => [
                 'type' => $c->event_type,
                 'occurred_at' => $c->occurred_at,
-                'time_display' => Carbon::parse($c->occurred_at)->format('g:i A'),
+                'time_display' => AgencyTime::fmt($c->occurred_at, $tz),
                 'by' => $c->notes,
                 'mood' => $c->mood_at_event,
             ])->all(),
         ]);
+    }
+
+    /** Display timezone (Eastern for Ontario) resolved from a child → family → centre → agency. */
+    private function tzForChild(int $childId): string
+    {
+        $centreId = DB::table('children')
+            ->join('families', 'families.id', '=', 'children.family_id')
+            ->where('children.id', $childId)
+            ->value('families.centre_id');
+        return AgencyTime::tzForCentre($centreId ? (int) $centreId : null);
     }
 
     /**
@@ -269,8 +349,9 @@ final class DailyEventController extends Controller
             ->orderBy('occurred_at')
             ->get();
 
-        $formattedEvents = $events->map(function ($e) {
-            $formatted = $this->formatEvent($e);
+        $tz = $this->tzForChild($childId);
+        $formattedEvents = $events->map(function ($e) use ($tz) {
+            $formatted = $this->formatEvent($e, $tz);
             return [
                 'time' => $formatted['time_display'],
                 'type' => $formatted['display']['title'],
@@ -279,7 +360,7 @@ final class DailyEventController extends Controller
         })->all();
 
         $formattedChecks = $checks->map(fn ($c) => [
-            'time' => Carbon::parse($c->occurred_at)->format('g:i A'),
+            'time' => AgencyTime::fmt($c->occurred_at, $tz),
             'type' => $c->event_type,
         ])->all();
 
@@ -301,6 +382,14 @@ final class DailyEventController extends Controller
     /**
      * Template-based fallback when AI isn't available.
      */
+    /** Pull a human name/title out of a daily_events payload. */
+    private function eventName($e): string
+    {
+        $p = is_string($e->payload ?? null) ? json_decode($e->payload, true) : ($e->payload ?? []);
+        if (!is_array($p)) $p = [];
+        return trim((string) ($p['name'] ?? $p['title'] ?? $p['description'] ?? ''));
+    }
+
     private function buildFallbackDigest(int $childId, string $date): string
     {
         $child = DB::table('children')->where('id', $childId)->first();
@@ -312,40 +401,146 @@ final class DailyEventController extends Controller
             ->orderBy('occurred_at')
             ->get();
 
-        if ($events->isEmpty()) {
-            return "{$name}'s day is still being captured. Check back later for a full summary.";
+        $checks = DB::table('check_events')
+            ->where('child_id', $childId)
+            ->whereDate('occurred_at', $date)
+            ->orderBy('occurred_at')
+            ->get();
+
+        // Deterministic per-day variety: the SAME day always reads the same, but
+        // consecutive days pull different wording — so the story never feels
+        // copy-pasted. Seeded by date+child, advanced with a small LCG.
+        $seed = crc32($date.'#'.$childId);
+        $pick = function (array $arr) use (&$seed) {
+            $seed = ($seed * 1103515245 + 12345) & 0x7fffffff;
+            return $arr[$seed % count($arr)];
+        };
+
+        $tz = $this->tzForChild($childId);
+        $checkIn  = $checks->firstWhere('event_type', 'check_in');
+        $checkOut = $checks->where('event_type', 'check_out')->last();
+        $inT  = $checkIn  ? AgencyTime::fmt($checkIn->occurred_at, $tz)  : null;
+        $outT = $checkOut ? AgencyTime::fmt($checkOut->occurred_at, $tz) : null;
+
+        if ($events->isEmpty() && !$checkIn) {
+            return $pick([
+                "{$name}'s day is still being written — check back a little later for the full story. \u{1F4D6}",
+                "We're still capturing {$name}'s day. Pop back this afternoon for the full recap! \u{2728}",
+                "{$name}'s story for today is still coming together — check back soon. \u{1F31F}",
+            ]);
         }
 
-        $meals = $events->whereIn('event_type', ['meal', 'snack'])->count();
-        $naps = $events->where('event_type', 'nap_end')->count();
+        $meals      = $events->whereIn('event_type', ['meal', 'snack']);
+        $napsCount  = $events->where('event_type', 'nap_end')->count();
         $activities = $events->where('event_type', 'activity');
-        $diapers = $events->whereIn('event_type', ['diaper', 'bathroom'])->count();
+        $diapers    = $events->whereIn('event_type', ['diaper', 'bathroom'])->count();
+        $moodEvt    = $events->where('event_type', 'mood')->last();
 
-        $parts = ["Here's a quick look at {$name}'s day:"];
+        // Total sleep by pairing nap_start -> nap_end.
+        $sleepMin = 0; $openStart = null;
+        foreach ($events as $e) {
+            if ($e->event_type === 'nap_start') {
+                $openStart = Carbon::parse($e->occurred_at);
+            } elseif ($e->event_type === 'nap_end' && $openStart) {
+                $sleepMin += (int) $openStart->diffInMinutes(Carbon::parse($e->occurred_at));
+                $openStart = null;
+            }
+        }
 
-        if ($meals > 0) {
-            $parts[] = "{$name} had {$meals} meal".($meals === 1 ? '' : 's')." and snacks.";
+        $parts = [];
+        $parts[] = $pick([
+            "Here's how {$name}'s day unfolded:",
+            "A little window into {$name}'s day:",
+            "Here's what {$name} got up to today:",
+            "{$name} had a full day \u{2014} here's the recap:",
+            "Here's the story of {$name}'s day:",
+        ]);
+
+        if ($inT && $outT) {
+            $parts[] = $pick([
+                "They arrived at {$inT} and headed home at {$outT}.",
+                "Signed in at {$inT} and signed out at {$outT}.",
+                "Their day with us ran from {$inT} to {$outT}.",
+            ]);
+        } elseif ($inT) {
+            $parts[] = $pick([
+                "They arrived bright and ready at {$inT}.",
+                "Check-in was at {$inT}.",
+                "{$name} joined us at {$inT}.",
+            ]);
         }
-        if ($naps > 0) {
-            $parts[] = "Nap time happened {$naps} time".($naps === 1 ? '' : 's').".";
+
+        if ($meals->count() > 0) {
+            $mealNames = $meals->map(fn ($m) => $this->eventName($m))->filter()->take(3)->implode(', ');
+            $mc = $meals->count();
+            $parts[] = $mealNames
+                ? $pick([
+                    "At the table, {$name} enjoyed {$mealNames}.",
+                    "Mealtimes included {$mealNames}.",
+                    "On the menu for {$name}: {$mealNames}.",
+                ])
+                : $pick([
+                    "{$name} had {$mc} meal".($mc === 1 ? '' : 's')." and snacks.",
+                    "There ".($mc === 1 ? 'was' : 'were')." {$mc} meal or snack break".($mc === 1 ? '' : 's')." today.",
+                ]);
         }
-        if ($diapers > 0) {
-            $parts[] = "We took care of {$diapers} diaper or bathroom break".($diapers === 1 ? '' : 's').".";
+
+        if ($sleepMin > 0) {
+            $h = intdiv($sleepMin, 60); $m = $sleepMin % 60;
+            $dur = $h > 0 ? ($h.'h'.($m ? ' '.$m.'m' : '')) : ($m.' minutes');
+            $parts[] = $pick([
+                "{$name} rested for about {$dur}.",
+                "Nap time added up to around {$dur} of sleep.",
+                "They recharged with roughly {$dur} of rest.",
+            ]);
+        } elseif ($napsCount > 0) {
+            $parts[] = $pick([
+                "Nap time happened {$napsCount} time".($napsCount === 1 ? '' : 's').".",
+                "{$name} settled down to rest {$napsCount} time".($napsCount === 1 ? '' : 's').".",
+            ]);
         }
+
         if ($activities->isNotEmpty()) {
-            $activityNames = $activities->map(function ($a) {
-                $p = is_string($a->payload) ? json_decode($a->payload, true) : [];
-                return $p['name'] ?? 'an activity';
-            })->take(3)->implode(', ');
-            $parts[] = "Activities included {$activityNames}.";
+            $an = $activities->map(fn ($a) => $this->eventName($a))->filter()->take(3)->implode(', ');
+            if ($an) {
+                $parts[] = $pick([
+                    "Fun moments included {$an}.",
+                    "They dove into {$an}.",
+                    "Highlights of the day: {$an}.",
+                    "{$name} explored {$an}.",
+                ]);
+            }
         }
 
-        $parts[] = "Ask {$name} about their day when you pick up!";
+        if ($moodEvt) {
+            $mood = $this->eventName($moodEvt);
+            if ($mood !== '') {
+                $parts[] = $pick([
+                    "Overall mood: {$mood}.",
+                    "{$name} seemed {$mood} today.",
+                ]);
+            }
+        }
+
+        if ($diapers > 0) {
+            $parts[] = $pick([
+                "We took care of {$diapers} diaper or bathroom break".($diapers === 1 ? '' : 's').".",
+                "There ".($diapers === 1 ? 'was' : 'were')." {$diapers} diaper or bathroom check".($diapers === 1 ? '' : 's')." along the way.",
+            ]);
+        }
+
+        $parts[] = $pick([
+            "Ask {$name} about the best part of their day! \u{1F49B}",
+            "Give {$name} a big hug from all of us! \u{1F917}",
+            "We can't wait to see {$name} again tomorrow. \u{2728}",
+            "Ask {$name} what made them smile today! \u{1F60A}",
+            "See you next time \u{2014} give {$name} a squeeze from us! \u{1F31F}",
+        ]);
 
         return implode(' ', $parts);
     }
 
-    private function formatEvent(object $event): array
+    private function formatEvent(object $event, string $tz = 'America/Toronto'): array
     {
         $payload = is_string($event->payload)
             ? (json_decode($event->payload, true) ?? [])
@@ -364,7 +559,16 @@ final class DailyEventController extends Controller
                 'detail' => ($payload['domain'] ?? '').(!empty($payload['duration_min']) ? ' · '.$payload['duration_min'].' min' : ''),
             ],
             'mood' => ['title' => 'Mood: '.($payload['score'] ?? '—'), 'detail' => ''],
-            'note' => ['title' => 'Note', 'detail' => $payload['note'] ?? ''],
+            // A media note carries kind=media from PhotoFeedController — give it a
+            // warm, specific title instead of the bare word "Note".
+            'note' => (($payload['kind'] ?? null) === 'media')
+                ? [
+                    'title' => (($payload['media_type'] ?? 'photo') === 'video')
+                        ? 'A new video was shared'
+                        : 'A new photo was shared',
+                    'detail' => $payload['note'] ?? '',
+                ]
+                : ['title' => 'Note', 'detail' => $payload['note'] ?? ''],
             default => ['title' => str_replace('_', ' ', ucfirst($event->event_type)), 'detail' => ''],
         };
 
@@ -372,7 +576,7 @@ final class DailyEventController extends Controller
             'id' => $event->id,
             'type' => $event->event_type,
             'occurred_at' => $event->occurred_at,
-            'time_display' => Carbon::parse($event->occurred_at)->format('g:i A'),
+            'time_display' => AgencyTime::fmt($event->occurred_at, $tz),
             'payload' => $payload,
             'notes' => $event->notes,
             'display' => $display,

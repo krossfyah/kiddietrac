@@ -86,7 +86,6 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
-          { hash: 'team-messages',  label: 'Team messages',    icon: '👥', badgeKey: 'team_unread' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -234,7 +233,6 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
-          { hash: 'team-messages',  label: 'Team messages',    icon: '👥', badgeKey: 'team_unread' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
