@@ -513,32 +513,20 @@ final class AgencyController extends Controller
                 ->whereIn("f.centre_id", $centreIds ?: [0])->pluck("g.user_id");
             $agencyUserIds = $staffIds->merge($guardIds)->unique()->filter()->values()->all();
         }
-        // Collapsing to the latest login hid the fact that someone signed in five
-        // times today — the feed simply said "signed in" once, so the sign-in history
-        // looked missing even though audit_logs has every event. Keep one row per
-        // person (the feed would otherwise be nothing but sign-ins) but say HOW MANY
-        // and link through to the audit log, which lists them all.
-        $loginWindow = now()->subDays(7);
-        $loginCounts = DB::table("audit_logs")->where("action", "login")
-            ->where("created_at", ">=", $loginWindow)
-            ->when(! $unscoped, fn ($q) => $q->whereIn("user_id", $agencyUserIds ?: [0]))
-            ->select("user_id", DB::raw("COUNT(*) as c"))->groupBy("user_id")->pluck("c", "user_id");
-
-        // 200, not 60: with a handful of people signing in repeatedly, a 60-row window
-        // could miss a quieter colleague's most recent login entirely.
+        // EVERY sign-in and sign-out as its own entry, newest first. The feed used to
+        // collapse to each person's most recent login "so it isn't flooded", which is
+        // precisely what made the history look missing: five sign-ins read as one line.
+        // An activity feed should show the activity, so events are listed individually
+        // and simply capped.
         $liQ = DB::table("audit_logs as al")->join("users as u", "u.id", "=", "al.user_id")
-            ->where("al.action", "login")->orderByDesc("al.created_at")->limit(200)
-            ->select("al.user_id", "u.first_name", "u.last_name", "u.photo_url", "al.created_at");
+            ->whereIn("al.action", ["login", "logout"])->orderByDesc("al.created_at")->limit(40)
+            ->select("al.user_id", "al.action", "u.first_name", "u.last_name", "u.photo_url", "al.created_at");
         if (! $unscoped) $liQ->whereIn("al.user_id", $agencyUserIds ?: [0]);
-        $seenLogin = [];
         foreach ($liQ->get() as $r) {
-            if (isset($seenLogin[$r->user_id])) continue;
-            $seenLogin[$r->user_id] = 1;
-            if (count($seenLogin) > 12) break;
             $nm = trim(($r->first_name ?? "") . " " . ($r->last_name ?? "")) ?: "A user";
-            $n = (int) ($loginCounts[$r->user_id] ?? 1);
-            $text = $nm . " signed in" . ($n > 1 ? " \u{00b7} " . $n . " times in the last 7 days" : "");
-            $push("login", "\u{1F511}", $text, $r->created_at, "#audit-logs", $r->photo_url);
+            $out = $r->action === "logout";
+            $push($out ? "logout" : "login", $out ? "\u{1F6AA}" : "\u{1F511}",
+                $nm . ($out ? " signed out" : " signed in"), $r->created_at, "#audit-logs", $r->photo_url);
         }
 
         // Inspection reports (hcc_inspection_forms — agency_id direct).
