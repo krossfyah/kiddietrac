@@ -42,17 +42,35 @@
 
     var ov = document.createElement('div');
     ov.id = 'kt-agree';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481000;background:#F6F9FC;display:flex;flex-direction:column;'
-      + 'font-family:system-ui,-apple-system,sans-serif;';
+    // This is a hard onboarding GATE, not a dismissible modal. Opt out of
+    // kt-modal-guard.js so it never grafts an × close button — an × let users
+    // dismiss the agreement and slip into the app WITHOUT signing (the "gap").
+    // The only ways past are Agree & continue, or the explicit Decline flow.
+    ov.setAttribute('data-no-modal-guard', '1');
+    // OPAQUE, not a 55% scrim: until this is signed the app behind must be neither
+    // readable nor reachable. The scrim let a user read children's names, the roster
+    // and the top bar straight through the gate.
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481000;background:#0B2545;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'font-family:system-ui,-apple-system,sans-serif;overscroll-behavior:contain;';
+    // Full-screen on phones; a centred card on desktop (was full-width → the
+    // buttons and text stretched across the whole screen).
+    if (!document.getElementById('kt-agree-css')) {
+      var _s = document.createElement('style'); _s.id = 'kt-agree-css';
+      _s.textContent = '#kt-agree .kt-agree-card{width:100%;height:100%;max-width:600px;background:#F6F9FC;display:flex;flex-direction:column;overflow:hidden;}'
+        + '@media(min-width:768px){#kt-agree .kt-agree-card{height:auto;max-height:90vh;border-radius:18px;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);}'
+        + '#kt-agree-submit{font-size:15px!important;padding:13px!important;}#kt-agree-decline{font-size:13px!important;padding:10px!important;}}';
+      document.head.appendChild(_s);
+    }
     ov.innerHTML =
-      '<div style="background:#0B2545;color:#fff;padding:16px 18px;flex:0 0 auto;">'
+      '<div class="kt-agree-card">'
+      + '<div style="background:#0B2545;color:#fff;padding:16px 18px;flex:0 0 auto;">'
       + '  <div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">BEFORE YOU START</div>'
       + '  <div style="font-size:19px;font-weight:800;margin-top:2px;">Terms, Privacy &amp; NDA</div>'
       + '  <div style="font-size:12.5px;opacity:.85;margin-top:3px;">Please read this and sign it. You must accept it to use KiddieTrac.</div>'
       + '</div>'
       + '<div id="kt-agree-scroll" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 18px;">'
       + '  <div id="kt-agree-text" style="background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:16px;font-size:14px;line-height:1.6;color:#334155;"></div>'
-      + '  <div id="kt-agree-hint" style="text-align:center;font-size:12px;color:#94A3B8;margin-top:10px;">Scroll to the end to continue ↓</div>'
+      + '  <div id="kt-agree-hint" style="text-align:center;font-size:12px;color:#64748B;margin-top:10px;">Scroll to the end to continue ↓</div>'
       + '  <div id="kt-agree-form" style="opacity:.45;pointer-events:none;transition:opacity .25s;">'
       + '    <div style="background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:16px;margin-top:14px;">'
       + '      <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Your full name</div>'
@@ -63,7 +81,7 @@
       + '        <button id="kt-agree-clear" type="button" style="background:none;border:none;color:#159FB4;font-size:12px;font-weight:700;cursor:pointer;">Clear</button>'
       + '      </div>'
       + '      <canvas id="kt-agree-pad" style="width:100%;height:170px;border:1.5px dashed #CBD5E1;border-radius:12px;background:#FCFDFE;touch-action:none;display:block;"></canvas>'
-      + '      <div style="font-size:11.5px;color:#94A3B8;margin-top:6px;">Sign with your finger or mouse.</div>'
+      + '      <div style="font-size:11.5px;color:#64748B;margin-top:6px;">Sign with your finger or mouse.</div>'
       + '      <div id="kt-agree-date" style="font-size:12.5px;color:#475569;margin-top:10px;font-weight:700;"></div>'
       + '      <label style="display:flex;gap:9px;align-items:flex-start;margin-top:12px;font-size:13.5px;color:#0F172A;line-height:1.45;">'
       + '        <input id="kt-agree-check" type="checkbox" style="width:19px;height:19px;flex:0 0 auto;margin-top:1px;accent-color:#159FB4;">'
@@ -78,9 +96,71 @@
       + '    color:#fff;background:#159FB4;opacity:.5;cursor:not-allowed;">Agree &amp; continue</button>'
       + '  <button id="kt-agree-decline" type="button" style="width:100%;background:none;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:12px;'
       + '    font-size:13.5px;font-weight:800;padding:12px;margin-top:9px;cursor:pointer;">Decline</button>'
-      + '  <div style="text-align:center;font-size:11px;color:#94A3B8;margin-top:7px;line-height:1.4;">If you decline you will not be onboarded, and your centre will be notified.</div>'
+      + '  <div style="text-align:center;font-size:11px;color:#64748B;margin-top:7px;line-height:1.4;">If you decline you will not be onboarded, and your centre will be notified.</div>'
+      + '</div>'
       + '</div>';
     document.body.appendChild(ov);
+
+    // ── Seal the app behind the gate ────────────────────────────────────────
+    // Opaque paint alone is not enough: without this the page still scrolls
+    // underneath, Tab walks into the sidebar and screen readers announce the
+    // whole app. `inert` (where supported) removes a subtree from hit-testing,
+    // focus AND the a11y tree in one go; aria-hidden covers older WebViews.
+    var _prevHtmlOverflow = document.documentElement.style.overflow;
+    var _prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    var _sealed = [];
+    Array.prototype.forEach.call(document.body.children, function (el) {
+      if (el === ov || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+      _sealed.push([el, el.hasAttribute('inert'), el.getAttribute('aria-hidden')]);
+      try { el.inert = true; } catch (e) {}
+      el.setAttribute('inert', '');
+      el.setAttribute('aria-hidden', 'true');
+    });
+    function unseal() {
+      document.documentElement.style.overflow = _prevHtmlOverflow;
+      document.body.style.overflow = _prevBodyOverflow;
+      _sealed.forEach(function (rec) {
+        var el = rec[0];
+        if (!rec[1]) { try { el.inert = false; } catch (e) {} el.removeAttribute('inert'); }
+        if (rec[2] === null) el.removeAttribute('aria-hidden'); else el.setAttribute('aria-hidden', rec[2]);
+      });
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+    }
+    ov.__ktUnseal = unseal;
+
+    // Keyboard: Tab cycles inside the gate only, and Escape must not dismiss it.
+    function focusables() {
+      return Array.prototype.filter.call(
+        ov.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),textarea,canvas,[tabindex]:not([tabindex="-1"])'),
+        function (el) { return el.offsetParent !== null || el === document.activeElement; }
+      );
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return; }
+      if (e.key !== 'Tab') return;
+      var f = focusables();
+      if (!f.length) { e.preventDefault(); return; }
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !ov.contains(document.activeElement))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    }
+    // Belt and braces for WebViews that ignore `inert`: yank focus back if it escapes.
+    function onFocusIn(e) {
+      if (!ov.contains(e.target)) {
+        e.stopPropagation();
+        var f = focusables();
+        if (f.length) f[0].focus();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+    setTimeout(function () { var f = focusables(); if (f.length) f[0].focus(); }, 60);
 
     ov.querySelector('#kt-agree-text').innerHTML = info.body_html || '';
     // The stamped date is the AGENCY's local time (from the server), not this
@@ -171,6 +251,7 @@
         signature: canvas.toDataURL('image/png'),
         agreed: true,
       }).then(function () {
+        if (ov.__ktUnseal) ov.__ktUnseal();
         ov.remove();
         if (KT.toast) KT.toast('✅', 'Thank you', 'A copy has been emailed to you for your records.', '#16A34A');
       }).catch(function (e) {
@@ -182,6 +263,7 @@
     // ── Decline: a real, deliberate exit, not a way to skip the step ──
     ov.querySelector('#kt-agree-decline').addEventListener('click', function () {
       var panel = document.createElement('div');
+      panel.setAttribute('data-no-modal-guard', '1'); // no auto-× — use "Go back"
       panel.style.cssText = 'position:fixed;inset:0;z-index:2147481500;background:rgba(8,17,33,.72);display:flex;align-items:center;'
         + 'justify-content:center;padding:22px;font-family:system-ui,-apple-system,sans-serif;';
       panel.innerHTML =
@@ -230,6 +312,9 @@
   KT.agreement = { show: show, check: check };
 
   function check() {
+    // Super admin "View as": don't force the agreement gate on the admin while
+    // they're just viewing a user's account — that's part of onboarding.
+    try { if (sessionStorage.getItem('kt_impersonating') === '1') return; } catch (e) {}
     if (!tok()) return;
     if (!/dashboard\.html/i.test(location.pathname)) return;
     api('GET', '/auth/agreement')

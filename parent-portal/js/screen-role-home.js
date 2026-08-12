@@ -354,10 +354,27 @@
     }
   }, true);
 
-  // Visible "← Back" button on every sub-screen (the top nav is hidden, so users
-  // need an obvious way back to the tile menu). Floating so it survives the
-  // shell clearing #appMain on each render.
+  // REMOVED (2026-08-11, per request): the floating "← Back" button is no longer
+  // shown on desktop or in the APK. Every role that used it already has a way home
+  // without it — the bottom nav's Home button on phones/APK, the top bar and tile
+  // launcher on desktop, and the Android hardware back button (kt-back.js handles
+  // the Capacitor backButton event independently of this control).
+  //
+  // ensureBackBtn is kept as a REAPER rather than deleted: an older cached copy of
+  // this file, or any stale DOM left over from a previous render, can still have
+  // injected #kt-role-back, so we actively remove it and clear the body flag that
+  // reserved space for it.
+  var BACK_BTN_ENABLED = false;
   function ensureBackBtn() {
+    if (!BACK_BTN_ENABLED) {
+      var stale = document.getElementById('kt-role-back');
+      if (stale) stale.remove();
+      document.body.classList.remove('kt-show-back');
+      return null;
+    }
+    return buildBackBtn();
+  }
+  function buildBackBtn() {
     var btn = document.getElementById('kt-role-back');
     if (!btn) {
       btn = document.createElement('button');
@@ -391,6 +408,7 @@
   }
   function syncBack() {
     var btn = ensureBackBtn();
+    if (!btn) return;              // back button disabled — nothing to sync
     var isRole = /\brole-(guardian|educator|auditor|home-visitor|sales-rep)\b/.test(document.body.className);
     var h = (window.location.hash || '').replace('#', '').split('?')[0];
     // An educator's home is the DASHBOARD (that's where the bottom bar's Home

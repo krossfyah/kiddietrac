@@ -83,7 +83,10 @@ class AgreementController extends Controller
     public function sign(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'full_name' => 'required|string|max:120',
+            // A signature is a legal record, so the typed name must actually look
+            // like a name. The old rule was any string up to 120 chars, so "144"
+            // was accepted and filed as the signer. Require two consecutive letters.
+            'full_name' => ['required', 'string', 'min:2', 'max:120', 'regex:/\p{L}{2,}/u'],
             'signature' => 'required|string|max:2000000',   // PNG data URL from the pad
             'agreed' => 'accepted',
         ]);
@@ -254,7 +257,7 @@ class AgreementController extends Controller
         dispatch(function () use ($email, $toName, $html, $subject, $absPdf, $attachName) {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($email, $toName, $subject, $absPdf, $attachName) {
                 $m->to($email, $toName)
-                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
                 if (is_file($absPdf)) {
@@ -317,10 +320,10 @@ class AgreementController extends Controller
         dispatch(function () use ($to, $html, $subject) {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $subject) {
                 if ($to) $m->to($to);
-                else $m->to('info@kiddietrac.com', 'Kiddietrac');
+                else $m->to('info@kiddietrac.com', 'KiddieTrac');
                 // KiddieTrac always gets a copy, quietly.
-                $m->bcc('info@kiddietrac.com', 'Kiddietrac');
-                $m->from('noreply@kiddietrac.com', 'Kiddietrac')
+                $m->bcc('info@kiddietrac.com', 'KiddieTrac');
+                $m->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
                 $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
