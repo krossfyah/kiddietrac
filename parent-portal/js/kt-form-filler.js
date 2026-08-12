@@ -87,7 +87,7 @@
       st.textContent = [
         '#kt-ff .kt-ff-card{background:#F6F9FC;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;}',
         '@media(min-width:769px){#kt-ff{padding:20px;}#kt-ff .kt-ff-card{max-width:900px;height:min(94vh,1000px);border-radius:16px;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);}}',
-        '#kt-ff .kt-ff-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;}',
+        '#kt-ff .kt-ff-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:14px;touch-action:pan-x pan-y pinch-zoom;}',
         // The page wrapper is positioned so pdf.js can place field widgets over it.
         '#kt-ff .kt-ff-page{position:relative;margin:0 auto 16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.14);border-radius:6px;overflow:hidden;width:fit-content;}',
         '#kt-ff .kt-ff-page canvas{display:block;}',
@@ -113,6 +113,8 @@
       + '    <div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FILL &amp; SIGN</div>'
       + '    <div style="font-size:16px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
       + '  </div>'
+      + '  <button id="kt-ff-zoomout" type="button" aria-label="Zoom out" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;">−</button>'
+      + '  <button id="kt-ff-zoomin" type="button" aria-label="Zoom in" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;">+</button>'
       + '  <button id="kt-ff-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
       + '</div>'
       + '<div id="kt-ff-hint" style="flex:0 0 auto;background:#EFF6FF;color:#1E40AF;font-size:12.5px;padding:9px 16px;border-bottom:1px solid #DBEAFE;">Tap a highlighted box to type. Scroll for more pages.</div>'
@@ -136,6 +138,24 @@
       document.body.style.overflow = 'hidden';
 
       var scroll = ov.querySelector('#kt-ff-scroll');
+      // Zoom by transforming the rendered pages. Scaling the wrapper moves the
+      // canvas AND its field overlay together, so inputs never drift off their
+      // boxes — and it is instant, unlike re-rendering every page at a new scale.
+      var zoom = 1;
+      function applyZoom() {
+        var pages = scroll.querySelectorAll('.kt-ff-page');
+        for (var i = 0; i < pages.length; i++) {
+          pages[i].style.transformOrigin = 'top left';
+          pages[i].style.transform = zoom === 1 ? '' : 'scale(' + zoom + ')';
+          pages[i].style.marginBottom = (16 * zoom) + 'px';
+        }
+      }
+      ov.querySelector('#kt-ff-zoomin').addEventListener('click', function () {
+        zoom = Math.min(2.5, Math.round((zoom + 0.25) * 100) / 100); applyZoom();
+      });
+      ov.querySelector('#kt-ff-zoomout').addEventListener('click', function () {
+        zoom = Math.max(0.5, Math.round((zoom - 0.25) * 100) / 100); applyZoom();
+      });
       var msg = ov.querySelector('#kt-ff-msg');
       var submitBtn = ov.querySelector('#kt-ff-submit');
       var hint = ov.querySelector('#kt-ff-hint');
@@ -174,14 +194,27 @@
           .then(function (doc) {
             annotationStorage = doc.annotationStorage;
             scroll.innerHTML = '';
+            // Progress line. A large form (100 fields) takes many seconds to lay out,
+            // and a silent blank page reads as "nothing happened".
+            var prog = document.createElement('div');
+            prog.style.cssText = 'padding:14px;text-align:center;color:#64748B;font-size:13px;';
+            prog.textContent = 'Preparing page 1 of ' + doc.numPages + '…';
+            scroll.appendChild(prog);
+            hint.textContent = 'Preparing the form…';
+
             var chain = Promise.resolve();
             for (var n = 1; n <= doc.numPages; n++) {
               (function (pageNo) {
-                chain = chain.then(function () { return renderPage(libs, doc, pageNo, scroll, fieldMap); })
-                             .then(function (widgets) { fieldCount += widgets; });
+                chain = chain.then(function () {
+                  prog.textContent = 'Preparing page ' + pageNo + ' of ' + doc.numPages + '…';
+                  // Yield a frame so the message actually paints before the heavy
+                  // render work blocks the thread.
+                  return new Promise(function (r) { setTimeout(r, 0); })
+                    .then(function () { return renderPage(libs, doc, pageNo, scroll, fieldMap); });
+                }).then(function (widgets) { fieldCount += widgets; });
               })(n);
             }
-            return chain;
+            return chain.then(function () { if (prog.parentNode) prog.remove(); });
           })
           .then(function () {
             if (!fieldCount) {
@@ -249,10 +282,15 @@
   /** Render one page + its interactive field widgets. Returns the widget count. */
   function renderPage(libs, doc, pageNo, host, fieldMap) {
     return doc.getPage(pageNo).then(function (page) {
-      // Fit the sheet width, but never upscale past 2x on a big screen.
+      // Sizing. Fitting a Letter page (612pt) into a ~360px phone gives scale ~0.55,
+      // which is what made the form unreadably tiny in the APK — a 100-field form
+      // ends up with 8px boxes. On a narrow screen we render at a MINIMUM legible
+      // scale and let the page scroll sideways instead of shrinking to fit.
       var avail = Math.max(280, Math.min(host.clientWidth - 28, 860));
       var base = page.getViewport({ scale: 1 });
-      var scale = Math.min(2, avail / base.width);
+      var fit = avail / base.width;
+      var narrow = host.clientWidth < 700;
+      var scale = narrow ? Math.max(fit, 1.15) : Math.min(2, fit);
       var viewport = page.getViewport({ scale: scale });
 
       var wrap = document.createElement('div');
@@ -261,7 +299,9 @@
       wrap.style.height = Math.floor(viewport.height) + 'px';
       var canvas = document.createElement('canvas');
       // Render at device resolution so text stays crisp on phones.
-      var dpr = Math.min(3, w.devicePixelRatio || 1);
+      // Cap at 2: at dpr 3 the canvas is 9x the pixel area for no perceptible gain,
+      // and that raster cost is a big part of why the form took so long in the APK.
+      var dpr = Math.min(2, w.devicePixelRatio || 1);
       canvas.width = Math.floor(viewport.width * dpr);
       canvas.height = Math.floor(viewport.height * dpr);
       canvas.style.width = Math.floor(viewport.width) + 'px';

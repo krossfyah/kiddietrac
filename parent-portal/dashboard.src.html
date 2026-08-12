@@ -128,7 +128,10 @@
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
 <div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img src="/logo-wordmark-large.png" alt="" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div></div></div>
 <style>
-#kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
+/* NAVY post-login boot (2026-08-11). This splash now only ever runs AFTER sign-in,
+   while the portal loads, so it wears the brand navy rather than the light ground
+   it used to share with the login page. */
+#kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(120% 70% at 50% 0%,#12315C 0%,#081C41 62%);transition:opacity .5s ease}
 #kt-splash.kt-hide{opacity:0;pointer-events:none}
 /* Reload gate — dim scrim + spinner shown on an in-session reload until the portal is ready. */
 #kt-reload-gate{position:fixed;inset:0;z-index:2147483100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(11,14,22,.94);-webkit-backdrop-filter:blur(10px) saturate(.9);backdrop-filter:blur(10px) saturate(.9);opacity:1;transition:opacity .35s ease}
@@ -142,7 +145,7 @@ html.kt-gating .loading-state{visibility:hidden!important;}
 #kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:30px;padding:0 28px}
 #kt-splash .kt-splash-logo-wrap{width:min(66vw,240px)}
 #kt-splash .kt-splash-logo{display:block;width:100%;height:auto;animation:kt-write 1.7s cubic-bezier(.62,.03,.2,1) both,kt-rise .7s ease both}
-#kt-splash .kt-spinner{width:40px;height:40px;border-radius:50%;border:3.5px solid rgba(20,70,100,.14);border-top-color:#13B7CC;opacity:0;animation:kt-spin .8s linear infinite,kt-fade .45s ease .95s forwards}
+#kt-splash .kt-spinner{width:40px;height:40px;border-radius:50%;border:3.5px solid rgba(255,255,255,.20);border-top-color:#13B7CC;opacity:0;animation:kt-spin .8s linear infinite,kt-fade .45s ease .95s forwards}
 @keyframes kt-write{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes kt-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes kt-spin{to{transform:rotate(360deg)}}
@@ -197,10 +200,16 @@ function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classL
    so a real launch still gets exactly one splash. */
 var _seen;try{_seen=sessionStorage.getItem('kt_splash_seen')==='1';}catch(e){_seen=false;}
 try{sessionStorage.setItem('kt_splash_seen','1');}catch(e){}
-if(_seen){var _s=document.getElementById('kt-splash');if(_s)_s.style.display='none';showReloadGate();}
+/* No session? Then this page is about to bounce to the login form, and there is no
+   portal to wait for — drop the splash instantly so launching the app lands on the
+   login page with no boot sequence in front of it. */
+var _hasSession=false;try{_hasSession=!!(sessionStorage.getItem('kt_token')||localStorage.getItem('kt_token'));}catch(e){_hasSession=false;}
+if(!_hasSession){var _ns=document.getElementById('kt-splash');if(_ns&&_ns.parentNode)_ns.parentNode.removeChild(_ns);}
+else if(_seen){var _s=document.getElementById('kt-splash');if(_s)_s.style.display='none';showReloadGate();}
 else{var MIN=2300,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}
 if(document.readyState==='complete')go();else window.addEventListener('load',go);
 setTimeout(hide,7000);}
+if(!_hasSession){try{document.documentElement.classList.remove('kt-gating');}catch(e){}}
 /* In-session RELOAD (SW update, pull-to-refresh, F5): skip the long animated splash
    but still GATE the portal behind a dimmed scrim + spinner so the user never sees a
    half-rendered/unstyled portal or interacts before it is ready. Removed once the page
@@ -400,7 +409,7 @@ function showReloadGate(){
   <script src="/js/screen-v22p58.js?v=20260806inv34b" defer></script>
   <script src="/js/screen-withdrawals.js?v=20260806au1" defer></script>
   <script src="/js/kt-signature-pad.js?v=20260810sig1" defer></script>
-  <script src="/js/kt-form-filler.js?v=20260811fill4" defer></script>
+  <script src="/js/kt-form-filler.js?v=20260811fill6" defer></script>
   <script src="/js/screen-v22p59.js?v=20260811rcdrop" defer></script>
     <script src="/js/fix-screen-v22p69.js?v=20260810walk5" defer></script>
   <script src="/js/kt-walk-tracker.js?v=20260810walk8" defer></script>

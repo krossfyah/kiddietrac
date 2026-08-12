@@ -40,8 +40,9 @@
   <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260809logotag">
 </head>
 <body class="auth-body">
-<!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
-<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div></div></div>
+<!-- Launch splash REMOVED (2026-08-11): opening the app must land on the login
+     form immediately. The boot animation now belongs AFTER sign-in, where there is
+     actually a portal being loaded to wait for. -->
 <style>
 #kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
 #kt-splash.kt-hide{opacity:0;pointer-events:none}
@@ -103,16 +104,7 @@
    APK shows ONE continuous logo boot instead of native-splash → web-splash →
    login-page-logo (the "triple logo" flash). */
 try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.SplashScreen.hide();}catch(e){}
-function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
-/* Show the full animated splash only ONCE per app session — a service-worker update
-   reload otherwise replays the 2.3s splash (the APK's "loads 3x"). sessionStorage
-   clears on a real relaunch, so a genuine launch still gets one splash. */
-var _seen;try{_seen=sessionStorage.getItem('kt_splash_seen')==='1';}catch(e){_seen=false;}
-try{sessionStorage.setItem('kt_splash_seen','1');}catch(e){}
-if(_seen){var _s=document.getElementById('kt-splash');if(_s)_s.style.display='none';}
-else{var MIN=2300,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}
-if(document.readyState==='complete')go();else window.addEventListener('load',go);
-setTimeout(hide,7000);}})();
+})();
 </script>
 <script>
 /* SSO handoff from the marketing site (www.kiddietrac.com): #kt_sso=<token>, and ?email= prefill */
