@@ -78,6 +78,15 @@ class OnboardingReminderCommand extends Command
 
             foreach ($users as $u) {
                 try {
+                    // Cadence guard. Without this the command re-emails EVERY pending
+                    // user EVERY day for as long as they stay un-onboarded — a parent
+                    // invited in June would be on their fiftieth identical reminder,
+                    // which is how an agency's mail ends up in a spam folder. Nudge a
+                    // few times over the first fortnight, then stop and leave it to
+                    // the admin (who can always re-invite from the Users screen).
+                    if (! $force && ! $this->shouldRemind($u->email)) {
+                        continue;
+                    }
                     $token = bin2hex(random_bytes(32));
                     DB::table('password_resets')->insert([
                         'email'      => $u->email,
@@ -98,6 +107,37 @@ class OnboardingReminderCommand extends Command
         $this->info("Onboarding reminders — hour {$nowHour} ET, {$agenciesRun} agency(ies) due, {$totalSent} email(s) sent.");
 
         return self::SUCCESS;
+    }
+
+    /** How many reminders one invitee may receive, and how far apart (days). */
+    private const MAX_REMINDERS = 4;
+    private const MIN_DAYS_BETWEEN = 3;
+
+    /**
+     * Has this address had enough? Decided from email_logs, so no schema change and
+     * no separate counter to drift out of sync — and suppressed rows count too, so a
+     * suppressed agency doesn't silently bank up a backlog of "owed" reminders.
+     */
+    private function shouldRemind(string $email): bool
+    {
+        try {
+            if (! Schema::hasTable('email_logs')) return true;
+
+            $sent = DB::table('email_logs')
+                ->where('to_email', $email)
+                ->where('subject', 'like', '%finish setting up%')
+                ->orderByDesc('created_at')
+                ->get(['created_at']);
+
+            if ($sent->count() >= self::MAX_REMINDERS) return false;
+            if ($sent->isEmpty()) return true;
+
+            return \Illuminate\Support\Carbon::parse($sent->first()->created_at)
+                ->lt(now()->subDays(self::MIN_DAYS_BETWEEN));
+        } catch (\Throwable $e) {
+            // If the check itself breaks, do NOT send — better a missed nudge than a loop.
+            return false;
+        }
     }
 
     private function send(string $email, string $firstName, string $agencyName, int $agencyId, string $link, bool $sync): void

@@ -151,3 +151,9 @@ Schedule::command("kiddietrac:send-scheduled-reports")->hourly()->withoutOverlap
 // independent witness, so this reconciles the two nightly and backfills the gap,
 // marking such rows "reconstructed from audit trail" so the omission stays visible.
 Schedule::command("mail:reconcile-logs --days=3 --backfill")->dailyAt("06:15")->timezone("America/Toronto");
+
+// Invited-but-not-onboarded nudges. The command self-gates to each agency's configured
+// hour (default 07:00 ET) and caps itself at 4 reminders, >= 3 days apart, per invitee,
+// so hourly dispatch is the intended cadence rather than hourly mail. This was never
+// registered anywhere - in practice NOBODY was being reminded.
+Schedule::command("kiddietrac:onboarding-reminders")->hourly();
