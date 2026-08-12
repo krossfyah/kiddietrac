@@ -1,0 +1,81 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — button interaction consistency (2026-07-24).
+
+   The app has ~400 hand-styled inline buttons that bypass the .btn / .kt-btn
+   component, so their COLOURS, PADDING and RADIUS vary screen-to-screen. Those
+   are set inline and can't be safely unified from a stylesheet without visual QA
+   per button (icon buttons use border-radius:50%, some are intentional pills),
+   so that pixel-level pass is deliberately left for a per-screen verified effort.
+
+   What CAN be unified safely — and is — is how every button BEHAVES: cursor,
+   font inheritance, the disabled treatment, and a subtle press/transition for
+   the hand-styled ones that currently have none. These are additive (they never
+   override a button's bespoke background/padding/radius), so they can't regress
+   any existing button — they just make interaction feel consistent everywhere.
+   Focus-visible rings are already handled globally in kt-polish-v22.css.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Universal hygiene — safe on every button, component or hand-styled. */
+#appMain button,
+.kt-modal button,
+.modal button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* One consistent disabled treatment everywhere (many inline buttons set none,
+   so a disabled button looked fully active). */
+#appMain button:disabled,
+.kt-modal button:disabled,
+.modal button:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+/* ── .kt-actionbtn — the submit/save button primitive (2026-08-11) ────────────
+   Several hand-styled submit buttons (Withdrawal "Submit request", Settings
+   "Save profile"/"Save preferences") were authored full-width with padding:13-14px
+   and font-size:15px. That is right on a phone and far too heavy on desktop, where
+   it renders as a ~47px slab spanning the whole card.
+
+   This class keeps the button's own background/colour (set inline by the screen)
+   and only owns SIZE: compact and content-width on desktop, full-width with a
+   proper 44px touch target on phones/APK. Screens opt in by adding the class and
+   dropping their own width/padding/font-size. */
+#appMain button.kt-actionbtn,
+.kt-modal button.kt-actionbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-height: 32px;
+  padding: 7px 18px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border-radius: 9px;
+  line-height: 1.2;
+}
+@media (max-width: 768px) {
+  #appMain button.kt-actionbtn,
+  .kt-modal button.kt-actionbtn {
+    width: 100%;
+    min-height: 44px;
+    padding: 12px 18px;
+    font-size: 15px;
+    border-radius: 12px;
+  }
+}
+
+/* Consistent press feedback + transition ONLY for hand-styled buttons (those
+   WITHOUT a .btn/.kt-btn class) — the component already has its own nicer
+   :active/transition, so we don't touch it. Respects reduced-motion. */
+#appMain button:not([class*="btn"]) {
+  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #appMain button:not([class*="btn"]):active:not(:disabled) {
+    transform: translateY(0.5px);
+  }
+}

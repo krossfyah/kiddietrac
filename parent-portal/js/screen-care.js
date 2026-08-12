@@ -18,6 +18,11 @@
   var Shell = KT.Shell;
 
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  // Media uploads go through raw fetch, not KT.Api: Api.request JSON-encodes its
+  // body, which would destroy a FormData multipart payload.
+  function _careApiBase() { return (KT.API_BASE) || (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
+  function _careToken() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''; } catch (e) { return ''; } }
   function fmt(d) {
     if (!d) return '—';
     try {
@@ -74,7 +79,7 @@
     var history = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);' });
     history.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Recent punches'));
     var list = Dom.el('div', { 'data-kt-list': '1' }); history.appendChild(list);
-    list.appendChild(Dom.el('div', { style: 'padding:18px;color:#9CA3AF;font-size:13px;text-align:center;' }, 'Loading…'));
+    list.appendChild(Dom.el('div', { style: 'padding:18px;color:#64748B;font-size:13px;text-align:center;' }, 'Loading…'));
     wrap.appendChild(history);
 
     function refresh() {
@@ -96,16 +101,22 @@
 
         Dom.clear(list);
         if (!data.punches || !data.punches.length) {
-          list.appendChild(Dom.el('div', { style: 'padding:18px;color:#9CA3AF;font-size:13px;text-align:center;' }, 'No punches yet — tap the button to start your first shift.'));
+          list.appendChild(Dom.el('div', { style: 'padding:18px;color:#64748B;font-size:13px;text-align:center;' }, 'No punches yet — tap the button to start your first shift.'));
           return;
         }
+        var T = function (d) { return d ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '…'; };
         data.punches.forEach(function (p) {
-          var row = Dom.el('div', { style: 'display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #F3F4F6;font-size:13px;' });
           var inO = new Date(p.punched_in_at);
           var outO = p.punched_out_at ? new Date(p.punched_out_at) : null;
-          var dur = outO ? ((outO - inO) / 3600000).toFixed(2) + ' h' : '— in progress —';
-          row.appendChild(Dom.el('div', { style: 'color:#111827;' }, fmt(p.punched_in_at) + (outO ? ' → ' + outO.toLocaleTimeString() : '')));
-          row.appendChild(Dom.el('div', { style: 'color:#1F6080;font-weight:600;' }, dur));
+          var live = !outO;
+          var durTxt = outO ? ((outO - inO) / 3600000).toFixed(2) + ' h' : 'In progress';
+          var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid #F1F5F9;' });
+          row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:' + (live ? '#F59E0B' : '#16A34A') + ';box-shadow:0 0 0 3px ' + (live ? 'rgba(245,158,11,.15)' : 'rgba(22,163,74,.15)') + ';' }));
+          var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
+          mid.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:13.5px;color:#0F172A;' }, fmt(p.punched_in_at)));
+          mid.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:1px;' }, T(inO) + ' → ' + T(outO)));
+          row.appendChild(mid);
+          row.appendChild(Dom.el('div', { style: 'flex:0 0 auto;font-size:12.5px;font-weight:800;padding:5px 12px;border-radius:20px;background:' + (live ? '#FEF3C7' : '#DCFCE7') + ';color:' + (live ? '#B45309' : '#15803D') + ';white-space:nowrap;' }, durTxt));
           list.appendChild(row);
         });
       });
@@ -120,6 +131,21 @@
     refresh();
   }
 
+  // "HH:MM" now, and an ISO timestamp for a "HH:MM" wall-clock time TODAY (local
+  // → correct UTC instant for the server). Used by the optional "When?" pickers.
+  function _careNowHHMM() {
+    var d = new Date();
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function _careIsoAt(hhmm) {
+    if (!hhmm) return null;
+    var p = String(hhmm).split(':');
+    if (p.length < 2) return null;
+    var d = new Date();
+    d.setHours(parseInt(p[0], 10) || 0, parseInt(p[1], 10) || 0, 0, 0);
+    return d.toISOString();
+  }
+
   // ─── Daily care log entry — quick-tap UI ──────────────────────────
   function renderCareLog(container) {
     Dom.clear(container);
@@ -129,6 +155,14 @@
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#8EC73C 0%,#1F6080 60%,#7C3AED 100%);' });
     hero.innerHTML = '<div class="kt-hero-greet">📝 DAILY LOG</div><h1>Log a moment</h1><div class="kt-hero-sub">Quick-tap diaper / bathroom / nap / meal / bottle entries. They roll up into the parent\'s Today screen instantly.</div>';
     wrap.appendChild(hero);
+
+    // Provider filter — an agency admin spans the WHOLE agency, so they pick a
+    // provider first, then the child. Hidden for staff/parents (single scope).
+    var providerSelWrap = Dom.el('div', { style: 'margin:18px 0 -4px;background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);display:none;' });
+    providerSelWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;' }, 'Provider'));
+    var providerSel = Dom.el('select', { style: 'width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;background:white;' });
+    providerSelWrap.appendChild(providerSel);
+    wrap.appendChild(providerSelWrap);
 
     var childSelWrap = Dom.el('div', { style: 'margin:18px 0;background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
     childSelWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;' }, 'Child'));
@@ -157,7 +191,7 @@
       btn.addEventListener('mouseenter', function () { btn.style.borderColor = t.color; btn.style.background = '#FAFBFC'; });
       btn.addEventListener('mouseleave', function () { btn.style.borderColor = '#E5E7EB'; btn.style.background = 'white'; });
       btn.addEventListener('click', function () {
-        if (!childSel.value) { alert('Pick a child first.'); return; }
+        if (!childSel.value || childSel.value === '__all__') { alert('Pick a child to log for.'); return; }
         openDetailsModal(t, parseInt(childSel.value, 10));
       });
       grid.appendChild(btn);
@@ -189,6 +223,7 @@
         return u.primary_role || '';
       } catch (e) { return ''; }
     }
+    var CHILDREN = [];
     function fillOptions(kids) {
       childSel.innerHTML = '';
       if (!kids.length) {
@@ -201,6 +236,9 @@
         if (!!a.at_centre !== !!b.at_centre) return a.at_centre ? -1 : 1;
         return String(a.name).localeCompare(String(b.name));
       });
+      CHILDREN = kids.slice();
+      // "All children" filter — view every child's logs; pick one to filter down.
+      childSel.appendChild(Dom.el('option', { value: '__all__' }, 'All children (today)'));
       kids.forEach(function (c) {
         childSel.appendChild(Dom.el('option', { value: c.id },
           c.name + (c.at_centre ? ' · here now' : '') + (c.suffix ? ' · ' + c.suffix : '')));
@@ -232,6 +270,33 @@
     }
 
     var role = roleOf();
+    // Agency-wide roles (super admin / agency admin) see EVERY provider's kids,
+    // filterable by provider — the reported bug was that they saw only the one
+    // centre /provider/bootstrap returned. Educators/directors keep their rooms.
+    function loadAgencyWide() {
+      var ALL = [];
+      function applyFilter() {
+        var cid = providerSel.value;
+        var list = cid ? ALL.filter(function (k) { return String(k.centre_id) === String(cid); }) : ALL;
+        fillOptions(list.map(function (c) {
+          return { id: c.id, name: c.name, centre_id: c.centre_id, suffix: cid ? '' : (c.centre_name || '') };
+        }));
+      }
+      return Api.get('/admin/children').then(function (r) {
+        ALL = ((r && r.children) || []).map(function (c) {
+          return { id: c.id, name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim(), centre_id: c.centre_id, centre_name: c.centre_name || '' };
+        });
+        var seen = {}; var provs = [];
+        ALL.forEach(function (k) { if (k.centre_id && !seen[k.centre_id]) { seen[k.centre_id] = 1; provs.push({ id: k.centre_id, name: k.centre_name }); } });
+        provs.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+        providerSel.innerHTML = '<option value="">All providers</option>';
+        provs.forEach(function (p) { providerSel.appendChild(Dom.el('option', { value: p.id }, p.name)); });
+        providerSelWrap.style.display = provs.length > 1 ? '' : 'none';
+        providerSel.addEventListener('change', applyFilter);
+        applyFilter();
+      });
+    }
+
     if (role === 'guardian') {
       Api.get('/parent/children')
         .then(function (r) {
@@ -240,53 +305,66 @@
           }));
         })
         .catch(function () { childSel.innerHTML = '<option value="">Could not load your children</option>'; });
+    } else if (role === 'agency_admin' || role === 'platform_admin') {
+      loadAgencyWide().catch(function () { childSel.innerHTML = '<option value="">No children loaded</option>'; });
     } else {
       loadStaffChildren()
         .then(function (kids) {
           if (kids.length) { fillOptions(kids); return; }
-          // Admins/directors with no rooms of their own → agency-wide list.
-          return Api.get('/admin/children').then(function (r2) {
-            fillOptions(((r2 && r2.children) || []).map(function (c) {
-              return { id: c.id, name: (c.first_name + ' ' + c.last_name).trim(), suffix: c.centre_name || '' };
-            }));
-          });
+          // Directors/educators with no rooms of their own → agency-wide list.
+          return loadAgencyWide();
         })
         .catch(function () { childSel.innerHTML = '<option value="">No children loaded</option>'; });
     }
     childSel.addEventListener('change', loadRecent);
 
+    function todayStartTs() { return new Date(new Date().setHours(0, 0, 0, 0)); }
+    function logRow(l, childName) {
+      var tInfo = TYPES.find(function (t) { return t.type === l.log_type; }) || { icon: '•', color: '#6B7280' };
+      var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F3F4F6;' });
+      row.appendChild(Dom.el('div', { style: 'font-size:24px;width:32px;text-align:center;' }, tInfo.icon));
+      var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      var head = Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#0F172A;' });
+      head.textContent = l.log_type.charAt(0).toUpperCase() + l.log_type.slice(1);
+      if (l.details) head.textContent += ' — ' + l.details;
+      body.appendChild(head);
+      var meta = fmt(l.occurred_at) + ' · by ' + (l.logged_by || 'staff');
+      if (childName) meta = childName + ' · ' + meta;
+      body.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, meta));
+      if (l.notes) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:2px;' }, l.notes));
+      row.appendChild(body);
+      return row;
+    }
     function loadRecent() {
-      if (!childSel.value) return;
-      Api.get('/care/logs/child/' + childSel.value).then(function (data) {
+      var v = childSel.value;
+      if (v === '__all__') return loadRecentAll();
+      if (!v) return;
+      Api.get('/care/logs/child/' + v).then(function (data) {
         Dom.clear(recent);
-        var todayStart = new Date(new Date().setHours(0, 0, 0, 0));
-        var todayLogs = (data.logs || []).filter(function (l) {
-          // v22p77: normalise MySQL space-format datetime (Safari/Firefox parse
-          // "2026-05-20 15:30:00" as Invalid Date otherwise).
-          var dt = parseDt(l.occurred_at);
-          return !dt || dt >= todayStart;
-        });
-        if (!todayLogs.length) {
-          recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#9CA3AF;font-size:13px;text-align:center;' }, 'Nothing logged today yet.'));
-          return;
-        }
-        todayLogs.forEach(function (l) {
-          var tInfo = TYPES.find(function (t) { return t.type === l.log_type; }) || { icon: '•', color: '#6B7280' };
-          var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F3F4F6;' });
-          row.appendChild(Dom.el('div', { style: 'font-size:24px;width:32px;text-align:center;' }, tInfo.icon));
-          var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
-          var head = Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#0F172A;' });
-          head.textContent = l.log_type.charAt(0).toUpperCase() + l.log_type.slice(1);
-          if (l.details) head.textContent += ' — ' + l.details;
-          body.appendChild(head);
-          body.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, fmt(l.occurred_at) + ' · by ' + (l.logged_by || 'staff')));
-          if (l.notes) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:2px;' }, l.notes));
-          row.appendChild(body);
-          recent.appendChild(row);
-        });
+        var ts = todayStartTs();
+        var todayLogs = (data.logs || []).filter(function (l) { var dt = parseDt(l.occurred_at); return !dt || dt >= ts; });
+        if (!todayLogs.length) { recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'Nothing logged today yet.')); return; }
+        todayLogs.forEach(function (l) { recent.appendChild(logRow(l, null)); });
       }).catch(function (e) {
         Dom.clear(recent);
         recent.appendChild(Dom.el('div', { style: 'padding:18px;color:#B91C1C;font-size:13px;text-align:center;' }, 'Could not load today’s log: ' + (e.message || 'error')));
+      });
+    }
+    // "All children" — aggregate today's logs across every child in scope, newest first.
+    function loadRecentAll() {
+      Dom.clear(recent);
+      recent.appendChild(Dom.el('div', { style: 'padding:18px;color:#64748B;font-size:13px;text-align:center;' }, 'Loading all children…'));
+      var kids = (CHILDREN || []).filter(function (c) { return c.id; });
+      if (!kids.length) { Dom.clear(recent); recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'No children found.')); return; }
+      Promise.all(kids.map(function (c) {
+        return Api.get('/care/logs/child/' + c.id).then(function (data) { return (data.logs || []).map(function (l) { l.__cn = c.name; return l; }); }).catch(function () { return []; });
+      })).then(function (lists) {
+        var ts = todayStartTs();
+        var all = lists.reduce(function (a, b) { return a.concat(b); }, []).filter(function (l) { var dt = parseDt(l.occurred_at); return !dt || dt >= ts; });
+        all.sort(function (a, b) { var da = parseDt(a.occurred_at), db = parseDt(b.occurred_at); return (db ? db.getTime() : 0) - (da ? da.getTime() : 0); });
+        Dom.clear(recent);
+        if (!all.length) { recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'Nothing logged today yet.')); return; }
+        all.forEach(function (l) { recent.appendChild(logRow(l, l.__cn)); });
       });
     }
 
@@ -310,6 +388,29 @@
       var modal = Dom.el('div', { style: 'background:white;border-radius:16px;max-width:420px;width:100%;padding:20px;max-height:88vh;overflow-y:auto;' });
       overlay.appendChild(modal);
       modal.innerHTML = '<h2 style="margin:0 0 12px;font-size:18px;">' + t.icon + ' ' + t.label + '</h2>';
+
+      // Snack: a quick Morning / Afternoon / Evening pick, folded into the detail.
+      var snackWhen = '';
+      if (t.type === 'snack') {
+        modal.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:7px;' }, 'Which snack?'));
+        var swRow = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px;' });
+        var swEls = [];
+        [['Morning', '🌅 Morning'], ['Afternoon', '☀️ Afternoon'], ['Evening', '🌆 Evening']].forEach(function (pair) {
+          var val = pair[0];
+          var chip = Dom.el('button', { type: 'button', style: 'border:1.5px solid #E2E8F0;background:#fff;color:#0F172A;border-radius:999px;padding:9px 14px;font-size:14px;font-weight:700;cursor:pointer;' }, pair[1]);
+          chip.addEventListener('click', function () {
+            snackWhen = (snackWhen === val) ? '' : val;
+            swEls.forEach(function (c) {
+              var on = snackWhen && c.textContent.indexOf(snackWhen) !== -1;
+              c.style.background = on ? t.color : '#fff';
+              c.style.color = on ? '#fff' : '#0F172A';
+              c.style.borderColor = on ? t.color : '#E2E8F0';
+            });
+          });
+          swEls.push(chip); swRow.appendChild(chip);
+        });
+        modal.appendChild(swRow);
+      }
 
       var chosen = '';
       var opts = DETAIL_OPTIONS[t.type] || [];
@@ -355,6 +456,22 @@
         modal.appendChild(otherIn);
       }
 
+      // Nap: capture the actual asleep → woke window (the parent sees real times).
+      var napAsleep = null, napWoke = null;
+      if (t.type === 'nap') {
+        var napGrid = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;' });
+        var col1 = Dom.el('div');
+        col1.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;' }, 'Fell asleep'));
+        napAsleep = Dom.el('input', { type: 'time', style: 'width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;' });
+        col1.appendChild(napAsleep);
+        var col2 = Dom.el('div');
+        col2.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;' }, 'Woke up'));
+        napWoke = Dom.el('input', { type: 'time', style: 'width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;' });
+        col2.appendChild(napWoke);
+        napGrid.appendChild(col1); napGrid.appendChild(col2);
+        modal.appendChild(napGrid);
+      }
+
       modal.appendChild(Dom.el('div', {
         style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;',
       }, 'Note (optional)'));
@@ -368,20 +485,148 @@
         amtWrap.appendChild(amtIn);
         modal.appendChild(amtWrap);
       }
+      // Optional "when" — educators frequently log a moment well after it happened
+      // (mid-room you can't always stop to log). Defaults to now; change it to
+      // back-time the entry. Nap uses its own asleep/woke times instead.
+      var whenIn = null;
+      if (t.type !== 'nap') {
+        modal.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:12px 0 6px;' }, 'When did it happen? (optional)'));
+        whenIn = Dom.el('input', { type: 'time', value: _careNowHHMM(), style: 'width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;' });
+        modal.appendChild(whenIn);
+      }
+
+      // ── Photo / video of the moment ──────────────────────────────────────
+      // Uploads to POST /photos (PhoteFeedController), which is the table the
+      // parent gallery reads (`photos`, tagged via child_ids) and which already
+      // notifies the child's guardians. Accepts stills AND short clips; the server
+      // caps at 30MB, so we reject earlier with a clearer message than a 422.
+      var MEDIA_MAX = 30 * 1024 * 1024;
+      var mediaFile = null;
+      modal.appendChild(Dom.el('div', {
+        style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;',
+      }, 'Photo or video (optional)'));
+      var fileIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,video/3gpp', style: 'display:none;' });
+      var pickBtn = Dom.el('button', {
+        type: 'button',
+        style: 'width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px dashed #CBD5E1;color:#1F6080;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;',
+      }, '📷 Add a photo or video');
+      var mediaPreview = Dom.el('div', { style: 'display:none;margin-top:10px;' });
+      var capIn = Dom.el('input', {
+        type: 'text', maxlength: '500', placeholder: 'Describe this moment for the parent…',
+        style: 'width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #159FB4;border-radius:10px;font-size:16px;margin-top:9px;display:none;',
+      });
+      var mediaMsg = Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:6px;min-height:15px;' });
+
+      function clearMedia() {
+        mediaFile = null; fileIn.value = '';
+        Dom.clear(mediaPreview); mediaPreview.style.display = 'none';
+        capIn.style.display = 'none'; capIn.value = '';
+        pickBtn.textContent = '📷 Add a photo or video';
+        mediaMsg.textContent = '';
+      }
+      pickBtn.addEventListener('click', function () { fileIn.click(); });
+      fileIn.addEventListener('change', function () {
+        var f = fileIn.files && fileIn.files[0];
+        if (!f) return;
+        if (f.size > MEDIA_MAX) {
+          mediaMsg.style.color = '#DC2626';
+          mediaMsg.textContent = 'That file is ' + (f.size / 1048576).toFixed(1) + ' MB — the limit is 30 MB (about 30 seconds of video).';
+          fileIn.value = ''; return;
+        }
+        mediaFile = f;
+        mediaMsg.style.color = '#64748B';
+        mediaMsg.textContent = f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' MB';
+        pickBtn.textContent = '🔁 Choose a different file';
+        Dom.clear(mediaPreview);
+        var url = URL.createObjectURL(f);
+        var isVid = /^video\//.test(f.type);
+        mediaPreview.appendChild(isVid
+          ? Dom.el('video', { src: url, controls: true, preload: 'metadata', playsInline: true, style: 'width:100%;max-height:190px;border-radius:10px;background:#0F172A;display:block;' })
+          : Dom.el('img', { src: url, alt: 'Preview', style: 'width:100%;max-height:190px;object-fit:cover;border-radius:10px;display:block;' }));
+        var rm = Dom.el('button', { type: 'button', style: 'background:none;border:0;color:#B91C1C;font-size:12.5px;font-weight:700;cursor:pointer;padding:6px 0 0;' }, '✕ Remove');
+        rm.addEventListener('click', function () { try { URL.revokeObjectURL(url); } catch (e) {} clearMedia(); });
+        mediaPreview.appendChild(rm);
+        mediaPreview.style.display = 'block';
+        capIn.style.display = 'block';
+      });
+      modal.appendChild(pickBtn);
+      modal.appendChild(fileIn);
+      modal.appendChild(mediaPreview);
+      modal.appendChild(capIn);
+      modal.appendChild(mediaMsg);
+
       var actions = Dom.el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:14px;' });
       var cancel = Dom.el('button', { style: 'background:white;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;' }, 'Cancel');
       cancel.addEventListener('click', function () { overlay.remove(); });
       var save = Dom.el('button', { style: 'background:' + t.color + ';color:white;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Log it');
+      var logSaved = false;
       save.addEventListener('click', function () {
         // "Other" means the typed text IS the detail — don't file it as the
         // literal word "Other".
         var detail = detailsIn.value.trim();
         if (detail === 'Other') detail = otherIn.value.trim();
+        // Fold the nap window / snack time-of-day into the detail string (the care
+        // log stores one detail field, which rolls up to the parent's Today feed).
+        function _t12(v) { if (!v) return ''; var p = String(v).split(':'); var h = parseInt(p[0], 10); if (isNaN(h)) return ''; var ap = h < 12 ? 'AM' : 'PM'; var h12 = h % 12; if (h12 === 0) h12 = 12; return h12 + ':' + p[1] + ' ' + ap; }
+        if (t.type === 'nap' && napAsleep && (napAsleep.value || napWoke.value)) {
+          var win = (_t12(napAsleep.value) || '?') + ' → ' + (_t12(napWoke.value) || '?');
+          detail = detail ? (detail + ' · ' + win) : win;
+        }
+        if (t.type === 'snack' && snackWhen) {
+          detail = detail ? (snackWhen + ' snack · ' + detail) : (snackWhen + ' snack');
+        }
         var body = { child_id: childId, log_type: t.type, details: detail || null, notes: notesIn.value.trim() || null };
         if (t.type === 'bottle' && amtIn && amtIn.value) body.amount_oz = parseFloat(amtIn.value);
+        // Timestamps: nap uses its asleep→woke inputs (occurred/ended); everything
+        // else uses the optional "When?" field so a late-logged moment lands at the
+        // real time, not when the educator got round to tapping it.
+        if (t.type === 'nap') {
+          var aIso = _careIsoAt(napAsleep && napAsleep.value);
+          var wIso = _careIsoAt(napWoke && napWoke.value);
+          if (aIso) body.occurred_at = aIso;
+          if (wIso) body.ended_at = wIso;
+        } else if (whenIn && whenIn.value) {
+          var whenIso = _careIsoAt(whenIn.value);
+          if (whenIso) body.occurred_at = whenIso;
+        }
         save.disabled = true; save.textContent = 'Saving…';
-        Api.post('/care/logs', body).then(function () { overlay.remove(); loadRecent(); }).catch(function (e) {
-          alert('Failed: ' + e.message); save.disabled = false; save.textContent = 'Log it';
+        // `logSaved` makes "Retry upload" retry ONLY the upload. Without it, a
+        // failed upload followed by a retry would POST /care/logs a second time and
+        // file the same moment twice on the parent's timeline.
+        (logSaved ? Promise.resolve() : Api.post('/care/logs', body).then(function () { logSaved = true; })).then(function () {
+          // The care log is saved. If media was attached, upload it as a second
+          // step so a failed/slow upload can never lose the log itself — we report
+          // the upload separately rather than rolling anything back.
+          if (!mediaFile) { overlay.remove(); loadRecent(); return null; }
+          save.textContent = 'Uploading…';
+          mediaMsg.style.color = '#64748B';
+          mediaMsg.textContent = 'Uploading ' + (/^video\//.test(mediaFile.type) ? 'video' : 'photo') + '…';
+          var fd = new FormData();
+          fd.append('photo', mediaFile);
+          // Caption priority: the dedicated description, else the note, else the
+          // picked detail — the parent should never see an untitled photo.
+          fd.append('caption', capIn.value.trim() || notesIn.value.trim() || detail || (t.label + ' moment'));
+          fd.append('child_ids', JSON.stringify([childId]));
+          return fetch(_careApiBase() + '/photos', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + _careToken() },
+            body: fd,
+          }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (d) {
+              if (!r.ok) throw new Error((d && d.message) || ('Upload failed (' + r.status + ')'));
+              return d;
+            });
+          }).then(function (d) {
+            overlay.remove(); loadRecent();
+            if (KT.toast) {
+              KT.toast('📸', 'Moment shared', (d && d.media_type === 'video' ? 'The video' : 'The photo') + ' is now in the parent’s Photos & video.', 'success');
+            }
+          });
+        }).catch(function (e) {
+          // Distinguish "the log didn't save" from "the log saved, the upload didn't".
+          mediaMsg.style.color = '#DC2626';
+          mediaMsg.textContent = (e && e.message) || 'Something went wrong.';
+          save.disabled = false; save.textContent = mediaFile ? 'Retry upload' : 'Log it';
         });
       });
       actions.appendChild(cancel); actions.appendChild(save);
@@ -404,7 +649,7 @@
 
     var body = Dom.el('div', { style: 'margin-top:18px;' });
     wrap.appendChild(body);
-    body.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    body.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     Api.get('/care/portfolio/' + childId).then(function (data) {
       Dom.clear(body);
@@ -436,7 +681,7 @@
       var feed = Dom.el('div', { style: 'background:white;border-radius:14px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.05);' });
       feed.appendChild(Dom.el('h3', { style: 'margin:0 0 14px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Observation timeline'));
       if (!data.observations.length) {
-        feed.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'No observations recorded yet.'));
+        feed.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'No observations recorded yet.'));
       } else {
         data.observations.forEach(function (o) {
           var item = Dom.el('div', { style: 'border-left:3px solid #7C3AED;padding:6px 14px;margin-bottom:14px;background:#F8FAFC;border-radius:0 10px 10px 0;' });
@@ -466,7 +711,7 @@
     wrap.appendChild(hero);
 
     var body = Dom.el('div'); wrap.appendChild(body);
-    body.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    body.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     Promise.all([
       Api.get('/care/milestones/catalog'),
@@ -552,7 +797,7 @@
 
     var listWrap = Dom.el('div', { 'data-kt-list': '1', style: cardStyle + 'overflow:hidden;margin-top:14px;' });
     wrap.appendChild(listWrap);
-    listWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    listWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     var allTours = [];
     var activeFilter = '';
@@ -631,7 +876,7 @@
     if (t.preferred_start_date) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#1F6080;margin-top:2px;font-weight:600;' }, '📅 Wants to start: ' + fmtDateOnly(t.preferred_start_date)));
     if (t.notes) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#374151;margin-top:4px;' }, '“' + t.notes + '”'));
     row.appendChild(body);
-    var sel = Dom.el('select', { style: 'padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;font-size:12px;background:white;' });
+    var sel = Dom.el('select', { style: 'width:130px;min-width:0;flex-shrink:0;padding:6px 8px;border:1px solid #D1D5DB;border-radius:8px;font-size:12px;background:white;' });
     ['requested','confirmed','completed','no_show','cancelled'].forEach(function (s) {
       var opt = Dom.el('option', { value: s }, s.replace('_',' '));
       if (s === t.status) opt.selected = true;

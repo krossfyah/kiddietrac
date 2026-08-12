@@ -280,6 +280,15 @@ select {
   min-height: 0 !important;
   background-position: right 8px center !important;
 }
+/* The 26px right padding above is reserved for the dropdown arrow, and it is
+   !important — so it silently eats 18px of content box inside ANY select that was
+   authored with its own fixed width/max-width for a smaller padding. That is what
+   clipped the parent top bar's language picker to "Englis". Those are fixed at
+   source where found; this is the safety net for the rest: a select that still runs
+   out of room now ellipsises instead of hard-cutting a word mid-letter. */
+select {
+  text-overflow: ellipsis;
+}
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):focus,
 textarea:focus, select:focus {
   border-color: #1F6080 !important;

@@ -84,7 +84,7 @@
       sub: 'Everything in one place',
       primary: [
         { hash: 'today',              icon: '✨', label: 'Today',        sub: "Your child's day" },
-        { hash: 'photos',             icon: '📸', label: 'Photos' },
+        { hash: 'photos',             icon: '📸', label: 'Photos & video', sub: 'Shared by educators' },
         { hash: 'walks',              icon: '🚶', label: 'Walks',        sub: 'Live location' },
         { hash: 'awards',             icon: '🏆', label: 'Awards' },
         { hash: 'my-forms',           icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },

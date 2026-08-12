@@ -44,22 +44,29 @@
           <div style="font-size:36px;">${m.type === 'card' ? '💳' : '🏦'}</div>
           <div style="font-weight:700;color:#0F172A;font-size:16px;margin-top:8px;">${esc(m.brand ? m.brand.toUpperCase() : (m.bank_name || 'Bank account'))}</div>
           <div style="color:#475569;font-size:14px;">•••• ${esc(m.last4 || '****')}</div>
-          ${m.exp_month ? `<div style="color:#94A3B8;font-size:12px;margin-top:4px;">Expires ${String(m.exp_month).padStart(2, '0')}/${m.exp_year}</div>` : ''}
+          ${m.exp_month ? `<div style="color:#64748B;font-size:12px;margin-top:4px;">Expires ${String(m.exp_month).padStart(2, '0')}/${m.exp_year}</div>` : ''}
           ${m.nickname ? `<div style="color:#475569;font-size:13px;margin-top:6px;font-style:italic;">"${esc(m.nickname)}"</div>` : ''}
           <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
             ${!m.is_default ? `<button class="kt-btn kt-btn-primary" data-default="${m.id}" style="font-size:13px;">Set default</button>` : ''}
             <button class="kt-btn kt-btn-danger" data-rm="${m.id}" style="font-size:13px;">Remove</button>
-          </div></div>`).join('') || '<div class="kt-card" style="grid-column:1/-1;text-align:center;padding:60px;color:#94A3B8;">No payment methods yet.</div>'}
+          </div></div>`).join('') || '<div class="kt-card" style="grid-column:1/-1;text-align:center;padding:60px;color:#64748B;">No payment methods yet.</div>'}
       </div>
     </div>`;
-    document.getElementById('w-add-card').onclick = () => startWalletAddFlow('card');
-    document.getElementById('w-add-ach').onclick = () => startWalletAddFlow('acss_debit');
+    // Scope to `main`, don't reach into the document. renderWallet awaits
+    // /parent/wallet first, so a parent who navigates away mid-fetch leaves `main`
+    // detached — document.getElementById then returns null and the old code threw
+    // "Cannot set properties of null (setting 'onclick')", which surfaced to the
+    // parent as the "KiddieTrac had a problem" crash prompt.
+    const addCard = main.querySelector('#w-add-card');
+    const addAch = main.querySelector('#w-add-ach');
+    if (addCard) addCard.onclick = () => startWalletAddFlow('card');
+    if (addAch) addAch.onclick = () => startWalletAddFlow('acss_debit');
     main.querySelectorAll('button[data-default]').forEach(b => b.onclick = async () => {
       await Api.post(`/parent/wallet/${b.dataset.default}/default`, {});
       renderWallet(main);
     });
     main.querySelectorAll('button[data-rm]').forEach(b => b.onclick = async () => {
-      if (!confirm('Remove this payment method?')) return;
+      if (!await KT.confirm('Remove this payment method?')) return;
       await Api.delete(`/parent/wallet/${b.dataset.rm}`);
       renderWallet(main);
     });
@@ -120,38 +127,134 @@
   }
 
   // ============================ Ledger ============================
+  function ldIsMobile() { return window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native'); }
+  function ldTypeMeta(t) {
+    return t === 'payment' ? { icon: '💳', bg: '#ECFDF5', fg: '#047857' }
+      : t === 'refund' ? { icon: '↩️', bg: '#FEF3C7', fg: '#B45309' }
+      : { icon: '🧾', bg: '#EFF6FF', fg: '#1D4ED8' };
+  }
+  function ldTxnCard(row) {
+    var m = ldTypeMeta(row.type);
+    var isInv = row.type === 'invoice' && row.invoice_id;
+    var amt = row.debit > 0 ? '−' + fmtMoney(row.debit) : (row.credit > 0 ? '+' + fmtMoney(row.credit) : fmtMoney(0));
+    var amtColor = row.debit > 0 ? '#B91C1C' : (row.credit > 0 ? '#047857' : '#64748B');
+    var late = row.days_late > 0 ? ' <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:10px;background:#FEE2E2;color:#B91C1C;font-size:10.5px;font-weight:800;white-space:nowrap;">' + row.days_late + ' day' + (row.days_late === 1 ? '' : 's') + ' late</span>' : '';
+    // #34 — invoice rows carry the three per-invoice actions as a PURE last-child
+    // bar so kt-row-actions collapses them into the standard ⋮ kebab.
+    var actionBar = isInv ? '<div style="flex:0 0 auto;display:flex;align-items:center;">' + ldActionButtons(row.invoice_id) + '</div>' : '';
+    return '<div class="kt-ldx" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EDF1F6;border-radius:14px;padding:12px 10px 12px 13px;margin-bottom:9px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
+      + '<span style="flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:' + m.bg + ';color:' + m.fg + ';display:flex;align-items:center;justify-content:center;font-size:19px;">' + m.icon + '</span>'
+      + '<div style="flex:1;min-width:0;">'
+      +   '<div style="font-weight:700;font-size:14px;color:#0F172A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(row.description) + '</div>'
+      +   '<div style="font-size:11.5px;color:#94A3B8;margin-top:2px;">' + esc(fmtDate(row.date)) + late + '</div>'
+      + '</div>'
+      + '<div style="flex:0 0 auto;text-align:right;min-width:92px;">'
+      +   '<div style="font-weight:800;font-size:14.5px;color:' + amtColor + ';white-space:nowrap;font-variant-numeric:tabular-nums;">' + amt + '</div>'
+      +   '<div style="font-size:11px;color:#94A3B8;margin-top:2px;white-space:nowrap;font-variant-numeric:tabular-nums;">bal ' + fmtMoney(row.running_balance) + '</div>'
+      + '</div>'
+      + actionBar
+      + '</div>';
+  }
+
+  // #34 — the three per-invoice actions, rendered as a PURE bar of action
+  // controls in the row's last cell. The global kt-row-actions.js engine then
+  // collapses them into the app's standard ⋮ kebab (View / Download / Email) on
+  // desktop — identical to every other list — and shows them inline on phones.
+  function ldActionButtons(invId) {
+    var b = 'class="kt-act-icon" style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;margin-left:4px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;color:#475569;cursor:pointer;font-size:15px;line-height:1;padding:0;vertical-align:middle;"';
+    return '<button type="button" ' + b + ' data-inv-view="' + invId + '" title="View invoice" aria-label="View invoice">👁️</button>'
+      + '<button type="button" ' + b + ' data-inv-dl="' + invId + '" title="Download PDF" aria-label="Download PDF">⬇️</button>'
+      + '<button type="button" ' + b + ' data-inv-email="' + invId + '" title="Email to me" aria-label="Email invoice to me">✉️</button>';
+  }
+
+  async function ldEmailInvoice(invId) {
+    try {
+      var r = await Api.post('/parent/invoices/' + invId + '/email', {});
+      if (window.KT && KT.toast) KT.toast('✉️', 'Invoice emailed', 'Sent to ' + (r.email || 'your email') + '.', '#16A34A');
+    } catch (e) {
+      if (window.KT && KT.toast) KT.toast('⚠️', 'Could not email invoice', (e && e.message) || 'Please try again.', '#DC2626');
+    }
+  }
   async function renderLedger(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading ledger…</div>';
     const r = await Api.get('/parent/ledger').catch(() => null);
-    if (!r) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No ledger available.</div>'; return; }
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <div class="kt-page-hero">
-        <h2>📒 Account ledger</h2>
-        <p>${esc(r.family.family_name)} · all invoices, payments, and refunds with a running balance.</p>
-        <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="ld-pdf">⤓ Download statement PDF</button></div>
+    if (!r) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No ledger available.</div>'; return; }
+    const rows = r.data || [];
+    const bal = Number(r.current_balance || 0);
+    const owed = bal > 0.005, credit = bal < -0.005;
+    const balGrad = owed ? '#E11D48,#B91C1C' : (credit ? '#7C3AED,#5B21B6' : '#0FA3B1,#0E7C90');
+    const balLabel = owed ? 'Balance due' : (credit ? 'Account credit' : 'Account balance');
+    const balSub = owed
+      ? (r.days_overdue > 0 ? (r.days_overdue + ' day' + (r.days_overdue === 1 ? '' : 's') + ' overdue') : 'Please settle when you can')
+      : (credit ? 'A credit is on your account' : 'You\'re all settled — thank you! 🎉');
+
+    const txnHtml = rows.length
+      ? (ldIsMobile()
+          ? '<div data-kt-list="1">' + rows.map(ldTxnCard).join('') + '</div>'
+          : `<div class="kt-card" style="padding:0;"><table style="width:100%;border-collapse:collapse;table-layout:auto;">
+              <thead><tr>
+                <th style="text-align:left;white-space:nowrap;">Date</th>
+                <th style="text-align:left;">Type</th>
+                <th style="text-align:left;">Description</th>
+                <th style="text-align:right;white-space:nowrap;">Debit</th>
+                <th style="text-align:right;white-space:nowrap;">Credit</th>
+                <th style="text-align:right;white-space:nowrap;">Balance</th>
+                <th style="width:1%;"></th>
+              </tr></thead>
+              <tbody>${rows.map(row => { const _inv = row.type === 'invoice' && row.invoice_id; return `<tr style="vertical-align:middle;">
+                <td style="white-space:nowrap;vertical-align:middle;">${fmtDate(row.date)}</td>
+                <td style="text-transform:capitalize;vertical-align:middle;">${esc(row.type)}</td>
+                <td style="vertical-align:middle;">${esc(row.description)}${row.days_late > 0 ? ' <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:#FEE2E2;color:#B91C1C;font-size:11px;font-weight:700;white-space:nowrap;">' + row.days_late + ' day' + (row.days_late === 1 ? '' : 's') + ' late</span>' : ''}</td>
+                <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;vertical-align:middle;color:${row.debit > 0 ? '#B91C1C' : '#94A3B8'};">${row.debit ? fmtMoney(row.debit) : ''}</td>
+                <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;vertical-align:middle;color:${row.credit > 0 ? '#047857' : '#94A3B8'};">${row.credit ? fmtMoney(row.credit) : ''}</td>
+                <td style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;vertical-align:middle;font-weight:700;">${fmtMoney(row.running_balance)}</td>
+                <td style="white-space:nowrap;vertical-align:middle;text-align:right;padding-right:10px;">${_inv ? ldActionButtons(row.invoice_id) : ''}</td>
+              </tr>`; }).join('')}</tbody>
+            </table></div>`)
+      : '<div style="text-align:center;padding:34px 16px;color:#64748B;background:#fff;border:1px dashed #CBD5E1;border-radius:14px;">No transactions yet.</div>';
+
+    main.innerHTML = `<div style="padding:18px 14px;max-width:1000px;margin:0 auto;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 2px 12px;">
+        <div><h2 style="margin:0;font-size:20px;color:#0F172A;">📒 Account ledger</h2>
+          <div style="font-size:12.5px;color:#64748B;margin-top:2px;">${esc(r.family.family_name)}</div></div>
+        <button id="ld-pdf" style="flex:0 0 auto;background:#fff;border:1px solid #E2E8F0;color:#1F6080;font-weight:700;font-size:13px;border-radius:10px;padding:9px 15px;cursor:pointer;">⤓ Statement PDF</button>
       </div>
-      <div class="kt-kpi-grid">
-        <div class="kt-kpi ${r.current_balance > 0 ? 'kt-kpi-warning' : 'kt-kpi-success'}"><div class="kt-kpi-label">Current balance</div><div class="kt-kpi-value">${fmtMoney(r.current_balance)}</div></div>
+
+      <div style="background:linear-gradient(135deg,${balGrad});color:#fff;border-radius:18px;padding:20px;margin-bottom:14px;box-shadow:0 12px 28px -14px rgba(0,0,0,.45);">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.9px;opacity:.9;text-transform:uppercase;">${balLabel}</div>
+        <div style="font-size:36px;font-weight:900;line-height:1;margin-top:7px;">${fmtMoney(Math.abs(bal))}</div>
+        <div style="font-size:12.5px;opacity:.92;margin-top:7px;">${esc(balSub)}</div>
+      </div>
+
+      <div class="kt-kpi-grid" style="margin-bottom:14px;">
         <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Total invoiced</div><div class="kt-kpi-value">${fmtMoney(r.total_invoiced)}</div></div>
         <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Total paid</div><div class="kt-kpi-value">${fmtMoney(r.total_paid)}</div></div>
         <div class="kt-kpi kt-kpi-danger"><div class="kt-kpi-label">Total refunded</div><div class="kt-kpi-value">${fmtMoney(r.total_refunded)}</div></div>
+        <div class="kt-kpi ${r.days_overdue > 0 ? 'kt-kpi-danger' : 'kt-kpi-success'}"><div class="kt-kpi-label">Payment status</div><div class="kt-kpi-value">${r.days_overdue > 0 ? r.days_overdue + (r.days_overdue === 1 ? ' day late' : ' days late') : 'On time'}</div></div>
       </div>
-      <div class="kt-card">
-        <table>
-          <thead><tr><th>Date</th><th>Type</th><th>Description</th><th style="text-align:right;">Debit</th><th style="text-align:right;">Credit</th><th style="text-align:right;">Balance</th></tr></thead>
-          <tbody>${(r.data || []).map(row => `<tr>
-            <td>${fmtDate(row.date)}</td>
-            <td style="text-transform:capitalize;">${esc(row.type)}</td>
-            <td>${esc(row.description)}</td>
-            <td style="text-align:right;color:${row.debit > 0 ? '#B91C1C' : '#94A3B8'};">${row.debit ? fmtMoney(row.debit) : ''}</td>
-            <td style="text-align:right;color:${row.credit > 0 ? '#047857' : '#94A3B8'};">${row.credit ? fmtMoney(row.credit) : ''}</td>
-            <td style="text-align:right;font-weight:700;">${fmtMoney(row.running_balance)}</td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#94A3B8;">No transactions yet.</td></tr>'}</tbody>
-        </table>
-      </div>
+
+      <div style="font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin:2px 2px 10px;">Transactions</div>
+      ${txnHtml}
     </div>`;
-    document.getElementById('ld-pdf').onclick = () => downloadAuthed('/parent/ledger/pdf', 'statement-' + new Date().toISOString().slice(0, 10) + '.pdf');
+
+    // #34 — per-invoice actions (View / Download PDF / Email to me). One delegated
+    // handler so it fires whether the button is clicked inline (mobile) OR
+    // forwarded by the kt-row-actions kebab menu (desktop) via el.click().
+    main.addEventListener('click', (e) => {
+      const v = e.target.closest('[data-inv-view]');
+      if (v) { e.preventDefault(); const id = v.getAttribute('data-inv-view'); if (window.KT && KT.openInvoiceById) KT.openInvoiceById(id); return; }
+      const dl = e.target.closest('[data-inv-dl]');
+      if (dl) { e.preventDefault(); const id = dl.getAttribute('data-inv-dl'); downloadAuthed('/parent/invoices/' + id + '/pdf', 'Invoice-' + id + '.pdf'); return; }
+      const em = e.target.closest('[data-inv-email]');
+      if (em) { e.preventDefault(); ldEmailInvoice(em.getAttribute('data-inv-email')); return; }
+    });
+    // Collapse the per-row action buttons into the app's standard ⋮ kebab now
+    // (don't wait for the 4s sweep bus) so it's there on first paint.
+    try { if (window.KT && KT.sweepRowActions) KT.sweepRowActions(); } catch (e) {}
+
+    const _ldPdf = main.querySelector('#ld-pdf');
+    if (_ldPdf) _ldPdf.onclick = () => downloadAuthed('/parent/ledger/pdf', 'statement-' + new Date().toISOString().slice(0, 10) + '.pdf');
   }
 
   // ============================ Refunds (director) ============================
@@ -168,7 +271,7 @@
           <option value="">Loading recent payments…</option>
         </select>
         <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:12px;color:#94A3B8;">or enter a Payment ID directly:</span>
+          <span style="font-size:12px;color:#64748B;">or enter a Payment ID directly:</span>
           <input id="rf-pid" type="number" placeholder="e.g. 1234" style="width:150px;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
           <button id="rf-load" class="kt-btn kt-btn-primary">Load</button>
         </div>
@@ -188,7 +291,8 @@
         sel.onchange = () => { const pid = +sel.value; if (pid) { document.getElementById('rf-pid').value = pid; loadPayment(pid); } };
       } catch (e) { sel.innerHTML = '<option value="">Could not load payments — enter an ID below</option>'; }
     })();
-    document.getElementById('rf-load').onclick = () => loadPayment(+document.getElementById('rf-pid').value);
+    const _rfLoad = main.querySelector('#rf-load');
+    if (_rfLoad) _rfLoad.onclick = () => { const el = main.querySelector('#rf-pid'); if (el) loadPayment(+el.value); };
     async function loadPayment(pid) {
       if (!pid) return;
       const r = await Api.get(`/refunds/payment/${pid}`);
@@ -204,7 +308,7 @@
           <td>${fmtDate(rf.refunded_at)}</td>
           <td>${fmtMoney(rf.amount)}</td>
           <td>${esc(rf.reason || '')}</td>
-          <td><span class="kt-pill ${rf.status === 'succeeded' ? 'kt-pill-success' : rf.status === 'failed' ? 'kt-pill-danger' : 'kt-pill-warning'}">${esc(rf.status)}</span></td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:24px;color:#94A3B8;">No prior refunds.</td></tr>'}</tbody></table>
+          <td><span class="kt-pill ${rf.status === 'succeeded' ? 'kt-pill-success' : rf.status === 'failed' ? 'kt-pill-danger' : 'kt-pill-warning'}">${esc(rf.status)}</span></td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:24px;color:#64748B;">No prior refunds.</td></tr>'}</tbody></table>
         <div style="max-width:440px;">
         <h3 style="margin-top:18px;font-size:15px;color:#0F172A;">Issue new refund</h3>
         <label style="font-size:13px;font-weight:600;">Amount</label>
@@ -223,7 +327,8 @@
         <div id="rf-out" style="margin-top:10px;"></div>
         </div>
       `;
-      document.getElementById('rf-go').onclick = async () => {
+      const _rfGo = main.querySelector('#rf-go');
+      if (_rfGo) _rfGo.onclick = async () => {
         const amt = parseFloat(document.getElementById('rf-amt').value);
         if (!amt) return (window.KT && window.KT.toast) ? KT.toast('Amount required', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Amount required') ? 'success' : 'info') : alert('Amount required');
         try {
@@ -254,16 +359,16 @@
         <div class="kt-card">
           <div class="kt-card-header"><h3 class="kt-card-title">⭐ Favourites</h3></div>
           ${(r.favorites || []).map(f => `<div style="padding:10px 0;border-bottom:1px solid #F1F5F9;display:flex;justify-content:space-between;align-items:center;">
-            <div><strong>${esc(f.name)}</strong><div style="color:#94A3B8;font-size:12px;">${esc(r.report_types[f.report_type] || f.report_type)}</div></div>
+            <div><strong>${esc(f.name)}</strong><div style="color:#64748B;font-size:12px;">${esc(r.report_types[f.report_type] || f.report_type)}</div></div>
             <button class="kt-btn kt-btn-primary" data-run="${f.id}" style="font-size:12px;padding:6px 12px;">Run</button>
-          </div>`).join('') || '<div style="color:#94A3B8;">No favourites yet.</div>'}
+          </div>`).join('') || '<div style="color:#64748B;">No favourites yet.</div>'}
         </div>
         <div class="kt-card">
           <div class="kt-card-header"><h3 class="kt-card-title">🕘 Recently run</h3></div>
           ${(r.recent || []).map(f => `<div style="padding:10px 0;border-bottom:1px solid #F1F5F9;display:flex;justify-content:space-between;align-items:center;">
-            <div><strong>${esc(f.name)}</strong><div style="color:#94A3B8;font-size:12px;">last run ${fmtDate(f.last_run_at)}</div></div>
+            <div><strong>${esc(f.name)}</strong><div style="color:#64748B;font-size:12px;">last run ${fmtDate(f.last_run_at)}</div></div>
             <button class="kt-btn kt-btn-primary" data-run="${f.id}" style="font-size:12px;padding:6px 12px;">Run</button>
-          </div>`).join('') || '<div style="color:#94A3B8;">No reports run yet.</div>'}
+          </div>`).join('') || '<div style="color:#64748B;">No reports run yet.</div>'}
         </div>
       </div>
       <div class="kt-card">
@@ -278,14 +383,15 @@
             <td>
               <button class="kt-btn kt-btn-primary" data-run="${f.id}" style="font-size:12px;padding:6px 12px;">Run</button>
               <button class="kt-btn kt-btn-danger" data-del="${f.id}" style="font-size:12px;padding:6px 12px;margin-left:4px;">Delete</button>
-            </td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:#94A3B8;">No reports yet.</td></tr>'}</tbody>
+            </td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:#64748B;">No reports yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
-    document.getElementById('rep-new').onclick = () => openReportBuilder(r.report_types);
+    const _repNew = main.querySelector('#rep-new');
+    if (_repNew) _repNew.onclick = () => openReportBuilder(r.report_types);
     main.querySelectorAll('button[data-run]').forEach(b => b.onclick = () => runReport(+b.dataset.run, r.report_types));
     main.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
-      if (!confirm('Delete this saved report?')) return;
+      if (!await KT.confirm('Delete this saved report?')) return;
       await Api.delete(`/reports/${b.dataset.del}`);
       renderReports(main);
     });
@@ -373,10 +479,11 @@
                   return `<button data-vid="${v.id}" data-rx="${rx}" style="background:#F1F5F9;border:0;padding:6px 10px;border-radius:14px;cursor:pointer;font-size:15px;">${emoji} ${reacts[rx] || 0}</button>`;
                 }).join('')}
               </div></div></div>`;
-        }).join('') || '<div class="kt-card" style="grid-column:1/-1;text-align:center;padding:60px;color:#94A3B8;">No videos yet.</div>'}
+        }).join('') || '<div class="kt-card" style="grid-column:1/-1;text-align:center;padding:60px;color:#64748B;">No videos yet.</div>'}
       </div>
     </div>`;
-    document.getElementById('v-upload').onclick = () => openVideoUpload();
+    const _vUp = main.querySelector('#v-upload');
+    if (_vUp) _vUp.onclick = () => openVideoUpload();
     main.querySelectorAll('button[data-vid][data-rx]').forEach(b => b.onclick = async () => {
       await Api.post('/reactions', { target_type: 'video', target_id: +b.dataset.vid, reaction: b.dataset.rx });
       renderVideoFeed(main);
@@ -448,7 +555,7 @@
           <td>${esc(c.centre_name)}</td>
           <td>${c.overdue > 0 ? `<span class="kt-pill kt-pill-danger">${c.overdue}</span>` : '—'}</td>
           <td>${c.due_soon > 0 ? `<span class="kt-pill kt-pill-warning">${c.due_soon}</span>` : '—'}</td>
-        </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:#94A3B8;">All children up to date.</td></tr>'}</tbody></table>
+        </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:#64748B;">All children up to date.</td></tr>'}</tbody></table>
       </div>
       <div class="kt-card">
         <div class="kt-card-header"><h3 class="kt-card-title">Schedule defaults</h3></div>
@@ -468,7 +575,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading CACFP…</div>';
     const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
-    if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No centres.</div>'; return; }
+    if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No centres.</div>'; return; }
     const centreId = centres[0].id;
     const date = new Date().toISOString().slice(0, 10);
     const month = date.slice(0, 7);
@@ -495,10 +602,10 @@
             const cell = (mt) => `<td><input type="checkbox" data-meal="${mt}" data-child="${r.child_id}" ${r[mt] ? 'checked' : ''} style="width:22px;height:22px;cursor:pointer;"></td>`;
             return `<tr>
               <td><strong>${esc(r.child_name)}</strong></td>
-              <td>${r.cacfp_tier ? `<span class="kt-pill kt-pill-info">${esc(r.cacfp_tier)}</span>` : '<span style="color:#94A3B8;">unset</span>'}</td>
+              <td>${r.cacfp_tier ? `<span class="kt-pill kt-pill-info">${esc(r.cacfp_tier)}</span>` : '<span style="color:#64748B;">unset</span>'}</td>
               ${cell('breakfast')}${cell('morning_snack')}${cell('lunch')}${cell('afternoon_snack')}${cell('dinner')}
             </tr>`;
-          }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:#94A3B8;">No children enrolled.</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748B;">No children enrolled.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -522,14 +629,29 @@
         <p>Pick weekly, biweekly, or monthly billing per family.</p>
       </div>
       <div class="kt-card">
-        <label style="font-size:13px;font-weight:600;">Family ID</label>
-        <input id="bs-fid" type="number" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-        <button id="bs-load" class="kt-btn kt-btn-primary" style="margin-top:10px;">Load</button>
+        <label style="font-size:13px;font-weight:600;">Family</label>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;align-items:center;">
+          <select id="bs-fid" style="flex:1;min-width:240px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;"><option value="">Loading families…</option></select>
+          <button id="bs-load" class="kt-btn kt-btn-primary">Load</button>
+        </div>
         <div id="bs-detail" style="margin-top:20px;"></div>
       </div>
     </div>`;
-    document.getElementById('bs-load').onclick = async () => {
+    // Pick a family by NAME (no more typing a raw ID).
+    try {
+      const fr = await Api.get('/admin/families');
+      const fams = (fr && (fr.families || fr.data)) || [];
+      const sel = document.getElementById('bs-fid');
+      sel.innerHTML = '<option value="">— Select a family —</option>' +
+        fams.map(f => `<option value="${f.id}">${esc(f.family_name || ('Family #' + f.id))}</option>`).join('');
+      sel.onchange = () => { if (+sel.value) document.getElementById('bs-load').click(); };
+    } catch (e) {
+      document.getElementById('bs-fid').innerHTML = '<option value="">Could not load families</option>';
+    }
+    const _bsLoad = main.querySelector('#bs-load');
+    if (_bsLoad) _bsLoad.onclick = async () => {
       const fid = +document.getElementById('bs-fid').value;
+      if (!fid) { document.getElementById('bs-detail').innerHTML = '<div style="color:#B91C1C;font-size:13px;">Choose a family first.</div>'; return; }
       const r = await Api.get(`/billing/schedule/${fid}`);
       const s = r.data || { frequency: 'monthly' };
       document.getElementById('bs-detail').innerHTML = `
@@ -547,7 +669,8 @@
         <button id="bs-save" class="kt-btn kt-btn-primary" style="margin-top:14px;">Save schedule</button>
         ${s.frequency ? `<button id="bs-off" class="kt-btn kt-btn-danger" style="margin-top:14px;margin-left:8px;">Disable</button>` : ''}
       `;
-      document.getElementById('bs-save').onclick = async () => {
+      const _bsSave = main.querySelector('#bs-save');
+      if (_bsSave) _bsSave.onclick = async () => {
         await Api.post('/billing/schedule', {
           family_id: fid,
           frequency: document.getElementById('bs-freq').value,

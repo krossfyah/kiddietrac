@@ -41,6 +41,12 @@
   }
 
   function attach(container) {
+    // Opt-out, mirroring kt-row-actions' data-kt-no-kebab. Some lists want ONLY the
+    // shared bottom "N records" bar (kt-table-export keys off the same
+    // data-kt-list) without a search box + A–Z sort bolted on top — e.g. the
+    // parent's Today timeline and Recent observations, which are short, already
+    // chronological, and read as a story rather than a searchable dataset.
+    if (container.hasAttribute('data-kt-no-controls')) return;
     if (container.dataset.ktListified) return;
     var kids = elChildren(container);
     if (kids.length < 2) return; // not worth it (or empty-state) — retried next sweep
@@ -52,7 +58,7 @@
 
     var bar = document.createElement('div');
     bar.className = 'kt-list-controls';
-    bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 12px;flex-wrap:wrap;';
+    bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0 12px;flex-wrap:wrap;';
 
     var left = document.createElement('div');
     left.style.cssText = 'position:relative;flex:1;min-width:220px;max-width:360px;';
@@ -138,7 +144,7 @@
     document.querySelectorAll('[data-kt-list]').forEach(attach);
   }
   window.addEventListener('hashchange', function () { setTimeout(sweep, 350); });
-  setInterval(sweep, 2000);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 4000);
   setTimeout(sweep, 700);
 
   window.KT = window.KT || {};

@@ -36,13 +36,17 @@
     return hh + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
   }
   function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
-  function greetWord() {
+  // Time-of-day greeting WITH its icon. Deliberately the same words + emoji as
+  // kt-topbar.js's greetEmoji() (the admin/director bar) — parents and educators
+  // were getting the bare words while admins got "🌆 Good evening".
+  function greetParts() {
     var h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    if (h < 22) return 'Good evening';
-    return 'Good night';
+    if (h < 12) return { g: 'Good morning', e: '🌅' };
+    if (h < 17) return { g: 'Good afternoon', e: '☀️' };
+    if (h < 22) return { g: 'Good evening', e: '🌆' };
+    return { g: 'Good night', e: '🌙' };
   }
+  function greetWord() { var p = greetParts(); return p.e + ' ' + p.g; }
   function wxEmoji(c) {
     if (c === 0) return '☀️'; if (c <= 2) return '🌤'; if (c === 3) return '☁️';
     if (c === 45 || c === 48) return '🌫'; if (c >= 51 && c <= 67) return '🌧';
@@ -125,7 +129,14 @@
       // Unread badge on the Messages icon — same look as the super-admin bar.
       '.kt-pc-badge{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;',
       '  background:#EF4444;color:#fff;font-size:9.5px;font-weight:800;line-height:15px;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.8);}',
-      '.kt-pc-lang{border:1px solid rgba(15,23,42,.10);border-radius:10px;background:#fff;padding:7px 8px;font-size:12px;font-weight:600;color:#334155;cursor:pointer;max-width:118px;box-shadow:0 1px 2px rgba(16,40,64,.05);}',
+      // The language picker sizes itself to its widest option — never cap it.
+      // kt-polish-v22.css forces `padding:5px 26px 5px 10px !important` on EVERY
+      // select (26px of right padding reserved for a custom arrow this select does
+      // not use). That stole 18px of content box inside the old hard
+      // `max-width:118px`, which is what clipped "English" to "Englis". We win the
+      // padding back with !important and drop the cap, so the native arrow gets its
+      // own intrinsic space and no language can ever clip again.
+      '.kt-pc-lang{border:1px solid rgba(15,23,42,.10);border-radius:10px;background:#fff;padding:5px 8px 5px 10px !important;font-size:12px;font-weight:600;color:#334155;cursor:pointer;max-width:none;box-shadow:0 1px 2px rgba(16,40,64,.05);}',
       '.kt-pc-wx{font-size:12.5px;font-weight:600;color:#475569;white-space:nowrap;}',
       '.kt-pc-date{font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;}',
       '.kt-pc-clock{font-size:13px;font-weight:800;color:#0F172A;white-space:nowrap;background:#fff;padding:5px 11px;border-radius:9px;border:1px solid rgba(15,23,42,.08);box-shadow:0 1px 3px rgba(16,40,64,.12);}',
@@ -247,7 +258,12 @@
         wrap.appendChild(iconBtn('🔔', 'Inbox', function () { location.hash = '#notifications'; }));
       } else {
         wrap.appendChild(iconBtn('💬', 'Messages', function () { location.hash = msgHash; }, 'kt-pc-msg-badge'));
+        // Team messages (staff-to-staff DM) — educators + home visitors, NOT parents.
+        if (role !== 'guardian') wrap.appendChild(iconBtn('👥', 'Team messages', function () { location.hash = '#team-messages'; }, 'kt-pc-team-badge'));
         wrap.appendChild(iconBtn('📣', 'Announcements', function () { location.hash = '#announcements'; }));
+        // Notification bell for educators + home visitors (their role-relevant
+        // inbox). Parents keep just Messages/Announcements.
+        if (role !== 'guardian') wrap.appendChild(iconBtn('🔔', 'Notifications', function () { location.hash = '#notifications'; }, 'kt-pc-notif-badge'));
       }
       wrap.appendChild(iconBtn('⚙️', 'Settings', function () { location.hash = '#settings'; }));
       wrap.appendChild(iconBtn('🚪', 'Sign out', doSignOut));
@@ -347,11 +363,30 @@
       .catch(function () {});
   }
 
+  // Notifications unread badge (educators / home visitors). Cached count is
+  // re-applied on every bar re-render so the badge never flickers; the actual
+  // fetch is throttled to ~12s so the 2s boot loop doesn't hammer the API.
+  var _lastNotif = 0, _notifCount = 0;
+  function applyNotifBadge() {
+    var el = document.getElementById('kt-pc-notif-badge'); if (!el) return;
+    if (_notifCount > 0) { el.textContent = _notifCount > 99 ? '99+' : _notifCount; el.hidden = false; } else { el.hidden = true; }
+  }
+  function refreshNotif(force) {
+    applyNotifBadge();
+    if (! document.getElementById('kt-pc-notif-badge')) return;
+    var now = Date.now(); if (! force && now - _lastNotif < 12000) return; _lastNotif = now;
+    var t; try { t = store('kt_token'); } catch (e) {} if (! t) return;
+    fetch(API + '/notifications', { headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + t } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (! d) return; var rows = d.notifications || d.data || (Array.isArray(d) ? d : []); var n = 0; for (var i = 0; i < rows.length; i++) { if (! rows[i].read_at) n++; } _notifCount = n; applyNotifBadge(); })
+      .catch(function () {});
+  }
+
   var _booting = false;
   function boot() {
     if (_booting) return;
     _booting = true;
-    try { ensureGreeting(); ensureMobileMeta(); ensure(); placeBack(); refreshUnread(); } catch (e) {} finally { _booting = false; }
+    try { ensureGreeting(); ensureMobileMeta(); ensure(); placeBack(); refreshUnread(); refreshNotif(); } catch (e) {} finally { _booting = false; }
   }
   boot();
 

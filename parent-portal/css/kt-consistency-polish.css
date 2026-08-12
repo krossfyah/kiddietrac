@@ -354,16 +354,75 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
    the native checkbox in place — state, name and handlers are preserved. */
 input.kt-switchified {
   -webkit-appearance: none; appearance: none; box-sizing: border-box;
-  width: 42px; height: 24px; min-width: 42px; border-radius: 24px; background: #CBD5E1;
+  width: 48px; height: 28px; min-width: 48px; border-radius: 999px; background: #CBD5E1;
   position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0;
   margin: 0; border: none; display: inline-block; transition: background .16s ease;
 }
 input.kt-switchified::after {
-  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
   border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.35);
   transition: transform .16s ease;
 }
-input.kt-switchified:checked { background: #16A34A; }
-input.kt-switchified:checked::after { transform: translateX(18px); }
+input.kt-switchified:checked { background: #159FB4; }
+input.kt-switchified:checked::after { transform: translateX(20px); }
 input.kt-switchified:disabled { opacity: .5; cursor: not-allowed; }
 input.kt-switchified:focus-visible { outline: 2px solid #1F6080; outline-offset: 2px; }
+
+/* ── Tooltips now rendered by kt-tooltip-global.js (2026-08-05) ───────────────
+   The old ::after/::before bubbles below were position:absolute and got CLIPPED
+   by any overflow:hidden/auto ancestor (tables, rounded cards, scroll boxes) —
+   the "tooltip stuck inside its own window" bug. The global engine appends a
+   position:fixed bubble to <body> instead, so nothing can clip it. Disable the
+   pseudo-element bubbles here to avoid a clipped duplicate. */
+.kt-icon-tip[data-kttip]:hover::after,
+.kt-icon-tip[data-kttip]:hover::before,
+.kt-act-icon.kt-icon-tip[data-kttip]:hover::after,
+.kt-act-icon.kt-icon-tip[data-kttip]:hover::before,
+[data-kt-tooltip]:hover::after,
+[data-kt-tooltip]:hover::before {
+  content: none !important;
+  display: none !important;
+}
+
+/* ── Toggle switch sizing fix (2026-08-05) ───────────────────────────────────
+   On [data-kt-pretty] screens, `[data-kt-pretty] input[type=checkbox]{height:20px!important}`
+   won over .kt-switchified's 28px, squishing the track to 20px while the 22px knob
+   stayed — so the round knob bulged out of the pill (looked broken, desktop + mobile).
+   Force the switch geometry with equal/higher specificity + !important everywhere. */
+#appMain input.kt-switchified,
+[data-kt-pretty] input.kt-switchified,
+input.kt-switchified.kt-switchified {
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* ── Global zebra striping for every data table (2026-08-05) ──────────────────
+   Applies a subtle alternating-row tint to all #appMain tables. Rows that set
+   their OWN inline background (e.g. the Announcements list, which stripes itself
+   in JS, or selected/hover rows) still win — inline beats this rule — so nothing
+   gets double-styled; this only fills in tables that had no striping. */
+#appMain table > tbody > tr:nth-child(even) { background-color: #F1F5F9; }
+#appMain table > tbody > tr:nth-child(even):hover { background-color: #E5EDF4; }
+
+/* ── Parent · Today timeline density (2026-08-11) ─────────────────────────────
+   A normal day is 10–15 short events ("8:00 AM · Meal"). Rendered as one narrow
+   ribbon in a wide card, ~70% of the row was empty and the card ran the height of
+   the screen. On a wide viewport the rows now flow into two columns, halving the
+   card height and using the space that was already paid for. Below 1100px (and on
+   phones, where the mobile renderer is used anyway) it stays a single column. */
+@media (min-width: 1100px) {
+  #appMain .kt-today-timeline {
+    column-count: 2;
+    column-gap: 26px;
+    column-rule: 1px solid rgba(15, 23, 42, 0.07);
+  }
+  #appMain .kt-today-timeline > div {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+  }
+}

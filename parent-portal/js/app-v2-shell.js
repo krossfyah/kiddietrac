@@ -387,7 +387,7 @@
       { label: 'Menu', items: [
         { hash: 'home',               label: 'Home',       icon: '🏠' },
         { hash: 'today',              label: 'Today',      icon: '✨' },
-        { hash: 'photos',             label: 'Photos',     icon: '📸' },
+        { hash: 'photos',             label: 'Photos & video', icon: '📸' },
         { hash: 'messages',           label: 'Messages',   icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
         { hash: 'checkin',            label: 'Check-in',   icon: '☀' },

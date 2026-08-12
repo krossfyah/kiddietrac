@@ -63,6 +63,7 @@
     var paneDocs = el('div', { style: 'display:none;' });
     var panePay = el('div', { style: 'display:none;' });
     var paneSecurity = el('div', { style: 'display:none;' });
+    var paneAbout = el('div', { style: 'display:none;' });
     var _stabs = [];
     function stab(label, pane) {
       var b = el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:9px 8px;margin-bottom:-1px;font-size:14px;font-weight:700;color:#6B7280;cursor:pointer;white-space:nowrap;flex:0 0 auto;' }, [label]);
@@ -73,11 +74,13 @@
     stab('Documents', paneDocs);
     if (isGuardian) stab('Payments', panePay);
     stab('Security', paneSecurity);
+    stab('About', paneAbout);
     wrap.appendChild(tabBar);
     wrap.appendChild(paneProfile);
     wrap.appendChild(paneDocs);
     if (isGuardian) wrap.appendChild(panePay);
     wrap.appendChild(paneSecurity);
+    wrap.appendChild(paneAbout);
     _t0.style.color = '#1F6080'; _t0.style.borderBottomColor = '#1F6080';
     // Payments (guardian only) — Autopay + Wallet, moved here from the home tiles.
     if (isGuardian) {
@@ -126,7 +129,7 @@
       ['Set a username to sign in when one email is shared across more than one account.']));
 
     var pStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
-    var pSave = el('button', { type: 'button', style: btn() }, ['Save profile']);
+    var pSave = el('button', { type: 'button', class: 'kt-actionbtn', style: btn() }, ['Save profile']);
     function profileStatus(m, err) { pStatus.style.color = err ? '#B91C1C' : '#16A34A'; pStatus.textContent = m; }
     pSave.addEventListener('click', function () {
       pSave.disabled = true; pSave.textContent = 'Saving…'; pStatus.textContent = '';
@@ -136,6 +139,37 @@
     });
     pc.appendChild(pStatus); pc.appendChild(pSave);
     paneProfile.appendChild(pc);
+
+    // ── PROVIDER BIO (home-daycare providers only) ──
+    // Onboarding makes this mandatory, but only fires once — already-onboarded
+    // providers edit it here. Saves to their centre (centres.provider_bio),
+    // which drives their family provider card + welcome email.
+    if (u.is_provider) {
+      var bc = el('div', { style: CARD });
+      bc.appendChild(el('div', { style: SECT }, ['Your bio']));
+      bc.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin:-4px 0 12px;line-height:1.45;' },
+        ['Introduce yourself to the families in your care — your experience, your approach, what makes your home special. This appears on each family’s provider card and their welcome email.']));
+      var bio = el('textarea', { rows: '6', style: 'width:100%;padding:11px 13px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical;' });
+      bio.value = u.provider_bio || '';
+      bio.setAttribute('placeholder', 'e.g. Hi, I’m Chearstine! I’ve run a licensed home daycare for 8 years and love nature walks, music, and cozy story time…');
+      bc.appendChild(bio);
+      var bCount = el('div', { style: 'font-size:11px;margin:6px 0 4px;text-align:right;' });
+      bc.appendChild(bCount);
+      function bUpd() { var n = (bio.value || '').trim().length; bCount.textContent = n + ' characters' + (n < 40 ? ' · at least 40' : ' ✓'); bCount.style.color = n < 40 ? '#B45309' : '#16A34A'; }
+      bio.addEventListener('input', bUpd); bUpd();
+      var bStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:2px 0 8px;' });
+      var bSave = el('button', { type: 'button', class: 'kt-actionbtn', style: btn() }, ['Save bio']);
+      bSave.addEventListener('click', function () {
+        var v = (bio.value || '').trim();
+        if (v.length < 40) { bStatus.style.color = '#B91C1C'; bStatus.textContent = 'Please write at least a sentence or two (40+ characters).'; bio.focus(); return; }
+        bSave.disabled = true; bSave.textContent = 'Saving…'; bStatus.textContent = '';
+        Api.patch('/auth/me/provider-bio', { provider_bio: v })
+          .then(function () { bSave.disabled = false; bSave.textContent = 'Save bio'; bStatus.style.color = '#16A34A'; bStatus.textContent = '✓ Saved — families will see this on your card.'; try { var ku = cachedUser(); ku.provider_bio = v; sessionStorage.setItem('kt_user', JSON.stringify(ku)); } catch (e) {} })
+          .catch(function (e) { bSave.disabled = false; bSave.textContent = 'Save bio'; bStatus.style.color = '#B91C1C'; bStatus.textContent = 'Could not save: ' + (e && e.message ? e.message : 'try again'); });
+      });
+      bc.appendChild(bStatus); bc.appendChild(bSave);
+      paneProfile.appendChild(bc);
+    }
 
     // ── MY DOCUMENTS & AGREEMENTS (v23) ──
     // Shared renderer (defined in screen-parent-forms.js) — the user's signed
@@ -188,7 +222,7 @@
       };
       var dEm = mkChk('Share my email'), dPh = mkChk('Share my phone'), dAd = mkChk('Share my address (city only)'), dKn = mkChk("Show my children's first names");
       var dStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
-      var dSave = el('button', { type: 'button', style: btn() }, ['Save preferences']);
+      var dSave = el('button', { type: 'button', class: 'kt-actionbtn', style: btn() }, ['Save preferences']);
       fc.appendChild(dStatus); fc.appendChild(dSave);
       paneProfile.appendChild(fc);
       Api.get('/directory/me').then(function (r) { var o = (r && r.data) || {}; dEm.checked = !!o.share_email; dPh.checked = !!o.share_phone; dAd.checked = !!o.share_address; dKn.checked = (o.share_children_names !== 0); }).catch(function () {});
@@ -215,7 +249,7 @@
     sc.appendChild(strength.node);
     var cf = field(sc, 'Confirm new password', 'password', '');
     var pwStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
-    var pwBtn = el('button', { type: 'button', style: btn() }, ['Change password']);
+    var pwBtn = el('button', { type: 'button', class: 'kt-actionbtn', style: btn() }, ['Change password']);
     pwBtn.addEventListener('click', function () {
       pwStatus.textContent = '';
       if (!cur.value || !nw.value) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'Fill in your current and new password.'; return; }
@@ -309,7 +343,10 @@
           paintUa();
           ua.appendChild(uaBtn);
           nd.appendChild(ua);
-          var uaTest = el('button', { type: 'button', style: 'display:block;background:none;border:none;color:#159FB4;font-size:12px;font-weight:700;cursor:pointer;padding:10px 0 2px;' }, ['Preview an urgent alert']);
+          var uaTest = el('button', { type: 'button', style: 'display:inline-flex;align-items:center;gap:6px;margin-top:12px;background:#FEF2F2;color:#B91C1C;border:1.5px solid #FECACA;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;' }, ['🚨 Test urgent alert']);
+          // Opt out of kt-icon-buttons: the old "Preview…" label contained "view",
+          // so it was auto-collapsed into a cryptic ℹ️ icon. Keep it a real button.
+          uaTest.dataset.ktIconized = '1';
           uaTest.addEventListener('click', function () { KT.urgentAlert.test('message'); });
           nd.appendChild(uaTest);
         }
@@ -422,6 +459,7 @@
     var about = el('div', { style: 'text-align:center;margin:10px 0 4px;font-size:11.5px;color:#64748B;line-height:1.7;' });
     about.appendChild(el('div', { style: 'font-weight:800;color:#334155;font-size:12.5px;' }, ['KiddieTrac']));
     about.appendChild(el('div', {}, ['Web build ' + (window.KT_VERSION || '—')]));
+    about.appendChild(el('div', { style: 'color:#94A3B8;font-size:10.5px;margin-top:2px;' }, ['© 2021–2026 KiddieTrac. All rights reserved.']));
     var appLine = el('div', { style: 'font-weight:700;color:#334155;' }, ['App build: checking…']);
     about.appendChild(appLine);
     try {
@@ -445,7 +483,32 @@
         appLine.style.fontWeight = '400';
       }
     } catch (e) { appLine.textContent = 'App build: —'; }
-    wrap.appendChild(about);
+    // Everything above lives in the ABOUT tab (its own section), not as a footer
+    // repeated under every tab.
+    var aboutCard = el('div', { style: CARD });
+    aboutCard.appendChild(el('div', { style: SECT }, ['About']));
+    aboutCard.appendChild(about);
+
+    // Diagnostics overlay toggle — a support/troubleshooting tool. OFF by default;
+    // when on, shows the small on-screen debug chip (version / WebView size / role).
+    // Persists in localStorage.kt_diag and applies live via window.__ktDiagRefresh().
+    var diagRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 2px 2px;padding-top:14px;border-top:1px solid #EEF2F6;' });
+    var diagText = el('div', {});
+    diagText.appendChild(el('div', { style: 'font-weight:700;color:#334155;font-size:13px;' }, ['Diagnostics overlay']));
+    diagText.appendChild(el('div', { style: 'font-size:11.5px;color:#94A3B8;margin-top:1px;' }, ['Show the on-screen debug chip (for support / troubleshooting).']));
+    diagRow.appendChild(diagText);
+    var diagSw = mkSwitch();
+    function diagOn() { try { return localStorage.getItem('kt_diag') === '1'; } catch (e) { return false; } }
+    try { diagSw.kt_set(diagOn()); } catch (e) {}
+    diagSw.addEventListener('click', function () {
+      var nowOn = !diagOn();
+      try { localStorage.setItem('kt_diag', nowOn ? '1' : '0'); } catch (e) {}
+      diagSw.kt_set(nowOn);
+      try { if (window.__ktDiagRefresh) window.__ktDiagRefresh(); } catch (e) {}
+    });
+    diagRow.appendChild(diagSw);
+    aboutCard.appendChild(diagRow);
+    paneAbout.appendChild(aboutCard);
   }
 
   function field(parent, label, type, val) {
@@ -474,7 +537,11 @@
     parent.appendChild(i);
     return i;
   }
-  function btn() { return 'width:100%;border:0;cursor:pointer;padding:14px;border-radius:12px;font-size:15px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);margin-top:8px;'; }
+  // Size now comes from the shared .kt-actionbtn class (compact on desktop,
+  // full-width 44px on phones) — btn() only carries the brand fill. The old
+  // hard-coded width:100%/padding:14px/font-size:15px rendered Save profile and
+  // Save preferences as 47px full-card slabs on desktop.
+  function btn() { return 'border:0;cursor:pointer;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);margin-top:8px;'; }
 
   // ── Password strength meter ────────────────────────────────────────
   // Mirrors the server's PasswordPolicy so the rules a user must satisfy are

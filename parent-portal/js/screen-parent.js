@@ -30,10 +30,27 @@
   };
   const { emptyState } = Shell;
 
+  // The AGENCY's date, never the device's UTC date. toISOString() is UTC, so from
+  // 8 PM Eastern onward `new Date().toISOString()` already reads tomorrow — the
+  // parent's Today screen went blank every evening ("No events logged yet today")
+  // while the day's events were still filed under the agency-local date.
+  // KT.agencyToday() (kt-tz.js) resolves the agency timezone from /auth/me.
+  const localToday = () => (window.KT && KT.agencyToday)
+    ? KT.agencyToday()
+    : ymd(new Date());
+  // Format a Date as YYYY-MM-DD from its LOCAL parts. Never use toISOString() for
+  // this: `new Date('2026-08-11T00:00:00')` is local midnight, and converting that
+  // to UTC lands on the previous day for any timezone ahead of UTC — which made the
+  // day-navigator arrows appear stuck for European agencies.
+  function ymd(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
   let state = {
     children: [],
     selectedChildId: null,
-    date: new Date().toISOString().split('T')[0],
+    date: localToday(),
   };
 
   // ≤768, NOT ≤600: the Android APK WebView reports an inflated ~601–768 width, so
@@ -172,7 +189,7 @@
 
   // Browse the child's day across dates — history back through past days (never the future).
   function buildDateNav() {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localToday();
     const isToday = state.date === todayStr;
     const dObj = new Date(state.date + 'T00:00:00');
     const label = dObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -181,7 +198,7 @@
     const shift = (days, ev) => {
       if (ev) { ev.preventDefault(); ev.stopPropagation(); }
       const d = new Date(state.date + 'T00:00:00'); d.setDate(d.getDate() + days);
-      const ns = d.toISOString().split('T')[0];
+      const ns = ymd(d);
       if (ns > todayStr) return;               // never go past today
       state.date = ns; rerender();
     };
@@ -414,6 +431,44 @@
     if (cl) cl.addEventListener('click', function () { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); });
   }
 
+  // ─── Walks + new-media helpers (shared by the desktop and mobile Today) ──────
+
+  // /parent/walks returns the guardian's children's trips keyed by `child_name`
+  // (no child_id in the payload), so match on the id when a future payload gains
+  // one, else on the name. A parent with one child sees everything either way.
+  function matchesChild(walk, child) {
+    if (!walk || !child) return false;
+    if (walk.child_id != null) return String(walk.child_id) === String(child.id);
+    const want = String(child.display_name || '').trim().toLowerCase();
+    const got = String(walk.child_name || '').trim().toLowerCase();
+    if (!want || !got) return true;              // can't tell → don't hide it
+    return got === want || got.startsWith(want) || want.startsWith(got.split(' ')[0]);
+  }
+
+  // "New" = shared since the parent last opened the gallery. The watermark is
+  // per-child in localStorage; with no watermark yet (first ever visit) we treat
+  // the last 3 days as new rather than claiming every historic photo is unseen.
+  function mediaSeenKey(childId) { return 'kt_media_seen_' + childId; }
+  function unseenMedia(photos, childId) {
+    let since = 0;
+    try { since = Date.parse(localStorage.getItem(mediaSeenKey(childId)) || '') || 0; } catch (e) { since = 0; }
+    if (!since) since = Date.now() - 3 * 86400000;
+    const fresh = (photos || []).filter(p => {
+      const t = Date.parse(String(p.taken_at || '').replace(' ', 'T'));
+      return !isNaN(t) && t > since;
+    });
+    const vids = fresh.filter(p => p.media_type === 'video').length;
+    const pics = fresh.length - vids;
+    let label;
+    if (vids && pics) label = 'photos & videos';
+    else if (vids) label = vids === 1 ? 'video' : 'videos';
+    else label = pics === 1 ? 'photo' : 'photos';
+    return { count: fresh.length, hasVideo: vids > 0, label };
+  }
+  function markMediaSeen(childId) {
+    try { localStorage.setItem(mediaSeenKey(childId), new Date().toISOString()); } catch (e) {}
+  }
+
   async function renderTodayTab(wrap) {
 
     const child = state.children.find(c => c.id === state.selectedChildId);
@@ -446,7 +501,9 @@
     wrap.appendChild(Dom.el('div', { style: 'display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px;' }, [
       _todayLeft, buildDateNav(),
     ]));
-    const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr; gap: 24px;' });
+    // minmax(0,…) so a long timeline detail can't blow the column out; the aside is
+    // given a real floor because it now carries the walk route map.
+    const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: minmax(0,1.55fr) minmax(330px,1fr); gap: 24px;' });
     wrap.appendChild(grid);
     const main = Dom.el('div'); grid.appendChild(main);
     const aside = Dom.el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' }); grid.appendChild(aside);
@@ -468,7 +525,10 @@
     main.appendChild(timelineCard);
     timelineCard.appendChild(Dom.el('h3', { style: 'margin:0 0 10px;background:linear-gradient(135deg,#EAF3FB,#F3F0FF);border:1px solid rgba(31,96,128,.10);padding:9px 13px;border-radius:10px;font-size:15px;color:#1F6080;' }, '🕒 Timeline'));
     timelineCard.appendChild(Dom.el('p', { style: 'color: var(--ink-600); margin: 0 0 16px 0; font-size: 13px;' }, 'Every moment logged by the educators'));
-    const timelineBody = Dom.el('div'); timelineCard.appendChild(timelineBody);
+    // .kt-today-timeline flows the rows into TWO columns on a wide screen (see
+    // kt-consistency-polish.css). A day's 10-15 short events rendered as one narrow
+    // ribbon left most of the card empty and pushed everything else down the page.
+    const timelineBody = Dom.el('div', { class: 'kt-today-timeline' }); timelineCard.appendChild(timelineBody);
 
     // Aside: this month's billing + recent observations
     const billingCard = Dom.el('div', { class: 'card' });
@@ -483,13 +543,26 @@
     const obsBody = Dom.el('div'); obsCard.appendChild(obsBody);
     obsBody.appendChild(Dom.el('p', { style: 'color: var(--ink-600);' }, 'Loading...'));
 
-    // Fire off all the parallel fetches
+    // Walks & outings — parents asked to see the day's trips alongside the rest of
+    // Today rather than only on the separate Walks screen.
+    const walkCard = Dom.el('div', { class: 'card' });
+    aside.appendChild(walkCard);
+    walkCard.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;background:linear-gradient(135deg,#ECFEFF,#F0FDF4);border:1px solid rgba(13,148,136,.14);padding:9px 13px;border-radius:10px;font-size:15px;color:#0F766E;' }, '🚶 Walks & outings'));
+    const walkBody = Dom.el('div'); walkCard.appendChild(walkBody);
+    walkBody.appendChild(Dom.el('p', { style: 'color: var(--ink-600);' }, 'Loading...'));
+
+    // Fire off all the parallel fetches. The walk/photo calls are additive niceties,
+    // so they resolve to an empty shape on failure — a walks outage must never take
+    // the whole Today screen down with it.
     Promise.all([
       Api.get(`/parent/children/${child.id}/timeline?date=${state.date}`),
       Api.get(`/parent/children/${child.id}/digest/${state.date}`),
       Api.get(`/parent/children/${child.id}/invoices?status=current`),
       Api.get(`/parent/children/${child.id}/observations`),
-    ]).then(([timeline, digest, invoices, observations]) => {
+      Api.get('/parent/walks').catch(() => ({ walks: [] })),
+      Api.get('/parent/active-walks').catch(() => ({ walks: [] })),
+      Api.get(`/parent/children/${child.id}/photos`).catch(() => ({ photos: [] })),
+    ]).then(([timeline, digest, invoices, observations, walksRes, activeRes, mediaRes]) => {
       // Stats
       const meals = (timeline.events || []).filter(e => e.type === 'meal' || e.type === 'snack').length;
       const naps = (timeline.events || []).filter(e => e.type === 'nap_end').length;
@@ -521,18 +594,36 @@
       // Timeline (moments + sign-in/out times, chronological)
       Dom.clear(timelineBody);
       const _tlEntries = mergeTimelineChecks(timeline);
+      // Opt into the shared bottom "N records" bar (kt-table-export), but not the
+      // search/sort toolbar or per-row kebabs — this is a short chronological story,
+      // not a dataset. Only marked when non-empty, or the bar would count the
+      // empty-state paragraph as one record (same rule as screen-observations.js).
+      if (_tlEntries.length) {
+        timelineBody.setAttribute('data-kt-list', '1');
+        timelineBody.setAttribute('data-kt-no-controls', '1');
+        timelineBody.setAttribute('data-kt-no-kebab', '1');
+      } else {
+        timelineBody.removeAttribute('data-kt-list');
+      }
       if (!_tlEntries.length) {
         timelineBody.appendChild(Dom.el('p', { style: 'color: var(--ink-500); padding: 24px 0;' }, 'No events logged yet today. Check back soon!'));
       } else {
         _tlEntries.forEach((ev, i) => {
-          // Zebra striping so the timeline reads clearly, especially on mobile/APK.
-          const row = Dom.el('div', { style: 'display: flex; gap: 12px; padding: 12px 10px; border-radius: 10px; align-items: flex-start; background: ' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
-          row.appendChild(Dom.el('div', { style: 'background: #fff; border: 1px solid var(--ink-100,#f1f5f9); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;' }, eventIcon(ev.type)));
-          const text = Dom.el('div', { style: 'flex: 1;' });
-          text.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, ev.display?.title || ev.type));
-          if (ev.display?.detail) text.appendChild(Dom.el('div', { style: 'color: var(--ink-600); font-size: 13px;' }, ev.display.detail));
+          // Compact row: the old layout used a 40px icon bubble, 12px vertical
+          // padding and a right-aligned time, which left a wide empty channel across
+          // the middle of every row and made a normal 11-event day scroll forever.
+          // Now: time on the LEFT as a fixed 62px gutter (so times line up and read
+          // as a chronology), a 26px icon, and title + detail sharing one line where
+          // the detail is short. Zebra striping is kept for scanability.
+          const row = Dom.el('div', { style: 'display:flex; gap:9px; padding:6px 9px; border-radius:8px; align-items:baseline; background:' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
+          row.appendChild(Dom.el('div', { style: 'width:62px;flex-shrink:0;color:var(--ink-500);font-size:12px;font-variant-numeric:tabular-nums;' }, ev.time_display || ''));
+          row.appendChild(Dom.el('div', { style: 'width:20px;flex-shrink:0;font-size:15px;line-height:1.25;' }, eventIcon(ev.type)));
+          const text = Dom.el('div', { style: 'flex:1;min-width:0;line-height:1.35;' });
+          text.appendChild(Dom.el('span', { style: 'font-weight:600;font-size:13.5px;' }, ev.display?.title || ev.type));
+          if (ev.display?.detail) {
+            text.appendChild(Dom.el('span', { style: 'color:var(--ink-500);font-size:12.5px;margin-left:7px;' }, ev.display.detail));
+          }
           row.appendChild(text);
-          row.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex-shrink: 0;' }, ev.time_display));
           timelineBody.appendChild(row);
         });
       }
@@ -565,15 +656,89 @@
       Dom.clear(obsBody);
       const obs = observations.observations || [];
       if (obs.length === 0) {
+        obsBody.removeAttribute('data-kt-list');
         obsBody.appendChild(Dom.el('p', { style: 'color: var(--ink-500); font-size: 13px;' }, 'No observations recorded yet.'));
       } else {
-        obs.slice(0, 3).forEach(o => {
-          const item = Dom.el('div', { style: 'padding: 10px 0; border-bottom: 1px solid var(--ink-100);' });
+        obsBody.setAttribute('data-kt-list', '1');
+        obsBody.setAttribute('data-kt-no-controls', '1');
+        obsBody.setAttribute('data-kt-no-kebab', '1');
+        obs.slice(0, 3).forEach((o, i) => {
+          // Zebra striping, matching the Timeline directly to its left — the flat
+          // white rows made consecutive observations hard to tell apart.
+          const item = Dom.el('div', { style: 'padding: 10px; border-radius: 8px; background: ' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
           item.appendChild(Dom.el('div', { style: 'font-size: 11px; font-weight: 700; color: var(--brand-green); letter-spacing: 0.5px; margin-bottom: 4px;' }, o.domain_label));
           item.appendChild(Dom.el('div', { style: 'font-weight: 600; font-size: 14px; line-height: 1.3;' }, o.title.replace(/^\[Demo\] /, '')));
           item.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 12px; margin-top: 4px;' }, o.date_display));
           obsBody.appendChild(item);
         });
+      }
+
+      // Walks & outings — a live trip wins the card; otherwise the most recent few.
+      Dom.clear(walkBody);
+      const _live = (activeRes && activeRes.walks || []).filter(w => matchesChild(w, child));
+      const _past = (walksRes && walksRes.walks || []).filter(w => matchesChild(w, child));
+      if (_live.length) {
+        _live.forEach(w => {
+          const box = Dom.el('div', { style: 'background:linear-gradient(135deg,#ECFEFF,#F0FDFA);border:1px solid rgba(13,148,136,.18);border-radius:12px;padding:12px 14px;margin-bottom:8px;' });
+          box.appendChild(Dom.el('div', { style: 'display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.5px;color:#0F766E;' }, [
+            Dom.el('span', { style: 'width:8px;height:8px;border-radius:50%;background:#0D9488;display:inline-block;' }), 'OUT NOW',
+          ]));
+          box.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;margin-top:5px;' }, w.title || 'Walk / outing'));
+          if (w.destination) box.appendChild(Dom.el('div', { style: 'color:var(--ink-600);font-size:12.5px;margin-top:2px;' }, '📍 ' + w.destination));
+          walkBody.appendChild(box);
+        });
+        // NB: the link goes on the CARD, not inside walkBody — walkBody is the
+        // [data-kt-list] container, and the bottom "N records" bar counts its direct
+        // children, so an anchor in there would inflate the count by one.
+        walkCard.appendChild(Dom.el('a', { href: '#walks', style: 'display:inline-block;margin-top:6px;font-size:13px;color:#0F766E;font-weight:700;text-decoration:none;' }, 'Follow live →'));
+      } else if (_past.length) {
+        walkBody.setAttribute('data-kt-list', '1');
+        walkBody.setAttribute('data-kt-no-controls', '1');
+        walkBody.setAttribute('data-kt-no-kebab', '1');
+        _past.slice(0, 3).forEach((w, i) => {
+          const row = Dom.el('div', { style: 'padding:10px;border-radius:8px;background:' + (i % 2 ? 'var(--ink-50,#f8fafc)' : '#ffffff') + ';' });
+          row.appendChild(Dom.el('div', { style: 'font-weight:600;font-size:13.5px;' }, w.title || 'Walk / outing'));
+          const bits = [];
+          if (w.destination) bits.push('📍 ' + w.destination);
+          if (w.duration_min) bits.push(w.duration_min + ' min');
+          if (w.steps_est) bits.push('👣 ' + w.steps_est);
+          row.appendChild(Dom.el('div', { style: 'color:var(--ink-500);font-size:12px;margin-top:3px;' }, bits.join(' · ') || (w.trip_date || '')));
+          // The most recent walk with GPS shows its there-and-back route inline, so
+          // the map is on Today rather than two taps away on the Walks screen.
+          if (i === 0 && w.has_location && window.KT && KT.WalkTracker && KT.WalkTracker.mountRouteMap) {
+            const mapBox = Dom.el('div', { style: 'height:190px;border-radius:10px;overflow:hidden;background:#EEF2F7;margin-top:8px;' });
+            row.appendChild(mapBox);
+            KT.WalkTracker.mountRouteMap(mapBox, w.trip_id);
+          }
+          walkBody.appendChild(row);
+        });
+      } else {
+        walkBody.removeAttribute('data-kt-list');
+        walkBody.appendChild(Dom.el('p', { style: 'color: var(--ink-500); font-size: 13px;' }, 'No walks or outings recorded yet.'));
+      }
+      if (!_live.length) {
+        walkCard.appendChild(Dom.el('a', { href: '#walks', style: 'display:inline-block;margin-top:10px;font-size:13px;color:#0F766E;font-weight:700;text-decoration:none;' }, 'View all walks →'));
+      }
+      // The three Today lists are filled asynchronously, after the shared DOM-settle
+      // sweep has already run for this screen — ask for one more pass so the bottom
+      // "N records" bars appear with the data instead of on the next 6s safety tick.
+      if (window.KT && KT.sweepBus && KT.sweepBus.run) KT.sweepBus.run();
+      else if (window.KT && KT.tableExport) KT.tableExport.sweep();
+
+      // New photo/video since the parent last opened the gallery → surface a link
+      // here so fresh media isn't missed on a screen they may not visit daily.
+      const _newMedia = unseenMedia(mediaRes && mediaRes.photos || [], child.id);
+      if (_newMedia.count) {
+        const pill = Dom.el('a', {
+          href: '#photos',
+          style: 'display:flex;align-items:center;gap:10px;text-decoration:none;background:linear-gradient(135deg,#FFF7ED,#FEF2F2);border:1px solid rgba(249,115,22,.22);border-radius:12px;padding:11px 14px;margin-bottom:16px;',
+        }, [
+          Dom.el('span', { style: 'font-size:20px;' }, _newMedia.hasVideo ? '🎬' : '📸'),
+          Dom.el('span', { style: 'font-weight:700;font-size:13.5px;color:#C2410C;' },
+            `${_newMedia.count} new ${_newMedia.label} to see`),
+          Dom.el('span', { style: 'margin-left:auto;font-size:13px;font-weight:700;color:#C2410C;' }, '→'),
+        ]);
+        main.insertBefore(pill, statsRow);
       }
     }).catch(e => console.error('Today tab load failed:', e));
   }
@@ -585,33 +750,51 @@
     const child = state.children.find(c => c.id === state.selectedChildId);
     if (!child) return;
 
-    wrap.appendChild(Dom.el('h1', { style: 'margin: 0 0 24px;' }, `${child.display_name}'s Photos`));
+    // Photos and video share one screen and one API — they were only ever split by
+    // wording. The desktop gallery previously rendered every item as an <img>, so a
+    // shared video clip showed as a broken image here while working on mobile.
+    wrap.appendChild(Dom.el('h1', { style: 'margin: 0 0 24px;' }, `${child.display_name}'s Photos & video`));
 
     const gallery = Dom.el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;' });
     wrap.appendChild(gallery);
-    gallery.appendChild(Dom.el('p', { style: 'color: var(--ink-500); grid-column: 1 / -1;' }, 'Loading photos…'));
+    gallery.appendChild(Dom.el('p', { style: 'color: var(--ink-500); grid-column: 1 / -1;' }, 'Loading photos & video…'));
 
     try {
       const data = await Api.get(`/parent/children/${child.id}/photos`);
       Dom.clear(gallery);
       if (!data.photos || data.photos.length === 0) {
-        gallery.appendChild(emptyState('📷', 'No photos yet', `When educators share photos of ${child.display_name}, they'll appear here.`));
+        gallery.removeAttribute('data-kt-list');
+        gallery.appendChild(emptyState('📷', 'Nothing shared yet', `When educators share photos or video of ${child.display_name}, they'll appear here.`));
         return;
       }
+      gallery.setAttribute('data-kt-list', '1');
+      gallery.setAttribute('data-kt-no-controls', '1');
+      gallery.setAttribute('data-kt-no-kebab', '1');
       data.photos.forEach(p => {
         const card = Dom.el('div', { class: 'card', style: 'padding: 0; overflow: hidden;' });
-        const img = Dom.el('img', { src: p.url, alt: p.caption || 'Photo', style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--ink-100); cursor: zoom-in;' });
-        img.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
-        card.appendChild(img);
+        if (p.media_type === 'video') {
+          card.appendChild(Dom.el('video', {
+            src: p.url, controls: true, preload: 'metadata', playsInline: true,
+            style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #0F172A;',
+          }));
+        } else {
+          const img = Dom.el('img', { src: p.url, alt: p.caption || 'Photo', loading: 'lazy', style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--ink-100); cursor: zoom-in;' });
+          img.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
+          card.appendChild(img);
+        }
         const body = Dom.el('div', { style: 'padding: 12px;' });
         if (p.caption) body.appendChild(Dom.el('div', { style: 'font-size: 14px; line-height: 1.4;' }, p.caption.replace(/^\[Demo\] /, '')));
-        body.appendChild(Dom.el('div', { style: 'font-size: 12px; color: var(--ink-500); margin-top: 4px;' }, p.date_display));
+        body.appendChild(Dom.el('div', { style: 'font-size: 12px; color: var(--ink-500); margin-top: 4px;' },
+          (p.media_type === 'video' ? '🎬 ' : '') + (p.date_display || '')));
         card.appendChild(body);
         gallery.appendChild(card);
       });
+      // Opening the gallery clears the "new media" pill on Today.
+      markMediaSeen(child.id);
     } catch (e) {
       Dom.clear(gallery);
-      gallery.appendChild(emptyState('⚠️', 'Could not load photos', e.message));
+      gallery.removeAttribute('data-kt-list');
+      gallery.appendChild(emptyState('⚠️', 'Could not load photos & video', e.message));
     }
   }
 
@@ -1462,18 +1645,19 @@
   async function renderPhotosMobile(wrap) {
     const child = state.children.find(c => c.id === state.selectedChildId);
     const name = child ? (child.first_name || child.display_name) : '';
-    wrap.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:var(--ink-900);margin:2px 2px 12px;' }, name ? `${name}'s Photos` : 'Photos'));
+    wrap.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:var(--ink-900);margin:2px 2px 12px;' }, name ? `${name}'s Photos & video` : 'Photos & video'));
 
     const grid = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' });
     wrap.appendChild(grid);
-    grid.appendChild(Dom.el('div', { style: 'grid-column:1/-1;text-align:center;color:var(--ink-500);padding:20px;font-size:13px;' }, 'Loading photos…'));
+    grid.appendChild(Dom.el('div', { style: 'grid-column:1/-1;text-align:center;color:var(--ink-500);padding:20px;font-size:13px;' }, 'Loading photos & video…'));
     try {
       const data = await cget(`/parent/children/${child.id}/photos`);
       Dom.clear(grid);
       if (!data.photos || !data.photos.length) {
-        grid.appendChild(Dom.el('div', { style: 'grid-column:1/-1;' }, [emptyState('📷', 'No photos yet', `Photos of ${child.display_name} will appear here.`)]));
+        grid.appendChild(Dom.el('div', { style: 'grid-column:1/-1;' }, [emptyState('📷', 'Nothing shared yet', `Photos and video of ${child.display_name} will appear here.`)]));
         return;
       }
+      markMediaSeen(child.id);
       data.photos.forEach(p => {
         const c = Dom.el('div', { style: 'border-radius:14px;overflow:hidden;' + card() });
         // Educators can share short video clips as well as photos — a first

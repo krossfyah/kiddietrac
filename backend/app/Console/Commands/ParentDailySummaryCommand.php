@@ -229,7 +229,7 @@ class ParentDailySummaryCommand extends Command
             ->where('centre_id', $child->centre_id)
             ->whereBetween('created_at', [$start, $end])
             ->orderBy('created_at')
-            ->get(['url', 'thumbnail_url', 'caption', 'taken_at', 'created_at', 'child_ids'])
+            ->get(['url', 'thumbnail_url', 'media_type', 'caption', 'taken_at', 'created_at', 'child_ids'])
             ->filter(function ($p) use ($child) {
                 $ids = json_decode((string) $p->child_ids, true);
                 return is_array($ids) && in_array((int) $child->id, array_map('intval', $ids), true);
@@ -358,7 +358,11 @@ class ParentDailySummaryCommand extends Command
         $t = fn ($ts) => Carbon::parse($ts)->timezone($tz)->format('g:i A');
 
         $of = fn (string $type) => $logs->filter(fn ($l) => $l->type === $type)->values();
-        $detailsOf = fn ($rows) => $rows->pluck('detail')->filter()->map(fn ($d) => mb_strtolower((string) $d))->all();
+        // ->values() is REQUIRED: Collection::filter() preserves the original keys, so
+        // if the first row's detail was blank the array came back without index 0 and
+        // the `$m[0]` / `$d[0]` reads below threw "Undefined array key 0" — which
+        // aborted the whole command, meaning those parents silently got NO daily email.
+        $detailsOf = fn ($rows) => $rows->pluck('detail')->filter()->map(fn ($d) => mb_strtolower((string) $d))->values()->all();
 
         $meals = $of('meal')->concat($of('snack'));
         $naps = $of('nap');
@@ -391,7 +395,7 @@ class ParentDailySummaryCommand extends Command
                 ? "At mealtimes she " . $this->list(array_unique($d)) . " (" . $meals->count() . ' '
                     . ($meals->count() === 1 ? 'sitting' : 'sittings') . ")."
                 : "She ate with the group " . $meals->count() . " times.";
-            $notes = $meals->pluck('note')->filter()->all();
+            $notes = $meals->pluck('note')->filter()->values()->all();
             if ($notes) $para2[] = (string) $notes[0] . '.';
         }
         if ($bottles->count()) {
@@ -405,7 +409,7 @@ class ParentDailySummaryCommand extends Command
             $para2[] = $naps->count() === 1
                 ? "She napped at " . $t($naps[0]->at) . ($d ? " and " . $d[0] : '') . "."
                 : "She had " . $naps->count() . " naps" . ($d ? " (" . $this->list(array_unique($d)) . ")" : '') . ".";
-            $notes = $naps->pluck('note')->filter()->all();
+            $notes = $naps->pluck('note')->filter()->values()->all();
             if ($notes) $para2[] = (string) $notes[0] . '.';
         } else {
             $para2[] = "She didn't settle for a nap today.";
@@ -581,23 +585,48 @@ class ParentDailySummaryCommand extends Command
             }
         }
 
-        // Photos
+        // Photos & video
         if (count($day['photos'])) {
-            $body .= $this->section('📸 Photos from today');
+            $hasVideo = false;
+            foreach ($day['photos'] as $p) { if (($p->media_type ?? '') === 'video') { $hasVideo = true; break; } }
+            $body .= $this->section($hasVideo ? '📸 Photos & video from today' : '📸 Photos from today');
             $body .= '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">';
             $i = 0;
             foreach ($day['photos'] as $p) {
                 if ($i % 2 === 0) $body .= '<tr>';
-                $src = $this->abs($p->thumbnail_url ?: $p->url);
-                $body .= '<td style="width:50%;padding:4px;vertical-align:top;">'
-                    . '<img src="' . e($src) . '" alt="Photo" style="width:100%;border-radius:10px;display:block;">'
-                    . ($p->caption ? '<div style="font-size:11.5px;color:#64748B;padding:4px 2px;">' . e($p->caption) . '</div>' : '')
-                    . '</td>';
+                $isVideo = ($p->media_type ?? '') === 'video';
+                if ($isVideo) {
+                    // No email client plays an inline <video>, and a video row has no
+                    // thumbnail to fall back on (PhotoFeedController stores NULL for
+                    // clips, since there is no ffmpeg on the host to grab a frame).
+                    // Rendering it as an <img> produced a broken image in the email,
+                    // so a clip becomes a tappable card that opens it in the portal.
+                    $body .= '<td style="width:50%;padding:4px;vertical-align:top;">'
+                        . '<a href="' . e($this->portalPhotosUrl()) . '" style="text-decoration:none;">'
+                        . '<div style="background:#0F172A;border-radius:10px;padding:26px 12px;text-align:center;color:#fff;">'
+                        . '<div style="font-size:26px;line-height:1;">🎬</div>'
+                        . '<div style="font-size:12.5px;font-weight:700;padding-top:7px;">Watch the video</div>'
+                        . '<div style="font-size:11px;opacity:.75;padding-top:2px;">Opens in KiddieTrac</div>'
+                        . '</div></a>'
+                        . ($p->caption ? '<div style="font-size:11.5px;color:#64748B;padding:4px 2px;">' . e($p->caption) . '</div>' : '')
+                        . '</td>';
+                } else {
+                    $src = $this->abs($p->thumbnail_url ?: $p->url);
+                    $body .= '<td style="width:50%;padding:4px;vertical-align:top;">'
+                        . '<a href="' . e($this->portalPhotosUrl()) . '" style="text-decoration:none;">'
+                        . '<img src="' . e($src) . '" alt="Photo" style="width:100%;border-radius:10px;display:block;">'
+                        . '</a>'
+                        . ($p->caption ? '<div style="font-size:11.5px;color:#64748B;padding:4px 2px;">' . e($p->caption) . '</div>' : '')
+                        . '</td>';
+                }
                 if ($i % 2 === 1) $body .= '</tr>';
                 $i++;
             }
             if ($i % 2 === 1) $body .= '<td style="width:50%;"></td></tr>';
             $body .= '</table>';
+            $body .= '<p style="margin:6px 2px 0;font-size:12.5px;color:#64748B;">'
+                . '<a href="' . e($this->portalPhotosUrl()) . '" style="color:#0E7C90;font-weight:700;text-decoration:none;">'
+                . 'See everything in Photos &amp; video &rarr;</a></p>';
         }
 
         // Care logs
@@ -672,6 +701,17 @@ class ParentDailySummaryCommand extends Command
     }
 
     /** Photos are stored as /storage/... paths; email clients need absolute URLs. */
+    /**
+     * Deep link to the parent's Photos & video screen in the portal. Videos can't
+     * play inside an email client, so the digest points there instead; photos link
+     * there too so a parent can see them full size.
+     */
+    private function portalPhotosUrl(): string
+    {
+        $base = rtrim((string) (env('PORTAL_URL') ?: 'https://app.kiddietrac.com'), '/');
+        return $base . '/dashboard.html#photos';
+    }
+
     private function abs(?string $url): string
     {
         if (!$url) return '';
