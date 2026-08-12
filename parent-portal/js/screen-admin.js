@@ -95,6 +95,60 @@
   // ════════════════════════════════════════════════════════════════
   //   CENTRES TAB
   // ════════════════════════════════════════════════════════════════
+  // Colour-coded on/off pill for a centre's / room's email delivery switch.
+  function emailBadgeEl(on) {
+    return Dom.el('span', {
+      style: 'display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;white-space:nowrap;padding:2px 9px;border-radius:20px;'
+        + (on ? 'color:#15803D;background:#DCFCE7;' : 'color:#B45309;background:#FEF3C7;'),
+    }, on ? '✉️ Email on' : '🔕 Email off');
+  }
+  // Coloured count chip so the numbers pop at a glance (the "colour coding").
+  function countPillEl(value, color, bg) {
+    return Dom.el('span', {
+      style: 'display:inline-block;min-width:22px;text-align:center;font-weight:800;font-size:13px;'
+        + 'color:' + color + ';background:' + bg + ';padding:2px 10px;border-radius:20px;',
+    }, String(value));
+  }
+  function capacityColour(pct) {
+    pct = Number(pct || 0);
+    if (pct >= 95) return ['#B91C1C', '#FEF2F2'];
+    if (pct >= 80) return ['#B45309', '#FFFBEB'];
+    return ['#15803D', '#F0FDF4'];
+  }
+
+  // Provider (centre) avatar fallback when there's no logo: an adult emoji face
+  // (sex guessed from the provider name), not a letter — matches the platform.
+  function provFallback(el, name) {
+    el.textContent = (window.KT && KT.emojiFor) ? KT.emojiFor(KT.guessSex(name || ''), false) : '🧑';
+    try { var w = parseInt(el.style.width, 10) || 32; el.style.fontSize = Math.round(w * 0.62) + 'px'; } catch (e) {}
+  }
+
+  // Fill a provider/centre avatar element: prefer the provider's PHOTO (a face →
+  // object-fit:cover) matched by email, then the centre LOGO (branding → contain),
+  // then an emoji fallback. This is why Chearstine's uploaded photo now shows on
+  // Providers & rooms even though her centre has no logo.
+  function provAvatarInto(el, c) {
+    // NOTE: provider_photo_url IS a /storage/avatars/ path on purpose, so it must
+    // NOT be run through isUsableLogoUrl() (that filter deliberately rejects avatar
+    // paths so a user photo can't masquerade as a centre LOGO). Just require a URL.
+    if (c.provider_photo_url) {
+      var ph = Dom.el('img', { src: avatarSrc(c.provider_photo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:cover;' });
+      ph.addEventListener('error', function () { ph.remove(); provAvatarLogo(el, c); });
+      el.appendChild(ph);
+    } else {
+      provAvatarLogo(el, c);
+    }
+  }
+  function provAvatarLogo(el, c) {
+    if (isUsableLogoUrl(c.logo_url)) {
+      var img = Dom.el('img', { src: avatarSrc(c.logo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:contain;background:white;' });
+      img.addEventListener('error', function () { img.remove(); provFallback(el, c.name); });
+      el.appendChild(img);
+    } else {
+      provFallback(el, c.name);
+    }
+  }
+
   async function renderCentresTab(content) {
     Dom.clear(content);
     content.appendChild(loading('Loading centres...'));
@@ -142,7 +196,7 @@
       return;
     }
 
-    var view = localStorage.getItem('kt_view_centres') || 'table';
+    var view = localStorage.getItem('kt_view_centres') || localStorage.getItem('kt_view_pref') || 'table';
     if (view === 'cards') {
       content.appendChild(renderCentresCards(data.centres, content));
       maybeAutoOpenCentre(data.centres, content);
@@ -153,7 +207,7 @@
     const table = Dom.el('table', { style: 'width: 100%; background: white; border-radius: 12px; overflow: hidden; border-collapse: collapse; box-shadow: 0 1px 3px rgba(0,0,0,0.04);' });
     const thead = Dom.el('thead', { style: 'background: var(--ink-50, #F9FAFB);' });
     const headRow = Dom.el('tr', {});
-    ['Name', 'City', 'Status', 'Enrolled', 'Capacity %', 'Families', 'Staff', ''].forEach(h => {
+    ['Name', 'City', 'Status', 'Enrolled', 'Capacity %', 'Families', 'Staff', 'Email', ''].forEach(h => {
       headRow.appendChild(Dom.el('th', { style: 'text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.5px;' }, h));
     });
     thead.appendChild(headRow);
@@ -171,13 +225,7 @@
       var miniLogo = Dom.el('div', {
         style: 'flex-shrink:0;width:32px;height:32px;border-radius:7px;overflow:hidden;background:' + accent + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;',
       });
-      if (isUsableLogoUrl(c.logo_url)) {
-        var miniImg = Dom.el('img', { src: avatarSrc(c.logo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:contain;background:white;' });
-        miniImg.addEventListener('error', function () { miniImg.remove(); miniLogo.textContent = (c.name || '?').charAt(0).toUpperCase(); });
-        miniLogo.appendChild(miniImg);
-      } else {
-        miniLogo.textContent = (c.name || '?').charAt(0).toUpperCase();
-      }
+      provAvatarInto(miniLogo, c);
       nameWrap.appendChild(miniLogo);
       var nameStack = Dom.el('div');
       nameStack.appendChild(Dom.el('div', {}, c.name));
@@ -187,10 +235,23 @@
       row.appendChild(nameCell);
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500);' }, c.city || '—'));
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(c.status)));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, c.enrolled_count + ' / ' + c.license_capacity));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, c.capacity_pct + '%'));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, String(c.family_count)));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, String(c.staff_count)));
+      const enrolledCell = Dom.el('td', { style: 'padding: 14px 16px;' });
+      enrolledCell.appendChild(countPillEl(c.enrolled_count || 0, '#1D4ED8', '#EFF6FF'));
+      if (c.license_capacity) enrolledCell.appendChild(Dom.el('span', { style: 'color:var(--ink-500);font-size:12px;margin-left:6px;' }, '/ ' + c.license_capacity));
+      row.appendChild(enrolledCell);
+      const capCol = capacityColour(c.capacity_pct);
+      const capCell = Dom.el('td', { style: 'padding: 14px 16px;' });
+      capCell.appendChild(countPillEl((c.capacity_pct || 0) + '%', capCol[0], capCol[1]));
+      row.appendChild(capCell);
+      const famCell = Dom.el('td', { style: 'padding: 14px 16px;' });
+      famCell.appendChild(countPillEl(c.family_count || 0, '#334155', '#F1F5F9'));
+      row.appendChild(famCell);
+      const staffCell = Dom.el('td', { style: 'padding: 14px 16px;' });
+      staffCell.appendChild((c.staff_count || 0) === 0 ? countPillEl(0, '#B91C1C', '#FEF2F2') : countPillEl(c.staff_count, '#15803D', '#F0FDF4'));
+      row.appendChild(staffCell);
+      const emailCell = Dom.el('td', { style: 'padding: 14px 16px;' });
+      emailCell.appendChild(emailBadgeEl(c.email_enabled !== false));
+      row.appendChild(emailCell);
       const editBtn = Dom.el('button', { style: 'background: transparent; border: 1px solid var(--ink-300); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;' }, 'Edit');
       editBtn.addEventListener('click', () => showCentreModal(c, content));
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, editBtn));
@@ -234,13 +295,7 @@
       var logo = Dom.el('div', {
         style: 'flex-shrink:0;width:44px;height:44px;border-radius:10px;overflow:hidden;background:' + accent + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;',
       });
-      if (isUsableLogoUrl(c.logo_url)) {
-        var img = Dom.el('img', { src: avatarSrc(c.logo_url), alt: c.name || '', style: 'width:100%;height:100%;object-fit:contain;background:white;' });
-        img.addEventListener('error', function () { img.remove(); logo.textContent = (c.name || '?').charAt(0).toUpperCase(); });
-        logo.appendChild(img);
-      } else {
-        logo.textContent = (c.name || '?').charAt(0).toUpperCase();
-      }
+      provAvatarInto(logo, c);
       head.appendChild(logo);
       var stack = Dom.el('div');
       stack.appendChild(Dom.el('div', { style: 'font-size:16px;font-weight:700;line-height:1.2;' }, c.name));
@@ -254,19 +309,21 @@
       var pct = Number(c.capacity_pct || 0);
       var pctColor = pct >= 95 ? '#DC2626' : (pct >= 80 ? '#F59E0B' : '#16A34A');
       strip.appendChild(Dom.el('span', { style: 'font-size:12px;font-weight:700;color:' + pctColor + ';' }, pct + '% full'));
+      strip.appendChild(emailBadgeEl(c.email_enabled !== false));
       card.appendChild(strip);
 
-      // stats grid
-      var stats = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);gap:0;border-top:1px solid var(--ink-100,#E5E7EB);background:#FAFBFC;' });
-      function statCell(label, value) {
-        var cell = Dom.el('div', { style: 'padding:10px 8px;text-align:center;' });
-        cell.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:var(--ink-700);' }, String(value)));
+      // stats grid — colour-coded tiles for at-a-glance scanning.
+      var stats = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(3, 1fr);gap:0;border-top:1px solid var(--ink-100,#E5E7EB);' });
+      function statCell(label, value, color, bg) {
+        var cell = Dom.el('div', { style: 'padding:10px 8px;text-align:center;background:' + bg + ';' });
+        cell.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:' + color + ';' }, String(value)));
         cell.appendChild(Dom.el('div', { style: 'font-size:10px;color:var(--ink-500);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;' }, label));
         return cell;
       }
-      stats.appendChild(statCell('Enrolled', (c.enrolled_count || 0) + ' / ' + (c.license_capacity || 0)));
-      stats.appendChild(statCell('Families', c.family_count || 0));
-      stats.appendChild(statCell('Staff', c.staff_count || 0));
+      var staffZero = (c.staff_count || 0) === 0;
+      stats.appendChild(statCell('Enrolled', (c.enrolled_count || 0) + ' / ' + (c.license_capacity || 0), '#1D4ED8', '#EFF6FF'));
+      stats.appendChild(statCell('Families', c.family_count || 0, '#334155', '#F8FAFC'));
+      stats.appendChild(statCell('Staff', c.staff_count || 0, staffZero ? '#B91C1C' : '#15803D', staffZero ? '#FEF2F2' : '#F0FDF4'));
       card.appendChild(stats);
 
       card.addEventListener('click', function () { showCentreModal(c, content); });
@@ -275,7 +332,7 @@
     return grid;
   }
 
-  function showCentreModal(centre, content) {
+  function showCentreModal(centre, content, onSaved) {
     const isEdit = !!centre;
     const body = Dom.el('div', {});
     const form = Dom.el('form', {});
@@ -283,7 +340,9 @@
     const fields = [
       { key: 'name', label: 'Centre name', required: true },
       { key: 'license_number', label: 'License number' },
-      { key: 'license_capacity', label: 'License capacity', type: 'number' },
+      { key: 'license_capacity', label: 'Maximum children enrolled (capacity)', type: 'number' },
+      { key: 'open_time', label: 'Opening time', type: 'time' },
+      { key: 'close_time', label: 'Closing time', type: 'time' },
       { key: 'address_line1', label: 'Address' },
       { key: 'city', label: 'City' },
       { key: 'province', label: 'Province', default: 'ON' },
@@ -300,7 +359,9 @@
         type: f.type || 'text',
         style: 'width: 100%; padding: 8px 12px; border: 1px solid var(--ink-300); border-radius: 6px; font-size: 14px; box-sizing: border-box;',
       });
-      input.value = centre ? (centre[f.key] || '') : (f.default || '');
+      var rawVal = centre ? (centre[f.key] || '') : (f.default || '');
+      if (f.type === 'time' && rawVal) rawVal = String(rawVal).slice(0, 5); // HH:MM:SS → HH:MM
+      input.value = rawVal;
       if (f.required) input.required = true;
       inputs[f.key] = input;
       wrap.appendChild(input);
@@ -396,6 +457,18 @@
       inputs.tagline = tagIn;
       tagWrap.appendChild(tagIn);
       form.appendChild(tagWrap);
+
+      // Provider bio — required. Sent to parents in the welcome email when a
+      // family is assigned to this provider, so they know who's caring for their
+      // child. A short, warm first-person introduction works best.
+      const bioWrap = Dom.el('div', { style: 'margin-bottom:12px;' });
+      bioWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Provider bio *'));
+      const bioIn = Dom.el('textarea', { placeholder: "Hi! I'm … I've cared for children for … years. I believe every child grows best with …", style: 'width:100%;min-height:88px;padding:9px 12px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;font-family:inherit;resize:vertical;' });
+      bioIn.value = centre.provider_bio || '';
+      inputs.provider_bio = bioIn;
+      bioWrap.appendChild(bioIn);
+      bioWrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:5px;line-height:1.5;' }, 'Required — this warm introduction is emailed to parents when a family joins this provider, so they feel confident about who is caring for their child.'));
+      form.appendChild(bioWrap);
     }
 
     // v22p5.1: kiosk mode section — visible only when editing an existing centre.
@@ -567,12 +640,12 @@
       const delBtn = Dom.el('button', { type: 'button', style: 'padding:8px 14px;background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;' }, 'Delete permanently');
       archiveBtn.addEventListener('click', async () => {
         if (!(window.KT && window.KT.confirm) || !await window.KT.confirm({ title: 'Archive “' + centre.name + '”?', description: 'It will be hidden from active centres but can be restored anytime from the Agency overview.' })) return;
-        try { await Api.delete('/admin/centres/' + centre.id); await renderCentresTab(content); Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre archived', 'success'); }
+        try { await Api.delete('/admin/centres/' + centre.id); if (typeof onSaved === 'function') { await onSaved(); } else { await renderCentresTab(content); } Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre archived', 'success'); }
         catch (e) { dzMsg.textContent = 'Could not archive: ' + (e.message || 'error'); dzMsg.style.color = '#DC2626'; }
       });
       delBtn.addEventListener('click', async () => {
         if (!(window.KT && window.KT.confirm) || !await window.KT.confirm({ title: 'Permanently delete “' + centre.name + '”?', description: 'This cannot be undone. Archive instead if you might need it back.', tone: 'danger' })) return;
-        try { await Api.delete('/admin/centres/' + centre.id + '/permanent'); await renderCentresTab(content); Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre permanently deleted', 'success'); }
+        try { await Api.delete('/admin/centres/' + centre.id + '/permanent'); if (typeof onSaved === 'function') { await onSaved(); } else { await renderCentresTab(content); } Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre permanently deleted', 'success'); }
         catch (e) { dzMsg.textContent = (e.message || 'Could not delete'); dzMsg.style.color = '#DC2626'; }
       });
       dz.appendChild(archiveBtn); dz.appendChild(delBtn); dz.appendChild(dzMsg);
@@ -602,6 +675,10 @@
               status.textContent = 'Name is required';
               return;
             }
+            if (inputs.provider_bio && (!data.provider_bio || !data.provider_bio.trim())) {
+              status.textContent = 'Provider bio is required — parents receive this when they join.';
+              return;
+            }
             if (data.license_capacity) data.license_capacity = parseInt(data.license_capacity, 10);
             data.open_days = Array.from(selectedDays).sort(function (a, b) { return a - b; });
 
@@ -613,8 +690,10 @@
               } else {
                 await Api.post('/admin/centres', data);
               }
-              // Reload
-              await renderCentresTab(content);
+              // Reload — either the caller's custom refresh (e.g. the agency
+              // overview, which opens this modal in place) or the Centres tab.
+              if (typeof onSaved === 'function') { await onSaved(); }
+              else { await renderCentresTab(content); }
               Shell.Modal.close();
             } catch (e) {
               status.style.color = '#DC2626';
@@ -629,6 +708,69 @@
   // ════════════════════════════════════════════════════════════════
   //   USERS TAB
   // ════════════════════════════════════════════════════════════════
+  // Collapsible advisory listing accounts that look like duplicates (shared email,
+  // or the same name across different emails). Read-only — helps admins spot messes
+  // like one person holding several logins; each member links to Manage.
+  function buildDuplicateCard(groups, allUsers, content) {
+    const _e = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const card = Dom.el('div', { style: 'background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;margin-bottom:16px;overflow:hidden;' });
+    const head = Dom.el('button', { type: 'button', style: 'width:100%;display:flex;align-items:center;gap:10px;background:none;border:0;padding:11px 14px;cursor:pointer;font-family:inherit;text-align:left;' });
+    head.innerHTML = '<span style="font-size:16px;">⚠️</span><span style="flex:1;font-weight:800;color:#92400E;font-size:13.5px;">' + groups.length + ' possible duplicate ' + (groups.length === 1 ? 'account group' : 'account groups') + '</span><span id="kt-dup-caret" style="color:#B45309;font-weight:800;">▸</span>';
+    const bodyWrap = Dom.el('div', { style: 'display:none;padding:0 14px 12px;' });
+    head.addEventListener('click', function () {
+      const open = bodyWrap.style.display !== 'none';
+      bodyWrap.style.display = open ? 'none' : 'block';
+      const caret = head.querySelector('#kt-dup-caret'); if (caret) caret.textContent = open ? '▸' : '▾';
+    });
+    card.appendChild(head); card.appendChild(bodyWrap);
+
+    const roleLbl = { platform_admin: 'Super admin', agency_admin: 'Admin', centre_director: 'Director', educator: 'Educator', home_visitor: 'Home visitor', guardian: 'Parent', sales_rep: 'Sales', auditor: 'Auditor' };
+    groups.forEach(function (g) {
+      const gWrap = Dom.el('div', { style: 'border-top:1px solid #FDE68A;padding:10px 0 4px;' });
+      const badge = g.type === 'email' ? 'Shares an email' : 'Same name';
+      gWrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;font-weight:800;color:#B45309;margin-bottom:7px;' },
+        badge + ' · ' + g.key));
+      g.members.forEach(function (m) {
+        // Clickable → open that account's Manage panel (found in the loaded list) so
+        // the report is actionable, not a dead end. Falls back to non-clickable if
+        // the account isn't in the current (active) list.
+        const full = (allUsers || []).filter(function (u) { return u.id === m.id; })[0];
+        const clickable = !!(full && content);
+        const row = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;padding:6px 4px;border-radius:8px;' + (clickable ? 'cursor:pointer;' : '') });
+        if (clickable) {
+          row.title = 'Open ' + (m.name || 'this account') + '’s Manage panel';
+          row.addEventListener('mouseenter', function () { row.style.background = '#FEF3C7'; });
+          row.addEventListener('mouseleave', function () { row.style.background = 'transparent'; });
+          row.addEventListener('click', function () { try { showUserModal(full, content); } catch (e) {} });
+        }
+        const av = Dom.el('div', { style: 'width:30px;height:30px;border-radius:50%;flex-shrink:0;overflow:hidden;background:#E2E8F0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#475569;' });
+        if (m.photo_url) { const im = Dom.el('img', { src: avatarSrc(m.photo_url), style: 'width:100%;height:100%;object-fit:cover;' }); im.addEventListener('error', function () { im.remove(); av.textContent = (m.name || '?')[0]; }); av.appendChild(im); }
+        else av.textContent = (m.name || '?')[0].toUpperCase();
+        const roles = (m.roles || []).map(function (r) { return roleLbl[r] || r; }).join(', ');
+        // Last sign-in tells an admin which of the duplicates is live vs a stray:
+        // "never signed in" is a strong hint the account can be removed.
+        let seen, seenColor;
+        if (!m.last_login_at) { seen = 'never signed in'; seenColor = '#B45309'; }
+        else {
+          const dt = new Date(String(m.last_login_at).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(m.last_login_at)) ? '' : 'Z'));
+          const days = Math.floor((Date.now() - dt.getTime()) / 86400000);
+          seen = 'last in ' + (days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 30 ? days + 'd ago' : dt.toLocaleDateString());
+          seenColor = days > 60 ? '#B45309' : '#64748B';
+        }
+        const info = Dom.el('div', { style: 'flex:1;min-width:0;' });
+        info.innerHTML = '<div style="font-size:13px;font-weight:700;color:#0D1B2A;">' + _e(m.name || '(no name)') + (m.username ? ' <span style="font-weight:500;color:#64748B;">@' + _e(m.username) + '</span>' : '') + '</div>'
+          + '<div style="font-size:11.5px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _e(m.email || '') + (roles ? ' · ' + _e(roles) : '') + ' · <span style="color:' + seenColor + ';font-weight:600;">' + _e(seen) + '</span></div>';
+        row.appendChild(av); row.appendChild(info);
+        gWrap.appendChild(row);
+      });
+      bodyWrap.appendChild(gWrap);
+    });
+    const tip = Dom.el('div', { style: 'font-size:11px;color:#92400E;margin-top:8px;padding-top:8px;border-top:1px dashed #FDE68A;' },
+      'Click an account to open its Manage panel. Shared-email accounts are sometimes intentional (one person, several roles) — deactivate the extra only if it’s truly a duplicate.');
+    bodyWrap.appendChild(tip);
+    return card;
+  }
+
   async function renderUsersTab(content, opts) {
     opts = opts || {};
     const showDeactivated = !!opts.deactivated;
@@ -661,6 +803,16 @@
         : (data.users.length + ' active user' + (data.users.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.'),
       'bear'
     ));
+
+    // Possible-duplicate-accounts advisory (best-effort; only on the active list).
+    if (!showDeactivated) {
+      const dupHolder = Dom.el('div');
+      content.appendChild(dupHolder);
+      Api.get('/admin/duplicate-users').then(function (r) {
+        const groups = (r && r.groups) || [];
+        if (groups.length) dupHolder.appendChild(buildDuplicateCard(groups, data.users || [], content));
+      }).catch(function () {});
+    }
 
     const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;' });
     bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, 'All accounts in your agency'));
@@ -797,7 +949,7 @@
       row.appendChild(rolesCell);
 
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(u.status)));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px;' }, u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'));
+      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px; white-space: nowrap;' }, fmtLoginStamp(u.last_login_at)));
 
       let actionEl;
       if (showDeactivated) {
@@ -891,6 +1043,7 @@
     var inviteRoleOpts = [
       { v: 'centre_director', l: 'Centre director' },
       { v: 'educator', l: 'Educator' },
+      { v: 'guardian', l: '👪 Parent / guardian' },
       { v: 'home_visitor', l: 'Home visitor' },
       { v: 'sales_rep', l: '💼 Sales rep' },
       { v: 'agency_admin', l: 'Agency admin' },
@@ -924,12 +1077,71 @@
     centreWrap.appendChild(centreSelect);
     body.appendChild(centreWrap);
 
+    // Parents/guardians aren't stand-alone accounts — they're registered together
+    // with their child in Families (guardians link to a family, not a centre). When
+    // "Parent / guardian" is picked we route to the Add Family wizard instead of
+    // creating an orphan login that would see no children. This hint + the toggling
+    // below make that switch obvious.
+    const parentHint = Dom.el('div', { style: 'display:none; background:#EFF6FF; border-left:3px solid #3B82F6; padding:10px 12px; font-size:13px; color:#1E3A8A; border-radius:4px; margin-bottom:12px;' },
+      '👪 Parents are added together with their child. Continue to open Add Family, where you can enter the child, guardians, billing split, and send their invite.');
+    body.appendChild(parentHint);
+
     const note = Dom.el('div', { style: 'background: #ECFDF5; border-left: 3px solid #10B981; padding: 10px 12px; font-size: 13px; color: #065F46; border-radius: 4px; margin-top: 12px;' },
       '✉ An invite email with a secure “set your password” link will be sent to this address automatically.');
     body.appendChild(note);
 
+    // Toggle the form for the Parent path: hide the centre picker + invite note,
+    // show the routing hint, and (below) the primary button becomes "Continue to
+    // Add Family". Restores everything for staff roles.
+    var syncRoleUI = function () {
+      var isParent = roleSelect.value === 'guardian';
+      parentHint.style.display = isParent ? 'block' : 'none';
+      centreWrap.style.display = isParent ? 'none' : '';
+      note.style.display       = isParent ? 'none' : '';
+      // Relabel the modal's primary button by matching its current text — robust to
+      // the footer's exact markup.
+      var m = body.closest('.modal');
+      if (m) {
+        m.querySelectorAll('button').forEach(function (b) {
+          var t = (b.textContent || '').trim();
+          if (t === 'Create user' || t === 'Continue to Add Family →') {
+            b.textContent = isParent ? 'Continue to Add Family →' : 'Create user';
+          }
+        });
+      }
+    };
+    roleSelect.addEventListener('change', function () { syncRoleUI(); setTimeout(syncRoleUI, 0); });
+
     const status = Dom.el('div', { style: 'min-height: 20px; color: #DC2626; font-size: 13px; margin: 8px 0;' });
     body.appendChild(status);
+
+    // Duplicate check: warn (and require confirmation) if this email/name already
+    // matches an existing user, so we don't create accidental duplicate accounts.
+    const _e = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const dupWarn = Dom.el('div', { style: 'display:none;background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:10px 12px;margin:2px 0 8px;font-size:12.5px;color:#92400E;' });
+    body.insertBefore(dupWarn, status);
+    let dupHasMatches = false, dupConfirm = false;
+    const runDupCheck = () => {
+      const email = (inputs.email && inputs.email.value || '').trim();
+      const nm = ((inputs.first_name && inputs.first_name.value || '') + ' ' + (inputs.last_name && inputs.last_name.value || '')).trim();
+      if (!email && nm.length < 3) { dupWarn.style.display = 'none'; dupHasMatches = false; return; }
+      const qs = email ? 'type=user&email=' + encodeURIComponent(email) : 'type=user&name=' + encodeURIComponent(nm);
+      Api.get('/admin/duplicate-check?' + qs).then((r) => {
+        const m = (r && r.matches) || [];
+        if (!m.length) { dupWarn.style.display = 'none'; dupHasMatches = false; return; }
+        dupHasMatches = true; dupConfirm = false;
+        dupWarn.style.display = 'block';
+        const anyDeact = m.some((x) => x.deactivated);
+        dupWarn.innerHTML = '<div style="font-weight:800;margin-bottom:5px;">⚠ Possible existing ' + (m.length > 1 ? 'records' : 'record') + '</div>'
+          + m.map((x) => '<div>• ' + _e(x.label) + ' <span style="color:#B45309;">(' + _e(x.detail) + (x.deactivated ? ' · <strong>deactivated</strong>' : '') + ')</span></div>').join('')
+          + (anyDeact ? '<div style="margin-top:6px;color:#92400E;">This person already has a <strong>deactivated</strong> account — reactivate it from User management instead of creating a new one.</div>' : '')
+          + '<label style="display:flex;gap:7px;align-items:center;margin-top:8px;font-weight:700;cursor:pointer;"><input type="checkbox" id="kt-dup-ok"> I’ve checked — this is a different person</label>';
+        const cb = dupWarn.querySelector('#kt-dup-ok');
+        if (cb) cb.addEventListener('change', () => { dupConfirm = cb.checked; });
+      }).catch(() => {});
+    };
+    if (inputs.email) inputs.email.addEventListener('blur', runDupCheck);
+    if (inputs.last_name) inputs.last_name.addEventListener('blur', runDupCheck);
 
     Shell.Modal.open({
       title: 'Invite user',
@@ -940,6 +1152,24 @@
         onClick: async () => {
           const data = {};
           ['first_name', 'last_name', 'email', 'phone', 'role'].forEach(k => { data[k] = inputs[k].value; });
+          // Block until a likely-duplicate is confirmed as a genuinely new person.
+          if (dupHasMatches && !dupConfirm) {
+            status.style.color = '#B45309';
+            status.textContent = 'This looks like an existing record — tick the confirmation box above, or use the existing account.';
+            return;
+          }
+          // Parent / guardian → this isn't a stand-alone account. Route to the Add
+          // Family wizard (the flag makes the Families tab auto-open it) rather than
+          // POST /admin/users, which doesn't accept guardian and would orphan them.
+          if (data.role === 'guardian') {
+            try { sessionStorage.setItem('kt_open_add_family', '1'); } catch (e) {}
+            Shell.Modal.close();
+            // Go to the Families tab; the flag makes it auto-open Add Family. If we're
+            // somehow already there, bounce the hash so hashchange still fires.
+            if (window.location.hash === '#admin-families') { window.location.hash = ''; setTimeout(function () { window.location.hash = 'admin-families'; }, 0); }
+            else { window.location.hash = 'admin-families'; }
+            return;
+          }
           if (inputs.username && inputs.username.value.trim()) data.username = inputs.username.value.trim();
           if (data.username && !uOK) { status.style.color = '#DC2626'; status.textContent = 'That username is taken — please choose an available one.'; return; }
           if (inputs.centre_id.value) data.centre_id = parseInt(inputs.centre_id.value, 10);
@@ -1067,13 +1297,21 @@
     const changeBtn = Dom.el('button', { type: 'button', style: 'padding:6px 12px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;' }, 'Change avatar');
     const avatarMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);margin-left:8px;' });
     changeBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async () => {
+    fileInput.addEventListener('change', () => {
       const file = fileInput.files[0];
       if (!file) return;
-      if (file.size > 2 * 1024 * 1024) { avatarMsg.textContent = 'Max 2 MB'; avatarMsg.style.color = '#DC2626'; return; }
+      if (file.size > 20 * 1024 * 1024) { avatarMsg.textContent = 'Image too large (max 20 MB)'; avatarMsg.style.color = '#DC2626'; return; }
+      // Reposition/zoom to fill the circle, then upload the cropped high-res result.
+      if (window.KT && KT.AvatarCropper) {
+        KT.AvatarCropper.open(file, (blob) => { fileInput.value = ''; if (blob) doAvatarUpload(blob); });
+      } else {
+        doAvatarUpload(file);
+      }
+    });
+    async function doAvatarUpload(blob) {
       changeBtn.disabled = true; changeBtn.textContent = 'Uploading...';
       try {
-        const fd = new FormData(); fd.append('avatar', file);
+        const fd = new FormData(); fd.append('avatar', blob, 'avatar.jpg');
         const r = await Api.postForm('/admin/users/' + user.id + '/avatar', fd);
         user.photo_url = r.photo_url;
         const fresh = avatarCircle(user, 64);
@@ -1085,12 +1323,55 @@
       } finally {
         changeBtn.disabled = false; changeBtn.textContent = 'Change avatar';
       }
-    });
+    }
     avatarSide.appendChild(changeBtn);
     avatarSide.appendChild(fileInput);
     avatarSide.appendChild(avatarMsg);
     avatarRow.appendChild(avatarSide);
     body.appendChild(avatarRow);
+
+    // ── At a glance ──────────────────────────────────────────────────────
+    // A read-only summary so an admin sees the whole person immediately — role,
+    // status, contact, full address, DOB, emergency contact — without scrolling
+    // through the editable form below. Filled from /admin/users/{id}/profile.
+    var glance = Dom.el('div', { style: 'margin-bottom:18px;padding:16px 18px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
+    glance.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;' }, 'At a glance'));
+    var glanceGrid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 26px;' });
+    glance.appendChild(glanceGrid);
+    body.appendChild(glance);
+    function glanceItem(label, valueNode) {
+      var it = Dom.el('div', {});
+      it.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;color:#94A3B8;letter-spacing:.4px;text-transform:uppercase;margin-bottom:3px;' }, label));
+      if (typeof valueNode === 'string' || valueNode == null) {
+        it.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:600;color:#0F172A;word-break:break-word;' }, (valueNode == null || valueNode === '') ? '—' : valueNode));
+      } else {
+        var w = Dom.el('div', { style: 'font-size:14px;font-weight:600;color:#0F172A;' }); w.appendChild(valueNode); it.appendChild(w);
+      }
+      return it;
+    }
+    function fillGlance(ed, record, u) {
+      ed = ed || {}; record = record || {};
+      Dom.clear(glanceGrid);
+      var fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.name || '—';
+      var roles = (u.roles && u.roles.length) ? u.roles.map(function (r) { return String(r).replace(/_/g, ' '); }).join(', ') : (record['Role'] || '—');
+      var phones = [ed.phone, ed.direct_phone, ed.home_phone].filter(Boolean);
+      var addr = [ed.address_line1, ed.address_line2, [ed.city, ed.province, ed.postal_code].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+      var emerg = ed.emergency_contact_name
+        ? ed.emergency_contact_name + (ed.emergency_contact_relation ? ' (' + ed.emergency_contact_relation + ')' : '') + (ed.emergency_contact_phone ? ' · ' + ed.emergency_contact_phone : '')
+        : '';
+      glanceGrid.appendChild(glanceItem('Full name', fullName));
+      glanceGrid.appendChild(glanceItem('Status', statusBadge(u.status || 'active')));
+      glanceGrid.appendChild(glanceItem('Role', roles));
+      glanceGrid.appendChild(glanceItem('Username', ed.username || u.username || '—'));
+      glanceGrid.appendChild(glanceItem('Email', u.email || '—'));
+      glanceGrid.appendChild(glanceItem('Phone', phones.length ? phones.join(' · ') : '—'));
+      glanceGrid.appendChild(glanceItem('Address', addr || '—'));
+      glanceGrid.appendChild(glanceItem('Date of birth', ed.date_of_birth ? String(ed.date_of_birth).slice(0, 10) : '—'));
+      glanceGrid.appendChild(glanceItem('Emergency contact', emerg || '—'));
+      glanceGrid.appendChild(glanceItem('Last login', u.last_login_at ? new Date(u.last_login_at).toLocaleString() : 'Never'));
+    }
+    // Seed immediately with what we already have; the profile fetch enriches it.
+    fillGlance({ phone: user.phone, username: user.username }, {}, user);
 
     // v23 (2026-07-20) — Files & documents filed against this user. The signed
     // Terms/Privacy/NDA lands here automatically (category 'agreement'); admins
@@ -1206,7 +1487,7 @@
       var statusBox = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
       statusBox.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;' }, 'Account status'));
       var statusRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;' });
-      var statusLabel = Dom.el('span', { style: 'font-size:13px;font-weight:700;text-transform:capitalize;' }, (user.status || 'active'));
+      var statusLabel = Dom.el('span', { style: 'font-size:13px;font-weight:700;text-transform:capitalize;' }, (user.status === 'not_invited' ? 'Not invited' : (user.status || 'active')));
       var toggleBtn = Dom.el('button', { style: 'padding:7px 14px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:700;color:#fff;background:' + (user.status === 'deactivated' ? '#16A34A' : '#DC2626') + ';' }, user.status === 'deactivated' ? 'Reactivate' : 'Deactivate');
       toggleBtn.addEventListener('click', async function () {
         var to = user.status === 'deactivated' ? 'active' : 'deactivated';
@@ -1224,46 +1505,65 @@
 
       var pf = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
       pf.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Profile & emergency contact'));
-      function _inp(ph) { return Dom.el('input', { placeholder: ph, style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;margin-bottom:8px;font-family:inherit;' }); }
-      var iAddr = _inp('Street, city, province'); var iDob = Dom.el('input', { type: 'date', style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;margin-bottom:8px;font-family:inherit;' });
+      var _pfSt = 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;margin-bottom:8px;font-family:inherit;';
+      function _inp(ph) { return Dom.el('input', { placeholder: ph, style: _pfSt }); }
+      function _sub(t) { return Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin:4px 0 3px;font-weight:600;' }, t); }
+      function _grid(cols) { return Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:8px;' }); }
+      // Phones
+      var iPhone = _inp('Mobile phone'); var iDirect = _inp('Direct phone'); var iHome = _inp('Home phone');
+      // Structured address (writes back to the Full record).
+      var iL1 = _inp('Address line 1'); var iL2 = _inp('Address line 2 (optional)');
+      var iCity = _inp('City'); var iProv = _inp('Province'); var iPostal = _inp('Postal code');
+      var iDob = Dom.el('input', { type: 'date', style: _pfSt });
       var iEcN = _inp('Emergency contact name'); var iEcP = _inp('Emergency contact phone'); var iEcR = _inp('Relationship (e.g. spouse)');
-      pf.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-bottom:3px;' }, 'Address')); pf.appendChild(iAddr);
-      pf.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-bottom:3px;' }, 'Date of birth')); pf.appendChild(iDob);
-      pf.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin:4px 0 3px;' }, 'Emergency contact')); pf.appendChild(iEcN); pf.appendChild(iEcP); pf.appendChild(iEcR);
-      var pfSave = Dom.el('button', { style: 'padding:8px 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Save profile');
+
+      pf.appendChild(_sub('Phone numbers'));
+      var pg = _grid(3); pg.appendChild(iPhone); pg.appendChild(iDirect); pg.appendChild(iHome); pf.appendChild(pg);
+      pf.appendChild(_sub('Address'));
+      pf.appendChild(iL1); pf.appendChild(iL2);
+      var ag = _grid(3); ag.appendChild(iCity); ag.appendChild(iProv); ag.appendChild(iPostal); pf.appendChild(ag);
+      pf.appendChild(_sub('Date of birth')); pf.appendChild(iDob);
+      pf.appendChild(_sub('Emergency contact')); pf.appendChild(iEcN);
+      var eg = _grid(2); eg.appendChild(iEcP); eg.appendChild(iEcR); pf.appendChild(eg);
+
+      var pfSave = Dom.el('button', { style: 'padding:8px 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;margin-top:4px;' }, 'Save profile');
       var pfMsg = Dom.el('span', { style: 'font-size:12px;font-weight:700;margin-left:10px;' });
       pfSave.addEventListener('click', function () {
         pfSave.disabled = true; pfMsg.textContent = 'Saving...'; pfMsg.style.color = '#6B7280';
-        Api.put('/admin/users/' + uid + '/profile', { address: iAddr.value, date_of_birth: iDob.value || null, emergency_contact_name: iEcN.value, emergency_contact_phone: iEcP.value, emergency_contact_relation: iEcR.value })
-          .then(function () { pfMsg.textContent = '✓ Saved'; pfMsg.style.color = '#16A34A'; pfSave.disabled = false; })
+        Api.put('/admin/users/' + uid + '/profile', {
+          phone: iPhone.value, direct_phone: iDirect.value, home_phone: iHome.value,
+          address_line1: iL1.value, address_line2: iL2.value, city: iCity.value, province: iProv.value, postal_code: iPostal.value,
+          date_of_birth: iDob.value || null,
+          emergency_contact_name: iEcN.value, emergency_contact_phone: iEcP.value, emergency_contact_relation: iEcR.value
+        })
+          .then(function () { pfMsg.textContent = '✓ Saved'; pfMsg.style.color = '#16A34A'; pfSave.disabled = false; if (typeof fillRecord === 'function') { Api.get('/admin/users/' + uid + '/profile').then(function (d) { fillRecord(d.record); }).catch(function () {}); } })
           .catch(function (e) { pfMsg.textContent = '✕ ' + (e && e.message ? e.message : 'Failed'); pfMsg.style.color = '#DC2626'; pfSave.disabled = false; });
       });
       pf.appendChild(pfSave); pf.appendChild(pfMsg); body.appendChild(pf);
 
-      // Read-only "Onboarding details" — the structured info the user gave at onboarding
-      // (users.phone + users.profile_extras JSON), which the editable panel above doesn't show.
-      (function () {
-        var pe = (user && user.profile_extras) || {};
-        var rows = [];
-        if (user && user.phone) rows.push(['Phone', user.phone]);
-        var addr = [pe.address_line1, pe.address_line2, pe.city, pe.province, pe.postal_code].filter(Boolean).join(', ');
-        if (addr) rows.push(['Address', addr]);
-        if (pe.emergency_contact_name) rows.push(['Emergency contact', pe.emergency_contact_name + (pe.emergency_contact_phone ? ' · ' + pe.emergency_contact_phone : '')]);
-        (pe.extra_contacts || []).forEach(function (c) { if (c && c.name) rows.push(['Contact', c.name + (c.phone ? ' · ' + c.phone : '')]); });
-        var re = pe.role_extras || {};
-        Object.keys(re).forEach(function (k) { if (re[k]) rows.push([k.replace(/_/g, ' ').replace(/\b\w/g, function (m) { return m.toUpperCase(); }), re[k]]); });
-        if (!rows.length) return;
-        var ob = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
-        ob.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Onboarding details'));
-        var tbl = Dom.el('table', { style: 'width:100%;border-collapse:collapse;font-size:13px;' });
-        rows.forEach(function (r) {
+      // #11 — "Full record": EVERY field captured at onboarding (address, phone,
+      // emergency contacts, role-specific answers, account details). Built as an
+      // empty shell here and filled from /admin/users/{id}/profile (the .then
+      // handler below), whose `record` map is the complete, authoritative set —
+      // the list object we were handed often omits profile_extras/phone.
+      var obTable = Dom.el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+      var obSection = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;display:none;' });
+      obSection.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Full record'));
+      obSection.appendChild(obTable);
+      body.appendChild(obSection);
+      function fillRecord(record) {
+        record = record || {};
+        var keys = Object.keys(record);
+        if (!keys.length) { obSection.style.display = 'none'; return; }
+        obTable.innerHTML = '';
+        keys.forEach(function (label) {
           var tr = Dom.el('tr', {});
-          tr.appendChild(Dom.el('td', { style: 'padding:4px 12px 4px 0;color:#64748B;white-space:nowrap;vertical-align:top;' }, r[0]));
-          tr.appendChild(Dom.el('td', { style: 'padding:4px 0;font-weight:600;color:#0F172A;' }, String(r[1])));
-          tbl.appendChild(tr);
+          tr.appendChild(Dom.el('td', { style: 'padding:5px 14px 5px 0;color:#64748B;white-space:nowrap;vertical-align:top;' }, label));
+          tr.appendChild(Dom.el('td', { style: 'padding:5px 0;font-weight:600;color:#0F172A;word-break:break-word;' }, String(record[label])));
+          obTable.appendChild(tr);
         });
-        ob.appendChild(tbl); body.appendChild(ob);
-      })();
+        obSection.style.display = '';
+      }
 
       // This user's background-check records (managed on the Background checks screen).
       (function () {
@@ -1317,7 +1617,14 @@
       nb.appendChild(noteInput); nb.appendChild(noteBtn); body.appendChild(nb);
 
       Api.get('/admin/users/' + uid + '/profile').then(function (d) {
-        if (d.profile) { iAddr.value = d.profile.address || ''; iDob.value = d.profile.date_of_birth || ''; iEcN.value = d.profile.emergency_contact_name || ''; iEcP.value = d.profile.emergency_contact_phone || ''; iEcR.value = d.profile.emergency_contact_relation || ''; }
+        var ed = d.editable || {};
+        iPhone.value = ed.phone || ''; iDirect.value = ed.direct_phone || ''; iHome.value = ed.home_phone || '';
+        iL1.value = ed.address_line1 || ''; iL2.value = ed.address_line2 || '';
+        iCity.value = ed.city || ''; iProv.value = ed.province || ''; iPostal.value = ed.postal_code || '';
+        iDob.value = ed.date_of_birth ? String(ed.date_of_birth).slice(0, 10) : '';
+        iEcN.value = ed.emergency_contact_name || ''; iEcP.value = ed.emergency_contact_phone || ''; iEcR.value = ed.emergency_contact_relation || '';
+        fillRecord(d.record);
+        try { fillGlance(ed, d.record, user); } catch (e) {}
         renderNotes(d.notes);
       }).catch(function () { renderNotes([]); });
     })();
@@ -1793,6 +2100,15 @@
     bar.insertBefore(toggle, famCsvBtn);
     content.appendChild(bar);
 
+    // Arrived here from "Invite user → Parent / guardian": open Add Family straight
+    // away (one-shot flag). Deferred so the list finishes painting behind the wizard.
+    try {
+      if (sessionStorage.getItem('kt_open_add_family') === '1') {
+        sessionStorage.removeItem('kt_open_add_family');
+        setTimeout(function () { showFamilyWizard(centresData.centres, content); }, 120);
+      }
+    } catch (e) {}
+
     if (data.families.length === 0) {
       content.appendChild(emptyMsg(
         'Click + Add family to register the first one. You can attach children, set the billing split, and invite guardians from the card afterward.',
@@ -1801,25 +2117,15 @@
       return;
     }
 
-    var view = localStorage.getItem('kt_view_families') || 'cards';
+    var view = localStorage.getItem('kt_view_families') || localStorage.getItem('kt_view_pref') || 'cards';
     if (view === 'table') {
       content.appendChild(renderFamiliesTable(data.families, centresData.centres, content));
       return;
     }
 
-    const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px;' });
+    const grid = Dom.el('div', { 'data-kt-list': '1', style: 'display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px;' });
     data.families.forEach(f => {
       const card = Dom.el('div', { style: 'background: white; padding: 18px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer; position: relative;' });
-
-      // v22p11: Edit button in top-right corner, stops card-click propagation.
-      const editBtn = Dom.el('button', {
-        style: 'position: absolute; top: 10px; right: 10px; background: transparent; border: 1px solid var(--ink-300); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--ink-700);',
-      }, 'Edit');
-      editBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showFamilyModal(f, centresData.centres, content);
-      });
-      card.appendChild(editBtn);
 
       // v22p83: avatar header (coloured initials circle) + name/centre
       var famHead = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-right:60px;' });
@@ -1839,11 +2145,20 @@
         card.appendChild(Dom.el('div', { style: 'margin-top: 10px; color: #DC2626; font-weight: 600; font-size: 13px;' },
           '⚠ $' + f.outstanding_balance.toFixed(2) + ' outstanding'));
       }
+      if (f.suspended) {
+        card.appendChild(Dom.el('div', { style: 'margin-top: 10px; display:inline-block; background:#FEF3C7; color:#92400E; font-weight:700; font-size:11px; padding:3px 9px; border-radius:20px;' }, '⏸ Suspended'));
+      }
+
+      // Action bar as the card's LAST child → ⋮ kebab via kt-row-actions.
+      const famActBar = familyActions(f, centresData.centres, content);
+      famActBar.style.marginTop = '12px';
+      card.appendChild(famActBar);
 
       card.addEventListener('click', () => showFamilyDetail(f.id));
       grid.appendChild(card);
     });
     content.appendChild(grid);
+    if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
   }
 
   // v22p26: small toggle for cards/table view, persisted in localStorage.
@@ -1851,7 +2166,10 @@
   // user has never set a preference. Families + Children default to 'cards';
   // Centres defaults to 'table' (more columns to compare at a glance).
   function viewToggle(storageKey, onChange, defaultView) {
-    var current = localStorage.getItem(storageKey) || defaultView || 'cards';
+    // Per-section choice wins; otherwise fall back to the user's GLOBAL
+    // card/table preference (kt_view_pref) so a choice made in one section
+    // carries to the others they haven't explicitly set.
+    var current = localStorage.getItem(storageKey) || localStorage.getItem('kt_view_pref') || defaultView || 'cards';
     var wrap = Dom.el('div', { style: 'display:inline-flex;background:#F3F4F6;border-radius:8px;padding:2px;margin-right:8px;' });
     function btn(view, label, icon) {
       var b = Dom.el('button', {
@@ -1861,6 +2179,7 @@
       b.addEventListener('click', function () {
         if (current === view) return;
         localStorage.setItem(storageKey, view);
+        localStorage.setItem('kt_view_pref', view); // remember globally too
         if (onChange) onChange(view);
       });
       return b;
@@ -1868,6 +2187,46 @@
     wrap.appendChild(btn('cards', 'Cards', '▦'));
     wrap.appendChild(btn('table', 'Table', '☰'));
     return wrap;
+  }
+
+  // Shared per-row family action bar → collapses into the standard ⋮ kebab
+  // (kt-row-actions). View / Edit / Suspend|Reactivate / Inactivate.
+  //  • Suspend (temporary): blocks the family's guardian logins (user.status).
+  //  • Reactivate: restores them (shown instead of Suspend when f.suspended).
+  //  • Inactivate (permanent): archives the family record (soft-delete).
+  function familyActions(f, centres, content) {
+    var bar = Dom.el('div', { style: 'display:flex;gap:6px;justify-content:flex-end;flex-shrink:0;' });
+    var mk = function (icon, cls, tip, handler) {
+      var b = Dom.el('button', { type: 'button', class: 'kt-act-icon ' + cls + ' kt-icon-tip', 'data-kttip': tip, 'aria-label': tip }, icon);
+      b.addEventListener('click', function (e) { e.stopPropagation(); handler(); });
+      return b;
+    };
+    bar.appendChild(mk('👁️', 'kt-act-info', 'View', function () { showFamilyDetail(f.id); }));
+    bar.appendChild(mk('✏️', 'kt-act-edit', 'Edit', function () { showFamilyModal(f, centres, content); }));
+    bar.appendChild(mk('✉️', 'kt-act-teal', 'Send welcome email', async function () {
+      if (window.KT && KT.confirm && !await KT.confirm('Send the provider welcome / bio email to this family’s guardians? (Agency admin, director and educator are CC’d.)')) return;
+      try { var _r = await Api.post('/admin/families/' + f.id + '/provider-welcome', {}); if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Welcome email sent to ' + (_r.recipients || 0) + ' guardian(s)', 'success'); }
+      catch (e) { if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not send: ' + (e.message || 'error'), 'error'); else alert('Could not send: ' + (e.message || 'error')); }
+    }));
+    if (f.suspended) {
+      bar.appendChild(mk('▶️', 'kt-act-teal', 'Reactivate', async function () {
+        if (!await KT.confirm('Reactivate this family? Their guardian logins will be restored.')) return;
+        try { await Api.post('/admin/families/' + f.id + '/reactivate', {}); await renderFamiliesTab(content); }
+        catch (e) { alert('Could not reactivate: ' + (e.message || 'error')); }
+      }));
+    } else {
+      bar.appendChild(mk('⏸️', 'kt-act-info', 'Suspend', async function () {
+        if (!await KT.confirm('Suspend this family? Their guardian logins are blocked until you reactivate. Enrollment is kept.')) return;
+        try { await Api.post('/admin/families/' + f.id + '/suspend', {}); await renderFamiliesTab(content); }
+        catch (e) { alert('Could not suspend: ' + (e.message || 'error')); }
+      }));
+    }
+    bar.appendChild(mk('🗑️', 'kt-act-danger', 'Inactivate', async function () {
+      if (!await KT.confirm('Inactivate this family permanently? The record is archived (children + history preserved).')) return;
+      try { await Api.delete('/admin/families/' + f.id); await renderFamiliesTab(content); }
+      catch (e) { alert('Could not inactivate: ' + (e.message || 'error')); }
+    }));
+    return bar;
   }
 
   // v22p26: families table view.
@@ -1949,6 +2308,7 @@
       var famWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
       famWrap.appendChild(avatarCircle({ id: f.id, name: f.family_name }, 32));
       famWrap.appendChild(Dom.el('span', { style: 'color:#1F6080;' }, f.family_name));
+      if (f.suspended) famWrap.appendChild(Dom.el('span', { style: 'background:#FEF3C7;color:#92400E;font-weight:700;font-size:10px;padding:2px 7px;border-radius:20px;' }, '⏸ Suspended'));
       famCell.appendChild(famWrap);
       tr.appendChild(famCell);
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;color:#6B7280;font-size:13px;' }, f.centre_name || '—'));
@@ -1958,20 +2318,13 @@
         f.outstanding_balance > 0 ? ('$' + f.outstanding_balance.toFixed(2)) : '—'));
 
       var actionsTd = Dom.el('td', { style: 'padding:11px 14px;text-align:right;white-space:nowrap;' });
-      var editBtn = Dom.el('button', {
-        type: 'button',
-        style: 'background:transparent;border:1px solid var(--ink-300);padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--ink-700);',
-      }, 'Edit');
-      editBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        showFamilyModal(f, centres, content);
-      });
-      actionsTd.appendChild(editBtn);
+      actionsTd.appendChild(familyActions(f, centres, content));
       tr.appendChild(actionsTd);
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
     wrap.appendChild(table);
+    if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
     return wrap;
   }
 
@@ -1981,6 +2334,7 @@
   // login) and children in a single POST /admin/families call (DB transaction).
   function showFamilyWizard(centres, content) {
     centres = centres || [];
+    var _dupEsc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); };
     var inStyle = 'width:100%;padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;box-sizing:border-box;';
     var labStyle = 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#1E293B;';
     var state = {
@@ -2007,6 +2361,43 @@
     function lab(t) { return Dom.el('label', { style: labStyle }, t); }
     function wrap(label, input) { var d = Dom.el('div', { style: 'margin-bottom:14px;' }); d.appendChild(lab(label)); d.appendChild(input); return d; }
     function fieldRow(cols) { return Dom.el('div', { style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;margin-bottom:14px;' }); }
+
+    // Mandatory child-photo uploader — uploads immediately to /admin/child-photo
+    // and stores the returned URL on the child (attached on createFamily).
+    function _wTok() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
+    function _wBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
+    function _wAbs(u) { if (!u) return ''; if (/^https?:\/\//.test(u)) return u; return _wBase().replace(/\/api\/v1\/?$/, '') + (u.charAt(0) === '/' ? u : '/' + u); }
+    function childPhotoWidget(c) {
+      var box = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:12px;padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;' });
+      var preview = Dom.el('div', { style: 'width:56px;height:56px;border-radius:12px;flex-shrink:0;background:#E2E8F0 no-repeat center/cover;display:flex;align-items:center;justify-content:center;font-size:24px;color:#94A3B8;overflow:hidden;' }, c.photo_url ? '' : '📷');
+      if (c.photo_url) preview.style.backgroundImage = 'url(' + _wAbs(c.photo_url) + ')';
+      var right = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      right.appendChild(Dom.el('div', { style: 'font-size:12.5px;font-weight:700;color:#1F6080;' }, 'Child photo *'));
+      var msg = Dom.el('div', { style: 'font-size:11.5px;margin-top:2px;color:' + (c.photo_url ? '#16A34A' : '#64748B') + ';' }, c.photo_url ? '✓ Photo added' : 'Required — upload or take a photo');
+      right.appendChild(msg);
+      var file = Dom.el('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none;' });
+      var btn = Dom.el('button', { type: 'button', style: 'background:#1F6080;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;flex-shrink:0;' }, c.photo_url ? 'Change' : '📷 Upload');
+      btn.addEventListener('click', function () { file.click(); });
+      file.addEventListener('change', function () {
+        var f = file.files && file.files[0]; if (!f) return;
+        if (f.size > 8 * 1024 * 1024) { msg.style.color = '#DC2626'; msg.textContent = 'Image too large (max 8 MB)'; return; }
+        msg.style.color = '#64748B'; msg.textContent = 'Uploading…'; btn.disabled = true;
+        var fd = new FormData(); fd.append('photo', f);
+        fetch(_wBase() + '/admin/child-photo', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _wTok() }, body: fd })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d && d.photo_url) {
+              c.photo_url = d.photo_url;
+              preview.textContent = ''; preview.style.backgroundImage = 'url(' + _wAbs(d.photo_url) + ')';
+              msg.style.color = '#16A34A'; msg.textContent = '✓ Photo added'; btn.textContent = 'Change';
+            } else { msg.style.color = '#DC2626'; msg.textContent = (d && d.message) || 'Upload failed — try again'; }
+            btn.disabled = false;
+          })
+          .catch(function () { msg.style.color = '#DC2626'; msg.textContent = 'Upload failed — try again'; btn.disabled = false; });
+      });
+      box.appendChild(preview); box.appendChild(right); box.appendChild(btn); box.appendChild(file);
+      return box;
+    }
     function bindInput(obj, key, opts) {
       opts = opts || {};
       var input = Dom.el('input', { type: opts.type || 'text', style: inStyle });
@@ -2025,6 +2416,21 @@
       s.addEventListener('change', function () { obj[key] = s.value; });
       return s;
     }
+    // Phone as separate area code + number (stored combined so the backend is unchanged).
+    function _pdig(s) { return (s == null ? '' : String(s)).replace(/[^0-9]/g, ''); }
+    function _psplit(v) { var d = _pdig(v); if (d.length === 11 && d[0] === '1') d = d.slice(1); if (d.length >= 10) return { a: d.slice(0, 3), n: d.slice(3, 10) }; if (d.length > 3) return { a: d.slice(0, 3), n: d.slice(3) }; return { a: '', n: v || '' }; }
+    function _pcombine(a, n) { a = _pdig(a); var nd = _pdig(n); if (!a && !nd) return ''; if (a && nd) return '(' + a + ') ' + (nd.length >= 7 ? nd.slice(0, 3) + '-' + nd.slice(3, 7) : nd); return (a ? '(' + a + ') ' : '') + (n || ''); }
+    function bindPhone(obj, key) {
+      var p = _psplit(obj[key]);
+      var box = Dom.el('div', { style: 'display:grid;grid-template-columns:78px 1fr;gap:8px;' });
+      var area = Dom.el('input', { type: 'text', maxlength: '3', placeholder: 'Area', style: inStyle + 'text-align:center;' }); area.value = p.a;
+      var num = Dom.el('input', { type: 'tel', placeholder: 'Phone number', style: inStyle }); num.value = p.n;
+      function upd() { obj[key] = _pcombine(area.value, num.value); }
+      area.addEventListener('input', upd); num.addEventListener('input', upd);
+      box.appendChild(area); box.appendChild(num);
+      return box;
+    }
+    var RELATIONSHIP_OPTS = ['Mother', 'Father', 'Guardian', 'Grandmother', 'Grandfather', 'Grandparent', 'Aunt', 'Uncle', 'Sibling', 'Stepparent', 'Family friend', 'Neighbour', 'Nanny / caregiver', 'Other'].map(function (r) { return { value: r, label: r }; });
 
     function renderStepper() {
       stepper.innerHTML = '';
@@ -2040,9 +2446,28 @@
     function renderFamilyStep() {
       bodyEl.innerHTML = '';
       bodyEl.appendChild(wrap('Centre *', bindSelect(state.family, 'centre_id', centres.map(function (c) { return { value: c.id, label: c.name }; }))));
-      bodyEl.appendChild(wrap('Family name *', bindInput(state.family, 'family_name', { placeholder: 'e.g. The Patel family' })));
+      var famNameInp = bindInput(state.family, 'family_name', { placeholder: 'e.g. The Patel family' });
+      bodyEl.appendChild(wrap('Family name *', famNameInp));
+      // Duplicate check: warn if a family with this name already exists.
+      var famDup = Dom.el('div', { style: 'display:none;background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:9px 12px;margin:-4px 0 10px;font-size:12.5px;color:#92400E;' });
+      bodyEl.appendChild(famDup);
+      famNameInp.addEventListener('blur', function () {
+        var nm = (state.family.family_name || '').trim();
+        if (nm.length < 3) { famDup.style.display = 'none'; state._famDup = false; return; }
+        Api.get('/admin/duplicate-check?type=family&name=' + encodeURIComponent(nm)).then(function (r) {
+          var m = (r && r.matches) || [];
+          if (!m.length) { famDup.style.display = 'none'; state._famDup = false; return; }
+          state._famDup = true; state._famDupOk = false;
+          famDup.style.display = 'block';
+          famDup.innerHTML = '<div style="font-weight:800;margin-bottom:4px;">⚠ A family with a similar name already exists</div>'
+            + m.map(function (x) { return '<div>• ' + _dupEsc(x.label) + ' <span style="color:#B45309;">(' + _dupEsc(x.detail) + ')</span></div>'; }).join('')
+            + '<label style="display:flex;gap:7px;align-items:center;margin-top:7px;font-weight:700;cursor:pointer;"><input type="checkbox" id="kt-famdup-ok"> This is a different family</label>';
+          var cb = famDup.querySelector('#kt-famdup-ok');
+          if (cb) cb.addEventListener('change', function () { state._famDupOk = cb.checked; });
+        }).catch(function () {});
+      });
       var r1 = fieldRow('1fr 1fr');
-      r1.appendChild(wrap('Primary phone', bindInput(state.family, 'primary_phone')));
+      r1.appendChild(wrap('Primary phone', bindPhone(state.family, 'primary_phone')));
       r1.appendChild(wrap('Primary email', bindInput(state.family, 'primary_email', { type: 'email' })));
       bodyEl.appendChild(r1);
       bodyEl.appendChild(wrap('Street address', bindInput(state.family, 'address_line1')));
@@ -2081,7 +2506,7 @@
         card.appendChild(r1);
         var r2 = fieldRow('1fr 1fr');
         r2.appendChild(wrap('Email *', bindInput(g, 'email', { type: 'email' })));
-        r2.appendChild(wrap('Phone', bindInput(g, 'phone')));
+        r2.appendChild(wrap('Phone', bindPhone(g, 'phone')));
         card.appendChild(r2);
         var r3 = fieldRow('1fr 1fr');
         r3.appendChild(wrap('Relationship', bindSelect(g, 'relationship', [
@@ -2104,7 +2529,13 @@
 
     function renderChildrenStep() {
       bodyEl.innerHTML = '';
-      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 14px;' }, 'Add the children in this family. Health, room and other details can be edited after creating.'));
+      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 10px;' }, 'Add the children in this family. Health, room and other details can be edited after creating.'));
+      // Why the photo is mandatory — reassure parents on confidentiality/security.
+      var blurb = Dom.el('div', { style: 'background:#F0F7FB;border:1px solid #D6E6F0;border-left:4px solid #1F6080;border-radius:10px;padding:12px 14px;margin:0 0 16px;font-size:12.5px;color:#334155;line-height:1.55;' });
+      blurb.innerHTML = '<strong style="color:#1F6080;">📷 A recent photo is required for each child.</strong><br>'
+        + 'Educators use it to confirm they have the right child at drop-off, pickup, headcounts and in an emergency — it’s a core safety check. '
+        + 'The photo is <strong>private and encrypted</strong>: it’s only ever visible to your child’s assigned educators and centre administrators, is never shared publicly or with other families, and is removed when the child leaves the centre.';
+      bodyEl.appendChild(blurb);
       state.children.forEach(function (c, idx) {
         var card = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;background:#FBFDFE;' });
         var head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
@@ -2115,10 +2546,36 @@
           head.appendChild(rm);
         }
         card.appendChild(head);
+        card.appendChild(childPhotoWidget(c));
         var r1 = fieldRow('1fr 1fr');
-        r1.appendChild(wrap('First name *', bindInput(c, 'first_name')));
-        r1.appendChild(wrap('Last name *', bindInput(c, 'last_name')));
+        var cFirst = bindInput(c, 'first_name');
+        var cLast = bindInput(c, 'last_name');
+        r1.appendChild(wrap('First name *', cFirst));
+        r1.appendChild(wrap('Last name *', cLast));
         card.appendChild(r1);
+        // Per-child duplicate check — prevents entering a child who already exists
+        // at this agency (the Weston-Boyd-twice scenario) a second time by hand.
+        var cDup = Dom.el('div', { style: 'display:none;background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:9px 12px;margin:-4px 0 10px;font-size:12.5px;color:#92400E;' });
+        card.appendChild(cDup);
+        (function (child, warnEl) {
+          var check = function () {
+            var nm = ((child.first_name || '') + ' ' + (child.last_name || '')).trim();
+            if (nm.length < 3) { warnEl.style.display = 'none'; child._dup = false; return; }
+            Api.get('/admin/duplicate-check?type=child&name=' + encodeURIComponent(nm)).then(function (r) {
+              var mm = (r && r.matches) || [];
+              if (!mm.length) { warnEl.style.display = 'none'; child._dup = false; return; }
+              child._dup = true; child._dupOk = false;
+              warnEl.style.display = 'block';
+              warnEl.innerHTML = '<div style="font-weight:800;margin-bottom:4px;">⚠ A child with this name already exists</div>'
+                + mm.map(function (x) { return '<div>• ' + _dupEsc(x.label) + ' <span style="color:#B45309;">(' + _dupEsc(x.detail) + ')</span></div>'; }).join('')
+                + '<label style="display:flex;gap:7px;align-items:center;margin-top:7px;font-weight:700;cursor:pointer;"><input type="checkbox" class="kt-cdup-ok"> This is a different child</label>';
+              var cb = warnEl.querySelector('.kt-cdup-ok');
+              if (cb) cb.addEventListener('change', function () { child._dupOk = cb.checked; });
+            }).catch(function () {});
+          };
+          cFirst.addEventListener('blur', check);
+          cLast.addEventListener('blur', check);
+        })(c, cDup);
         var r2 = fieldRow('1fr 1fr');
         r2.appendChild(wrap('Preferred name', bindInput(c, 'preferred_name')));
         r2.appendChild(wrap('Date of birth *', bindInput(c, 'date_of_birth', { type: 'date' })));
@@ -2166,12 +2623,13 @@
         rm.addEventListener('click', function () { state.emergency.splice(idx, 1); renderEmergencyStep(); });
         head.appendChild(rm); card.appendChild(head);
         var r1 = fieldRow('1fr 1fr');
-        r1.appendChild(wrap('Full name *', bindInput(e, 'name')));
-        r1.appendChild(wrap('Relationship', bindInput(e, 'relationship', { placeholder: 'e.g. Grandmother' })));
+        r1.appendChild(wrap('First name *', bindInput(e, 'first_name')));
+        r1.appendChild(wrap('Last name *', bindInput(e, 'last_name')));
         card.appendChild(r1);
+        card.appendChild(wrap('Relationship', bindSelect(e, 'relationship', RELATIONSHIP_OPTS)));
         var r2 = fieldRow('1fr 1fr');
-        r2.appendChild(wrap('Phone', bindInput(e, 'phone')));
-        r2.appendChild(wrap('Alternate phone', bindInput(e, 'alt_phone')));
+        r2.appendChild(wrap('Phone', bindPhone(e, 'phone')));
+        r2.appendChild(wrap('Alternate phone', bindPhone(e, 'alt_phone')));
         card.appendChild(r2);
         var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
         var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup;
@@ -2181,7 +2639,7 @@
         bodyEl.appendChild(card);
       });
       var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add emergency contact');
-      add.addEventListener('click', function () { state.emergency.push({ name: '', relationship: '', phone: '', alt_phone: '', can_pickup: false }); renderEmergencyStep(); });
+      add.addEventListener('click', function () { state.emergency.push({ first_name: '', last_name: '', relationship: 'Grandparent', phone: '', alt_phone: '', can_pickup: false }); renderEmergencyStep(); });
       bodyEl.appendChild(add);
     }
 
@@ -2199,15 +2657,29 @@
       fam.appendChild(row('Name', state.family.family_name));
       fam.appendChild(row('Centre', centreObj ? centreObj.name : '—'));
       fam.appendChild(row('Contact', [state.family.primary_phone, state.family.primary_email].filter(Boolean).join('  ·  ')));
+      var _addr = [state.family.address_line1, [state.family.city, state.family.province, state.family.postal_code].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+      if (_addr) fam.appendChild(row('Address', _addr));
       bodyEl.appendChild(fam);
       var gd = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;' });
       gd.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;display:block;margin-bottom:6px;' }, '🧑‍🤝‍🧑 Guardians (' + state.guardians.length + ')'));
       state.guardians.forEach(function (g, i) { gd.appendChild(row((i === 0 ? '★ ' : '') + (g.first_name + ' ' + g.last_name).trim(), g.relationship + '  ·  ' + g.email)); });
       bodyEl.appendChild(gd);
-      var ch = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;' });
+      var ch = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;' });
       ch.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;display:block;margin-bottom:6px;' }, '🧒 Children (' + state.children.length + ')'));
       state.children.forEach(function (c) { ch.appendChild(row((c.first_name + ' ' + c.last_name).trim(), (c.date_of_birth || '?') + '  ·  ' + c.enrollment_status)); });
       bodyEl.appendChild(ch);
+      // Emergency contacts — previously omitted from the review.
+      var ec = (state.emergency || []).filter(function (e) { return ((e.first_name || '') + (e.last_name || '')).trim(); });
+      if (ec.length) {
+        var em = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;' });
+        em.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;display:block;margin-bottom:6px;' }, '☎ Emergency contacts (' + ec.length + ')'));
+        ec.forEach(function (e) {
+          var name = ((e.first_name || '') + ' ' + (e.last_name || '')).trim();
+          var meta = [e.relationship, e.phone, (e.can_pickup ? 'can pick up' : null)].filter(Boolean).join('  ·  ');
+          em.appendChild(row(name, meta));
+        });
+        bodyEl.appendChild(em);
+      }
     }
 
     function validateStep() {
@@ -2215,6 +2687,7 @@
       if (step === 0) {
         if (!state.family.centre_id) { status.textContent = 'Please choose a centre.'; return false; }
         if (!state.family.family_name.trim()) { status.textContent = 'Family name is required.'; return false; }
+        if (state._famDup && !state._famDupOk) { status.style.color = '#B45309'; status.textContent = 'This family name looks like an existing record — tick “This is a different family”, or open the existing family instead.'; return false; }
       } else if (step === 1) {
         for (var i = 0; i < state.guardians.length; i++) {
           var g = state.guardians[i];
@@ -2228,6 +2701,8 @@
           var c = state.children[j];
           if (!c.first_name.trim() || !c.last_name.trim()) { status.textContent = 'Child ' + (j + 1) + ': first and last name are required.'; return false; }
           if (!c.date_of_birth) { status.textContent = 'Child ' + (j + 1) + ': date of birth is required.'; return false; }
+          if (!c.photo_url) { status.textContent = 'Child ' + (j + 1) + ': a photo is required — please upload or take one.'; return false; }
+          if (c._dup && !c._dupOk) { status.style.color = '#B45309'; status.textContent = 'Child ' + (j + 1) + ' looks like an existing child — tick “This is a different child”, or open the existing record instead.'; return false; }
         }
       }
       status.textContent = '';
@@ -2286,16 +2761,20 @@
           return { first_name: c.first_name.trim(), last_name: c.last_name.trim(), preferred_name: c.preferred_name.trim() || null, date_of_birth: c.date_of_birth, gender: c.gender, enrollment_status: c.enrollment_status,
             allergies: (c.allergies || '').trim() || null, dietary_restrictions: (c.dietary_restrictions || '').trim() || null, medical_notes: (c.medical_notes || '').trim() || null, doctor_name: (c.doctor_name || '').trim() || null, doctor_phone: (c.doctor_phone || '').trim() || null, school: (c.school || '').trim() || null };
         }),
-        emergency_contacts: (state.emergency || []).filter(function (e) { return (e.name || '').trim(); }).map(function (e) {
-          return { name: e.name.trim(), relationship: (e.relationship || '').trim() || null, phone: (e.phone || '').trim() || null, alt_phone: (e.alt_phone || '').trim() || null, can_pickup: !!e.can_pickup };
+        emergency_contacts: (state.emergency || []).filter(function (e) { return ((e.first_name || '') + (e.last_name || '')).trim(); }).map(function (e) {
+          return { name: ((e.first_name || '') + ' ' + (e.last_name || '')).trim(), relationship: (e.relationship || '').trim() || null, phone: (e.phone || '').trim() || null, alt_phone: (e.alt_phone || '').trim() || null, can_pickup: !!e.can_pickup };
         }),
       };
+      // Circular progress + a short settle delay so the portal has time to update.
+      if (!document.getElementById('kt-fam-spin-kf')) { var _st = document.createElement('style'); _st.id = 'kt-fam-spin-kf'; _st.textContent = '@keyframes kt-spin{to{transform:rotate(360deg)}}'; document.head.appendChild(_st); }
       status.style.color = '#1F6080';
-      status.textContent = 'Creating family…';
+      status.innerHTML = '<span style="display:inline-flex;align-items:center;gap:10px;"><span style="width:18px;height:18px;border:3px solid #CBD5E1;border-top-color:#1F6080;border-radius:50%;display:inline-block;animation:kt-spin .7s linear infinite;"></span> Creating family &amp; sending guardian invites…</span>';
       footer.innerHTML = '';
       try {
         var res = await Api.post('/admin/families', payload);
-        if (Dom.toast) Dom.toast('Family created — ' + (res.guardians || 0) + ' guardian(s), ' + (res.children || 0) + ' child(ren)', 'success');
+        status.innerHTML = '<span style="display:inline-flex;align-items:center;gap:10px;color:#16A34A;"><span style="width:18px;height:18px;border:3px solid #BBF7D0;border-top-color:#16A34A;border-radius:50%;display:inline-block;animation:kt-spin .7s linear infinite;"></span> Family created — finishing up…</span>';
+        await new Promise(function (r) { setTimeout(r, 1000); });
+        if (Dom.toast) Dom.toast('Family created — ' + (res.guardians || 0) + ' guardian(s), ' + (res.children || 0) + ' child(ren). Invites sent.', 'success');
         await renderFamiliesTab(content);
         Shell.Modal.close();
       } catch (e) {
@@ -2312,6 +2791,165 @@
   function showFamilyModal(family, centres, content) {
     const isEdit = !!family;
     if (!isEdit) { return showFamilyWizard(centres, content); }
+    return showFamilyEditTabs(family, centres, content);
+  }
+
+  // Full tabbed family editor: Family · Guardians · Children · Emergency.
+  function showFamilyEditTabs(family, centres, content) {
+    centres = centres || [];
+    content = content || document.getElementById('appMain');
+    const EREL = ['Mother', 'Father', 'Guardian', 'Grandmother', 'Grandfather', 'Grandparent', 'Aunt', 'Uncle', 'Sibling', 'Family friend', 'Neighbour', 'Other'];
+    function _dig(s) { return (s == null ? '' : String(s)).replace(/[^0-9]/g, ''); }
+    function _psplit(v) { var d = _dig(v); if (d.length === 11 && d[0] === '1') d = d.slice(1); if (d.length >= 10) return { a: d.slice(0, 3), n: d.slice(3, 10) }; if (d.length > 3) return { a: d.slice(0, 3), n: d.slice(3) }; return { a: '', n: v || '' }; }
+    function _pcomb(a, n) { a = _dig(a); var nd = _dig(n); if (!a && !nd) return ''; if (a && nd) return '(' + a + ') ' + (nd.length >= 7 ? nd.slice(0, 3) + '-' + nd.slice(3, 7) : nd); return (a ? '(' + a + ') ' : '') + (n || ''); }
+    var IN = 'width:100%;padding:8px 11px;border:1px solid #D1D5DB;border-radius:7px;font-size:14px;box-sizing:border-box;';
+    function inp(val, ph, type) { var e = Dom.el('input', { type: type || 'text', style: IN }); if (ph) e.placeholder = ph; e.value = val == null ? '' : val; return e; }
+    function selEl(val, opts) { var s = Dom.el('select', { style: IN + 'background:#fff;' }); opts.forEach(function (o) { var op = Dom.el('option', { value: o.value }, o.label); if (String(val) === String(o.value)) op.selected = true; s.appendChild(op); }); return s; }
+    function fwrap(l, e) { var d = Dom.el('div', { style: 'margin-bottom:12px;' }); d.appendChild(Dom.el('label', { style: 'display:block;font-size:12.5px;font-weight:600;color:#334155;margin-bottom:4px;' }, l)); d.appendChild(e); return d; }
+    function grid(cols) { return Dom.el('div', { style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;' }); }
+    function phoneField(label, val) { var p = _psplit(val); var box = Dom.el('div', { style: 'display:grid;grid-template-columns:74px 1fr;gap:8px;' }); var a = inp(p.a, 'Area'); a.maxLength = 3; a.style.textAlign = 'center'; var n = inp(p.n, 'Phone number', 'tel'); box.appendChild(a); box.appendChild(n); return { wrap: fwrap(label, box), get: function () { return _pcomb(a.value, n.value); } }; }
+
+    var root = Dom.el('div', {});
+    var tabBar = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:14px;' });
+    var pane = Dom.el('div', {});
+    var msg = Dom.el('div', { style: 'min-height:18px;font-size:13px;margin-top:10px;' });
+    root.appendChild(tabBar); root.appendChild(pane); root.appendChild(msg);
+    function setMsg(t, ok) { msg.style.color = ok ? '#16A34A' : '#DC2626'; msg.textContent = t; }
+    function refreshList() { try { renderFamiliesTab(content); } catch (e) {} }
+
+    var TABS = ['Family', 'Guardians', 'Children', 'Emergency'];
+    var active = 'Family', DATA = null, tabBtns = {};
+    TABS.forEach(function (t) {
+      var b = Dom.el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;margin-bottom:-1px;font-size:13.5px;font-weight:700;color:#64748B;cursor:pointer;' }, t);
+      b.addEventListener('click', function () { active = t; paintTabs(); renderTab(); });
+      tabBtns[t] = b; tabBar.appendChild(b);
+    });
+    function paintTabs() { TABS.forEach(function (t) { var on = t === active; tabBtns[t].style.color = on ? '#1F6080' : '#64748B'; tabBtns[t].style.borderBottomColor = on ? '#1F6080' : 'transparent'; }); }
+
+    function renderFamily() {
+      pane.innerHTML = ''; var f = DATA.family;
+      var iName = inp(f.family_name, 'Family name');
+      var copts = (centres || []).map(function (c) { return { value: c.id, label: c.name }; });
+      if (!copts.some(function (o) { return String(o.value) === String(f.centre_id); })) copts.unshift({ value: f.centre_id, label: '(current centre)' });
+      var iCentre = selEl(f.centre_id, copts);
+      var ph = phoneField('Primary phone', f.primary_phone);
+      var iEmail = inp(f.primary_email, 'name@example.com', 'email');
+      var iAddr = inp(f.address_line1, 'Street address');
+      var iCity = inp(f.city, 'City'), iProv = inp(f.province, 'Province'), iPost = inp(f.postal_code, 'Postal code');
+      var iBill = selEl(f.billing_split, [{ value: 'single', label: 'Single payer' }, { value: 'split_50_50', label: 'Split 50 / 50' }, { value: 'custom', label: 'Custom split' }]);
+      var iNotes = Dom.el('textarea', { style: IN + 'min-height:60px;font-family:inherit;' }); iNotes.value = f.notes || '';
+      pane.appendChild(fwrap('Family name *', iName));
+      pane.appendChild(fwrap('Centre', iCentre));
+      var g1 = grid('1fr 1fr'); g1.appendChild(ph.wrap); g1.appendChild(fwrap('Primary email', iEmail)); pane.appendChild(g1);
+      pane.appendChild(fwrap('Street address', iAddr));
+      var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province', iProv)); g2.appendChild(fwrap('Postal code', iPost)); pane.appendChild(g2);
+      pane.appendChild(fwrap('Billing split', iBill));
+      pane.appendChild(fwrap('Internal notes', iNotes));
+      var save = Dom.el('button', { style: 'padding:9px 18px;background:#1F6080;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;' }, 'Save family');
+      save.addEventListener('click', async function () {
+        if (!iName.value.trim()) { setMsg('Family name is required.'); return; }
+        save.disabled = true; setMsg('Saving…', true);
+        try {
+          await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, billing_split: iBill.value, notes: iNotes.value.trim() || null });
+          setMsg('✓ Family saved', true); refreshList();
+        } catch (e) { setMsg((e.message || 'Save failed') + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '')); }
+        save.disabled = false;
+      });
+      pane.appendChild(save);
+    }
+
+    function renderGuardians() {
+      pane.innerHTML = '';
+      (DATA.guardians || []).forEach(function (g) {
+        var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
+        card.appendChild(Dom.el('div', { style: 'font-weight:700;color:#1F6080;font-size:13px;margin-bottom:10px;' }, ((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? ' ★ primary' : '')));
+        var iF = inp(g.first_name, 'First name'), iL = inp(g.last_name, 'Last name');
+        var ph = phoneField('Phone', g.phone);
+        var iR = selEl(g.relationship, [{ value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' }, { value: 'guardian', label: 'Guardian' }, { value: 'grandparent', label: 'Grandparent' }, { value: 'foster', label: 'Foster' }, { value: 'other', label: 'Other' }]);
+        var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:26px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
+        var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('First name', iF)); g1.appendChild(fwrap('Last name', iL)); card.appendChild(g1);
+        var g2 = grid('1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Relationship', iR)); card.appendChild(g2);
+        card.appendChild(pickWrap);
+        card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:8px;' }, 'Login email: ' + (g.email || '—')));
+        var save = Dom.el('button', { style: 'margin-top:10px;padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save guardian');
+        save.addEventListener('click', async function () {
+          save.disabled = true; setMsg('Saving…', true);
+          try { await Api.patch('/admin/guardians/' + g.id, { first_name: iF.value.trim(), last_name: iL.value.trim(), phone: ph.get() || null, relationship: iR.value, can_pickup: pick.checked }); setMsg('✓ Guardian saved', true); refreshList(); }
+          catch (e) { setMsg(e.message || 'Save failed'); }
+          save.disabled = false;
+        });
+        card.appendChild(save); pane.appendChild(card);
+      });
+      if (!(DATA.guardians || []).length) pane.appendChild(Dom.el('div', { style: 'color:#64748B;' }, 'No guardians.'));
+    }
+
+    function renderChildren() {
+      pane.innerHTML = '';
+      pane.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:12px;' }, 'Open a child’s record to edit health, enrolment and details.'));
+      (DATA.children || []).forEach(function (c) {
+        var row = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;' });
+        var info = Dom.el('div', {});
+        info.appendChild(Dom.el('div', { style: 'font-weight:700;' }, (c.preferred_name || ((c.first_name || '') + ' ' + (c.last_name || ''))).trim()));
+        var bits = [c.date_of_birth ? 'Born ' + c.date_of_birth : null, c.gender, c.enrollment_status].filter(Boolean).join(' · ');
+        info.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;' }, bits));
+        if (c.allergies) info.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#B45309;margin-top:2px;' }, '⚠️ ' + c.allergies));
+        row.appendChild(info);
+        var open = Dom.el('button', { style: 'padding:7px 12px;background:#fff;color:#1F6080;border:1px solid #1F6080;border-radius:7px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;' }, 'Open record →');
+        open.addEventListener('click', function () { Shell.Modal.close(); location.hash = '#child-detail?id=' + c.id; });
+        row.appendChild(open); pane.appendChild(row);
+      });
+      if (!(DATA.children || []).length) pane.appendChild(Dom.el('div', { style: 'color:#64748B;' }, 'No children.'));
+    }
+
+    function ecCard(e) {
+      var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
+      var iN = inp(e.name, 'Full name'); var iR = selEl(e.relationship || '', [{ value: '', label: 'Relationship…' }].concat(EREL.map(function (r) { return { value: r, label: r }; })));
+      var ph = phoneField('Phone', e.phone); var pha = phoneField('Alternate phone', e.alt_phone);
+      var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
+      var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('Full name', iN)); g1.appendChild(fwrap('Relationship', iR)); card.appendChild(g1);
+      var g2 = grid('1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(pha.wrap); card.appendChild(g2);
+      card.appendChild(pickWrap);
+      var bar = Dom.el('div', { style: 'display:flex;gap:8px;margin-top:10px;' });
+      var save = Dom.el('button', { style: 'padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save');
+      save.addEventListener('click', async function () {
+        if (!iN.value.trim()) { setMsg('Name is required.'); return; }
+        save.disabled = true; setMsg('Saving…', true);
+        var payload = { name: iN.value.trim(), relationship: iR.value || null, phone: ph.get() || null, alt_phone: pha.get() || null, can_pickup: pick.checked };
+        try {
+          if (e.__new) { var r = await Api.post('/admin/families/' + DATA.family.id + '/emergency-contacts', payload); e.__new = false; e.id = r.id; }
+          else { await Api.patch('/admin/emergency-contacts/' + e.id, payload); }
+          setMsg('✓ Emergency contact saved', true); refreshList();
+        } catch (err) { setMsg(err.message || 'Save failed'); }
+        save.disabled = false;
+      });
+      bar.appendChild(save);
+      if (!e.__new) { var del = Dom.el('button', { style: 'padding:8px 14px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Delete'); del.addEventListener('click', async function () { if (KT.confirm && !await KT.confirm('Delete this emergency contact?')) return; try { await Api.delete('/admin/emergency-contacts/' + e.id); card.remove(); setMsg('✓ Deleted', true); refreshList(); } catch (err) { setMsg(err.message || 'Delete failed'); } }); bar.appendChild(del); }
+      card.appendChild(bar);
+      return card;
+    }
+    function renderEmergency() {
+      pane.innerHTML = '';
+      (DATA.emergency_contacts || []).forEach(function (e) { pane.appendChild(ecCard(e)); });
+      var add = Dom.el('button', { style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add emergency contact');
+      add.addEventListener('click', function () { pane.insertBefore(ecCard({ __new: true, name: '', relationship: '', phone: '', alt_phone: '', can_pickup: false }), add); });
+      pane.appendChild(add);
+    }
+
+    function renderTab() {
+      if (!DATA) return;
+      if (active === 'Family') renderFamily();
+      else if (active === 'Guardians') renderGuardians();
+      else if (active === 'Children') renderChildren();
+      else renderEmergency();
+    }
+
+    Shell.Modal.open({ title: 'Edit family — ' + family.family_name, body: root, large: true });
+    paintTabs();
+    pane.appendChild(loading('Loading family…'));
+    Api.get('/admin/families/' + family.id).then(function (data) { DATA = data; renderTab(); }).catch(function (e) { pane.innerHTML = ''; setMsg('Could not load: ' + (e.message || 'error')); });
+    return;
+
+    // ── legacy single-form edit (unreachable; kept to avoid a large diff) ──
     const inputs = {};
     const form = Dom.el('form', {});
 
@@ -2448,9 +3086,46 @@
       const data = await Api.get('/admin/families/' + familyId);
       const body = Dom.el('div', {});
 
-      body.appendChild(Dom.el('h3', { style: 'font-size: 18px; margin: 0 0 12px;' }, data.family.family_name));
-      body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); margin-bottom: 4px;' }, '📧 ' + (data.family.primary_email || '—')));
-      body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); margin-bottom: 16px;' }, '📞 ' + (data.family.primary_phone || '—')));
+      var _f = data.family || {};
+      var _hd = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;' });
+      _hd.appendChild(Dom.el('h3', { style: 'font-size: 19px; margin: 0;' }, _f.family_name));
+      var _edit = Dom.el('button', { style: 'padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;flex:0 0 auto;' }, '✏️ Edit family');
+      _edit.addEventListener('click', async function () {
+        var _cs = [];
+        try { var _r = await Api.get('/admin/centres'); _cs = _r.centres || []; } catch (e) {}
+        Shell.Modal.close();
+        setTimeout(function () { showFamilyModal(_f, _cs, document.getElementById('appMain')); }, 80);
+      });
+      // Manual (re)send of the provider welcome/bio email to this family's
+      // guardians (CCs the agency admin, director and educator).
+      var _resend = Dom.el('button', { style: 'padding:8px 14px;background:#fff;color:#1F6080;border:1.5px solid #1F6080;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;flex:0 0 auto;' }, '✉️ Send welcome');
+      _resend.addEventListener('click', async function () {
+        var go = !(window.KT && KT.confirm) || await KT.confirm({ title: 'Send provider welcome email?', description: 'Emails the warm provider introduction to this family’s guardians, with the agency admin, director and educator on CC.' });
+        if (!go) return;
+        _resend.disabled = true; _resend.textContent = 'Sending…';
+        try {
+          var rr = await Api.post('/admin/families/' + familyId + '/provider-welcome', {});
+          if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Welcome email sent to ' + (rr.recipients || 0) + ' guardian(s)', 'success');
+          _resend.textContent = '✓ Sent';
+        } catch (e) {
+          if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not send: ' + (e.message || 'error'), 'error');
+          _resend.disabled = false; _resend.textContent = '✉️ Send welcome';
+        }
+      });
+      var _btns = Dom.el('div', { style: 'display:flex;gap:8px;flex-shrink:0;' });
+      _btns.appendChild(_resend); _btns.appendChild(_edit);
+      _hd.appendChild(_btns);
+      body.appendChild(_hd);
+      function _kv(k, v) { var d = Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:14px;padding:4px 0;font-size:13.5px;' }); d.appendChild(Dom.el('span', { style: 'color:var(--ink-500);flex-shrink:0;' }, k)); d.appendChild(Dom.el('span', { style: 'font-weight:600;color:#0F172A;text-align:right;word-break:break-word;' }, (v == null || v === '') ? '—' : String(v))); return d; }
+      var _famCard = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;margin:8px 0 6px;' });
+      _famCard.appendChild(_kv('Email', _f.primary_email));
+      _famCard.appendChild(_kv('Phone', _f.primary_phone));
+      var _addr = [_f.address_line1, _f.address_line2, [_f.city, _f.province, _f.postal_code].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+      _famCard.appendChild(_kv('Address', _addr));
+      _famCard.appendChild(_kv('Billing', ({ single: 'Single payer', split_50_50: 'Split 50 / 50', custom: 'Custom split' })[_f.billing_split] || _f.billing_split));
+      if (_f.status) _famCard.appendChild(_kv('Status', _f.status));
+      if (_f.notes) _famCard.appendChild(_kv('Notes', _f.notes));
+      body.appendChild(_famCard);
 
       body.appendChild(Dom.el('h4', { style: 'font-size: 14px; font-weight: 700; margin: 16px 0 8px; letter-spacing: 0.5px; color: var(--ink-700);' }, 'CHILDREN'));
       if (data.children.length === 0) {
@@ -2461,9 +3136,16 @@
           // v22p83: child avatar (photo or initials)
           const cName = c.preferred_name || (c.first_name + ' ' + c.last_name);
           row.appendChild(Dom.el('span', { html: KT.avatar(c.first_name + ' ' + c.last_name, { size: 34, photoUrl: c.photo_url }) }));
-          const cInfo = Dom.el('div', { style: 'min-width:0;' });
+          const cInfo = Dom.el('div', { style: 'min-width:0;flex:1;' });
           cInfo.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, cName));
-          cInfo.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, (c.date_of_birth ? 'Born ' + c.date_of_birth + ' · ' : '') + c.enrollment_status));
+          cInfo.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, (c.date_of_birth ? 'Born ' + c.date_of_birth + ' · ' : '') + (c.gender ? c.gender + ' · ' : '') + c.enrollment_status));
+          var _extra = [];
+          if (c.allergies) _extra.push('⚠️ Allergies: ' + c.allergies);
+          if (c.dietary_restrictions) _extra.push('🍽️ Dietary: ' + c.dietary_restrictions);
+          if (c.medical_notes) _extra.push('💊 Medical: ' + c.medical_notes);
+          if (c.doctor_name || c.doctor_phone) _extra.push('🩺 Doctor: ' + [c.doctor_name, c.doctor_phone].filter(Boolean).join(' · '));
+          if (c.school) _extra.push('🏫 School: ' + c.school);
+          if (_extra.length) cInfo.appendChild(Dom.el('div', { style: 'font-size:12px;color:#475569;margin-top:4px;line-height:1.5;' }, _extra.join('  ·  ')));
           row.appendChild(cInfo);
           body.appendChild(row);
         });
@@ -2475,8 +3157,9 @@
         // v22p83: guardian avatar (photo or initials)
         row.appendChild(Dom.el('span', { html: KT.avatar(g.first_name + ' ' + g.last_name, { size: 34, photoUrl: g.photo_url }) }));
         const info = Dom.el('div', { style: 'flex: 1; min-width: 0;' });
-        info.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, g.first_name + ' ' + g.last_name + (g.is_primary ? ' (primary)' : '')));
-        info.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, g.email + ' · ' + g.relationship));
+        info.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, g.first_name + ' ' + g.last_name + (g.is_primary ? ' ★ primary' : '')));
+        info.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, [g.relationship, g.email, g.phone].filter(Boolean).join(' · ')));
+        info.appendChild(Dom.el('div', { style: 'font-size: 11px; color: #94A3B8;margin-top:1px;' }, (g.can_pickup ? '✓ authorized for pickup' : '✗ not for pickup') + (g.status ? ' · ' + g.status : '')));
         row.appendChild(info);
         // v22p5.2: per-guardian kiosk PIN setter (gates parent sign-in on the kiosk)
         if (g.can_pickup && g.id) {
@@ -2505,7 +3188,21 @@
         body.appendChild(row);
       });
 
-      Shell.Modal.open({ title: data.family.family_name, body: body, large: true });
+      // Emergency contacts — previously not shown in the family view at all.
+      var _ecs = data.emergency_contacts || [];
+      body.appendChild(Dom.el('h4', { style: 'font-size: 14px; font-weight: 700; margin: 16px 0 8px; letter-spacing: 0.5px; color: var(--ink-700);' }, 'EMERGENCY CONTACTS'));
+      if (!_ecs.length) {
+        body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'None on file.'));
+      } else {
+        _ecs.forEach(function (e) {
+          var er = Dom.el('div', { style: 'padding:10px;background:var(--ink-50);border-radius:6px;margin-bottom:6px;' });
+          er.appendChild(Dom.el('div', { style: 'font-weight:600;' }, e.name + (e.can_pickup ? '  ·  ✓ pickup' : '')));
+          er.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' }, [e.relationship, e.phone, e.alt_phone].filter(Boolean).join('  ·  ') || '—'));
+          body.appendChild(er);
+        });
+      }
+
+      Shell.Modal.open({ title: 'Family — ' + (data.family.family_name || ''), body: body, large: true });
     } catch (e) {
       Shell.Modal.open({ title: 'Error', body: Dom.el('div', {}, e.message || 'Could not load family') });
     }
@@ -2632,6 +3329,9 @@
 
     content.appendChild(grid);
 
+    // Email delivery (white-label): send from the agency's own M365 / Google.
+    renderEmailDeliveryCard(content);
+
     function updatePreview() {
       Dom.clear(previewBox);
       const primary = inputs.primary_color.value;
@@ -2652,6 +3352,211 @@
       previewBox.appendChild(btn);
     }
     updatePreview();
+
+    // ── Payslip appearance ───────────────────────────────────────────────
+    // Agency-wide wording printed on every staff payslip PDF. It used to live at the
+    // bottom of the Payroll REPORT screen, which is a date-range report, not a place
+    // anyone looks for settings. It is document branding - the logo, agency name and
+    // address are already added automatically - so it belongs on this tab.
+    (function () {
+      var wrap = Dom.el('div', { style: 'margin-top:28px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;max-width:720px;' });
+      wrap.innerHTML =
+        '<h3 style="margin:0 0 4px;color:#1F6080;font-size:16px;">\uD83E\uDDFE Payslip appearance</h3>'
+        + '<p style="margin:0 0 16px;color:#64748B;font-size:13px;line-height:1.5;">Wording that appears on every staff payslip PDF for your agency. Your agency <strong>logo, name, and address</strong> are added automatically, along with the employee\'s details and a standard confidentiality notice.</p>'
+        + '<label style="display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px;">Message to staff <span style="color:#94A3B8;font-weight:500;">(optional \u2014 appears in the body)</span></label>'
+        + '<textarea id="ps-note" rows="3" placeholder="e.g. Thank you for your hard work this pay period. Please contact the office with any questions about your pay." style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:13.5px;font-family:inherit;resize:vertical;color:#0D1B2A;"></textarea>'
+        + '<label style="display:block;font-size:12px;font-weight:700;color:#374151;margin:14px 0 5px;">Confidentiality / private notice <span style="color:#94A3B8;font-weight:500;">(optional)</span></label>'
+        + '<textarea id="ps-conf" rows="2" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:13.5px;font-family:inherit;resize:vertical;color:#0D1B2A;"></textarea>'
+        + '<div style="font-size:11.5px;color:#94A3B8;margin-top:4px;">Leave blank to use the standard &ldquo;Private &amp; Confidential&rdquo; notice.</div>'
+        + '<div style="margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+        +   '<button id="ps-save" style="background:#1F6080;color:#fff;border:0;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13.5px;">Save wording</button>'
+        +   '<span id="ps-status" style="font-size:13px;"></span>'
+        + '</div>';
+      content.appendChild(wrap);
+
+      var noteEl = wrap.querySelector('#ps-note'), confEl = wrap.querySelector('#ps-conf'),
+          saveBtn = wrap.querySelector('#ps-save'), statusEl = wrap.querySelector('#ps-status');
+      Api.get('/agency/payslip-settings').then(function (s) {
+        if (!s) return;
+        noteEl.value = s.note || '';
+        confEl.value = s.confidential || '';
+        if (s.confidential_default) confEl.placeholder = s.confidential_default;
+      }).catch(function () {});
+      saveBtn.onclick = function () {
+        saveBtn.disabled = true; saveBtn.textContent = 'Saving\u2026'; statusEl.textContent = '';
+        Api.post('/agency/payslip-settings', { note: noteEl.value, confidential: confEl.value })
+          .then(function () { statusEl.style.color = '#059669'; statusEl.textContent = '\u2713 Saved \u2014 applies to payslip downloads from now on.'; })
+          .catch(function (e) { statusEl.style.color = '#DC2626'; statusEl.textContent = (e && e.message) || 'Could not save.'; })
+          .then(function () { saveBtn.disabled = false; saveBtn.textContent = 'Save wording'; });
+      };
+    })();
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //   EMAIL DELIVERY (white-label) — send from the agency's OWN M365/Google
+  // ════════════════════════════════════════════════════════════════
+  // By default an agency's mail is sent by KiddieTrac. A white-label agency can
+  // instead send from their OWN Microsoft 365 (Graph) or Google/Gmail (SMTP).
+  // Scoped by the API to the caller's agency (a platform_admin manages whichever
+  // agency they're switched into). Secrets are write-only — never sent back.
+  async function renderEmailDeliveryCard(content) {
+    var card = Dom.el('div', { 'data-kt-noautofill': '1', style: 'background:white;padding:24px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-top:24px;' });
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:4px;' });
+    head.appendChild(Dom.el('h3', { style: 'margin:0;font-size:18px;' }, '✉️ Email delivery'));
+    var badge = Dom.el('span', { style: 'display:none;font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#065F46;background:#D1FAE5;padding:3px 9px;border-radius:99px;' }, 'Own email active');
+    head.appendChild(badge);
+    card.appendChild(head);
+    card.appendChild(Dom.el('div', { style: 'color:var(--ink-500);font-size:13px;margin-bottom:16px;max-width:640px;' },
+      'By default your emails are sent securely by KiddieTrac. If your agency has its own Microsoft 365 or Google Workspace, you can send from your own email address instead — recipients see mail from you, and it counts toward your own domain reputation.'));
+    var loadingEl = loading('Loading…'); card.appendChild(loadingEl); content.appendChild(card);
+
+    var res;
+    try { res = await Api.get('/admin/agency-mail'); }
+    catch (e) { loadingEl.replaceWith(errorBox('Could not load email settings: ' + (e.message || 'error'))); return; }
+    loadingEl.remove();
+    var c = res.config || {};
+    if (res.active) badge.style.display = 'inline-block';
+
+    function field(label, opts) {
+      opts = opts || {};
+      var wrap = Dom.el('div', { style: 'margin-bottom:12px;' + (opts.width || '') });
+      wrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, label));
+      var input = Dom.el('input', { type: opts.type || 'text', placeholder: opts.placeholder || '',
+        style: 'width:100%;padding:8px 12px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;' });
+      if (opts.value != null) input.value = opts.value;
+      if (opts.autocomplete) input.autocomplete = opts.autocomplete;
+      wrap.appendChild(input);
+      if (opts.hint) wrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:var(--ink-500);margin-top:4px;' }, opts.hint));
+      wrap._input = input;
+      return wrap;
+    }
+
+    // Provider selector (segmented).
+    var provider = c.provider || 'default';
+    var seg = Dom.el('div', { style: 'display:inline-flex;background:var(--ink-50);border:1px solid var(--ink-200);border-radius:10px;padding:3px;gap:3px;margin-bottom:16px;flex-wrap:wrap;' });
+    var opts = [['default', 'KiddieTrac default'], ['graph', 'Our Microsoft 365'], ['google', 'Our Google / Gmail']];
+    var segBtns = {};
+    opts.forEach(function (o) {
+      var b = Dom.el('button', { type: 'button', style: 'border:none;background:transparent;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink-600);transition:all .12s;' }, o[1]);
+      b.addEventListener('click', function () { provider = o[0]; paint(); });
+      segBtns[o[0]] = b;
+      seg.appendChild(b);
+    });
+    card.appendChild(seg);
+
+    // From identity (shared by both providers).
+    var fromRow = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;' });
+    var fFrom = field('Send from address', { type: 'email', value: c.from, placeholder: 'noreply@youragency.com' });
+    var fFromName = field('Send from name', { value: c.from_name, placeholder: 'Your Agency Name' });
+    fromRow.appendChild(fFrom); fromRow.appendChild(fFromName);
+
+    // Microsoft 365 (Graph) fields.
+    var gWrap = Dom.el('div', {});
+    var gTenant = field('Directory (tenant) ID', { value: (c.graph || {}).tenant, placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' });
+    var gClient = field('Application (client) ID', { value: (c.graph || {}).client_id, placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' });
+    var gSecret = field('Client secret', { type: 'password', autocomplete: 'new-password',
+      placeholder: (c.graph || {}).secret_set ? '•••••••• (unchanged — type to replace)' : 'Client secret value',
+      hint: 'From your Azure app registration → Certificates & secrets. The app needs the Mail.Send application permission (admin-consented).' });
+    gWrap.appendChild(gTenant); gWrap.appendChild(gClient); gWrap.appendChild(gSecret);
+
+    // Google / Gmail (SMTP) fields.
+    var goWrap = Dom.el('div', {});
+    var goUser = field('SMTP username (email)', { type: 'email', value: (c.google || {}).username, placeholder: 'you@youragency.com' });
+    var goPass = field('App password', { type: 'password', autocomplete: 'new-password',
+      placeholder: (c.google || {}).password_set ? '•••••••• (unchanged — type to replace)' : '16-character app password',
+      hint: 'Google Account → Security → 2-Step Verification → App passwords. Not your normal login password.' });
+    var goHostRow = Dom.el('div', { style: 'display:grid;grid-template-columns:2fr 1fr;gap:12px;' });
+    var goHost = field('SMTP host', { value: (c.google || {}).host || 'smtp.gmail.com', placeholder: 'smtp.gmail.com' });
+    var goPort = field('Port', { type: 'number', value: (c.google || {}).port || 587, placeholder: '587' });
+    goHostRow.appendChild(goHost); goHostRow.appendChild(goPort);
+    goWrap.appendChild(goUser); goWrap.appendChild(goPass); goWrap.appendChild(goHostRow);
+
+    card.appendChild(fromRow);
+    card.appendChild(gWrap);
+    card.appendChild(goWrap);
+
+    var status = Dom.el('div', { style: 'min-height:20px;font-size:13px;margin:6px 0;' });
+    card.appendChild(status);
+
+    var actions = Dom.el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;' });
+    var saveBtn = Dom.el('button', { style: btnPrimary() }, 'Save email settings');
+    actions.appendChild(saveBtn);
+    // Inline test.
+    var testInput = Dom.el('input', { type: 'email', placeholder: 'you@example.com',
+      style: 'padding:8px 12px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;width:200px;' });
+    var testBtn = Dom.el('button', { style: 'padding:9px 16px;border:1px solid var(--ink-300);background:white;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;' }, 'Send test');
+    var testWrap = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;' });
+    testWrap.appendChild(testInput); testWrap.appendChild(testBtn);
+    actions.appendChild(testWrap);
+    card.appendChild(actions);
+    var testStatus = Dom.el('div', { style: 'min-height:18px;font-size:12.5px;margin-top:6px;' });
+    card.appendChild(testStatus);
+
+    function paint() {
+      opts.forEach(function (o) {
+        var on = provider === o[0];
+        segBtns[o[0]].style.background = on ? 'white' : 'transparent';
+        segBtns[o[0]].style.color = on ? 'var(--brand-600, #1F6080)' : 'var(--ink-600)';
+        segBtns[o[0]].style.boxShadow = on ? '0 1px 3px rgba(0,0,0,.12)' : 'none';
+      });
+      var isDefault = provider === 'default';
+      fromRow.style.display = isDefault ? 'none' : 'grid';
+      gWrap.style.display = provider === 'graph' ? 'block' : 'none';
+      goWrap.style.display = provider === 'google' ? 'block' : 'none';
+      testWrap.style.opacity = isDefault ? '.4' : '1';
+      testBtn.disabled = isDefault; testInput.disabled = isDefault;
+    }
+    paint();
+
+    saveBtn.addEventListener('click', async function () {
+      var payload = {
+        provider: provider,
+        from: fFrom._input.value.trim(),
+        from_name: fFromName._input.value.trim(),
+        graph_tenant: gTenant._input.value.trim(),
+        graph_client_id: gClient._input.value.trim(),
+        google_username: goUser._input.value.trim(),
+        google_host: goHost._input.value.trim(),
+        google_port: goPort._input.value
+      };
+      // Only send a secret/password when the operator actually typed one.
+      if (gSecret._input.value) payload.graph_client_secret = gSecret._input.value;
+      if (goPass._input.value) payload.google_password = goPass._input.value;
+
+      saveBtn.disabled = true;
+      status.style.color = '#1F6080'; status.textContent = 'Saving…';
+      try {
+        var out = await Api.put('/admin/agency-mail', payload);
+        status.style.color = '#16A34A';
+        status.textContent = provider === 'default'
+          ? '✓ Saved. This agency now uses the KiddieTrac default email.'
+          : '✓ Saved. Emails for this agency will now send from your own ' + (provider === 'graph' ? 'Microsoft 365' : 'Google') + '. Send a test to confirm.';
+        badge.style.display = out.active ? 'inline-block' : 'none';
+        gSecret._input.value = ''; goPass._input.value = '';
+        if ((out.config || {}).graph && out.config.graph.secret_set) gSecret._input.placeholder = '•••••••• (unchanged — type to replace)';
+        if ((out.config || {}).google && out.config.google.password_set) goPass._input.placeholder = '•••••••• (unchanged — type to replace)';
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = 'Save failed: ' + (e.message || 'error');
+      }
+      saveBtn.disabled = false;
+    });
+
+    testBtn.addEventListener('click', async function () {
+      var to = testInput.value.trim();
+      if (!to) { testStatus.style.color = '#DC2626'; testStatus.textContent = 'Enter an address to send the test to.'; return; }
+      testBtn.disabled = true;
+      testStatus.style.color = '#1F6080'; testStatus.textContent = 'Sending test…';
+      try {
+        var r = await Api.post('/admin/agency-mail/test', { to: to });
+        if (r.ok) { testStatus.style.color = '#16A34A'; testStatus.textContent = '✓ Test sent from ' + r.from + ' via your ' + (r.via === 'graph' ? 'Microsoft 365' : 'Google') + '. Check the inbox.'; }
+        else { testStatus.style.color = '#DC2626'; testStatus.textContent = '✗ ' + (r.message || 'Test failed'); }
+      } catch (e) {
+        testStatus.style.color = '#DC2626';
+        testStatus.textContent = 'Test failed: ' + (e.message || 'error');
+      }
+      testBtn.disabled = false;
+    });
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -2962,6 +3867,19 @@
     return apiHost + photoUrl;
   }
 
+  // Last-login stamp: date + time, in the agency's timezone. Uses KT.Fmt.parse so
+  // zone-less UTC strings (what DB::table hands back) aren't misread as local time.
+  function fmtLoginStamp(v) {
+    if (!v) return 'Never';
+    try {
+      var d = (window.KT && KT.Fmt && KT.Fmt.parse) ? KT.Fmt.parse(v) : new Date(v);
+      if (!d || isNaN(d.getTime())) return 'Never';
+      var z = (window.KT && KT.tz) ? KT.tz() : null;
+      var o = { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true };
+      return d.toLocaleString('en-CA', z ? Object.assign({ timeZone: z }, o) : o);
+    } catch (e) { return 'Never'; }
+  }
+
   function statusBadge(status) {
     const colors = {
       active: ['#DCFCE7', '#166534'],
@@ -2969,13 +3887,17 @@
       paused: ['#FEE2E2', '#991B1B'],
       closed: ['#F3F4F6', '#374151'],
       invited: ['#DBEAFE', '#1E40AF'],
+      // Imported but never sent an invite — distinct from "invited" so admins can
+      // see at a glance who still needs to be invited (amber, like a to-do).
+      not_invited: ['#FEF3C7', '#92400E'],
       suspended: ['#FEE2E2', '#991B1B'],
       deactivated: ['#F3F4F6', '#374151'],
     };
+    const labels = { not_invited: 'Not invited' };
     const c = colors[status] || ['#F3F4F6', '#374151'];
     return Dom.el('span', {
       style: 'display: inline-block; background: ' + c[0] + '; color: ' + c[1] + '; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;',
-    }, status);
+    }, labels[status] || status);
   }
   function billingStat(label, value) {
     const w = Dom.el('div', { style: 'background: var(--ink-50, #F9FAFB); padding: 14px; border-radius: 8px;' });
@@ -2987,6 +3909,19 @@
   // Expose
   window.KT = window.KT || {};
   window.KT.renderAdmin = renderAdmin;
+  // Exposed so the agency overview can open the centre edit modal IN PLACE
+  // (no teleport to the Administration › Centres tab). Pass an onSaved refresh.
+  window.KT.showCentreModal = showCentreModal;
+  // Clicking your own name in the top bar opens your account record (view + edit
+  // details/roles) instead of re-running the onboarding wizard. Self-edit is
+  // allowed by the backend even for a platform-level superadmin.
+  window.KT.openMyAccount = function () {
+    var u = null;
+    try { u = JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) {}
+    if (!u || !u.id) { location.hash = '#onboarding'; return; }
+    var content = document.getElementById('appMain') || document.body;
+    try { showUserModal(u, content); } catch (e) { location.hash = '#onboarding'; }
+  };
 
   Shell.registerScreen('agency_admin:admin', renderAdmin);
   // v22p2.3: register deep-link hashes per tab so nav entries can land on a specific tab.

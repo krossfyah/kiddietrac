@@ -22,7 +22,7 @@
     main.appendChild(html(`
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 16px;color:#1F6080;">Time off</h2>
-        <button id="tor-new" class="btn btn-primary" style="padding:10px 18px;border-radius:6px;background:#1F6080;color:#fff;border:0;font-weight:600;cursor:pointer;">+ Request time off</button>
+        <button id="tor-new" class="btn btn-primary" style="margin-top:6px;${isMobile() ? 'width:100%;' : ''}">🌴 Request time off</button>
         <h3 style="margin-top:32px;font-size:16px;color:#374151;">Your requests</h3>
         <div id="tor-mine"></div>
         ${isStaffOrAdmin() ? '<h3 style="margin-top:32px;font-size:16px;color:#374151;">Pending team requests</h3><div id="tor-pending"></div>' : ''}
@@ -32,9 +32,55 @@
     if (isStaffOrAdmin()) renderTorList(document.getElementById('tor-pending'), pending.data || [], true);
     document.getElementById('tor-new').onclick = () => openTorModal();
   }
+  function isMobile() { return window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native'); }
+  var TOR_META = {
+    vacation:    { icon: '🌴', label: 'Vacation' },
+    sick:        { icon: '🤒', label: 'Sick leave' },
+    personal:    { icon: '🙋', label: 'Personal' },
+    bereavement: { icon: '🕊️', label: 'Bereavement' },
+    jury:        { icon: '⚖️', label: 'Jury duty' },
+    other:       { icon: '🗓️', label: 'Other' },
+  };
+  function torMeta(t) { return TOR_META[String(t || '').toLowerCase()] || { icon: '🗓️', label: (t || 'Time off') }; }
+  function torStatusColors(st) {
+    return st === 'approved' ? { bg: '#DCFCE7', fg: '#15803D' }
+      : st === 'denied' ? { bg: '#FEE2E2', fg: '#B91C1C' }
+      : { bg: '#FEF3C7', fg: '#B45309' };
+  }
+  async function actOnTor(id, status) {
+    await Api.patch('/admin/time-off/' + id, { status: status });
+    renderTimeOff(document.getElementById('appMain') || document.querySelector('main'));
+  }
+  function torCard(r, isApprover) {
+    var status = (r.status || 'pending').toLowerCase();
+    var sc = torStatusColors(status);
+    var meta = torMeta(r.request_type);
+    var card = el('div', { style: 'background:#fff;border:1px solid #EDF1F6;border-radius:15px;padding:14px;margin-bottom:11px;box-shadow:0 2px 8px -3px rgba(15,23,42,.12);' });
+    var head = el('div', { style: 'display:flex;align-items:center;gap:11px;' });
+    head.appendChild(el('span', { style: 'flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:#F1F5F9;display:flex;align-items:center;justify-content:center;font-size:20px;' }, meta.icon));
+    var mid = el('div', { style: 'flex:1;min-width:0;' });
+    mid.appendChild(el('div', { style: 'font-weight:800;font-size:15px;color:#0F172A;' }, meta.label));
+    if (isApprover) mid.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, r.user_name || 'Team member'));
+    head.appendChild(mid);
+    head.appendChild(el('span', { style: 'flex:0 0 auto;font-size:11.5px;font-weight:800;text-transform:capitalize;padding:4px 11px;border-radius:20px;background:' + sc.bg + ';color:' + sc.fg + ';' }, status));
+    card.appendChild(head);
+    card.appendChild(el('div', { style: 'font-size:13.5px;font-weight:600;color:#334155;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;' }, '📅 ' + fmtDate(r.start_at) + ' – ' + fmtDate(r.end_at)));
+    if (r.reason) card.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.45;' }, r.reason));
+    if (isApprover && status === 'pending') {
+      var actions = el('div', { style: 'display:flex;gap:8px;margin-top:12px;' });
+      var appr = el('button', { type: 'button', style: 'flex:1;background:#16A34A;color:#fff;border:0;padding:11px;border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;' }, 'Approve');
+      var deny = el('button', { type: 'button', style: 'flex:1;background:#fff;color:#B91C1C;border:1.5px solid #FCA5A5;padding:11px;border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;' }, 'Deny');
+      appr.onclick = function () { actOnTor(r.id, 'approved'); };
+      deny.onclick = function () { actOnTor(r.id, 'denied'); };
+      actions.appendChild(appr); actions.appendChild(deny);
+      card.appendChild(actions);
+    }
+    return card;
+  }
   function renderTorList(host, rows, isApprover) {
-    if (!rows.length) { host.innerHTML = '<div style="color:#9CA3AF;padding:12px;">No requests.</div>'; return; }
+    if (!rows.length) { host.innerHTML = '<div style="color:#64748B;padding:16px;background:#fff;border:1px solid #EDF1F6;border-radius:14px;text-align:center;font-size:13.5px;">No requests yet.</div>'; return; }
     host.innerHTML = '';
+    if (isMobile()) { rows.forEach(function (r) { host.appendChild(torCard(r, isApprover)); }); return; }
     const tbl = document.createElement('table');
     tbl.style.cssText = 'width:100%;border-collapse:collapse;margin-top:8px;';
     tbl.innerHTML = '<thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Who</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Type</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Dates</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Status</th><th></th></tr></thead><tbody></tbody>';
@@ -64,16 +110,16 @@
     m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:480px;width:90%;">
       <h3 style="margin:0 0 12px;">New time-off request</h3>
       <label style="display:block;margin-top:10px;font-size:13px;color:#374151;font-weight:600;">Type
-        <select id="tor-type" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;">
+        <select id="tor-type" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;">
           <option value="vacation">Vacation</option><option value="sick">Sick</option>
           <option value="personal">Personal</option><option value="bereavement">Bereavement</option>
           <option value="jury">Jury duty</option><option value="other">Other</option></select></label>
       <label style="display:block;margin-top:10px;font-size:13px;color:#374151;font-weight:600;">Start date
-        <input id="tor-start" type="date" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;"></label>
+        <input id="tor-start" type="date" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></label>
       <label style="display:block;margin-top:10px;font-size:13px;color:#374151;font-weight:600;">End date
-        <input id="tor-end" type="date" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;"></label>
+        <input id="tor-end" type="date" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></label>
       <label style="display:block;margin-top:10px;font-size:13px;color:#374151;font-weight:600;">Reason
-        <textarea id="tor-reason" rows="3" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;"></textarea></label>
+        <textarea id="tor-reason" rows="3" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></textarea></label>
       <div style="margin-top:20px;text-align:right;">
         <button id="tor-cancel" style="background:#F3F4F6;border:0;padding:9px 16px;border-radius:4px;margin-right:8px;cursor:pointer;">Cancel</button>
         <button id="tor-submit" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:4px;cursor:pointer;">Submit</button>
@@ -116,7 +162,7 @@
     root.querySelector('#bgc-add').onclick = () => openBgcModal(null);
   }
   function renderBgcList(host, rows) {
-    if (!rows.length) { host.innerHTML = '<div style="color:#9CA3AF;padding:12px;">No records.</div>'; return; }
+    if (!rows.length) { host.innerHTML = '<div style="color:#64748B;padding:12px;">No records.</div>'; return; }
     host.innerHTML = '';
     const tbl = document.createElement('table');
     tbl.style.cssText = 'width:100%;border-collapse:collapse;';
@@ -129,16 +175,71 @@
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-transform:uppercase;">${escapeHtml(r.check_type)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${fmtDate(r.expires_at)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;">${r.status_bucket}</span></td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;"><button data-id="${r.id}" data-edit="1" style="background:#F3F4F6;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;margin-right:6px;">Edit</button><button data-id="${r.id}" data-del="1" style="background:#FEE2E2;color:#B91C1C;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;">Delete</button></td>`;
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;"><button data-id="${r.id}" data-view="1" style="background:#EFF6FF;color:#1D4ED8;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;margin-right:6px;">View</button><button data-id="${r.id}" data-edit="1" style="background:#F3F4F6;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;margin-right:6px;">Edit</button><button data-id="${r.id}" data-del="1" class="kt-icon-tip" title="Delete" aria-label="Delete" data-kttip="Delete" style="background:#FEE2E2;color:#B91C1C;border:0;padding:6px 11px;border-radius:4px;cursor:pointer;">🗑️</button></td>`;
       tb.appendChild(tr);
     });
     host.appendChild(tbl);
+    host.querySelectorAll('button[data-view]').forEach(b => b.onclick = () => openBgcDetail(rows.find(r => r.id == b.dataset.id)));
     host.querySelectorAll('button[data-edit]').forEach(b => b.onclick = () => openBgcModal(rows.find(r => r.id == b.dataset.id)));
     host.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
-      if (!confirm('Delete this background check?')) return;
+      if (!await KT.confirm('Delete this background check?')) return;
       await Api.delete(`/admin/background-checks/${b.dataset.id}`);
       renderBackgroundChecks(document.getElementById('main') || document.querySelector('main'));
     });
+  }
+
+  // Read-only detail + attach-a-file for a background-check record (dimmed modal).
+  function openBgcDetail(row) {
+    if (!row) return;
+    const host = ((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
+    const abs = (u) => (u ? (/^https?:\/\//.test(u) ? u : host + u) : '');
+    const docLink = (u) => '<a href="' + abs(u) + '" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>';
+    const m = document.createElement('div');
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    m.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 50px -12px rgba(15,23,42,.4);">
+      <h3 style="margin:0 0 12px;color:#0F172A;">🛡️ Background check</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
+        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Staff</td><td style="padding:5px 0;font-weight:700;">${escapeHtml(row.user_name || '')}</td></tr>
+        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Type</td><td style="padding:5px 0;text-transform:uppercase;">${escapeHtml(row.check_type || '')}</td></tr>
+        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Reference</td><td style="padding:5px 0;">${escapeHtml(row.reference || '—')}</td></tr>
+        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Issued</td><td style="padding:5px 0;">${row.issued_at ? fmtDate(row.issued_at) : '—'}</td></tr>
+        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Expires</td><td style="padding:5px 0;">${fmtDate(row.expires_at)}</td></tr>
+        <tr><td style="padding:5px 12px 5px 0;color:#64748B;vertical-align:top;">Notes</td><td style="padding:5px 0;white-space:pre-wrap;">${escapeHtml(row.notes || '—')}</td></tr>
+      </table>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid #F1F5F9;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#94A3B8;margin-bottom:8px;">Attached document</div>
+        <div id="bgc-doc-cur">${row.document_url ? docLink(row.document_url) : '<span style="color:#64748B;">No document attached yet.</span>'}</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+          <input id="bgc-file" type="file" accept=".pdf,image/*,.doc,.docx" style="font-size:13px;">
+          <button id="bgc-upload" style="background:#1F6080;color:#fff;border:0;padding:8px 14px;border-radius:7px;cursor:pointer;font-weight:600;">Upload</button>
+        </div>
+        <div id="bgc-up-status" style="font-size:12.5px;min-height:16px;margin-top:6px;"></div>
+      </div>
+      <div style="text-align:right;margin-top:16px;"><button id="bgc-close" style="background:#F1F5F9;color:#475569;border:0;border-radius:9px;padding:8px 16px;font-weight:700;cursor:pointer;">Close</button></div>
+    </div>`;
+    const close = () => m.remove();
+    m.addEventListener('click', e => { if (e.target === m) close(); });
+    document.body.appendChild(m);
+    m.querySelector('#bgc-close').onclick = close;
+    m.querySelector('#bgc-upload').onclick = async () => {
+      const fileEl = m.querySelector('#bgc-file');
+      const st = m.querySelector('#bgc-up-status');
+      if (!fileEl.files || !fileEl.files[0]) { st.style.color = '#B91C1C'; st.textContent = 'Choose a file first.'; return; }
+      const btn = m.querySelector('#bgc-upload');
+      const done = (window.KT && KT.busy) ? KT.busy(btn) : function () {};
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.append('file', fileEl.files[0]);
+        const res = await Api.postForm('/admin/background-checks/' + row.id + '/document', fd);
+        row.document_url = res.document_url;
+        m.querySelector('#bgc-doc-cur').innerHTML = docLink(res.document_url);
+        st.style.color = '#047857'; st.textContent = '✓ Uploaded.';
+      } catch (e) {
+        st.style.color = '#B91C1C'; st.textContent = '✗ ' + (e.message || 'Upload failed');
+        btn.disabled = false;
+      } finally { done(); }
+    };
   }
   async function openBgcModal(row) {
     const staffRes = await Api.get('/admin/users?role=educator,centre_director,agency_admin').catch(() => ({ data: [] }));
@@ -193,7 +294,9 @@
           <button id="pr-run" style="background:#1F6080;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">Run</button>
           <button id="pr-csv" style="background:#059669;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">⤓ CSV</button>
         </div>
-        <div id="pr-result"></div></div>`;
+        <div id="pr-result"></div>
+
+      </div>`;
     // v22p98: default to a trailing 30-day window (was first-of-month → today,
     // a single empty day on the 1st, hiding the whole prior pay period).
     const today = new Date();
@@ -206,6 +309,7 @@
       downloadAuthed(`/admin/payroll?from=${f}&to=${t}&format=csv`, `payroll-${f}-to-${t}.csv`);
     };
     runPayroll();
+
   }
   async function runPayroll() {
     // Guard against the user navigating away mid-fetch: the from/to inputs and the
@@ -217,7 +321,7 @@
     const res = await Api.get(`/admin/payroll?from=${f}&to=${t}`);
     const host = document.getElementById('pr-result');
     if (!host) return;
-    if (!res.data || !res.data.length) { host.innerHTML = '<div style="color:#9CA3AF;padding:12px;">No punches in range.</div>'; return; }
+    if (!res.data || !res.data.length) { host.innerHTML = '<div style="color:#64748B;padding:12px;">No punches in range.</div>'; return; }
     let tot = 0;
     host.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr>
       <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Staff</th>
@@ -342,8 +446,8 @@
           <div>
             <textarea id="sms-body" maxlength="300" rows="4" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;resize:vertical;font:inherit;"></textarea>
             <div style="display:flex;justify-content:space-between;margin-top:4px;">
-              <span style="font-size:12px;color:#94A3B8;">Only recipients who opted in to SMS and have a phone number on file will receive it.</span>
-              <span id="sms-count" style="font-size:12px;color:#94A3B8;">0 / 300</span>
+              <span style="font-size:12px;color:#64748B;">Only recipients who opted in to SMS and have a phone number on file will receive it.</span>
+              <span id="sms-count" style="font-size:12px;color:#64748B;">0 / 300</span>
             </div>
           </div>
 
@@ -395,7 +499,7 @@
     if (!host) return;
     const rows = (r && r.data) || [];
     if (!rows.length) {
-      host.innerHTML = '<div class="kt-card" style="color:#94A3B8;padding:40px;text-align:center;font-size:13px;">No broadcasts sent yet.</div>';
+      host.innerHTML = '<div class="kt-card" style="color:#64748B;padding:40px;text-align:center;font-size:13px;">No broadcasts sent yet.</div>';
       return;
     }
     const colour = (st) => st === 'sent' ? '#047857' : st === 'failed' ? '#B91C1C' : '#D97706';
@@ -447,7 +551,9 @@
     main.innerHTML = `<div style="padding:24px;max-width:760px;margin:0 auto;">
       <h2 style="margin:0 0 16px;color:#1F6080;">AI document extraction</h2>
       <p style="color:#6B7280;font-size:14px;">Upload a photo or scan of a document and we'll extract structured fields into JSON. Useful for new staff certifications, immunization records, etc.</p>
-      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Document URL (must be publicly reachable)
+      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Upload a file (image)
+        <input id="aid-file" type="file" accept="image/png,image/jpeg,image/webp" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;background:#fff;"></label>
+      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">…or a document URL (publicly reachable)
         <input id="aid-url" placeholder="https://…/document.png" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;"></label>
       <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Document type
         <select id="aid-type" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;">
@@ -463,10 +569,20 @@
       const out = document.getElementById('aid-out');
       out.textContent = 'Extracting…';
       try {
-        const r = await Api.post('/ai/doc-extract', {
-          document_url: document.getElementById('aid-url').value,
-          doc_type: document.getElementById('aid-type').value,
-        });
+        const fileEl = document.getElementById('aid-file');
+        const docType = document.getElementById('aid-type').value;
+        let r;
+        if (fileEl && fileEl.files && fileEl.files[0]) {
+          const fd = new FormData();
+          fd.append('file', fileEl.files[0]);
+          fd.append('doc_type', docType);
+          r = await Api.postForm('/ai/doc-extract', fd);
+        } else {
+          r = await Api.post('/ai/doc-extract', {
+            document_url: document.getElementById('aid-url').value,
+            doc_type: docType,
+          });
+        }
         out.textContent = JSON.stringify(r.fields, null, 2);
       } catch (e) { out.textContent = 'Error: ' + (e.message || e); }
     };
@@ -490,7 +606,12 @@
   // ============================ Helpers ============================
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function fmtDate(s) { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+  // Approving time off is for directors & agency admins ONLY. Honour "View as":
+  // when a super-admin previews a lower role (educator / home_visitor / guardian),
+  // they must NOT see the approve/deny queue — only the effective role counts.
   function isStaffOrAdmin() {
+    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    if (va) return ['agency_admin', 'centre_director'].indexOf(va) !== -1;
     const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
     return Array.isArray(u.roles) && u.roles.some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
   }
