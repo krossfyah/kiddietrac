@@ -93,13 +93,23 @@ class ManagedFormController extends Controller
             ->whereIn('managed_form_id', $forms->pluck('id')->all())
             ->select('managed_form_id', DB::raw('COUNT(*) as n'))
             ->groupBy('managed_form_id')->pluck('n', 'managed_form_id');
+        // The actual ids too, so the Edit dialog can pre-select the people already
+        // named — editing was previously unable to show, let alone change, them.
+        $namedIds = DB::table('managed_form_recipients')
+            ->whereIn('managed_form_id', $forms->pluck('id')->all())
+            ->get(['managed_form_id', 'user_id'])
+            ->groupBy('managed_form_id')
+            ->map(fn ($g) => $g->pluck('user_id')->map(fn ($v) => (int) $v)->values()->all());
 
-        $out = $forms->map(function ($f) use ($counts, $uploaders, $named) {
+        $out = $forms->map(function ($f) use ($counts, $uploaders, $named, $namedIds) {
             $f->audiences = $f->audiences ? (json_decode($f->audiences, true) ?: []) : [];
             $f->signoff_count = (int) ($counts[$f->id] ?? 0);
             $u = $uploaders[$f->created_by_id] ?? null;
             $f->uploaded_by = $u ? trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) : null;
             $f->named_count = (int) ($named[$f->id] ?? 0);
+            $f->recipient_ids = $namedIds[$f->id] ?? [];
+            $f->fillable = (bool) ($f->fillable ?? false);
+            $f->reusable = (bool) ($f->reusable ?? false);
             return $f;
         });
         return response()->json(['forms' => $out]);
@@ -117,7 +127,10 @@ class ManagedFormController extends Controller
         }
         $data = $request->validate([
             'title'       => ['required', 'string', 'max:190'],
-            'description' => ['nullable', 'string', 'max:2000'],
+            // Required: a library of bare titles ('test 8') tells an admin nothing about
+            // what a form is for, and the Completed tab now shows this column. NOT enforced
+            // in update(): the activate/deactivate button PATCHes {active} alone.
+            'description' => ['required', 'string', 'max:2000'],
             'file'        => ['required', 'file', 'mimes:pdf', 'max:15360'], // 15 MB
             'audiences'   => ['nullable'],   // optional when specific people are named
             'recipient_ids' => ['nullable'],
@@ -202,7 +215,58 @@ class ManagedFormController extends Controller
             if (is_string($aud)) $aud = json_decode($aud, true) ?: [];
             $patch['audiences'] = json_encode(array_values(array_intersect((array) $aud, self::ROLES)));
         }
+        // Everything chosen at upload has to be changeable afterwards. These two were
+        // upload-only, so getting a toggle wrong meant deleting the form and
+        // re-uploading the PDF just to flip a boolean.
+        if ($request->has('fillable')) {
+            $patch['fillable'] = filter_var($request->input('fillable'), FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        }
+        if ($request->has('reusable')) {
+            $patch['reusable'] = filter_var($request->input('reusable'), FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        }
+        // Named recipients, likewise editable. Sent as the COMPLETE list (the picker
+        // shows the current selection), so this replaces rather than appends —
+        // otherwise removing somebody would be impossible.
+        $newRecipients = null;
+        if ($request->has('recipient_ids')) {
+            $ids = $request->input('recipient_ids');
+            if (is_string($ids)) $ids = json_decode($ids, true);
+            $newRecipients = array_values(array_unique(array_filter(array_map('intval', (array) $ids))));
+        }
+
+        // Check BEFORE writing: an edit must not leave the form with nobody to sign
+        // it. Validating afterwards would mean rejecting a change already applied.
+        $audAfter = array_key_exists('audiences', $patch)
+            ? (json_decode($patch['audiences'], true) ?: [])
+            : ($form->audiences ? (json_decode($form->audiences, true) ?: []) : []);
+        $namedAfter = $newRecipients !== null
+            ? count($newRecipients)
+            : DB::table('managed_form_recipients')->where('managed_form_id', $id)->count();
+        if (empty($audAfter) && $namedAfter === 0) {
+            return response()->json([
+                'message' => 'That would leave the form with nobody to sign it — choose an audience or pick specific people.',
+                'errors' => ['audiences' => ['Choose at least one audience or pick specific people.']],
+            ], 422);
+        }
+
         DB::table('managed_forms')->where('id', $id)->update($patch);
+
+        if ($newRecipients !== null) {
+            $existing = DB::table('managed_form_recipients')->where('managed_form_id', $id)
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->all();
+            $remove = array_diff($existing, $newRecipients);
+            $add    = array_diff($newRecipients, $existing);
+            if ($remove) {
+                DB::table('managed_form_recipients')->where('managed_form_id', $id)
+                    ->whereIn('user_id', $remove)->delete();
+            }
+            foreach ($add as $rid) {
+                DB::table('managed_form_recipients')->insertOrIgnore([
+                    'managed_form_id' => $id, 'user_id' => $rid, 'created_at' => now(),
+                ]);
+            }
+        }
+
         return response()->json(['ok' => true]);
     }
 

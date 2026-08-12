@@ -10,7 +10,8 @@
   var Api = KT.Api;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   var API_HOST = ((KT.API_BASE || 'https://api.kiddietrac.com/api/v1')).replace(/\/api\/v1\/?$/, '');
-  var AUD = [['guardian', 'Parents', '👪'], ['educator', 'Educators', '🎓'], ['home_visitor', 'Home visitors', '🏡']];
+  var AUD = [['guardian', 'Parents', '👪'], ['educator', 'Educators', '🎓'],
+             ['home_visitor', 'Home visitors', '🏡'], ['centre_director', 'Directors', '🏫']];
   var audLabel = function (a) { var m = { guardian: 'Parents', educator: 'Educators', home_visitor: 'Home visitors', centre_director: 'Directors' }; return m[a] || a; };
   function fileUrl(u) { return u ? (/^https?:/.test(u) ? u : API_HOST + u) : ''; }
   function openUrl(u) {
@@ -50,7 +51,7 @@
       + '<div><label for="fm-title" style="' + LBL + '">Form title</label>'
       + '<input id="fm-title" placeholder="e.g. Consent to photograph" style="' + FIELD + '"></div>'
       // Description
-      + '<div><label for="fm-desc" style="' + LBL + '">Description <span style="color:#CBD5E1;font-weight:600;text-transform:none;letter-spacing:0;">(optional)</span></label>'
+      + '<div><label for="fm-desc" style="' + LBL + '">Description</label>'
       + '<textarea id="fm-desc" placeholder="A short note about this form" rows="2" style="' + FIELD + 'resize:vertical;min-height:52px;"></textarea></div>'
       // Audience chips
       + '<div><label style="' + LBL + '">Who must sign it?</label>'
@@ -126,79 +127,12 @@
       };
       cb.addEventListener('change', sync); sync();
     });
-    // ── people picker ────────────────────────────────────────────────────────
-    var chosenPeople = {};                       // id -> label
-    var peopleLoaded = false;
-    var rToggle = body.querySelector('#fm-rtoggle');
-    var rPicker = body.querySelector('#fm-rpicker');
-    var rList = body.querySelector('#fm-rlist');
-    var rSearch = body.querySelector('#fm-rsearch');
-    var rCount = body.querySelector('#fm-rcount');
-    var ROLE_LABEL = { guardian: 'Parent', educator: 'Educator', home_visitor: 'Home visitor',
-                       centre_director: 'Director', agency_admin: 'Admin', platform_admin: 'Super admin',
-                       auditor: 'Auditor', sales_rep: 'Sales' };
-
-    function syncCount() {
-      var n = Object.keys(chosenPeople).length;
-      rCount.textContent = n ? (n + ' selected') : 'none selected';
-      rCount.style.background = n ? '#ECFDF5' : '#EFF6FF';
-      rCount.style.color = n ? '#0F766E' : '#1E40AF';
-      rCount.style.borderColor = n ? '#A7F3D0' : '#BFDBFE';
-    }
-
-    function paintPeople(rows) {
-      var q = (rSearch.value || '').trim().toLowerCase();
-      var shown = rows.filter(function (u) {
-        if (!q) return true;
-        return (u.__label + ' ' + (u.email || '')).toLowerCase().indexOf(q) !== -1;
-      }).slice(0, 200);
-      if (!shown.length) {
-        rList.innerHTML = '<div style="padding:16px;text-align:center;color:#94A3B8;font-size:13px;">No one matches that.</div>';
-        return;
-      }
-      rList.innerHTML = shown.map(function (u) {
-        var on = !!chosenPeople[u.id];
-        return '<label style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-bottom:1px solid #F1F5F9;cursor:pointer;">'
-          + '<input type="checkbox" data-uid="' + u.id + '" ' + (on ? 'checked' : '')
-          + ' style="width:17px;height:17px;accent-color:#1F6FB2;flex:0 0 auto;">'
-          + '<span style="min-width:0;"><span style="display:block;font-size:13.5px;font-weight:700;color:#0F172A;">' + esc(u.__label) + '</span>'
-          + '<span style="display:block;font-size:11.5px;color:#64748B;">' + esc(u.__role) + (u.email ? ' · ' + esc(u.email) : '') + '</span></span></label>';
-      }).join('');
-      rList.querySelectorAll('input[data-uid]').forEach(function (cb) {
-        cb.addEventListener('change', function () {
-          var id = cb.getAttribute('data-uid');
-          var rec = rows.filter(function (x) { return String(x.id) === String(id); })[0];
-          if (cb.checked) chosenPeople[id] = rec ? rec.__label : id; else delete chosenPeople[id];
-          syncCount();
-        });
-      });
-    }
-
-    rToggle.addEventListener('click', function () {
-      var open = rPicker.style.display !== 'none';
-      rPicker.style.display = open ? 'none' : 'block';
-      rToggle.textContent = open ? 'Choose people' : 'Hide list';
-      if (open || peopleLoaded) return;
-      peopleLoaded = true;
-      rList.innerHTML = '<div style="padding:16px;text-align:center;color:#94A3B8;font-size:13px;">Loading people…</div>';
-      Api.get('/admin/users').then(function (d) {
-        var rows = (d && (d.users || d.data || d)) || [];
-        if (!Array.isArray(rows)) rows = [];
-        rows.forEach(function (u) {
-          u.__label = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || u.name || u.email || ('User ' + u.id);
-          var r = u.roles || u.primary_role || [];
-          if (typeof r === 'string') r = [r];
-          u.__role = (r || []).map(function (x) { return ROLE_LABEL[x] || x; }).join(', ') || 'Member';
-        });
-        rows.sort(function (a, b) { return a.__label.localeCompare(b.__label); });
-        paintPeople(rows);
-        rSearch.addEventListener('input', function () { paintPeople(rows); });
-      }).catch(function (e) {
-        rList.innerHTML = '<div style="padding:16px;color:#B91C1C;font-size:13px;">Could not load people: ' + esc(e.message || '') + '</div>';
-      });
-    });
-    syncCount();
-
+    // People picker, shared with the Edit dialog (see attachPeoplePicker). It used
+    // to be inline here, which is how the two dialogs drifted apart.
+    var picker = attachPeoplePicker(body, {
+      toggle: '#fm-rtoggle', panel: '#fm-rpicker', list: '#fm-rlist',
+      search: '#fm-rsearch', count: '#fm-rcount',
+    }, []);
     var fileIn = body.querySelector('#fm-file'), drop = body.querySelector('#fm-drop');
     fileIn.addEventListener('change', function () {
       var f = fileIn.files[0];
@@ -215,7 +149,10 @@
       var auds = [].slice.call(body.querySelectorAll('.fm-aud:checked')).map(function (c) { return c.value; });
       var file = body.querySelector('#fm-file').files[0];
       if (!title) { out.style.color = '#B91C1C'; out.textContent = 'Add a title.'; return; }
-      var people = Object.keys(chosenPeople);
+      // A title alone does not say what the form is for, and the Completed and
+      // Library tables both show the description now.
+      if (!desc) { out.style.color = '#B91C1C'; out.textContent = 'Add a description.'; return; }
+      var people = picker.ids();
       if (!auds.length && !people.length) {
         out.style.color = '#B91C1C';
         out.textContent = 'Pick an audience, or choose specific people.';
@@ -367,38 +304,219 @@
   }
 
   /** Rename / re-describe a form without re-uploading the PDF. */
-  function openEditDialog(id, title, desc, el) {
+  /**
+   * Wires up a "send to specific people" picker inside `scope`.
+   *
+   * Both the upload dialog and the Edit dialog need this, and it started life inline
+   * in the upload dialog only — which is why editing a form could not show, let alone
+   * change, who had been named. `preselected` is a list of user ids to start ticked,
+   * so Edit opens showing the current selection.
+   *
+   * Returns { ids() } — the chosen ids as numbers.
+   */
+  function attachPeoplePicker(scope, sel, preselected) {
+    var chosen = {};                              // id -> label
+    var loaded = false;
+    var toggle = scope.querySelector(sel.toggle);
+    var panel  = scope.querySelector(sel.panel);
+    var list   = scope.querySelector(sel.list);
+    var search = scope.querySelector(sel.search);
+    var count  = scope.querySelector(sel.count);
+    var ROLE_LABEL = { guardian: 'Parent', educator: 'Educator', home_visitor: 'Home visitor',
+                       centre_director: 'Director', agency_admin: 'Admin', platform_admin: 'Super admin',
+                       auditor: 'Auditor', sales_rep: 'Sales' };
+
+    (preselected || []).forEach(function (id) { chosen[String(id)] = String(id); });
+
+    function syncCount() {
+      var n = Object.keys(chosen).length;
+      count.textContent = n ? (n + ' selected') : 'none selected';
+      count.style.background = n ? '#ECFDF5' : '#EFF6FF';
+      count.style.color = n ? '#0F766E' : '#1E40AF';
+      count.style.borderColor = n ? '#A7F3D0' : '#BFDBFE';
+    }
+
+    function paint(rows) {
+      var q = (search.value || '').trim().toLowerCase();
+      var shown = rows.filter(function (u) {
+        if (!q) return true;
+        return (u.__label + ' ' + (u.email || '')).toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 200);
+      if (!shown.length) {
+        list.innerHTML = '<div style="padding:16px;text-align:center;color:#94A3B8;font-size:13px;">No one matches that.</div>';
+        return;
+      }
+      list.innerHTML = shown.map(function (u) {
+        var on = !!chosen[String(u.id)];
+        return '<label style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-bottom:1px solid #F1F5F9;cursor:pointer;">'
+          + '<input type="checkbox" data-uid="' + u.id + '" ' + (on ? 'checked' : '')
+          + ' style="width:17px;height:17px;accent-color:#1F6FB2;flex:0 0 auto;">'
+          + '<span style="min-width:0;"><span style="display:block;font-size:13.5px;font-weight:700;color:#0F172A;">' + esc(u.__label) + '</span>'
+          + '<span style="display:block;font-size:11.5px;color:#64748B;">' + esc(u.__role) + (u.email ? ' · ' + esc(u.email) : '') + '</span></span></label>';
+      }).join('');
+      list.querySelectorAll('input[data-uid]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          var id = cb.getAttribute('data-uid');
+          var rec = rows.filter(function (x) { return String(x.id) === String(id); })[0];
+          if (cb.checked) chosen[id] = rec ? rec.__label : id; else delete chosen[id];
+          syncCount();
+        });
+      });
+    }
+
+    function load() {
+      loaded = true;
+      list.innerHTML = '<div style="padding:16px;text-align:center;color:#94A3B8;font-size:13px;">Loading people…</div>';
+      Api.get('/admin/users').then(function (d) {
+        var rows = (d && (d.users || d.data || d)) || [];
+        if (!Array.isArray(rows)) rows = [];
+        rows.forEach(function (u) {
+          u.__label = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || u.name || u.email || ('User ' + u.id);
+          var r = u.roles || u.primary_role || [];
+          if (typeof r === 'string') r = [r];
+          u.__role = (r || []).map(function (x) { return ROLE_LABEL[x] || x; }).join(', ') || 'Member';
+        });
+        rows.sort(function (a, b) { return a.__label.localeCompare(b.__label); });
+        paint(rows);
+        search.addEventListener('input', function () { paint(rows); });
+      }).catch(function (e) {
+        list.innerHTML = '<div style="padding:16px;color:#B91C1C;font-size:13px;">Could not load people: ' + esc(e.message || '') + '</div>';
+      });
+    }
+
+    toggle.addEventListener('click', function () {
+      var open = panel.style.display !== 'none';
+      panel.style.display = open ? 'none' : 'block';
+      toggle.textContent = open ? 'Choose people' : 'Hide list';
+      if (! open && ! loaded) load();
+    });
+
+    syncCount();
+    return { ids: function () { return Object.keys(chosen).map(Number); } };
+  }
+
+  /** The "send to specific people" block, shared markup for both dialogs. */
+  function peopleBlockHtml(prefix, hint) {
+    return '<div style="border:1.5px solid #E2E8F0;border-radius:12px;padding:13px 15px;margin-bottom:16px;">'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+      + '<span style="font-weight:800;font-size:13.5px;color:#0F172A;">Or send to specific people</span>'
+      + '<span id="' + prefix + '-rcount" style="font-size:12px;font-weight:800;color:#1E40AF;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:999px;padding:2px 10px;">none selected</span>'
+      + '<button id="' + prefix + '-rtoggle" type="button" data-kt-iconized="1" style="margin-left:auto;background:#fff;border:1.5px solid #CBD5E1;color:#1F6080;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:800;cursor:pointer;">Choose people</button>'
+      + '</div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-top:4px;">' + hint + '</div>'
+      + '<div id="' + prefix + '-rpicker" style="display:none;margin-top:11px;">'
+      + '<input id="' + prefix + '-rsearch" type="text" placeholder="Search by name or email…" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #E2E8F0;border-radius:9px;font-size:13.5px;margin-bottom:8px;">'
+      + '<div id="' + prefix + '-rlist" style="max-height:230px;overflow-y:auto;border:1px solid #EEF2F7;border-radius:9px;"></div>'
+      + '</div></div>';
+  }
+
+  /** One checkbox card, used for the fillable / reusable toggles in both dialogs. */
+  function toggleCardHtml(id, title, blurb, checked) {
+    return '<label id="' + id + '-wrap" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid '
+      + (checked ? '#1F6FB2' : '#E2E8F0') + ';border-radius:12px;padding:13px 15px;margin-bottom:12px;cursor:pointer;">'
+      + '<input id="' + id + '" type="checkbox" ' + (checked ? 'checked' : '')
+      + ' style="width:18px;height:18px;flex:0 0 auto;margin-top:1px;accent-color:#1F6FB2;">'
+      + '<span><span style="display:block;font-weight:800;font-size:13.5px;color:#0F172A;">' + title + '</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;line-height:1.5;margin-top:2px;">' + blurb + '</span></span></label>';
+  }
+
+  /**
+   * Edit EVERYTHING that was chosen at upload — not just the title and description.
+   * Audiences, the fill-in and reuse toggles and the named people were upload-only,
+   * so a wrong choice meant deleting the form and re-uploading the PDF to change a
+   * boolean. Takes the whole form record so every control opens pre-populated.
+   */
+  function openEditDialog(form, el) {
+    var auds = form.audiences || [];
     var ov = document.createElement('div');
     ov.setAttribute('data-no-modal-guard', '1');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479500;background:rgba(8,17,33,.62);display:flex;align-items:center;justify-content:center;padding:18px;';
-    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
-      + '<div style="background:#0B2545;color:#fff;padding:14px 18px;font-size:16px;font-weight:800;">Edit form details</div>'
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479500;background:rgba(8,17,33,.62);display:flex;align-items:flex-start;justify-content:center;padding:18px;overflow-y:auto;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);margin:auto;">'
+      + '<div style="background:#0B2545;color:#fff;padding:14px 18px;font-size:16px;font-weight:800;">Edit form</div>'
       + '<div style="padding:18px;">'
       + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Title</div>'
       + '<input id="fe-title" type="text" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;">'
       + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;">Description</div>'
       + '<textarea id="fe-desc" rows="3" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>'
-      + '<div id="fe-msg" style="font-size:12.5px;color:#B91C1C;min-height:16px;margin-top:8px;"></div>'
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;">Who signs it</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">'
+        + AUD.map(function (a) {
+            var on = auds.indexOf(a[0]) !== -1;
+            return '<label style="display:inline-flex;align-items:center;gap:7px;border:1.5px solid ' + (on ? '#1F6FB2' : '#E2E8F0')
+              + ';border-radius:999px;padding:7px 13px;font-size:13px;font-weight:700;color:#0F172A;cursor:pointer;background:' + (on ? '#EFF6FF' : '#fff') + ';">'
+              + '<input type="checkbox" class="fe-aud" value="' + a[0] + '" ' + (on ? 'checked' : '')
+              + ' style="accent-color:#1F6FB2;width:16px;height:16px;margin:0;">'
+              + '<span>' + a[2] + ' ' + a[1] + '</span></label>';
+          }).join('')
+      + '</div>'
+      + peopleBlockHtml('fe', 'Leave empty to use the audiences above. Pick people to send it only to them.')
+      + toggleCardHtml('fe-fillable', 'Let recipients fill this form in',
+          'Turn on for a PDF with real form fields. A read-and-sign notice should stay read-and-sign.', !!form.fillable)
+      + toggleCardHtml('fe-reusable', 'Reusable form',
+          'Stays on the list after signing, so it can be filled again for the next child or week.', !!form.reusable)
+      + '<div id="fe-msg" style="font-size:12.5px;color:#B91C1C;min-height:16px;margin-top:2px;"></div>'
       + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">'
       + '<button id="fe-cancel" type="button" data-kt-iconized="1" style="background:#fff;border:1.5px solid #CBD5E1;color:#1F6080;border-radius:10px;padding:9px 16px;font-weight:800;font-size:13px;cursor:pointer;">Cancel</button>'
       + '<button id="fe-save" type="button" data-kt-iconized="1" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;border:0;border-radius:10px;padding:9px 18px;font-weight:800;font-size:13px;cursor:pointer;">Save changes</button>'
       + '</div></div></div>';
     document.body.appendChild(ov);
-    ov.querySelector('#fe-title').value = title || '';
-    ov.querySelector('#fe-desc').value = desc || '';
+    ov.querySelector('#fe-title').value = form.title || '';
+    ov.querySelector('#fe-desc').value = form.description || '';
+
+    // Same live border feedback the upload dialog gives its toggles.
+    ['fe-fillable', 'fe-reusable'].forEach(function (id) {
+      var cb = ov.querySelector('#' + id), wrap = ov.querySelector('#' + id + '-wrap');
+      cb.addEventListener('change', function () { wrap.style.borderColor = cb.checked ? '#1F6FB2' : '#E2E8F0'; });
+    });
+    ov.querySelectorAll('.fe-aud').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var lab = cb.closest('label');
+        lab.style.borderColor = cb.checked ? '#1F6FB2' : '#E2E8F0';
+        lab.style.background = cb.checked ? '#EFF6FF' : '#fff';
+      });
+    });
+
+    var picker = attachPeoplePicker(ov, {
+      toggle: '#fe-rtoggle', panel: '#fe-rpicker', list: '#fe-rlist',
+      search: '#fe-rsearch', count: '#fe-rcount',
+    }, form.recipient_ids || []);
+
     function close() { ov.remove(); }
     ov.querySelector('#fe-cancel').addEventListener('click', close);
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+
     var save = ov.querySelector('#fe-save');
     save.addEventListener('click', function () {
+      var msg = ov.querySelector('#fe-msg');
       var t = ov.querySelector('#fe-title').value.trim();
-      if (!t) { ov.querySelector('#fe-msg').textContent = 'A title is required.'; return; }
+      if (!t) { msg.textContent = 'A title is required.'; return; }
+      if (!ov.querySelector('#fe-desc').value.trim()) { msg.textContent = 'A description is required.'; return; }
+      var chosenAuds = [].slice.call(ov.querySelectorAll('.fe-aud:checked')).map(function (c) { return c.value; });
+      // Preserve any audience this dialog has no chip for, rather than silently
+      // deleting it: the server accepts roles the UI may not list yet, and a save
+      // must never quietly narrow who a form reaches.
+      var chipValues = AUD.map(function (a) { return a[0]; });
+      (auds || []).forEach(function (a) {
+        if (chipValues.indexOf(a) === -1 && chosenAuds.indexOf(a) === -1) chosenAuds.push(a);
+      });
+      var people = picker.ids();
+      if (!chosenAuds.length && !people.length) {
+        msg.textContent = 'Pick an audience, or choose specific people — otherwise nobody can sign it.';
+        return;
+      }
       save.disabled = true; save.textContent = 'Saving…';
-      Api.patch('/admin/managed-forms/' + id, { title: t, description: ov.querySelector('#fe-desc').value.trim() })
+      Api.patch('/admin/managed-forms/' + form.id, {
+        title: t,
+        description: ov.querySelector('#fe-desc').value.trim(),
+        audiences: chosenAuds,
+        recipient_ids: people,
+        fillable: ov.querySelector('#fe-fillable').checked,
+        reusable: ov.querySelector('#fe-reusable').checked,
+      })
         .then(function () { toast('✏️', 'Form updated', '', '#16A34A'); close(); loadList(el); })
         .catch(function (e) {
           save.disabled = false; save.textContent = 'Save changes';
-          ov.querySelector('#fe-msg').textContent = (e && e.message) || 'Could not save.';
+          msg.textContent = (e && e.message) || 'Could not save.';
         });
     });
   }
@@ -408,11 +526,14 @@
       var forms = (d && d.forms) || [];
       if (!forms.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms uploaded yet.</div>'; return; }
       el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Assigned to', 'Uploaded by', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Assigned to', 'Uploaded by', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + forms.map(function (f) {
           var auds = (f.audiences || []).map(function (a) { return '<span style="display:inline-block;background:#EFF6FB;color:#1F6080;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;margin:1px 3px 1px 0;">' + esc(audLabel(a)) + '</span>'; }).join('');
           return '<tr style="border-top:1px solid #F3F4F6;">'
-            + '<td style="padding:9px 14px;"><span class="fm-open" data-u="' + esc(fileUrl(f.file_url)) + '" style="color:#2563EB;font-weight:700;cursor:pointer;">' + esc(f.title) + '</span>' + (f.description ? '<div style="font-size:11.5px;color:#94A3B8;">' + esc(f.description) + '</div>' : '') + '</td>'
+            + '<td style="padding:9px 14px;"><span class="fm-open" data-u="' + esc(fileUrl(f.file_url)) + '" style="color:#2563EB;font-weight:700;cursor:pointer;">' + esc(f.title) + '</span></td>'
+            // Description gets its own sortable column. As a grey sub-line under the
+            // title it was easy to miss entirely, and it could not be sorted or scanned.
+            + '<td style="padding:9px 14px;color:#475569;max-width:320px;">' + (f.description ? esc(f.description) : '<span style="color:#CBD5E1;">—</span>') + '</td>'
             + '<td style="padding:9px 14px;">' + (auds || '—')
             + (f.named_count ? '<span style="display:inline-block;background:#FFF7ED;color:#C2410C;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;margin-left:4px;">+' + f.named_count + ' named</span>' : '')
             + '</td>'
@@ -428,9 +549,14 @@
             + '</td></tr>';
         }).join('') + '</tbody></table>';
       el.querySelectorAll('.fm-open').forEach(function (b) { b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); }); });
+      // Pass the loaded record, not scraped data- attributes: the dialog now needs
+      // audiences, both toggles and the named recipients as well.
+      var byId = {};
+      forms.forEach(function (f) { byId[String(f.id)] = f; });
       el.querySelectorAll('.fm-edit').forEach(function (b) {
         b.addEventListener('click', function () {
-          openEditDialog(b.getAttribute('data-id'), b.getAttribute('data-t'), b.getAttribute('data-d'), el);
+          var rec = byId[String(b.getAttribute('data-id'))];
+          if (rec) openEditDialog(rec, el);
         });
       });
       el.querySelectorAll('.fm-toggle').forEach(function (b) { b.addEventListener('click', function () {
