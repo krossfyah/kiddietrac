@@ -154,24 +154,79 @@
       document.body.style.overflow = 'hidden';
 
       var scroll = ov.querySelector('#kt-ff-scroll');
-      // Zoom by transforming the rendered pages. Scaling the wrapper moves the
-      // canvas AND its field overlay together, so inputs never drift off their
-      // boxes — and it is instant, unlike re-rendering every page at a new scale.
-      var zoom = 1;
-      function applyZoom() {
-        var pages = scroll.querySelectorAll('.kt-ff-page');
-        for (var i = 0; i < pages.length; i++) {
-          pages[i].style.transformOrigin = 'top left';
-          pages[i].style.transform = zoom === 1 ? '' : 'scale(' + zoom + ')';
-          pages[i].style.marginBottom = (16 * zoom) + 'px';
+      // ── Zoom ──────────────────────────────────────────────────────────────
+      // ONE transform on a single wrapper, not one per page: that keeps everything
+      // on a single composited layer, so a pinch is a GPU transform rather than a
+      // relayout of 100 field widgets every frame. Nothing that triggers layout
+      // (margins, width) is touched during the gesture.
+      var zoomWrap = document.createElement('div');
+      zoomWrap.id = 'kt-ff-zoomwrap';
+      zoomWrap.style.cssText = 'transform-origin:0 0;will-change:transform;';
+      var zoom = 1, zoomRaf = 0;
+      function paintZoom() {
+        zoomRaf = 0;
+        zoomWrap.style.transform = zoom === 1 ? '' : 'scale(' + zoom + ')';
+        // Reserve the scaled footprint so the scroll range matches what is drawn.
+        // Done on the SPACER, never on the transformed layer itself.
+        // Reserve the SCALED footprint so the scroll range matches what is drawn.
+        // Measured with the transform removed, then restored, so the number is the
+        // layer's true unscaled height rather than a compounding one.
+        var prev = zoomWrap.style.transform;
+        zoomWrap.style.transform = '';
+        var h = zoomWrap.offsetHeight, wdt = zoomWrap.offsetWidth;
+        zoomWrap.style.transform = prev;
+        var spacer = zoomWrap.__spacer;
+        if (!spacer) {
+          spacer = document.createElement('div');
+          spacer.style.cssText = 'pointer-events:none;';
+          zoomWrap.__spacer = spacer;
+          zoomWrap.parentNode.appendChild(spacer);
         }
+        spacer.style.height = Math.max(0, Math.round(h * (zoom - 1))) + 'px';
+        spacer.style.width = Math.max(0, Math.round(wdt * (zoom - 1))) + 'px';
       }
-      ov.querySelector('#kt-ff-zoomin').addEventListener('click', function () {
-        zoom = Math.min(2.5, Math.round((zoom + 0.25) * 100) / 100); applyZoom();
-      });
-      ov.querySelector('#kt-ff-zoomout').addEventListener('click', function () {
-        zoom = Math.max(0.5, Math.round((zoom - 0.25) * 100) / 100); applyZoom();
-      });
+      function applyZoom() { if (!zoomRaf) zoomRaf = (w.requestAnimationFrame || setTimeout)(paintZoom); }
+      /** Zoom about a point in the scroller so the form grows where the fingers are. */
+      function zoomTo(next, cx, cy) {
+        next = Math.max(0.5, Math.min(3, next));
+        if (next === zoom) return;
+        var rect = scroll.getBoundingClientRect();
+        var px = (scroll.scrollLeft + (cx - rect.left)) / zoom;
+        var py = (scroll.scrollTop + (cy - rect.top)) / zoom;
+        zoom = next;
+        applyZoom();
+        scroll.scrollLeft = px * zoom - (cx - rect.left);
+        scroll.scrollTop = py * zoom - (cy - rect.top);
+      }
+      function zoomCentre(next) {
+        var r = scroll.getBoundingClientRect();
+        zoomTo(next, r.left + r.width / 2, r.top + r.height / 2);
+      }
+      ov.querySelector('#kt-ff-zoomin').addEventListener('click', function () { zoomCentre(zoom + 0.25); });
+      ov.querySelector('#kt-ff-zoomout').addEventListener('click', function () { zoomCentre(zoom - 0.25); });
+
+      // PINCH. The APK's WebView has built-in zoom disabled, so the browser gesture
+      // never fires — we drive the same transform from raw touch points. Continuous
+      // (no rounding to steps) and rAF-throttled, so it tracks the fingers smoothly.
+      var pinchStart = 0, zoomStart = 1, pinching = false;
+      function dist(t) {
+        var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+      function mid(t) { return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
+      scroll.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 2) return;
+        pinching = true; pinchStart = dist(e.touches); zoomStart = zoom;
+      }, { passive: true });
+      scroll.addEventListener('touchmove', function (e) {
+        if (!pinching || e.touches.length !== 2 || !pinchStart) return;
+        e.preventDefault();                       // the sheet must not scroll mid-pinch
+        var m = mid(e.touches);
+        zoomTo(zoomStart * (dist(e.touches) / pinchStart), m.x, m.y);
+      }, { passive: false });
+      function endPinch(e) { if (!e.touches || e.touches.length < 2) { pinching = false; pinchStart = 0; } }
+      scroll.addEventListener('touchend', endPinch, { passive: true });
+      scroll.addEventListener('touchcancel', endPinch, { passive: true });
       var msg = ov.querySelector('#kt-ff-msg');
       var submitBtn = ov.querySelector('#kt-ff-submit');
       var hint = ov.querySelector('#kt-ff-hint');
@@ -197,6 +252,19 @@
       // find the fields to write into. Map id → fieldName while rendering.
       var fieldMap = {};
 
+      // Re-read the draft from the server on open. The caller passes what it had
+      // when the list was rendered, which goes stale the moment a draft is saved —
+      // relying on it alone is how "nothing was saved" happens.
+      var draftReady = KT.Api.get('/managed-forms/assigned').then(function (d) {
+        var list = (d && d.forms) || [];
+        for (var i = 0; i < list.length; i++) {
+          if (String(list[i].id) === String(form.id) && list[i].draft_values) {
+            form.draftValues = list[i].draft_values;
+            break;
+          }
+        }
+      }).catch(function () { /* fall back to whatever the caller handed us */ });
+
       ensureLibs().then(function (libs) {
         return fetch(absUrl(form.fileUrl), { credentials: 'omit' })
           .then(function (r) {
@@ -210,27 +278,47 @@
           .then(function (doc) {
             annotationStorage = doc.annotationStorage;
             scroll.innerHTML = '';
+            scroll.appendChild(zoomWrap);
             // Progress line. A large form (100 fields) takes many seconds to lay out,
             // and a silent blank page reads as "nothing happened".
             var prog = document.createElement('div');
             prog.style.cssText = 'padding:14px;text-align:center;color:#64748B;font-size:13px;';
             prog.textContent = 'Preparing page 1 of ' + doc.numPages + '…';
-            scroll.appendChild(prog);
+            zoomWrap.appendChild(prog);
             hint.textContent = 'Preparing the form…';
 
+            // TWO PHASES, so the form becomes readable as fast as possible.
+            //
+            // Phase 1 paints every page. Phase 2 attaches the interactive fields,
+            // which is the expensive half — pdf.js builds a DOM widget per field, and
+            // on a 100-field form that blocked the thread long enough that the page
+            // sat blank and the sheet looked broken. Painting first means the user
+            // sees their actual form within a beat; the boxes light up right after.
+            var deferred = [];
             var chain = Promise.resolve();
             for (var n = 1; n <= doc.numPages; n++) {
               (function (pageNo) {
                 chain = chain.then(function () {
-                  prog.textContent = 'Preparing page ' + pageNo + ' of ' + doc.numPages + '…';
-                  // Yield a frame so the message actually paints before the heavy
-                  // render work blocks the thread.
-                  return new Promise(function (r) { setTimeout(r, 0); })
-                    .then(function () { return renderPage(libs, doc, pageNo, scroll, fieldMap); });
-                }).then(function (widgets) { fieldCount += widgets; });
+                  prog.textContent = 'Loading page ' + pageNo + ' of ' + doc.numPages + '…';
+                  return yieldFrame().then(function () { return renderPage(libs, doc, pageNo, zoomWrap); });
+                }).then(function (res) { deferred.push(res); });
               })(n);
             }
-            return chain.then(function () { if (prog.parentNode) prog.remove(); });
+            return chain.then(function () {
+              if (!deferred.some(function (d) { return d && d.widgetCount; })) { if (prog.parentNode) prog.remove(); return; }
+              prog.textContent = 'Adding the fields you can type into…';
+              var fchain = Promise.resolve();
+              deferred.forEach(function (d, i) {
+                if (!d || !d.widgetCount) return;
+                fchain = fchain.then(function () {
+                  prog.textContent = 'Adding fields' + (deferred.length > 1 ? ' — page ' + (i + 1) + ' of ' + deferred.length : '') + '…';
+                  // Yield between pages so the UI stays responsive and the progress
+                  // line actually repaints instead of freezing on one message.
+                  return yieldFrame().then(function () { return d.attachFields(fieldMap); });
+                }).then(function (n2) { fieldCount += n2; });
+              });
+              return fchain.then(function () { if (prog.parentNode) prog.remove(); });
+            });
           })
           .then(function () {
             if (!fieldCount) {
@@ -247,10 +335,11 @@
             // Put a saved draft back into the fields. Setting .value alone would look
             // right but leave pdf.js's annotation storage empty, so the answers would
             // not be submitted — dispatch input/change so the storage updates too.
+            return draftReady.then(function () {
             if (form.draftValues && fieldCount) {
               var restored = 0;
               Object.keys(form.draftValues).forEach(function (name) {
-                var el = scroll.querySelector('.annotationLayer [name="' + (w.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+                var el = zoomWrap.querySelector('.annotationLayer [name="' + (w.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
                 if (!el) return;
                 var v = form.draftValues[name];
                 if (el.type === 'checkbox' || el.type === 'radio') {
@@ -268,6 +357,9 @@
                 msg.textContent = 'Your saved draft has been restored (' + restored + ' answers).';
               }
             }
+            });
+          })
+          .then(function () {
             scroll.addEventListener('input', function () { dirty = true; }, true);
             scroll.addEventListener('change', function () { dirty = true; }, true);
           })
@@ -288,11 +380,11 @@
         msg.style.color = '#64748B'; msg.textContent = '';
         KT.Api.post('/managed-forms/' + form.id + '/draft', { field_values: collectValues(annotationStorage, fieldMap) })
           .then(function () {
-            dirty = false;                       // saved — closing is now safe
-            draftBtn.disabled = false; draftBtn.textContent = 'Save draft';
-            msg.style.color = '#0F766E';
-            msg.textContent = 'Draft saved — you can come back and finish this later.';
+            // Saving a draft ends the sitting — close the sheet rather than leaving
+            // the user staring at the form wondering whether it took.
+            dirty = false;                       // saved, so no "discard?" prompt
             if (KT.toast) KT.toast('💾', 'Draft saved', 'Your answers are kept until you sign.', '#0F766E');
+            close(false);                        // false = not submitted; list reloads
           })
           .catch(function (e) {
             draftBtn.disabled = false; draftBtn.textContent = 'Save draft';
@@ -338,8 +430,18 @@
     });
   }
 
-  /** Render one page + its interactive field widgets. Returns the widget count. */
-  function renderPage(libs, doc, pageNo, host, fieldMap) {
+  /** Let the browser paint before the next chunk of work. */
+  function yieldFrame() {
+    return new Promise(function (res) {
+      (w.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () { setTimeout(res, 0); });
+    });
+  }
+
+  /**
+   * PHASE 1 — paint the page. Returns { widgetCount, attachFields() }; the caller
+   * runs attachFields() afterwards so the document is visible first.
+   */
+  function renderPage(libs, doc, pageNo, host) {
     return doc.getPage(pageNo).then(function (page) {
       // Sizing. Fitting a Letter page (612pt) into a ~360px phone gives scale ~0.55,
       // which is what made the form unreadably tiny in the APK — a 100-field form
@@ -374,7 +476,8 @@
         .then(function () { return page.getAnnotations({ intent: 'display' }); })
         .then(function (annotations) {
           var widgets = (annotations || []).filter(function (a) { return a.subtype === 'Widget'; });
-          if (!widgets.length) return 0;
+          if (!widgets.length) return { widgetCount: 0, attachFields: function () { return Promise.resolve(0); } };
+          return { widgetCount: widgets.length, attachFields: function (fieldMap) {
           widgets.forEach(function (a) {
             if (fieldMap && a && a.id != null && a.fieldName) fieldMap[String(a.id)] = a.fieldName;
           });
@@ -419,7 +522,8 @@
           } else {
             throw new Error('This PDF viewer build cannot render form fields.');
           }
-          return widgets.length;
+          return Promise.resolve(widgets.length);
+          } };
         });
     });
   }

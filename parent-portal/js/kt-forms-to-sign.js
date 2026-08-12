@@ -61,7 +61,13 @@
             title: b.getAttribute('data-t'),
             fileUrl: b.getAttribute('data-u'),
             draftValues: rec && rec.draft_values ? rec.draft_values : null,
-          }).then(function (submitted) { if (submitted) load(el); });
+          }).then(function () {
+            // ALWAYS reload, not only on submit. The card list is rendered once from
+            // one /assigned payload; after saving a draft that payload still says
+            // draft_values:null, so reopening the form restored nothing and the work
+            // looked lost. Reloading re-reads the draft from the server.
+            load(el);
+          });
         });
       });
     }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
