@@ -262,25 +262,84 @@
     loadList(body.querySelector('#fm-list'));
   }
 
+  /** "12 Aug 2026 · 3:41 PM" — a form's provenance needs a real date, not "today". */
+  function fmtStamp(ts) {
+    if (!ts) return '';
+    try {
+      var d = new Date(String(ts).replace(' ', 'T'));
+      if (isNaN(d.getTime())) return String(ts);
+      return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+        + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return String(ts); }
+  }
+
+  /** Rename / re-describe a form without re-uploading the PDF. */
+  function openEditDialog(id, title, desc, el) {
+    var ov = document.createElement('div');
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479500;background:rgba(8,17,33,.62);display:flex;align-items:center;justify-content:center;padding:18px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="background:#0B2545;color:#fff;padding:14px 18px;font-size:16px;font-weight:800;">Edit form details</div>'
+      + '<div style="padding:18px;">'
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Title</div>'
+      + '<input id="fe-title" type="text" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;">'
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;">Description</div>'
+      + '<textarea id="fe-desc" rows="3" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>'
+      + '<div id="fe-msg" style="font-size:12.5px;color:#B91C1C;min-height:16px;margin-top:8px;"></div>'
+      + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">'
+      + '<button id="fe-cancel" type="button" data-kt-iconized="1" style="background:#fff;border:1.5px solid #CBD5E1;color:#1F6080;border-radius:10px;padding:9px 16px;font-weight:800;font-size:13px;cursor:pointer;">Cancel</button>'
+      + '<button id="fe-save" type="button" data-kt-iconized="1" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;border:0;border-radius:10px;padding:9px 18px;font-weight:800;font-size:13px;cursor:pointer;">Save changes</button>'
+      + '</div></div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#fe-title').value = title || '';
+    ov.querySelector('#fe-desc').value = desc || '';
+    function close() { ov.remove(); }
+    ov.querySelector('#fe-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    var save = ov.querySelector('#fe-save');
+    save.addEventListener('click', function () {
+      var t = ov.querySelector('#fe-title').value.trim();
+      if (!t) { ov.querySelector('#fe-msg').textContent = 'A title is required.'; return; }
+      save.disabled = true; save.textContent = 'Saving…';
+      Api.patch('/admin/managed-forms/' + id, { title: t, description: ov.querySelector('#fe-desc').value.trim() })
+        .then(function () { toast('✏️', 'Form updated', '', '#16A34A'); close(); loadList(el); })
+        .catch(function (e) {
+          save.disabled = false; save.textContent = 'Save changes';
+          ov.querySelector('#fe-msg').textContent = (e && e.message) || 'Could not save.';
+        });
+    });
+  }
+
   function loadList(el) {
     Api.get('/admin/managed-forms').then(function (d) {
       var forms = (d && d.forms) || [];
       if (!forms.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms uploaded yet.</div>'; return; }
-      el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Assigned to', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+      el.innerHTML = '<table data-kt-no-kebab="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Assigned to', 'Uploaded by', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + forms.map(function (f) {
           var auds = (f.audiences || []).map(function (a) { return '<span style="display:inline-block;background:#EFF6FB;color:#1F6080;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;margin:1px 3px 1px 0;">' + esc(audLabel(a)) + '</span>'; }).join('');
           return '<tr style="border-top:1px solid #F3F4F6;">'
             + '<td style="padding:9px 14px;"><span class="fm-open" data-u="' + esc(fileUrl(f.file_url)) + '" style="color:#2563EB;font-weight:700;cursor:pointer;">' + esc(f.title) + '</span>' + (f.description ? '<div style="font-size:11.5px;color:#94A3B8;">' + esc(f.description) + '</div>' : '') + '</td>'
-            + '<td style="padding:9px 14px;">' + (auds || '—') + '</td>'
+            + '<td style="padding:9px 14px;">' + (auds || '—')
+            + (f.named_count ? '<span style="display:inline-block;background:#FFF7ED;color:#C2410C;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;margin-left:4px;">+' + f.named_count + ' named</span>' : '')
+            + '</td>'
+            + '<td style="padding:9px 14px;color:#475569;white-space:nowrap;">'
+            + esc(f.uploaded_by || '—')
+            + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(fmtStamp(f.created_at)) + '</div></td>'
             + '<td style="padding:9px 14px;font-weight:700;color:#0F172A;">' + (f.signoff_count || 0) + '</td>'
             + '<td style="padding:9px 14px;">' + (f.active ? '<span style="color:#16A34A;font-weight:700;">● Active</span>' : '<span style="color:#94A3B8;">Off</span>') + '</td>'
             + '<td style="padding:9px 8px;text-align:right;white-space:nowrap;">'
+            + '<button class="fm-edit kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" data-d="' + esc(f.description || '') + '" title="Edit details" style="border:1px solid #BFDBFE;background:#EFF6FF;color:#1E40AF;">✏️</button>'
             + '<button class="fm-toggle kt-act-icon" data-id="' + f.id + '" data-active="' + (f.active ? 1 : 0) + '" title="' + (f.active ? 'Deactivate' : 'Activate') + '" style="border:1px solid #E5E7EB;background:#fff;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">' + (f.active ? '⏸' : '▶️') + '</button> '
             + '<button class="fm-del kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" title="Delete" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">🗑️</button>'
             + '</td></tr>';
         }).join('') + '</tbody></table>';
       el.querySelectorAll('.fm-open').forEach(function (b) { b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); }); });
+      el.querySelectorAll('.fm-edit').forEach(function (b) {
+        b.addEventListener('click', function () {
+          openEditDialog(b.getAttribute('data-id'), b.getAttribute('data-t'), b.getAttribute('data-d'), el);
+        });
+      });
       el.querySelectorAll('.fm-toggle').forEach(function (b) { b.addEventListener('click', function () {
         var on = b.getAttribute('data-active') === '1';
         Api.patch('/admin/managed-forms/' + b.getAttribute('data-id'), { active: !on }).then(function () { loadList(el); }).catch(function (e) { toast('⚠️', 'Failed', e.message || '', '#B91C1C'); });

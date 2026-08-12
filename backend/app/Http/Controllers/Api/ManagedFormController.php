@@ -76,9 +76,23 @@ class ManagedFormController extends Controller
             ->where('f.agency_id', $agencyId)
             ->select('s.managed_form_id', DB::raw('COUNT(*) as n'))
             ->groupBy('s.managed_form_id')->pluck('n', 's.managed_form_id');
-        $out = $forms->map(function ($f) use ($counts) {
+        // Who uploaded each form. created_by_id was already stored but never
+        // surfaced, so the library could not answer "who added this, and when".
+        $uploaderIds = $forms->pluck('created_by_id')->filter()->unique()->all();
+        $uploaders = empty($uploaderIds) ? collect() : DB::table('users')->whereIn('id', $uploaderIds)
+            ->get(['id', 'first_name', 'last_name'])->keyBy('id');
+        // How many people were named individually (vs reached by role audience).
+        $named = DB::table('managed_form_recipients')
+            ->whereIn('managed_form_id', $forms->pluck('id')->all())
+            ->select('managed_form_id', DB::raw('COUNT(*) as n'))
+            ->groupBy('managed_form_id')->pluck('n', 'managed_form_id');
+
+        $out = $forms->map(function ($f) use ($counts, $uploaders, $named) {
             $f->audiences = $f->audiences ? (json_decode($f->audiences, true) ?: []) : [];
             $f->signoff_count = (int) ($counts[$f->id] ?? 0);
+            $u = $uploaders[$f->created_by_id] ?? null;
+            $f->uploaded_by = $u ? trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) : null;
+            $f->named_count = (int) ($named[$f->id] ?? 0);
             return $f;
         });
         return response()->json(['forms' => $out]);
@@ -171,6 +185,10 @@ class ManagedFormController extends Controller
         }
         if ($request->has('title')) {
             $patch['title'] = (string) $request->input('title');
+        }
+        // description was not editable, so a typo in it meant re-uploading the PDF.
+        if ($request->has('description')) {
+            $patch['description'] = (string) $request->input('description');
         }
         if ($request->has('audiences')) {
             $aud = $request->input('audiences');

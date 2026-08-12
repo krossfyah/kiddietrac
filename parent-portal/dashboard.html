@@ -124,7 +124,35 @@
   </style>
   <link rel="stylesheet" href="/css/kt-select-fix.css?v=20260811scheme">
 </head>
-<body><!-- v17.2-shell -->
+<body>
+<!-- ── Signed-out launch: leave immediately ──────────────────────────────────
+     The APK opens dashboard.html. With no session this page only exists to bounce
+     to the login form, but the shell still painted first — the wordmark header,
+     a spinner and "Loading your workspace…", which is not a launch experience.
+     This runs BEFORE any of that: it paints a plain navy cover with the app icon
+     and redirects, so a cold launch reads as navy splash -> login and nothing else.
+     Must stay inline and first; a deferred script is far too late. -->
+<script>
+(function () {
+  try {
+    var t = null;
+    try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+    if (t) return;                                  // signed in: normal boot
+    var h = (location.hash || '');
+    if (h.indexOf('__demo=') !== -1 || h.indexOf('kt_sso=') !== -1) return;   // token handoff in the URL
+    document.documentElement.style.background = '#081C41';
+    var cover = document.createElement('div');
+    cover.setAttribute('style',
+      'position:fixed;inset:0;z-index:2147483600;background:#081C41;display:flex;'
+      + 'align-items:center;justify-content:center;');
+    cover.innerHTML = '<img src="/icon-192.png" alt="" style="width:104px;height:104px;border-radius:24px;"'
+      + ' onerror="this.style.display='none'">';
+    (document.body || document.documentElement).appendChild(cover);
+    location.replace('/index.html');
+  } catch (e) {}
+})();
+</script>
+<!-- v17.2-shell -->
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
 <div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img src="/logo-wordmark-large.png" alt="" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div></div></div>
 <style>
@@ -310,7 +338,7 @@ function showReloadGate(){
   <script src="/js/screen-audit-logs.js?v=20260810elfull" defer></script>
   <script src="/js/screen-bulk-invoices.js?v=20260806bulk" defer></script>
   <script src="/js/screen-forms.js?v=20260811kebab" defer></script>
-  <script src="/js/screen-forms-manager.js?v=20260812people1" defer></script>
+  <script src="/js/screen-forms-manager.js?v=20260812tbl1" defer></script>
   <script src="/js/screen-fee-plans.js?v=20260724cfm" defer></script>
   <script src="/js/screen-expenses.js?v=20260724cfm" defer></script>
   <script src="/js/screen-billing-setup.js?v=20260724a11y" defer></script>
