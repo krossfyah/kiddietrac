@@ -170,6 +170,20 @@
 /* While the reload gate is up it is the ONLY spinner — suppress the portal's own
    #appMain loading-state spinner so it doesn't show through the dimmed scrim. */
 html.kt-gating .loading-state{visibility:hidden!important;}
+/* Boot ground (2026-08-12). The navy splash lifts after ~2.3s, but the portal is 162
+   scripts and often has not painted a screen yet — so a launch flashed the LIGHT app
+   shell with a bare "Loading your workspace...", which is what the user photographed.
+   The waiting state now wears the same navy as the splash and the native launch icon,
+   so native splash -> boot -> portal reads as one continuous navy sequence instead of
+   navy, white flash, portal. */
+.loading-state{position:fixed;inset:0;z-index:2147482000;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;
+  background:radial-gradient(120% 70% at 50% 0%,#12315C 0%,#081C41 62%);}
+.loading-state::before{content:'';display:block;width:96px;height:96px;border-radius:22px;
+  background:#fff url('/icon-192.png') center/cover no-repeat;
+  box-shadow:0 20px 44px -18px rgba(0,0,0,.65);}
+.loading-state p{color:#9FB3D1!important;font-weight:600;}
+.loading-state .spinner{border-color:rgba(255,255,255,.22)!important;border-top-color:#22D3EE!important;}
 #kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:30px;padding:0 28px}
 #kt-splash .kt-splash-logo-wrap{width:min(66vw,240px)}
 #kt-splash .kt-splash-logo{display:block;width:100%;height:auto;animation:kt-write 1.7s cubic-bezier(.62,.03,.2,1) both,kt-rise .7s ease both}
