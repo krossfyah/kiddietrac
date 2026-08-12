@@ -108,6 +108,7 @@ class ManagedFormController extends Controller
             $f->uploaded_by = $u ? trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) : null;
             $f->named_count = (int) ($named[$f->id] ?? 0);
             $f->recipient_ids = $namedIds[$f->id] ?? [];
+            $f->notify_email = $f->notify_email ?? null;
             $f->fillable = (bool) ($f->fillable ?? false);
             $f->reusable = (bool) ($f->reusable ?? false);
             return $f;
@@ -138,6 +139,8 @@ class ManagedFormController extends Controller
             // read-and-sign notices where typing into the page makes no sense.
             'fillable'    => ['nullable'],
             'reusable'    => ['nullable'],
+            // Optional: where a completed copy should be sent. Blank = nobody.
+            'notify_email' => ['nullable', 'email', 'max:190'],
         ]);
 
         $recipientIds = $request->input('recipient_ids');
@@ -168,6 +171,7 @@ class ManagedFormController extends Controller
             'file_url'      => '/storage/' . $path,
             'fillable'      => filter_var($request->input('fillable', false), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             'reusable'      => filter_var($request->input('reusable', false), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
+            'notify_email'  => $data['notify_email'] ?? null,
             'file_type'     => 'application/pdf',
             'file_size'     => $request->file('file')->getSize(),
             'audiences'     => json_encode($audiences),
@@ -223,6 +227,11 @@ class ManagedFormController extends Controller
         }
         if ($request->has('reusable')) {
             $patch['reusable'] = filter_var($request->input('reusable'), FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        }
+        if ($request->has('notify_email')) {
+            $em = trim((string) $request->input('notify_email'));
+            // Clearing the field switches the notification off again.
+            $patch['notify_email'] = ($em !== '' && filter_var($em, FILTER_VALIDATE_EMAIL)) ? $em : null;
         }
         // Named recipients, likewise editable. Sent as the COMPLETE list (the picker
         // shows the current selection), so this replaces rather than appends —
@@ -524,6 +533,74 @@ class ManagedFormController extends Controller
             ]);
         }
 
+        // If the form names an address, send the completed copy there. Best-effort:
+        // the signature is already saved, so a mail problem must not fail the submit.
+        try {
+            $this->emailCompletedForm($form, $name, $filledUrl, (string) ($u->email ?? ''));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return response()->json(['ok' => true, 'message' => 'Signed. Thank you!']);
+    }
+
+    /**
+     * Email the completed form to the address configured on it, with the filled PDF
+     * attached. Requested so a signed form can land in a compliance inbox or with a
+     * director instead of only living in the Completed tab.
+     *
+     * The recipient is chosen by an admin and is often outside the agency (a licensing
+     * contact, a shared mailbox), so this carries X-KT-Bypass-Suppression: it is
+     * operational mail the admin explicitly asked for, like a support ticket, not a
+     * broadcast that the per-agency comms switch should silence.
+     */
+    private function emailCompletedForm(object $form, ?string $signerName, ?string $filledUrl, string $signerEmail): void
+    {
+        $to = trim((string) ($form->notify_email ?? ''));
+        if ($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL)) return;
+
+        $who = $signerName ?: 'Someone';
+        $subject = 'Completed form: ' . $form->title;
+        $when = \App\Support\AgencyTime::fmt(now(), \App\Support\AgencyTime::tz((int) $form->agency_id));
+
+        $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
+              . e($who) . ' has completed and signed <strong>' . e($form->title) . '</strong>.</p>'
+              . \App\Services\EmailTemplate::calloutBox(
+                    '<strong>Form:</strong> ' . e($form->title)
+                    . ($form->description ? '<br><strong>About:</strong> ' . e($form->description) : '')
+                    . '<br><strong>Signed by:</strong> ' . e($who) . ($signerEmail ? ' (' . e($signerEmail) . ')' : '')
+                    . '<br><strong>Signed at:</strong> ' . e($when),
+                    'info'
+                )
+              . '<p style="margin:14px 0 0;font-size:13.5px;color:#64748B;line-height:1.6;">'
+              . ($filledUrl
+                    ? 'The completed PDF is attached, with the signature embedded.'
+                    : 'This form was signed as a read-and-sign notice, so there is no filled PDF to attach.')
+              . '</p>';
+
+        $html = \App\Services\EmailTemplate::wrap((int) $form->agency_id, $body, [
+            'eyebrow'   => 'FORM COMPLETED',
+            'title'     => $form->title,
+            'subtitle'  => 'Signed by ' . $who,
+            'preheader' => $who . ' completed ' . $form->title . '.',
+        ]);
+
+        $absPdf = null;
+        if ($filledUrl) {
+            $candidate = Storage::disk('public')->path(preg_replace('#^/storage/#', '', $filledUrl));
+            if (is_file($candidate)) $absPdf = $candidate;
+        }
+        $attachName = preg_replace('/[^A-Za-z0-9._-]+/', '-', $form->title) . '.pdf';
+
+        dispatch(function () use ($to, $subject, $html, $absPdf, $attachName) {
+            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $subject, $absPdf, $attachName) {
+                $m->to($to)
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
+                  ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
+                  ->subject($subject);
+                if ($absPdf) $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
+                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            });
+        })->onQueue('mail');
     }
 }

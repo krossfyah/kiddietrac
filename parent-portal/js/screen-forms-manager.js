@@ -101,6 +101,11 @@
       + '<span style="display:block;font-size:12.5px;color:#64748B;line-height:1.5;margin-top:2px;">'
       + 'Keeps the form available after it is submitted, so staff can complete it again — once per child, or week after week. '
       + 'Each submission is kept as its own record.</span></span></label>'
+      // Optional: where a completed copy goes. Often a compliance inbox or a
+      // director, so a signed form does not only live in the Completed tab.
+      + '<div><label for="fm-notify" style="' + LBL + '">Email completed forms to <span style="color:#CBD5E1;font-weight:600;text-transform:none;letter-spacing:0;">(optional)</span></label>'
+      + '<input id="fm-notify" type="email" placeholder="e.g. compliance@youragency.com" style="' + FIELD + '">'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-top:5px;">Each time someone signs this form, the completed PDF is emailed here. Leave blank to send nothing.</div></div>'
       // Action row
       + '<div style="display:flex;align-items:center;gap:14px;border-top:1px solid #F1F5F9;padding-top:16px;">'
       + '<button id="fm-upload" type="button" data-kt-iconized="1" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 24px;font-weight:800;font-size:13.5px;cursor:pointer;">Upload form</button>'
@@ -164,6 +169,8 @@
       fd.append('title', title); fd.append('description', desc);
       fd.append('fillable', body.querySelector('#fm-fillable').checked ? '1' : '0');
       fd.append('reusable', body.querySelector('#fm-reusable').checked ? '1' : '0');
+      var notify = (body.querySelector('#fm-notify').value || '').trim();
+      if (notify) fd.append('notify_email', notify);
       if (people.length) fd.append('recipient_ids', JSON.stringify(people.map(Number)));
       auds.forEach(function (a) { fd.append('audiences[]', a); });
       fd.append('file', file);
@@ -454,6 +461,9 @@
           'Turn on for a PDF with real form fields. A read-and-sign notice should stay read-and-sign.', !!form.fillable)
       + toggleCardHtml('fe-reusable', 'Reusable form',
           'Stays on the list after signing, so it can be filled again for the next child or week.', !!form.reusable)
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:4px 0 6px;">Email completed forms to (optional)</div>'
+      + '<input id="fe-notify" type="email" placeholder="e.g. compliance@youragency.com" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;margin-bottom:6px;">'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:14px;">Each signature emails the completed PDF here. Clear it to stop sending.</div>'
       + '<div id="fe-msg" style="font-size:12.5px;color:#B91C1C;min-height:16px;margin-top:2px;"></div>'
       + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">'
       + '<button id="fe-cancel" type="button" data-kt-iconized="1" style="background:#fff;border:1.5px solid #CBD5E1;color:#1F6080;border-radius:10px;padding:9px 16px;font-weight:800;font-size:13px;cursor:pointer;">Cancel</button>'
@@ -462,6 +472,7 @@
     document.body.appendChild(ov);
     ov.querySelector('#fe-title').value = form.title || '';
     ov.querySelector('#fe-desc').value = form.description || '';
+    ov.querySelector('#fe-notify').value = form.notify_email || '';
 
     // Same live border feedback the upload dialog gives its toggles.
     ['fe-fillable', 'fe-reusable'].forEach(function (id) {
@@ -512,6 +523,7 @@
         recipient_ids: people,
         fillable: ov.querySelector('#fe-fillable').checked,
         reusable: ov.querySelector('#fe-reusable').checked,
+        notify_email: ov.querySelector('#fe-notify').value.trim(),
       })
         .then(function () { toast('✏️', 'Form updated', '', '#16A34A'); close(); loadList(el); })
         .catch(function (e) {
