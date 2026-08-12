@@ -293,18 +293,31 @@ final class DayBriefController extends Controller
                 ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('occurred_at')
                 ->get(['child_id', 'event_type', 'occurred_at', 'payload', 'notes']) as $e) {
                 $p = is_string($e->payload) ? (json_decode($e->payload, true) ?: []) : ((array) ($e->payload ?? []));
-                $title = match ($e->event_type) {
-                    'meal', 'snack' => ucfirst($p['meal'] ?? $e->event_type),
-                    'nap_start' => 'Started nap', 'nap_end' => 'Woke from nap',
-                    'diaper' => 'Diaper (' . ($p['type'] ?? 'changed') . ')',
-                    'activity' => $p['name'] ?? 'Activity',
-                    'mood' => 'Mood: ' . ($p['score'] ?? '—'),
-                    default => str_replace('_', ' ', ucfirst((string) $e->event_type)),
-                };
+                // A shared photo or video is filed as event_type 'note' (daily_events
+                // has an enum, so the real shape rides in the payload) — which meant
+                // capturing a moment showed up in Activities & daily logs as a bare
+                // "Note". Name it for what it is, and keep the caption as the detail.
+                $isMedia = ($p['kind'] ?? '') === 'media';
+                $isVideoEvent = $isMedia && (($p['media_type'] ?? '') === 'video');
+                $title = $isMedia
+                    ? ($isVideoEvent ? 'Video captured' : 'Photo captured')
+                    : match ($e->event_type) {
+                        'meal', 'snack' => ucfirst($p['meal'] ?? $e->event_type),
+                        'nap_start' => 'Started nap', 'nap_end' => 'Woke from nap',
+                        'diaper' => 'Diaper (' . ($p['type'] ?? 'changed') . ')',
+                        'activity' => $p['name'] ?? 'Activity',
+                        'mood' => 'Mood: ' . ($p['score'] ?? '—'),
+                        default => str_replace('_', ' ', ucfirst((string) $e->event_type)),
+                    };
                 $events[] = [
                     'at' => $e->occurred_at, 'time' => AgencyTime::fmt($e->occurred_at, $tz),
-                    'icon' => $ICON[$e->event_type] ?? '•', 'title' => $title,
-                    'child' => $nameById[$e->child_id] ?? 'Child', 'detail' => $e->notes ?? '',
+                    'icon' => $isMedia ? ($isVideoEvent ? '🎥' : '📸') : ($ICON[$e->event_type] ?? '•'),
+                    'title' => $title,
+                    'child' => $nameById[$e->child_id] ?? 'Child',
+                    // The caption is the description the educator typed when capturing.
+                    'detail' => $isMedia ? (string) ($p['note'] ?? $e->notes ?? '') : ($e->notes ?? ''),
+                    'media_type' => $isMedia ? ($isVideoEvent ? 'video' : 'photo') : null,
+                    'photo_id' => $isMedia ? ($p['photo_id'] ?? null) : null,
                 ];
             }
             // ALSO the "Log a moment" entries — these write to daily_care_logs, a
