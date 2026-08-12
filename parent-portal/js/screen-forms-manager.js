@@ -232,6 +232,7 @@
       fd.append('file', file);
       Api.post('/admin/managed-forms', fd).then(function () {
         out.style.color = '#047857'; out.textContent = '✓ Uploaded.';
+        try { body.dispatchEvent(new CustomEvent('kt-fm-uploaded')); } catch (e) {}
         toast('🗂️', 'Form uploaded', '"' + title + '" is now assigned.', '#16A34A');
         renderLibrary(body);
       }).catch(function (e) {
@@ -258,6 +259,82 @@
         }
       });
     };
+
+    // ── Upload panel -> dialog ───────────────────────────────────────────────
+    // The panel is built and wired exactly as before, then MOVED into a dialog.
+    // Moving a node keeps its listeners, so none of the upload wiring above needs
+    // to know it now lives in a modal — and the screen leads with the library
+    // instead of a tall form pushing existing forms below the fold.
+    (function () {
+      var panel = body.firstElementChild;                     // the upload card
+      var list = body.querySelector('#fm-list');
+      if (!panel || !list || panel === list) return;
+
+      var bar = document.createElement('div');
+      bar.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;';
+      bar.innerHTML = '<div style="min-width:0;">'
+        + '<div style="font-size:17px;font-weight:800;color:#0F172A;">Forms library</div>'
+        + '<div style="font-size:13px;color:#64748B;margin-top:2px;">Upload a PDF and assign it to roles or to specific people.</div></div>';
+      var openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.setAttribute('data-kt-iconized', '1');
+      openBtn.textContent = '+ Upload a form';
+      openBtn.style.cssText = 'margin-left:auto;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);'
+        + 'color:#fff;border:0;border-radius:10px;padding:11px 20px;font-weight:800;font-size:13.5px;cursor:pointer;';
+      bar.appendChild(openBtn);
+      body.insertBefore(bar, list);
+
+      // The overlay lives INSIDE the screen container, so a re-render after a
+      // successful upload disposes of it automatically.
+      var ov = document.createElement('div');
+      ov.setAttribute('data-no-modal-guard', '1');
+      ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:2147479000;background:rgba(8,17,33,.62);'
+        + 'align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
+      var card = document.createElement('div');
+      card.style.cssText = 'background:#fff;border-radius:16px;max-width:640px;width:100%;margin:auto;'
+        + 'box-shadow:0 30px 80px -20px rgba(8,20,40,.6);overflow:hidden;';
+      var head = document.createElement('div');
+      head.style.cssText = 'background:#0B2545;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px;';
+      head.innerHTML = '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FORMS MANAGER</div>'
+        + '<div style="font-size:17px;font-weight:800;margin-top:2px;">Upload a form</div></div>';
+      var closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('aria-label', 'Close');
+      closeBtn.setAttribute('data-kt-iconized', '1');
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;'
+        + 'width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;';
+      head.appendChild(closeBtn);
+      var scroller = document.createElement('div');
+      scroller.style.cssText = 'padding:16px;max-height:calc(100vh - 150px);overflow-y:auto;';
+
+      panel.parentNode.removeChild(panel);                    // move, listeners intact
+      panel.style.margin = '0';
+      panel.style.border = '0';
+      panel.style.boxShadow = 'none';
+      panel.style.padding = '0';
+      scroller.appendChild(panel);
+      card.appendChild(head); card.appendChild(scroller); ov.appendChild(card);
+      body.appendChild(ov);
+
+      var prevOverflow = '';
+      function open() {
+        prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        ov.style.display = 'flex';
+      }
+      function close() { document.body.style.overflow = prevOverflow; ov.style.display = 'none'; }
+      openBtn.addEventListener('click', open);
+      closeBtn.addEventListener('click', close);
+      ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && ov.style.display === 'flex') close();
+      });
+      // A successful upload re-renders the library; make sure the page can scroll
+      // again even though this overlay is about to be discarded with it.
+      body.addEventListener('kt-fm-uploaded', close);
+    })();
 
     loadList(body.querySelector('#fm-list'));
   }
@@ -360,7 +437,7 @@
     Api.get('/admin/managed-forms/signoffs').then(function (d) {
       var rows = (d && d.signoffs) || [];
       if (!rows.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms have been signed yet.</div>'; return; }
-      el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
+      el.innerHTML = '<table data-kt-no-kebab="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
         + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Signed by', 'Date', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || '—';
