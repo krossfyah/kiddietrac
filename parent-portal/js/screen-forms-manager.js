@@ -454,11 +454,15 @@
       var rows = (d && d.signoffs) || [];
       if (!rows.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms have been signed yet.</div>'; return; }
       el.innerHTML = '<table data-kt-no-kebab="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Signed by', 'Signed (agency time)', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Signed by', 'Signed (agency time)', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || '—';
+          // The description is what the form is FOR — a list of titles like "test 8"
+          // says nothing on its own. It is mandatory at upload, so it is always there.
+          var desc = (r.form_description || '').trim();
           return '<tr style="border-top:1px solid #F3F4F6;">'
             + '<td style="padding:9px 14px;font-weight:600;color:#111827;">' + esc(r.form_title) + '</td>'
+            + '<td style="padding:9px 14px;color:#475569;max-width:320px;">' + (desc ? esc(desc) : '<span style="color:#CBD5E1;">—</span>') + '</td>'
             + '<td style="padding:9px 14px;">' + esc(who) + (r.email ? '<div style="font-size:11px;color:#94A3B8;">' + esc(r.email) + '</div>' : '') + '</td>'
             + '<td style="padding:9px 14px;color:#374151;white-space:nowrap;">' + esc(fmtStamp(r.signed_at)) + '</td>'
             + '<td style="padding:9px 8px;text-align:right;">' + kebab(r) + '</td></tr>';

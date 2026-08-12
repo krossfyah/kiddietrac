@@ -19,7 +19,14 @@
   var TABS = [['todo', 'To sign'], ['drafts', 'Drafts'], ['submitted', 'Submitted']];
 
   function render(main, tab) {
-    tab = tab || 'todo';
+    // This is BOTH the registered screen renderer and its own tab switcher, and the
+    // two callers pass different second arguments: the tab buttons pass a tab key,
+    // but the Shell calls screens as fn(main, { user, role, params }). That object is
+    // truthy, so `tab || 'todo'` kept it — the screen opened with no tab selected and
+    // ran the saved-work path instead of the one thing a user comes here to do.
+    // Only a real tab key counts; anything else means "opened fresh" → To sign.
+    var known = TABS.some(function (t) { return t[0] === tab; });
+    if (!known) tab = 'todo';
     main.innerHTML =
       '<div style="padding:20px;max-width:640px;margin:0 auto;">'
       + '<div style="text-align:center;margin-bottom:14px;"><div style="font-size:40px;line-height:1;">✍️</div>'

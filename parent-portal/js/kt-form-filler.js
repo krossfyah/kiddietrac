@@ -129,13 +129,16 @@
     }
     ov.innerHTML =
       '<div class="kt-ff-card">'
-      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;flex:0 0 auto;display:flex;align-items:center;gap:12px;">'
+      // The APK draws edge-to-edge, so the webview starts UNDER the status bar.
+      // Without safe-area padding the whole header row — title and the ✕ that is
+      // the only way out of this sheet — sat behind the system clock, off-screen.
+      // The footer already respected safe-area-inset-bottom; the top was missed.
+      // env() resolves to 0px on desktop, so this is a no-op there.
+      + '<div style="background:#0B2545;color:#fff;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 13px) calc(env(safe-area-inset-right,0px) + 16px) 13px calc(env(safe-area-inset-left,0px) + 16px);">'
       + '  <div style="min-width:0;flex:1;">'
       + '    <div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FILL &amp; SIGN</div>'
       + '    <div style="font-size:16px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
       + '  </div>'
-      + '  <button id="kt-ff-zoomout" type="button" aria-label="Zoom out" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;">−</button>'
-      + '  <button id="kt-ff-zoomin" type="button" aria-label="Zoom in" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;">+</button>'
       + '  <button id="kt-ff-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
       + '</div>'
       + '<div id="kt-ff-hint" style="flex:0 0 auto;background:#EFF6FF;color:#1E40AF;font-size:12.5px;padding:9px 16px;border-bottom:1px solid #DBEAFE;">Tap a highlighted box to type. Scroll for more pages.</div>'
@@ -206,12 +209,10 @@
         scroll.scrollLeft = px * zoom - (cx - rect.left);
         scroll.scrollTop = py * zoom - (cy - rect.top);
       }
-      function zoomCentre(next) {
-        var r = scroll.getBoundingClientRect();
-        zoomTo(next, r.left + r.width / 2, r.top + r.height / 2);
-      }
-      ov.querySelector('#kt-ff-zoomin').addEventListener('click', function () { zoomCentre(zoom + 0.25); });
-      ov.querySelector('#kt-ff-zoomout').addEventListener('click', function () { zoomCentre(zoom - 0.25); });
+      // The header's +/- buttons are gone: pinch-to-zoom is the gesture people already
+      // use on a phone, and the two 34px buttons were crowding the ✕ — the only way
+      // out of this sheet — into the edge of a narrow header. zoomCentre() went with
+      // them since nothing else called it; zoomTo() below drives the pinch.
 
       // PINCH. The APK's WebView has built-in zoom disabled, so the browser gesture
       // never fires — we drive the same transform from raw touch points. Continuous
