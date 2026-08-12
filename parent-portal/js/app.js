@@ -11,10 +11,35 @@
 
   // ─── Auth ───────────────────────────────────────────────────────
   const Auth = {
-    token() { return sessionStorage.getItem('kt_token'); },
+    // Fall back to localStorage so the session survives a WebView process kill
+    // (which wipes sessionStorage) — an educator using the app all day shouldn't be
+    // bounced to login every time Android reclaims the tab. The token is only ever
+    // MIRRORED to localStorage when no biometric/PIN lock is enrolled (see
+    // rememberSession below); enrolled users keep their locked kt_bio_/kt_pin_ vault.
+    token() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } },
     user() {
-      try { return JSON.parse(sessionStorage.getItem('kt_user') || 'null'); }
+      try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || 'null'); }
       catch (_) { return null; }
+    },
+    // Keep the user signed in across app restarts. Mirrors the live session token
+    // into localStorage (survives a WebView kill) and restores it back into
+    // sessionStorage on a cold launch. Skipped when a biometric/PIN lock is enrolled
+    // — those flows own persistence with their own encrypted/locked vault, and we
+    // must not bypass a lock the user deliberately turned on. Sign out still purges
+    // both stores (Auth.clear), so this never keeps a token past an explicit logout.
+    rememberSession() {
+      try {
+        if (localStorage.getItem('kt_biometric_enabled') === '1' || localStorage.getItem('kt_pin_enabled') === '1') return;
+        var s = sessionStorage.getItem('kt_token');
+        var l = localStorage.getItem('kt_token');
+        if (s) {
+          localStorage.setItem('kt_token', s);
+          var su = sessionStorage.getItem('kt_user'); if (su) localStorage.setItem('kt_user', su);
+        } else if (l) {
+          sessionStorage.setItem('kt_token', l);
+          var lu = localStorage.getItem('kt_user'); if (lu) sessionStorage.setItem('kt_user', lu);
+        }
+      } catch (e) {}
     },
     clear() {
       // SECURITY: the bearer token is also written to localStorage (biometric
@@ -34,7 +59,19 @@
       return true;
     },
     async logout() {
-      try { await Api.post('/auth/logout'); } catch (_) {}
+      // If biometric/PIN unlock is enrolled, DON'T revoke the token server-side.
+      // The biometric/PIN vault stores THIS token to re-open the app on the next
+      // launch; revoking it here made the unlock's /auth/me return 401, which
+      // wiped the enrolment and bounced the user to the password login ("session
+      // ended"). Ordinary sign-out keeps the credential for biometric re-entry
+      // (the user's chosen behaviour); fully removing it = Settings → turn off
+      // biometric, which clears the vault and lets logout revoke normally.
+      var keepToken = false;
+      try {
+        keepToken = (localStorage.getItem('kt_biometric_enabled') === '1' && !!localStorage.getItem('kt_bio_token'))
+          || (localStorage.getItem('kt_pin_enabled') === '1' && !!localStorage.getItem('kt_pin_vault'));
+      } catch (e) {}
+      if (!keepToken) { try { await Api.post('/auth/logout'); } catch (_) {} }
       this.clear();
       window.location.href = '/index.html';
     },
@@ -49,10 +86,16 @@
         if (qs) url += (path.includes('?') ? '&' : '?') + qs;
       }
 
+      // A FormData body must NOT be JSON-encoded, and must NOT carry an explicit
+      // Content-Type — the browser has to set multipart/form-data plus the
+      // boundary itself. Without this, JSON.stringify(new FormData()) produced the
+      // string "{}", so file uploads reached the API with NO fields at all and came
+      // back as "The title field is required" plus one error per other field.
+      const isForm = (typeof FormData !== 'undefined') && (body instanceof FormData);
       const headers = {
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
       };
+      if (!isForm) headers['Content-Type'] = 'application/json';
       const token = Auth.token();
       if (token) headers['Authorization'] = 'Bearer ' + token;
       // Multi-agency scope: tell the API which agency the user is currently
@@ -73,7 +116,7 @@
         res = await fetch(url, {
           method,
           headers,
-          body: body ? JSON.stringify(body) : null,
+          body: body ? (isForm ? body : JSON.stringify(body)) : null,
         });
       } catch (e) {
         throw new ApiError('network', 'Network error — check your connection', 0);
@@ -103,6 +146,9 @@
     },
     get(path, query) { return this.request(path, { query }); },
     post(path, body) { return this.request(path, { method: 'POST', body }); },
+    /** Multipart upload. Same as post() — request() detects FormData — but named
+     *  so call sites reading as an upload are obvious. */
+    postForm(path, formData) { return this.request(path, { method: 'POST', body: formData }); },
     patch(path, body) { return this.request(path, { method: 'PATCH', body }); },
     delete(path) { return this.request(path, { method: 'DELETE' }); },
   };
@@ -123,19 +169,45 @@
         style: 'currency', currency, currencyDisplay: 'symbol',
       }).format(n);
     },
+    // Parse a server timestamp to a real instant. MySQL/PHP hand us UTC with NO
+    // zone marker ("2026-08-05 13:30:04"); a bare new Date() reads that as the
+    // browser's LOCAL time, so on anything behind UTC (all of North America) the
+    // instant lands in the FUTURE → "just now" for events that are hours old.
+    // This was the recurring notifications bug: individual screens appended 'Z'
+    // but this shared Fmt never did, so every screen using Fmt stayed broken.
+    // Date-only strings ("2026-08-05") are left as-is (already UTC midnight).
+    parse(iso) {
+      if (iso == null || iso === '') return null;
+      if (iso instanceof Date) return isNaN(iso.getTime()) ? null : iso;
+      let v = String(iso).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) { const d0 = new Date(v); return isNaN(d0.getTime()) ? null : d0; }
+      v = v.replace(' ', 'T');
+      if (!/(Z|[+-]\d{2}:?\d{2})$/.test(v)) v += 'Z';     // treat zone-less as UTC
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    },
+    // Render in the AGENCY's timezone (America/Toronto by default via kt-tz.js),
+    // not the device's — a director on a phone set to another zone must still see
+    // the centre's local time. Falls back to device tz only if kt-tz isn't loaded.
     time(iso) {
-      if (!iso) return '';
-      return new Date(iso).toLocaleTimeString('en-CA', {
-        hour: 'numeric', minute: '2-digit', hour12: true,
-      });
+      const d = this.parse(iso);
+      if (!d) return '';
+      const z = (window.KT && KT.tz) ? KT.tz() : null;
+      const opts = { hour: 'numeric', minute: '2-digit', hour12: true };
+      if (z) opts.timeZone = z;
+      return d.toLocaleTimeString('en-CA', opts);
     },
     date(iso, opts = { weekday: 'long', month: 'long', day: 'numeric' }) {
-      if (!iso) return '';
-      return new Date(iso).toLocaleDateString('en-CA', opts);
+      const d = this.parse(iso);
+      if (!d) return '';
+      const z = (window.KT && KT.tz) ? KT.tz() : null;
+      return d.toLocaleDateString('en-CA', z ? Object.assign({ timeZone: z }, opts) : opts);
     },
     relative(iso) {
-      if (!iso) return '';
-      const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+      const d = this.parse(iso);
+      if (!d) return '';
+      let diff = (Date.now() - d.getTime()) / 1000;
+      if (diff < 0) diff = 0;                              // clock skew → clamp, never negative
       if (diff < 60) return 'just now';
       if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
       if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
@@ -173,14 +245,29 @@
     show(node) { node.hidden = false; },
     hide(node) { node.hidden = true; },
     toast(message, type = 'info') {
+      // Unified toast: hand off to the canonical KT.toast (kt-toasts.js) so every
+      // toast in the app shares ONE look (top-right rich card, mobile-aware) instead
+      // of this bottom-centre pill. Map the simple type → icon + colour and call
+      // KT.toast's explicit 4-arg form (no signature ambiguity). The local pill
+      // below stays only as a fallback for when KT.toast hasn't loaded yet.
+      try {
+        if (window.KT && typeof window.KT.toast === 'function') {
+          var _m = ({ info: ['ℹ️', '#1F6080'], success: ['✅', '#16A34A'], error: ['⚠️', '#DC2626'],
+            warning: ['⚠️', '#D97706'], danger: ['⚠️', '#DC2626'] })[type] || ['ℹ️', '#1F6080'];
+          return window.KT.toast(_m[0], message, '', _m[1]);
+        }
+      } catch (e) {}
       let toast = document.getElementById('kt-toast');
       if (!toast) {
         toast = document.createElement('div');
         toast.id = 'kt-toast';
-        toast.style.cssText = `position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+        // Center transform-free (left/right + margin auto) and attach to <html>,
+        // NOT <body>: a transformed ancestor (mobile screen transitions) turns a
+        // transform-based fixed toast off-screen. Clear the bottom nav too.
+        toast.style.cssText = `position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 88px); left:0; right:0; margin:0 auto; width:max-content; max-width:calc(100vw - 24px);
           padding:12px 20px; border-radius:12px; font-size:14px; font-weight:500;
-          z-index:9999; box-shadow:0 8px 32px rgba(0,0,0,0.18); transition:opacity 0.2s;`;
-        document.body.appendChild(toast);
+          z-index:2147483600; box-shadow:0 8px 32px rgba(0,0,0,0.18); transition:opacity 0.2s;`;
+        (document.documentElement || document.body).appendChild(toast);
       }
       const colors = {
         info: ['#1F6080', '#FFFFFF'],
@@ -200,6 +287,7 @@
   // ─── Page bootstrap ─────────────────────────────────────────────
   // All authenticated pages call this on load to populate the nav
   async function bootstrapPage() {
+    Auth.rememberSession();   // restore a persisted session (survives WebView restarts) before gating
     if (!Auth.requireLogin()) return null;
 
     const user = Auth.user();
@@ -211,8 +299,8 @@
     // Click on avatar opens menu
     const navUser = Dom.$('#navUser');
     if (navUser) {
-      navUser.addEventListener('click', () => {
-        if (confirm('Sign out of Kiddietrac?')) Auth.logout();
+      navUser.addEventListener('click', async () => {
+        if (await KT.confirm('Sign out of Kiddietrac?')) Auth.logout();
       });
     }
 

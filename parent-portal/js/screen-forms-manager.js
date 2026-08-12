@@ -113,7 +113,29 @@
         out.style.color = '#047857'; out.textContent = '✓ Uploaded.';
         toast('🗂️', 'Form uploaded', '"' + title + '" is now assigned.', '#16A34A');
         renderLibrary(body);
-      }).catch(function (e) { out.style.color = '#B91C1C'; out.textContent = '✗ ' + (e.message || 'Upload failed'); });
+      }).catch(function (e) {
+        // Laravel answers a 422 with {message, errors:{field:[...]}}. The summary
+        // message only names the first failure ("The title field is required.
+        // (and 2 more errors)"), which told the user nothing about the other two.
+        // List every field error instead.
+        out.style.color = '#B91C1C';
+        var errs = e && e.data && e.data.errors;
+        if (errs && typeof errs === 'object') {
+          var lines = [];
+          Object.keys(errs).forEach(function (k) {
+            var msgs = Array.isArray(errs[k]) ? errs[k] : [errs[k]];
+            msgs.forEach(function (m) { lines.push('• ' + m); });
+          });
+          out.innerHTML = '';
+          out.appendChild(document.createTextNode('✗ Could not upload:'));
+          var ul = document.createElement('div');
+          ul.style.cssText = 'margin-top:4px;white-space:pre-line;';
+          ul.textContent = lines.join(String.fromCharCode(10));
+          out.appendChild(ul);
+        } else {
+          out.textContent = '✗ ' + ((e && e.message) || 'Upload failed');
+        }
+      });
     };
 
     loadList(body.querySelector('#fm-list'));
