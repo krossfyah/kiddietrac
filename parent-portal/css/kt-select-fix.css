@@ -6,8 +6,17 @@
    white background + dark text on every dropdown, portal-wide. The <option> list is
    OS-rendered, so `color-scheme:light` is what actually fixes the popup itself.
    ───────────────────────────────────────────────────────────────────────── */
+/* DOCUMENT level first. The OS draws the <option> popup itself and takes its
+   colours from the WebView's resolved colour scheme, NOT from the page's CSS on
+   the option elements — so `select option{color:...}` alone could never fix the
+   APK. Declaring the scheme on the root is what actually makes the popup light. */
+:root,
+html {
+  color-scheme: light only !important;
+}
+
 select {
-  color-scheme: light !important;
+  color-scheme: light only !important;
   background-color: #ffffff !important;
   color: #0F172A !important;
 }
@@ -25,7 +34,7 @@ input[type="date"],
 input[type="time"],
 input[type="datetime-local"],
 input[type="month"] {
-  color-scheme: light !important;
+  color-scheme: light only !important;
   background-color: #ffffff !important;
   color: #0F172A !important;
 }

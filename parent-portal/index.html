@@ -9,11 +9,21 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <!-- Preload the login hero art so it's ready the instant the splash lifts —
+       the screen then appears all at once (logo + fields together). -->
+  <link rel="preload" as="image" href="/logo-wordmark-large.png">
+  <link rel="preload" as="image" href="/login-wordmark.png">
+  <link rel="preload" as="image" href="/login-tagline.png">
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <meta name="theme-color" content="#081C41">
+  <!-- Light-only document: stops the Android WebView treating this page as
+       dark-capable on a phone in dark mode, which painted native <select>
+       popups and date pickers with white-on-white text. -->
+  <meta name="color-scheme" content="light only">
+  <link rel="stylesheet" href="/css/kt-select-fix.css?v=20260811scheme">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -23,20 +33,24 @@
   <link rel="stylesheet" href="/css/kt-login-v22.css">
   <link rel="stylesheet" href="/css/kt-login-pop.css">
   <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260729logo">
+  <!-- Mark the native APK on <html> as early as possible so the bold navy mobile
+       login applies even if the WebView reports a desktop-ish width. -->
+  <script>try{var C=window.Capacitor;if(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)))document.documentElement.classList.add('kt-native');}catch(e){}</script>
+  <!-- Bold navy mobile/APK login (layered over the redesign above). -->
+  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260809logotag">
 </head>
 <body class="auth-body">
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
-<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-splash-bar"><span></span></div></div></div>
+<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img class="kt-splash-logo" src="/logo-wordmark-large.png" alt="" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div></div></div>
 <style>
 #kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
 #kt-splash.kt-hide{opacity:0;pointer-events:none}
 #kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:26px;padding:0 28px}
 #kt-splash .kt-splash-logo{width:min(66vw,224px);height:auto}
-#kt-splash .kt-splash-bar{width:128px;height:3px;border-radius:99px;background:rgba(20,70,100,.13);overflow:hidden}
-#kt-splash .kt-splash-bar span{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,#13B7CC,#8EC73C);animation:kt-load 1.25s ease-in-out infinite}
+#kt-splash .kt-spinner{width:40px;height:40px;border-radius:50%;border:3.5px solid rgba(20,70,100,.14);border-top-color:#13B7CC;animation:kt-spin .8s linear infinite}
 @keyframes kt-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
-@keyframes kt-load{0%{transform:translateX(-130%)}100%{transform:translateX(360%)}}
-@media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo,#kt-splash .kt-splash-bar span{animation:none}}
+@keyframes kt-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo{animation:none}#kt-splash .kt-spinner{animation:kt-spin 1.1s linear infinite}}
 
 /* ── KiddieTrac logo "write-on" animation (login + splash) ──────────────
    The wordmark writes itself on left→right (Kiddie→Trac, then the swish),
@@ -72,6 +86,11 @@
 .ktl-anim .ktl-spk b:nth-child(2){--tx:2px;--ty:-30px;animation:ktl-spk .8s ease 1.42s both;}
 .ktl-anim .ktl-spk b:nth-child(3){--tx:26px;--ty:-18px;animation:ktl-spk .75s ease 1.5s both;}
 @keyframes ktl-spk{0%{transform:translate(0,0) scale(.2);opacity:0;}35%{opacity:1;}100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0;}}
+/* Calm, instant login: the write-on flourish (pen glow + sparkle burst) read as a
+   distracting artifact and made the page feel like it loaded in stages. Show the
+   logo instantly with no pen/sheen/sparkle so the whole screen appears at once. */
+.ktl-anim > img{animation:none !important;clip-path:none !important;transform:none !important;opacity:1 !important;}
+.ktl-anim .ktl-pen,.ktl-anim .ktl-sheen,.ktl-anim .ktl-spk{display:none !important;}
 #kt-splash .ktl-anim > img{width:min(66vw,224px);height:auto;}
 @media(prefers-reduced-motion:reduce){
   .ktl-anim > img{animation:none;clip-path:none;}
@@ -79,10 +98,21 @@
 }
 </style>
 <script>
-(function(){function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
-var MIN=1200,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}
+(function(){
+/* Hand the NATIVE (Capacitor) splash off to this web splash immediately so the
+   APK shows ONE continuous logo boot instead of native-splash → web-splash →
+   login-page-logo (the "triple logo" flash). */
+try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.SplashScreen.hide();}catch(e){}
+function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
+/* Show the full animated splash only ONCE per app session — a service-worker update
+   reload otherwise replays the 2.3s splash (the APK's "loads 3x"). sessionStorage
+   clears on a real relaunch, so a genuine launch still gets one splash. */
+var _seen;try{_seen=sessionStorage.getItem('kt_splash_seen')==='1';}catch(e){_seen=false;}
+try{sessionStorage.setItem('kt_splash_seen','1');}catch(e){}
+if(_seen){var _s=document.getElementById('kt-splash');if(_s)_s.style.display='none';}
+else{var MIN=2300,t0=Date.now();function go(){setTimeout(hide,Math.max(0,MIN-(Date.now()-t0)));}
 if(document.readyState==='complete')go();else window.addEventListener('load',go);
-setTimeout(hide,6000);})();
+setTimeout(hide,7000);}})();
 </script>
 <script>
 /* SSO handoff from the marketing site (www.kiddietrac.com): #kt_sso=<token>, and ?email= prefill */
@@ -149,10 +179,10 @@ setTimeout(hide,6000);})();
           </div>
 
           <div class="form-row">
-            <label for="password">
-              Password
+            <div class="pw-label-row">
+              <label for="password">Password</label>
               <a href="/forgot-password.html" class="forgot-link" tabindex="-1">Forgot?</a>
-            </label>
+            </div>
             <div class="kt-pw-wrap" style="position:relative;">
               <input type="password" id="password" name="password" autocomplete="current-password" placeholder="••••••••••" minlength="10" required style="padding-right:46px;">
               <button type="button" id="kt-pw-toggle" tabindex="-1" aria-label="Show password" title="Show password" style="position:absolute;top:0;right:0;height:100%;width:44px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;font-size:17px;color:#64748B;line-height:1;">👁</button>
@@ -184,16 +214,19 @@ setTimeout(hide,6000);})();
           </div>
 
           <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
-            Sign in
+            Log in
           </button>
 
           <p class="ktl-foot">
             No account yet? Your childcare centre will send you an invitation email.
-            <a href="https://kiddietrac.ca/contact">Contact us</a> if you need help.
+            <a href="https://www.kiddietrac.com/contact">Contact us</a> if you need help.
           </p>
         </form>
       </div>
-      <div class="ktl-legal">© 2026 KiddieTrac · Smart Childcare Management Platform · <span id="ktl-ver"></span></div>
+      <div class="ktl-legal">
+        <span class="ktl-legal-links"><a href="https://www.kiddietrac.com/terms">Terms of Service</a> · <a href="https://www.kiddietrac.com/privacy">Privacy Policy</a></span><br>
+        © 2021–2026 KiddieTrac. All rights reserved. · <span id="ktl-ver"></span>
+      </div>
       <script>(function(){var v=document.getElementById('ktl-ver');if(v)v.textContent='v'+(window.KT_VERSION||'');})();</script>
     </section>
 
@@ -319,6 +352,16 @@ setTimeout(hide,6000);})();
         sessionStorage.setItem('kt_token', body.token);
         sessionStorage.setItem('kt_user', JSON.stringify(body.user));
 
+        // Language follows the USER: apply their server-saved locale (chosen at
+        // onboarding or in Settings) authoritatively on every sign-in. So a changed
+        // default takes effect after sign-out/in, and a stale device value (or a
+        // previous user on this device) never overrides the account's own language.
+        try {
+          var _loc = body.user && body.user.locale;
+          if (_loc && ['en', 'fr', 'es', 'hi'].indexOf(_loc) !== -1) localStorage.setItem('kt_locale', _loc);
+          else localStorage.removeItem('kt_locale');   // not a supported code → default English
+        } catch (e) {}
+
         // v22p31: stamp session start so idle+absolute timers kick in
         if (window.KT && window.KT.SessionTimeout) window.KT.SessionTimeout.stampLogin();
         else {
@@ -375,9 +418,9 @@ setTimeout(hide,6000);})();
   <script src="/js/screen-marketing-site.js" defer></script>
   <script src="/js/nav-additions-v15.js" defer></script>
   <script src="/js/kt-social-login.js?v=20260721icons"></script>
-  <script src="/js/kt-pin.js?v=20260731lock" defer></script>
-  <script src="/js/kt-biometric.js?v=20260731lock" defer></script>
+  <script src="/js/kt-pin.js?v=20260809navy" defer></script>
+  <script src="/js/kt-biometric.js?v=20260809navy" defer></script>
   <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
-  <script src="/js/kt-i18n.js?v=20260714i23" defer></script>
+  <script src="/js/kt-i18n.js?v=20260808i24" defer></script>
 </body>
 </html>

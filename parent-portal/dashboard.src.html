@@ -82,6 +82,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=DM+Sans:wght@500;700&display=swap" rel="stylesheet">
   <meta name="theme-color" content="#081C41">
+  <!-- The portal is a LIGHT UI. Without a document-level colour scheme the
+       Android WebView still treats the page as dark-capable when the phone is
+       in dark mode, and renders the OS-drawn <select> popup with dark-theme
+       (white) text — which is why option lists appeared white-on-white in the
+       APK. "light only" opts the whole document out, including native
+       controls and algorithmic darkening. Element-level color-scheme on the
+       <select> alone was NOT enough. -->
+  <meta name="color-scheme" content="light only">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -114,7 +122,7 @@
   <style>
     body.kt-show-back #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px) !important; }
   </style>
-  <link rel="stylesheet" href="/css/kt-select-fix.css?v=20260811sel">
+  <link rel="stylesheet" href="/css/kt-select-fix.css?v=20260811scheme">
 </head>
 <body><!-- v17.2-shell -->
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
