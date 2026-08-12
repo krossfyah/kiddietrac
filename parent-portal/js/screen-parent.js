@@ -774,11 +774,14 @@
         const card = Dom.el('div', { class: 'card', style: 'padding: 0; overflow: hidden;' });
         if (p.media_type === 'video') {
           card.appendChild(Dom.el('video', {
-            src: p.url, controls: true, preload: 'metadata', playsInline: true,
+            src: p.url, controls: true, preload: 'metadata', playsInline: true, poster: p.thumbnail_url || undefined,
             style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #0F172A;',
           }));
         } else {
-          const img = Dom.el('img', { src: p.url, alt: p.caption || 'Photo', loading: 'lazy', style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--ink-100); cursor: zoom-in;' });
+          // Tile shows the 480px thumbnail; the lightbox still opens p.url at full
+          // quality. thumbnail_url used to BE the full-size path, so a grid of
+          // tiles pulled megabytes each — one phone photo is ~5 MB against ~30 KB.
+          const img = Dom.el('img', { src: p.thumbnail_url || p.url, alt: p.caption || 'Photo', loading: 'lazy', decoding: 'async', style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--ink-100); cursor: zoom-in;' });
           img.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
           card.appendChild(img);
         }
@@ -1664,11 +1667,13 @@
         // wobble across the room doesn't survive as a still.
         if (p.media_type === 'video') {
           c.appendChild(Dom.el('video', {
-            src: p.url, controls: true, preload: 'metadata', playsInline: true,
+            src: p.url, controls: true, preload: 'metadata', playsInline: true, poster: p.thumbnail_url || undefined,
             style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#0F172A;',
           }));
         } else {
-          const mimg = Dom.el('img', { src: p.url, alt: p.caption || 'Photo', loading: 'lazy', style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--ink-100);cursor:zoom-in;' });
+          // Mobile tile — same thumbnail rule (the parent SPA renders mobile and
+          // desktop through different functions, so both need it).
+          const mimg = Dom.el('img', { src: p.thumbnail_url || p.url, alt: p.caption || 'Photo', loading: 'lazy', decoding: 'async', style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--ink-100);cursor:zoom-in;' });
           mimg.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
           c.appendChild(mimg);
         }

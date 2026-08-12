@@ -105,11 +105,38 @@ final class PhotoFeedController extends Controller
         // browser show the first frame. media_type is what tells them which.
         $isVideo = str_starts_with((string) $file->getMimeType(), 'video/');
 
+        // Build a REAL thumbnail. thumbnail_url used to be set to the full-size path,
+        // so every gallery tile pulled the whole photo down — ~5 MB for a phone shot
+        // rendered into a 220px box. Falls back to the original if the resize fails.
+        // A phone writes the MP4 index (moov) at the END of the file, so a browser must
+        // download the whole clip before it can show frame one. Move it to the front
+        // now, while we still have the file in hand.
+        if ($isVideo) {
+            try {
+                \App\Support\Mp4FastStart::process(
+                    \Illuminate\Support\Facades\Storage::disk('public')->path($path)
+                );
+            } catch (\Throwable $e) {
+                // leave the upload exactly as it arrived
+            }
+        }
+
+        $thumb = null;
+        if (! $isVideo) {
+            try {
+                $abs = \Illuminate\Support\Facades\Storage::disk('public')->path($path);
+                $made = \App\Support\MediaThumb::make($abs);
+                if ($made) $thumb = \App\Support\MediaThumb::webPath($made);
+            } catch (\Throwable $e) {
+                $thumb = null;
+            }
+        }
+
         $id = DB::table('photos')->insertGetId([
             'centre_id' => $centreId,
             'uploaded_by_id' => $u->id,
             'url' => '/storage/' . $path,
-            'thumbnail_url' => $isVideo ? null : '/storage/' . $path,
+            'thumbnail_url' => $isVideo ? null : ($thumb ?: '/storage/' . $path),
             'media_type' => $isVideo ? 'video' : 'image',
             'caption' => $request->input('caption'),
             'child_ids' => json_encode($childIds),
