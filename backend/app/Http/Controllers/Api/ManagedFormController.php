@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,21 +21,27 @@ use Illuminate\Support\Facades\Storage;
  */
 class ManagedFormController extends Controller
 {
+    use ResolvesCentreContext;
+
     private const ROLES = ['guardian', 'educator', 'home_visitor', 'centre_director'];
 
+    /**
+     * The agency this request operates on.
+     *
+     * This used to return X-Active-Agency-Id verbatim, with no check that the caller
+     * has anything to do with that agency. A stale header therefore filed uploads
+     * into someone else's tenant: on 2026-08-12 an agency_admin of agency 2 uploaded
+     * two forms while her browser still carried "6", so both landed in Test Agency,
+     * invisible to her AND to her educators, with no error to explain it.
+     *
+     * resolveAgencyId() (ResolvesCentreContext, from the tenant-isolation audit)
+     * already does this correctly: the header is honoured only for a platform_admin
+     * or a user who actually holds a role in that agency, otherwise it falls back to
+     * the caller's own agency. Everything here now goes through it.
+     */
     private function agencyId(Request $request): int
     {
-        $hdr = $request->header('X-Active-Agency-Id');
-        if ($hdr !== null && ctype_digit((string) $hdr)) {
-            return (int) $hdr;
-        }
-        $uid = (int) $request->user()->id;
-        $aid = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->whereNotNull('agency_id')->value('agency_id');
-        if (! $aid) {
-            $cid = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->whereNotNull('centre_id')->value('centre_id');
-            $aid = $cid ? DB::table('centres')->where('id', $cid)->value('agency_id') : null;
-        }
-        return (int) ($aid ?: 0);
+        return (int) ($this->resolveAgencyId($request) ?: 0);
     }
 
     private function roles(int $uid): array
