@@ -100,6 +100,19 @@
         '  color:#0F172A !important;min-height:0 !important;font-family:inherit;}',
         '#kt-ff .annotationLayer input[type="checkbox"],#kt-ff .annotationLayer input[type="radio"]{',
         '  width:100%;height:100%;accent-color:#1F6FB2;padding:0 !important;}',
+        // Action row: full-width pair on a phone (thumb reach), right-aligned on
+        // desktop. One shape for both buttons so they read as a set.
+        '#kt-ff .kt-ff-actions{display:flex;gap:10px;}',
+        '#kt-ff .kt-ff-btn{flex:1;min-height:46px;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;',
+        '  display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1.5px solid transparent;',
+        '  transition:filter .15s ease,background .15s ease;font-family:inherit;}',
+        '#kt-ff .kt-ff-btn:active{filter:brightness(.95);}',
+        '#kt-ff .kt-ff-btn:disabled{opacity:.55;cursor:not-allowed;}',
+        '#kt-ff .kt-ff-btn--ghost{background:#fff;color:#1F6080;border-color:#CBD5E1;}',
+        '#kt-ff .kt-ff-btn--ghost:hover{background:#F8FAFC;}',
+        '#kt-ff .kt-ff-btn--go{background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;}',
+        '@media(min-width:769px){#kt-ff .kt-ff-actions{justify-content:flex-end;}',
+        '  #kt-ff .kt-ff-btn{flex:0 0 auto;min-height:40px;padding:0 20px;font-size:14px;}}',
         '#kt-ff .annotationLayer input:focus,#kt-ff .annotationLayer textarea:focus{',
         '  outline:none !important;border-color:#0FA3B1 !important;background:#fff !important;',
         '  box-shadow:0 0 0 3px rgba(15,163,177,.22) !important;}',
@@ -119,9 +132,12 @@
       + '</div>'
       + '<div id="kt-ff-hint" style="flex:0 0 auto;background:#EFF6FF;color:#1E40AF;font-size:12.5px;padding:9px 16px;border-bottom:1px solid #DBEAFE;">Tap a highlighted box to type. Scroll for more pages.</div>'
       + '<div class="kt-ff-scroll" id="kt-ff-scroll"><div style="padding:40px;text-align:center;color:#64748B;font-size:13.5px;">Opening the form…</div></div>'
-      + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E7EDF3;padding:11px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;gap:10px;align-items:center;">'
-      + '  <div id="kt-ff-msg" style="font-size:12.5px;color:#64748B;flex:1;min-width:0;"></div>'
-      + '  <button id="kt-ff-submit" type="button" class="kt-actionbtn" style="background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:0;cursor:pointer;">✍️ Sign &amp; submit</button>'
+      + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E7EDF3;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);">'
+      + '  <div id="kt-ff-msg" style="font-size:12.5px;color:#64748B;min-height:16px;margin-bottom:8px;"></div>'
+      + '  <div class="kt-ff-actions">'
+      + '    <button id="kt-ff-draft" type="button" class="kt-ff-btn kt-ff-btn--ghost">Save draft</button>'
+      + '    <button id="kt-ff-submit" type="button" class="kt-ff-btn kt-ff-btn--go">Sign &amp; submit</button>'
+      + '  </div>'
       + '</div>'
       + '</div>';
     return ov;
@@ -228,6 +244,30 @@
                 ? 'Tap the highlighted box to type. Then sign and submit.'
                 : 'Tap any highlighted box to type (' + fieldCount + ' fields). Then sign and submit.';
             }
+            // Put a saved draft back into the fields. Setting .value alone would look
+            // right but leave pdf.js's annotation storage empty, so the answers would
+            // not be submitted — dispatch input/change so the storage updates too.
+            if (form.draftValues && fieldCount) {
+              var restored = 0;
+              Object.keys(form.draftValues).forEach(function (name) {
+                var el = scroll.querySelector('.annotationLayer [name="' + (w.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+                if (!el) return;
+                var v = form.draftValues[name];
+                if (el.type === 'checkbox' || el.type === 'radio') {
+                  var on = (v === true || v === 'true' || v === 'On');
+                  if (el.checked !== on) { el.click(); restored++; }
+                } else {
+                  el.value = String(v);
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                  restored++;
+                }
+              });
+              if (restored) {
+                msg.style.color = '#0F766E';
+                msg.textContent = 'Your saved draft has been restored (' + restored + ' answers).';
+              }
+            }
             scroll.addEventListener('input', function () { dirty = true; }, true);
             scroll.addEventListener('change', function () { dirty = true; }, true);
           })
@@ -240,6 +280,25 @@
         scroll.innerHTML = '<div style="padding:30px;text-align:center;color:#B91C1C;font-size:13.5px;">'
           + esc((e && e.message) || 'Could not load the PDF viewer.') + '</div>';
         submitBtn.disabled = true;
+      });
+
+      var draftBtn = ov.querySelector('#kt-ff-draft');
+      draftBtn.addEventListener('click', function () {
+        draftBtn.disabled = true; draftBtn.textContent = 'Saving…';
+        msg.style.color = '#64748B'; msg.textContent = '';
+        KT.Api.post('/managed-forms/' + form.id + '/draft', { field_values: collectValues(annotationStorage, fieldMap) })
+          .then(function () {
+            dirty = false;                       // saved — closing is now safe
+            draftBtn.disabled = false; draftBtn.textContent = 'Save draft';
+            msg.style.color = '#0F766E';
+            msg.textContent = 'Draft saved — you can come back and finish this later.';
+            if (KT.toast) KT.toast('💾', 'Draft saved', 'Your answers are kept until you sign.', '#0F766E');
+          })
+          .catch(function (e) {
+            draftBtn.disabled = false; draftBtn.textContent = 'Save draft';
+            msg.style.color = '#B91C1C';
+            msg.textContent = (e && e.message) || 'Could not save the draft.';
+          });
       });
 
       submitBtn.addEventListener('click', function () {
@@ -270,7 +329,7 @@
               close(true);
             })
             .catch(function (e) {
-              submitBtn.disabled = false; submitBtn.textContent = '✍️ Sign & submit';
+              submitBtn.disabled = false; submitBtn.textContent = 'Sign & submit';
               msg.style.color = '#B91C1C';
               msg.textContent = (e && e.message) || 'Could not submit — please try again.';
             });

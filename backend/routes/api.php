@@ -375,6 +375,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/admin/managed-forms/{id}',                [\App\Http\Controllers\Api\ManagedFormController::class, 'destroy']);
         Route::get   ('/managed-forms/assigned',                  [\App\Http\Controllers\Api\ManagedFormController::class, 'assigned']);
         Route::post  ('/managed-forms/{id}/sign',                 [\App\Http\Controllers\Api\ManagedFormController::class, 'sign']);
+        Route::post  ('/managed-forms/{id}/draft',                [\App\Http\Controllers\Api\ManagedFormController::class, 'draft']);
         Route::get   ('/provider/children/{child}',  [\App\Http\Controllers\Api\EducatorSelfController::class, 'childRecord']);
         Route::get   ('/admin/tours',               [\App\Http\Controllers\Api\CareController::class, 'listTours']);
         Route::patch ('/admin/tours/{id}',          [\App\Http\Controllers\Api\CareController::class, 'updateTour']);

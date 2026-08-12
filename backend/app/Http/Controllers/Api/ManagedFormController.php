@@ -217,7 +217,12 @@ class ManagedFormController extends Controller
         if (empty($roles) || ! $agencyId) {
             return response()->json(['forms' => [], 'count' => 0]);
         }
-        $signed = DB::table('managed_form_signoffs')->where('user_id', $uid)->pluck('managed_form_id')->all();
+        // Only a SIGNED form leaves the list. A draft keeps its place — with the
+        // answers so far — so the user can come back and finish it.
+        $signed = DB::table('managed_form_signoffs')->where('user_id', $uid)
+            ->whereNotNull('signed_at')->pluck('managed_form_id')->all();
+        $drafts = DB::table('managed_form_signoffs')->where('user_id', $uid)
+            ->whereNull('signed_at')->pluck('field_values', 'managed_form_id')->all();
         $forms = DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
             ->when(! empty($signed), fn ($q) => $q->whereNotIn('id', $signed))
             ->orderByDesc('id')->get()
@@ -225,11 +230,54 @@ class ManagedFormController extends Controller
                 $aud = $f->audiences ? (json_decode($f->audiences, true) ?: []) : [];
                 return (bool) array_intersect($aud, $roles);
             })
-            ->map(function ($f) {
-                return ['id' => $f->id, 'title' => $f->title, 'description' => $f->description, 'file_url' => $f->file_url, 'fillable' => (bool) ($f->fillable ?? false)];
+            ->map(function ($f) use ($drafts) {
+                $raw = $drafts[$f->id] ?? null;
+                return [
+                    'id' => $f->id, 'title' => $f->title, 'description' => $f->description,
+                    'file_url' => $f->file_url, 'fillable' => (bool) ($f->fillable ?? false),
+                    'draft_values' => $raw ? (json_decode($raw, true) ?: null) : null,
+                ];
             })
             ->values();
         return response()->json(['forms' => $forms, 'count' => $forms->count()]);
+    }
+
+    /**
+     * POST /managed-forms/{id}/draft — save answers WITHOUT signing.
+     * A draft is simply a signoff row with signed_at NULL: the form stays in the
+     * user's list, and reopening it restores what they typed. Signing later fills
+     * the same row in, so a person can never end up with two records for one form.
+     */
+    public function draft(Request $request, int $id): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        $agencyId = $this->agencyId($request);
+        $form = DB::table('managed_forms')->where('id', $id)->where('agency_id', $agencyId)->where('active', 1)->first();
+        if (! $form) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        $aud = $form->audiences ? (json_decode($form->audiences, true) ?: []) : [];
+        if (! array_intersect($aud, $this->roles($uid))) {
+            return response()->json(['message' => 'This form is not assigned to you.'], 403);
+        }
+        // Never let a draft overwrite a completed submission.
+        $existing = DB::table('managed_form_signoffs')->where('managed_form_id', $id)->where('user_id', $uid)->first();
+        if ($existing && $existing->signed_at) {
+            return response()->json(['message' => 'This form has already been signed.'], 409);
+        }
+        $data = $request->validate(['field_values' => ['nullable', 'array']]);
+
+        DB::table('managed_form_signoffs')->updateOrInsert(
+            ['managed_form_id' => $id, 'user_id' => $uid],
+            [
+                'field_values' => !empty($data['field_values']) ? json_encode($data['field_values']) : null,
+                'signed_at'    => null,
+                'updated_at'   => now(),
+                'created_at'   => $existing->created_at ?? now(),
+            ]
+        );
+
+        return response()->json(['ok' => true, 'message' => 'Draft saved.']);
     }
 
     /** POST /forms/{id}/sign — record the caller's e-signature. */

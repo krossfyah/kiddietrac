@@ -37,6 +37,7 @@
         return '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
           + '<div style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(f.title) + '</div>'
           + (f.description ? '<div style="font-size:13px;color:#64748B;margin-top:3px;line-height:1.5;">' + esc(f.description) + '</div>' : '')
+          + (f.draft_values ? '<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#0F766E;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:3px 10px;">💾 Draft saved</div>' : '')
           + '<div style="display:flex;gap:10px;margin-top:13px;flex-wrap:wrap;">'
           + '<button class="mf-view" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;">📄 Read the form</button>'
           + (f.fillable
@@ -50,8 +51,17 @@
       el.querySelectorAll('.mf-fill').forEach(function (b) {
         b.addEventListener('click', function () {
           if (!KT.formFiller) { if (KT.toast) KT.toast('⚠️', 'Unavailable', 'The form filler is not available.', '#B91C1C'); return; }
-          KT.formFiller.open({ id: b.getAttribute('data-id'), title: b.getAttribute('data-t'), fileUrl: b.getAttribute('data-u') })
-            .then(function (submitted) { if (submitted) load(el); });
+          var id = b.getAttribute('data-id');
+          // Look the form up in the payload rather than serialising a whole draft
+          // into a data- attribute.
+          var rec = null;
+          for (var i = 0; i < forms.length; i++) { if (String(forms[i].id) === String(id)) { rec = forms[i]; break; } }
+          KT.formFiller.open({
+            id: id,
+            title: b.getAttribute('data-t'),
+            fileUrl: b.getAttribute('data-u'),
+            draftValues: rec && rec.draft_values ? rec.draft_values : null,
+          }).then(function (submitted) { if (submitted) load(el); });
         });
       });
     }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
