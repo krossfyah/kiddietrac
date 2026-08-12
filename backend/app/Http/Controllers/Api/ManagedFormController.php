@@ -311,6 +311,7 @@ class ManagedFormController extends Controller
                 's.id', 's.managed_form_id', 's.signer_name', 's.signed_at',
                 'f.title as form_title', 'f.description as form_description',
                 'f.file_url', 's.filled_file_url',
+                'f.notify_email as form_notify_email', 's.notified_at', 's.notified_to',
                 'u.first_name', 'u.last_name', 'u.email',
             ])
             ->limit(500)
@@ -527,8 +528,9 @@ class ManagedFormController extends Controller
         ];
         if ($open) {
             DB::table('managed_form_signoffs')->where('id', $open->id)->update($row);
+            $signoffId = (int) $open->id;
         } else {
-            DB::table('managed_form_signoffs')->insert($row + [
+            $signoffId = (int) DB::table('managed_form_signoffs')->insertGetId($row + [
                 'managed_form_id' => $id, 'user_id' => $uid, 'created_at' => now(),
             ]);
         }
@@ -536,7 +538,7 @@ class ManagedFormController extends Controller
         // If the form names an address, send the completed copy there. Best-effort:
         // the signature is already saved, so a mail problem must not fail the submit.
         try {
-            $this->emailCompletedForm($form, $name, $filledUrl, (string) ($u->email ?? ''));
+            $this->emailCompletedForm($form, $name, $filledUrl, (string) ($u->email ?? ''), $uid, $signoffId);
         } catch (\Throwable $e) {
             report($e);
         }
@@ -554,14 +556,59 @@ class ManagedFormController extends Controller
      * operational mail the admin explicitly asked for, like a support ticket, not a
      * broadcast that the per-agency comms switch should silence.
      */
-    private function emailCompletedForm(object $form, ?string $signerName, ?string $filledUrl, string $signerEmail): void
+    /**
+     * The signer's place, and what this agency calls it.
+     *
+     * Agencies are set up differently: settings.centre_term is 'centre', 'room' or
+     * 'provider', and a home-provider agency's centre record IS the provider. The
+     * lookup is therefore the same; only the label changes. Falls back to the room's
+     * own centre for staff attached through educator_rooms rather than directly.
+     *
+     * @return array{0: ?string, 1: string} [name, word]
+     */
+    private function signerPlace(int $userId, int $agencyId): array
+    {
+        $word = 'centre';
+        try {
+            $settings = DB::table('agencies')->where('id', $agencyId)->value('settings');
+            $arr = $settings ? (json_decode($settings, true) ?: []) : [];
+            $t = $arr['centre_term'] ?? 'centre';
+            if (in_array($t, ['centre', 'room', 'provider'], true)) $word = $t;
+        } catch (\Throwable $e) {
+        }
+        if (! $userId) return [null, $word];
+
+        try {
+            $centreId = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)
+                ->whereNotNull('centre_id')->value('centre_id');
+            if (! $centreId && \Illuminate\Support\Facades\Schema::hasTable('educator_rooms')) {
+                // Attached to a room rather than to a centre directly.
+                $centreId = DB::table('educator_rooms as er')->join('rooms as r', 'r.id', '=', 'er.room_id')
+                    ->where('er.user_id', $userId)->value('r.centre_id');
+            }
+            if (! $centreId) return [null, $word];
+            $name = DB::table('centres')->where('id', $centreId)->value('name');
+            return [$name ?: null, $word];
+        } catch (\Throwable $e) {
+            return [null, $word];
+        }
+    }
+
+    private function emailCompletedForm(object $form, ?string $signerName, ?string $filledUrl, string $signerEmail, int $signerId = 0, int $signoffId = 0): void
     {
         $to = trim((string) ($form->notify_email ?? ''));
         if ($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL)) return;
 
         $who = $signerName ?: 'Someone';
-        $subject = 'Completed form: ' . $form->title;
         $when = \App\Support\AgencyTime::fmt(now(), \App\Support\AgencyTime::tz((int) $form->agency_id));
+
+        // Name the place in the subject. Which KIND of place that is depends on the
+        // agency: settings.centre_term is 'centre', 'room' or 'provider', and the
+        // centre record IS that thing - a home-provider agency's centre is the
+        // provider. Same lookup either way; only the word changes.
+        [$placeName, $placeWord] = $this->signerPlace($signerId, (int) $form->agency_id);
+
+        $subject = 'Completed form: ' . $form->title . ($placeName ? " \u{2014} " . $placeName : '');
 
         $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
               . e($who) . ' has completed and signed <strong>' . e($form->title) . '</strong>.</p>'
@@ -569,6 +616,7 @@ class ManagedFormController extends Controller
                     '<strong>Form:</strong> ' . e($form->title)
                     . ($form->description ? '<br><strong>About:</strong> ' . e($form->description) : '')
                     . '<br><strong>Signed by:</strong> ' . e($who) . ($signerEmail ? ' (' . e($signerEmail) . ')' : '')
+                    . ($placeName ? '<br><strong>' . e(ucfirst($placeWord)) . ':</strong> ' . e($placeName) : '')
                     . '<br><strong>Signed at:</strong> ' . e($when),
                     'info'
                 )
@@ -592,7 +640,7 @@ class ManagedFormController extends Controller
         }
         $attachName = preg_replace('/[^A-Za-z0-9._-]+/', '-', $form->title) . '.pdf';
 
-        dispatch(function () use ($to, $subject, $html, $absPdf, $attachName) {
+        dispatch(function () use ($to, $subject, $html, $absPdf, $attachName, $signoffId) {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $subject, $absPdf, $attachName) {
                 $m->to($to)
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
@@ -601,6 +649,14 @@ class ManagedFormController extends Controller
                 if ($absPdf) $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
             });
+            // Stamped only once the send has actually returned, so the Completed tab
+            // reports what happened rather than what was queued.
+            if ($signoffId) {
+                try {
+                    DB::table('managed_form_signoffs')->where('id', $signoffId)
+                        ->update(['notified_at' => now(), 'notified_to' => $to]);
+                } catch (\Throwable $e) {}
+            }
         })->onQueue('mail');
     }
 }

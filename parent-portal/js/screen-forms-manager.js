@@ -538,7 +538,7 @@
       var forms = (d && d.forms) || [];
       if (!forms.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms uploaded yet.</div>'; return; }
       el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Assigned to', 'Uploaded by', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Assigned to', 'Email copy', 'Uploaded by', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + forms.map(function (f) {
           var auds = (f.audiences || []).map(function (a) { return '<span style="display:inline-block;background:#EFF6FB;color:#1F6080;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;margin:1px 3px 1px 0;">' + esc(audLabel(a)) + '</span>'; }).join('');
           return '<tr style="border-top:1px solid #F3F4F6;">'
@@ -547,6 +547,12 @@
             // title it was easy to miss entirely, and it could not be sorted or scanned.
             + '<td style="padding:9px 14px;color:#475569;max-width:320px;">' + (f.description ? esc(f.description) : '<span style="color:#CBD5E1;">—</span>') + '</td>'
             + '<td style="padding:9px 14px;">' + (auds || '—')
+            // Whether a completed copy is emailed on, and where to. Without this the
+            // only way to know was to open Edit on every form one at a time.
+            + '<td style="padding:9px 14px;white-space:nowrap;">' + (f.notify_email
+                ? '<span style="font-size:11px;font-weight:800;color:#0F766E;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:2px 9px;">On</span>'
+                  + '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">' + esc(f.notify_email) + '</div>'
+                : '<span style="font-size:11px;font-weight:800;color:#64748B;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:999px;padding:2px 9px;">Off</span>') + '</td>'
             + (f.named_count ? '<span style="display:inline-block;background:#FFF7ED;color:#C2410C;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;margin-left:4px;">+' + f.named_count + ' named</span>' : '')
             + '</td>'
             + '<td style="padding:9px 14px;color:#475569;white-space:nowrap;">'
@@ -592,7 +598,7 @@
       var rows = (d && d.signoffs) || [];
       if (!rows.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms have been signed yet.</div>'; return; }
       el.innerHTML = '<table data-kt-no-kebab="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Signed by', 'Signed (agency time)', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Signed by', 'Signed (agency time)', 'Copy emailed', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || '—';
           // The description is what the form is FOR — a list of titles like "test 8"
@@ -603,6 +609,17 @@
             + '<td style="padding:9px 14px;color:#475569;max-width:320px;">' + (desc ? esc(desc) : '<span style="color:#CBD5E1;">—</span>') + '</td>'
             + '<td style="padding:9px 14px;">' + esc(who) + (r.email ? '<div style="font-size:11px;color:#94A3B8;">' + esc(r.email) + '</div>' : '') + '</td>'
             + '<td style="padding:9px 14px;color:#374151;white-space:nowrap;">' + esc(fmtStamp(r.signed_at)) + '</td>'
+            // Did the completed copy actually reach the address on the form? Three
+            // distinct states, because "no tick" alone cannot tell an admin whether
+            // sending was off or simply had not happened.
+            + '<td style="padding:9px 14px;white-space:nowrap;">' + (
+                r.notified_at
+                  ? '<span style="color:#16A34A;font-weight:700;">✓ ' + esc(fmtStamp(r.notified_at)) + '</span>'
+                    + (r.notified_to ? '<div style="font-size:11px;color:#94A3B8;">' + esc(r.notified_to) + '</div>' : '')
+                  : (r.form_notify_email
+                      ? '<span style="font-size:11px;font-weight:800;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:999px;padding:2px 9px;">Not sent</span>'
+                      : '<span style="font-size:11px;color:#94A3B8;">Not set up</span>')
+              ) + '</td>'
             + '<td style="padding:9px 8px;text-align:right;">' + kebab(r) + '</td></tr>';
         }).join('') + '</tbody></table>';
       wireKebabs(el, rows);
