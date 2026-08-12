@@ -42,6 +42,10 @@
   var FIELD = 'width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;box-sizing:border-box;background:#fff;color:#0F172A;font-family:inherit;';
   var LBL = 'display:block;font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.3px;margin:0 0 6px;';
   function renderLibrary(body) {
+    // The dialog now lives in <body>, so a re-render cannot dispose of it implicitly.
+    var _stale = document.getElementById('fm-upload-ov');
+    if (_stale && _stale.parentNode) _stale.parentNode.removeChild(_stale);
+
     body.innerHTML =
       '<div class="kt-card" style="background:#fff;border:1px solid #E7EBF0;border-radius:16px;padding:22px 24px;margin-bottom:18px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
       + '<div style="font-weight:800;font-size:15px;margin:0 0 4px;color:#0F172A;">⬆️ Upload a new form</div>'
@@ -231,8 +235,10 @@
       // The overlay lives INSIDE the screen container, so a re-render after a
       // successful upload disposes of it automatically.
       var ov = document.createElement('div');
+      ov.id = 'fm-upload-ov';
+      ov.className = 'kt-scrim';
       ov.setAttribute('data-no-modal-guard', '1');
-      ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:2147479000;background:rgba(8,17,33,.62);'
+      ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:2147479000;'
         + 'align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;';
       var card = document.createElement('div');
       card.style.cssText = 'background:#fff;border-radius:16px;max-width:640px;width:100%;margin:auto;'
@@ -260,7 +266,10 @@
       panel.style.padding = '0';
       scroller.appendChild(panel);
       card.appendChild(head); card.appendChild(scroller); ov.appendChild(card);
-      body.appendChild(ov);
+      // PORTAL to <body>. Inside #fm-body the sidebar and top bar painted over it
+      // regardless of z-index, so the scrim missed them and the dialog slid under the
+      // top bar. The other two dialogs already attach here.
+      document.body.appendChild(ov);
 
       var prevOverflow = '';
       function open() {
@@ -445,7 +454,8 @@
     if (!url) return;
     var ov = document.createElement('div');
     ov.setAttribute('data-no-modal-guard', '1');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;background:rgba(8,17,33,.72);'
+    ov.className = 'kt-scrim';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;'
       + 'display:flex;align-items:center;justify-content:center;padding:18px;';
     ov.innerHTML =
       '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
@@ -471,7 +481,8 @@
     var auds = form.audiences || [];
     var ov = document.createElement('div');
     ov.setAttribute('data-no-modal-guard', '1');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479500;background:rgba(8,17,33,.62);display:flex;align-items:flex-start;justify-content:center;padding:18px;overflow-y:auto;';
+    ov.className = 'kt-scrim';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479500;display:flex;align-items:flex-start;justify-content:center;padding:18px;overflow-y:auto;';
     ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);margin:auto;">'
       + '<div style="background:#0B2545;color:#fff;padding:14px 18px;font-size:16px;font-weight:800;">Edit form</div>'
       + '<div style="padding:18px;">'
@@ -723,7 +734,9 @@
       var s = d && d.signoff; if (!s) return;
       var who = (((s.first_name || '') + ' ' + (s.last_name || '')).trim()) || s.signer_name || s.email || '';
       var ov = document.createElement('div');
-      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;background:rgba(8,20,36,.5);display:flex;align-items:center;justify-content:center;padding:20px;';
+      ov.className = 'kt-scrim';
+      ov.setAttribute('data-no-modal-guard', '1');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:20px;';
       ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.35);">'
         + '<div style="padding:18px 20px;border-bottom:1px solid #EEF2F6;"><div style="font-size:16px;font-weight:800;">' + esc(s.form_title) + '</div><div style="font-size:12.5px;color:#64748B;margin-top:2px;">Signed by ' + esc(who) + ' · ' + esc(fmtDate(s.signed_at)) + '</div></div>'
         + '<div style="padding:20px;">'

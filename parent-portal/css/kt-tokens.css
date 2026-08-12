@@ -1,0 +1,59 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — canonical design tokens (2026-07-24).
+
+   Fixes a class of "invisible / wrong colour" bugs found in the production
+   audit: an entire family of custom properties was REFERENCED ~350× across
+   the JS-built inline styles but NEVER DEFINED anywhere — so `color:var(--ink-500)`
+   fell back to `inherit` and `background:var(--brand-green)` (with white text on
+   top) rendered white-on-transparent (i.e. invisible).
+
+   Every value below is the value the code itself already expected: the tokens
+   that carry inline fallbacks in the codebase — `var(--ink-500,#64748b)`,
+   `var(--ink-900,#0f172a)`, `var(--brand-blue,#1F6080)` — anchor the ramp, and
+   the rest follow the standard slate scale those two endpoints belong to. This
+   file is purely ADDITIVE (it only defines names nothing else defines), so it
+   cannot fight the existing stylesheets — it just makes the intended styling
+   actually apply.
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Brand ─────────────────────────────────────────────────────────
+     --brand-blue / --kt-primary = the KiddieTrac primary teal (the value
+     used 32× across the stylesheets and in the brand-blue inline fallbacks).
+     --brand-green = the secondary "green" which in this codebase means teal
+     (`--kt-green: var(--kt-teal)`); the deep #0E7C90 is the same teal already
+     used for chat bubbles / toasts / buttons and is legible under white text. */
+  --kt-primary:  #1F6080;
+  --brand-blue:  #1F6080;
+  --brand-green: #0E7C90;
+
+  /* ── Ink / neutral text + surface ramp (slate) ─────────────────────
+     Anchored by the codebase's own fallbacks: --ink-500 #64748b, --ink-900
+     #0f172a. 50→900 = lightest surface → darkest text. */
+  --ink-50:  #F8FAFC;
+  --ink-100: #F1F5F9;
+  --ink-200: #E2E8F0;
+  --ink-300: #CBD5E1;
+  --ink-400: #94A3B8;
+  --ink-500: #64748B;
+  --ink-600: #475569;
+  --ink-700: #334155;
+  --ink-800: #1E293B;
+  --ink-900: #0F172A;
+}
+
+/* ── Modal scrim ──────────────────────────────────────────────────────────────
+   The standard dim behind a dialog. Defined once so every popup agrees; individual
+   modals reference var(--kt-scrim) instead of inventing their own rgba().
+
+   Deliberately NOT applied to the NDA/agreement gate: that one is a solid navy cover
+   by design, because nothing behind it may be readable until it is signed.
+   ──────────────────────────────────────────────────────────────────────────── */
+:root{
+  --kt-scrim: rgba(15,23,42,.52);
+  --kt-scrim-blur: blur(2px);
+}
+.kt-scrim{
+  background: var(--kt-scrim) !important;
+  -webkit-backdrop-filter: var(--kt-scrim-blur);
+  backdrop-filter: var(--kt-scrim-blur);
+}
