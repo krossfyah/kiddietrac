@@ -46,6 +46,16 @@ class ManagedFormController extends Controller
         return array_values(array_unique($roles));
     }
 
+    /** Addressed to this user by ROLE audience, or named individually. */
+    private function mayUseForm(object $form, int $uid): bool
+    {
+        $named = DB::table('managed_form_recipients')
+            ->where('managed_form_id', $form->id)->where('user_id', $uid)->exists();
+        if ($named) return true;
+        $aud = $form->audiences ? (json_decode($form->audiences, true) ?: []) : [];
+        return (bool) array_intersect($aud, $this->roles($uid));
+    }
+
     private function isAdmin(Request $request): bool
     {
         return (bool) array_intersect($this->roles((int) $request->user()->id), ['platform_admin', 'agency_admin', 'centre_director']);
@@ -88,20 +98,32 @@ class ManagedFormController extends Controller
             'title'       => ['required', 'string', 'max:190'],
             'description' => ['nullable', 'string', 'max:2000'],
             'file'        => ['required', 'file', 'mimes:pdf', 'max:15360'], // 15 MB
-            'audiences'   => ['required'],
+            'audiences'   => ['nullable'],   // optional when specific people are named
+            'recipient_ids' => ['nullable'],
             // Opt-in PER FORM, chosen by the admin at upload. Most uploads are
             // read-and-sign notices where typing into the page makes no sense.
             'fillable'    => ['nullable'],
             'reusable'    => ['nullable'],
         ]);
 
-        $audiences = $data['audiences'];
+        $recipientIds = $request->input('recipient_ids');
+        if (is_string($recipientIds)) $recipientIds = json_decode($recipientIds, true);
+        $recipientIds = array_values(array_unique(array_filter(array_map('intval', (array) $recipientIds))));
+
+        $audiences = $data['audiences'] ?? [];
         if (is_string($audiences)) {
             $audiences = json_decode($audiences, true) ?: array_filter(array_map('trim', explode(',', $audiences)));
         }
         $audiences = array_values(array_intersect((array) $audiences, self::ROLES));
-        if (empty($audiences)) {
-            return response()->json(['message' => 'Pick at least one audience.'], 422);
+        // NOTE: no longer "audiences required" — a form may instead be addressed to
+        // named people. The combined check below enforces that it reaches somebody.
+
+        // A form has to reach SOMEBODY: either a role audience or named people.
+        if (empty($audiences) && empty($recipientIds)) {
+            return response()->json([
+                'message' => 'Choose at least one audience or pick specific people.',
+                'errors' => ['audiences' => ['Choose at least one audience or pick specific people.']],
+            ], 422);
         }
 
         $path = $request->file('file')->store('managed-forms/' . $agencyId, 'public');
@@ -121,6 +143,14 @@ class ManagedFormController extends Controller
             'updated_at'    => now(),
         ]);
 
+        if (!empty($recipientIds)) {
+            $now = now();
+            foreach ($recipientIds as $rid) {
+                DB::table('managed_form_recipients')->insertOrIgnore([
+                    'managed_form_id' => $id, 'user_id' => $rid, 'created_at' => $now,
+                ]);
+            }
+        }
         return response()->json(['id' => $id, 'message' => 'Form uploaded and assigned.']);
     }
 
@@ -225,6 +255,8 @@ class ManagedFormController extends Controller
             ->whereNotNull('signed_at')->pluck('managed_form_id')->all();
         // A REUSABLE form is never "done" — an educator fills it again for the next
         // child or the next week — so signing it must not remove it from the list.
+        $namedFor = DB::table('managed_form_recipients')->where('user_id', $uid)
+            ->pluck('managed_form_id')->map(fn ($v) => (int) $v)->all();
         $reusableIds = DB::table('managed_forms')->where('reusable', 1)->pluck('id')->all();
         $signed = array_values(array_diff($signed, $reusableIds));
         $drafts = DB::table('managed_form_signoffs')->where('user_id', $uid)
@@ -232,7 +264,11 @@ class ManagedFormController extends Controller
         $forms = DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
             ->when(! empty($signed), fn ($q) => $q->whereNotIn('id', $signed))
             ->orderByDesc('id')->get()
-            ->filter(function ($f) use ($roles) {
+            ->filter(function ($f) use ($roles, $namedFor) {
+                // Addressed to me if my ROLE is in the audience, or if I was named
+                // individually. A form with named recipients and no audience reaches
+                // exactly those people and nobody else.
+                if (in_array((int) $f->id, $namedFor, true)) return true;
                 $aud = $f->audiences ? (json_decode($f->audiences, true) ?: []) : [];
                 return (bool) array_intersect($aud, $roles);
             })
@@ -263,8 +299,7 @@ class ManagedFormController extends Controller
         if (! $form) {
             return response()->json(['message' => 'Not found'], 404);
         }
-        $aud = $form->audiences ? (json_decode($form->audiences, true) ?: []) : [];
-        if (! array_intersect($aud, $this->roles($uid))) {
+        if (! $this->mayUseForm($form, $uid)) {
             return response()->json(['message' => 'This form is not assigned to you.'], 403);
         }
         // Never let a draft overwrite a completed submission.
@@ -347,8 +382,7 @@ class ManagedFormController extends Controller
         if (! $form) {
             return response()->json(['message' => 'Not found'], 404);
         }
-        $aud = $form->audiences ? (json_decode($form->audiences, true) ?: []) : [];
-        if (! array_intersect($aud, $this->roles($uid))) {
+        if (! $this->mayUseForm($form, $uid)) {
             return response()->json(['message' => 'This form is not assigned to you.'], 403);
         }
         $data = $request->validate([

@@ -72,6 +72,20 @@
       // Fill-and-sign toggle — PER FORM, not a global behaviour. Only makes sense
       // for a PDF that was authored with real form fields; a read-and-sign notice
       // should stay read-and-sign.
+      // Named recipients. Role audiences reach EVERY parent or educator; often the
+      // real need is narrower — this consent for these three families. Both work
+      // together: a form reaches you if your role matches OR you are named here.
+      + '<div style="border:1.5px solid #E2E8F0;border-radius:12px;padding:13px 15px;margin-bottom:16px;">'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+      + '<span style="font-weight:800;font-size:13.5px;color:#0F172A;">Or send to specific people</span>'
+      + '<span id="fm-rcount" style="font-size:12px;font-weight:800;color:#1E40AF;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:999px;padding:2px 10px;">none selected</span>'
+      + '<button id="fm-rtoggle" type="button" data-kt-iconized="1" style="margin-left:auto;background:#fff;border:1.5px solid #CBD5E1;color:#1F6080;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:800;cursor:pointer;">Choose people</button>'
+      + '</div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-top:4px;">Leave empty to use the audiences above. Pick people to send it only to them.</div>'
+      + '<div id="fm-rpicker" style="display:none;margin-top:11px;">'
+      + '<input id="fm-rsearch" type="text" placeholder="Search by name or email…" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #E2E8F0;border-radius:9px;font-size:13.5px;margin-bottom:8px;">'
+      + '<div id="fm-rlist" style="max-height:230px;overflow-y:auto;border:1px solid #EEF2F7;border-radius:9px;"></div>'
+      + '</div></div>'
       + '<label id="fm-fillable-wrap" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid #E2E8F0;border-radius:12px;padding:13px 15px;margin-bottom:16px;cursor:pointer;">'
       + '<input id="fm-fillable" type="checkbox" style="width:18px;height:18px;flex:0 0 auto;margin-top:1px;accent-color:#1F6FB2;">'
       + '<span><span style="display:block;font-weight:800;font-size:13.5px;color:#0F172A;">Let recipients fill this form in</span>'
@@ -112,6 +126,79 @@
       };
       cb.addEventListener('change', sync); sync();
     });
+    // ── people picker ────────────────────────────────────────────────────────
+    var chosenPeople = {};                       // id -> label
+    var peopleLoaded = false;
+    var rToggle = body.querySelector('#fm-rtoggle');
+    var rPicker = body.querySelector('#fm-rpicker');
+    var rList = body.querySelector('#fm-rlist');
+    var rSearch = body.querySelector('#fm-rsearch');
+    var rCount = body.querySelector('#fm-rcount');
+    var ROLE_LABEL = { guardian: 'Parent', educator: 'Educator', home_visitor: 'Home visitor',
+                       centre_director: 'Director', agency_admin: 'Admin', platform_admin: 'Super admin',
+                       auditor: 'Auditor', sales_rep: 'Sales' };
+
+    function syncCount() {
+      var n = Object.keys(chosenPeople).length;
+      rCount.textContent = n ? (n + ' selected') : 'none selected';
+      rCount.style.background = n ? '#ECFDF5' : '#EFF6FF';
+      rCount.style.color = n ? '#0F766E' : '#1E40AF';
+      rCount.style.borderColor = n ? '#A7F3D0' : '#BFDBFE';
+    }
+
+    function paintPeople(rows) {
+      var q = (rSearch.value || '').trim().toLowerCase();
+      var shown = rows.filter(function (u) {
+        if (!q) return true;
+        return (u.__label + ' ' + (u.email || '')).toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 200);
+      if (!shown.length) {
+        rList.innerHTML = '<div style="padding:16px;text-align:center;color:#94A3B8;font-size:13px;">No one matches that.</div>';
+        return;
+      }
+      rList.innerHTML = shown.map(function (u) {
+        var on = !!chosenPeople[u.id];
+        return '<label style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-bottom:1px solid #F1F5F9;cursor:pointer;">'
+          + '<input type="checkbox" data-uid="' + u.id + '" ' + (on ? 'checked' : '')
+          + ' style="width:17px;height:17px;accent-color:#1F6FB2;flex:0 0 auto;">'
+          + '<span style="min-width:0;"><span style="display:block;font-size:13.5px;font-weight:700;color:#0F172A;">' + esc(u.__label) + '</span>'
+          + '<span style="display:block;font-size:11.5px;color:#64748B;">' + esc(u.__role) + (u.email ? ' · ' + esc(u.email) : '') + '</span></span></label>';
+      }).join('');
+      rList.querySelectorAll('input[data-uid]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          var id = cb.getAttribute('data-uid');
+          var rec = rows.filter(function (x) { return String(x.id) === String(id); })[0];
+          if (cb.checked) chosenPeople[id] = rec ? rec.__label : id; else delete chosenPeople[id];
+          syncCount();
+        });
+      });
+    }
+
+    rToggle.addEventListener('click', function () {
+      var open = rPicker.style.display !== 'none';
+      rPicker.style.display = open ? 'none' : 'block';
+      rToggle.textContent = open ? 'Choose people' : 'Hide list';
+      if (open || peopleLoaded) return;
+      peopleLoaded = true;
+      rList.innerHTML = '<div style="padding:16px;text-align:center;color:#94A3B8;font-size:13px;">Loading people…</div>';
+      Api.get('/admin/users').then(function (d) {
+        var rows = (d && (d.users || d.data || d)) || [];
+        if (!Array.isArray(rows)) rows = [];
+        rows.forEach(function (u) {
+          u.__label = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || u.name || u.email || ('User ' + u.id);
+          var r = u.roles || u.primary_role || [];
+          if (typeof r === 'string') r = [r];
+          u.__role = (r || []).map(function (x) { return ROLE_LABEL[x] || x; }).join(', ') || 'Member';
+        });
+        rows.sort(function (a, b) { return a.__label.localeCompare(b.__label); });
+        paintPeople(rows);
+        rSearch.addEventListener('input', function () { paintPeople(rows); });
+      }).catch(function (e) {
+        rList.innerHTML = '<div style="padding:16px;color:#B91C1C;font-size:13px;">Could not load people: ' + esc(e.message || '') + '</div>';
+      });
+    });
+    syncCount();
+
     var fileIn = body.querySelector('#fm-file'), drop = body.querySelector('#fm-drop');
     fileIn.addEventListener('change', function () {
       var f = fileIn.files[0];
@@ -128,13 +215,19 @@
       var auds = [].slice.call(body.querySelectorAll('.fm-aud:checked')).map(function (c) { return c.value; });
       var file = body.querySelector('#fm-file').files[0];
       if (!title) { out.style.color = '#B91C1C'; out.textContent = 'Add a title.'; return; }
-      if (!auds.length) { out.style.color = '#B91C1C'; out.textContent = 'Pick at least one audience.'; return; }
+      var people = Object.keys(chosenPeople);
+      if (!auds.length && !people.length) {
+        out.style.color = '#B91C1C';
+        out.textContent = 'Pick an audience, or choose specific people.';
+        return;
+      }
       if (!file) { out.style.color = '#B91C1C'; out.textContent = 'Choose a PDF.'; return; }
       out.style.color = '#64748B'; out.textContent = 'Uploading…';
       var fd = new FormData();
       fd.append('title', title); fd.append('description', desc);
       fd.append('fillable', body.querySelector('#fm-fillable').checked ? '1' : '0');
       fd.append('reusable', body.querySelector('#fm-reusable').checked ? '1' : '0');
+      if (people.length) fd.append('recipient_ids', JSON.stringify(people.map(Number)));
       auds.forEach(function (a) { fd.append('audiences[]', a); });
       fd.append('file', file);
       Api.post('/admin/managed-forms', fd).then(function () {
