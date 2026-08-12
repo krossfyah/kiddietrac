@@ -8,14 +8,79 @@
 (function () {
   'use strict';
   if (window.__ktMobileNav) return; window.__ktMobileNav = true;
+  try { window.__KT_NAV_VER = 'eduhome'; } catch (e) {}   // stamp: proves which nav JS actually ran (read by the diag chip)
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
+
+  // Is this the native Capacitor APK (vs a web browser)? The APK's WebView can
+  // report a CSS layout-viewport width ABOVE 768 (device/OEM/full-screen dependent),
+  // which would make every `@media(max-width:768px)` mobile rule miss — the bottom
+  // bar, the raised check-in button and the gear would all vanish at once. So the
+  // native app forces the mobile layout regardless of the width it reports.
+  function isNativeApp() {
+    try {
+      var C = window.Capacitor;
+      if (C) {
+        if (typeof C.isNativePlatform === 'function') return C.isNativePlatform();
+        if (C.isNative != null) return !!C.isNative;
+        if (C.platform && C.platform !== 'web') return true;
+      }
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KtBio) return true;
+    } catch (e) {}
+    return false;
+  }
+  var NATIVE = isNativeApp();
+
+  // Being the app does not make you a phone. A Samsung tablet running the APK has a
+  // desktop-sized viewport (~1280x800 landscape) and was still getting phone chrome,
+  // because kt-native was applied on nativeness alone and 24 rules in kt-mobile-app.css
+  // key off it at ANY width. kt-native now means "native AND phone-sized", so every one
+  // of those rules — and every isMobile() check that tests the class — becomes
+  // width-aware without touching them individually. kt-app stays on for the whole
+  // session, for anything that genuinely needs to know it is the native app.
+  var PHONE_MAX = 768;
+  // The APK WebView has been seen reporting an innerWidth ABOVE 768 on a phone (see the
+  // note on the media query below - it once made the bottom bar vanish entirely). So a
+  // phone is judged on the smaller of the layout width and the PHYSICAL screen width:
+  // an inflated innerWidth is corrected by screen.width (~412 on a phone), while a real
+  // tablet reports ~800-1280 for both and is correctly treated as desktop.
+  function isPhoneSized() {
+    try {
+      var w = window.innerWidth || 0;
+      var sw = (window.screen && window.screen.width) || 0;
+      var eff = sw ? Math.min(w || sw, sw) : w;
+      return eff > 0 ? eff <= PHONE_MAX : true;   // unknown -> assume phone (safe default)
+    } catch (e) { return true; }
+  }
+  function syncNativeClasses() {
+    try {
+      var d = document.documentElement;
+      d.classList.toggle('kt-app', NATIVE);
+      d.classList.toggle('kt-native', NATIVE && isPhoneSized());
+    } catch (e) {}
+  }
+  syncNativeClasses();
+  // Rotating a tablet crosses the boundary, so re-evaluate rather than deciding once.
+  try {
+    window.addEventListener('resize', syncNativeClasses);
+    window.addEventListener('orientationchange', syncNativeClasses);
+  } catch (e) {}
+
+  // Same breakpoints as a browser now: the app follows the viewport, not the platform.
+  var BP = PHONE_MAX;                     // bottom bar + mobile rules: max-width
+  var GEARBP = PHONE_MAX + 1;             // gear hide: min-width
 
   function injectStyle() {
     if (document.getElementById('kt-mobilenav-style')) return;
     var s = document.createElement('style'); s.id = 'kt-mobilenav-style';
     s.textContent = [
       '#kt-mobilenav{display:none;}',
-      '@media(max-width:768px){',
+      // ≤768px, in the browser AND in the app. This was previously forced to
+      // effectively-infinite for native, which gave TABLETS phone chrome. The APK
+      // WebView can report an innerWidth >768 on a phone - which is what once made this
+      // block miss and the bottom bar, raised check-in button and gear all vanish - so
+      // isPhoneSized() above cross-checks screen.width rather than trusting innerWidth
+      // alone. DO NOT narrow to 600.
+      '@media(max-width:' + BP + 'px){',
         '#kt-mobilenav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:9500;background:#fff;',
         'border-top:1px solid #E5E7EB;box-shadow:0 -4px 16px -8px rgba(15,23,42,.2);',
         'padding:5px 4px calc(env(safe-area-inset-bottom,0px) + 5px);justify-content:space-around;}',
@@ -66,7 +131,7 @@
         '#kt-mnav-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9550;}',
         'body.kt-mnav-open #kt-mnav-scrim{display:block;}',
       '}',
-      '@media(min-width:769px){#kt-gear{display:none !important;}}',
+      '@media(min-width:' + GEARBP + 'px){#kt-gear{display:none !important;}}',
       'body.kt-mnav-open #kt-gear{display:none;}',
       // Hide the gear while a full-screen chat thread is open (it would float over the header).
       'body:has(.kt-thread-compose) #kt-gear{display:none !important;}'
@@ -82,7 +147,7 @@
   // so we force it inline (inline !important always wins) and re-apply as the SPA
   // re-renders the header.
   function padGearClearance() {
-    if (window.innerWidth > 768) return;
+    if (!NATIVE && window.innerWidth > 768) return;
     if (!document.getElementById('kt-gear')) return;
     var nu = document.getElementById('navUser');
     if (!nu) return;
@@ -95,50 +160,81 @@
     if (nu.style.paddingRight !== pad) nu.style.setProperty('padding-right', pad, 'important');
   }
 
-  // A parent (guardian) — either by their own role, or a super-admin previewing
-  // the parent view — gets a parent-appropriate bottom bar.
-  function isParentView() {
-    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
-    if (va) return va === 'guardian';
+  // The ACTIVE role = exactly what the shell renders (badge + tiles + screens):
+  // a view-as override if present, else the user's primary_role. The bar MUST
+  // match this. (The old logic keyed off the `roles` ARRAY with educator/admin
+  // exclusions, which broke multi-role accounts — e.g. a guardian who ALSO has an
+  // educator role got the staff bar with no check-in, and an account whose `roles`
+  // array is empty but primary_role='guardian' fell through entirely.)
+  // Mirror app-v2-shell.js `Roles.primaryRoleOf` EXACTLY: the shell derives the
+  // active role from the `roles` ARRAY via a PRIORITY ORDER (not primary_role, not
+  // roles[0]) — agency_admin > platform_admin(→agency_admin) > centre_director >
+  // educator > guardian > home_visitor > auditor. A guardian who ALSO holds e.g.
+  // home_visitor/auditor still resolves to 'guardian' (it outranks those), which is
+  // why the shell shows the PARENT view. The old roles[0] fallback picked the wrong
+  // element and gave those parents the staff bar. Only a platform_admin's view-as
+  // overrides (the impersonation feature), matching the shell.
+  function activeRole() {
     try {
       var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
-      var r = u.roles || [];
-      return r.indexOf('guardian') > -1 && !['agency_admin', 'platform_admin', 'centre_director', 'educator'].some(function (x) { return r.indexOf(x) > -1; });
-    } catch (e) { return false; }
+      var roles = Array.isArray(u.roles) ? u.roles : [];
+      var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+      if (va && roles.indexOf('platform_admin') !== -1 &&
+          ['agency_admin', 'centre_director', 'educator', 'guardian', 'auditor', 'home_visitor'].indexOf(va) !== -1) return va;
+      if (roles.indexOf('agency_admin') !== -1) return 'agency_admin';
+      if (roles.indexOf('platform_admin') !== -1) return 'agency_admin';
+      if (roles.indexOf('centre_director') !== -1) return 'centre_director';
+      if (roles.indexOf('educator') !== -1) return 'educator';
+      if (roles.indexOf('guardian') !== -1) return 'guardian';
+      if (roles.indexOf('home_visitor') !== -1) return 'home_visitor';
+      if (roles.indexOf('auditor') !== -1) return 'auditor';
+      return u.primary_role || '';
+    } catch (e) { return ''; }
   }
+  try { window.__ktActiveRole = activeRole; } catch (e) {}
 
-  // An educator (by role, or previewed via view-as). Educators are phone-first
+  // A parent (guardian) — by their active role, or a super-admin previewing the
+  // parent view — gets the parent bottom bar (Home·Photos·Check-in·Messages·Billing).
+  function isParentView() { return activeRole() === 'guardian'; }
+
+  // An educator (active role, or previewed via view-as). Educators are phone-first
   // too, so they get the same floating settings gear + a check-in QR button.
-  function isEducatorView() {
-    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
-    if (va) return va === 'educator';
-    try {
-      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
-      var r = u.roles || [];
-      return r.indexOf('educator') > -1 && !['agency_admin', 'platform_admin', 'centre_director'].some(function (x) { return r.indexOf(x) > -1; });
-    } catch (e) { return false; }
-  }
+  function isEducatorView() { return activeRole() === 'educator'; }
 
   // Fullscreen check-in QR for the educator's centre — parents scan it off the
   // educator's phone (or print it). The code is fetched fresh and rotates daily
   // server-side (CheckinScanController::centreCode → KTCHK.<centre>.<Ymd>.<sig>).
   function showCheckinQr() {
+    // Guard: a stale/second overlay stacking made the button feel unresponsive
+    // ("kept clicking"). If one's already up, don't build another.
+    if (document.getElementById('kt-qr-overlay')) return;
     var u = {}; try { u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) {}
     var centreId = u.centre_id;
     var tok = null; try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
     var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
     var ov = document.createElement('div');
     ov.id = 'kt-qr-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,28,65,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;color:#fff;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,28,65,.95);overflow-y:auto;color:#fff;';
     ov.innerHTML =
       '<div style="font-size:21px;font-weight:800;margin-bottom:4px;">📲 Check-in QR</div>'
       + '<div id="kt-qr-sub" style="font-size:13.5px;opacity:.85;margin-bottom:18px;">Loading…</div>'
       + '<div id="kt-qr-holder" style="background:#fff;padding:16px;border-radius:18px;width:250px;height:250px;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:13px;">Generating…</div>'
-      + '<div style="font-size:12px;opacity:.75;margin-top:14px;max-width:300px;line-height:1.5;">Parents scan this with the KiddieTrac app to sign in or out. It refreshes every day for security.</div>'
+      + '<div id="kt-qr-codebox" style="display:none;margin-top:14px;max-width:300px;">'
+      +   '<div style="font-size:11.5px;opacity:.8;margin-bottom:6px;">📷 No camera? Enter this code in the app:</div>'
+      +   '<div id="kt-qr-code" style="font-family:ui-monospace,Menlo,monospace;font-size:26px;font-weight:800;letter-spacing:5px;text-align:center;background:rgba(255,255,255,.16);border:1px dashed rgba(255,255,255,.4);border-radius:10px;padding:12px 14px;user-select:all;-webkit-user-select:all;"></div>'
+      + '</div>'
+      + '<div style="font-size:12px;opacity:.75;margin-top:14px;max-width:300px;line-height:1.5;">Parents scan this with the KiddieTrac app to sign in or out (or type the code above). It refreshes every day for security.</div>'
       + '<div style="display:flex;gap:12px;margin-top:22px;">'
       +   '<button id="kt-qr-print" style="background:#fff;color:#0B2545;border:none;border-radius:12px;padding:12px 24px;font-size:15px;font-weight:800;cursor:pointer;">🖨 Print</button>'
       +   '<button id="kt-qr-close" style="background:transparent;color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer;">Close</button>'
       + '</div>';
+    // Center the content but allow scrolling on short screens — previously the QR
+    // + code + helper text could be taller than the viewport, so the top was
+    // clipped and it looked off-centre. Wrap it all in a min-height flex box.
+    var _qrInner = document.createElement('div');
+    _qrInner.style.cssText = 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(env(safe-area-inset-top,0px) + 24px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;';
+    while (ov.firstChild) _qrInner.appendChild(ov.firstChild);
+    ov.appendChild(_qrInner);
     document.body.appendChild(ov);
     var close = function () { if (ov && ov.parentNode) ov.parentNode.removeChild(ov); };
     ov.querySelector('#kt-qr-close').addEventListener('click', close);
@@ -148,6 +244,10 @@
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('load failed')); })
       .then(function (d) {
         var sub = ov.querySelector('#kt-qr-sub'); if (sub) sub.textContent = (d.centre_name || '') + ' · valid ' + (d.valid_for || 'today');
+        // Show the short 6-char code (fresh per open, unique for tracking) so a
+        // parent whose camera fails can type it. Falls back to the long code.
+        var _mc = d.short_code || d.code;
+        if (_mc) { var _cb = ov.querySelector('#kt-qr-codebox'), _cc = ov.querySelector('#kt-qr-code'); if (_cb && _cc) { _cc.textContent = _mc; _cb.style.display = 'block'; } }
         var holder = ov.querySelector('#kt-qr-holder');
         if (window.KT && KT.qrImg && d.code) {
           KT.qrImg(d.code, { size: 224, cell: 6, margin: 2 })
@@ -195,7 +295,13 @@
       // (every section, one tap), so the sidebar drawer was a second, redundant
       // way to reach the same places — and it was the only thing on the bar that
       // didn't navigate.
-      nav.appendChild(btn('🏠', 'Home', function () { go('#dashboard'); }, null, 'dashboard'));
+      // Home goes to whatever the SHELL considers this role's home, NOT a hardcoded
+      // #dashboard: educators land on #home (the tile launcher; homeHashForRole →
+      // 'home'), admins/directors on #dashboard. Hardcoding #dashboard sent educators
+      // to the roster/"today" screen and never back to their launcher home.
+      var homeH = 'dashboard';
+      try { if (window.KT && KT.Shell && KT.Shell.homeHashForRole) homeH = KT.Shell.homeHashForRole(activeRole()) || 'dashboard'; } catch (e) {}
+      nav.appendChild(btn('🏠', 'Home', (function (h) { return function () { go('#' + h); }; })(homeH), null, homeH));
       // Daily log is the thing an educator reaches for most times in a day —
       // it belongs on the bar, not two taps deep in the launcher.
       nav.appendChild(btn('📝', 'Daily log', function () { go('#care-log'); }, null, 'care-log'));
@@ -212,6 +318,38 @@
       // as a notification, so a separate Alerts tab showed the same thing twice.
       // (Composing an alert lives on the Home launcher, under Alerts.)
       nav.appendChild(btn('🔔', 'Inbox', function () { go('#notifications'); }, 'kt-b-inbox', 'notifications'));
+      // Menu (☰) — admin / director / platform-admin ONLY. These roles have a full
+      // sidebar but NO tile launcher (screen-role-home registers :home only for
+      // guardian/educator/auditor), so without this the bar's four buttons are the
+      // ONLY reachable sections on a phone — Children, Billing, Settings, Centres,
+      // Staff, Reports, etc. are all stranded. The drawer-overlay CSS
+      // (body.kt-mnav-open #appSidebar) already exists and reveals the real sidebar;
+      // this button is the only thing that opens it. Scrim/Android-back/link-tap
+      // all close it (see ensure() scrim + kt-back.js). Educators/auditors reach
+      // their sections via the #home launcher, so they don't get this.
+      var _isAdminNav = (function () {
+        var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+        if (va) return ['agency_admin', 'platform_admin', 'centre_director'].indexOf(va) > -1;
+        // Match the active view: primary_role first (the shell's signal), plus the
+        // roles array as a fallback — so an admin whose `roles` array is empty but
+        // primary_role is an admin role still gets the Menu drawer.
+        var ADMIN = ['agency_admin', 'platform_admin', 'centre_director'];
+        try {
+          var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+          if (ADMIN.indexOf(u.primary_role || '') > -1) return true;
+          var r = u.roles || [];
+          return ADMIN.some(function (x) { return r.indexOf(x) > -1; });
+        } catch (e) { return false; }
+      })();
+      if (_isAdminNav) {
+        var menuBtn = btn('☰', 'Menu', function () {
+          var open = document.body.classList.toggle('kt-mnav-open');
+          menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }, null, '__menu');
+        menuBtn.setAttribute('aria-expanded', 'false');
+        menuBtn.setAttribute('aria-haspopup', 'menu');
+        nav.appendChild(menuBtn);
+      }
     }
     document.body.appendChild(nav);
     pinToVisualViewport();
@@ -273,6 +411,14 @@
     var main = document.getElementById('appMain');
     if (main && window.innerWidth <= 600) {
       var need = Math.round(nav.getBoundingClientRect().height) + 16;
+      // If the floating back button (FAB, bottom-left) is showing, reserve enough
+      // room that content clears IT too — it floats ABOVE the nav bar, so the
+      // nav-only clearance leaves the last controls/text hidden behind the FAB.
+      var backFab = document.getElementById('kt-role-back');
+      if (backFab && getComputedStyle(backFab).display !== 'none') {
+        var fr = backFab.getBoundingClientRect();
+        if (fr.height > 0) need = Math.max(need, Math.round(window.innerHeight - fr.top) + 16);
+      }
       if (need > 20 && main.style.paddingBottom !== need + 'px') {
         main.style.setProperty('padding-bottom', need + 'px', 'important');
       }
@@ -379,7 +525,7 @@
       _setBadge('kt-b-inbox', sec === 'notifications' ? 0 : totalUnread);
     });
   }
-  setInterval(refreshBadges, 30000);
+  setInterval(refreshBadges, 60000);
   // On entering a section, instantly clear its badge, then re-sync shortly after
   // (the screen marks its notifications read on open).
   window.addEventListener('hashchange', function () {
