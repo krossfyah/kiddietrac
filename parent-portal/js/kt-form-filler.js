@@ -616,34 +616,23 @@
             var BLOCK_H = 120;                 // the band the block needs
             var MARGIN = 36;
 
-            // Is the foot of the last page clear? Any field widget dipping into the
-            // band means it is not, and we would be drawing over the form.
-            var footClear = ph > BLOCK_H + 140;
-            if (footClear && formObj) {
-              try {
-                var fields = formObj.getFields();
-                for (var fi = 0; fi < fields.length && footClear; fi++) {
-                  var widgets = fields[fi].acroField.getWidgets();
-                  for (var wi = 0; wi < widgets.length; wi++) {
-                    var r = widgets[wi].getRectangle();
-                    if (r && r.y < MARGIN + BLOCK_H + 10) { footClear = false; break; }
-                  }
-                }
-              } catch (e) { footClear = false; }   // can't tell -> take the safe route
-            }
-
-            var page, top;
-            if (footClear) {
-              page = last;
-              top = MARGIN + BLOCK_H;
-            } else {
-              page = pdfDoc.addPage([pw, ph]);   // same paper size as the document
-              top = ph - MARGIN - 40;
-              page.drawText('Signature', { x: MARGIN, y: ph - MARGIN - 14, size: 15, font: bold, color: ink });
-              page.drawText('This page forms part of the completed document.', {
-                x: MARGIN, y: ph - MARGIN - 30, size: 9, font: font, color: grey,
-              });
-            }
+            // ALWAYS a dedicated signature page.
+            //
+            // The previous version tried to detect a clear band at the foot of the
+            // last page by checking form-field rectangles. That cannot work: a field
+            // rectangle says nothing about the form's own PRINTED content, so on a
+            // real inspection sheet it reported "clear" and stamped the block over
+            // the page — verified by extracting the text of a signed PDF, where the
+            // block landed mid-content ("…New Area located to ELECTRONICALLY SIGNED
+            // Anthony Hosein …"). There is no dependable way to know what is already
+            // drawn on a page, so we stop guessing and give the signature its own
+            // page every time. Predictable, never overlapping, always legible.
+            var page = pdfDoc.addPage([pw, ph]);
+            var top = ph - MARGIN - 56;
+            page.drawText('Signature', { x: MARGIN, y: ph - MARGIN - 16, size: 16, font: bold, color: ink });
+            page.drawText('This page forms part of the completed document.', {
+              x: MARGIN, y: ph - MARGIN - 32, size: 9, font: font, color: grey,
+            });
 
             var boxW = Math.min(340, pw - MARGIN * 2);
             var x = MARGIN;
