@@ -45,8 +45,10 @@
    The standard dim behind a dialog. Defined once so every popup agrees; individual
    modals reference var(--kt-scrim) instead of inventing their own rgba().
 
-   Deliberately NOT applied to the NDA/agreement gate: that one is a solid navy cover
-   by design, because nothing behind it may be readable until it is signed.
+   Applied to the NDA/agreement gate too (2026-08-12, by request), so every dialog dims
+   identically. That gate was previously an opaque navy cover; the portal is now visible
+   behind it, though still not clickable - the overlay swallows every event until the
+   agreement is signed.
    ──────────────────────────────────────────────────────────────────────────── */
 :root{
   --kt-scrim: rgba(15,23,42,.52);

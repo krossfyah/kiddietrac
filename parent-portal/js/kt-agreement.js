@@ -50,7 +50,12 @@
     // OPAQUE, not a 55% scrim: until this is signed the app behind must be neither
     // readable nor reachable. The scrim let a user read children's names, the roster
     // and the top bar straight through the gate.
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481000;background:#0B2545;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+    // Shared modal scrim (--kt-scrim in kt-tokens.css) rather than its own opaque
+    // navy, so every dialog in the portal dims identically and the level is tuned
+    // in one place. Clicks are still swallowed by the overlay, so the portal behind
+    // remains unusable until the agreement is signed.
+    ov.className = 'kt-scrim';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481000;display:flex;flex-direction:column;align-items:center;justify-content:center;'
       + 'font-family:system-ui,-apple-system,sans-serif;overscroll-behavior:contain;';
     // Full-screen on phones; a centred card on desktop (was full-width → the
     // buttons and text stretched across the whole screen).
@@ -264,7 +269,8 @@
     ov.querySelector('#kt-agree-decline').addEventListener('click', function () {
       var panel = document.createElement('div');
       panel.setAttribute('data-no-modal-guard', '1'); // no auto-× — use "Go back"
-      panel.style.cssText = 'position:fixed;inset:0;z-index:2147481500;background:rgba(8,17,33,.72);display:flex;align-items:center;'
+      panel.className = 'kt-scrim';
+      panel.style.cssText = 'position:fixed;inset:0;z-index:2147481500;display:flex;align-items:center;'
         + 'justify-content:center;padding:22px;font-family:system-ui,-apple-system,sans-serif;';
       panel.innerHTML =
         '<div style="background:#fff;border-radius:18px;max-width:380px;width:100%;padding:20px;">'
