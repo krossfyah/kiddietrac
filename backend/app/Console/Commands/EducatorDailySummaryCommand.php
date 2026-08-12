@@ -287,6 +287,148 @@ class EducatorDailySummaryCommand extends Command
             . '</tr>';
     }
 
+    /**
+     * A sentence per child about how their day went, and what this educator did for
+     * them. Six tiles say "14 moments"; a parent-style line says what actually
+     * happened, which is what makes the email feel like the day rather than a report.
+     *
+     * Reads BOTH care tables: daily_events (roster quick-log) and daily_care_logs
+     * ("Log a moment") — using only one of them has bitten this codebase before.
+     *
+     * @return array<int, array{name:string, line:string, moments:int}>
+     */
+    private function childrenNarrative(int $uid, string $tz, Carbon $date): array
+    {
+        $start = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc();
+        $end   = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
+
+        $byChild = [];
+        $add = function (int $cid, string $kind, ?string $detail) use (&$byChild) {
+            if (! isset($byChild[$cid])) $byChild[$cid] = ['kinds' => [], 'notes' => []];
+            $byChild[$cid]['kinds'][$kind] = ($byChild[$cid]['kinds'][$kind] ?? 0) + 1;
+            $detail = trim((string) $detail);
+            if ($detail !== '' && count($byChild[$cid]['notes']) < 2) $byChild[$cid]['notes'][] = $detail;
+        };
+
+        foreach (DB::table('daily_events')->where('recorded_by_id', $uid)
+            ->whereBetween('occurred_at', [$start, $end])->whereNull('deleted_at')
+            ->get(['child_id', 'event_type', 'notes']) as $e) {
+            $add((int) $e->child_id, (string) $e->event_type, $e->notes);
+        }
+        if (Schema::hasTable('daily_care_logs')) {
+            foreach (DB::table('daily_care_logs')->where('recorded_by_id', $uid)
+                ->whereBetween('occurred_at', [$start, $end])
+                ->get(['child_id', 'log_type', 'details', 'notes']) as $e) {
+                $add((int) $e->child_id, (string) $e->log_type, $e->details ?: $e->notes);
+            }
+        }
+        if (Schema::hasTable('observations')) {
+            foreach (DB::table('observations')->where('recorded_by_id', $uid)
+                ->whereBetween('observed_at', [$start, $end])
+                ->get(['child_id', 'title']) as $o) {
+                $add((int) $o->child_id, 'observation', $o->title);
+            }
+        }
+        if (! $byChild) return [];
+
+        $names = DB::table('children')->whereIn('id', array_keys($byChild))
+            ->get(['id', 'first_name', 'preferred_name'])
+            ->keyBy('id');
+
+        // Plain words for what each log type meant for the child.
+        $PHRASE = [
+            'meal' => 'ate', 'snack' => 'had a snack', 'bottle' => 'took a bottle',
+            'nap' => 'napped', 'nap_start' => 'napped', 'nap_end' => 'woke up',
+            'diaper' => 'was changed', 'bathroom' => 'used the bathroom',
+            'activity' => 'joined an activity', 'mood' => 'had their mood checked',
+            'observation' => 'was observed for their learning story',
+            'note' => 'had a moment shared', 'sunscreen' => 'had sunscreen applied',
+        ];
+
+        $out = [];
+        foreach ($byChild as $cid => $d) {
+            $rec = $names[$cid] ?? null;
+            if (! $rec) continue;
+            $nm = $rec->preferred_name ?: $rec->first_name;
+
+            $parts = [];
+            foreach ($d['kinds'] as $kind => $n) {
+                $phrase = $PHRASE[$kind] ?? str_replace('_', ' ', $kind);
+                $parts[] = $n > 1 ? ($phrase . ' (' . $n . ')') : $phrase;
+            }
+            $total = array_sum($d['kinds']);
+            $line  = htmlspecialchars($nm) . ' ' . htmlspecialchars(implode(', ', array_slice($parts, 0, 5))) . '.';
+            if ($d['notes']) {
+                $quoted = array_map(fn ($n) => '&ldquo;' . htmlspecialchars($n) . '&rdquo;', $d['notes']);
+            $line .= ' <span style="color:#64748B;">' . implode(' &middot; ', $quoted) . '</span>';
+            }
+            $out[] = ['name' => $nm, 'line' => $line, 'moments' => $total];
+        }
+        usort($out, fn ($a, $b) => $b['moments'] <=> $a['moments']);
+        return $out;
+    }
+
+    /**
+     * The educator's own shift: each clock-in/out pair in the AGENCY's timezone.
+     * "7h" in a tile does not tell someone whether they forgot to clock out.
+     *
+     * @return array{rows: array<int, array{in:string, out:?string, mins:int}>, total:int, open:bool}
+     */
+    private function shiftDetail(int $uid, string $tz, Carbon $date): array
+    {
+        $start = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc();
+        $end   = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
+        $rows = []; $total = 0; $open = false;
+
+        foreach (DB::table('time_punches')->where('user_id', $uid)
+            ->whereBetween('punched_in_at', [$start, $end])->orderBy('punched_in_at')
+            ->get(['punched_in_at', 'punched_out_at']) as $tp) {
+            $in  = Carbon::parse($tp->punched_in_at)->timezone($tz);
+            $out = $tp->punched_out_at ? Carbon::parse($tp->punched_out_at)->timezone($tz) : null;
+            // An open punch is not zero time — it is time still being worked. Count it
+            // up to now (capped at the end of the day being reported) so the total
+            // reflects the shift instead of reading 0h 0m.
+            $upto = $out ?: Carbon::now($tz)->min(Carbon::parse($end)->timezone($tz));
+            $mins = (int) $in->diffInMinutes($upto);
+            $total += $mins;
+            if (! $out) $open = true;
+            $rows[] = ['in' => $in->format('g:i A'), 'out' => $out ? $out->format('g:i A') : null, 'mins' => $mins];
+        }
+        return ['rows' => $rows, 'total' => $total, 'open' => $open];
+    }
+
+    /**
+     * Two or three concrete things to try tomorrow, drawn from what today was missing
+     * rather than generic advice — the point is that it is about THEIR day.
+     *
+     * @return array<int, string>
+     */
+    private function tomorrowIdeas(array $t, array $kids, array $shift): array
+    {
+        $ideas = [];
+        if ($t['observations'] < 1) {
+            $ideas[] = 'Write one learning observation. A single noticing — who they played with, what they figured out — is what families treasure most.';
+        }
+        $quiet = array_values(array_filter($kids, fn ($k) => $k['moments'] <= 1));
+        if ($quiet) {
+            $names = implode(' and ', array_slice(array_column($quiet, 'name'), 0, 3));
+            $ideas[] = 'Share a moment for ' . htmlspecialchars($names) . ' — quieter children can go a whole day without a note home.';
+        }
+        if (($t['activities'] ?? 0) < 1) {
+            $ideas[] = 'Log one activity. Even "water play in the garden" gives a parent something real to ask about at dinner.';
+        }
+        if ($shift['open']) {
+            $ideas[] = 'You are still clocked in — remember to clock out so your hours are right.';
+        }
+        if (($t['moments'] ?? 0) >= 12 && ! $ideas) {
+            $ideas[] = 'Honestly? Nothing to fix. Do exactly what you did today.';
+        }
+        if (! $ideas) {
+            $ideas[] = 'Try a photo with your next moment — families read those first.';
+        }
+        return array_slice($ideas, 0, 3);
+    }
+
     /** A bright, iconed stat card cell for the "day in numbers" grid. */
     private function card(string $icon, string $label, string $value, string $accent): string
     {
@@ -384,6 +526,54 @@ class EducatorDailySummaryCommand extends Command
             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
             .   'style="border-collapse:separate;background:#F8FBFD;border-left:4px solid #0E7C90;border-radius:0 12px 12px 0;">'
             . '<tr><td style="padding:14px 16px;">' . EmailTemplate::dailyQuote(crc32($date->toDateString())) . '</td></tr></table>';
+
+        // ── The children's day, in words ───────────────────────────────────
+        $kids = $this->childrenNarrative((int) $ed->id, $tz, $date);
+        if ($kids) {
+            $body .= $this->sectionHead("\u{1F9F8}", 'How the children\'s day went')
+                . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                .   'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">';
+            foreach ($kids as $i => $k) {
+                $body .= '<tr><td style="padding:12px 14px;' . ($i ? 'border-top:1px solid #F1F5F9;' : '') . 'font-size:13.5px;line-height:1.6;color:#334155;">'
+                    . '<strong style="color:#0F172A;">' . htmlspecialchars($k['name']) . '</strong> &mdash; ' . $k['line']
+                    . '</td></tr>';
+            }
+            $body .= '</table>';
+        }
+
+        // ── Your shift ─────────────────────────────────────────────────────
+        $shift = $this->shiftDetail((int) $ed->id, $tz, $date);
+        if ($shift['rows']) {
+            $body .= $this->sectionHead("\u{1F553}", 'Your sign-in and sign-out')
+                . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                .   'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">';
+            foreach ($shift['rows'] as $i => $r) {
+                $dur = intdiv($r['mins'], 60) . 'h ' . ($r['mins'] % 60) . 'm' . ($r['out'] ? '' : ' so far');
+                $body .= '<tr><td style="padding:11px 14px;' . ($i ? 'border-top:1px solid #F1F5F9;' : '') . 'font-size:13.5px;color:#334155;">'
+                    .   '<strong style="color:#0F172A;">' . htmlspecialchars($r['in']) . '</strong>'
+                    .   ' &rarr; ' . ($r['out'] ? '<strong style="color:#0F172A;">' . htmlspecialchars($r['out']) . '</strong>'
+                                               : '<span style="color:#B45309;font-weight:700;">not clocked out</span>')
+                    .   '<span style="float:right;color:#64748B;">' . htmlspecialchars($dur) . '</span>'
+                    . '</td></tr>';
+            }
+            $tot = $shift['total'];
+            $body .= '<tr><td style="padding:11px 14px;border-top:2px solid #EEF2F6;background:#F8FAFC;font-size:13.5px;font-weight:800;color:#0F172A;">'
+                . 'Total on the floor' . ($shift['open'] ? ' so far' : '')
+                . '<span style="float:right;">' . intdiv($tot, 60) . 'h ' . ($tot % 60) . 'm</span></td></tr></table>';
+        }
+
+        // ── Ideas for tomorrow ─────────────────────────────────────────────
+        $ideas = $this->tomorrowIdeas($t, $kids, $shift);
+        if ($ideas) {
+            $body .= $this->sectionHead("\u{1F31E}", 'A couple of ideas for tomorrow')
+                . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                .   'style="border-collapse:separate;background:#F0FAFC;border-radius:14px;"><tr><td style="padding:14px 16px;">';
+            foreach ($ideas as $i => $idea) {
+                $body .= '<div style="font-size:13.5px;line-height:1.6;color:#134E5A;' . ($i ? 'margin-top:10px;' : '') . '">'
+                    . '<span style="color:#0E7C90;font-weight:800;">&bull;</span> ' . $idea . '</div>';
+            }
+            $body .= '</td></tr></table>';
+        }
 
         // Warm close — varied each day.
         $close = $pick([
