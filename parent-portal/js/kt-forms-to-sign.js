@@ -16,14 +16,90 @@
     window.open(u, '_blank');
   }
 
-  function render(main) {
+  var TABS = [['todo', 'To sign'], ['drafts', 'Drafts'], ['submitted', 'Submitted']];
+
+  function render(main, tab) {
+    tab = tab || 'todo';
     main.innerHTML =
       '<div style="padding:20px;max-width:640px;margin:0 auto;">'
       + '<div style="text-align:center;margin-bottom:14px;"><div style="font-size:40px;line-height:1;">✍️</div>'
-      + '<h2 style="margin:6px 0 2px;color:#0F172A;">Forms to sign</h2>'
-      + '<p style="color:#64748B;font-size:13.5px;margin:0;">Read each form, then sign to confirm.</p></div>'
+      + '<h2 style="margin:6px 0 2px;color:#0F172A;">My forms</h2>'
+      + '<p style="color:#64748B;font-size:13.5px;margin:0;">Forms to sign, work you have saved, and everything you have submitted.</p></div>'
+      + '<div id="mf-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;"></div>'
       + '<div id="mf-list"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div></div>';
-    load(main.querySelector('#mf-list'));
+
+    var tabsEl = main.querySelector('#mf-tabs');
+    TABS.forEach(function (t) {
+      var on = t[0] === tab;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = t[1];
+      b.style.cssText = 'border-radius:999px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer;'
+        + 'border:1.5px solid ' + (on ? '#1F6FB2' : '#E2E8F0') + ';'
+        + 'background:' + (on ? '#EFF6FF' : '#fff') + ';color:' + (on ? '#1E40AF' : '#475569') + ';';
+      b.addEventListener('click', function () { render(main, t[0]); });
+      tabsEl.appendChild(b);
+    });
+
+    var listEl = main.querySelector('#mf-list');
+    if (tab === 'todo') load(listEl);
+    else loadMine(listEl, tab, main);
+  }
+
+  function fmtWhen(ts) {
+    if (!ts) return '';
+    try {
+      var d = new Date(String(ts).replace(' ', 'T'));
+      if (isNaN(d.getTime())) return String(ts);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return String(ts); }
+  }
+
+  function mineCard(f, kind) {
+    var badge = kind === 'drafts'
+      ? '<span style="background:#ECFDF5;color:#0F766E;border:1px solid #A7F3D0;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;">Draft</span>'
+      : '<span style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;">Submitted</span>';
+    var when = kind === 'drafts' ? ('Last saved ' + fmtWhen(f.updated_at)) : ('Signed ' + fmtWhen(f.signed_at));
+    return '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
+      + '<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">'
+      + '<span style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(f.title) + '</span>' + badge
+      + (f.reusable ? '<span style="background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;">Reusable</span>' : '')
+      + '</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin-top:4px;">' + esc(when)
+      + (f.answers ? ' · ' + f.answers + ' answer' + (f.answers === 1 ? '' : 's') : '') + '</div>'
+      + '<div style="display:flex;gap:10px;margin-top:13px;flex-wrap:wrap;">'
+      + (kind === 'drafts'
+          ? '<button class="mf-resume" data-id="' + f.id + '" data-t="' + esc(f.title) + '" data-u="' + esc(fileUrl(f.original_url)) + '" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">Continue</button>'
+          : '<button class="mf-view" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;">View my copy</button>')
+      + '</div></div>';
+  }
+
+  function loadMine(el, kind, main) {
+    Api.get('/managed-forms/mine').then(function (d) {
+      var rows = (d && d[kind]) || [];
+      if (!rows.length) {
+        el.innerHTML = '<div style="padding:30px 20px;text-align:center;color:#64748B;background:#F8FAFC;border:1px solid #E7EBF0;border-radius:14px;font-size:13.5px;">'
+          + (kind === 'drafts'
+              ? 'No drafts yet. Anything you save while filling a form waits here until you sign it.'
+              : 'Nothing submitted yet.')
+          + '</div>';
+        return;
+      }
+      el.innerHTML = rows.map(function (f) { return mineCard(f, kind); }).join('');
+      el.querySelectorAll('.mf-view').forEach(function (b) {
+        b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); });
+      });
+      el.querySelectorAll('.mf-resume').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (!KT.formFiller) { if (KT.toast) KT.toast('⚠️', 'Unavailable', 'The form filler is not available.', '#B91C1C'); return; }
+          KT.formFiller.open({ id: b.getAttribute('data-id'), title: b.getAttribute('data-t'), fileUrl: b.getAttribute('data-u') })
+            .then(function () { render(main, 'drafts'); });
+        });
+      });
+    }).catch(function (e) {
+      el.innerHTML = '<div style="padding:24px;color:#B91C1C;font-size:13px;">Could not load: ' + esc(e.message || '') + '</div>';
+    });
   }
 
   function load(el) {

@@ -92,6 +92,7 @@ class ManagedFormController extends Controller
             // Opt-in PER FORM, chosen by the admin at upload. Most uploads are
             // read-and-sign notices where typing into the page makes no sense.
             'fillable'    => ['nullable'],
+            'reusable'    => ['nullable'],
         ]);
 
         $audiences = $data['audiences'];
@@ -110,6 +111,7 @@ class ManagedFormController extends Controller
             'description'   => $data['description'] ?? null,
             'file_url'      => '/storage/' . $path,
             'fillable'      => filter_var($request->input('fillable', false), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
+            'reusable'      => filter_var($request->input('reusable', false), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             'file_type'     => 'application/pdf',
             'file_size'     => $request->file('file')->getSize(),
             'audiences'     => json_encode($audiences),
@@ -221,6 +223,10 @@ class ManagedFormController extends Controller
         // answers so far — so the user can come back and finish it.
         $signed = DB::table('managed_form_signoffs')->where('user_id', $uid)
             ->whereNotNull('signed_at')->pluck('managed_form_id')->all();
+        // A REUSABLE form is never "done" — an educator fills it again for the next
+        // child or the next week — so signing it must not remove it from the list.
+        $reusableIds = DB::table('managed_forms')->where('reusable', 1)->pluck('id')->all();
+        $signed = array_values(array_diff($signed, $reusableIds));
         $drafts = DB::table('managed_form_signoffs')->where('user_id', $uid)
             ->whereNull('signed_at')->pluck('field_values', 'managed_form_id')->all();
         $forms = DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
@@ -235,6 +241,7 @@ class ManagedFormController extends Controller
                 return [
                     'id' => $f->id, 'title' => $f->title, 'description' => $f->description,
                     'file_url' => $f->file_url, 'fillable' => (bool) ($f->fillable ?? false),
+                    'reusable' => (bool) ($f->reusable ?? false),
                     'draft_values' => $raw ? (json_decode($raw, true) ?: null) : null,
                 ];
             })
@@ -261,23 +268,74 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'This form is not assigned to you.'], 403);
         }
         // Never let a draft overwrite a completed submission.
-        $existing = DB::table('managed_form_signoffs')->where('managed_form_id', $id)->where('user_id', $uid)->first();
-        if ($existing && $existing->signed_at) {
-            return response()->json(['message' => 'This form has already been signed.'], 409);
+        // Work on the OPEN (unsigned) row. For a reusable form the user may already
+        // have signed submissions on file; those must never be touched.
+        $open = DB::table('managed_form_signoffs')->where('managed_form_id', $id)
+            ->where('user_id', $uid)->whereNull('signed_at')->first();
+        if (! $open && ! ($form->reusable ?? false)) {
+            $done = DB::table('managed_form_signoffs')->where('managed_form_id', $id)
+                ->where('user_id', $uid)->whereNotNull('signed_at')->exists();
+            if ($done) {
+                return response()->json(['message' => 'This form has already been signed.'], 409);
+            }
         }
         $data = $request->validate(['field_values' => ['nullable', 'array']]);
-
-        DB::table('managed_form_signoffs')->updateOrInsert(
-            ['managed_form_id' => $id, 'user_id' => $uid],
-            [
-                'field_values' => !empty($data['field_values']) ? json_encode($data['field_values']) : null,
-                'signed_at'    => null,
-                'updated_at'   => now(),
-                'created_at'   => $existing->created_at ?? now(),
-            ]
-        );
+        $payload = [
+            'field_values' => !empty($data['field_values']) ? json_encode($data['field_values']) : null,
+            'signed_at'    => null,
+            'updated_at'   => now(),
+        ];
+        if ($open) {
+            DB::table('managed_form_signoffs')->where('id', $open->id)->update($payload);
+        } else {
+            DB::table('managed_form_signoffs')->insert($payload + [
+                'managed_form_id' => $id, 'user_id' => $uid, 'created_at' => now(),
+            ]);
+        }
 
         return response()->json(['ok' => true, 'message' => 'Draft saved.']);
+    }
+
+    /**
+     * GET /managed-forms/mine - the caller's own drafts and submitted forms.
+     * Feeds the Drafts / Submitted tabs in My Forms.
+     */
+    public function mine(Request $request): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        $agencyId = $this->agencyId($request);
+        if (! $agencyId) {
+            return response()->json(['drafts' => [], 'submitted' => []]);
+        }
+
+        $rows = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->where('s.user_id', $uid)->where('f.agency_id', $agencyId)
+            ->orderByDesc('s.updated_at')
+            ->get(['s.id', 's.managed_form_id', 's.signed_at', 's.updated_at', 's.field_values',
+                   's.filled_file_url', 'f.title', 'f.description', 'f.file_url', 'f.fillable', 'f.reusable']);
+
+        $shape = function ($r) {
+            $vals = $r->field_values ? (json_decode($r->field_values, true) ?: []) : [];
+            return [
+                'signoff_id'   => $r->id,
+                'id'           => $r->managed_form_id,
+                'title'        => $r->title,
+                'description'  => $r->description,
+                'file_url'     => $r->filled_file_url ?: $r->file_url,
+                'original_url' => $r->file_url,
+                'fillable'     => (bool) $r->fillable,
+                'reusable'     => (bool) $r->reusable,
+                'answers'      => count($vals),
+                'signed_at'    => $r->signed_at,
+                'updated_at'   => $r->updated_at,
+            ];
+        };
+
+        return response()->json([
+            'drafts'    => $rows->whereNull('signed_at')->map($shape)->values(),
+            'submitted' => $rows->whereNotNull('signed_at')->map($shape)->values(),
+        ]);
     }
 
     /** POST /forms/{id}/sign — record the caller's e-signature. */
@@ -321,9 +379,11 @@ class ManagedFormController extends Controller
             }
         }
 
-        DB::table('managed_form_signoffs')->updateOrInsert(
-            ['managed_form_id' => $id, 'user_id' => $uid],
-            [
+        // Sign the OPEN draft if one exists, otherwise start a new record. A reusable
+        // form therefore accumulates one row per submission instead of overwriting.
+        $open = DB::table('managed_form_signoffs')->where('managed_form_id', $id)
+            ->where('user_id', $uid)->whereNull('signed_at')->first();
+        $row = [
                 'signer_name' => $name ?: null,
                 'signature'   => mb_substr($data['signature'], 0, 400000),
                 'field_values' => !empty($data['field_values']) ? json_encode($data['field_values']) : null,
@@ -331,9 +391,14 @@ class ManagedFormController extends Controller
                 'signed_at'   => now(),
                 'ip_address'  => substr((string) $request->ip(), 0, 45),
                 'updated_at'  => now(),
-                'created_at'  => now(),
-            ]
-        );
+        ];
+        if ($open) {
+            DB::table('managed_form_signoffs')->where('id', $open->id)->update($row);
+        } else {
+            DB::table('managed_form_signoffs')->insert($row + [
+                'managed_form_id' => $id, 'user_id' => $uid, 'created_at' => now(),
+            ]);
+        }
 
         return response()->json(['ok' => true, 'message' => 'Signed. Thank you!']);
     }

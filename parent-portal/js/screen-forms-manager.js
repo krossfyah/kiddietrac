@@ -78,9 +78,17 @@
       + '<span style="display:block;font-size:12.5px;color:#64748B;line-height:1.5;margin-top:2px;">'
       + 'Tick this if the PDF has fillable fields. Recipients get the form on screen with typing fields and sign it in place, on desktop or the app. '
       + 'Leave it off for read-and-sign notices.</span></span></label>'
+      // Reuse: the same sheet completed over and over (per child, per week) rather
+      // than signed once and finished.
+      + '<label id="fm-reusable-wrap" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid #E2E8F0;border-radius:12px;padding:13px 15px;margin-bottom:16px;cursor:pointer;">'
+      + '<input id="fm-reusable" type="checkbox" style="width:18px;height:18px;flex:0 0 auto;margin-top:1px;accent-color:#1F6FB2;">'
+      + '<span><span style="display:block;font-weight:800;font-size:13.5px;color:#0F172A;">Allow this form to be reused</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;line-height:1.5;margin-top:2px;">'
+      + 'Keeps the form available after it is submitted, so staff can complete it again — once per child, or week after week. '
+      + 'Each submission is kept as its own record.</span></span></label>'
       // Action row
       + '<div style="display:flex;align-items:center;gap:14px;border-top:1px solid #F1F5F9;padding-top:16px;">'
-      + '<button id="fm-upload" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 24px;font-weight:800;font-size:13.5px;cursor:pointer;">Upload &amp; assign</button>'
+      + '<button id="fm-upload" type="button" data-kt-iconized="1" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 24px;font-weight:800;font-size:13.5px;cursor:pointer;">Upload form</button>'
       + '<span id="fm-upout" style="font-size:13px;font-weight:700;"></span></div>'
       + '</div></div>'
       + '<div id="fm-list"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div>';
@@ -95,14 +103,15 @@
       }
       cb.addEventListener('change', sync); sync();
     });
-    var fillCb = body.querySelector('#fm-fillable'), fillWrap = body.querySelector('#fm-fillable-wrap');
-    if (fillCb && fillWrap) {
-      var syncFill = function () {
-        fillWrap.style.borderColor = fillCb.checked ? '#1F6FB2' : '#E2E8F0';
-        fillWrap.style.background = fillCb.checked ? '#EFF6FF' : '#fff';
+    [['#fm-fillable', '#fm-fillable-wrap'], ['#fm-reusable', '#fm-reusable-wrap']].forEach(function (pair) {
+      var cb = body.querySelector(pair[0]), wrap = body.querySelector(pair[1]);
+      if (!cb || !wrap) return;
+      var sync = function () {
+        wrap.style.borderColor = cb.checked ? '#1F6FB2' : '#E2E8F0';
+        wrap.style.background = cb.checked ? '#EFF6FF' : '#fff';
       };
-      fillCb.addEventListener('change', syncFill); syncFill();
-    }
+      cb.addEventListener('change', sync); sync();
+    });
     var fileIn = body.querySelector('#fm-file'), drop = body.querySelector('#fm-drop');
     fileIn.addEventListener('change', function () {
       var f = fileIn.files[0];
@@ -125,6 +134,7 @@
       var fd = new FormData();
       fd.append('title', title); fd.append('description', desc);
       fd.append('fillable', body.querySelector('#fm-fillable').checked ? '1' : '0');
+      fd.append('reusable', body.querySelector('#fm-reusable').checked ? '1' : '0');
       auds.forEach(function (a) { fd.append('audiences[]', a); });
       fd.append('file', file);
       Api.post('/admin/managed-forms', fd).then(function () {
