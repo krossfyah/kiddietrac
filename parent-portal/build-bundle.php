@@ -98,14 +98,35 @@ if ($checkOnly) {
 }
 if ($ifStale && !$stale) exit(0);
 
-// ── 3. Concatenate ────────────────────────────────────────────────────────
+// ── 3. Concatenate, ISOLATING EACH FILE ───────────────────────────────────
+// Every file gets its own try/catch. This is not cosmetic — it is the whole
+// reason the first bundle had to be rolled back on 2026-08-11.
+//
+// As 162 separate <script> tags, a module that THROWS on load kills only itself
+// and the browser carries on with the next tag. Concatenated naively, that same
+// throw aborts the remaining script — so everything after it never runs. In the
+// Android APK one module threw on a Capacitor-only code path, and every module
+// after it died: screens were never registered (so tapping a section fell back
+// to Today) and the native status bar was never painted (so it lost its navy).
+// Desktop never reproduced it because `window.Capacitor` does not exist there.
+//
+// Wrapping restores the per-tag isolation. It is safe for these files: all 162
+// are IIFE-wrapped and NONE declares a top-level `var` or `function` (verified),
+// so a wrapping block changes no scoping — every global is assigned onto
+// window/KT from inside its own closure.
+//
 // A leading ";" between files guards against ASI hazards (a file ending without
 // a semicolon followed by one starting with "(" or "[").
 $body = '';
 foreach ($files as $f) {
     $code = file_get_contents($f['path']);
     if ($code === false) fail('could not read ' . $f['rel']);
-    $body .= "\n;/* ===== " . $f['rel'] . " ===== */\n" . $code . "\n";
+    $rel = $f['rel'];
+    $body .= "\n;/* ===== " . $rel . " ===== */\n"
+           . "try {\n" . $code . "\n} catch (e) { "
+           . "try { console.error('[kt-bundle] " . addslashes($rel) . " failed to load:', e); } catch (_e) {} "
+           . "try { (window.__ktBundleErrors = window.__ktBundleErrors || []).push({ file: '" . addslashes($rel) . "', message: (e && e.message) || String(e) }); } catch (_e) {} "
+           . "}\n";
 }
 
 // Hash the CODE ONLY — never the build timestamp. Otherwise every rebuild would

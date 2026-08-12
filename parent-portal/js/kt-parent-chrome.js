@@ -42,6 +42,7 @@
   // were getting the bare words while admins got "🌆 Good evening".
   function greetParts() {
     var h = new Date().getHours();
+    if (h < 5) return { g: 'Good night', e: '🌙' };     // pre-dawn, not "morning"
     if (h < 12) return { g: 'Good morning', e: '🌅' };
     if (h < 17) return { g: 'Good afternoon', e: '☀️' };
     if (h < 22) return { g: 'Good evening', e: '🌆' };

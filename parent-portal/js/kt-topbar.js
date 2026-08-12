@@ -24,6 +24,7 @@
     return (u && u.primary_role && ROLE[u.primary_role]) || 'Member';
   }
   function isAdminRole(u) { var r = (u && u.roles) || []; return ['platform_admin', 'agency_admin', 'centre_director'].some(function (x) { return r.indexOf(x) !== -1; }); }
+  function isStaffBarRole(u) { var r = (u && u.roles) || []; return r.indexOf('educator') !== -1 || r.indexOf('home_visitor') !== -1; }
   function isPlatformAdmin(u) { return ((u && u.roles) || []).indexOf('platform_admin') !== -1; }
 
   // Super-admin View-as + agency switcher are built NATIVELY in the bar (not moved
@@ -77,6 +78,7 @@
     buildViewAs(host); buildAgency(host);
   }
   function greetEmoji(h) {
+    if (h < 5) return { g: 'Good night', e: '🌙' };     // pre-dawn, not "morning"
     if (h < 12) return { g: 'Good morning', e: '🌅' };
     if (h < 17) return { g: 'Good afternoon', e: '☀️' };
     if (h < 22) return { g: 'Good evening', e: '🌆' };
@@ -147,7 +149,26 @@
   function startNotif() {
     if (__notifStarted) return; __notifStarted = true;
     setTimeout(refreshNotifBadge, 1500);
-    setInterval(refreshNotifBadge, 60000);
+    setInterval(refreshNotifBadge, 15000);
+  }
+  // Staff (educator / home visitor) bell badge — unread count from THEIR own
+  // notifications inbox (role-relevant notifications addressed to them).
+  var __staffNotifStarted = false;
+  function refreshStaffNotifBadge() {
+    var t = store('kt_token'); if (!t) return;
+    fetch(API + '/notifications', { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        var rows = d.notifications || d.data || (Array.isArray(d) ? d : []);
+        var n = 0; for (var i = 0; i < rows.length; i++) { if (!rows[i].read_at) n++; }
+        setNotifBadge(n);
+      }).catch(function () {});
+  }
+  function startStaffNotif() {
+    if (__staffNotifStarted) return; __staffNotifStarted = true;
+    setTimeout(refreshStaffNotifBadge, 1500);
+    setInterval(refreshStaffNotifBadge, 15000);
   }
   var notifPanel = null;
   function closeNotif() { if (notifPanel) { notifPanel.remove(); notifPanel = null; document.removeEventListener('click', outsideNotif, true); } }
@@ -202,9 +223,15 @@
       setNotifBadge(0);
     });
   }
-  function openProfile() { location.hash = '#onboarding'; }   // profile editor (name / photo / contact)
+  function openProfile() {
+    // Show the user's own account record (view + edit their details/roles) rather
+    // than re-running the full onboarding wizard. Falls back to the profile editor
+    // if the account view isn't available (e.g. non-admin roles).
+    if (window.KT && typeof KT.openMyAccount === 'function') { KT.openMyAccount(); return; }
+    location.hash = '#onboarding';
+  }
   function openHome() { location.hash = '#dashboard'; }
-  function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
+  function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
 
   function injectStyle() {
     if (document.getElementById('kt-topbar-style')) return;
@@ -216,6 +243,9 @@
       'border:1px solid rgba(15,23,42,.07);box-shadow:0 2px 10px -7px rgba(15,23,42,.2);animation:kt-tb-in .4s ease both;}',
       '.kt-tb-left{display:flex;align-items:center;gap:10px;min-width:0;}',
       '.kt-tb-emoji{font-size:20px;line-height:1;}',
+      '.kt-tb-ava{width:32px;height:32px;border-radius:50%;overflow:hidden;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;background:#E2E8F0;box-shadow:0 1px 3px rgba(15,23,42,.16);}',
+      '.kt-tb-ava img{width:100%;height:100%;object-fit:cover;display:block;}',
+      '.kt-tb-ava--init{color:#fff;font-weight:700;font-size:13px;letter-spacing:.3px;}',
       '.kt-tb-greet{font-size:14px;font-weight:700;color:#1E293B;white-space:nowrap;}',
       '.kt-tb-name{color:#0E7C90;cursor:pointer;text-decoration:none;}',
       '.kt-tb-name:hover{text-decoration:underline;}',
@@ -225,8 +255,10 @@
       '.kt-tb-ico{position:relative;width:31px;height:31px;border:1px solid rgba(15,23,42,.1);background:rgba(15,23,42,.03);',
       'border-radius:9px;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;color:#334155;padding:0;transition:background .14s;}',
       '.kt-tb-ico:hover{background:rgba(15,23,42,.08);}',
-      // Consistent custom tooltip BELOW the icon (same as the parent/educator bar).
-      '.kt-tb-ico[data-kttip]:hover::after{content:attr(data-kttip);position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:4px 9px;border-radius:6px;z-index:10001;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28);}',
+      // Tooltip is now rendered by the global kt-tooltip-global.js engine (body-appended,
+      // position:fixed). This screen's own ::after bubble was a DUPLICATE — two tooltips
+      // showed on hover — so it's disabled here.
+      '.kt-tb-ico[data-kttip]:hover::after{content:none;}',
       '.kt-tb-badge{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;',
       'background:#EF4444;color:#fff;font-size:9.5px;font-weight:800;line-height:15px;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.8);}',
       '.kt-tb-sep{width:1px;height:18px;background:rgba(15,23,42,.12);margin:0 2px;}',
@@ -330,25 +362,40 @@
     // Top bar is for admins / directors / super admins only. While a platform
     // admin previews a lower role via "View as", honour that (hide the bar too).
     var viewAs = ''; try { viewAs = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    // Admins / directors ONLY. Educators + home visitors already have their own
+    // horizontal top nav (app-v2-shell), so rendering kt-topbar for them DOUBLED
+    // the top bar — their notification bell is added to that nav instead.
     if (!isAdminRole(u) || (viewAs && ['educator', 'guardian', 'auditor', 'home_visitor', 'sales_rep'].indexOf(viewAs) !== -1)) return;
+    var effAdmin = true;
     injectStyle();
     var pod = greetEmoji(new Date().getHours());
     var bar = document.createElement('div');
     bar.id = 'kt-topbar'; bar.className = 'kt-topbar';
 
     var left = document.createElement('div'); left.className = 'kt-tb-left';
-    left.innerHTML = '<span class="kt-tb-emoji">' + pod.e + '</span><span class="kt-tb-greet">' + pod.g + ', <a class="kt-tb-name" title="Your profile">' + esc(firstName(u)) + '</a></span><span class="kt-tb-role">' + esc(roleLabel(u)) + '</span>';
+    // The user's avatar (photo → coloured initials) PLUS the time-of-day emoji.
+    left.innerHTML = tbAvatarHtml(u) + '<span class="kt-tb-emoji">' + pod.e + '</span><span class="kt-tb-greet">' + pod.g + ', <a class="kt-tb-name" title="Your profile">' + esc(firstName(u)) + '</a></span><span class="kt-tb-role">' + esc(roleLabel(u)) + '</span>';
+    var _avaImg = left.querySelector('.kt-tb-ava img');
+    if (_avaImg) _avaImg.onerror = function () { var sp = left.querySelector('.kt-tb-ava'); if (sp) { sp.className = 'kt-tb-ava kt-tb-ava--init'; sp.style.background = avaColour((u && u.name) || ''); sp.textContent = tbInitials(u); } };
+    var avaClick = left.querySelector('.kt-tb-ava'); if (avaClick) { avaClick.style.cursor = 'pointer'; avaClick.title = 'Your profile'; avaClick.addEventListener('click', function () { openProfile(); }); }
     var nameEl = left.querySelector('.kt-tb-name'); if (nameEl) nameEl.addEventListener('click', function (e) { e.preventDefault(); openProfile(); });
 
     var right = document.createElement('div'); right.className = 'kt-tb-right';
     right.appendChild(languagePicker());
     right.appendChild(iconBtn('🏠', 'Home', openHome));
-    right.appendChild(iconBtn('⚡', 'Quick add', openQuickAdd));
+    if (effAdmin) right.appendChild(iconBtn('⚡', 'Quick add', openQuickAdd));
     right.appendChild(iconBtn('💬', 'Messages', function () { go('#chat'); }, 'kt-tb-msg-badge'));
     right.appendChild(iconBtn('📣', 'Announcements', function () { go('#announcements'); }));
-    if (isAdminRole(u)) { right.appendChild(iconBtn('🔔', 'Notifications', toggleNotif, 'kt-tb-notif-badge')); startNotif(); }
+    // Notification bell for EVERY bar role. Admins/directors get the agency
+    // activity-feed dropdown; educators/home visitors get their OWN inbox (the
+    // activity-feed endpoint is admin-only), so their bell opens #notifications.
+    if (effAdmin) {
+      right.appendChild(iconBtn('🔔', 'Notifications', toggleNotif, 'kt-tb-notif-badge')); startNotif();
+    } else {
+      right.appendChild(iconBtn('🔔', 'Notifications', function () { go('#notifications'); }, 'kt-tb-notif-badge')); startStaffNotif();
+    }
     right.appendChild(iconBtn('🤖', 'AI assistant', openAI));
-    if (isAdminRole(u)) right.appendChild(iconBtn('🎁', "What's new", function () { if (window.KT && window.KT.openWhatsNew) window.KT.openWhatsNew(); }, 'kt-tb-wn-badge'));
+    if (effAdmin) right.appendChild(iconBtn('🎁', "What's new", function () { if (window.KT && window.KT.openWhatsNew) window.KT.openWhatsNew(); }, 'kt-tb-wn-badge'));
     var sep = document.createElement('div'); sep.className = 'kt-tb-sep'; right.appendChild(sep);
     var wx = document.createElement('span'); wx.className = 'kt-tb-weather'; wx.id = 'kt-tb-weather'; wx.style.display = 'none'; right.appendChild(wx);
     var dt = document.createElement('span'); dt.className = 'kt-tb-date'; dt.id = 'kt-tb-date'; dt.textContent = fmtDate(); right.appendChild(dt);
@@ -390,6 +437,7 @@
           cur.photo_url = fresh.photo_url;
           try { sessionStorage.setItem('kt_user', JSON.stringify(cur)); } catch (e) {}
           paintSidebarAvatar(cur);
+          paintTopbarAvatar(cur);
         }
       }).catch(function () {});
   }
@@ -403,6 +451,31 @@
     img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;';
     av.appendChild(img);
   }
+  // ── Top-bar user avatar (photo → coloured initials) ──────────────────
+  function tbInitials(u) {
+    var n = ((u && u.name) || '').trim(); if (!n) return '•';
+    var p = n.split(/\s+/); return (((p[0] || '')[0] || '') + ((p[1] || '')[0] || '')).toUpperCase() || '•';
+  }
+  function avaColour(s) {
+    s = String(s || ''); var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    var pal = ['#1F6FB2', '#0FA3B1', '#E0699A', '#7C3AED', '#F59E0B', '#10B981', '#EF6C4D', '#0891B2', '#DB2777', '#4F8A3D'];
+    return pal[h % pal.length];
+  }
+  function tbAvatarHtml(u) {
+    if (u && u.photo_url) {
+      var src = /^https?:\/\//i.test(u.photo_url) ? u.photo_url : (API.replace(/\/api\/v1\/?$/, '') + u.photo_url);
+      return '<span class="kt-tb-ava"><img src="' + esc(src) + '" alt=""></span>';
+    }
+    return '<span class="kt-tb-ava kt-tb-ava--init" style="background:' + avaColour((u && u.name) || '') + '">' + esc(tbInitials(u)) + '</span>';
+  }
+  function paintTopbarAvatar(u) {
+    var sp = document.querySelector('#kt-topbar .kt-tb-ava'); if (!sp || !u || !u.photo_url) return;
+    var apiHost = API.replace(/\/api\/v1\/?$/, '');
+    var src = /^https?:\/\//i.test(u.photo_url) ? u.photo_url : (apiHost + u.photo_url);
+    sp.className = 'kt-tb-ava'; sp.style.background = '';
+    sp.innerHTML = '<img alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
+    sp.querySelector('img').src = src;
+  }
 
   // Let the shell mount the bar the instant it clears #appMain, instead of leaving it
   // missing until the 1.2s poll below fires. Clearing the screen takes the bar with it,
@@ -414,7 +487,12 @@
   setInterval(function () { var c = document.getElementById('kt-tb-clock'); if (c) c.textContent = fmtClock(); var d = document.getElementById('kt-tb-date'); if (d) d.textContent = fmtDate(); }, 15000);
   setInterval(ensure, 1200);   // safety net; the shell now calls ensure() on every render
   setInterval(buildSelectors, 1400);   // rebuild View-as + agency switcher in the bar after any nav
-  setInterval(refreshUnread, 60000);   // near-real-time unread badge
+  setInterval(refreshUnread, 15000);   // near-real-time unread badge
+  // No lag on return: refresh the bell + unread the instant the tab/app is
+  // re-focused, instead of waiting up to a full poll interval.
+  function refreshBellBadge() { try { (__staffNotifStarted ? refreshStaffNotifBadge : refreshNotifBadge)(); } catch (e) {} }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { refreshBellBadge(); try { refreshUnread(); } catch (e) {} } });
+  window.addEventListener('focus', function () { refreshBellBadge(); try { refreshUnread(); } catch (e) {} });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ensure(); refreshUser(); });
   else { ensure(); refreshUser(); }
 })();

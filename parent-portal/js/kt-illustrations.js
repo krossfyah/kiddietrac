@@ -166,7 +166,7 @@
     var greet = h < 5 ? 'Good night' :
                 h < 12 ? 'Good morning' :
                 h < 17 ? 'Good afternoon' :
-                h < 21 ? 'Good evening' :
+                h < 22 ? 'Good evening' :
                 'Good night';
     return firstName ? greet + ', ' + firstName : greet;
   };
