@@ -69,6 +69,14 @@
     return w.location.origin + path;
   }
 
+  /** The signed-in user's full name, for the printed signature block. */
+  function signerName() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || u.name || '';
+    } catch (e) { return ''; }
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
@@ -407,8 +415,18 @@
           if (!sigDataUrl) return;
           submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
           msg.style.color = '#64748B'; msg.textContent = 'Preparing your completed form…';
-          fillAndFlatten(pdfBytes, values, sigDataUrl)
-            .catch(function () { return null; })   // never block the submit on PDF writing
+          fillAndFlatten(pdfBytes, values, sigDataUrl, signerName(), new Date().toLocaleDateString(undefined,
+            { year: 'numeric', month: 'long', day: 'numeric' }))
+            .catch(function (err) {
+              // Previously this swallowed the error and submitted with no completed
+              // PDF — the record then fell back to the ORIGINAL blank form, which is
+              // exactly the "submitted form is blank" report. Warn, and keep going so
+              // the answers themselves are never lost.
+              try { console.error('[kt-form] could not build the completed PDF:', err); } catch (e) {}
+              msg.style.color = '#B45309';
+              msg.textContent = 'Saved your answers, but the completed PDF could not be generated.';
+              return null;
+            })
             .then(function (filledB64) {
               return KT.Api.post('/managed-forms/' + form.id + '/sign', {
                 signature: sigDataUrl,
@@ -554,7 +572,7 @@
    * the submit still goes through with the raw values, so a PDF-writing problem
    * can never cost the user their answers.
    */
-  function fillAndFlatten(originalBytes, values, sigDataUrl) {
+  function fillAndFlatten(originalBytes, values, sigDataUrl, signerName, signedOn) {
     return Promise.resolve().then(function () {
       var PDFLib = w.PDFLib;
       if (!PDFLib || !originalBytes) return null;
@@ -574,18 +592,40 @@
             } catch (e) { /* a field we can't set must not abort the rest */ }
           });
         }
-        // Signature: stamp bottom-right of the last page, above the margin.
+        // Signature block on the last page: the drawn signature, the signer's full
+        // name, and the date signed — a signature image alone is not a record of
+        // who signed or when.
         return (sigDataUrl ? pdfDoc.embedPng(sigDataUrl) : Promise.resolve(null)).then(function (png) {
-          if (png) {
+          return pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica).then(function (font) {
             var pages = pdfDoc.getPages();
             var last = pages[pages.length - 1];
             var pw = last.getWidth();
-            var targetW = Math.min(180, pw * 0.36);
-            var ratio = png.height / png.width;
-            last.drawImage(png, { x: pw - targetW - 40, y: 40, width: targetW, height: targetW * ratio });
-          }
-          if (formObj) { try { formObj.flatten(); } catch (e) {} }
-          return pdfDoc.saveAsBase64();
+            var boxW = Math.min(240, pw * 0.46);
+            var x = pw - boxW - 36;
+            var y = 40;                      // above the bottom margin
+            var ink = PDFLib.rgb(0.06, 0.09, 0.16);
+            var grey = PDFLib.rgb(0.42, 0.47, 0.55);
+
+            if (png) {
+              var ratio = png.height / png.width;
+              var sigH = Math.min(52, boxW * ratio);
+              last.drawImage(png, { x: x, y: y + 34, width: sigH / ratio, height: sigH });
+            }
+            // Rule under the signature, then the printed name and date beneath it.
+            last.drawLine({
+              start: { x: x, y: y + 28 }, end: { x: x + boxW, y: y + 28 },
+              thickness: 0.8, color: grey,
+            });
+            last.drawText(String(signerName || '').slice(0, 60), {
+              x: x, y: y + 15, size: 10, font: font, color: ink,
+            });
+            last.drawText('Signed ' + signedOn, {
+              x: x, y: y + 3, size: 8, font: font, color: grey,
+            });
+
+            if (formObj) { try { formObj.flatten(); } catch (e) {} }
+            return pdfDoc.saveAsBase64();
+          });
         });
       });
     }).catch(function () { return null; });
