@@ -39,11 +39,21 @@
           + (f.description ? '<div style="font-size:13px;color:#64748B;margin-top:3px;line-height:1.5;">' + esc(f.description) + '</div>' : '')
           + '<div style="display:flex;gap:10px;margin-top:13px;flex-wrap:wrap;">'
           + '<button class="mf-view" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;">📄 Read the form</button>'
-          + '<button class="mf-sign" data-id="' + f.id + '" data-t="' + esc(f.title) + '" type="button" style="background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">✍️ Sign</button>'
+          + (f.fillable
+              // Fillable: typing and signing are one journey, so one primary action.
+              ? '<button class="mf-fill" data-id="' + f.id + '" data-t="' + esc(f.title) + '" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">📝 Fill &amp; sign</button>'
+              : '<button class="mf-sign" data-id="' + f.id + '" data-t="' + esc(f.title) + '" type="button" style="background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">✍️ Sign</button>')
           + '</div></div>';
       }).join('');
       el.querySelectorAll('.mf-view').forEach(function (b) { b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); }); });
       el.querySelectorAll('.mf-sign').forEach(function (b) { b.addEventListener('click', function () { signForm(b.getAttribute('data-id'), b.getAttribute('data-t'), el); }); });
+      el.querySelectorAll('.mf-fill').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (!KT.formFiller) { if (KT.toast) KT.toast('⚠️', 'Unavailable', 'The form filler is not available.', '#B91C1C'); return; }
+          KT.formFiller.open({ id: b.getAttribute('data-id'), title: b.getAttribute('data-t'), fileUrl: b.getAttribute('data-u') })
+            .then(function (submitted) { if (submitted) load(el); });
+        });
+      });
     }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
   }
 

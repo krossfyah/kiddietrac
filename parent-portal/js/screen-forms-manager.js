@@ -69,6 +69,15 @@
       + '<span style="margin-left:auto;font-size:12px;font-weight:800;color:#1F6FB2;border:1.5px solid #BFDBFE;background:#EFF6FF;border-radius:8px;padding:6px 12px;">Browse</span>'
       + '</label>'
       + '<input id="fm-file" type="file" accept="application/pdf" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"></div>'
+      // Fill-and-sign toggle — PER FORM, not a global behaviour. Only makes sense
+      // for a PDF that was authored with real form fields; a read-and-sign notice
+      // should stay read-and-sign.
+      + '<label id="fm-fillable-wrap" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid #E2E8F0;border-radius:12px;padding:13px 15px;margin-bottom:16px;cursor:pointer;">'
+      + '<input id="fm-fillable" type="checkbox" style="width:18px;height:18px;flex:0 0 auto;margin-top:1px;accent-color:#1F6FB2;">'
+      + '<span><span style="display:block;font-weight:800;font-size:13.5px;color:#0F172A;">Let recipients fill this form in</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;line-height:1.5;margin-top:2px;">'
+      + 'Tick this if the PDF has fillable fields. Recipients get the form on screen with typing fields and sign it in place, on desktop or the app. '
+      + 'Leave it off for read-and-sign notices.</span></span></label>'
       // Action row
       + '<div style="display:flex;align-items:center;gap:14px;border-top:1px solid #F1F5F9;padding-top:16px;">'
       + '<button id="fm-upload" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 24px;font-weight:800;font-size:13.5px;cursor:pointer;">Upload &amp; assign</button>'
@@ -86,6 +95,14 @@
       }
       cb.addEventListener('change', sync); sync();
     });
+    var fillCb = body.querySelector('#fm-fillable'), fillWrap = body.querySelector('#fm-fillable-wrap');
+    if (fillCb && fillWrap) {
+      var syncFill = function () {
+        fillWrap.style.borderColor = fillCb.checked ? '#1F6FB2' : '#E2E8F0';
+        fillWrap.style.background = fillCb.checked ? '#EFF6FF' : '#fff';
+      };
+      fillCb.addEventListener('change', syncFill); syncFill();
+    }
     var fileIn = body.querySelector('#fm-file'), drop = body.querySelector('#fm-drop');
     fileIn.addEventListener('change', function () {
       var f = fileIn.files[0];
@@ -107,6 +124,7 @@
       out.style.color = '#64748B'; out.textContent = 'Uploading…';
       var fd = new FormData();
       fd.append('title', title); fd.append('description', desc);
+      fd.append('fillable', body.querySelector('#fm-fillable').checked ? '1' : '0');
       auds.forEach(function (a) { fd.append('audiences[]', a); });
       fd.append('file', file);
       Api.post('/admin/managed-forms', fd).then(function () {

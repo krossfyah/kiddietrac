@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Forms Manager — agencies upload a fillable PDF, assign it to roles (parents /
@@ -88,6 +89,9 @@ class ManagedFormController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             'file'        => ['required', 'file', 'mimes:pdf', 'max:15360'], // 15 MB
             'audiences'   => ['required'],
+            // Opt-in PER FORM, chosen by the admin at upload. Most uploads are
+            // read-and-sign notices where typing into the page makes no sense.
+            'fillable'    => ['nullable'],
         ]);
 
         $audiences = $data['audiences'];
@@ -105,6 +109,7 @@ class ManagedFormController extends Controller
             'title'         => $data['title'],
             'description'   => $data['description'] ?? null,
             'file_url'      => '/storage/' . $path,
+            'fillable'      => filter_var($request->input('fillable', false), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             'file_type'     => 'application/pdf',
             'file_size'     => $request->file('file')->getSize(),
             'audiences'     => json_encode($audiences),
@@ -193,7 +198,7 @@ class ManagedFormController extends Controller
             ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
             ->leftJoin('users as u', 'u.id', '=', 's.user_id')
             ->where('s.id', $signoffId)->where('f.agency_id', $agencyId)
-            ->select(['s.*', 'f.title as form_title', 'f.file_url', 'u.first_name', 'u.last_name', 'u.email'])
+            ->select(['s.*', 'f.title as form_title', 'f.file_url', 'f.fillable', 'u.first_name', 'u.last_name', 'u.email'])
             ->first();
         if (! $row) {
             return response()->json(['message' => 'Not found'], 404);
@@ -221,7 +226,7 @@ class ManagedFormController extends Controller
                 return (bool) array_intersect($aud, $roles);
             })
             ->map(function ($f) {
-                return ['id' => $f->id, 'title' => $f->title, 'description' => $f->description, 'file_url' => $f->file_url];
+                return ['id' => $f->id, 'title' => $f->title, 'description' => $f->description, 'file_url' => $f->file_url, 'fillable' => (bool) ($f->fillable ?? false)];
             })
             ->values();
         return response()->json(['forms' => $forms, 'count' => $forms->count()]);
@@ -241,17 +246,40 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'This form is not assigned to you.'], 403);
         }
         $data = $request->validate([
-            'signature' => ['required', 'string'],   // base64 PNG
-            'name'      => ['nullable', 'string', 'max:190'],
+            'signature'    => ['required', 'string'],   // base64 PNG
+            'name'         => ['nullable', 'string', 'max:190'],
+            // Fill-and-sign only. field_values keeps the answers queryable without
+            // parsing a PDF; filled_file is the completed PDF (the client writes the
+            // values into the original's own AcroForm fields, embeds the signature
+            // and flattens), which is the artefact a parent or regulator wants.
+            'field_values' => ['nullable', 'array'],
+            'filled_file'  => ['nullable', 'string'],   // base64 PDF, no data: prefix
         ]);
         $u = DB::table('users')->where('id', $uid)->first();
-        $name = $data['name'] ?: trim((string) (($u->first_name ?? '') . ' ' . ($u->last_name ?? '')));
+        // validate() omits an absent nullable key entirely, and no client sends
+        // `name` — so $data['name'] threw "Undefined array key" and every signature
+        // submission 500'd, the plain read-and-sign flow included.
+        $name = ($data['name'] ?? null) ?: trim((string) (($u->first_name ?? '') . ' ' . ($u->last_name ?? '')));
+
+        // Store the completed PDF next to the original.
+        $filledUrl = null;
+        if (!empty($data['filled_file'])) {
+            $bin = base64_decode(preg_replace('#^data:application/pdf;base64,#', '', $data['filled_file']), true);
+            // 20MB ceiling and a real %PDF header — never write whatever was posted.
+            if ($bin !== false && strlen($bin) > 0 && strlen($bin) <= 20971520 && str_starts_with($bin, '%PDF')) {
+                $fp = 'managed-forms/filled/' . $id . '/' . $uid . '-' . time() . '.pdf';
+                Storage::disk('public')->put($fp, $bin);
+                $filledUrl = '/storage/' . $fp;
+            }
+        }
 
         DB::table('managed_form_signoffs')->updateOrInsert(
             ['managed_form_id' => $id, 'user_id' => $uid],
             [
                 'signer_name' => $name ?: null,
                 'signature'   => mb_substr($data['signature'], 0, 400000),
+                'field_values' => !empty($data['field_values']) ? json_encode($data['field_values']) : null,
+                'filled_file_url' => $filledUrl,
                 'signed_at'   => now(),
                 'ip_address'  => substr((string) $request->ip(), 0, 45),
                 'updated_at'  => now(),

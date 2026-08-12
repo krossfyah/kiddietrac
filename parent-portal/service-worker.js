@@ -22,7 +22,7 @@
         (the old staleness came from cache-first on UNVERSIONED urls). HTML + any
         unversioned asset stay network-first. Net: near-instant repeat launches.
    =================================================================== */
-const CACHE = "kt-v385-2026081180";
+const CACHE = "kt-v386-2026081180";
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -129,7 +129,14 @@ self.addEventListener('fetch', (e) => {
         } catch (e) {}
         return res;
       })
-      .catch(() => caches.match(e.request).then(c => c || caches.match('/dashboard.html')))
+      // Fall back to the CACHED COPY of this asset when offline — but never to
+      // /dashboard.html. Substituting the HTML shell for a failed image/PDF/font
+      // made a blocked request look like a SUCCESSFUL html response: a
+      // cross-origin PDF fetch came back as the dashboard page, and pdf.js
+      // reported "Invalid PDF structure" instead of a network error.
+      .catch(() => caches.match(e.request).then(c => c || new Response('', {
+        status: 504, statusText: 'Offline and not cached',
+      })))
   );
 });
 
