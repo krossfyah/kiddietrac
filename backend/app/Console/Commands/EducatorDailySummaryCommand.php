@@ -244,6 +244,49 @@ class EducatorDailySummaryCommand extends Command
              . '</td></tr></table>';
     }
 
+    /**
+     * One stat tile: a soft colour wash, a big number, a quiet label.
+     *
+     * Replaces the old card(): white boxes with a coloured top border read as a form,
+     * not a celebration. Table-cell based with inline styles, because Outlook ignores
+     * flex/grid and collapses divs with percentage widths.
+     */
+    private function statTile(string $icon, string $label, string $value, string $accent, string $wash): string
+    {
+        return '<td valign="top" width="33.33%" style="padding:5px;">'
+            . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+            .   'style="border-collapse:separate;background:' . $wash . ';border-radius:14px;">'
+            . '<tr><td style="padding:14px 10px;text-align:center;">'
+            .   '<div style="font-size:20px;line-height:1;">' . $icon . '</div>'
+            .   '<div style="font-size:26px;font-weight:800;color:' . $accent . ';margin-top:6px;line-height:1.1;">'
+            .     htmlspecialchars($value) . '</div>'
+            .   '<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;'
+            .     'color:#64748B;margin-top:4px;line-height:1.35;">' . htmlspecialchars($label) . '</div>'
+            . '</td></tr></table></td>';
+    }
+
+    /** A section heading with a hairline under it, used to break the email into parts. */
+    private function sectionHead(string $icon, string $text): string
+    {
+        return '<div style="margin:26px 0 12px;">'
+            . '<span style="font-size:15px;font-weight:800;color:#0F172A;">' . $icon . ' ' . htmlspecialchars($text) . '</span>'
+            . '<div style="height:3px;width:38px;background:#0E7C90;border-radius:3px;margin-top:7px;"></div>'
+            . '</div>';
+    }
+
+    /** One comparison row: today's number, then how it moved against a past day. */
+    private function compareRow(string $label, int $now, int $yest, int $month): string
+    {
+        return '<tr>'
+            . '<td style="padding:11px 12px;border-top:1px solid #EEF2F6;font-weight:700;color:#0F172A;font-size:13.5px;">'
+            .   htmlspecialchars($label) . '</td>'
+            . '<td align="center" style="padding:11px 8px;border-top:1px solid #EEF2F6;font-weight:800;color:#0F172A;font-size:16px;">'
+            .   $now . '</td>'
+            . '<td align="center" style="padding:11px 8px;border-top:1px solid #EEF2F6;">' . $this->delta($now, $yest) . '</td>'
+            . '<td align="center" style="padding:11px 8px;border-top:1px solid #EEF2F6;">' . $this->delta($now, $month) . '</td>'
+            . '</tr>';
+    }
+
     /** A bright, iconed stat card cell for the "day in numbers" grid. */
     private function card(string $icon, string $label, string $value, string $accent): string
     {
@@ -299,73 +342,48 @@ class EducatorDailySummaryCommand extends Command
             . $this->heroCard($sc, $placeName, $placeWord, $date)
             . '<p style="margin:0 0 4px;">' . $opener . '</p>';
 
-        // A fresh inspirational quote each day (same for everyone that day).
-        $body .= EmailTemplate::dailyQuote(crc32($date->toDateString()));
-
-        // Stat cards — bright, iconed, three-up.
-        $cards = [
-            ['🌟', 'Caring moments', (string) $t['moments'], '#7C3AED'],
-            ['👶', 'Children cared for', (string) $t['children'], '#1F6080'],
-            ['🍽️', 'Meals & snacks', (string) $t['meals'], '#0EA5E9'],
-            ['😴', 'Naps', (string) $t['naps'], '#0F9D6B'],
-            ['🎨', 'Activities', (string) $t['activities'], '#DB2777'],
-            ['⏱️', 'Hours', $hoursTxt, '#F59E0B'],
+        // ── Your day in numbers ────────────────────────────────────────────
+        // Soft washes rather than bordered white boxes: this is a thank-you, not a
+        // report. Two rows of three, table-based so Outlook lays it out correctly.
+        $tiles = [
+            ["\u{1F31F}", 'Caring moments', (string) $t['moments'],      '#6D28D9', '#F3EEFF'],
+            ["\u{1F476}", 'Children',       (string) $t['children'],     '#155E75', '#E7F5FA'],
+            ["\u{1F37D}", 'Meals & snacks', (string) $t['meals'],        '#0369A1', '#E6F3FC'],
+            ["\u{1F634}", 'Naps',           (string) $t['naps'],         '#047857', '#E7F7F1'],
+            ["\u{1F3A8}", 'Activities',     (string) $t['activities'],   '#BE185D', '#FDECF3'],
+            ["\u{23F1}",  'Hours on floor', $hoursTxt,                   '#B45309', '#FEF4E6'],
         ];
-        $body .= '<h2 style="font-size:16px;margin:24px 0 10px;">📋 Your day in numbers</h2>'
-            . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation"><tr>';
-        foreach ($cards as $i => $c) {
-            $body .= $this->card($c[0], $c[1], $c[2], $c[3]);
+        $body .= $this->sectionHead("\u{1F4CB}", 'Your day in numbers')
+            . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="border-collapse:separate;"><tr>';
+        foreach ($tiles as $i => $tile) {
+            $body .= $this->statTile($tile[0], $tile[1], $tile[2], $tile[3], $tile[4]);
             if ($i === 2) { $body .= '</tr><tr>'; }
         }
         $body .= '</tr></table>';
 
-        // Comparison table (today vs yesterday vs ~a month ago).
-        $rows = [
-            ['Caring moments', $t['moments'], $y['moments'], $m['moments']],
-            ['Children', $t['children'], $y['children'], $m['children']],
-            ['Activities', $t['activities'], $y['activities'], $m['activities']],
-            ['Observations', $t['observations'], $y['observations'], $m['observations']],
-        ];
-        $cmp = '<h2 style="font-size:16px;margin:26px 0 8px;">📈 How today compares</h2>'
-            . '<table style="width:100%;border-collapse:collapse;font-size:14px;">'
-            . '<tr style="color:#94A3B8;font-size:11px;text-transform:uppercase;letter-spacing:.5px;text-align:right;">'
-            . '<td style="text-align:left;padding:6px 0;">&nbsp;</td><td style="padding:6px 8px;">Today</td>'
-            . '<td style="padding:6px 8px;">vs yesterday</td><td style="padding:6px 8px;">vs a month ago</td></tr>';
-        foreach ($rows as $r) {
-            $cmp .= '<tr style="border-top:1px solid #EEF2F6;text-align:right;">'
-                . '<td style="text-align:left;padding:8px 0;font-weight:700;color:#0F172A;">' . e($r[0]) . '</td>'
-                . '<td style="padding:8px 8px;font-weight:800;color:#0F172A;">' . (int) $r[1] . '</td>'
-                . '<td style="padding:8px 8px;">' . $this->delta((int) $r[1], (int) $r[2]) . '</td>'
-                . '<td style="padding:8px 8px;">' . $this->delta((int) $r[1], (int) $r[3]) . '</td></tr>';
-        }
-        $cmp .= '</table>';
-        $body .= $cmp;
+        // ── How today compares ─────────────────────────────────────────────
+        $body .= $this->sectionHead("\u{1F4C8}", 'How today compares')
+            . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+            .   'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">'
+            . '<tr style="background:#F8FAFC;">'
+            .   '<td style="padding:9px 12px;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#94A3B8;text-transform:uppercase;">&nbsp;</td>'
+            .   '<td align="center" style="padding:9px 8px;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#94A3B8;text-transform:uppercase;">Today</td>'
+            .   '<td align="center" style="padding:9px 8px;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#94A3B8;text-transform:uppercase;">vs yesterday</td>'
+            .   '<td align="center" style="padding:9px 8px;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#94A3B8;text-transform:uppercase;">vs a month ago</td>'
+            . '</tr>'
+            . $this->compareRow('Caring moments', (int) $t['moments'],      (int) $y['moments'],      (int) $m['moments'])
+            . $this->compareRow('Children',       (int) $t['children'],     (int) $y['children'],     (int) $m['children'])
+            . $this->compareRow('Activities',     (int) $t['activities'],   (int) $y['activities'],   (int) $m['activities'])
+            . $this->compareRow('Observations',   (int) $t['observations'], (int) $y['observations'], (int) $m['observations'])
+            . '</table>';
 
-        // Wins — always find something warm to celebrate.
-        $wins = [];
-        if ($t['moments'] > 0) { $wins[] = 'You logged <strong>' . $t['moments'] . '</strong> caring moment' . ($t['moments'] === 1 ? '' : 's') . ' — every one keeps a family connected to their child\'s day. 💛'; }
-        if ($t['moments'] > $y['moments'] && $y['moments'] > 0) { $wins[] = 'That\'s more than yesterday — lovely momentum!'; }
-        if ($t['activities'] >= 2) { $wins[] = 'A great variety of <strong>' . $t['activities'] . '</strong> learning activities — the children are lucky to have you.'; }
-        if ($t['observations'] > 0) { $wins[] = 'You captured <strong>' . $t['observations'] . '</strong> learning observation' . ($t['observations'] === 1 ? '' : 's') . ' — parents love these windows into growth.'; }
-        if ($t['naps'] > 0 && $t['meals'] > 0) { $wins[] = 'Meals and naps beautifully tracked — those steady routines help little ones feel safe.'; }
-        if (empty($wins)) { $wins[] = 'You showed up and cared for your room today — and that\'s what matters most. 💛'; }
-        $body .= '<h2 style="font-size:16px;margin:26px 0 8px;">' . $pick(['🎉 Today\'s wins', '⭐ Moments to be proud of', '💫 What went brilliantly', '🌟 Today\'s bright spots', '👏 Worth celebrating']) . '</h2>';
-        $body .= '<ul style="margin:0 0 8px;padding-left:20px;font-size:14.5px;line-height:1.7;color:#2A3D5F;">';
-        foreach ($wins as $w) { $body .= '<li>' . $w . '</li>'; }
-        $body .= '</ul>';
-
-        // Gentle, encouraging suggestions based on gaps.
-        $tips = [];
-        if ($t['observations'] === 0) { $tips[] = 'A quick learning observation tomorrow — even one line — gives parents a treasured glimpse of their child\'s progress.'; }
-        if ($t['activities'] === 0) { $tips[] = 'Logging an activity or two helps families see all the wonderful learning happening in your room.'; }
-        if ($t['meals'] === 0 && $t['minutes'] > 0) { $tips[] = 'If meals happened today, a quick meal log reassures parents their little one ate well.'; }
-        if ($t['moments'] > 0 && $t['moments'] < 4) { $tips[] = 'A few more quick taps through the day (a photo, a mood, a nap) build a richer story for parents — no extra effort, just in-the-moment.'; }
-        if (! empty($tips)) {
-            $body .= EmailTemplate::calloutBox(
-                '<strong>A gentle idea for tomorrow:</strong><br>' . implode('<br>• ', array_merge([''], $tips)),
-                'info'
-            );
-        }
+        // ── A thought to end on ────────────────────────────────────────────
+        // The quote used to sit at the very top, ahead of the person's own day. It
+        // reads better as a closing note once the numbers have been seen.
+        $body .= $this->sectionHead("\u{1F4AD}", 'A thought to end on')
+            . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+            .   'style="border-collapse:separate;background:#F8FBFD;border-left:4px solid #0E7C90;border-radius:0 12px 12px 0;">'
+            . '<tr><td style="padding:14px 16px;">' . EmailTemplate::dailyQuote(crc32($date->toDateString())) . '</td></tr></table>';
 
         // Warm close — varied each day.
         $close = $pick([
