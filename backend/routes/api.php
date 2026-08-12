@@ -368,6 +368,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/provider/children',          [\App\Http\Controllers\Api\EducatorSelfController::class, 'children']);
         // ── Forms Manager: upload PDF → assign to roles → e-sign → track sign-offs ──
         Route::get   ('/admin/managed-forms/signoffs',           [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffs']);
+        // Send a completed copy to the address configured on its form (see emailSignoff).
+        Route::post  ('/admin/managed-forms/signoffs/{id}/email', [\App\Http\Controllers\Api\ManagedFormController::class, 'emailSignoff'])->where('id', '[0-9]+');
         Route::get   ('/admin/managed-forms/{id}/signoff/{sid}',  [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffDetail']);
         Route::get   ('/admin/managed-forms',                     [\App\Http\Controllers\Api\ManagedFormController::class, 'index']);
         Route::post  ('/admin/managed-forms',                     [\App\Http\Controllers\Api\ManagedFormController::class, 'store']);

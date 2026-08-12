@@ -433,6 +433,40 @@
    * so a wrong choice meant deleting the form and re-uploading the PDF to change a
    * boolean. Takes the whole form record so every control opens pre-populated.
    */
+  /**
+   * Show a PDF in a popup over the portal instead of handing it to the browser.
+   *
+   * openUrl() opens a new tab (and in the APK, an external browser), which loses the
+   * session and drops the user out of the app to find their way back. This keeps the
+   * document inside the page, with an explicit "Open in new tab" escape hatch for
+   * anyone who prefers the browser's own viewer.
+   */
+  function openPdfPopup(url, title) {
+    if (!url) return;
+    var ov = document.createElement('div');
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;background:rgba(8,17,33,.72);'
+      + 'display:flex;align-items:center;justify-content:center;padding:18px;';
+    ov.innerHTML =
+      '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
+      + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
+      +   '<div style="min-width:0;flex:1;">'
+      +     '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FORM</div>'
+      +     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title || 'Form') + '</div>'
+      +   '</div>'
+      +   '<button id="fv-new" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">Open in new tab</button>'
+      +   '<button id="fv-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">\u2715</button>'
+      + '</div>'
+      + '<iframe src="' + esc(url) + '" title="' + esc(title || 'Form') + '" style="flex:1;width:100%;border:0;background:#fff;"></iframe>'
+      + '</div>';
+    document.body.appendChild(ov);
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    ov.querySelector('#fv-close').addEventListener('click', close);
+    ov.querySelector('#fv-new').addEventListener('click', function () { openUrl(url); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+  }
+
   function openEditDialog(form, el) {
     var auds = form.audiences || [];
     var ov = document.createElement('div');
@@ -652,6 +686,19 @@
         // Download the COMPLETED copy — r.file_url is the blank original, which is
         // why this opened an empty form. Fall back to the original only when no
         // completed copy exists, and say so rather than pretending.
+        menu.appendChild(item('\uD83D\uDC41', 'View form', false, function () {
+          openPdfPopup(fileUrl(r.filled_file_url || r.file_url), r.form_title || 'Form');
+        }));
+        // Send the completed copy to the address configured ON THE FORM: for
+        // submissions signed before that address was set, and to re-send one that
+        // still shows as "Not sent".
+        if (r.form_notify_email) {
+          menu.appendChild(item('\uD83D\uDCE4', (r.notified_at ? 'Email the copy again' : 'Email the copy') + ' to ' + r.form_notify_email, false, function () {
+            Api.post('/admin/managed-forms/signoffs/' + r.id + '/email', {})
+              .then(function (d) { toast('\u2709', 'Sent', (d && d.message) || 'Copy emailed.', '#16A34A'); renderCompleted(el.parentNode || el); })
+              .catch(function (e) { toast('\u26A0', 'Could not send', (e && e.message) || '', '#B91C1C'); });
+          }));
+        }
         menu.appendChild(item('⬇️', r.filled_file_url ? 'Download completed form' : 'Download blank form (not completed)', false, function () {
           openUrl(fileUrl(r.filled_file_url || r.file_url));
         }));

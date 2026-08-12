@@ -319,6 +319,49 @@ class ManagedFormController extends Controller
         return response()->json(['signoffs' => $rows]);
     }
 
+    /**
+     * POST /admin/managed-forms/signoffs/{id}/email — send this completed copy to the
+     * address configured on its form.
+     *
+     * Setting an address only affects submissions signed AFTER it was set, so forms
+     * already signed had no way to reach it; this also re-sends one that shows as
+     * "Not sent". Scoped to the caller's agency like every other admin action here.
+     */
+    public function emailSignoff(Request $request, int $id): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $agencyId = $this->agencyId($request);
+        $row = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->leftJoin('users as u', 'u.id', '=', 's.user_id')
+            ->where('s.id', $id)->where('f.agency_id', $agencyId)
+            ->select(['s.id', 's.user_id', 's.signer_name', 's.filled_file_url', 's.signed_at',
+                      'f.id as form_id', 'f.agency_id', 'f.title', 'f.description', 'f.notify_email',
+                      'u.email as signer_email'])
+            ->first();
+        if (! $row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! $row->signed_at) {
+            return response()->json(['message' => 'That form has not been signed yet.'], 422);
+        }
+        if (! $row->notify_email) {
+            return response()->json(['message' => 'No address is set on this form. Add one with Edit first.'], 422);
+        }
+
+        // emailCompletedForm() reads the form's own fields, so hand it a form-shaped object.
+        $form = (object) [
+            'id' => $row->form_id, 'agency_id' => $row->agency_id, 'title' => $row->title,
+            'description' => $row->description, 'notify_email' => $row->notify_email,
+        ];
+        $this->emailCompletedForm($form, $row->signer_name, $row->filled_file_url,
+            (string) ($row->signer_email ?? ''), (int) $row->user_id, (int) $row->id);
+
+        return response()->json(['ok' => true, 'message' => 'Copy emailed to ' . $row->notify_email . '.']);
+    }
+
     /** GET /admin/managed-forms/{id}/signoff/{signoffId} — one signed record (with signature). */
     public function signoffDetail(Request $request, int $id, int $signoffId): JsonResponse
     {
