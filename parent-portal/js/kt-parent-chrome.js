@@ -35,7 +35,8 @@
     var d = new Date(), h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM', hh = h % 12; if (hh === 0) hh = 12;
     return hh + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
   }
-  function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
+  // Short weekday — byte-identical to the admin bar's date ("Tue, August 11, 2026").
+  function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
   // Time-of-day greeting WITH its icon. Deliberately the same words + emoji as
   // kt-topbar.js's greetEmoji() (the admin/director bar) — parents and educators
   // were getting the bare words while admins got "🌆 Good evening".
@@ -107,7 +108,8 @@
       '@media(min-width:769px){',
       '  body.role-guardian #appSidebar #navUser .nav-user-text,body.role-educator #appSidebar #navUser .nav-user-text,'
       + 'body.role-home-visitor #appSidebar #navUser .nav-user-text,body.role-sales-rep #appSidebar #navUser .nav-user-text'
-      + '{display:flex !important;flex-direction:row !important;align-items:center !important;gap:6px;flex-wrap:nowrap;}',
+      + '{display:flex !important;flex-direction:row !important;align-items:center !important;gap:10px;flex-wrap:nowrap;}',
+      '  .kt-pc-navemoji{font-size:20px;line-height:1;flex:0 0 auto;}',
       '  .kt-pc-navgreet{font-size:14px !important;font-weight:700 !important;letter-spacing:normal !important;text-transform:none !important;color:#1E293B !important;white-space:nowrap;}',
       '  body.role-guardian #appSidebar #navUser .nav-user-name,body.role-educator #appSidebar #navUser .nav-user-name,'
       + 'body.role-home-visitor #appSidebar #navUser .nav-user-name,body.role-sales-rep #appSidebar #navUser .nav-user-name'
@@ -118,7 +120,7 @@
       + 'box-shadow:0 1px 3px rgba(15,23,42,.18) !important;}',
       '}',
       // Role shown as a pill (like admin / director / super admin), not hidden.
-      'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role,body.role-home-visitor #appSidebar #navUser .nav-user-role,body.role-sales-rep #appSidebar #navUser .nav-user-role{display:inline-block !important;margin-top:0;font-size:9.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;background:rgba(14,124,144,.12);color:#0C6070;border:1px solid rgba(14,124,144,.22);padding:2px 9px;border-radius:100px;white-space:nowrap;align-self:center;}',
+      'body.role-guardian #appSidebar #navUser .nav-user-role,body.role-educator #appSidebar #navUser .nav-user-role,body.role-home-visitor #appSidebar #navUser .nav-user-role,body.role-sales-rep #appSidebar #navUser .nav-user-role{display:inline-block !important;margin-top:0;font-size:9.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;background:rgba(14,124,144,.12);color:#0C6070;border:1px solid rgba(14,124,144,.22);padding:2px 8px;border-radius:100px;white-space:nowrap;align-self:center;}',
       // Tighter top bar (less whitespace): smaller logo + slimmer vertical padding — DESKTOP only.
       '@media(min-width:601px){body.role-guardian #appSidebar,body.role-educator #appSidebar{padding-top:6px !important;padding-bottom:6px !important;}body.role-guardian #appSidebar #navBrand img,body.role-educator #appSidebar #navBrand img{height:60px !important;}}',
       // Home launcher: stop the banner replaying its fade-in (a "pop") when the
@@ -158,7 +160,12 @@
       // Identical to the admin/director bar's .kt-tb-clock so the two top bars read
       // as one product: monospace tabular figures on a flat tinted chip (the old
       // white raised card sat differently from every admin screen).
-      '.kt-pc-clock{font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:13px;font-weight:700;color:#334155;'
+      // NOTE: .kt-tb-clock (admin) DECLARES a monospace stack, but on the real admin
+      // bar that declaration is overridden and the clock renders in Inter like the
+      // rest of the chrome. Matching the stylesheet rather than the RENDERING left
+      // this clock visibly monospace while the admin one was not — so we
+      // deliberately declare no font-family here and inherit the same face.
+      '.kt-pc-clock{font-size:13px;font-weight:700;color:#334155;'
       + 'font-variant-numeric:tabular-nums;background:rgba(15,23,42,.05);padding:5px 10px;border-radius:9px;white-space:nowrap;}',
       '.kt-pc-sep{width:1px;height:24px;background:rgba(15,23,42,.10);margin:0 2px;}',
       '.kt-back-inbar{position:static !important;top:auto !important;left:auto !important;right:auto !important;bottom:auto !important;margin:0 12px 0 0 !important;box-shadow:none !important;align-self:center !important;z-index:auto !important;}',
@@ -227,10 +234,15 @@
     if (!navUser) return;
     var txt = navUser.querySelector('.nav-user-text');
     if (txt && !document.getElementById('kt-pc-navgreet')) {
+      // Same element order as the admin bar's .kt-tb-left: emoji, greeting, name,
+      // role — with the time-of-day emoji as its OWN 20px span rather than a 14px
+      // character inside the greeting text.
       var gr = document.createElement('div');
       gr.id = 'kt-pc-navgreet'; gr.className = 'kt-pc-navgreet';
-      gr.textContent = greetWord();
+      var em = document.createElement('span');
+      em.id = 'kt-pc-navemoji'; em.className = 'kt-pc-navemoji';
       txt.insertBefore(gr, txt.firstChild);
+      txt.insertBefore(em, gr);
     }
   }
 
@@ -331,9 +343,20 @@
   function paintGreeting() {
     var gr = document.getElementById('kt-pc-navgreet');
     if (!gr) return;
-    // Trailing comma so the row reads "🌆 Good evening, Harjit Singh" — the name
-    // is the shell's own .nav-user-name element sitting directly after us.
-    if (isDesktop()) { gr.textContent = greetWord() + ','; return; }
+    var p = greetParts();
+    var em = document.getElementById('kt-pc-navemoji');
+    if (isDesktop()) {
+      if (em) em.textContent = p.e;              // 20px emoji in its own span
+      gr.textContent = p.g + ',';                // greeting text carries no emoji
+      // The admin bar greets by FIRST name ("Good evening, Sarah"), so the name
+      // beside us must match. The shell renders the full name into .nav-user-name;
+      // rewrite it each paint (idempotent, and survives the shell re-rendering).
+      var nameEl = document.querySelector('#appSidebar #navUser .nav-user-name');
+      var fn = firstName();
+      if (nameEl && fn && nameEl.textContent.trim() !== fn) nameEl.textContent = fn;
+      return;
+    }
+    if (em) em.textContent = '';                 // phones keep the compact eyebrow
     // Phones: fold date + time into the eyebrow so the full name below keeps its width.
     gr.textContent = greetWord() + ' \u00b7 ' + fmtClock();
   }
