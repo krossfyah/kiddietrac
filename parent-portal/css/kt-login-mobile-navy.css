@@ -1,0 +1,218 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — BOLD NAVY mobile login (2026-08-08)
+   Mobile only (≤768px + the native APK). Turns the flat white phone login
+   into a deep-navy, immersive sign-in with a big white wordmark up top —
+   matching the email banner header. Layered ON TOP of kt-login-redesign.css
+   (loaded after it), so desktop is untouched.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  html, body.auth-body { background: #0a1f44 !important; }
+
+  /* Deep navy ground with a soft glow behind the logo — the email-header look. */
+  .ktl-form-side {
+    background:
+      radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.20) 0%, rgba(19,183,204,0) 55%),
+      radial-gradient(90% 60% at 50% 8%, #16407a 0%, rgba(22,64,122,0) 60%),
+      linear-gradient(168deg, #0a1f44 0%, #0c2857 46%, #0a1f44 100%) !important;
+    justify-content: flex-start !important;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 8vh) !important;
+  }
+
+  /* ── Logo: the dedicated WHITE wordmark (kiddietrac-logo-white.png, 306×177 —
+     the same asset the marketing-site footer uses) sits directly on the navy, no
+     card. It's a proper white logo so there's no filter garble, and it reads bold
+     and clean against the deep-navy ground. ── */
+  .ktl-mobile-hero { margin-bottom: 32px !important; }
+  .ktl-mhero-card {
+    display: inline-block !important;
+    /* The KiddieTrac wordmark (two-tone, from the email header) on the navy. */
+    background: url(/login-wordmark.png) center/contain no-repeat !important;
+    width: min(300px, 80vw) !important; aspect-ratio: 701 / 275 !important; height: auto !important;
+    padding: 0 !important; border-radius: 0 !important; overflow: visible !important;
+    box-shadow: none !important; filter: drop-shadow(0 6px 20px rgba(19,183,204,.28)) !important;
+  }
+  .ktl-mhero-card img { display: none !important; }   /* hide the colour logo; the white one is the box bg */
+  /* Tagline = the "Smart Childcare Management Platform" strip lifted from the
+     marketing footer logo (already all-white), shown as an image under the
+     wordmark. The <p>'s own text is hidden. */
+  .ktl-mhero-tag {
+    display: block !important;
+    background: url(/login-tagline.png) center/contain no-repeat !important;
+    width: min(280px, 76vw) !important; aspect-ratio: 238 / 15 !important; height: auto !important;
+    margin: 15px auto 0 !important;
+    text-indent: -9999px !important; overflow: hidden !important;
+    color: transparent !important; font-size: 0 !important;
+    filter: drop-shadow(0 2px 7px rgba(0,0,0,.3)) !important;
+  }
+
+  /* ── Headings ── (force the WHOLE title white — base CSS tinted one word teal) */
+  .ktl-title, .ktl-title *, .auth-title, .auth-title * { color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; background: none !important; }
+  .ktl-title { font-size: 27px !important; }
+  .ktl-sub { color: #93a8c2 !important; }
+
+  /* ── Glass input fields on navy ── */
+  .ktl-wrap .auth-form label { color: #b7c8dc !important; }
+  .ktl-wrap .auth-form input {
+    background: rgba(255,255,255,.07) !important;
+    border: 1.5px solid rgba(255,255,255,.16) !important;
+    color: #ffffff !important;
+    border-radius: 14px !important;
+  }
+  .ktl-wrap .auth-form input::placeholder { color: rgba(255,255,255,.42) !important; }
+  .ktl-wrap .auth-form input:focus {
+    background: rgba(255,255,255,.12) !important;
+    border-color: #22d3ee !important;
+    box-shadow: 0 0 0 3px rgba(34,211,238,.22) !important;
+  }
+  /* Autofill on navy — keep it dark, not the browser's white. */
+  .ktl-wrap .auth-form input:-webkit-autofill,
+  .ktl-wrap .auth-form input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #fff !important;
+    -webkit-box-shadow: 0 0 0 1000px #12305e inset !important;
+    caret-color: #fff !important;
+  }
+
+  #kt-pw-toggle { color: #9fb6cf !important; }
+  .forgot-link { color: #7fe3f2 !important; }
+
+  /* ── Primary button: bold brand gradient, glowing ── */
+  .ktl-wrap #submitBtn, .ktl-wrap .btn-primary {
+    background: linear-gradient(135deg, #13b7cc 0%, #4bc47a 55%, #8ec73c 100%) !important;
+    color: #05263b !important;
+    border: none !important;
+    padding: 15px 18px !important;
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    letter-spacing: .2px !important;
+    border-radius: 14px !important;
+    box-shadow: 0 12px 28px -10px rgba(19,183,204,.7) !important;
+  }
+  .ktl-wrap #submitBtn:active, .ktl-wrap .btn-primary:active { transform: translateY(1px); }
+
+  /* Biometric secondary pill — light outline on navy. */
+  #kt-bio-loginbtn {
+    background: rgba(255,255,255,.06) !important;
+    border-color: rgba(255,255,255,.28) !important;
+    color: #dbe7f3 !important;
+  }
+
+  /* Footer / legal / links — legible on navy. */
+  .ktl-foot { color: #8da4bf !important; }
+  .ktl-foot a, .ktl-legal a { color: #7fe3f2 !important; }
+  .ktl-legal { color: #5f7690 !important; }
+
+  /* Signed-out + error banners keep enough contrast on navy. */
+  #signedOutBanner { background: rgba(251,191,36,.15) !important; color: #fde68a !important; border-color: rgba(251,191,36,.4) !important; }
+  .form-error { color: #ffb4b4 !important; }
+}
+
+/* The native APK can report a width > 768; html.kt-native forces the phone
+   look regardless. Mirror the key navy bits so the APK always gets them. */
+html.kt-native body.auth-body { background: #0a1f44 !important; }
+html.kt-native .ktl-brand-side { display: none !important; }
+html.kt-native .ktl-form-side {
+  background:
+    radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.20) 0%, rgba(19,183,204,0) 55%),
+    linear-gradient(168deg, #0a1f44 0%, #0c2857 46%, #0a1f44 100%) !important;
+}
+html.kt-native .ktl-mobile-hero { display: block !important; text-align: center; }
+html.kt-native .ktl-mhero-card { background: url(/login-wordmark.png) center/contain no-repeat !important; width: min(300px,80vw) !important; aspect-ratio: 701 / 275 !important; height: auto !important; padding: 0 !important; border-radius: 0 !important; overflow: visible !important; box-shadow: none !important; filter: drop-shadow(0 6px 20px rgba(19,183,204,.28)) !important; display: inline-block !important; }
+html.kt-native .ktl-mhero-card img { display: none !important; }
+html.kt-native .ktl-mhero-tag { display: block !important; background: url(/login-tagline.png) center/contain no-repeat !important; width: min(280px,76vw) !important; aspect-ratio: 238 / 15 !important; height: auto !important; margin: 15px auto 0 !important; text-indent: -9999px !important; overflow: hidden !important; color: transparent !important; font-size: 0 !important; filter: drop-shadow(0 2px 7px rgba(0,0,0,.3)) !important; }
+html.kt-native .ktl-title, html.kt-native .ktl-title * { color: #fff !important; -webkit-text-fill-color:#fff !important; }
+html.kt-native .ktl-wrap .auth-form input { background: rgba(255,255,255,.07) !important; border: 1.5px solid rgba(255,255,255,.16) !important; color: #fff !important; }
+html.kt-native .ktl-wrap #submitBtn { background: linear-gradient(135deg,#13b7cc,#4bc47a 55%,#8ec73c) !important; color: #05263b !important; }
+
+/* Desktop keeps the classic "Password … Forgot?" row after the markup split. */
+.pw-label-row { display: flex; align-items: baseline; justify-content: space-between; }
+
+/* ═══ Amex-style floating / outlined labels (mobile) ═══
+   The field label starts as the in-field placeholder and floats up onto the top
+   border — highlighting in cyan — when the field is focused or filled. Removes the
+   separate label row (tighter) and gives the "highlight around the box" look. */
+@media (max-width: 768px) {
+  .ktl-wrap .auth-form .form-row { position: relative; margin-bottom: 18px !important; }
+  .ktl-wrap .auth-form input::placeholder { color: transparent !important; }
+
+  .ktl-wrap .auth-form .form-row > label,
+  .ktl-wrap .auth-form .pw-label-row label {
+    position: absolute; left: 13px; top: 17px; z-index: 2; margin: 0 !important;
+    padding: 0 6px !important; font-size: 16px !important; font-weight: 500 !important;
+    color: rgba(255,255,255,.55) !important; pointer-events: none; background: transparent;
+    transition: top .15s ease, font-size .15s ease, color .15s ease;
+    max-width: calc(100% - 26px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ktl-wrap .auth-form .form-row:focus-within > label,
+  .ktl-wrap .auth-form .form-row:has(input:not(:placeholder-shown)) > label,
+  .ktl-wrap .auth-form .form-row:focus-within .pw-label-row label,
+  .ktl-wrap .auth-form .form-row:has(input:not(:placeholder-shown)) .pw-label-row label {
+    top: -9px !important; font-size: 11.5px !important; font-weight: 800 !important;
+    letter-spacing: .3px; color: #35d6ec !important; background: #0e2a54 !important; border-radius: 5px;
+  }
+
+  .ktl-wrap .auth-form input {
+    padding: 18px 14px !important; font-size: 16px !important; border-radius: 13px !important;
+    background: rgba(255,255,255,.05) !important; border: 1.6px solid rgba(255,255,255,.22) !important;
+    color: #fff !important;
+  }
+  /* Keep room for the show/hide eye on the password field. */
+  .ktl-wrap .auth-form .kt-pw-wrap input { padding: 18px 46px 18px 14px !important; }
+  .ktl-wrap .auth-form input:focus {
+    border-color: #35d6ec !important; background: rgba(255,255,255,.08) !important;
+    box-shadow: 0 0 0 3px rgba(53,214,236,.20) !important;
+  }
+
+  /* Forgot? → a small link tucked under the password field, right-aligned. */
+  .ktl-wrap .auth-form .form-row:has(.kt-pw-wrap) { margin-bottom: 30px !important; }
+  .pw-label-row .forgot-link {
+    position: absolute; right: 2px; bottom: -21px; top: auto; z-index: 3;
+    font-size: 12px; font-weight: 700; color: #7fe3f2 !important;
+  }
+}
+
+/* ═══ Tighten to fit one screen (NO scroll) + readable MFA row on navy ═══ */
+@media (max-width: 768px) {
+  .ktl-form-side {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 3.2vh) !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px) !important;
+    justify-content: center !important;
+  }
+  .ktl-mobile-hero { margin-bottom: 16px !important; }
+  /* tagline (image strip) stays visible — it's the brand tagline, not decorative */
+  .ktl-title { font-size: 23px !important; margin-bottom: 3px !important; }
+  .ktl-sub { font-size: 13px !important; margin-bottom: 15px !important; }
+  #signedOutBanner { margin-bottom: 12px !important; padding: 8px 12px !important; font-size: 12px !important; line-height: 1.35 !important; }
+  .ktl-wrap .auth-form .form-row { margin-bottom: 14px !important; }
+  .ktl-wrap .auth-form .form-row:has(.kt-pw-wrap) { margin-bottom: 24px !important; }
+  .ktl-wrap .auth-form input { padding: 15px 14px !important; }
+  .ktl-wrap .auth-form .kt-pw-wrap input { padding: 15px 46px 15px 14px !important; }
+  .ktl-wrap #submitBtn, .ktl-wrap .btn-primary { margin-top: 8px !important; padding: 13px 18px !important; }
+  .ktl-foot { margin-top: 12px !important; font-size: 11.5px !important; }
+  .ktl-legal { margin-top: 12px !important; font-size: 10.5px !important; }
+
+  /* Authenticator-code row: a plain, clearly-readable label on navy — NOT the
+     floating label (its "Authenticator code (6 digits…)" text is too long to float). */
+  #mfaRow > label {
+    position: static !important; display: block !important; margin: 0 0 7px !important;
+    padding: 0 !important; background: none !important; max-width: none !important;
+    white-space: normal !important; overflow: visible !important;
+    color: #e6eef8 !important; -webkit-text-fill-color: #e6eef8 !important;
+    font-size: 13.5px !important; font-weight: 700 !important;
+  }
+  #mfaRow > label span { color: #9fb6cf !important; -webkit-text-fill-color: #9fb6cf !important; font-weight: 500 !important; }
+  #mfaRow input { text-align: center !important; letter-spacing: 5px !important; font-size: 19px !important; font-weight: 700 !important; }
+  #mfaRow input::placeholder { color: rgba(255,255,255,.42) !important; letter-spacing: 5px !important; }
+  /* The instruction/error text (#errorMsg, incl. the "enter your 6-digit code" prompt).
+     A clear high-contrast pill on navy so it NEVER blends in, whatever inline colour
+     the login JS sets. Near-white text on a subtle glass box — readable for both the
+     info prompt and error messages. */
+  .ktl-wrap #errorMsg:not([hidden]) {
+    color: #f1f8fd !important; -webkit-text-fill-color: #f1f8fd !important;
+    font-weight: 600 !important; font-size: 13px !important; line-height: 1.45 !important;
+    background: rgba(255,255,255,.09) !important;
+    border: 1px solid rgba(34,211,238,.4) !important;
+    border-radius: 11px !important; padding: 11px 13px !important; margin: 2px 0 12px !important;
+    text-align: center !important;
+  }
+}
