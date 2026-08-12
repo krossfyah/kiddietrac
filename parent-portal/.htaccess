@@ -25,6 +25,14 @@
   ExpiresByType image/jpeg "access plus 7 days"
   ExpiresByType image/svg+xml "access plus 7 days"
   ExpiresByType image/webp "access plus 7 days"
+  # Shared photos and video carry a unique filename per upload, so they are safe
+  # to cache. Video had NO cache header at all, which meant a 12MB clip was
+  # re-downloaded in full every time a parent opened the gallery.
+  ExpiresByType video/mp4 "access plus 30 days"
+  ExpiresByType video/quicktime "access plus 30 days"
+  ExpiresByType video/webm "access plus 30 days"
+  ExpiresByType video/3gpp "access plus 30 days"
+  ExpiresByType image/heic "access plus 7 days"
   ExpiresByType image/x-icon "access plus 30 days"
   ExpiresByType font/woff2 "access plus 30 days"
   ExpiresByType application/manifest+json "access plus 1 day"

@@ -19,6 +19,59 @@
 
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+  /**
+   * Shrink a photo BEFORE upload.
+   *
+   * A phone camera JPEG is 4-6MB, and the galleries draw it into a ~220px card —
+   * so the app was downloading roughly 20x the pixels it can display and throwing
+   * the rest away. That is the whole reason shared photos loaded slowly on mobile
+   * data. 1600px on the long edge is still far more than any view uses (and plenty
+   * for a full-screen tap), at roughly a tenth of the bytes.
+   *
+   * Videos are passed through untouched — re-encoding video in the browser is not
+   * realistic; they are capped at 30MB at the picker instead.
+   *
+   * Always resolves: if anything about the decode/encode fails we hand back the
+   * ORIGINAL file, because a slow upload beats a failed one.
+   */
+  function ktShrinkImage(file, maxEdge, quality) {
+    return new Promise(function (resolve) {
+      try {
+        if (!file || !/^image\//.test(file.type) || /image\/(gif|svg)/.test(file.type)) return resolve(file);
+        if (!window.createImageBitmap && !window.FileReader) return resolve(file);
+        var done = false;
+        var finish = function (f) { if (!done) { done = true; resolve(f); } };
+        // Never let a stuck decode block the upload.
+        setTimeout(function () { finish(file); }, 8000);
+
+        var img = new Image();
+        var url = URL.createObjectURL(file);
+        img.onload = function () {
+          try {
+            var w = img.naturalWidth, h = img.naturalHeight;
+            if (!w || !h) return finish(file);
+            var scale = Math.min(1, maxEdge / Math.max(w, h));
+            if (scale >= 1 && file.size < 1200000) return finish(file);   // already small
+            var cw = Math.round(w * scale), ch = Math.round(h * scale);
+            var cv = document.createElement('canvas');
+            cv.width = cw; cv.height = ch;
+            var g = cv.getContext('2d');
+            g.drawImage(img, 0, 0, cw, ch);
+            cv.toBlob(function (blob) {
+              try { URL.revokeObjectURL(url); } catch (e) {}
+              // Keep the original if the "shrunk" copy somehow is not smaller.
+              if (!blob || blob.size >= file.size) return finish(file);
+              var name = (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+              finish(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
+            }, 'image/jpeg', quality || 0.82);
+          } catch (e) { finish(file); }
+        };
+        img.onerror = function () { try { URL.revokeObjectURL(url); } catch (e) {} finish(file); };
+        img.src = url;
+      } catch (e) { resolve(file); }
+    });
+  }
+
   // Media uploads go through raw fetch, not KT.Api: Api.request JSON-encodes its
   // body, which would destroy a FormData multipart payload.
   function _careApiBase() { return (KT.API_BASE) || (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
@@ -468,8 +521,14 @@
         }
         send.disabled = true; send.textContent = 'Uploading…';
         msg.style.color = '#64748B'; msg.textContent = 'Uploading — please keep this open.';
+        ktShrinkImage(chosen, 1600, 0.82).then(function (toSend) {
+        if (toSend !== chosen) {
+          msg.style.color = '#64748B';
+          msg.textContent = 'Optimised ' + (chosen.size / 1048576).toFixed(1) + ' MB \u2192 '
+            + (toSend.size / 1048576).toFixed(1) + ' MB, uploading\u2026';
+        }
         var fd = new FormData();
-        fd.append('photo', chosen);
+        fd.append('photo', toSend);
         fd.append('caption', cap.value.trim());
         fd.append('child_ids', JSON.stringify([childId]));
         fetch(_careApiBase() + '/photos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _careToken() }, body: fd })
@@ -489,6 +548,7 @@
             msg.textContent = (e && e.message) || 'Upload failed — please try again.';
             send.disabled = false; send.textContent = 'Share it';
           });
+        });
       });
       actions.appendChild(cancel); actions.appendChild(send);
       modal.appendChild(actions);
@@ -721,8 +781,15 @@
           save.textContent = 'Uploading…';
           mediaMsg.style.color = '#64748B';
           mediaMsg.textContent = 'Uploading ' + (/^video\//.test(mediaFile.type) ? 'video' : 'photo') + '…';
+          // Shrink first (see ktShrinkImage): a phone photo is 4-6MB and every view
+          // of it is a few hundred pixels wide.
+          return ktShrinkImage(mediaFile, 1600, 0.82).then(function (toSend) {
+          if (toSend !== mediaFile) {
+            mediaMsg.textContent = 'Optimised ' + (mediaFile.size / 1048576).toFixed(1) + ' MB → '
+              + (toSend.size / 1048576).toFixed(1) + ' MB, uploading…';
+          }
           var fd = new FormData();
-          fd.append('photo', mediaFile);
+          fd.append('photo', toSend);
           // Caption priority: the dedicated description, else the note, else the
           // picked detail — the parent should never see an untitled photo.
           fd.append('caption', capIn.value.trim());
@@ -741,6 +808,7 @@
             if (KT.toast) {
               KT.toast('📸', 'Moment shared', (d && d.media_type === 'video' ? 'The video' : 'The photo') + ' is now in the parent’s Photos & video.', 'success');
             }
+          });
           });
         }).catch(function (e) {
           // Distinguish "the log didn't save" from "the log saved, the upload didn't".
