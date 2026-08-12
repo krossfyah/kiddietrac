@@ -576,8 +576,61 @@ final class AdminController extends Controller
         $action = trim(str_replace('[fail]', '', $action));
         if (preg_match('#^(post|put|patch|delete):(.+)$#', $action, $m)) {
             $verb = ['post' => 'Created', 'put' => 'Updated', 'patch' => 'Updated', 'delete' => 'Deleted'][$m[1]] ?? ucfirst($m[1]);
-            $path = trim(str_replace('/', ' › ', preg_replace('#^api/v1/#', '', $m[2])));
-            return $verb . ' · ' . $path . ($failed ? '  (failed)' : '');
+            $path = preg_replace('#^api/v1/#', '', $m[2]);
+
+            // Drop the record ids from the path. They read as noise ("managed-forms
+            // › 9 › sign") and the record they point at is already named in the
+            // "What" column, resolved to a real name.
+            $segments = array_values(array_filter(explode('/', $path), function ($s) {
+                return $s !== '' && ! ctype_digit($s);
+            }));
+
+            // A trailing verb segment IS the action — "…/9/sign" is a signature, not
+            // the creation of something called "sign".
+            static $tailVerbs = [
+                'sign' => 'Signed', 'draft' => 'Saved a draft of', 'resend' => 'Resent',
+                'send' => 'Sent', 'promote' => 'Promoted', 'decline' => 'Declined',
+                'remind' => 'Sent a reminder for', 'approve' => 'Approved', 'reject' => 'Rejected',
+                'restore' => 'Restored', 'archive' => 'Archived', 'suspend' => 'Suspended',
+                'resume' => 'Resumed', 'cancel' => 'Cancelled', 'submit' => 'Submitted',
+                'clock-in' => 'Clocked in', 'clock-out' => 'Clocked out', 'react' => 'Reacted to',
+                'mark-read' => 'Marked read', 'typing' => 'Typing in', 'nudge' => 'Nudged',
+            ];
+            // Friendly names for the resources themselves.
+            static $resources = [
+                'managed-forms' => 'a form', 'photos' => 'a photo', 'care' => 'a care record',
+                'logs' => 'a daily-care log', 'children' => 'a child record',
+                'families' => 'a family', 'users' => 'a user', 'centres' => 'a centre',
+                'rooms' => 'a room', 'invoices' => 'an invoice', 'payments' => 'a payment',
+                'announcements' => 'an announcement', 'observations' => 'an observation',
+                'incidents' => 'an incident report', 'chats' => 'a chat message',
+                'team-threads' => 'a staff message', 'awards' => 'an award',
+                'lesson-plans' => 'a lesson plan', 'documents' => 'a document',
+                'withdrawals' => 'a withdrawal request', 'tasks' => 'a task',
+                'inspection-forms' => 'an inspection form', 'agreements' => 'an agreement',
+                'attendance' => 'attendance', 'time-punches' => 'a time punch',
+            ];
+
+            $tail = end($segments);
+            if ($tail !== false && isset($tailVerbs[$tail])) {
+                array_pop($segments);
+                $what = null;
+                foreach (array_reverse($segments) as $seg) {
+                    if (isset($resources[$seg])) { $what = $resources[$seg]; break; }
+                }
+                $label = $tailVerbs[$tail] . ($what ? ' ' . $what : '');
+                return $label . ($failed ? ' (failed)' : '');
+            }
+
+            // Otherwise: verb + the most specific resource we recognise.
+            $what = null;
+            foreach (array_reverse($segments) as $seg) {
+                if (isset($resources[$seg])) { $what = $resources[$seg]; break; }
+            }
+            if ($what !== null) return $verb . ' ' . $what . ($failed ? ' (failed)' : '');
+
+            $pretty = trim(str_replace(['/', '-'], [' › ', ' '], implode('/', $segments)));
+            return $verb . ' · ' . $pretty . ($failed ? '  (failed)' : '');
         }
         return ucfirst(str_replace(['.', '_'], ' ', $action)) . ($failed ? ' (failed)' : '');
     }
@@ -591,10 +644,24 @@ final class AdminController extends Controller
         if (is_string($fromPayload) && trim($fromPayload) !== '') {
             return $fromPayload;
         }
+        // The middleware derives entity_type from the URL, which frequently yields
+        // junk like "id" (from ".../managed-forms/9/sign") — so the record was never
+        // looked up and the "What" column sat empty. When the type is unusable, take
+        // the resource segment that PRECEDES the id in the recorded path instead.
+        if ($id && (! $type || in_array(strtolower((string) $type), ['id', 'ids', ''], true))) {
+            $path = (string) ($data['path'] ?? '');
+            if ($path !== '') {
+                $segs = array_values(array_filter(explode('/', $path), fn ($s) => $s !== ''));
+                foreach ($segs as $i => $seg) {
+                    if (ctype_digit($seg) && (int) $seg === $id && $i > 0) { $type = $segs[$i - 1]; break; }
+                }
+            }
+        }
         if (! $type || ! $id) {
             return null;
         }
-        $map = ['users' => 'user', 'user' => 'user', 'agencies' => 'agency', 'agency' => 'agency', 'centres' => 'centre', 'centre' => 'centre', 'children' => 'child', 'child' => 'child', 'families' => 'family', 'family' => 'family', 'rooms' => 'room', 'room' => 'room'];
+        $map = ['users' => 'user', 'user' => 'user', 'agencies' => 'agency', 'agency' => 'agency', 'centres' => 'centre', 'centre' => 'centre', 'children' => 'child', 'child' => 'child', 'families' => 'family', 'family' => 'family', 'rooms' => 'room', 'room' => 'room',
+            'managed-forms' => 'managed_form', 'managed_forms' => 'managed_form'];
         $t = $map[strtolower($type)] ?? strtolower($type);
         try {
             switch ($t) {
@@ -610,6 +677,10 @@ final class AdminController extends Controller
                     $r = DB::table('children')->where('id', $id)->first(['first_name', 'last_name']);
                     return $r ? (trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: null) : null;
                 case 'room': return DB::table('rooms')->where('id', $id)->value('name') ?: null;
+                case 'managed_form':
+                    return \Illuminate\Support\Facades\Schema::hasTable('managed_forms')
+                        ? (DB::table('managed_forms')->where('id', $id)->value('title') ?: null)
+                        : null;
             }
         } catch (\Throwable $e) {
         }
@@ -617,7 +688,7 @@ final class AdminController extends Controller
     }
 
     /** Short human summary of what changed, drawn from the audit payload. */
-    private function summarizeAuditPayload(?string $payload): ?string
+    private function summarizeAuditPayload(?string $payload, ?string $tz = null): ?string
     {
         $data = $payload ? (json_decode($payload, true) ?: []) : [];
         if (! is_array($data)) return null;
@@ -633,17 +704,41 @@ final class AdminController extends Controller
         }
         $input = is_array($data['input'] ?? null) ? $data['input'] : (isset($data['method']) ? [] : $data);
         $skip = ['method', 'path', 'status', 'input', 'active_agency_id', 'fields', 'user_agent', 'ip_address'];
+        // Uploaded blobs and data: URLs (signatures, files, logos). Their VALUE is
+        // meaningless to a reader and megabytes long — say that one was included.
+        $blobKeys = ['signature', 'file', 'filled_file', 'photo', 'video', 'attachment', 'brand_logo_url', 'avatar', 'image'];
         $fields = [];
         foreach ($input as $k => $v) {
-            if (in_array($k, $skip, true) || ! is_scalar($v) || $v === '' || $v === null) continue;
+            if (in_array($k, $skip, true) || $v === '' || $v === null || $v === []) continue;
+
             // Resolve id references to the actual record's NAME so an auditor reads
-            // "child: Aria Hosein" instead of "child_id: 6".
+            // "child: Aria Hosein" instead of "child_id: 6" — singly or as a list.
             $ref = $this->resolveAuditRef((string) $k, $v);
-            if ($ref !== null) { $fields[] = $ref; if (count($fields) >= 5) break; continue; }
+            if ($ref !== null) { $fields[] = $ref; if (count($fields) >= 6) break; continue; }
+
+            $label = $this->auditFieldLabel((string) $k);
+
+            if (in_array(strtolower((string) $k), $blobKeys, true)
+                || (is_string($v) && str_starts_with($v, 'data:'))) {
+                $fields[] = $label . ': (attached)';
+                if (count($fields) >= 6) break;
+                continue;
+            }
+
+            if (! is_scalar($v)) {
+                // Nested structures (e.g. a form's field_values): say how much, not what.
+                if (is_array($v)) { $fields[] = $label . ': ' . count($v) . ' ' . (count($v) === 1 ? 'entry' : 'entries'); if (count($fields) >= 6) break; }
+                continue;
+            }
+
+            // Timestamps in the AGENCY's timezone, matching the "When" column.
+            $ts = $this->formatAuditTs($v, $tz);
+            if ($ts !== null) { $fields[] = $label . ': ' . $ts; if (count($fields) >= 6) break; continue; }
+
             $val = is_bool($v) ? ($v ? 'yes' : 'no') : (string) $v;
-            if (mb_strlen($val) > 40) $val = mb_substr($val, 0, 40) . '…';
-            $fields[] = $k . ': ' . $val;
-            if (count($fields) >= 5) break;
+            if (mb_strlen($val) > 60) $val = mb_substr($val, 0, 60) . '…';
+            $fields[] = $label . ': ' . $val;
+            if (count($fields) >= 6) break;
         }
         if (isset($data['fields']) && is_array($data['fields'])) {
             $fields = array_merge($fields, array_map('strval', array_slice($data['fields'], 0, 6)));
@@ -663,24 +758,161 @@ final class AdminController extends Controller
      */
     private function resolveAuditRef(string $key, $value): ?string
     {
+        $k = strtolower($key);
+        $spec = $this->auditRefSpec($k);
+        if ($spec === null) return null;
+
+        // PLURAL / LIST forms: child_ids arrives as a real array, a JSON string
+        // ("[59]" — that is how the photo upload posts it) or a comma list. These
+        // used to fall straight through to the generic branch, which printed the
+        // literal "child_ids: [59]" an auditor cannot read. Resolve every id.
+        $ids = $this->auditRefIds($value);
+        if (count($ids) > 1 || (count($ids) === 1 && ! is_scalar($value)) || (is_string($value) && preg_match('/^\s*[\[,]/', $value))) {
+            $names = [];
+            foreach (array_slice($ids, 0, 6) as $one) {
+                $n = $this->auditRefName($spec[1], $one);
+                if ($n !== null) $names[] = $n;
+            }
+            if (! $names) return null;
+            $label = count($ids) > 1 ? $this->auditRefPlural($spec[0]) : $spec[0];
+            $more = count($ids) > count($names) ? ' +' . (count($ids) - count($names)) . ' more' : '';
+            return $label . ': ' . implode(', ', $names) . $more;
+        }
+
         if (! is_scalar($value)) return null;
         $id = (int) $value;
         if ((string) $id !== (string) $value || $id <= 0) return null;   // only plain positive ids
-        $k = strtolower($key);
-
-        // key → [display label, users|children|families|centres|agencies]
-        static $userKeys = ['user_id', 'assigned_to', 'assigned_by', 'guardian_id', 'educator_id',
-            'home_visitor_id', 'staff_id', 'target_user_id', 'impersonated_user_id', 'created_by', 'updated_by', 'reviewer_id'];
-        if (in_array($k, $userKeys, true)) $spec = [$this->auditRefLabel($k), 'users'];
-        elseif (in_array($k, ['child_id', 'children_id'], true)) $spec = ['child', 'children'];
-        elseif ($k === 'family_id') $spec = ['family', 'families'];
-        elseif ($k === 'centre_id') $spec = ['centre', 'centres'];
-        elseif ($k === 'agency_id') $spec = ['agency', 'agencies'];
-        elseif ($k === 'room_id') $spec = ['room', 'rooms'];
-        else return null;
-
         $name = $this->auditRefName($spec[1], $id);
         return $name !== null ? ($spec[0] . ': ' . $name) : null;
+    }
+
+    /** key → [display label, lookup table], singular or plural (child_id / child_ids). */
+    private function auditRefSpec(string $k): ?array
+    {
+        $k = preg_replace('/_ids$/', '_id', $k);   // child_ids → child_id
+        static $userKeys = ['user_id', 'assigned_to', 'assigned_by', 'guardian_id', 'educator_id',
+            'home_visitor_id', 'staff_id', 'target_user_id', 'impersonated_user_id', 'created_by',
+            'updated_by', 'reviewer_id', 'signer_id', 'recipient_id', 'actor_id'];
+        if (in_array($k, $userKeys, true)) return [$this->auditRefLabel($k), 'users'];
+        if (in_array($k, ['child_id', 'children_id'], true)) return ['child', 'children'];
+        if ($k === 'family_id') return ['family', 'families'];
+        if ($k === 'centre_id') return ['centre', 'centres'];
+        if ($k === 'agency_id') return ['agency', 'agencies'];
+        if ($k === 'room_id')   return ['room', 'rooms'];
+        return null;
+    }
+
+    /** "children" from "child", "families" from "family" — for id LISTS. */
+    private function auditRefPlural(string $label): string
+    {
+        static $map = ['child' => 'children', 'family' => 'families', 'centre' => 'centres',
+            'agency' => 'agencies', 'room' => 'rooms', 'user' => 'users', 'parent' => 'parents',
+            'educator' => 'educators', 'staff' => 'staff'];
+        return $map[$label] ?? $label . 's';
+    }
+
+    /** Every positive id inside a scalar, JSON-encoded array, real array or CSV. */
+    private function auditRefIds($value): array
+    {
+        if (is_array($value)) {
+            $out = [];
+            foreach ($value as $v) if (is_scalar($v) && (int) $v > 0) $out[] = (int) $v;
+            return array_values(array_unique($out));
+        }
+        if (! is_scalar($value)) return [];
+        $s = trim((string) $value);
+        if ($s === '') return [];
+        if ($s[0] === '[' || $s[0] === '{') {
+            $decoded = json_decode($s, true);
+            if (is_array($decoded)) return $this->auditRefIds($decoded);
+        }
+        if (str_contains($s, ',')) {
+            $out = [];
+            foreach (explode(',', $s) as $part) {
+                $part = trim($part);
+                if ($part !== '' && ctype_digit($part) && (int) $part > 0) $out[] = (int) $part;
+            }
+            return array_values(array_unique($out));
+        }
+        return ctype_digit($s) && (int) $s > 0 ? [(int) $s] : [];
+    }
+
+    /**
+     * Replace embedded blobs in the payload we RETURN (never in the stored row) with
+     * a short marker. A single signature is ~40 KB of base64 that pushes the real
+     * fields off the screen and makes the detail view unreadable — and 50 of them in
+     * one response is megabytes over the wire for data nobody can interpret.
+     */
+    private function trimAuditPayloadBlobs(?string $payload): ?string
+    {
+        if ($payload === null || $payload === '') return $payload;
+        if (strlen($payload) < 400 && ! str_contains($payload, 'data:')) return $payload;
+        $data = json_decode($payload, true);
+        if (! is_array($data)) {
+            return strlen($payload) > 4000 ? substr($payload, 0, 4000).'… (truncated)' : $payload;
+        }
+        $walk = function ($node) use (&$walk) {
+            if (is_array($node)) {
+                $out = [];
+                foreach ($node as $k => $v) $out[$k] = $walk($v);
+                return $out;
+            }
+            if (is_string($node)) {
+                if (str_starts_with($node, 'data:')) {
+                    $kind = explode(';', substr($node, 5))[0] ?: 'file';
+                    return '('.$kind.', '.number_format(strlen($node) / 1024, 0).' KB — not shown)';
+                }
+                if (strlen($node) > 600) return substr($node, 0, 600).'… (truncated)';
+            }
+            return $node;
+        };
+        return json_encode($walk($data), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Render a timestamp found inside an audit payload in the AGENCY's timezone.
+     *
+     * Clients post these as UTC ISO strings ("2026-08-12T11:50:00.000Z"), and the
+     * log printed them verbatim — so a care log entered at 7:50 a.m. Eastern read
+     * as 11:50, disagreeing with the very same event's "When" column right beside
+     * it. Every displayed time in the portal is agency-local; this is no exception.
+     */
+    private function formatAuditTs($value, ?string $tz): ?string
+    {
+        if (! is_string($value) && ! is_numeric($value)) return null;
+        $s = trim((string) $value);
+        if ($s === '') return null;
+        // ISO-8601 (with or without a zone) or a MySQL datetime; a bare date too.
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/', $s)) return null;
+        try {
+            $dateOnly = ! str_contains($s, ':');
+            // No zone marker on a datetime means UTC here (that is how the server stores).
+            $hasZone = (bool) preg_match('/(Z|[+-]\d{2}:?\d{2})$/', $s);
+            $c = \Carbon\Carbon::parse($s, $hasZone || $dateOnly ? null : 'UTC');
+            if ($dateOnly) return $c->format('M j, Y');
+            return $c->setTimezone($tz ?: 'UTC')->format('M j, Y, g:i a');
+        } catch (\Throwable $e) { return null; }
+    }
+
+    /**
+     * Readable label for a payload field. Raw request keys are developer names —
+     * "log_type", "occurred_at", "week_starting" — and an audit trail is read by
+     * administrators and auditors, not by the people who chose the column names.
+     */
+    private function auditFieldLabel(string $key): string
+    {
+        static $map = [
+            'log_type' => 'type', 'occurred_at' => 'occurred', 'ended_at' => 'ended',
+            'started_at' => 'started', 'week_starting' => 'week of', 'field_values' => 'fields filled',
+            'details' => 'details', 'notes' => 'notes', 'body' => 'message', 'title' => 'title',
+            'full_name' => 'name', 'first_name' => 'first name', 'last_name' => 'last name',
+            'agreed' => 'agreed', 'enabled' => 'enabled', 'status' => 'status',
+            'audiences' => 'audiences', 'brand_primary_color' => 'brand colour',
+            'brand_support_email' => 'support email', 'effective_date' => 'effective',
+            'due_date' => 'due', 'amount' => 'amount', 'reason' => 'reason',
+        ];
+        if (isset($map[$key])) return $map[$key];
+        return str_replace('_', ' ', preg_replace('/_at$/', '', $key));
     }
 
     private function auditRefLabel(string $key): string
@@ -846,12 +1078,18 @@ final class AdminController extends Controller
         // Enrich each row: readable action, the affected entity's NAME (from
         // payload first so it survives deletes, else a live lookup), and a short
         // human summary of what changed.
-        $rows = $rows->map(function ($r) {
+        // One timezone for the whole view: the agency being audited. Times inside
+        // payloads are rendered in it so they agree with the "When" column.
+        $auditTz = 'UTC';
+        try { $auditTz = \App\Support\AgencyTime::tz($activeAgencyId ?: null) ?: 'UTC'; } catch (\Throwable $e) {}
+
+        $rows = $rows->map(function ($r) use ($auditTz) {
             $r->action_label = $this->humanizeAuditAction($r->action);
             $r->entity_name  = $this->describeAuditEntity($r->entity_type, $r->entity_id ? (int) $r->entity_id : null, $r->payload);
-            $r->summary      = $this->summarizeAuditPayload($r->payload);
+            $r->summary      = $this->summarizeAuditPayload($r->payload, $auditTz);
             // An IP address tells an auditor nothing. Where it came from does.
             $r->location     = \App\Support\GeoIp::locate($r->ip_address);
+            $r->payload      = $this->trimAuditPayloadBlobs($r->payload);
             return $r;
         });
 

@@ -31,6 +31,8 @@
     'agency.invite_resent': 'Invite re-sent',
     'lesson_plan.saved': 'Lesson plan saved',
     'centre.deleted': 'Centre deleted',
+    'staff.clock_in': '🟢 Clocked IN',
+    'staff.clock_out': '🔴 Clocked OUT',
   };
 
   // Known endpoints, said plainly. Anything not listed still gets a sensible
@@ -70,6 +72,19 @@
 
   var VERBS = { post: 'Created', patch: 'Updated', put: 'Updated', delete: 'Deleted', get: 'Viewed' };
 
+  /**
+   * The label for a row. Prefer the SERVER's action_label: the API resolves the
+   * record ids in the path to real names ("Signed a form" + the form's title),
+   * where this file can only pattern-match the raw URL. Two independent label
+   * tables drift apart — the browser showed "Created photos" for what the API
+   * already described as "Created a photo". Fall back to the local mapping for
+   * rows an older API build didn't enrich.
+   */
+  function rowActionLabel(l) {
+    if (l && typeof l.action_label === 'string' && l.action_label.trim() !== '') return l.action_label;
+    return actionLabel(l && l.action);
+  }
+
   function actionLabel(raw) {
     var a = String(raw || '').trim();
     if (!a) return '—';
@@ -106,6 +121,33 @@
     }
 
     return label + (failed ? ' — failed' : '');
+  }
+
+  // Turn a raw entity_type ("room", "menu_week", "check_event") into a plain word
+  // an auditor reads — no "id" jargon, no table names.
+  function prettyEntityType(t) {
+    if (!t) return '';
+    // The middleware takes entity_type from the URL, so it is sometimes a bare
+    // "id" (from ".../managed-forms/9/sign") or a number. Those are not a kind of
+    // thing — printing them gave rows like "test 8  Id". Say nothing instead.
+    var raw = String(t).trim().toLowerCase();
+    if (raw === 'id' || raw === 'ids' || /^\d+$/.test(raw)) return '';
+    var MAP = {
+      user: 'User', users: 'User', child: 'Child', children: 'Child',
+      family: 'Family', families: 'Family', centre: 'Centre', centres: 'Centre',
+      room: 'Room', rooms: 'Room', agency: 'Agency', agencies: 'Agency',
+      integration: 'Integration', conversation: 'Message thread', message: 'Message',
+      photo: 'Photo', photos: 'Photo', video: 'Video',
+      care: 'Care log', logs: 'Care log', 'care-logs': 'Care log',
+      managed_form: 'Form', 'managed-forms': 'Form', managed_forms: 'Form',
+      invoice: 'Invoice', invoices: 'Invoice', waitlist: 'Waitlist', announcement: 'Announcement',
+      incident: 'Incident report', task: 'Task', document: 'Document', menu_week: 'Menu',
+      lesson_plan: 'Lesson plan', check_event: 'Check-in / out', daily_event: 'Care log',
+      time_punch: 'Time clock', guardian: 'Parent', role_assignment: 'Role',
+    };
+    var key = String(t).toLowerCase();
+    if (MAP[key]) return MAP[key];
+    return key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
   if (!window.KT) return;
@@ -155,6 +197,36 @@
     return Math.floor(ms / 86400000) + 'd ago';
   }
 
+  /**
+   * Rewrite every timestamp inside a payload into the AGENCY's timezone.
+   *
+   * Clients post times as UTC ISO strings ("2026-08-12T11:50:00.000Z"), so the raw
+   * payload showed a care log entered at 7:50 a.m. as 11:50 — contradicting the
+   * "When" line directly above it in the same dialog. The audit trail must read in
+   * one clock, and that clock is the agency's.
+   */
+  function localiseTimes(node) {
+    var ISO = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+    if (Array.isArray(node)) return node.map(localiseTimes);
+    if (node && typeof node === 'object') {
+      var out = {};
+      Object.keys(node).forEach(function (k) { out[k] = localiseTimes(node[k]); });
+      return out;
+    }
+    if (typeof node === 'string' && ISO.test(node.trim())) {
+      var s = node.trim();
+      if (s.indexOf(':') === -1) return s;                 // a bare date has no zone to fix
+      var d = parseTs(s);
+      if (isNaN(d)) return node;
+      try {
+        return new Intl.DateTimeFormat('en-CA', {
+          timeZone: auditTz(), dateStyle: 'medium', timeStyle: 'short',
+        }).format(d);
+      } catch (e) { return node; }
+    }
+    return node;
+  }
+
   var ACTION_ICONS = {
     'user.created': '👤', 'user.revived': '♻️', 'user.deleted': '✖',
     'user.updated': '✏', 'user.role_changed': '🎚',
@@ -168,7 +240,39 @@
     'kiosk.checkin': '🟢', 'kiosk.checkout': '🔴',
   };
 
+  // Top-level screen: for platform admins, a tab bar with the Audit log + the
+  // Email log (hosted here as a subtab). Everyone else just gets the audit log.
   function render(container) {
+    Dom.clear(container);
+    var isPlatform = false;
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      isPlatform = (u.roles && u.roles.indexOf('platform_admin') > -1) || sessionStorage.getItem('kt_is_platform_admin') === '1';
+    } catch (e) {}
+    var hasEmail = isPlatform && window.KT && KT.EmailLog && KT.EmailLog.render;
+    if (!hasEmail) { renderAudit(container); return; }
+
+    var tabsRow = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;padding:16px 24px 0;max-width:1800px;margin:0 auto;' });
+    var pane = Dom.el('div', {});
+    var mkTab = function (label) { return Dom.el('button', { style: 'background:none;border:none;border-bottom:3px solid transparent;color:#64748B;font-weight:700;font-size:14px;padding:10px 16px;cursor:pointer;margin-bottom:-1px;' }, label); };
+    var tA = mkTab('📜 Audit log');
+    var tE = mkTab('📧 Email log');
+    var activate = function (which) {
+      tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
+      tE.style.borderBottomColor = which === 'email' ? '#1F6080' : 'transparent'; tE.style.color = which === 'email' ? '#1F6080' : '#64748B';
+      Dom.clear(pane);
+      if (which === 'email') { var inner = Dom.el('div', { style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' }); pane.appendChild(inner); KT.EmailLog.render(inner); }
+      else { renderAudit(pane); }
+    };
+    tA.addEventListener('click', function () { activate('audit'); });
+    tE.addEventListener('click', function () { activate('email'); });
+    tabsRow.appendChild(tA); tabsRow.appendChild(tE);
+    container.appendChild(tabsRow);
+    container.appendChild(pane);
+    activate('audit');
+  }
+
+  function renderAudit(container) {
     Dom.clear(container);
     var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
@@ -190,7 +294,7 @@
 
     function reload() {
       Dom.clear(listWrap);
-      listWrap.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#9CA3AF;font-size:13px;' }, 'Loading audit log…'));
+      listWrap.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading audit log…'));
 
       var qs = new URLSearchParams();
       Object.keys(state.filters).forEach(function (k) { if (state.filters[k]) qs.set(k, state.filters[k]); });
@@ -315,7 +419,13 @@
   }
 
   function renderTable(logs) {
-    var t = Dom.el('table', { style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+    // This screen has its OWN server-side search + pagination (the toolbar filters
+    // and the ◀ Prev / Next ▶ pager below, backed by /admin/audit-logs). Pre-set
+    // kt-table-filter's dedup flag so its GLOBAL auto search+pager does NOT also
+    // attach — otherwise it client-paginated the 50 rows we load per server page
+    // into 25-per-page chunks, producing a SECOND Prev/Next and capping the view
+    // at "2 pages" no matter how many pages the server actually has.
+    var t = Dom.el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;font-size:13px;' });
     var thead = Dom.el('thead', { style: 'background:#FAFBFC;' });
     var hr = Dom.el('tr');
     ['When', 'Action', 'Entity', 'Actor', 'Location'].forEach(function (h) {
@@ -345,7 +455,7 @@
       // When
       var whenCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;' });
       whenCell.appendChild(Dom.el('div', { style: 'font-weight:600;color:#111827;' }, fmtTime(l.created_at)));
-      whenCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, relTime(l.created_at)));
+      whenCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, relTime(l.created_at)));
       row.appendChild(whenCell);
 
       // Action
@@ -357,22 +467,26 @@
       var lbl = Dom.el('span', {
         style: 'font-weight:600;color:' + (/\[fail\]/.test(l.action || '') ? '#B91C1C' : '#1F6080') + ';',
         title: l.action || '',
-      }, actionLabel(l.action));
+      }, rowActionLabel(l));
       actLine.appendChild(lbl);
       actCell.appendChild(actLine);
       if (l.summary) actCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;margin-top:3px;word-break:break-word;' }, l.summary));
       row.appendChild(actCell);
 
-      // Entity — show the resolved NAME, with type/id underneath
+      // Entity — the resolved NAME with a plain-English type label; no raw ids.
       var entCell = Dom.el('td', { style: 'padding:10px 14px;color:#374151;vertical-align:top;' });
-      if (l.entity_name) entCell.appendChild(Dom.el('div', { style: 'font-weight:600;color:#111827;' }, l.entity_name));
-      entCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, l.entity_type ? (l.entity_type + (l.entity_id ? ' #' + l.entity_id : '')) : '—'));
+      if (l.entity_name) {
+        entCell.appendChild(Dom.el('div', { style: 'font-weight:600;color:#111827;' }, l.entity_name));
+        if (l.entity_type) entCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, prettyEntityType(l.entity_type)));
+      } else {
+        entCell.appendChild(Dom.el('div', { style: 'color:#374151;' }, l.entity_type ? prettyEntityType(l.entity_type) : '—'));
+      }
       row.appendChild(entCell);
 
       // Actor
       var actorCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;' });
       actorCell.appendChild(Dom.el('div', { style: 'font-weight:600;color:#111827;' }, l.actor_name || 'system'));
-      if (l.actor_email) actorCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, l.actor_email));
+      if (l.actor_email) actorCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, l.actor_email));
       row.appendChild(actorCell);
 
       // Where it came from. A raw payload blob was noise — nobody audits by
@@ -383,7 +497,7 @@
       locCell.appendChild(Dom.el('div', {}, l.location || l.ip_address || '—'));
       if (l.ip_address) {
         locCell.appendChild(Dom.el('div', {
-          style: 'color:#9CA3AF;font-family:ui-monospace,monospace;font-size:10.5px;margin-top:2px;',
+          style: 'color:#64748B;font-family:ui-monospace,monospace;font-size:10.5px;margin-top:2px;',
         }, l.ip_address));
       }
       row.appendChild(locCell);
@@ -401,7 +515,10 @@
 
     var head = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;' });
     var titleEl = Dom.el('h3', { style: 'margin:0;font-size:18px;' });
-    titleEl.textContent = (ACTION_ICONS[l.action] || '•') + ' ' + l.action;
+    // The heading is the readable action, not the raw endpoint — the dialog said
+    // "post:api/v1/care/logs" while the Action row right below it already read
+    // "Created a daily-care log".
+    titleEl.textContent = (ACTION_ICONS[l.action] || '•') + ' ' + rowActionLabel(l);
     head.appendChild(titleEl);
     var x = Dom.el('button', { style: 'background:transparent;border:none;font-size:20px;color:#6B7280;cursor:pointer;' }, '×');
     x.addEventListener('click', function () { overlay.remove(); });
@@ -415,14 +532,19 @@
       return r;
     }
     modal.appendChild(row('When', fmtTime(l.created_at) + ' (' + relTime(l.created_at) + ')'));
-    modal.appendChild(row('Action', l.action));
-    modal.appendChild(row('Entity', l.entity_type ? l.entity_type + (l.entity_id ? ' #' + l.entity_id : '') : '—'));
+    modal.appendChild(row('Action', rowActionLabel(l)));
+    modal.appendChild(row('What', l.entity_name
+      ? (l.entity_name + (l.entity_type ? ' (' + prettyEntityType(l.entity_type) + ')' : ''))
+      : (l.entity_type ? prettyEntityType(l.entity_type) : '—')));
+    if (l.summary) modal.appendChild(row('Details', l.summary));
     modal.appendChild(row('Actor', l.actor_name + (l.actor_email ? ' — ' + l.actor_email : '')));
     modal.appendChild(row('IP address', l.ip_address));
 
     var prettyPayload = l.payload;
-    try { if (typeof l.payload === 'string') prettyPayload = JSON.stringify(JSON.parse(l.payload), null, 2); } catch (e) {}
-    modal.appendChild(Dom.el('div', { style: 'margin-top:14px;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;' }, 'Payload'));
+    try {
+      if (typeof l.payload === 'string') prettyPayload = JSON.stringify(localiseTimes(JSON.parse(l.payload)), null, 2);
+    } catch (e) {}
+    modal.appendChild(Dom.el('div', { style: 'margin-top:14px;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;' }, 'Payload · times in ' + auditTz()));
     modal.appendChild(Dom.el('pre', { style: 'background:#0F172A;color:#E2E8F0;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.4;max-height:240px;' }, prettyPayload || '(empty)'));
 
     document.body.appendChild(overlay);
