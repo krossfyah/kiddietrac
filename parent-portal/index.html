@@ -44,14 +44,11 @@
      form immediately. The boot animation now belongs AFTER sign-in, where there is
      actually a portal being loaded to wait for. -->
 <style>
-#kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(125% 72% at 50% 2%,#E7F3FB 0%,#FBFDFF 62%);transition:opacity .5s ease}
-#kt-splash.kt-hide{opacity:0;pointer-events:none}
-#kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:26px;padding:0 28px}
-#kt-splash .kt-splash-logo{width:min(66vw,224px);height:auto}
-#kt-splash .kt-spinner{width:40px;height:40px;border-radius:50%;border:3.5px solid rgba(20,70,100,.14);border-top-color:#13B7CC;animation:kt-spin .8s linear infinite}
+/* No #kt-splash on the login page: the boot splash lives in dashboard.html and
+   runs AFTER sign-in. The rules that used to sit here styled an element nothing
+   created. The login hero's own write-on animation is .ktl-anim, below. */
 @keyframes kt-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
 @keyframes kt-spin{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo{animation:none}#kt-splash .kt-spinner{animation:kt-spin 1.1s linear infinite}}
 
 /* ── KiddieTrac logo "write-on" animation (login + splash) ──────────────
    The wordmark writes itself on left→right (Kiddie→Trac, then the swish),
@@ -92,7 +89,6 @@
    logo instantly with no pen/sheen/sparkle so the whole screen appears at once. */
 .ktl-anim > img{animation:none !important;clip-path:none !important;transform:none !important;opacity:1 !important;}
 .ktl-anim .ktl-pen,.ktl-anim .ktl-sheen,.ktl-anim .ktl-spk{display:none !important;}
-#kt-splash .ktl-anim > img{width:min(66vw,224px);height:auto;}
 @media(prefers-reduced-motion:reduce){
   .ktl-anim > img{animation:none;clip-path:none;}
   .ktl-anim .ktl-pen,.ktl-anim .ktl-sheen,.ktl-anim .ktl-spk{display:none !important;}
