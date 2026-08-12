@@ -112,7 +112,24 @@ class AppServiceProvider extends ServiceProvider
                     ]);
                 }
 
-                // email_logs: skip messages that log themselves (open-tracking) to avoid a dup row.
+                // email_logs: skip messages that log themselves, to avoid a duplicate row.
+                //
+                // CONTRACT for X-KT-Logged — only set it if BOTH are true:
+                //   1. the sender embeds an open-tracking pixel in the HTML, so its
+                //      email_logs row (which owns the token) must exist before sending; and
+                //   2. the sender actually performs that insert.
+                //
+                // Only AdminController + PlatformController (invite / resend) qualify.
+                // Setting the header without doing the insert makes the email vanish from
+                // the log entirely — that is how the educator day-brief and absence notices
+                // were delivered for weeks with no trace. Doing the insert WITHOUT a pixel
+                // is also wrong: it writes status='sent' before the suppression listener
+                // has had its say, so a suppressed message was logged as both 'sent' and
+                // 'suppressed'. Senders with nothing to track simply omit the header and
+                // let this listener log them — it only ever runs on a real delivery.
+                //
+                // `mail:reconcile-logs` compares the email.sent audit rows above against
+                // email_logs and reports/backfills anything a sender fails to record.
                 if (! Schema::hasTable('email_logs')) return;
                 if ($msg->getHeaders() && $msg->getHeaders()->has('X-KT-Logged')) return;
                 // Stamp the OWNING agency so the email log is strictly per-tenant (same

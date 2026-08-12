@@ -23,6 +23,7 @@ Artisan::command('inspire', function () {
 // the AI story of the day, photos, sign-in/out, every care log, the day's
 // messages, and any announcements. Each child is bucketed in its own agency's
 // timezone inside the command, so this schedule only picks the wall-clock hour.
+Schedule::command("kiddietrac:educator-summary")->dailyAt("19:00")->timezone("America/Toronto");
 Schedule::command('kiddietrac:parent-summary')
     ->dailyAt('18:30')
     ->timezone('America/Toronto')
@@ -136,3 +137,17 @@ Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=
 
 // Daily sales-lead follow-up reminders (email owner/superadmin about due/overdue follow-ups).
 Schedule::command('kiddietrac:sales-followups')->dailyAt('08:00');
+
+// Nightly data-retention purge — enforces each agency's compliance policy
+// (chat + announcements past their retention window). Opt-in per agency via
+// Settings → Data Retention (auto_enforce). Off-hours so it never contends.
+Schedule::command('retention:purge')->dailyAt('02:30')->withoutOverlapping();
+
+// Scheduled reports — email due canned-report schedules hourly (fires once/day at/after each schedule send-time hour).
+Schedule::command("kiddietrac:send-scheduled-reports")->hourly()->withoutOverlapping();
+
+// Any sender that sets X-KT-Logged without writing its own email_logs row leaves an
+// email delivered but invisible in the log. The email.sent audit rows are the
+// independent witness, so this reconciles the two nightly and backfills the gap,
+// marking such rows "reconstructed from audit trail" so the omission stays visible.
+Schedule::command("mail:reconcile-logs --days=3 --backfill")->dailyAt("06:15")->timezone("America/Toronto");

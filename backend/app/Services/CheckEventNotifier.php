@@ -156,21 +156,12 @@ class CheckEventNotifier
         dispatch(function () use ($agencyId, $to, $toName, $html, $subject) {
             AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($to, $toName, $subject) {
                 $m->to($to, $toName ?: null)
-                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
-                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
             });
         })->onQueue('mail');
 
-        if (Schema::hasTable('email_logs')) {
-            DB::table('email_logs')->insert([
-                'to_email' => $to, 'to_name' => $toName,
-                'from_email' => 'noreply@kiddietrac.com', 'subject' => $subject,
-                'mailer' => config('mail.default'), 'status' => 'sent',
-                'tracking_token' => Str::random(32), 'opens' => 0, 'created_at' => now(),
-            ]);
-        }
     }
 
     private function sms(int $agencyId, int $userId, string $phone, string $line): void

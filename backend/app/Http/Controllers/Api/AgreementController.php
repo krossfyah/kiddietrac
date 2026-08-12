@@ -263,11 +263,9 @@ class AgreementController extends Controller
                 if (is_file($absPdf)) {
                     $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
                 }
-                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
             });
         })->onQueue('mail');
 
-        $this->logEmail($email, $toName, $subject);
     }
 
     /** Tells the agency (and info@kiddietrac.com, bcc) that someone declined. */
@@ -326,22 +324,9 @@ class AgreementController extends Controller
                 $m->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
-                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
             });
         })->onQueue('mail');
 
-        $this->logEmail($to[0] ?? 'info@kiddietrac.com', 'Agency admin', $subject);
-    }
-
-    private function logEmail(string $email, string $toName, string $subject): void
-    {
-        if (!Schema::hasTable('email_logs')) return;
-        DB::table('email_logs')->insert([
-            'to_email' => $email, 'to_name' => $toName,
-            'from_email' => 'noreply@kiddietrac.com', 'subject' => $subject,
-            'mailer' => config('mail.default'), 'status' => 'sent',
-            'tracking_token' => Str::random(32), 'opens' => 0, 'created_at' => now(),
-        ]);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

@@ -468,25 +468,9 @@ class ParentDailySummaryCommand extends Command
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
-                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
             });
         })->onQueue('mail');
 
-        if (\Illuminate\Support\Facades\Schema::hasTable('email_logs')) {
-            $agid = null;
-            try { $agid = \App\Support\AgencyMail::agencyOfEmail($email) ?: (int) $agencyId; } catch (\Throwable $e) { $agid = (int) $agencyId; }
-            DB::table('email_logs')->insert([
-                'agency_id' => $agid,
-                'to_email' => $email, 'to_name' => $name,
-                'from_email' => 'noreply@kiddietrac.com', 'subject' => $subject,
-                'mailer' => config('mail.default'), 'status' => 'sent',
-                // Store the rendered HTML so the email log's 👁 preview works (these
-                // digests self-log with X-KT-Logged, so the global logger skips them —
-                // without this they had no body to preview).
-                'body_html' => mb_substr($html, 0, 500000),
-                'tracking_token' => \Illuminate\Support\Str::random(32), 'opens' => 0, 'created_at' => now(),
-            ]);
-        }
     }
 
     // ── The email ───────────────────────────────────────────────────────

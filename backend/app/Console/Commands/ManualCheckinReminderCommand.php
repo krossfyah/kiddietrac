@@ -157,26 +157,10 @@ class ManualCheckinReminderCommand extends Command
                     ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                     ->subject($subject);
                 if ($ccAdmin && $ccAdmin !== $email) { try { $m->cc($ccAdmin); } catch (\Throwable $e) {} }
-                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
                 $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
             });
         };
         if ($sync) { $sendClosure(); } else { dispatch($sendClosure)->onQueue('mail'); }
 
-        if (Schema::hasTable('email_logs')) {
-            DB::table('email_logs')->insert([
-                'agency_id'      => $agencyId ?: null,
-                'to_email'       => $email,
-                'to_name'        => $name,
-                'from_email'     => 'noreply@kiddietrac.com',
-                'subject'        => $subject,
-                'mailer'         => config('mail.default'),
-                'status'         => 'sent',
-                'body_html'      => mb_substr($html, 0, 500000),
-                'tracking_token' => Str::random(32),
-                'opens'          => 0,
-                'created_at'     => now(),
-            ]);
-        }
     }
 }

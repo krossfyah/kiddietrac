@@ -193,9 +193,8 @@ class AbsenceController extends Controller
                     \App\Services\AgencyMailer::forAgency((int) $child->agency_id)->mailer()
                         ->html($html, function ($m) use ($emails, $title) {
                             $m->to($emails)
-                              ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                              ->from('noreply@kiddietrac.com', 'KiddieTrac')
                               ->subject($title);
-                            $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
                         });
                 })->onQueue('mail');
             }

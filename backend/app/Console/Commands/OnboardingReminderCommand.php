@@ -129,7 +129,6 @@ class OnboardingReminderCommand extends Command
                     ->from('noreply@kiddietrac.com', 'KiddieTrac')
                     ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                     ->subject($subject);
-                $m->getHeaders()->addTextHeader('X-KT-Logged', '1');
                 // Reaches a not-yet-onboarded user (exempt from the not-onboarded gate).
                 $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
                 $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
@@ -143,20 +142,5 @@ class OnboardingReminderCommand extends Command
             dispatch($sendClosure)->onQueue('mail');
         }
 
-        if (Schema::hasTable('email_logs')) {
-            DB::table('email_logs')->insert([
-                'agency_id'      => $agencyId ?: null,
-                'to_email'       => $email,
-                'to_name'        => $name,
-                'from_email'     => 'noreply@kiddietrac.com',
-                'subject'        => $subject,
-                'mailer'         => config('mail.default'),
-                'status'         => 'sent',
-                'body_html'      => mb_substr($html, 0, 500000),
-                'tracking_token' => Str::random(32),
-                'opens'          => 0,
-                'created_at'     => now(),
-            ]);
-        }
     }
 }
