@@ -29,57 +29,20 @@
     return false;
   }
   var NATIVE = isNativeApp();
-
-  // Being the app does not make you a phone. A Samsung tablet running the APK has a
-  // desktop-sized viewport (~1280x800 landscape) and was still getting phone chrome,
-  // because kt-native was applied on nativeness alone and 24 rules in kt-mobile-app.css
-  // key off it at ANY width. kt-native now means "native AND phone-sized", so every one
-  // of those rules — and every isMobile() check that tests the class — becomes
-  // width-aware without touching them individually. kt-app stays on for the whole
-  // session, for anything that genuinely needs to know it is the native app.
-  var PHONE_MAX = 768;
-  // The APK WebView has been seen reporting an innerWidth ABOVE 768 on a phone (see the
-  // note on the media query below - it once made the bottom bar vanish entirely). So a
-  // phone is judged on the smaller of the layout width and the PHYSICAL screen width:
-  // an inflated innerWidth is corrected by screen.width (~412 on a phone), while a real
-  // tablet reports ~800-1280 for both and is correctly treated as desktop.
-  function isPhoneSized() {
-    try {
-      var w = window.innerWidth || 0;
-      var sw = (window.screen && window.screen.width) || 0;
-      var eff = sw ? Math.min(w || sw, sw) : w;
-      return eff > 0 ? eff <= PHONE_MAX : true;   // unknown -> assume phone (safe default)
-    } catch (e) { return true; }
-  }
-  function syncNativeClasses() {
-    try {
-      var d = document.documentElement;
-      d.classList.toggle('kt-app', NATIVE);
-      d.classList.toggle('kt-native', NATIVE && isPhoneSized());
-    } catch (e) {}
-  }
-  syncNativeClasses();
-  // Rotating a tablet crosses the boundary, so re-evaluate rather than deciding once.
-  try {
-    window.addEventListener('resize', syncNativeClasses);
-    window.addEventListener('orientationchange', syncNativeClasses);
-  } catch (e) {}
-
-  // Same breakpoints as a browser now: the app follows the viewport, not the platform.
-  var BP = PHONE_MAX;                     // bottom bar + mobile rules: max-width
-  var GEARBP = PHONE_MAX + 1;             // gear hide: min-width
+  try { if (NATIVE) document.documentElement.classList.add('kt-native'); } catch (e) {}
+  // Mobile layout applies at ≤768 in a browser, but ALWAYS in the native app —
+  // encoded by widening the breakpoint to effectively-infinite when native.
+  var BP = NATIVE ? 100000 : 768;         // bottom bar + mobile rules: max-width
+  var GEARBP = NATIVE ? 100001 : 769;     // gear hide: min-width (never hides on native)
 
   function injectStyle() {
     if (document.getElementById('kt-mobilenav-style')) return;
     var s = document.createElement('style'); s.id = 'kt-mobilenav-style';
     s.textContent = [
       '#kt-mobilenav{display:none;}',
-      // ≤768px, in the browser AND in the app. This was previously forced to
-      // effectively-infinite for native, which gave TABLETS phone chrome. The APK
-      // WebView can report an innerWidth >768 on a phone - which is what once made this
-      // block miss and the bottom bar, raised check-in button and gear all vanish - so
-      // isPhoneSized() above cross-checks screen.width rather than trusting innerWidth
-      // alone. DO NOT narrow to 600.
+      // ≤768px in a browser; ALWAYS in the native APK (BP=100000) — the APK WebView
+      // can report a width >768, which used to make this whole block miss and the
+      // bottom bar + raised check-in button + gear all vanish. DO NOT narrow to 600.
       '@media(max-width:' + BP + 'px){',
         '#kt-mobilenav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:9500;background:#fff;',
         'border-top:1px solid #E5E7EB;box-shadow:0 -4px 16px -8px rgba(15,23,42,.2);',
