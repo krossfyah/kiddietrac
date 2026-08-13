@@ -75,13 +75,37 @@
     return '';
   }
 
+  // The reverse of fallbackIcon(): a button that is ONLY an icon, with no label on
+  // it anywhere, still has to read as something in a text menu. "Deactivate" beats
+  // "Action" even if the original wording was "Deactivate form".
+  var ICON_LABEL = [
+    ['🗑', 'Delete'], ['✏', 'Edit'], ['📝', 'Edit'], ['👁', 'View'], ['🔍', 'View'],
+    ['⏸', 'Deactivate'], ['▶', 'Activate'], ['🚫', 'Deactivate'], ['✅', 'Approve'],
+    ['⛔', 'Reject'], ['✖', 'Cancel'], ['❌', 'Cancel'], ['⬇', 'Download'], ['📥', 'Download'],
+    ['⬆', 'Upload'], ['📤', 'Send'], ['🖨', 'Print'], ['✉', 'Email'], ['📧', 'Email'],
+    ['💬', 'Message'], ['🔄', 'Refresh'], ['⚙', 'Manage'], ['➕', 'Add'], ['📋', 'Copy'],
+    ['🗄', 'Archive'], ['💳', 'Payment'], ['📄', 'View document'], ['📎', 'Attachment'],
+    ['🔒', 'Lock'], ['🔓', 'Unlock'], ['⭐', 'Feature'], ['📅', 'Schedule'],
+  ];
+  function labelFromIcon(icon) {
+    if (!icon) return '';
+    for (var i = 0; i < ICON_LABEL.length; i++) {
+      if (icon.indexOf(ICON_LABEL[i][0]) !== -1) return ICON_LABEL[i][1];
+    }
+    return '';
+  }
+
   // Pull an icon (leading emoji/symbol) + a readable label out of a button.
   function parse(el) {
     var raw = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    // data-kttip FIRST: kt-icon-buttons.js has usually already replaced this
-    // button's text with an icon and moved the real label there. Reading only
-    // aria-label/title is why every kebab item read "Action".
-    var aria = (el.getAttribute('data-kttip') || el.getAttribute('aria-label')
+    // Every place a sweep might have moved the label to. kt-icon-buttons.js puts it
+    // in data-kttip when it swaps the text for an icon; kt-tooltip-global.js strips
+    // the native title on first hover and keeps it in data-kttip / data-kttip-title.
+    // Reading only aria-label and title is why items read "Action" — and why the
+    // same menu could show one correct label beside two wrong ones, depending on
+    // which buttons had been swept or hovered.
+    var aria = (el.getAttribute('data-kttip') || el.getAttribute('data-kttip-title')
+      || el.getAttribute('data-kt-tooltip') || el.getAttribute('aria-label')
       || el.getAttribute('title') || el.getAttribute('data-kt-label') || '').trim();
     var icon = '', label = '';
     if (raw && !/[0-9A-Za-z]/.test(raw)) {           // emoji-only button (e.g. 🗑️)
@@ -91,7 +115,7 @@
       if (m) { icon = m[1].trim(); label = m[2].trim(); }
       else { label = raw; }
     }
-    if (!label) label = aria || 'Action';
+    if (!label) label = aria || labelFromIcon(icon) || labelFromIcon(raw) || 'Action';
     if (!icon) icon = fallbackIcon(label);           // consistent icon for text-only actions
     return { icon: icon, label: label };
   }
