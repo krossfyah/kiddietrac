@@ -31,6 +31,15 @@
   function $(s, r) { return (r || document).querySelector(s); }
 
   async function render(container) {
+    // The agency's country, currency and regulatory framework — the same card the
+    // Agency overview shows, rendered from one implementation.
+    try {
+      if (window.KT && KT.renderCountryCard) {
+        const countryHost = document.createElement('div');
+        container.appendChild(countryHost);
+        KT.renderCountryCard(countryHost);
+      }
+    } catch (e) {}
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading branding…</div>';
     const user = getUser();
     // v22p87: use the ACTIVE agency (the one being viewed via the agency
@@ -70,7 +79,7 @@
             <div style="display:flex;align-items:center;gap:10px;margin:-6px 0 14px;">
               <input type="file" id="kt-logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">
               <button type="button" id="kt-logo-upload" style="padding:7px 14px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">⬆ Upload a logo file</button>
-              <span id="kt-logo-upmsg" style="font-size:12px;color:#9CA3AF;">…or paste a URL above</span>
+              <span id="kt-logo-upmsg" style="font-size:12px;color:#64748B;">…or paste a URL above</span>
             </div>
             ${colorField('Primary colour', 'kt-color', brand.brand_primary_color || '#3BBBBE')}
             ${field('Support email', 'kt-support', brand.brand_support_email || '', 'billing@yourdomain.com', 'Shown on invoices and parent emails.')}
@@ -83,7 +92,7 @@
               <input type="checkbox" id="kt-poweredby" ${brand.powered_by_visible == 0 ? '' : 'checked'} style="width:18px;height:18px;cursor:pointer;">
               <label for="kt-poweredby" style="font-size:13px;color:#374151;cursor:pointer;flex:1;">
                 Show <em>"Powered by Kiddietrac"</em> on invoices
-                <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">Uncheck to fully white-label. Plan must support this.</div>
+                <div style="font-size:11px;color:#64748B;margin-top:2px;">Uncheck to fully white-label. Plan must support this.</div>
               </label>
             </div>
 
@@ -163,7 +172,7 @@
     return `<div style="margin-bottom:12px;">
       <label style="font-size:12px;font-weight:700;color:#6B7280;">${esc(label)}</label>
       <input type="text" id="${id}" value="${esc(value)}" placeholder="${esc(placeholder)}" style="width:100%;padding:9px 11px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;margin-top:4px;">
-      ${hint ? `<div style="font-size:11px;color:#9CA3AF;margin-top:3px;">${esc(hint)}</div>` : ''}
+      ${hint ? `<div style="font-size:11px;color:#64748B;margin-top:3px;">${esc(hint)}</div>` : ''}
     </div>`;
   }
   function textareaField(label, id, value, placeholder) {
@@ -184,7 +193,7 @@
 
   async function refreshPreview(container, agencyId) {
     const iframe = $('#kt-preview-iframe', container);
-    iframe.srcdoc = '<div style="padding:40px;text-align:center;color:#9CA3AF;font-family:sans-serif;">Loading preview…</div>';
+    iframe.srcdoc = '<div style="padding:40px;text-align:center;color:#64748B;font-family:sans-serif;">Loading preview…</div>';
     try {
       const res = await fetch(apiBase() + '/invoices/preview-sample?agency_id=' + agencyId + '&_=' + Date.now(), {
         headers: { 'Authorization': 'Bearer ' + token() },

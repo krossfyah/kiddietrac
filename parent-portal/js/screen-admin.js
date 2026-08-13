@@ -171,8 +171,9 @@
       'cloudsAndStars'
     ));
 
-    // v22p83: agency-wide Country & compliance setup (currency + regulations)
-    await renderCountryCard(content);
+    // Country & compliance used to render here, on the list of providers. It is an
+    // AGENCY-level setting - country, currency, regulatory framework - so it now
+    // lives on the Agency overview and in Branding & settings, via KT.renderCountryCard.
 
     // Action bar
     const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;' });
@@ -3672,6 +3673,10 @@
   // currency/locale and surface the childcare, privacy, PCI and tax frameworks.
   // Rendered on the Centres tab (the Branding tab's #admin-branding hash is taken
   // by the reseller branding screen). Self-contained: appends its own card.
+  // Exposed so the Agency overview and Branding & settings can render the SAME
+  // card instead of each keeping a copy that drifts.
+  KT.renderCountryCard = function (container) { return renderCountryCard(container); };
+
   async function renderCountryCard(content) {
     var card = Dom.el('div', { style: 'background:white;padding:24px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:24px;' });
     card.appendChild(Dom.el('h3', { style: 'margin:0 0 4px;font-size:18px;' }, '🌍 Country & compliance'));

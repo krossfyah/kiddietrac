@@ -583,6 +583,16 @@
     `);
 
     wrap.querySelector('#kt-refresh-btn')?.addEventListener('click', () => renderAgencyDashboard(main));
+
+    // Country & compliance — an agency-wide setting, so it belongs on the agency's
+    // own screen rather than on the list of providers where it used to sit.
+    try {
+      if (KT.renderCountryCard) {
+        const countryHost = document.createElement('div');
+        wrap.appendChild(countryHost);
+        KT.renderCountryCard(countryHost);
+      }
+    } catch (e) {}
     wrap.querySelector('#kt-add-centre-btn')?.addEventListener('click', () => openAddCentre(main));
     wrap.querySelector('#kt-edit-agency-btn')?.addEventListener('click', () => openEditAgency(main, data.agency || {}));
 
