@@ -61,28 +61,134 @@ Route::prefix('v1')->group(function () {
     // Public crash-report sink — the Android app POSTs its last captured native
     // crash here on next launch so we can review it server-side (storage/app/crash-reports.log).
     Route::post('/diag/crash', function (\Illuminate\Http\Request $r) {
-        $line = json_encode([
-            'at' => now()->toDateTimeString(),
-            'device' => mb_substr((string) $r->input('device'), 0, 200),
-            'os' => mb_substr((string) $r->input('os'), 0, 80),
-            'app' => mb_substr((string) $r->input('app'), 0, 80),
-            'trace' => mb_substr((string) $r->input('trace'), 0, 8000),
-            'ip' => $r->ip(),
-        ]);
-        try { \Illuminate\Support\Facades\Storage::append('crash-reports.log', $line); } catch (\Throwable $e) {}
+        // Context, not just a stack. A trace with no screen, no user and no last
+        // action tells you something broke but not what anyone was doing.
+        $data = [
+            'at'          => now()->toDateTimeString(),
+            'device'      => mb_substr((string) $r->input('device'), 0, 200),
+            'os'          => mb_substr((string) $r->input('os'), 0, 80),
+            'app'         => mb_substr((string) $r->input('app'), 0, 80),
+            'app_version' => mb_substr((string) $r->input('app_version'), 0, 40),
+            'url'         => mb_substr((string) $r->input('url'), 0, 300),
+            'screen'      => mb_substr((string) $r->input('screen'), 0, 120),
+            'user_id'     => $r->input('user_id') ? (int) $r->input('user_id') : null,
+            'user_email'  => mb_substr((string) $r->input('user_email'), 0, 160),
+            'user_name'   => mb_substr((string) $r->input('user_name'), 0, 120),
+            'role'        => mb_substr((string) $r->input('role'), 0, 40),
+            'agency_id'   => $r->input('agency_id') ? (int) $r->input('agency_id') : null,
+            'last_action' => mb_substr((string) $r->input('last_action'), 0, 160),
+            'viewport'    => mb_substr((string) $r->input('viewport'), 0, 24),
+            'native'      => (bool) $r->input('native'),
+            'trace'       => mb_substr((string) $r->input('trace'), 0, 8000),
+            'ip'          => $r->ip(),
+        ];
+        try { \Illuminate\Support\Facades\Storage::append('crash-reports.log', json_encode($data)); } catch (\Throwable $e) {}
+
+        // The first line of the trace is the error itself; the rest is where it came
+        // from. That first line is what makes two reports "the same crash".
+        // Neither preg_replace nor strtok is safe to chain into trim(): the first
+        // returns null on a pattern failure and the second returns FALSE when the
+        // string is empty, and trim() rejects both with a TypeError - a 500 on the
+        // one endpoint whose whole job is to survive a bad client. A report whose
+        // JSON does not decode arrives here with an empty trace, which is exactly
+        // the case that hit. Cast, guard, then split.
+        $cleanTrace = (string) preg_replace('/^\S+\s+(JS ERROR|UNHANDLED PROMISE)\s+/', '', $data['trace']);
+        if (trim($cleanTrace) === '') $cleanTrace = (string) $data['trace'];
+        $lines = explode("\n", $cleanTrace);
+        $firstLine = trim((string) ($lines[0] ?? ''));
+        $subject = 'Crash: ' . mb_substr($firstLine !== '' ? $firstLine : 'Unknown error', 0, 150);
+
+        // Track it as a support ticket, so a crash is something you can work through
+        // and close rather than a line in a log nobody opens.
+        $ticketId = null;
+        try {
+            // The SAME crash reported repeatedly is one problem, not twenty tickets:
+            // three identical traces arrived within an hour of each other in August.
+            // Reopen nothing, spam nothing — only file a new one if there is no open
+            // ticket for this error already.
+            $existing = \Illuminate\Support\Facades\DB::table('support_tickets')
+                ->where('category', 'technical')->where('status', 'open')
+                ->where('subject', $subject)
+                ->orderByDesc('id')->first();
+
+            $userId = $data['user_id'];
+            if ($userId && ! \Illuminate\Support\Facades\DB::table('users')->where('id', $userId)->exists()) {
+                $userId = null;                        // client-supplied; never trust it blindly
+            }
+            $agencyId = $data['agency_id'];
+            if ($userId) {
+                // Prefer the agency we can PROVE from their roles over the one the
+                // browser claims — a stale active-agency id has misfiled data before.
+                $real = \Illuminate\Support\Facades\DB::table('role_assignments')
+                    ->where('user_id', $userId)->where('active', true)
+                    ->whereNotNull('agency_id')->value('agency_id');
+                if ($real) $agencyId = (int) $real;
+            }
+            if ($agencyId && ! \Illuminate\Support\Facades\DB::table('agencies')->where('id', $agencyId)->exists()) {
+                $agencyId = null;
+            }
+
+            $bodyText = "Automatically filed from a crash report.\n\n"
+                . 'When: ' . $data['at'] . "\n"
+                . 'Who: ' . ($data['user_name'] ?: 'unknown') . ' <' . ($data['user_email'] ?: 'unknown') . '>'
+                . ($data['role'] ? ' · ' . $data['role'] : '') . "\n"
+                . 'Screen: ' . ($data['screen'] ?: '?') . '   URL: ' . ($data['url'] ?: '?') . "\n"
+                . 'Last action: ' . ($data['last_action'] ?: 'not captured') . "\n"
+                . 'App: ' . ($data['app'] ?: '?') . ' ' . $data['app_version']
+                . ($data['native'] ? ' (native app)' : ' (browser)') . '   Viewport: ' . ($data['viewport'] ?: '?') . "\n"
+                . 'Device: ' . $data['device'] . "\n"
+                . 'OS: ' . $data['os'] . '   IP: ' . $data['ip'] . "\n\n"
+                . "Trace:\n" . $data['trace'];
+
+            if ($existing) {
+                // Append the recurrence to the open ticket instead of filing a twin.
+                \Illuminate\Support\Facades\DB::table('support_tickets')->where('id', $existing->id)->update([
+                    'body' => mb_substr($existing->body . "\n\n--- reported again ---\n" . $bodyText, 0, 60000),
+                    'updated_at' => now(),
+                ]);
+                $ticketId = (int) $existing->id;
+            } else {
+                $ticketId = \Illuminate\Support\Facades\DB::table('support_tickets')->insertGetId([
+                    'agency_id'         => $agencyId,
+                    'centre_id'         => null,
+                    'raised_by_user_id' => $userId,
+                    'category'          => 'technical',
+                    'priority'          => 'high',
+                    'subject'           => $subject,
+                    'body'              => $bodyText,
+                    'status'            => 'open',
+                    'created_at'        => now(),
+                    'updated_at'        => now(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Crash report: could not file a support ticket', ['error' => $e->getMessage()]);
+        }
+
         // Email the crash to the team so it lands in the inbox, not just a log.
         try {
             $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;">'
                 . '<h2 style="color:#B91C1C;">KiddieTrac crash report</h2>'
-                . '<p><b>When:</b> ' . e($data['at']) . '<br><b>Device:</b> ' . e($data['device'])
-                . '<br><b>OS:</b> ' . e($data['os']) . '<br><b>App:</b> ' . e($data['app']) . '<br><b>IP:</b> ' . e($data['ip']) . '</p>'
+                . ($ticketId ? '<p style="font-weight:700;">Support ticket #' . (int) $ticketId . '</p>' : '')
+                . '<p><b>When:</b> ' . e($data['at'])
+                . '<br><b>Who:</b> ' . e($data['user_name'] ?: 'unknown') . ' &lt;' . e($data['user_email'] ?: 'unknown') . '&gt;'
+                . ($data['role'] ? ' · ' . e($data['role']) : '')
+                . '<br><b>Screen:</b> ' . e($data['screen'] ?: '?')
+                . '<br><b>Last action:</b> ' . e($data['last_action'] ?: 'not captured')
+                . '<br><b>Device:</b> ' . e($data['device'])
+                . '<br><b>OS:</b> ' . e($data['os']) . '<br><b>App:</b> ' . e($data['app']) . ' ' . e($data['app_version'])
+                . '<br><b>IP:</b> ' . e($data['ip']) . '</p>'
                 . '<pre style="white-space:pre-wrap;word-break:break-word;background:#F1F5F9;padding:12px;border-radius:8px;font-size:12px;">'
                 . e($data['trace']) . '</pre></div>';
             \App\Services\AgencyMailer::forAgency(null)->mailer()->html($body, function ($m) {
                 $m->to('info@kiddietrac.com')->subject('⚠️ KiddieTrac crash report');
             });
-        } catch (\Throwable $e) {}
-        return response()->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            // Do NOT swallow this silently again: the undefined-$data bug hid every
+            // crash email for weeks because the failure had nowhere to be seen.
+            \Illuminate\Support\Facades\Log::error('Crash report: could not email the team', ['error' => $e->getMessage()]);
+        }
+        return response()->json(['ok' => true, 'ticket_id' => $ticketId]);
     })->middleware('throttle:30,1');
 
     // Device-side scroll diagnostics (log only, no email) — lets us SEE the phone's

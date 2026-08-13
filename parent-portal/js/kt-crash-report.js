@@ -18,21 +18,78 @@
   // ── Capture JS-level problems as they happen ────────────────────────
   window.addEventListener('error', function (e) {
     try {
+      if (isNetworkNoise(e && (e.error || e.message))) return;
       var where = (e && e.filename ? e.filename : '') + ':' + (e && e.lineno ? e.lineno : '') + ':' + (e && e.colno ? e.colno : '');
       var stack = (e && e.error && e.error.stack) ? e.error.stack : ((e && e.message ? e.message : 'error') + ' @ ' + where);
       set('kt_js_error', nowIso() + '  JS ERROR  ' + String(stack).slice(0, 4000));
     } catch (x) {}
   });
+  // A transient CONNECTIVITY failure (dropped/slow network, offline, timeout) is
+  // NOT an app crash — the user just needs to retry — so it must never trip the
+  // "send a crash report?" prompt. ApiError uses type:'network'/status:0; also match
+  // the common fetch-failure messages as a backstop.
+  function isNetworkNoise(r) {
+    try {
+      if (r && (r.type === 'network' || r.status === 0)) return true;
+      var m = String((r && (r.message || r.reason)) || r || '');
+      return /network error|failed to fetch|load failed|networkerror|the internet connection|err_internet|err_network|err_timed_out|err_connection|err_name_not_resolved|failed to update a serviceworker|error occurred when fetching the script|serviceworker.*script/i.test(m);
+    } catch (x) { return false; }
+  }
   window.addEventListener('unhandledrejection', function (e) {
     try {
       var r = e && e.reason;
+      if (isNetworkNoise(r)) return;
       var s = (r && r.stack) ? r.stack : String(r);
       set('kt_js_error', nowIso() + '  UNHANDLED PROMISE  ' + String(s).slice(0, 4000));
     } catch (x) {}
   });
 
+  // What was the user doing? A stack trace alone does not say which screen they
+  // were on, who they are, or what they had just touched - all of which is the
+  // difference between reproducing a report and guessing at it.
+  var lastAction = '';
+  try {
+    document.addEventListener('click', function (e) {
+      try {
+        var t = e.target;
+        if (!t || t.nodeType !== 1) return;
+        var id = t.id ? '#' + t.id : '';
+        var cls = (typeof t.className === 'string' && t.className) ? '.' + t.className.trim().split(/\s+/)[0] : '';
+        var txt = (t.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        lastAction = t.tagName.toLowerCase() + id + cls + (txt ? ' "' + txt + '"' : '');
+      } catch (x) {}
+    }, true);
+  } catch (x) {}
+
+  function currentUser() {
+    var out = {};
+    try {
+      var raw = localStorage.getItem('kt_user') || sessionStorage.getItem('kt_user');
+      var u = raw ? JSON.parse(raw) : null;
+      if (u) {
+        out.user_id = u.id || null;
+        out.user_email = u.email || '';
+        out.user_name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.name || '';
+        out.role = (u.roles && u.roles.length ? u.roles[0] : (u.role || '')) || '';
+      }
+      out.agency_id = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id') || null;
+    } catch (x) {}
+    return out;
+  }
+
   function sendReport(trace, onDone) {
     var body = { device: navigator.userAgent, os: (navigator.platform || 'web'), app: 'webview', trace: trace, email: 1 };
+    try {
+      var u = currentUser();
+      for (var k in u) if (Object.prototype.hasOwnProperty.call(u, k)) body[k] = u[k];
+      body.url = String(location.href).slice(0, 300);
+      body.screen = String(location.hash || '#').slice(0, 120);
+      body.app_version = String(window.KT_VERSION || '');
+      body.last_action = String(lastAction || '').slice(0, 160);
+      body.viewport = (window.innerWidth || 0) + 'x' + (window.innerHeight || 0);
+      body.native = !!window.__KT_NATIVE;
+      body.online = navigator.onLine !== false;
+    } catch (x) {}
     try {
       fetch(apiBase() + '/diag/crash', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         .then(function (r) { onDone && onDone(r && r.ok); })

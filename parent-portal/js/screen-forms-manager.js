@@ -42,6 +42,16 @@
   var FIELD = 'width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;box-sizing:border-box;background:#fff;color:#0F172A;font-family:inherit;';
   var LBL = 'display:block;font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.3px;margin:0 0 6px;';
   function renderLibrary(body) {
+    // The upload panel is PORTALED to <body> further down, so that the scrim covers
+    // the sidebar and top bar instead of sliding under them. Its listeners survive
+    // the move — but they must not assume the panel is still inside #fm-body,
+    // because after the move it is not. Every fq() for a field then
+    // returned null: choosing a file threw before it could show the name, and
+    // Upload did nothing at all, throwing on the first field it touched. Look
+    // inside the container first, then anywhere in the document — the ids are
+    // unique and any stale overlay is removed above.
+    function fq(sel) { return body.querySelector(sel) || document.querySelector(sel); }
+    function fqa(sel) { var n = body.querySelectorAll(sel); return n.length ? n : document.querySelectorAll(sel); }
     // The dialog now lives in <body>, so a re-render cannot dispose of it implicitly.
     var _stale = document.getElementById('fm-upload-ov');
     if (_stale && _stale.parentNode) _stale.parentNode.removeChild(_stale);
@@ -118,7 +128,7 @@
       + '<div id="fm-list"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div>';
 
     // Chip active-state highlight + filename echo + dropzone accent.
-    body.querySelectorAll('.fm-audchip').forEach(function (chip) {
+    fqa('.fm-audchip').forEach(function (chip) {
       var cb = chip.querySelector('input');
       function sync() {
         chip.style.borderColor = cb.checked ? '#1F6FB2' : '#E2E8F0';
@@ -128,7 +138,7 @@
       cb.addEventListener('change', sync); sync();
     });
     [['#fm-fillable', '#fm-fillable-wrap'], ['#fm-reusable', '#fm-reusable-wrap']].forEach(function (pair) {
-      var cb = body.querySelector(pair[0]), wrap = body.querySelector(pair[1]);
+      var cb = fq(pair[0]), wrap = fq(pair[1]);
       if (!cb || !wrap) return;
       var sync = function () {
         wrap.style.borderColor = cb.checked ? '#1F6FB2' : '#E2E8F0';
@@ -142,21 +152,21 @@
       toggle: '#fm-rtoggle', panel: '#fm-rpicker', list: '#fm-rlist',
       search: '#fm-rsearch', count: '#fm-rcount',
     }, []);
-    var fileIn = body.querySelector('#fm-file'), drop = body.querySelector('#fm-drop');
+    var fileIn = fq('#fm-file'), drop = fq('#fm-drop');
     fileIn.addEventListener('change', function () {
       var f = fileIn.files[0];
-      body.querySelector('#fm-fname').textContent = f ? f.name : 'Choose a PDF…';
-      body.querySelector('#fm-fname').style.color = f ? '#0F172A' : '#64748B';
+      fq('#fm-fname').textContent = f ? f.name : 'Choose a PDF…';
+      fq('#fm-fname').style.color = f ? '#0F172A' : '#64748B';
       drop.style.borderColor = f ? '#1F6FB2' : '#CBD5E1';
       drop.style.background = f ? '#EFF6FF' : '#F8FAFC';
     });
 
-    body.querySelector('#fm-upload').onclick = function () {
-      var out = body.querySelector('#fm-upout');
-      var title = body.querySelector('#fm-title').value.trim();
-      var desc = body.querySelector('#fm-desc').value.trim();
-      var auds = [].slice.call(body.querySelectorAll('.fm-aud:checked')).map(function (c) { return c.value; });
-      var file = body.querySelector('#fm-file').files[0];
+    fq('#fm-upload').onclick = function () {
+      var out = fq('#fm-upout');
+      var title = fq('#fm-title').value.trim();
+      var desc = fq('#fm-desc').value.trim();
+      var auds = [].slice.call(fqa('.fm-aud:checked')).map(function (c) { return c.value; });
+      var file = fq('#fm-file').files[0];
       if (!title) { out.style.color = '#B91C1C'; out.textContent = 'Add a title.'; return; }
       // A title alone does not say what the form is for, and the Completed and
       // Library tables both show the description now.
@@ -171,9 +181,9 @@
       out.style.color = '#64748B'; out.textContent = 'Uploading…';
       var fd = new FormData();
       fd.append('title', title); fd.append('description', desc);
-      fd.append('fillable', body.querySelector('#fm-fillable').checked ? '1' : '0');
-      fd.append('reusable', body.querySelector('#fm-reusable').checked ? '1' : '0');
-      var notify = (body.querySelector('#fm-notify').value || '').trim();
+      fd.append('fillable', fq('#fm-fillable').checked ? '1' : '0');
+      fd.append('reusable', fq('#fm-reusable').checked ? '1' : '0');
+      var notify = (fq('#fm-notify').value || '').trim();
       if (notify) fd.append('notify_email', notify);
       if (people.length) fd.append('recipient_ids', JSON.stringify(people.map(Number)));
       auds.forEach(function (a) { fd.append('audiences[]', a); });
@@ -215,7 +225,7 @@
     // instead of a tall form pushing existing forms below the fold.
     (function () {
       var panel = body.firstElementChild;                     // the upload card
-      var list = body.querySelector('#fm-list');
+      var list = fq('#fm-list');
       if (!panel || !list || panel === list) return;
 
       var bar = document.createElement('div');
@@ -289,7 +299,7 @@
       body.addEventListener('kt-fm-uploaded', close);
     })();
 
-    loadList(body.querySelector('#fm-list'));
+    loadList(fq('#fm-list'));
   }
 
   /**
