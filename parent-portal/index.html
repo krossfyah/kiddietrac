@@ -33,11 +33,17 @@
   <link rel="stylesheet" href="/css/kt-login-v22.css">
   <link rel="stylesheet" href="/css/kt-login-pop.css">
   <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260729logo">
-  <!-- Mark the native APK on <html> as early as possible so the bold navy mobile
-       login applies even if the WebView reports a desktop-ish width. -->
-  <script>try{var C=window.Capacitor;if(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)))document.documentElement.classList.add('kt-native');}catch(e){}</script>
+  <!-- Mark the native APK on <html> as early as possible. kt-app = the app at any
+       size; kt-native = the app on a PHONE-shaped device, which is what the navy
+       mobile login below is keyed to. A tablet gets neither the phone login nor a
+       half-styled hybrid - it gets the ordinary responsive desktop login, split-screen
+       in landscape and single-column in portrait, exactly as a browser that size would.
+       Judged on the device's short edge (Android's own 600dp tablet cutoff), so it does
+       not flip when you rotate, and an APK WebView reporting an inflated innerWidth on a
+       phone is still correctly a phone. -->
+  <script>try{var C=window.Capacitor;var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)));var d=document.documentElement;function ktPhone(){try{var s=window.screen||{},e=(s.width&&s.height)?Math.min(s.width,s.height):(s.width||0);var w=window.innerWidth||0;if(e)return e<=600||(w>0&&w<=768);return w>0?w<=768:true;}catch(x){return true;}}function ktSync(){d.classList.toggle('kt-app',nat);d.classList.toggle('kt-native',nat&&ktPhone());}ktSync();window.__KT_NATIVE=nat;window.__KT_PHONE=ktPhone();window.addEventListener('resize',ktSync);window.addEventListener('orientationchange',ktSync);}catch(e){}</script>
   <!-- Bold navy mobile/APK login (layered over the redesign above). -->
-  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260809logotag">
+  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260812tablet3">
 </head>
 <body class="auth-body">
 <!-- Launch splash REMOVED (2026-08-11): opening the app must land on the login

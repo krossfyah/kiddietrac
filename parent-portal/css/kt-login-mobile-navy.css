@@ -107,8 +107,12 @@
   .form-error { color: #ffb4b4 !important; }
 }
 
-/* The native APK can report a width > 768; html.kt-native forces the phone
-   look regardless. Mirror the key navy bits so the APK always gets them. */
+/* html.kt-native now means "the app, on a phone-shaped device" - set by the inline
+   detector in index.html, which judges the screen's short edge rather than the
+   layout width the WebView reports. These rules therefore reach a phone whatever
+   width its WebView claims (the reason they are unconditional rather than inside
+   the media query above), and no longer reach a tablet, which gets the ordinary
+   responsive desktop login instead. */
 html.kt-native body.auth-body { background: #0a1f44 !important; }
 html.kt-native .ktl-brand-side { display: none !important; }
 html.kt-native .ktl-form-side {

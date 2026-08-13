@@ -14,11 +14,13 @@
   <!-- Sales demo SSO: open Test Agency (#6) demo from a minted token (#__demo=). Runs before deferred app boot. -->
   <script>(function(){try{var m=(location.hash||'').match(/__demo=([^&]+)/);if(!m)return;var tk=decodeURIComponent(m[1]);var x=new XMLHttpRequest();x.open('GET','https://api.kiddietrac.com/api/v1/auth/me',false);x.setRequestHeader('Authorization','Bearer '+tk);x.setRequestHeader('X-Active-Agency-Id','6');try{x.send(null);}catch(e){}if(x.status===200){var u;try{u=JSON.parse(x.responseText);u=u.user||u;}catch(e){u=null;}if(u){sessionStorage.setItem('kt_token',tk);sessionStorage.setItem('kt_user',JSON.stringify(u));sessionStorage.setItem('kt_active_agency_id','6');try{localStorage.setItem('kt_token',tk);localStorage.setItem('kt_active_agency_id','6');}catch(e){}}}try{history.replaceState(null,'',location.pathname);}catch(e){}}catch(e){}})();</script>
   <!-- Mark the native Capacitor APK on <html> as EARLY as possible and from the
-       always-fresh HTML (network-first), so the mobile layout never depends on a
-       possibly-stale JS file. The APK's WebView can report a CSS width >768, which
-       would make every ≤768 media rule miss; html.kt-native lets CSS force the
-       phone layout regardless of width. -->
-  <script>try{var C=window.Capacitor;var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)));if(nat)document.documentElement.classList.add('kt-native');window.__KT_NATIVE=nat;}catch(e){}</script>
+       document itself (never a cached JS file), so the very first paint already has
+       the right chrome. kt-app = the app at any size (safe-area insets and anything
+       that genuinely needs to know it is native). kt-native = the app on a PHONE-shaped
+       device - the 24 phone rules in kt-mobile-app.css and every isMobile() check read
+       this one, so gating it here makes all of them size-aware at a single point.
+       kt-mobilenav.js re-applies the same rule and keeps it in sync on rotate. -->
+  <script>try{var C=window.Capacitor;var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)));var d=document.documentElement;function ktPhone(){try{var s=window.screen||{},e=(s.width&&s.height)?Math.min(s.width,s.height):(s.width||0);var w=window.innerWidth||0;if(e)return e<=600||(w>0&&w<=768);return w>0?w<=768:true;}catch(x){return true;}}function ktSync(){d.classList.toggle('kt-app',nat);d.classList.toggle('kt-native',nat&&ktPhone());}ktSync();window.__KT_NATIVE=nat;window.__KT_PHONE=ktPhone();window.addEventListener('resize',ktSync);window.addEventListener('orientationchange',ktSync);}catch(e){}</script>
   <!-- Clear a STALE kt_view_as: only a platform_admin can "view as" another role.
        For everyone else a leftover kt_view_as (e.g. from previewing a parent account,
        persisting across logout/login in the same WebView) wrongly overrides their real
@@ -110,7 +112,7 @@
   <link rel="stylesheet" href="/css/kt-fullwidth.css?v=20260708fw2">
   <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20260811tl2col">
   <link rel="stylesheet" href="/css/kt-buttons.css?v=20260811actionbtn">
-  <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20260729clk">
+  <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20260812tablet3">
   <link rel="stylesheet" href="/css/kt-mobile-brand-fix.css?v=20260810restore">
   <link rel="preload" as="image" href="/login-wordmark.png">
   <link rel="stylesheet" href="/css/kt-sidebar-compact.css?v=20260714logo2">
@@ -441,7 +443,7 @@ function showReloadGate(){
   <script src="/js/kt-impersonate.js?v=20260724a11y" defer></script>
   <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
   <script src="/js/kt-progress.js?v=20260709prog" defer></script>
-  <script src="/js/kt-mobilenav.js?v=20260812revert" defer></script>
+  <script src="/js/kt-mobilenav.js?v=20260812tablet3" defer></script>
   <script src="/js/kt-clockbar.js?v=20260806ck1" defer></script>
   <script src="/js/kt-mobile-tables.js?v=20260724a11y" defer></script>
   <script src="/js/kt-row-actions.js?v=20260812nokebab" defer></script>
