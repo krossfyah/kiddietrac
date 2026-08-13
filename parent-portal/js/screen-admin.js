@@ -468,12 +468,12 @@
       // family is assigned to this provider, so they know who's caring for their
       // child. A short, warm first-person introduction works best.
       const bioWrap = Dom.el('div', { style: 'margin-bottom:12px;' });
-      bioWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Provider bio *'));
+      bioWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Provider bio'));
       const bioIn = Dom.el('textarea', { placeholder: "Hi! I'm … I've cared for children for … years. I believe every child grows best with …", style: 'width:100%;min-height:88px;padding:9px 12px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;font-family:inherit;resize:vertical;' });
       bioIn.value = centre.provider_bio || '';
       inputs.provider_bio = bioIn;
       bioWrap.appendChild(bioIn);
-      bioWrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:5px;line-height:1.5;' }, 'Required — this warm introduction is emailed to parents when a family joins this provider, so they feel confident about who is caring for their child.'));
+      bioWrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:5px;line-height:1.5;' }, 'Emailed to parents when a family joins this provider, so they feel confident about who is caring for their child. Strongly recommended — and once added it cannot be removed.'));
       form.appendChild(bioWrap);
     }
 
@@ -706,8 +706,13 @@
               refuse('Name is required.', 'name');
               return;
             }
-            if (inputs.provider_bio && (!data.provider_bio || !data.provider_bio.trim())) {
-              refuse('A provider bio is required — families are sent this when they join.', 'provider_bio');
+            // Only REMOVING an existing bio is refused. Requiring one before any
+            // other field can be saved blocked ordinary edits — a capacity change on
+            // a provider that never had a bio simply would not save.
+            const bioExisted = !!(centre && String(centre.provider_bio || '').trim());
+            const bioNowEmpty = inputs.provider_bio && (!data.provider_bio || !data.provider_bio.trim());
+            if (bioExisted && bioNowEmpty) {
+              refuse('The provider bio cannot be removed — families are sent it when they join.', 'provider_bio');
               return;
             }
             if (data.license_capacity) data.license_capacity = parseInt(data.license_capacity, 10);
@@ -751,6 +756,12 @@
               if (typeof onSaved === 'function') { await onSaved(); }
               else { await renderCentresTab(content); }
               Shell.Modal.close();
+              // Saved either way — but say what is still missing, since a family
+              // assigned to this provider gets no introduction without it.
+              if (bioNowEmpty) {
+                _toast('✍️', 'Saved — bio still needed',
+                  'Families joining this provider will not receive an introduction until a bio is added.', '#B45309');
+              }
             } catch (e) {
               status.style.color = '#DC2626';
               status.textContent = 'Save failed: ' + (e.message || 'error');
