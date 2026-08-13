@@ -279,19 +279,20 @@ final class DayBriefController extends Controller
         $checkTypes = ['check_in' => ['✅', 'Signed in'], 'check_out' => ['👋', 'Signed out']];
         if ($childIds) {
             foreach (DB::table('check_events')->whereIn('child_id', $childIds)
-                ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('occurred_at')
-                ->get(['child_id', 'event_type', 'occurred_at', 'notes']) as $e) {
+                ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('id')
+                ->get(['id', 'child_id', 'event_type', 'occurred_at', 'created_at', 'notes']) as $e) {
                 $m = $checkTypes[$e->event_type] ?? ['•', ucfirst((string) $e->event_type)];
                 $events[] = [
                     'at' => $e->occurred_at, 'time' => AgencyTime::fmt($e->occurred_at, $tz),
+                    'logged_at' => $e->created_at ?? $e->occurred_at, 'seq' => (int) $e->id,
                     'icon' => $m[0], 'title' => $m[1], 'child' => $nameById[$e->child_id] ?? 'Child',
                     'detail' => $e->notes ?? '',
                 ];
             }
             $ICON = ['meal' => '🍽️', 'snack' => '🍎', 'nap_start' => '😴', 'nap_end' => '🌅', 'diaper' => '🧷', 'bathroom' => '🚽', 'activity' => '✨', 'mood' => '🙂', 'note' => '📝', 'bottle' => '🍼'];
             foreach (DB::table('daily_events')->whereIn('child_id', $childIds)
-                ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('occurred_at')
-                ->get(['child_id', 'event_type', 'occurred_at', 'payload', 'notes']) as $e) {
+                ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('id')
+                ->get(['id', 'child_id', 'event_type', 'occurred_at', 'created_at', 'payload', 'notes']) as $e) {
                 $p = is_string($e->payload) ? (json_decode($e->payload, true) ?: []) : ((array) ($e->payload ?? []));
                 // A shared photo or video is filed as event_type 'note' (daily_events
                 // has an enum, so the real shape rides in the payload) — which meant
@@ -311,6 +312,7 @@ final class DayBriefController extends Controller
                     };
                 $events[] = [
                     'at' => $e->occurred_at, 'time' => AgencyTime::fmt($e->occurred_at, $tz),
+                    'logged_at' => $e->created_at ?? $e->occurred_at, 'seq' => (int) $e->id,
                     'icon' => $isMedia ? ($isVideoEvent ? '🎥' : '📸') : ($ICON[$e->event_type] ?? '•'),
                     'title' => $title,
                     'child' => $nameById[$e->child_id] ?? 'Child',
@@ -325,17 +327,30 @@ final class DayBriefController extends Controller
             // daily_events meant a provider's logged moments never showed here.
             $CICON = ['diaper' => '🧷', 'bathroom' => '🚽', 'nap' => '😴', 'meal' => '🍽️', 'snack' => '🍎', 'bottle' => '🍼', 'sunscreen' => '☀️', 'mood' => '🙂'];
             foreach (DB::table('daily_care_logs')->whereIn('child_id', $childIds)
-                ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('occurred_at')
-                ->get(['child_id', 'log_type', 'occurred_at', 'details', 'notes']) as $e) {
+                ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('id')
+                ->get(['id', 'child_id', 'log_type', 'occurred_at', 'created_at', 'details', 'notes']) as $e) {
                 $events[] = [
                     'at' => $e->occurred_at, 'time' => AgencyTime::fmt($e->occurred_at, $tz),
+                    'logged_at' => $e->created_at ?? $e->occurred_at, 'seq' => (int) $e->id,
                     'icon' => $CICON[$e->log_type] ?? '📝',
                     'title' => ucfirst((string) $e->log_type) . ($e->details ? ' — ' . $e->details : ''),
                     'child' => $nameById[$e->child_id] ?? 'Child', 'detail' => $e->notes ?? '',
                 ];
             }
         }
-        usort($events, fn ($a, $b) => strcmp((string) $a['at'], (string) $b['at']));
+        // ORDER OF RECORDING, not the time typed into the entry. Sorting by
+        // occurred_at meant one mistyped time jumped its entry across the day and
+        // pulled the sequence around it out of shape - in the one view you open to
+        // work out what actually happened. created_at cannot be mistyped; the row id
+        // breaks ties within the same second, and across the three tables the two
+        // together keep entries in the order they were genuinely logged. The times
+        // still display exactly as entered, so a wrong one now stands out against
+        // its neighbours instead of quietly reshuffling them.
+        usort($events, function ($a, $b) {
+            $al = (string) ($a['logged_at'] ?? $a['at']);
+            $bl = (string) ($b['logged_at'] ?? $b['at']);
+            return strcmp($al, $bl) ?: (($a['seq'] ?? 0) <=> ($b['seq'] ?? 0));
+        });
 
         // Summary counts for the date.
         $present = 0; $out = 0; $seen = [];
