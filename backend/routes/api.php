@@ -61,10 +61,38 @@ Route::prefix('v1')->group(function () {
     // Public crash-report sink — the Android app POSTs its last captured native
     // crash here on next launch so we can review it server-side (storage/app/crash-reports.log).
     Route::post('/diag/crash', function (\Illuminate\Http\Request $r) {
+        // Resolve the reporter FIRST: their agency decides which timezone this
+        // report is stamped in, and the agency's own zone is the only one that
+        // lines up with "what were you doing when it broke".
+        $claimedUser = $r->input('user_id') ? (int) $r->input('user_id') : null;
+        if ($claimedUser && ! \Illuminate\Support\Facades\DB::table('users')->where('id', $claimedUser)->exists()) {
+            $claimedUser = null;                       // client-supplied; never trust it blindly
+        }
+        $agencyId = $r->input('agency_id') ? (int) $r->input('agency_id') : null;
+        if ($claimedUser) {
+            // Prefer the agency we can PROVE from their roles over the one the
+            // browser claims — a stale active-agency id has misfiled data before.
+            $real = \Illuminate\Support\Facades\DB::table('role_assignments')
+                ->where('user_id', $claimedUser)->where('active', true)
+                ->whereNotNull('agency_id')->value('agency_id');
+            if ($real) $agencyId = (int) $real;
+        }
+        if ($agencyId && ! \Illuminate\Support\Facades\DB::table('agencies')->where('id', $agencyId)->exists()) {
+            $agencyId = null;
+        }
+        $tz = \App\Support\AgencyTime::tz($agencyId);   // null agency → the system default
+        $nowLocal = now()->setTimezone($tz);
+
         // Context, not just a stack. A trace with no screen, no user and no last
         // action tells you something broke but not what anyone was doing.
         $data = [
-            'at'          => now()->toDateTimeString(),
+            'at'          => $nowLocal->format('D, M j, Y g:i A') . ' (' . $nowLocal->format('T') . ')',
+            'at_utc'      => now()->toDateTimeString(),
+            'timezone'    => $tz,
+            'lang'        => mb_substr((string) $r->input('lang'), 0, 20),
+            'screen_size' => mb_substr((string) $r->input('screen_size'), 0, 24),
+            'dpr'         => mb_substr((string) $r->input('dpr'), 0, 8),
+            'sw'          => mb_substr((string) $r->input('sw'), 0, 60),
             'device'      => mb_substr((string) $r->input('device'), 0, 200),
             'os'          => mb_substr((string) $r->input('os'), 0, 80),
             'app'         => mb_substr((string) $r->input('app'), 0, 80),
@@ -111,22 +139,7 @@ Route::prefix('v1')->group(function () {
                 ->where('subject', $subject)
                 ->orderByDesc('id')->first();
 
-            $userId = $data['user_id'];
-            if ($userId && ! \Illuminate\Support\Facades\DB::table('users')->where('id', $userId)->exists()) {
-                $userId = null;                        // client-supplied; never trust it blindly
-            }
-            $agencyId = $data['agency_id'];
-            if ($userId) {
-                // Prefer the agency we can PROVE from their roles over the one the
-                // browser claims — a stale active-agency id has misfiled data before.
-                $real = \Illuminate\Support\Facades\DB::table('role_assignments')
-                    ->where('user_id', $userId)->where('active', true)
-                    ->whereNotNull('agency_id')->value('agency_id');
-                if ($real) $agencyId = (int) $real;
-            }
-            if ($agencyId && ! \Illuminate\Support\Facades\DB::table('agencies')->where('id', $agencyId)->exists()) {
-                $agencyId = null;
-            }
+            $userId = $claimedUser;
 
             $bodyText = "Automatically filed from a crash report.\n\n"
                 . 'When: ' . $data['at'] . "\n"
@@ -135,9 +148,14 @@ Route::prefix('v1')->group(function () {
                 . 'Screen: ' . ($data['screen'] ?: '?') . '   URL: ' . ($data['url'] ?: '?') . "\n"
                 . 'Last action: ' . ($data['last_action'] ?: 'not captured') . "\n"
                 . 'App: ' . ($data['app'] ?: '?') . ' ' . $data['app_version']
-                . ($data['native'] ? ' (native app)' : ' (browser)') . '   Viewport: ' . ($data['viewport'] ?: '?') . "\n"
+                . ($data['native'] ? ' (native app)' : ' (browser)') . '   Viewport: ' . ($data['viewport'] ?: '?')
+                . ($data['screen_size'] ? '   Screen: ' . $data['screen_size'] : '')
+                . ($data['dpr'] ? ' @' . $data['dpr'] . 'x' : '') . "\n"
                 . 'Device: ' . $data['device'] . "\n"
-                . 'OS: ' . $data['os'] . '   IP: ' . $data['ip'] . "\n\n"
+                . 'OS: ' . $data['os'] . ($data['lang'] ? '   Language: ' . $data['lang'] : '')
+                . '   IP: ' . $data['ip'] . "\n"
+                . 'Service worker: ' . ($data['sw'] ?: 'not reported')
+                . '   Recorded ' . $data['at_utc'] . ' UTC' . "\n\n"
                 . "Trace:\n" . $data['trace'];
 
             if ($existing) {
@@ -165,23 +183,57 @@ Route::prefix('v1')->group(function () {
             \Illuminate\Support\Facades\Log::error('Crash report: could not file a support ticket', ['error' => $e->getMessage()]);
         }
 
-        // Email the crash to the team so it lands in the inbox, not just a log.
+        // Email the crash to the team so it lands in the inbox, not just a log —
+        // branded like every other KiddieTrac email, and led by the ticket number
+        // so the report and the thing you track it in are never separate items.
         try {
-            $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;">'
-                . '<h2 style="color:#B91C1C;">KiddieTrac crash report</h2>'
-                . ($ticketId ? '<p style="font-weight:700;">Support ticket #' . (int) $ticketId . '</p>' : '')
-                . '<p><b>When:</b> ' . e($data['at'])
-                . '<br><b>Who:</b> ' . e($data['user_name'] ?: 'unknown') . ' &lt;' . e($data['user_email'] ?: 'unknown') . '&gt;'
-                . ($data['role'] ? ' · ' . e($data['role']) : '')
-                . '<br><b>Screen:</b> ' . e($data['screen'] ?: '?')
-                . '<br><b>Last action:</b> ' . e($data['last_action'] ?: 'not captured')
-                . '<br><b>Device:</b> ' . e($data['device'])
-                . '<br><b>OS:</b> ' . e($data['os']) . '<br><b>App:</b> ' . e($data['app']) . ' ' . e($data['app_version'])
-                . '<br><b>IP:</b> ' . e($data['ip']) . '</p>'
-                . '<pre style="white-space:pre-wrap;word-break:break-word;background:#F1F5F9;padding:12px;border-radius:8px;font-size:12px;">'
-                . e($data['trace']) . '</pre></div>';
-            \App\Services\AgencyMailer::forAgency(null)->mailer()->html($body, function ($m) {
-                $m->to('info@kiddietrac.com')->subject('⚠️ KiddieTrac crash report');
+            $row = function ($label, $value) {
+                return '<tr><td style="padding:5px 14px 5px 0;color:#64748B;font-size:13px;white-space:nowrap;vertical-align:top;">'
+                    . e($label) . '</td><td style="padding:5px 0;color:#0F172A;font-size:13px;font-weight:600;word-break:break-word;">'
+                    . e($value ?: '—') . '</td></tr>';
+            };
+            $ticketLine = $ticketId
+                ? '<div style="display:inline-block;background:#13b7cc;color:#04263a;font-weight:800;font-size:13px;letter-spacing:.4px;padding:6px 14px;border-radius:999px;">SUPPORT TICKET #' . (int) $ticketId . '</div>'
+                : '<div style="display:inline-block;background:#FEE2E2;color:#991B1B;font-weight:800;font-size:13px;padding:6px 14px;border-radius:999px;">NO TICKET FILED — SEE THE LOG</div>';
+
+            $body = '<div style="margin:0;padding:0;background:#F1F5F9;">'
+                . '<div style="max-width:640px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+                // Branded navy header, matching the portal's other emails.
+                . '<div style="background:linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);padding:22px 24px;border-radius:14px 14px 0 0;text-align:center;">'
+                .   '<img src="https://app.kiddietrac.com/login-wordmark.png" alt="KiddieTrac" width="190" style="max-width:190px;height:auto;display:block;margin:0 auto 10px;">'
+                .   '<div style="color:#fff;font-size:17px;font-weight:800;">Crash report</div>'
+                .   '<div style="color:rgba(255,255,255,.72);font-size:12.5px;margin-top:3px;">' . e($data['at']) . '</div>'
+                . '</div>'
+                . '<div style="background:#fff;padding:20px 24px;border:1px solid #E2E8F0;border-top:0;">'
+                .   '<div style="text-align:center;margin-bottom:16px;">' . $ticketLine . '</div>'
+                .   '<div style="font-size:15px;font-weight:800;color:#0F172A;margin:0 0 4px;">' . e($firstLine ?: 'Unknown error') . '</div>'
+                .   '<div style="font-size:12.5px;color:#64748B;margin-bottom:16px;">on ' . e($data['screen'] ?: 'an unknown screen') . '</div>'
+                .   '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">'
+                .     $row('When', $data['at'])
+                .     $row('Who', ($data['user_name'] ?: 'Not signed in') . ($data['user_email'] ? ' <' . $data['user_email'] . '>' : '') . ($data['role'] ? ' · ' . $data['role'] : ''))
+                .     $row('Screen', $data['screen'])
+                .     $row('URL', $data['url'])
+                .     $row('Last action', $data['last_action'] ?: 'not captured')
+                .     $row('App', trim(($data['app'] ?: '?') . ' ' . $data['app_version']) . ($data['native'] ? ' · native app' : ' · browser'))
+                .     $row('Viewport', trim($data['viewport'] . ($data['screen_size'] ? ' (screen ' . $data['screen_size'] . ')' : '')))
+                .     $row('Device', $data['device'])
+                .     $row('OS', $data['os'] . ($data['lang'] ? ' · ' . $data['lang'] : ''))
+                .     $row('Service worker', $data['sw'])
+                .     $row('IP', $data['ip'])
+                .   '</table>'
+                .   '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Trace</div>'
+                .   '<pre style="white-space:pre-wrap;word-break:break-word;background:#0B1220;color:#E2E8F0;padding:14px;border-radius:10px;font-size:11.5px;line-height:1.55;margin:0;">'
+                .   e($data['trace']) . '</pre>'
+                . '</div>'
+                . '<div style="text-align:center;padding:14px 24px 24px;color:#94A3B8;font-size:11.5px;">'
+                .   'Times shown in ' . e($data['timezone']) . ' · recorded ' . e($data['at_utc']) . ' UTC<br>'
+                .   'Filed automatically by KiddieTrac from an in-app crash report.'
+                . '</div></div></div>';
+
+            $subject = '⚠️ KiddieTrac crash' . ($ticketId ? ' · ticket #' . (int) $ticketId : '')
+                . ' · ' . mb_substr($firstLine ?: 'Unknown error', 0, 80);
+            \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($subject) {
+                $m->to('info@kiddietrac.com')->subject($subject);
             });
         } catch (\Throwable $e) {
             // Do NOT swallow this silently again: the undefined-$data bug hid every

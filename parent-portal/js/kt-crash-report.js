@@ -89,6 +89,15 @@
       body.viewport = (window.innerWidth || 0) + 'x' + (window.innerHeight || 0);
       body.native = !!window.__KT_NATIVE;
       body.online = navigator.onLine !== false;
+      body.lang = navigator.language || '';
+      body.screen_size = (screen && screen.width ? screen.width + 'x' + screen.height : '');
+      body.dpr = String(window.devicePixelRatio || 1);
+      // Which service-worker build served this session — the stale-asset question
+      // is the first thing asked of any "it broke for me" report.
+      try {
+        var reg = navigator.serviceWorker && navigator.serviceWorker.controller;
+        body.sw = reg ? String(reg.scriptURL || '').split('/').pop() : 'none';
+      } catch (x) {}
     } catch (x) {}
     try {
       fetch(apiBase() + '/diag/crash', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
