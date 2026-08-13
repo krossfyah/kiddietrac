@@ -1682,3 +1682,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::put('kb/{id}',    [App\Http\Controllers\Api\KnowledgeBaseController::class, 'update'])->whereNumber('id');
     Route::delete('kb/{id}', [App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy'])->whereNumber('id');
 });
+
+/* The pulse - one cheap request answering "has anything I can see changed?", so a
+   change made by ANOTHER user reaches the screen without a reload. Replaces the
+   question a dozen separate badge pollers were each asking on their own timer. */
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    Route::get('pulse', [App\Http\Controllers\Api\PulseController::class, 'index']);
+});

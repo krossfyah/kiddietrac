@@ -584,15 +584,10 @@
 
     wrap.querySelector('#kt-refresh-btn')?.addEventListener('click', () => renderAgencyDashboard(main));
 
-    // Country & compliance — an agency-wide setting, so it belongs on the agency's
-    // own screen rather than on the list of providers where it used to sit.
-    try {
-      if (KT.renderCountryCard) {
-        const countryHost = document.createElement('div');
-        wrap.appendChild(countryHost);
-        KT.renderCountryCard(countryHost);
-      }
-    } catch (e) {}
+    // Country & compliance is NOT rendered here. It is an agency SETTING, so it
+    // belongs inside Edit agency (and Branding & settings) rather than sitting on
+    // the overview, which is a dashboard — something you read, not something you
+    // configure.
     wrap.querySelector('#kt-add-centre-btn')?.addEventListener('click', () => openAddCentre(main));
     wrap.querySelector('#kt-edit-agency-btn')?.addEventListener('click', () => openEditAgency(main, data.agency || {}));
 
@@ -1237,6 +1232,7 @@
           Logo, colours, business address, bank details, and privacy / terms links live under <strong>Branding</strong>.
           <button id="kt-ea-branding" style="margin-top:8px;display:block;background:white;color:#1F6080;border:1px solid #1F6080;border-radius:7px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:12px;">Open Branding →</button>
         </div>
+        <div id="kt-ea-country"></div>
         <div id="kt-ea-msg" style="margin-top:12px;font-size:13px;"></div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
           <button id="kt-ea-cancel" style="background:white;color:#374151;border:1px solid #D1D5DB;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer;">Cancel</button>
@@ -1244,6 +1240,14 @@
         </div>
       </div>`;
     document.body.appendChild(overlay);
+
+    // The agency's country, currency and regulatory framework — an agency setting,
+    // so it lives with the rest of them rather than on the dashboard. Same shared
+    // KT.renderCountryCard the Branding & settings screen uses.
+    try {
+      const _countryHost = modal.querySelector('#kt-ea-country');
+      if (_countryHost && window.KT && KT.renderCountryCard) KT.renderCountryCard(_countryHost);
+    } catch (e) {}
 
     const close = () => overlay.remove();
     modal.querySelector('#kt-ea-close').addEventListener('click', close);
