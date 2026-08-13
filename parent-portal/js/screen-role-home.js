@@ -67,7 +67,11 @@
       var bg = palette[h % palette.length];
       var base = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:' + Math.round(size * 0.4) + 'px;color:#fff;background:' + bg + ';overflow:hidden;vertical-align:middle;';
       var p = opts.photoUrl;
-      if (p) return '<span class="kt-avatar" title="' + nm.replace(/"/g, '') + '" style="' + base + 'background-image:url(' + p + ');background-size:cover;background-position:center;"></span>';
+      // opts.userId / opts.role travel with the avatar so the zoom lightbox can
+      // name the person, show their role and link to their record.
+      var idAttr = opts.userId ? ' data-kt-user-id="' + String(opts.userId).replace(/"/g, '') + '"' : '';
+      var roleAttr = opts.role ? ' data-kt-role="' + String(opts.role).replace(/"/g, '') + '"' : '';
+      if (p) return '<span class="kt-avatar" title="' + nm.replace(/"/g, '') + '" data-kt-name="' + nm.replace(/"/g, '') + '"' + idAttr + roleAttr + ' style="' + base + 'background-image:url(' + p + ');background-size:cover;background-position:center;"></span>';
       // No photo → an emoji face avatar (never initials). Known sex when given,
       // else assumed by name. Pass opts.kind:'child' for a child face. Set
       // opts.initials:true to force the old initials look for a specific caller.

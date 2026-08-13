@@ -925,7 +925,7 @@
       const nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
       // v22p42: avatar with a presence indicator dot (online in last 5 min)
       const avatarWrap = Dom.el('div', { style: 'position:relative;display:inline-block;' });
-      avatarWrap.appendChild(avatarCircle(u, 32));
+      avatarWrap.appendChild(avatarCircle(u, 32, { user: true }));
       if (presenceSet.has(u.id)) {
         avatarWrap.appendChild(Dom.el('span', {
           title: 'Online now',
@@ -1208,7 +1208,7 @@
     };
     var body = Dom.el('div', {});
     var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:6px;' });
-    head.appendChild(avatarCircle(u, 52));
+    head.appendChild(avatarCircle(u, 52, { user: true }));
     head.appendChild(Dom.el('div', {}, [
       Dom.el('div', { style: 'font-size:18px;font-weight:800;color:#0f172a;' }, u.name || u.email),
       Dom.el('div', { style: 'margin-top:4px;' }, statusBadge(u.status)),
@@ -1288,7 +1288,7 @@
 
     // v22p3.2: avatar row at the top — current avatar + "Change avatar" file picker
     const avatarRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
-    let currentAvatar = avatarCircle(user, 64);
+    let currentAvatar = avatarCircle(user, 64, { user: true });
     avatarRow.appendChild(currentAvatar);
     const avatarSide = Dom.el('div', { style: 'flex:1;' });
     avatarSide.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:15px;' }, user.name));
@@ -1314,7 +1314,7 @@
         const fd = new FormData(); fd.append('avatar', blob, 'avatar.jpg');
         const r = await Api.postForm('/admin/users/' + user.id + '/avatar', fd);
         user.photo_url = r.photo_url;
-        const fresh = avatarCircle(user, 64);
+        const fresh = avatarCircle(user, 64, { user: true });
         currentAvatar.replaceWith(fresh); currentAvatar = fresh;
         avatarMsg.textContent = '✓ Updated'; avatarMsg.style.color = '#16A34A';
       } catch (e) {
@@ -3837,11 +3837,41 @@
   }
 
   // v22p3.2: avatar circle (image if photo_url set, else colored initials)
-  function avatarCircle(u, size) {
-    size = size || 36;
-    const wrap = Dom.el('div', {
-      style: 'flex-shrink:0;width:' + size + 'px;height:' + size + 'px;border-radius:50%;overflow:hidden;background:' + avatarColor(u) + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:' + Math.round(size * 0.4) + 'px;letter-spacing:0.3px;box-shadow:0 1px 3px rgba(0,0,0,0.1);',
+  // opts.user marks this as a PERSON, which lets the avatar lightbox show their
+  // role and link through to their record. Deliberately opt-in: this helper is
+  // also called for families, whose id is a family id, not a user id.
+  // Open a person's record from anywhere in the portal — used by the avatar
+  // lightbox's "View profile". There is no single-user endpoint, so this reads
+  // the list the Users screen already uses and hands the row to the same modal,
+  // which keeps one implementation of "the user record" rather than two.
+  KT.openUserRecord = function (userId) {
+    if (!userId) return Promise.resolve(false);
+    return Api.get('/admin/users').then(function (data) {
+      var rows = (data && (data.data || data.users || data)) || [];
+      var u = (rows.length ? rows : []).filter(function (r) { return String(r.id) === String(userId); })[0];
+      if (!u) { try { KT.Shell.navigate('admin-users'); } catch (e) {} return false; }
+      showUserModal(u, Dom.el('div', {}));
+      return true;
+    }).catch(function () {
+      try { KT.Shell.navigate('admin-users'); } catch (e) {}
+      return false;
     });
+  };
+
+  function avatarCircle(u, size, opts) {
+    size = size || 36;
+    opts = opts || {};
+    const attrs = {
+      style: 'flex-shrink:0;width:' + size + 'px;height:' + size + 'px;border-radius:50%;overflow:hidden;background:' + avatarColor(u) + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:' + Math.round(size * 0.4) + 'px;letter-spacing:0.3px;box-shadow:0 1px 3px rgba(0,0,0,0.1);',
+    };
+    const personName = (u && (u.name || [u.first_name, u.last_name].filter(Boolean).join(' '))) || '';
+    if (personName) attrs['data-kt-name'] = personName;
+    if (opts.user && u && u.id) {
+      attrs['data-kt-user-id'] = String(u.id);
+      const r = (u.roles && u.roles.length) ? u.roles.join(', ') : (u.role || '');
+      if (r) attrs['data-kt-role'] = String(r);
+    }
+    const wrap = Dom.el('div', attrs);
     if (u && u.photo_url) {
       const img = Dom.el('img', {
         src: avatarSrc(u.photo_url),
