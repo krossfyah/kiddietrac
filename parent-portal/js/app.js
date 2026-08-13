@@ -132,6 +132,19 @@
         throw new ApiError('unauthorized', 'Session expired. Please sign in again.', 401);
       }
 
+      // A successful WRITE means somebody's screen is now out of date — this
+      // one, another screen, or the same user in another tab. Announce it from
+      // the single place every request already passes through, so no screen has
+      // to remember to do it. Reads say nothing and are ignored.
+      if (method !== 'GET' && res.ok) {
+        try {
+          if (window.KT && KT.dataChanged
+              && !(KT.liveRefresh && KT.liveRefresh.shouldIgnore(path))) {
+            KT.dataChanged(path);
+          }
+        } catch (_) { /* never let this affect the request */ }
+      }
+
       if (res.status === 204) return null;
 
       let data = null;

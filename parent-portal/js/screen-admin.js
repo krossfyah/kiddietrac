@@ -464,6 +464,38 @@
       tagWrap.appendChild(tagIn);
       form.appendChild(tagWrap);
 
+      // Email delivery for this centre/provider. The switchboard on
+      // Settings → Email settings covers every centre and room at once; this is
+      // the same switch on the record itself, because that is where you look when
+      // you want to turn email on for THIS provider.
+      const emailWrap = Dom.el('div', { style: 'margin:14px 0;padding:12px 14px;border:1px solid var(--ink-100,#E5E7EB);border-radius:10px;background:#F8FAFC;' });
+      const emailRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
+      const emailIn = Dom.el('input', { type: 'checkbox' });
+      emailIn.checked = centre.email_enabled !== false;
+      emailRow.appendChild(emailIn);
+      emailRow.appendChild(Dom.el('label', { style: 'font-size:14px;font-weight:600;' }, 'Send emails for this ' + (KT.centreWord ? KT.centreWord(false, true) : 'centre')));
+      emailWrap.appendChild(emailRow);
+      emailWrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:6px;line-height:1.5;' },
+        'Off holds back every email to its educators and to the parents of its children — useful while setting one up. Rooms follow their centre: a room cannot send while this is off. The full switchboard, including rooms, is under Settings → Email settings.'));
+      const emailMsg = Dom.el('span', { style: 'font-size:12px;font-weight:700;margin-left:8px;' });
+      emailRow.appendChild(emailMsg);
+      // Saved immediately: it is a switch, not part of the form, and it writes to
+      // the same endpoint the switchboard uses rather than a second code path.
+      emailIn.addEventListener('change', async () => {
+        emailMsg.style.color = '#6B7280'; emailMsg.textContent = 'Saving…';
+        try {
+          await Api.patch('/admin/email-delivery/centre/' + centre.id, { enabled: emailIn.checked });
+          centre.email_enabled = emailIn.checked;
+          emailMsg.style.color = '#16A34A';
+          emailMsg.textContent = emailIn.checked ? '✓ Email on' : '✓ Email off';
+        } catch (e) {
+          emailIn.checked = !emailIn.checked;               // put the switch back
+          emailMsg.style.color = '#DC2626';
+          emailMsg.textContent = (e && e.message) || 'Could not save';
+        }
+      });
+      form.appendChild(emailWrap);
+
       // Provider bio — required. Sent to parents in the welcome email when a
       // family is assigned to this provider, so they know who's caring for their
       // child. A short, warm first-person introduction works best.
