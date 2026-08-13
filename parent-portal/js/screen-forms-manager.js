@@ -451,6 +451,13 @@
    * anyone who prefers the browser's own viewer.
    */
   function openPdfPopup(url, title) {
+    // This viewer was generalised into kt-doc-viewer.js so every document in the
+    // portal opens the same way. Kept as a thin wrapper: same call sites, one
+    // implementation. The local copy below is the fallback if that file fails to load.
+    if (window.KT && KT.viewDocument) { KT.viewDocument(url, { title: title || 'Form', label: 'Form' }); return; }
+    return openPdfPopupLocal(url, title);
+  }
+  function openPdfPopupLocal(url, title) {
     if (!url) return;
     var ov = document.createElement('div');
     ov.setAttribute('data-no-modal-guard', '1');

@@ -1424,14 +1424,14 @@
       function openDoc(d) {
         var url = avatarSrc(d.file_url);
         if (!url) return;
-        var C = window.Capacitor;
-        var native = C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative);
-        var B = C && C.Plugins && C.Plugins.Browser;
-        if (native && B && B.open) { try { B.open({ url: url }); return; } catch (e) {} }
-        if (native) { try { window.location.href = url; } catch (e) {} return; }
-        var w = null;
-        try { w = window.open(url, '_blank', 'noopener'); } catch (e) {}
-        if (!w) { try { window.location.href = url; } catch (e) {} }
+        // View it in the portal's document panel. Handing it to the browser sent
+        // APK users out to an external browser, session and all.
+        if (window.KT && KT.viewDocument) {
+          KT.viewDocument(url, { title: d.title || d.file_name || 'Document', label: d.category || 'Document' });
+          return;
+        }
+        if (window.KT && KT.openDocumentExternally) { KT.openDocumentExternally(url); return; }
+        try { window.location.href = url; } catch (e) {}
       }
       function fmtSize(n) { n = Number(n || 0); if (n < 1024) return n + ' B'; if (n < 1048576) return Math.round(n / 1024) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
       function docIcon(d) {
