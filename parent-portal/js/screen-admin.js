@@ -1214,6 +1214,8 @@
       Dom.el('div', { style: 'margin-top:4px;' }, statusBadge(u.status)),
     ]));
     body.appendChild(head);
+    // What the list row already knows — shown immediately so the dialog is never
+    // empty while the full record is on its way.
     body.appendChild(rowEl('Username', u.username || '—', true));
     body.appendChild(rowEl('Email', u.email));
     body.appendChild(rowEl('Phone', u.phone));
@@ -1221,6 +1223,44 @@
     body.appendChild(rowEl('Last login', fmtDT(u.last_login_at)));
     body.appendChild(rowEl('Onboarded', u.onboarded_at ? fmtDT(u.onboarded_at) : 'Not yet'));
     body.appendChild(rowEl('Created', fmtDT(u.created_at)));
+
+    // Then EVERYTHING they entered. The list payload carries a handful of account
+    // fields; the record endpoint carries the bio, address, date of birth,
+    // emergency contacts and every role-specific onboarding answer. Rendering the
+    // record itself means a question added to onboarding later appears here without
+    // anyone remembering to add a line to this file.
+    var loading = Dom.el('div', { style: 'padding:10px 0;font-size:12.5px;color:#94A3B8;' }, 'Loading the rest of the record…');
+    body.appendChild(loading);
+    Api.get('/admin/users/' + u.id + '/profile').then(function (d) {
+        if (loading.parentNode) loading.parentNode.removeChild(loading);
+        var rec = (d && d.record) || {};
+        // Skip what is already above, and the name shown in the header.
+        var shown = { 'Username': 1, 'Email': 1, 'Phone': 1, 'Role': 1, 'Roles': 1, 'Status': 1,
+                      'Last login': 1, 'Onboarded': 1, 'Created': 1, 'First name': 1, 'Last name': 1 };
+        var keys = Object.keys(rec).filter(function (k) { return !shown[k]; });
+        if (!keys.length) {
+            body.appendChild(Dom.el('div', { style: 'padding:8px 0;font-size:12.5px;color:#94A3B8;' },
+                'Nothing further was captured for this user.'));
+            return;
+        }
+        keys.forEach(function (label) {
+            var value = String(rec[label]);
+            // A bio is a paragraph, not a table cell — give it room to breathe.
+            if (value.length > 90) {
+                var wrap = Dom.el('div', { style: 'padding:10px 0;border-top:1px solid #F1F5F9;' });
+                wrap.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;color:#94A3B8;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px;' }, label));
+                wrap.appendChild(Dom.el('div', { style: 'font-size:13.5px;color:#0F172A;line-height:1.55;white-space:pre-wrap;' }, value));
+                body.appendChild(wrap);
+            } else {
+                body.appendChild(rowEl(label, value));
+            }
+        });
+    }).catch(function () {
+        if (loading.parentNode) loading.parentNode.removeChild(loading);
+        body.appendChild(Dom.el('div', { style: 'padding:8px 0;font-size:12.5px;color:#B45309;' },
+            'Could not load the full record — open Manage for the complete profile.'));
+    });
+
     Shell.Modal.open({
       title: 'User details',
       body: body,

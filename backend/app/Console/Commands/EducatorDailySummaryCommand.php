@@ -118,14 +118,56 @@ class EducatorDailySummaryCommand extends Command
         $start = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc();
         $end   = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
 
+        // BOTH care tables. The roster quick-log writes daily_events; the care
+        // screen writes daily_care_logs. Reading only the first counted a real
+        // day's work as a light one - and the score is 40% this number.
         $events = DB::table('daily_events')->where('recorded_by_id', $uid)
-            ->whereBetween('occurred_at', [$start, $end])->get(['event_type', 'child_id']);
-        $byType = [];
-        foreach ($events as $e) { $byType[$e->event_type] = ($byType[$e->event_type] ?? 0) + 1; }
+            ->whereBetween('occurred_at', [$start, $end])->get(['event_type', 'child_id', 'occurred_at']);
 
+        $careLogs = Schema::hasTable('daily_care_logs')
+            ? DB::table('daily_care_logs')->where('recorded_by_id', $uid)
+                ->whereBetween('occurred_at', [$start, $end])->get(['log_type', 'child_id', 'occurred_at'])
+            : collect();
+
+        // The two tables use different words for the same care, so map them onto one
+        // set of buckets: a nap counts as a nap whichever screen logged it. Bathroom
+        // rides with nappies (both toileting) and bottle with meals (both feeding);
+        // sunscreen and mood have no tile but still count as moments, which is the
+        // point - they ARE work done for a child.
+        $CARE_TO_EVENT = [
+            'meal' => 'meal', 'snack' => 'snack', 'bottle' => 'meal',
+            'nap' => 'nap', 'diaper' => 'diaper', 'bathroom' => 'diaper',
+            'mood' => 'mood', 'sunscreen' => 'care',
+        ];
+
+        $byType = [];
+        $momentKeys = [];      // child|bucket|minute - dedupes a moment written to both
+        $addMoment = function ($childId, $bucket, $when) use (&$byType, &$momentKeys) {
+            try { $minute = Carbon::parse($when)->format('Y-m-d H:i'); } catch (\Throwable $e) { $minute = (string) $when; }
+            $key = $childId . '|' . $bucket . '|' . $minute;
+            if (isset($momentKeys[$key])) return;        // same moment, both tables
+            $momentKeys[$key] = true;
+            $byType[$bucket] = ($byType[$bucket] ?? 0) + 1;
+        };
+        foreach ($events as $e)   { $addMoment($e->child_id, $e->event_type, $e->occurred_at); }
+        foreach ($careLogs as $c) { $addMoment($c->child_id, $CARE_TO_EVENT[$c->log_type] ?? $c->log_type, $c->occurred_at); }
+        $moments = count($momentKeys);
+
+        // Photos and video shared with families are the day's work too, and were
+        // credited nowhere at all.
+        $media = Schema::hasTable('photos')
+            ? DB::table('photos')->where('uploaded_by_id', $uid)->whereBetween('created_at', [$start, $end])->count()
+            : 0;
+
+        // Children covered = everyone this educator actually looked after, from any
+        // source. This used to take the check_events count and fall back to the logs
+        // only when that was ZERO, so checking in 3 children while logging care for 8
+        // credited 3.
         $children = DB::table('check_events')->where('recorded_by_id', $uid)
-            ->whereBetween('occurred_at', [$start, $end])->distinct('child_id')->count('child_id');
-        if (! $children) { $children = $events->pluck('child_id')->unique()->count(); }
+            ->whereBetween('occurred_at', [$start, $end])->pluck('child_id')
+            ->merge($events->pluck('child_id'))
+            ->merge($careLogs->pluck('child_id'))
+            ->filter()->unique()->count();
 
         $obs = Schema::hasTable('observations')
             ? DB::table('observations')->where('recorded_by_id', $uid)->whereBetween('created_at', [$start, $end])->count()
@@ -139,15 +181,16 @@ class EducatorDailySummaryCommand extends Command
         }
 
         return [
-            'moments'      => $events->count(),
+            'moments'      => (int) $moments + (int) $media,
             'children'     => (int) $children,
             'observations' => (int) $obs,
             'minutes'      => $mins,
+            'media'        => (int) $media,
             'meals'        => ($byType['meal'] ?? 0) + ($byType['snack'] ?? 0),
             'naps'         => ($byType['nap_start'] ?? 0) + ($byType['nap_end'] ?? 0) + ($byType['nap'] ?? 0),
-            'activities'   => $byType['activity'] ?? 0,
+            'activities'   => ($byType['activity'] ?? 0) + ($byType['care'] ?? 0),
             'diapers'      => $byType['diaper'] ?? 0,
-            'notes'        => $byType['note'] ?? 0,
+            'notes'        => ($byType['note'] ?? 0) + ($byType['mood'] ?? 0),
         ];
     }
 
