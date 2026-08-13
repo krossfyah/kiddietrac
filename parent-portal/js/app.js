@@ -150,6 +150,7 @@
      *  so call sites reading as an upload are obvious. */
     postForm(path, formData) { return this.request(path, { method: 'POST', body: formData }); },
     patch(path, body) { return this.request(path, { method: 'PATCH', body }); },
+    put(path, body) { return this.request(path, { method: 'PUT', body }); },
     delete(path) { return this.request(path, { method: 'DELETE' }); },
   };
 

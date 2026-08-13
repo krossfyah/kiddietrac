@@ -1055,9 +1055,10 @@
       // Body — scrolls inside the dialog (overscroll-behavior:contain stops the
       // scroll from chaining to the page once the body hits its top/bottom).
       const bodyEl = Dom.el('div', { class: 'modal-body' });
-      bodyEl.style.overflowY = 'auto';
-      bodyEl.style.overscrollBehavior = 'contain';
-      if (!bodyEl.style.maxHeight) bodyEl.style.maxHeight = 'calc(90vh - 128px)';
+      // Scrolling lives in the stylesheet now: the shell is a flex column that does
+      // not scroll and the body is the only scroll region, sized by flex. The inline
+      // "90vh minus 128px" had to guess the height of the header and footer, and
+      // paired with the shell's own overflow it produced two scrollbars.
       if (typeof body === 'string') {
         bodyEl.innerHTML = body;
       } else if (body instanceof Node) {

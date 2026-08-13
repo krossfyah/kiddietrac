@@ -78,7 +78,11 @@
   // Pull an icon (leading emoji/symbol) + a readable label out of a button.
   function parse(el) {
     var raw = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    var aria = (el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
+    // data-kttip FIRST: kt-icon-buttons.js has usually already replaced this
+    // button's text with an icon and moved the real label there. Reading only
+    // aria-label/title is why every kebab item read "Action".
+    var aria = (el.getAttribute('data-kttip') || el.getAttribute('aria-label')
+      || el.getAttribute('title') || el.getAttribute('data-kt-label') || '').trim();
     var icon = '', label = '';
     if (raw && !/[0-9A-Za-z]/.test(raw)) {           // emoji-only button (e.g. 🗑️)
       icon = raw; label = aria;

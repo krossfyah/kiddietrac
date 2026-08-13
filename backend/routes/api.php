@@ -1670,3 +1670,15 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::post('help/{slug}/view', [App\Http\Controllers\Api\HelpController::class, 'trackView']);
     Route::post('help/{slug}/feedback', [App\Http\Controllers\Api\HelpController::class, 'feedback']);
 });
+
+/* Knowledge base - the agency's OWN articles. Every signed-in role may read and
+   write one; only the author, or someone who manages the agency, may edit or
+   remove another person's. Scoping happens inside the controller through the
+   shared resolver, never the raw X-Active-Agency-Id header. */
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    Route::get('kb',         [App\Http\Controllers\Api\KnowledgeBaseController::class, 'index']);
+    Route::post('kb',        [App\Http\Controllers\Api\KnowledgeBaseController::class, 'store']);
+    Route::get('kb/{id}',    [App\Http\Controllers\Api\KnowledgeBaseController::class, 'show'])->whereNumber('id');
+    Route::put('kb/{id}',    [App\Http\Controllers\Api\KnowledgeBaseController::class, 'update'])->whereNumber('id');
+    Route::delete('kb/{id}', [App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy'])->whereNumber('id');
+});

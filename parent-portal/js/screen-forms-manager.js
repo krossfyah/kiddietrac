@@ -267,7 +267,10 @@
         + 'width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;';
       head.appendChild(closeBtn);
       var scroller = document.createElement('div');
-      scroller.style.cssText = 'padding:16px;max-height:calc(100vh - 150px);overflow-y:auto;';
+      // The overlay itself scrolls (overflow-y:auto above), so this must not scroll
+      // as well or the upload dialog shows two scrollbars, the same fault as the
+      // shell modal. Let it grow and leave the scrolling to the overlay.
+      scroller.style.cssText = 'padding:16px;';
 
       panel.parentNode.removeChild(panel);                    // move, listeners intact
       panel.style.margin = '0';
@@ -628,7 +631,12 @@
             + '<button class="fm-del kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" title="Delete" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">🗑️</button>'
             + '</td></tr>';
         }).join('') + '</tbody></table>';
-      el.querySelectorAll('.fm-open').forEach(function (b) { b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); }); });
+      // View it in the portal's document panel like every other document, rather
+      // than handing it to the browser — which on the APK opens an EXTERNAL browser
+      // and drops the user out of the app.
+      el.querySelectorAll('.fm-open').forEach(function (b) {
+        b.addEventListener('click', function () { openPdfPopup(b.getAttribute('data-u'), b.textContent.trim()); });
+      });
       // Pass the loaded record, not scraped data- attributes: the dialog now needs
       // audiences, both toggles and the named recipients as well.
       var byId = {};
@@ -764,7 +772,7 @@
         + '<button id="fm-vclose" style="flex:0 0 auto;background:#F1F5F9;color:#334155;border:0;border-radius:10px;padding:11px 18px;font-weight:700;font-size:13px;cursor:pointer;">Close</button>'
         + '</div></div></div>';
       document.body.appendChild(ov);
-      ov.querySelector('#fm-vform').onclick = function () { openUrl(fileUrl(s.file_url)); };
+      ov.querySelector('#fm-vform').onclick = function () { openPdfPopup(fileUrl(s.file_url), s.form_title || 'Form'); };
       ov.querySelector('#fm-vclose').onclick = function () { ov.remove(); };
       ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
     }).catch(function (e) { toast('⚠️', 'Could not load', e.message || '', '#B91C1C'); });

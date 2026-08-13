@@ -25,7 +25,17 @@
   };
 
   function catIcon(cat) {
-    var c = String(cat || '').toLowerCase();
+    var name = String(cat || '').trim();
+    // Explicit, one-to-one icons so no two topics share the same glyph.
+    var MAP = {
+      'AI': '🤖', 'Administration': '🏢', 'Billing': '💳', 'Billing & Payments': '🧾',
+      'Children': '👶', 'Communications': '💬', 'Compliance': '🛡️', 'Daily Operations': '📆',
+      'Enrollment': '📝', 'Family Engagement': '👪', 'Getting Started': '🚀', 'Marketing': '📣',
+      'Mobile': '📱', 'Programs': '🎨', 'Reporting': '📊', 'Settings': '⚙️', 'Settings & security': '🔒',
+      'Staff': '🧑‍🏫', 'Staff Management': '🗂️', 'Troubleshooting': '🛠️', 'Your Account': '👤',
+    };
+    if (MAP[name]) return MAP[name];
+    var c = name.toLowerCase();
     if (/start|begin|welcome|intro|basic/.test(c)) return '🚀';
     if (/attend|check|sign.?in|arriv/.test(c)) return '✅';
     if (/messag|chat|communica/.test(c)) return '💬';
@@ -59,6 +69,11 @@
     const tourBtn = Dom.el('button', { class: 'kt-help-ask-btn', style: 'background:#7C3AED;' }, ['🎬', Dom.el('span', {}, 'Take the tour')]);
     tourBtn.addEventListener('click', function () { if (window.KT && window.KT.showTour) window.KT.showTour(); });
     actions.appendChild(tourBtn);
+    // Help is what KiddieTrac does; the knowledge base is what THIS agency does.
+    // Both belong on this page, so either answer is one click away.
+    const kbBtn = Dom.el('button', { class: 'kt-help-ask-btn', style: 'background:#0FA3B1;' }, ['📚', Dom.el('span', {}, 'Knowledge base')]);
+    kbBtn.addEventListener('click', function () { location.hash = '#knowledge-base'; });
+    actions.appendChild(kbBtn);
     const askBtn = Dom.el('button', { class: 'kt-help-ask-btn' }, ['✨', Dom.el('span', {}, 'Ask AI')]);
     askBtn.addEventListener('click', showAskModal);
     actions.appendChild(askBtn);
@@ -72,7 +87,13 @@
     });
     searchInput.addEventListener('input', (e) => {
       state.searchTerm = e.target.value.trim().toLowerCase();
+      const caret = e.target.selectionStart;
       renderSidebar();
+      // renderSidebar() clears the sidebar and re-appends THIS input node, which
+      // detaches it mid-keystroke and drops focus — so you couldn't type past the
+      // first character and search "did nothing". Restore focus + caret afterwards.
+      searchInput.focus();
+      try { searchInput.setSelectionRange(caret, caret); } catch (_) {}
       if (state.searchTerm.length >= 2) {
         renderSearchResults();
       } else if (state.currentSlug) {
@@ -302,13 +323,22 @@
         home.appendChild(panelOfCards('🔥 Popular this month', state.popular));
       }
 
-      // Big quick-start card
+      // Welcome / quick-start card (redesigned)
       const qs = Dom.el('div', { class: 'kt-help-quickstart' });
-      qs.appendChild(Dom.el('h3', { style: 'margin: 0 0 8px;' }, 'New to KiddieTrac?'));
-      qs.appendChild(Dom.el('p', { style: 'margin: 0 0 12px; opacity: 0.9;' }, 'Read the master roles & responsibilities article to understand who can do what.'));
-      const qsBtn = Dom.el('button', { class: 'kt-help-quickstart-btn' }, 'Read roles & responsibilities  →');
+      qs.appendChild(Dom.el('div', { class: 'kt-help-qs-icon' }, '📘'));
+      const qsBody = Dom.el('div', { class: 'kt-help-qs-body' });
+      qsBody.appendChild(Dom.el('div', { class: 'kt-help-qs-eyebrow' }, '👋 WELCOME'));
+      qsBody.appendChild(Dom.el('h3', { class: 'kt-help-qs-h' }, 'New to KiddieTrac?'));
+      qsBody.appendChild(Dom.el('p', { class: 'kt-help-qs-p' }, 'Start with the master roles & responsibilities guide to see who can do what — or browse the getting-started guides.'));
+      const qsBtns = Dom.el('div', { class: 'kt-help-qs-btns' });
+      const qsBtn = Dom.el('button', { class: 'kt-help-quickstart-btn', 'data-kt-iconized': '1' }, 'Roles & responsibilities  →');
       qsBtn.addEventListener('click', () => loadArticle('roles-and-responsibilities'));
-      qs.appendChild(qsBtn);
+      const qsBtn2 = Dom.el('button', { class: 'kt-help-quickstart-btn ghost', 'data-kt-iconized': '1' }, 'Getting started guides');
+      qsBtn2.addEventListener('click', () => { if (state.categorized['Getting Started']) showCategory('Getting Started'); });
+      qsBtns.appendChild(qsBtn);
+      qsBtns.appendChild(qsBtn2);
+      qsBody.appendChild(qsBtns);
+      qs.appendChild(qsBody);
       home.appendChild(qs);
     }
 
@@ -571,28 +601,36 @@
   // ─── AI Ask Modal (compact) ─────────────────────────────────
 
   function showAskModal(prefill) {
-    const body = Dom.el('div', {});
-    body.appendChild(Dom.el('p', { class: 'kt-ask-intro' }, 'Ask in plain English. The AI reads every help article + your role.'));
-    const input = Dom.el('textarea', { class: 'kt-ask-input', placeholder: 'e.g. "How do I refund a payment?"' });
+    // NOTE: styles are inlined (not just classes) because this modal opens from
+    // the floating button WITHOUT the help screen — whose <style> block carries
+    // the .kt-ask-* rules — so the classes alone rendered a tiny, cramped input.
+    const body = Dom.el('div', { style: 'min-width:min(520px,80vw);' });
+    body.appendChild(Dom.el('p', { class: 'kt-ask-intro', style: 'color:#64748B;margin:0 0 14px;font-size:14px;line-height:1.5;' },
+      'Ask in plain English. The AI reads every help article + your role.'));
+    const input = Dom.el('textarea', { class: 'kt-ask-input', rows: '3', placeholder: 'e.g. "How do I refund a payment?"',
+      style: 'width:100%;min-height:96px;height:96px;box-sizing:border-box;padding:13px 15px;border:1.5px solid #D1D5DB;border-radius:12px;font-family:inherit;font-size:15px;line-height:1.5;resize:vertical;outline:none;color:#0F172A;' });
     if (prefill) input.value = prefill;
+    input.addEventListener('focus', function () { input.style.borderColor = '#1F6080'; input.style.boxShadow = '0 0 0 3px rgba(31,96,128,.12)'; });
+    input.addEventListener('blur', function () { input.style.borderColor = '#D1D5DB'; input.style.boxShadow = 'none'; });
     body.appendChild(input);
     setTimeout(() => input.focus(), 100);
-    const askBtn = Dom.el('button', { class: 'kt-ask-go' }, '✨ Ask');
+    const askBtn = Dom.el('button', { class: 'kt-ask-go',
+      style: 'width:100%;background:linear-gradient(135deg,#1F6080,#2D7BA8);color:#fff;border:0;padding:13px 20px;border-radius:12px;font-weight:800;cursor:pointer;margin-top:14px;font-size:15px;box-shadow:0 4px 12px rgba(31,96,128,.22);' }, '✨ Ask');
     body.appendChild(askBtn);
-    const answerArea = Dom.el('div', { class: 'kt-ask-answer-area' });
+    const answerArea = Dom.el('div', { class: 'kt-ask-answer-area', style: 'margin-top:16px;' });
     body.appendChild(answerArea);
     askBtn.addEventListener('click', async () => {
       const q = input.value.trim();
       if (!q) return;
       askBtn.disabled = true; askBtn.textContent = 'Thinking...';
       Dom.clear(answerArea);
-      answerArea.appendChild(Dom.el('div', { class: 'kt-ask-pending' }, 'Searching the help docs...'));
+      answerArea.appendChild(Dom.el('div', { class: 'kt-ask-pending', style: 'background:#F8FAFC;padding:14px 16px;border-radius:10px;color:#64748B;font-size:14px;' }, 'Searching the help docs…'));
       try {
         const res = await Api.post('/help/ask', { question: q });
         Dom.clear(answerArea);
-        const box = Dom.el('div', { class: 'kt-ask-answer' });
-        box.appendChild(Dom.el('div', { class: 'kt-ask-answer-l' }, '✨ ANSWER'));
-        const b = Dom.el('div', { class: 'kt-ask-answer-body' });
+        const box = Dom.el('div', { class: 'kt-ask-answer', style: 'background:linear-gradient(135deg,#1F6080,#2D7BA8);color:#fff;padding:18px;border-radius:12px;' });
+        box.appendChild(Dom.el('div', { class: 'kt-ask-answer-l', style: 'font-size:11px;font-weight:800;letter-spacing:1px;opacity:.8;margin-bottom:8px;' }, '✨ ANSWER'));
+        const b = Dom.el('div', { class: 'kt-ask-answer-body', style: 'font-size:14.5px;line-height:1.6;white-space:pre-wrap;' });
         b.textContent = res.answer || '(empty response)';
         box.appendChild(b);
         if (res.sources && res.sources.length) {
@@ -750,8 +788,18 @@
       .kt-help-card-cat { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; color: #8EC73C; text-transform: uppercase; margin-bottom: 4px; }
       .kt-help-card-ttl { font-size: 14px; font-weight: 600; color: #1F2937; line-height: 1.3; }
 
-      .kt-help-quickstart { background: linear-gradient(135deg, #1F6080 0%, #2D7BA8 100%); color: white; padding: 28px; border-radius: 16px; }
-      .kt-help-quickstart-btn { background: white; color: #1F6080; border: none; padding: 12px 22px; border-radius: 24px; font-weight: 700; cursor: pointer; font-size: 14px; }
+      .kt-help-quickstart { position: relative; overflow: hidden; display: flex; align-items: center; gap: 20px; background: linear-gradient(120deg, #0E7C90 0%, #159FB4 46%, #7C3AED 100%); color: #fff; padding: 24px 28px; border-radius: 18px; box-shadow: 0 16px 36px -16px rgba(21,159,180,.55); }
+      .kt-help-qs-icon { flex: 0 0 auto; width: 62px; height: 62px; border-radius: 18px; background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-size: 32px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); }
+      .kt-help-qs-body { flex: 1 1 auto; min-width: 0; }
+      .kt-help-qs-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 1.4px; opacity: .85; margin-bottom: 5px; }
+      .kt-help-qs-h { margin: 0 0 6px; font-size: 22px; font-weight: 800; line-height: 1.2; }
+      .kt-help-qs-p { margin: 0 0 16px; font-size: 14px; line-height: 1.55; opacity: .92; max-width: 640px; }
+      .kt-help-qs-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+      .kt-help-quickstart-btn { background: #fff; color: #0E7C90; border: none; padding: 11px 20px; border-radius: 12px; font-weight: 800; cursor: pointer; font-size: 13.5px; transition: transform .12s ease, box-shadow .12s ease; }
+      .kt-help-quickstart-btn:hover { transform: translateY(-1px); box-shadow: 0 9px 20px -8px rgba(0,0,0,.45); }
+      .kt-help-quickstart-btn.ghost { background: rgba(255,255,255,.14); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.45); }
+      .kt-help-quickstart-btn.ghost:hover { background: rgba(255,255,255,.24); box-shadow: inset 0 0 0 1px rgba(255,255,255,.6); }
+      @media (max-width: 640px) { .kt-help-quickstart { flex-direction: column; align-items: flex-start; } }
 
       .kt-help-search-head { font-size: 14px; color: #6B7280; margin-bottom: 16px; }
       .kt-help-results { display: flex; flex-direction: column; gap: 8px; }
