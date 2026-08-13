@@ -1851,10 +1851,24 @@ final class AdminController extends Controller
         // every field without hard-coding which keys exist.
         $record = [];
         $put = function ($label, $value) use (&$record) {
+            // A list answer (multi-select at onboarding) is worth showing, not
+            // dropping - flatten it to a readable string. Nested structures are
+            // the only thing skipped, and those have their own handling below.
+            if (is_array($value)) {
+                $flat = array_filter($value, static fn ($v) => is_scalar($v) && $v !== '');
+                $value = count($flat) === count($value) ? implode(', ', $flat) : null;
+            }
             $value = is_string($value) ? trim($value) : $value;
             if ($value !== null && $value !== '' && $value !== []) {
                 $record[$label] = $value;
             }
+        };
+        // Onboarding keys are snake_case, so a plain ucwords() prints "Rece Number"
+        // and "Cpr Expiry". Restore the acronyms the childcare sector actually uses.
+        $labelise = function ($k) {
+            $label = ucwords(str_replace('_', ' ', (string) $k));
+            return preg_replace_callback('/(rece|cpr|dob|id|sin|ece)/i',
+                static fn ($m) => strtoupper($m[1]), $label);
         };
         $extras = [];
         if ($u && $u->profile_extras) {
@@ -1874,7 +1888,29 @@ final class AdminController extends Controller
             $put('Timezone', $u->timezone);
             $put('Onboarded', $u->onboarded_at);
             $put('Last login', $u->last_login_at);
+            $put('Sex', $u->sex ?? null);
+            if (($u->pay_rate ?? null) !== null && $u->pay_rate !== '') {
+                $put('Pay rate', '$' . number_format((float) $u->pay_rate, 2)
+                    . ($u->pay_type ? ' / ' . $u->pay_type : ''));
+            }
         }
+
+        // BIO. A home-daycare provider writes this during onboarding and it is
+        // stored against their CENTRE (centres.provider_bio), matched to them by
+        // email - never on the user row. That is why it was missing from a record
+        // otherwise assembled from users + user_profiles + profile_extras.
+        // PATCH /auth/me/provider-bio edits the same column, so this stays current.
+        $bio = null;
+        if ($u && !empty($u->email)) {
+            $bio = DB::table('centres')
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $u->email))])
+                ->whereNull('deleted_at')
+                ->value('provider_bio');
+        }
+        // Any other role that gains a bio later writes it into profile_extras;
+        // read both so this does not need revisiting.
+        if (!$bio) $bio = $extras['bio'] ?? ($extras['role_extras']['bio'] ?? null);
+        $put('Bio', $bio);
         // Address — prefer the structured onboarding parts, fall back to the flat field.
         $addr = implode(', ', array_filter([
             $extras['address_line1'] ?? null,
@@ -1895,14 +1931,14 @@ final class AdminController extends Controller
         }
         // Role-specific onboarding answers (dynamic keys).
         foreach (($extras['role_extras'] ?? []) as $k => $v) {
-            if ($v === null || $v === '' || is_array($v)) continue;
-            $put(ucwords(str_replace('_', ' ', (string) $k)), is_bool($v) ? ($v ? 'Yes' : 'No') : $v);
+            if ($v === null || $v === '') continue;
+            $put($labelise($k), is_bool($v) ? ($v ? 'Yes' : 'No') : $v);
         }
         // Any other top-level onboarding extras we didn't explicitly place.
         $known = ['address_line1', 'address_line2', 'city', 'province', 'postal_code', 'emergency_contact_name', 'emergency_contact_phone', 'extra_contacts', 'role_extras'];
         foreach ($extras as $k => $v) {
-            if (in_array($k, $known, true) || $v === null || $v === '' || is_array($v)) continue;
-            $put(ucwords(str_replace('_', ' ', (string) $k)), is_bool($v) ? ($v ? 'Yes' : 'No') : $v);
+            if (in_array($k, $known, true) || $v === null || $v === '') continue;
+            $put($labelise($k), is_bool($v) ? ($v ? 'Yes' : 'No') : $v);
         }
 
         return response()->json([

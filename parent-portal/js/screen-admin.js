@@ -1349,26 +1349,58 @@
       }
       return it;
     }
+    // The fields worth reading first; everything else the person entered follows
+    // in the order the server built it. Anything not listed here still shows —
+    // this is a preference, not a whitelist, which is what went wrong before.
+    var GLANCE_FIRST = ['Role', 'Username', 'Email', 'Phone', 'Address', 'Date of birth',
+      'Emergency contact', 'Last login', 'Bio'];
+    // Long prose (a provider's bio) gets the full width instead of a narrow column.
+    function isLongValue(v) { return String(v).length > 90; }
+
     function fillGlance(ed, record, u) {
       ed = ed || {}; record = record || {};
       Dom.clear(glanceGrid);
       var fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.name || '—';
       var roles = (u.roles && u.roles.length) ? u.roles.map(function (r) { return String(r).replace(/_/g, ' '); }).join(', ') : (record['Role'] || '—');
-      var phones = [ed.phone, ed.direct_phone, ed.home_phone].filter(Boolean);
-      var addr = [ed.address_line1, ed.address_line2, [ed.city, ed.province, ed.postal_code].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-      var emerg = ed.emergency_contact_name
-        ? ed.emergency_contact_name + (ed.emergency_contact_relation ? ' (' + ed.emergency_contact_relation + ')' : '') + (ed.emergency_contact_phone ? ' · ' + ed.emergency_contact_phone : '')
-        : '';
+
+      // Identity first — name, status and role are the questions an admin opens
+      // this modal to answer.
       glanceGrid.appendChild(glanceItem('Full name', fullName));
       glanceGrid.appendChild(glanceItem('Status', statusBadge(u.status || 'active')));
       glanceGrid.appendChild(glanceItem('Role', roles));
-      glanceGrid.appendChild(glanceItem('Username', ed.username || u.username || '—'));
-      glanceGrid.appendChild(glanceItem('Email', u.email || '—'));
-      glanceGrid.appendChild(glanceItem('Phone', phones.length ? phones.join(' · ') : '—'));
-      glanceGrid.appendChild(glanceItem('Address', addr || '—'));
-      glanceGrid.appendChild(glanceItem('Date of birth', ed.date_of_birth ? String(ed.date_of_birth).slice(0, 10) : '—'));
-      glanceGrid.appendChild(glanceItem('Emergency contact', emerg || '—'));
-      glanceGrid.appendChild(glanceItem('Last login', u.last_login_at ? new Date(u.last_login_at).toLocaleString() : 'Never'));
+
+      // First name / Last name are already shown as Full name above, and Status
+      // and Role are rendered specially — everything else in the record is fair
+      // game, whether or not this file knew about it when it was written.
+      var skip = { 'First name': 1, 'Last name': 1, 'Status': 1, 'Role': 1 };
+      var keys = Object.keys(record).filter(function (k) { return !skip[k]; });
+      keys.sort(function (a, b) {
+        var ia = GLANCE_FIRST.indexOf(a), ib = GLANCE_FIRST.indexOf(b);
+        if (ia === -1 && ib === -1) return 0;      // both extra: keep server order
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+
+      // Fall back to the editable form's values for the few fields the record
+      // omits when they were never filled in, so the shape of the view is stable.
+      if (keys.indexOf('Username') === -1 && (ed.username || u.username)) {
+        glanceGrid.appendChild(glanceItem('Username', ed.username || u.username));
+      }
+      keys.forEach(function (label) {
+        var value = record[label];
+        var item = glanceItem(label, String(value));
+        if (isLongValue(value)) {
+          item.style.gridColumn = '1 / -1';
+          var v = item.lastChild;
+          if (v) { v.style.fontWeight = '500'; v.style.lineHeight = '1.5'; v.style.whiteSpace = 'pre-wrap'; }
+        }
+        glanceGrid.appendChild(item);
+      });
+      if (!keys.length) {
+        glanceGrid.appendChild(glanceItem('Email', u.email || '—'));
+        glanceGrid.appendChild(glanceItem('Last login', u.last_login_at ? new Date(u.last_login_at).toLocaleString() : 'Never'));
+      }
     }
     // Seed immediately with what we already have; the profile fetch enriches it.
     fillGlance({ phone: user.phone, username: user.username }, {}, user);
@@ -1536,34 +1568,14 @@
           date_of_birth: iDob.value || null,
           emergency_contact_name: iEcN.value, emergency_contact_phone: iEcP.value, emergency_contact_relation: iEcR.value
         })
-          .then(function () { pfMsg.textContent = '✓ Saved'; pfMsg.style.color = '#16A34A'; pfSave.disabled = false; if (typeof fillRecord === 'function') { Api.get('/admin/users/' + uid + '/profile').then(function (d) { fillRecord(d.record); }).catch(function () {}); } })
+          .then(function () { pfMsg.textContent = '✓ Saved'; pfMsg.style.color = '#16A34A'; pfSave.disabled = false; Api.get('/admin/users/' + uid + '/profile').then(function (d) { fillGlance(d.editable, d.record, user); }).catch(function () {}); })
           .catch(function (e) { pfMsg.textContent = '✕ ' + (e && e.message ? e.message : 'Failed'); pfMsg.style.color = '#DC2626'; pfSave.disabled = false; });
       });
       pf.appendChild(pfSave); pf.appendChild(pfMsg); body.appendChild(pf);
 
-      // #11 — "Full record": EVERY field captured at onboarding (address, phone,
-      // emergency contacts, role-specific answers, account details). Built as an
-      // empty shell here and filled from /admin/users/{id}/profile (the .then
-      // handler below), whose `record` map is the complete, authoritative set —
-      // the list object we were handed often omits profile_extras/phone.
-      var obTable = Dom.el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;font-size:13px;' });
-      var obSection = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;display:none;' });
-      obSection.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Full record'));
-      obSection.appendChild(obTable);
-      body.appendChild(obSection);
-      function fillRecord(record) {
-        record = record || {};
-        var keys = Object.keys(record);
-        if (!keys.length) { obSection.style.display = 'none'; return; }
-        obTable.innerHTML = '';
-        keys.forEach(function (label) {
-          var tr = Dom.el('tr', {});
-          tr.appendChild(Dom.el('td', { style: 'padding:5px 14px 5px 0;color:#64748B;white-space:nowrap;vertical-align:top;' }, label));
-          tr.appendChild(Dom.el('td', { style: 'padding:5px 0;font-weight:600;color:#0F172A;word-break:break-word;' }, String(record[label])));
-          obTable.appendChild(tr);
-        });
-        obSection.style.display = '';
-      }
+      // The "Full record" table that used to sit here is gone: "At a glance"
+      // above now renders the same complete record map, so keeping both showed
+      // every field twice.
 
       // This user's background-check records (managed on the Background checks screen).
       (function () {
@@ -1623,7 +1635,6 @@
         iCity.value = ed.city || ''; iProv.value = ed.province || ''; iPostal.value = ed.postal_code || '';
         iDob.value = ed.date_of_birth ? String(ed.date_of_birth).slice(0, 10) : '';
         iEcN.value = ed.emergency_contact_name || ''; iEcP.value = ed.emergency_contact_phone || ''; iEcR.value = ed.emergency_contact_relation || '';
-        fillRecord(d.record);
         try { fillGlance(ed, d.record, user); } catch (e) {}
         renderNotes(d.notes);
       }).catch(function () { renderNotes([]); });
