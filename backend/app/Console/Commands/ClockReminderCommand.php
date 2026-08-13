@@ -55,19 +55,35 @@ final class ClockReminderCommand extends Command
             ->join('users as u', 'u.id', '=', 't.user_id')
             ->whereNull('t.clocked_out_at')
             ->whereDate('t.clocked_in_at', $today)
-            // only nudge once they've plausibly left (>= 6h in)
-            ->where('t.clocked_in_at', '<=', Carbon::now()->subHours(6))
+            // Cheap floor; the real test is against each person's own usual day below.
+            ->where('t.clocked_in_at', '<=', Carbon::now()->subHours(4))
             ->whereNotNull('u.email')->whereNull('u.deleted_at')
             ->select('t.user_id', 't.centre_id', 't.clocked_in_at', 'u.email', 'u.first_name')
             ->get();
 
         $n = 0;
         foreach ($open as $e) {
-            $inAt = Carbon::parse($e->clocked_in_at)->format('g:i A');
-            $this->emailReminder(
-                (int) $e->centre_id, $e->email, $e->first_name,
+            // Approved time off can start mid-day (leaving sick at noon), so an open
+            // punch on such a day is expected, not a lapse.
+            if ($this->isOnApprovedTimeOff((int) $e->user_id, $today)) continue;
+
+            // Nudge once they are past their OWN usual day, not a flat six hours: an
+            // afternoon shift that started at 12:30 is not overdue at 18:30, and
+            // someone whose day normally ends at 15:00 should hear from us sooner.
+            $in = Carbon::parse($e->clocked_in_at);
+            $usual = $this->usualShiftHours((int) $e->user_id, $today);
+            $threshold = $usual === null ? 6.0 : max(5.0, $usual + 1.0);
+            if ($in->floatDiffInHours(Carbon::now()) < $threshold) continue;
+
+            $inAt = $in->format('g:i A');
+            $howLong = number_format($in->floatDiffInHours(Carbon::now()), 1);
+            $usualLine = $usual === null
+                ? ''
+                : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.';
+            $this->sendReminder(
+                (int) $e->user_id, (int) $e->centre_id, $e->email, $e->first_name,
                 'Reminder: you\'re still clocked in',
-                "You clocked in at {$inAt} today but haven't clocked out yet. Please clock out so your hours are recorded correctly — or, if you left already, log your out time from the time clock.",
+                "You clocked in at {$inAt} today and have been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly — or, if you left already, log your out time from the time clock.",
             );
             $n++;
         }
@@ -99,7 +115,13 @@ final class ClockReminderCommand extends Command
                 ->where('user_id', $s->user_id)->whereDate('clocked_in_at', $today)->exists();
             if ($clockedToday) continue;
 
-            // Did they work this same weekday in the last 14 days? (regular pattern)
+            // Approved vacation, sick or personal leave — they are not missing, they
+            // are off, and the office already said so.
+            if ($this->isOnApprovedTimeOff((int) $s->user_id, $today)) continue;
+
+            // Did they work this same weekday in the last 14 days? (regular pattern —
+            // we still have no shift schedule table, so their own history is the
+            // best available statement of when they are expected in)
             $worksThisWeekday = DB::table('time_entries')
                 ->where('user_id', $s->user_id)
                 ->where('clocked_in_at', '>=', $today->copy()->subDays(14))
@@ -107,8 +129,8 @@ final class ClockReminderCommand extends Command
                 ->exists();
             if (! $worksThisWeekday) continue;
 
-            $this->emailReminder(
-                (int) $s->centre_id, $s->email, $s->first_name,
+            $this->sendReminder(
+                (int) $s->user_id, (int) $s->centre_id, $s->email, $s->first_name,
                 'Reminder: don\'t forget to clock in',
                 "We noticed you're not clocked in today. If you're working, please clock in now so your hours are captured. If you're off today, you can ignore this.",
             );
@@ -117,12 +139,72 @@ final class ClockReminderCommand extends Command
         return $n;
     }
 
-    private function emailReminder(int $centreId, string $to, ?string $firstName, string $subject, string $lead): void
+    /**
+     * Is this person on APPROVED time off today? Covers vacation, sick and personal
+     * leave - whatever the office has already approved, we do not second-guess with
+     * a reminder. Pending requests deliberately do NOT suppress: nothing has been
+     * agreed yet, and staying silent would hide a genuinely missing punch.
+     *
+     * Read live from time_off_requests so approving, amending or revoking a request
+     * changes the reminders the same day, with no duplicated state to fall behind.
+     */
+    private function isOnApprovedTimeOff(int $userId, Carbon $day): bool
+    {
+        return DB::table('time_off_requests')
+            ->where('user_id', $userId)
+            ->where('status', 'approved')
+            ->where('start_at', '<=', $day->copy()->endOfDay())
+            ->where('end_at', '>=', $day->copy()->startOfDay())
+            ->exists();
+    }
+
+    /**
+     * How long this person's day usually runs, in hours, from their own completed
+     * entries over the last 28 days. Null when there is not enough history to say -
+     * the caller then falls back to the flat minimum rather than inventing a number.
+     */
+    private function usualShiftHours(int $userId, Carbon $today): ?float
+    {
+        $rows = DB::table('time_entries')
+            ->where('user_id', $userId)
+            ->whereNotNull('clocked_out_at')
+            ->where('clocked_in_at', '>=', $today->copy()->subDays(28))
+            ->select('clocked_in_at', 'clocked_out_at')
+            ->get();
+        if ($rows->count() < 3) return null;
+
+        $hours = [];
+        foreach ($rows as $r) {
+            $h = Carbon::parse($r->clocked_in_at)->floatDiffInHours(Carbon::parse($r->clocked_out_at));
+            if ($h > 0.5 && $h < 18) $hours[] = $h;       // ignore mis-punches at both ends
+        }
+        if (count($hours) < 3) return null;
+        sort($hours);
+        return $hours[intdiv(count($hours), 2)];          // median, so one long day does not skew it
+    }
+
+    private function sendReminder(int $userId, int $centreId, string $to, ?string $firstName, string $subject, string $lead): void
     {
         if ($this->dryRun) {
-            $this->line("  [dry-run] would email {$to} — {$subject}");
+            $this->line("  [dry-run] would remind {$to} (user {$userId}) — {$subject}");
             return;
         }
+
+        // Push + in-app notification so the reminder reaches the educator on the
+        // APK, not only by email. FcmService handles device-token lookup and the
+        // do-not-contact suppression for live agencies.
+        try {
+            DB::table('notifications')->insert([
+                'user_id' => $userId, 'type' => 'clock_reminder',
+                'title' => $subject, 'body' => $lead,
+                'data' => json_encode(['link' => '#dashboard']),
+                'created_at' => now(),
+            ]);
+            app(\App\Services\FcmService::class)->sendToUser($userId, $subject, $lead, '#dashboard');
+        } catch (\Throwable $e) {
+            Log::warning('Clock reminder push failed', ['user_id' => $userId, 'error' => $e->getMessage()]);
+        }
+
         $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
         $name = $firstName ?: 'there';
         $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;color:#111827;">'
