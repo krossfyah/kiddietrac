@@ -723,39 +723,50 @@
             try {
               if (isEdit) {
                 await Api.patch('/admin/centres/' + centre.id, data);
-                // Read it back and check the fields actually changed. A save that
-                // reports success while a value stays as it was is the failure mode
-                // this screen was reported for; it will not pass silently again.
-                try {
-                  // There is no single-centre endpoint, so read the list and pick
-                  // this one out — the same data the screen itself renders from.
-                  const after = await Api.get('/admin/centres');
-                  const list = (after && (after.data || after.centres || after)) || [];
-                  const rec = (Array.isArray(list) ? list : []).filter(function (c) {
-                    return String(c.id) === String(centre.id);
-                  })[0] || {};
-                  const missed = Object.keys(data).filter(function (k) {
-                    if (!(k in rec) || k === 'open_days') return false;
-                    var sent = data[k], got = rec[k];
-                    if (sent === '' || sent === null || sent === undefined) return false;
-                    if (typeof got === 'boolean' || typeof sent === 'boolean') return !!sent !== !!got;
-                    return String(sent).trim() !== String(got == null ? '' : got).trim();
-                  });
-                  if (missed.length) {
-                    status.style.color = '#B45309';
-                    status.textContent = 'Saved, but these did not change on the server: ' + missed.join(', ')
-                      + '. Please try again and tell us if it repeats.';
-                    return;                       // leave the dialog open with the message
-                  }
-                } catch (_) { /* verification is a safety net, never a blocker */ }
               } else {
                 await Api.post('/admin/centres', data);
               }
               // Reload — either the caller's custom refresh (e.g. the agency
               // overview, which opens this modal in place) or the Centres tab.
+              // Refresh and close FIRST. The save has already succeeded; nothing
+              // below may stand between the user and seeing their change.
               if (typeof onSaved === 'function') { await onSaved(); }
               else { await renderCentresTab(content); }
               Shell.Modal.close();
+
+              // Then confirm it really landed. Advisory only — a check that blocks
+              // the refresh is worse than no check at all, which is precisely what
+              // the first version of this did.
+              if (isEdit) {
+                Api.get('/admin/centres').then(function (after) {
+                  var list = (after && (after.data || after.centres || after)) || [];
+                  var rec = (Array.isArray(list) ? list : []).filter(function (c) {
+                    return String(c.id) === String(centre.id);
+                  })[0];
+                  if (!rec) return;
+                  // Compare the way the two sides actually express a value: a time
+                  // input sends "07:00" and MySQL returns "07:00:00"; a number may
+                  // arrive as a string. Raw string equality called every one of
+                  // those a failure.
+                  var norm = function (v) {
+                    if (v === null || v === undefined) return '';
+                    if (typeof v === 'boolean') return v ? '1' : '0';
+                    var t = String(v).trim();
+                    if (/^\d{2}:\d{2}(:\d{2})?$/.test(t)) return t.slice(0, 5);   // time → HH:MM
+                    if (t !== '' && !isNaN(Number(t))) return String(Number(t));      // "6" === 6
+                    return t;
+                  };
+                  var missed = Object.keys(data).filter(function (k) {
+                    if (!(k in rec) || k === 'open_days') return false;
+                    var sent = norm(data[k]);
+                    if (sent === '') return false;                 // nothing asked of it
+                    return sent !== norm(rec[k]);
+                  });
+                  if (missed.length) {
+                    _toast('⚠️', 'Some changes did not save', missed.join(', ') + ' — please try again.', '#B45309');
+                  }
+                }).catch(function () { /* advisory only */ });
+              }
               // Saved either way — but say what is still missing, since a family
               // assigned to this provider gets no introduction without it.
               if (bioNowEmpty) {
