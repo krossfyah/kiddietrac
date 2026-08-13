@@ -85,6 +85,13 @@
     return actionLabel(l && l.action);
   }
 
+  // The agency's word for a facility — "Centre", "Provider" or "Room" — applied to
+  // the sentence this screen generates. Without it, an agency set to Providers still
+  // read "Centre updated" in its own audit trail.
+  function termed(t) {
+    return (window.KT && KT.termText) ? KT.termText(t) : t;
+  }
+
   function actionLabel(raw) {
     var a = String(raw || '').trim();
     if (!a) return '—';
@@ -120,7 +127,7 @@
       }
     }
 
-    return label + (failed ? ' — failed' : '');
+    return termed(label) + (failed ? ' — failed' : '');
   }
 
   // Turn a raw entity_type ("room", "menu_week", "check_event") into a plain word
@@ -146,7 +153,7 @@
       time_punch: 'Time clock', guardian: 'Parent', role_assignment: 'Role',
     };
     var key = String(t).toLowerCase();
-    if (MAP[key]) return MAP[key];
+    if (MAP[key]) return termed(MAP[key]);
     return key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 

@@ -107,6 +107,15 @@
     var w = chosen(!!plural);
     return lower ? w.toLowerCase() : w;
   };
+  // Run a whole generated SENTENCE through the agency's wording. The DOM sweep is
+  // scoped to labels and table headers on purpose — it must never rewrite data — so
+  // any screen that BUILDS text ("Centre updated", "Centre archived") has to ask for
+  // the term at render time. Same transform, no extra rules to keep in step.
+  window.KT.termText = function (t) {
+    if (t == null || t === '') return t;
+    try { var c = sessionStorage.getItem('kt_centre_term'); if (c) TERM = c; } catch (e) {}
+    try { return transform(String(t)); } catch (e) { return t; }
+  };
   window.KT.setCountry = function (code) {
     var L = CLABELS[code] || CLABELS.CA; STATE = L[0]; ZIP = L[1];
     try { sessionStorage.setItem('kt_country', code); sessionStorage.setItem('kt_state_label', STATE); sessionStorage.setItem('kt_zip_label', ZIP); } catch (e) {}

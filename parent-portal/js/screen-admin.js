@@ -352,6 +352,7 @@
     ];
 
     const inputs = {};
+    const edited = {};   // last value typed per field, immune to a re-render
     fields.forEach(f => {
       const wrap = Dom.el('div', { style: 'margin-bottom: 12px;' });
       wrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, f.label + (f.required ? ' *' : '')));
@@ -364,6 +365,10 @@
       input.value = rawVal;
       if (f.required) input.required = true;
       inputs[f.key] = input;
+      // Remember it as it is TYPED. Reading .value only when Save is pressed loses
+      // the edit if anything re-renders or replaces the input in between — which is
+      // how a capacity change could be sent back as the value it already had.
+      input.addEventListener('input', function () { edited[f.key] = input.value; });
       wrap.appendChild(input);
       form.appendChild(wrap);
     });
@@ -669,14 +674,39 @@
             Object.keys(inputs).forEach(k => {
               const el = inputs[k];
               if (el.type === 'checkbox') data[k] = el.checked;
-              else data[k] = el.value;
+              // The typed value wins over whatever the DOM currently holds.
+              else data[k] = (k in edited) ? edited[k] : el.value;
             });
+            // A refusal has to be impossible to miss. This status line sits at the
+            // bottom of a long form: edit a field near the top, press Save, and the
+            // reason renders below the fold — so the button looks broken, and the
+            // save leaves no trace anywhere because it never left the browser.
+            const refuse = (message, field) => {
+              status.style.color = '#DC2626';
+              status.textContent = message;
+              _toast('⚠️', 'Not saved', message, '#DC2626');
+              const el = field && inputs[field];
+              if (el) {
+                el.style.borderColor = '#DC2626';
+                el.style.background = '#FEF2F2';
+                const clear = function () {
+                  el.style.borderColor = 'var(--ink-300)';
+                  el.style.background = '';
+                  el.removeEventListener('input', clear);
+                };
+                el.addEventListener('input', clear);
+                try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+                try { el.focus(); } catch (_) {}
+              } else {
+                try { status.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+              }
+            };
             if (!data.name) {
-              status.textContent = 'Name is required';
+              refuse('Name is required.', 'name');
               return;
             }
             if (inputs.provider_bio && (!data.provider_bio || !data.provider_bio.trim())) {
-              status.textContent = 'Provider bio is required — parents receive this when they join.';
+              refuse('A provider bio is required — families are sent this when they join.', 'provider_bio');
               return;
             }
             if (data.license_capacity) data.license_capacity = parseInt(data.license_capacity, 10);
@@ -687,6 +717,31 @@
             try {
               if (isEdit) {
                 await Api.patch('/admin/centres/' + centre.id, data);
+                // Read it back and check the fields actually changed. A save that
+                // reports success while a value stays as it was is the failure mode
+                // this screen was reported for; it will not pass silently again.
+                try {
+                  // There is no single-centre endpoint, so read the list and pick
+                  // this one out — the same data the screen itself renders from.
+                  const after = await Api.get('/admin/centres');
+                  const list = (after && (after.data || after.centres || after)) || [];
+                  const rec = (Array.isArray(list) ? list : []).filter(function (c) {
+                    return String(c.id) === String(centre.id);
+                  })[0] || {};
+                  const missed = Object.keys(data).filter(function (k) {
+                    if (!(k in rec) || k === 'open_days') return false;
+                    var sent = data[k], got = rec[k];
+                    if (sent === '' || sent === null || sent === undefined) return false;
+                    if (typeof got === 'boolean' || typeof sent === 'boolean') return !!sent !== !!got;
+                    return String(sent).trim() !== String(got == null ? '' : got).trim();
+                  });
+                  if (missed.length) {
+                    status.style.color = '#B45309';
+                    status.textContent = 'Saved, but these did not change on the server: ' + missed.join(', ')
+                      + '. Please try again and tell us if it repeats.';
+                    return;                       // leave the dialog open with the message
+                  }
+                } catch (_) { /* verification is a safety net, never a blocker */ }
               } else {
                 await Api.post('/admin/centres', data);
               }
