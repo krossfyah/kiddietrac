@@ -33,6 +33,7 @@ class EducatorDailySummaryCommand extends Command
         {--user= : Only this educator user id}
         {--date= : YYYY-MM-DD in the agency timezone (default: today)}
         {--to= : Send to this address instead of the educator (for testing)}
+        {--limit= : Stop after N educators (defaults to 1 when --to is set)}
         {--dry-run : Build it, print what would happen, send nothing}';
 
     protected $description = 'Email each educator a warm end-of-day summary of their day, with wins and gentle suggestions';
@@ -42,6 +43,13 @@ class EducatorDailySummaryCommand extends Command
         $onlyUser = $this->option('user') ? (int) $this->option('user') : null;
         $override = $this->option('to');
         $dry = (bool) $this->option('dry-run');
+        // A test send is to check the layout, not to mail yourself the whole staff
+        // list: --to produced one email per educator (24 of them, once). It now
+        // means "show me one", unless --limit says otherwise.
+        $limit = ($this->option('limit') !== null && $this->option('limit') !== '')
+            ? max(1, (int) $this->option('limit'))
+            : ($override ? 1 : 0);
+        $sentCount = 0;
 
         $educators = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
@@ -104,6 +112,11 @@ class EducatorDailySummaryCommand extends Command
                 continue;
             }
             $this->send((int) $ed->agency_id, (string) $to, (string) $ed->first_name, $subject, $html);
+            $sentCount++;
+            if ($limit && $sentCount >= $limit) {
+                $this->info('Stopped after ' . $sentCount . ' (limit).');
+                break;
+            }
             $sent++;
             $this->info("✓ {$subject} → {$to}");
         }
@@ -603,6 +616,36 @@ class EducatorDailySummaryCommand extends Command
         }
         $body .= '</tr></table>';
 
+        // ── What made up today's score ─────────────────────────────────────
+        // One number says "63" without saying why. These are the four parts it is
+        // built from, each drawn as how close it came to full marks, so where
+        // tomorrow could differ is visible rather than merely asserted.
+        $bars = [
+            ['Moments logged',     min(1.0, $t['moments'] / 12),       $t['moments'] . ' of ~12',   '#7C3AED'],
+            ['Children cared for', min(1.0, $t['children'] / 6),       (string) $t['children'],     '#0E7C90'],
+            ['Observations',       min(1.0, $t['observations'] / 2),   (string) $t['observations'], '#B45309'],
+            ['Hours on the floor', min(1.0, ($t['minutes'] / 60) / 7), $hoursTxt,                   '#0369A1'],
+        ];
+        $body .= $this->sectionHead("\u{1F4CA}", "What made up today's score")
+            . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+            . 'style="border-collapse:separate;background:#fff;border:1px solid #EEF2F6;border-radius:14px;">'
+            . '<tr><td style="padding:14px 16px;">';
+        foreach ($bars as $b) {
+            $pct = (int) round($b[1] * 100);
+            $body .= '<div style="margin-bottom:11px;">'
+                . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation"><tr>'
+                .   '<td style="font-size:12.5px;font-weight:700;color:#334155;">' . e($b[0]) . '</td>'
+                .   '<td align="right" style="font-size:12px;color:#94A3B8;">' . e($b[2]) . '</td>'
+                . '</tr></table>'
+                . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                .   'style="border-collapse:separate;background:#F1F5F9;border-radius:999px;margin-top:4px;"><tr>'
+                .   '<td width="' . max(2, $pct) . '%" style="background:' . $b[3] . ';border-radius:999px;height:9px;font-size:0;line-height:0;">&nbsp;</td>'
+                .   '<td style="font-size:0;line-height:0;">&nbsp;</td>'
+                . '</tr></table>'
+                . '</div>';
+        }
+        $body .= '</td></tr></table>';
+
         // ── Who wasn't in today ────────────────────────────────────────────
         // The most important thing on this email, and it was missing. A child with
         // a pattern for today who never signed in, and no absence reported, is a
@@ -718,7 +761,8 @@ class EducatorDailySummaryCommand extends Command
         ]);
         $signoff = $pick(['With gratitude,', 'With appreciation,', 'Warmly,', 'Cheering you on,', 'Thank you,']);
         $body .= '<p style="margin-top:20px;font-size:15px;">' . $close . '</p>'
-            . '<p style="font-weight:800;color:#0F172A;">' . $signoff . '<br>Your KiddieTrac team</p>';
+            . '<p style="font-weight:800;color:#0F172A;">' . $signoff . '<br>'
+            . 'The team at ' . e((string) (DB::table('agencies')->where('id', (int) $ed->agency_id)->value('name') ?: 'your team')) . '</p>';
 
         return EmailTemplate::wrap((int) $ed->agency_id, $body, [
             'title'     => 'Your day at a glance',
