@@ -313,14 +313,52 @@ final class EmailTemplate
                     $agencyLogo = 'https://app.kiddietrac.com/' . ltrim((string) $agencyLogo, '/');
                 }
             }
-            if ($agencyName !== '' || $agencyLogo) {
-                $html .= '<div style="margin-bottom:10px;">';
+            // Everything the agency has published about itself. All of this was stored
+            // and none of it was shown, so an email from a childcare provider carried
+            // less identifying detail than a shop receipt.
+            $settings = [];
+            try { $settings = json_decode((string) ($agency->settings ?? ''), true) ?: []; } catch (\Throwable $e) {}
+
+            $lines = [];
+            // Address is stored as a multi-line string. Escape FIRST, then turn the
+            // newlines into <br> — the other order would let stored text inject markup.
+            $addr = trim((string) ($settings['brand_address'] ?? ''));
+            if ($addr !== '') {
+                $lines[] = nl2br(htmlspecialchars($addr), false);
+            }
+            $phone = trim((string) ($agency->contact_phone ?? ''));
+            if ($phone !== '') {
+                // tel: needs the digits; the label keeps whatever the agency typed.
+                $telHref = preg_replace('/[^0-9+]/', '', $phone);
+                $lines[] = '<a href="tel:' . htmlspecialchars($telHref) . '" style="color:#475569;text-decoration:none;">'
+                    . htmlspecialchars($phone) . '</a>';
+            }
+            $mail = trim((string) ($agency->contact_email ?? $agency->brand_support_email ?? ''));
+            if ($mail !== '') {
+                $lines[] = '<a href="mailto:' . htmlspecialchars($mail) . '" style="color:#1F6FB2;text-decoration:none;">'
+                    . htmlspecialchars($mail) . '</a>';
+            }
+            foreach ([['brand_privacy_url', 'Privacy policy'], ['brand_terms_url', 'Terms']] as [$key, $label]) {
+                $url = trim((string) ($settings[$key] ?? ''));
+                if ($url !== '') {
+                    $lines[] = '<a href="' . htmlspecialchars($url) . '" style="color:#1F6FB2;text-decoration:none;">'
+                        . $label . '</a>';
+                }
+            }
+
+            if ($agencyName !== '' || $agencyLogo || $lines) {
+                // text-align:left explicitly — the footer container centres its
+                // contents, and this is contact information now, not a decorative mark.
+                $html .= '<div style="text-align:left;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #E7EBF0;">';
                 if ($agencyLogo) {
                     $html .= '<img src="' . htmlspecialchars($agencyLogo) . '" alt="' . $agencyName
-                        . '" height="34" style="max-height:34px;width:auto;display:block;margin:0 auto 6px;border:0;">';
+                        . '" height="34" style="max-height:34px;width:auto;display:block;margin:0 0 8px;border:0;">';
                 }
                 if ($agencyName !== '') {
-                    $html .= '<div style="font-weight:800;color:#0F172A;">' . $agencyName . '</div>';
+                    $html .= '<div style="font-weight:800;color:#0F172A;font-size:13.5px;margin-bottom:3px;">' . $agencyName . '</div>';
+                }
+                if ($lines) {
+                    $html .= '<div style="color:#475569;font-size:12px;line-height:1.65;">' . implode('<br>', $lines) . '</div>';
                 }
                 $html .= '</div>';
             }
