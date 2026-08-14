@@ -108,6 +108,116 @@ class EducatorRoomsController extends Controller
      * did this educator actually work?" had nowhere to look on the person's own
      * record. Times are returned in the agency's timezone.
      */
+    /**
+     * PATCH /admin/users/{user}/punches/{punch}
+     *
+     * Correct a time punch. Nothing could do this before: the educator's own clock only
+     * toggles — so "clocking out" a two-day-old shift would record two days — and there
+     * was no admin route at all. Four punches have consequently been open for up to a
+     * month, distorting hours and, until earlier today, permanently disabling the
+     * "you must be clocked in" gate for those accounts.
+     *
+     * Times arrive as wall-clock strings and are interpreted in the AGENCY's timezone,
+     * because that is the clock the person actually worked to. Storing what an admin in
+     * another zone happened to type would silently shift the shift.
+     */
+    public function updatePunch(Request $request, int $user, int $punch): JsonResponse
+    {
+        $centreId = $this->centreOf($user);
+        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $row = DB::table('time_punches')->where('id', $punch)->where('user_id', $user)->first();
+        if (! $row) return response()->json(['message' => 'Not found'], 404);
+
+        $data = $request->validate([
+            'punched_in_at'  => ['nullable', 'date'],
+            'punched_out_at' => ['nullable', 'date'],
+            'reason'         => ['nullable', 'string', 'max:200'],
+        ]);
+        if (! array_key_exists('punched_in_at', $data) && ! array_key_exists('punched_out_at', $data)) {
+            return response()->json(['message' => 'Nothing to change.'], 422);
+        }
+
+        $tz = DB::table('centres as c')
+            ->join('agencies as a', 'a.id', '=', 'c.agency_id')
+            ->where('c.id', $centreId)
+            ->value('a.timezone') ?: 'America/Toronto';
+
+        // Wall-clock in the agency zone → UTC, which is what the column stores.
+        $toUtc = function ($v) use ($tz) {
+            if ($v === null || $v === '') return null;
+            return \Illuminate\Support\Carbon::parse($v, $tz)->utc()->toDateTimeString();
+        };
+
+        $newIn  = array_key_exists('punched_in_at', $data)  ? $toUtc($data['punched_in_at'])  : $row->punched_in_at;
+        $newOut = array_key_exists('punched_out_at', $data) ? $toUtc($data['punched_out_at']) : $row->punched_out_at;
+
+        if (! $newIn) return response()->json(['message' => 'A clock-in time is required.'], 422);
+        if ($newOut && strtotime((string) $newOut) <= strtotime((string) $newIn)) {
+            return response()->json(['message' => 'The clock-out time must be after the clock-in time.'], 422);
+        }
+        // A shift longer than 24 hours is almost certainly a typo, and quietly accepting
+        // it puts a wrong number straight into someone's pay.
+        if ($newOut && (strtotime((string) $newOut) - strtotime((string) $newIn)) > 86400) {
+            return response()->json(['message' => 'That is longer than 24 hours — please check the date and time.'], 422);
+        }
+
+        $actor = $request->user();
+        $actorName = trim(((string) ($actor->first_name ?? '')) . ' ' . ((string) ($actor->last_name ?? ''))) ?: 'an administrator';
+
+        // Stamp the punch itself, so a corrected shift is visible on the row rather than
+        // only in a log somebody has to know to look for.
+        $stamp = 'Corrected by ' . $actorName . ' on ' . now()->setTimezone($tz)->format('j M Y')
+            . (! empty($data['reason']) ? ' — ' . $data['reason'] : '');
+        $notes = trim((string) ($row->notes ?? ''));
+        $notes = $notes === '' ? $stamp : mb_substr($notes . ' | ' . $stamp, 0, 300);
+
+        DB::table('time_punches')->where('id', $punch)->update([
+            'punched_in_at'  => $newIn,
+            'punched_out_at' => $newOut,
+            'notes'          => $notes,
+        ]);
+
+        try {
+            DB::table('audit_logs')->insert([
+                'user_id'     => $actor->id,
+                'action'      => 'timepunch.corrected',
+                'entity_type' => 'time_punch',
+                'entity_id'   => $punch,
+                'payload'     => json_encode([
+                    'staff_user_id' => $user,
+                    'from' => ['in' => $row->punched_in_at, 'out' => $row->punched_out_at],
+                    'to'   => ['in' => $newIn,              'out' => $newOut],
+                    'reason' => $data['reason'] ?? null,
+                ]),
+                'created_at'  => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // The correction stands even if the audit insert fails, but do not lose it.
+            \Illuminate\Support\Facades\Log::error('Punch correction audit failed', [
+                'punch' => $punch, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        $in = \Illuminate\Support\Carbon::parse($newIn)->timezone($tz);
+        $out = $newOut ? \Illuminate\Support\Carbon::parse($newOut)->timezone($tz) : null;
+
+        return response()->json([
+            'ok' => true,
+            'punch' => [
+                'id' => $punch,
+                'day' => $in->format('D j M Y'),
+                'in_time' => $in->format('g:i A'),
+                'out_time' => $out?->format('g:i A'),
+                'punched_out_at' => $newOut,
+                'hours' => $out ? round($in->floatDiffInHours($out), 2) : null,
+                'notes' => $notes,
+            ],
+        ]);
+    }
+
     public function punches(Request $request, int $user): JsonResponse
     {
         $centreId = $this->centreOf($user);

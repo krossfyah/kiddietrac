@@ -496,6 +496,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::put('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'update']);
         // A staff member's clock in/out history, on their own record.
         Route::get('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'punches']);
+        // Correcting a punch. Nothing could do this before — the educator's clock only
+        // toggles, and there was no admin route — which is why punches sat open for weeks.
+        Route::patch('/admin/users/{user}/punches/{punch}', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'updatePunch']);
         Route::put('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'update']);
 
         // Onboarding — Privacy Policy & NDA. Every role signs once; the signature,
