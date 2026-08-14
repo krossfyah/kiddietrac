@@ -63,10 +63,10 @@ final class SeedDemoV4 extends Command
 
         foreach ($educators as $ed) {
             // Skip if already clocked in today
-            $existing = DB::table('time_entries')
+            $existing = DB::table('time_punches')
                 ->where('user_id', $ed->id)
-                ->whereDate('clocked_in_at', now())
-                ->whereNull('clocked_out_at')
+                ->whereDate('punched_in_at', now())
+                ->whereNull('punched_out_at')
                 ->exists();
 
             if ($existing) {
@@ -74,10 +74,11 @@ final class SeedDemoV4 extends Command
                 continue;
             }
 
-            DB::table('time_entries')->insert([
+            DB::table('time_punches')->insert([
                 'user_id' => $ed->id,
                 'centre_id' => $ed->centre_id,
-                'clocked_in_at' => now()->setTime(7, 30),
+                'punched_in_at' => now()->setTime(7, 30),
+                'source' => 'kiosk',
                 'created_at' => now(),
             ]);
             $this->line("  · Clocked in {$ed->first_name}");

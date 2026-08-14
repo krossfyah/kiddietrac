@@ -45,10 +45,14 @@ final class CentreController extends Controller
 
         $presentNow = $this->countCurrentlyPresent($centre->id, $today);
 
-        $staffOnFloor = DB::table('time_entries')
+        // time_punches, not time_entries. The clock was consolidated onto /staff/punch
+        // and nothing has written the legacy table since 23 July, so this reported ZERO
+        // staff on the floor at every centre regardless of who was actually clocked in
+        // — checked against production, a centre with one educator on shift read 0.
+        $staffOnFloor = DB::table('time_punches')
             ->where('centre_id', $centre->id)
-            ->whereDate('clocked_in_at', $today)
-            ->whereNull('clocked_out_at')
+            ->whereDate('punched_in_at', $today)
+            ->whereNull('punched_out_at')
             ->count();
 
         $receivables = (float) DB::table('invoices')
@@ -323,10 +327,12 @@ final class CentreController extends Controller
             ->count();
 
         if ($educatorsPresent === 0) {
-            $clockedIn = DB::table('time_entries')
+            // Same correction as RoomController's copy of this fallback, which was
+            // fixed earlier; this second copy was missed and stayed on the dead table.
+            $clockedIn = DB::table('time_punches')
                 ->where('centre_id', $room->centre_id)
-                ->whereDate('clocked_in_at', $date)
-                ->whereNull('clocked_out_at')
+                ->whereDate('punched_in_at', $date)
+                ->whereNull('punched_out_at')
                 ->count();
             $totalRooms = DB::table('rooms')
                 ->where('centre_id', $room->centre_id)

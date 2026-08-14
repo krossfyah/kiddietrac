@@ -126,12 +126,31 @@ class SeedDemoDaily extends Command
             foreach ($staff as $s) {
                 // Guard on ANY open shift (not just today's) so re-runs / day
                 // rollovers don't stack multiple open entries for one staffer.
-                $open = DB::table('time_entries')->where('user_id', $s->id)->where('centre_id', $centreId)
-                    ->whereNull('clocked_out_at')->exists();
+                // Close anything left open from an earlier day FIRST. Seeding only
+                // ever opened shifts and never closed them, so demo staff would have
+                // accumulated permanently-open punches — showing as on the floor
+                // forever, which is precisely the stale-punch problem being cleaned up
+                // on the live agency. A demo day should end as well as start.
+                DB::table('time_punches')
+                    ->where('user_id', $s->id)->where('centre_id', $centreId)
+                    ->whereNull('punched_out_at')
+                    ->whereDate('punched_in_at', '<', $today->toDateString())
+                    ->update(['punched_out_at' => DB::raw("DATE_ADD(DATE(punched_in_at), INTERVAL 17.5 HOUR)")]);
+
+                // time_punches — the table the clock actually writes. Seeding the
+                // legacy one left demo staff invisible everywhere that matters: no one
+                // on the floor, nothing on a timesheet, and every demo educator's
+                // nightly summary reporting 0h. This runs at 05:00 daily, so it was
+                // re-creating that every morning.
+                $open = DB::table('time_punches')->where('user_id', $s->id)->where('centre_id', $centreId)
+                    ->whereNull('punched_out_at')->exists();
                 if ($open) continue;
-                DB::table('time_entries')->insert([
+                DB::table('time_punches')->insert([
                     'user_id' => $s->id, 'centre_id' => $centreId,
-                    'clocked_in_at' => $today->copy()->setTime(7, 30), 'total_break_min' => 0,
+                    'punched_in_at' => $today->copy()->setTime(7, 30),
+                    // NOT NULL enum(web|kiosk|mobile); a seeded shift stands in for
+                    // somebody tapping in at the door.
+                    'source' => 'kiosk',
                     'created_at' => now(),
                 ]);
                 $n++;
