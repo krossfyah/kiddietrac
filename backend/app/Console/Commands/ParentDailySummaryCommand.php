@@ -224,6 +224,19 @@ class ParentDailySummaryCommand extends Command
 
         $logs = $careLogs->concat($eventLogs)->sortBy('at')->values();
 
+        // Who actually looked after them today. Both care tables stamp
+        // recorded_by_id; this reads the distinct authors so the email can show the
+        // parent a face rather than an anonymous list of times.
+        $educatorIds = collect()
+            ->concat(DB::table('daily_care_logs')->where('child_id', $child->id)
+                ->whereBetween('occurred_at', [$start, $end])->pluck('recorded_by_id'))
+            ->concat(DB::table('daily_events')->where('child_id', $child->id)->whereNull('deleted_at')
+                ->whereBetween('occurred_at', [$start, $end])->pluck('recorded_by_id'))
+            ->filter()->unique()->values();
+        $educators = $educatorIds->isEmpty() ? collect() : DB::table('users')
+            ->whereIn('id', $educatorIds)->whereNull('deleted_at')
+            ->get(['id', 'first_name', 'last_name', 'photo_url']);
+
         // Photos — child_ids is a JSON array on the photo row.
         $photos = DB::table('photos')
             ->where('centre_id', $child->centre_id)
@@ -339,6 +352,7 @@ class ParentDailySummaryCommand extends Command
             'announcements' => $announcements,
             'awards' => $awards,
             'late_pickup' => $latePickup,
+            'educators' => $educators,
             'digest' => $digest,
             'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $awards->count() || $latePickup || $digest),
         ];
@@ -547,6 +561,16 @@ class ParentDailySummaryCommand extends Command
                 . '</td></tr></table>' . $body;
         }
 
+        // The child's face, above everything. On a phone this is what a parent sees
+        // before they read a word, and it makes an email about their child look like
+        // one — particularly in a family with more than one child in care.
+        $body = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px;"><tr>'
+            . '<td style="padding-right:11px;vertical-align:middle;">' . $this->avatarChip($name, $child->photo_url ?? null, 46) . '</td>'
+            . '<td style="vertical-align:middle;">'
+            .   '<div style="font-size:16px;font-weight:800;color:#0B2545;line-height:1.25;">' . $name . '</div>'
+            .   '<div style="font-size:12.5px;color:#64748B;margin-top:1px;">' . e((string) $child->centre_name) . ' · ' . $day['date']->format('D, j M Y') . '</div>'
+            . '</td></tr></table>' . $body;
+
         // $attended was established at the top, before the wording was chosen.
 
         if (! $attended) {
@@ -716,6 +740,47 @@ class ParentDailySummaryCommand extends Command
             }
         }
 
+        // Who looked after them. Shown only when somebody actually logged something,
+        // so an absent day does not credit an educator with a day that did not happen.
+        $eds = collect($day['educators'] ?? []);
+        if ($attended && $eds->count()) {
+            $chips = '';
+            foreach ($eds->take(4) as $ed) {
+                $edName = trim(((string) $ed->first_name) . ' ' . ((string) $ed->last_name));
+                $chips .= '<td style="padding:0 14px 0 0;vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
+                    . '<td style="padding-right:8px;vertical-align:middle;">' . $this->avatarChip($edName, $ed->photo_url ?? null, 34) . '</td>'
+                    . '<td style="vertical-align:middle;font-size:13px;font-weight:700;color:#334155;white-space:nowrap;">' . e($edName) . '</td>'
+                    . '</tr></table></td>';
+            }
+            $body .= '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
+                . '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#94A3B8;text-transform:uppercase;margin-bottom:9px;">'
+                . ($eds->count() === 1 ? 'Cared for today by' : 'Cared for today by') . '</div>'
+                . '<table role="presentation" cellpadding="0" cellspacing="0"><tr>' . $chips . '</tr></table></div>';
+        }
+
+        // One idea for tomorrow. Rotates by child and by date, so siblings do not get
+        // the same line on the same evening and nobody reads it twice in three weeks.
+        $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 0;"><tr>'
+            . '<td style="background:#F0F7FF;border:1px solid #D8E8F7;border-left:5px solid #1F6FB2;border-radius:12px;padding:13px 15px;">'
+            . '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1F6FB2;text-transform:uppercase;margin-bottom:4px;">Something to try tomorrow</div>'
+            . '<div style="font-size:14px;color:#0F172A;line-height:1.55;">' . $this->tomorrowTip((int) $child->id, $day['date'], $name) . '</div>'
+            . '</td></tr></table>';
+
+        // If the day came back thin, say so plainly and point the parent at the people
+        // who can fix it. Deliberately NOT shown on an absent or closed day: nothing
+        // came back because the child was not there, and telling a parent to raise
+        // that would be the software picking a fight on their behalf.
+        $loggedCount = $countOf($day['logs'] ?? null) + $countOf($day['photos'] ?? null);
+        if ($attended && empty($day['closed_today']) && $loggedCount < 3) {
+            $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0 0;"><tr>'
+                . '<td style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:13px 15px;">'
+                . '<div style="font-size:13.5px;color:#78350F;line-height:1.6;">'
+                . 'There is not much detail in today\'s update. Some days are simply busy — but if you would '
+                . 'like to hear more about how ' . $name . ' is getting on, do mention it to '
+                . e((string) $child->centre_name) . ' next time you are in. They would rather know.'
+                . '</div></td></tr></table>';
+        }
+
         // Agency-editable sign-off line (from the parent-daily-summary template).
         if (! empty($day['_signoff'])) {
             $body .= '<div style="margin-top:18px;font-size:15px;color:#334155;line-height:1.6;">' . $day['_signoff'] . '</div>';
@@ -737,6 +802,82 @@ class ParentDailySummaryCommand extends Command
             'subtitle' => $day['date']->format('l, j F Y'),
             'preheader' => $name . ': ' . (count($day['awards'] ?? []) ? '🏆 award earned · ' : '') . count($day['photos']) . ' photos, ' . count($day['logs']) . ' moments logged.',
         ]);
+    }
+
+    /**
+     * An avatar that survives an email client.
+     *
+     * A photo is used ONLY when the URL is provably a raster image. Every child
+     * avatar in this system is a dicebear SVG, and Gmail and Outlook do not render
+     * SVG in mail — an <img> would be a broken image for all of them. Those fall
+     * back to an initial in a tinted circle, which renders everywhere.
+     *
+     * Stored educator photos are site-relative (/storage/avatars/...), so they are
+     * made absolute; a relative src in an email resolves against nothing.
+     */
+    private function avatarChip(?string $name, ?string $photoUrl, int $size = 44): string
+    {
+        $name = trim((string) $name);
+        $initial = $name !== '' ? mb_strtoupper(mb_substr($name, 0, 1)) : '?';
+
+        $url = trim((string) $photoUrl);
+        $isRaster = $url !== ''
+            && ! str_contains(strtolower($url), 'svg')
+            && (bool) preg_match('~(\.(png|jpe?g|webp|gif)($|\?)|pravatar|gravatar)~i', $url);
+
+        if ($isRaster) {
+            if (! preg_match('~^https?://~i', $url)) {
+                $url = 'https://app.kiddietrac.com/' . ltrim($url, '/');
+            }
+            return '<img src="' . e($url) . '" alt="' . e($name) . '" width="' . $size . '" height="' . $size . '"'
+                . ' style="width:' . $size . 'px;height:' . $size . 'px;border-radius:' . $size . 'px;'
+                . 'object-fit:cover;display:block;border:2px solid #FFFFFF;box-shadow:0 0 0 1px #E2E8F0;">';
+        }
+
+        // Same name, same colour, every day — so a parent comes to recognise it.
+        $palette = ['#1F6FB2', '#0E9F6E', '#7C3AED', '#DB6D28', '#0891B2', '#BE185D'];
+        $bg = $palette[($name !== '' ? (ord(mb_substr($name, 0, 1)) + mb_strlen($name)) : 0) % count($palette)];
+        return '<div style="width:' . $size . 'px;height:' . $size . 'px;border-radius:' . $size . 'px;'
+            . 'background:' . $bg . ';color:#FFFFFF;font-weight:800;font-size:' . (int) round($size * 0.42) . 'px;'
+            . 'line-height:' . $size . 'px;text-align:center;border:2px solid #FFFFFF;'
+            . 'box-shadow:0 0 0 1px #E2E8F0;">' . e($initial) . '</div>';
+    }
+
+    /**
+     * One encouraging idea for tomorrow, chosen by child and by date so that two
+     * children in the same family do not get the same line on the same evening, and
+     * no child sees the same line twice in three weeks.
+     */
+    private function tomorrowTip(int $childId, $date, string $name): string
+    {
+        $tips = [
+            "Ask {n} to name one thing that made them laugh today — recalling it out loud helps it stick.",
+            "Let {n} pour their own water at dinner. Small acts of control build real confidence.",
+            "Try five minutes of drawing side by side, no instructions and no corrections.",
+            "Count something ordinary together on the way in tomorrow — steps, red cars, front doors.",
+            "Give {n} a two-minute warning before bath or bed. Transitions get easier with a heads-up.",
+            "Ask what was hard today, not just what was fun. Both deserve room.",
+            "Read the same book {n} keeps choosing. Repetition is how the words become theirs.",
+            "Let {n} carry their own bag in tomorrow, even if it is slower.",
+            "Name the feeling you see: \"you look frustrated\". Naming it takes some of the heat out.",
+            "Put on one song and dance badly. Ten minutes of movement resets a whole evening.",
+            "Ask {n} to help with one real job — sorting socks, setting a fork. Being useful matters.",
+            "Skip the screen for the last half hour before bed and see how sleep goes.",
+            "Ask {n} who they played with today, and remember the name for tomorrow.",
+            "Let {n} choose between two outfits rather than picking for them.",
+            "Talk through tomorrow at bedtime, in order. Knowing what comes next settles most worries.",
+            "Praise the effort and not the outcome: \"you kept trying\" beats \"you are so clever\".",
+            "Take a slightly different route in tomorrow and let {n} spot what changed.",
+            "Let {n} tell you a story with no right answer and no interruptions.",
+            "Build something that is allowed to fall over. Failing safely is its own lesson.",
+            "Ask {n} to teach you something they learned today. Teaching it proves they have it.",
+            "Sit outside for ten minutes without a plan, whatever the weather.",
+            "Let {n} choose tomorrow's snack from two options you are happy with either way.",
+            "Notice one thing {n} did without being asked, and say so out loud.",
+            "Ask what they are looking forward to tomorrow, then follow it up in the evening.",
+        ];
+        $i = ($childId + (int) $date->format('z')) % count($tips);
+        return str_replace('{n}', e($name), $tips[$i]);
     }
 
     private function section(string $title): string
