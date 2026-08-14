@@ -519,10 +519,21 @@ class ParentDailySummaryCommand extends Command
         // and until now nothing asked it. A child with no sign-in and no logged care
         // was still given sign-in/out cards, a story about their day and a thank-you
         // for sharing them — about a day spent at home.
+        // COUNT, do not use empty(). These arrive as Collections, and empty() on an
+        // OBJECT is always false - so an empty photo collection read as "attended"
+        // and a child who never arrived still got a story. That is the bug this
+        // block was written to prevent, reintroduced by the check itself.
+        $countOf = static function ($v): int {
+            if ($v === null) return 0;
+            if (is_array($v)) return count($v);
+            if ($v instanceof \Countable) return count($v);
+            if (is_object($v) && method_exists($v, 'count')) return (int) $v->count();
+            return $v ? 1 : 0;
+        };
         $attended = !empty($day['check_in'])
-            || !empty($day['events'])
-            || !empty($day['care_logs'])
-            || !empty($day['photos']);
+            || $countOf($day['events'] ?? null) > 0
+            || $countOf($day['care_logs'] ?? null) > 0
+            || $countOf($day['photos'] ?? null) > 0;
 
         if (! $attended) {
             // Say it once, clearly, at the top. If the family told us why, repeat it
