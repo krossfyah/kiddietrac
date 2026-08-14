@@ -249,14 +249,8 @@
       Dom.clear(wrap);
       var child = data;
 
-      // Back link
-      var backWrap = Dom.el('div', { style: 'margin-bottom:16px;' });
-      var backLink = Dom.el('a', {
-        href: backHash(params),
-        style: 'color:#1F6080;text-decoration:none;font-size:13px;',
-      }, '← Back');
-      backWrap.appendChild(backLink);
-      wrap.appendChild(backWrap);
+      // The "← Back" link is deliberately gone: the shell's own navigation knows
+      // where the user came from, and a link that guesses does not.
 
       // Header
       var header = Dom.el('div', {
@@ -443,8 +437,13 @@
         else if (activeTab === 'attachments') renderAttachmentsTab(tabContent, child);
         else renderOverviewTab(tabContent, child);
       }
-      wrap.appendChild(tabbar);
-      wrap.appendChild(tabContent);
+      // Tabs sit directly under the header — they decide what you are looking at,
+      // so they cannot appear below the thing they control. insertBefore rather than
+      // appendChild because a section of content is built before this point.
+      if (header && header.nextSibling) wrap.insertBefore(tabbar, header.nextSibling);
+      else wrap.appendChild(tabbar);
+      if (tabbar && tabbar.nextSibling) wrap.insertBefore(tabContent, tabbar.nextSibling);
+      else wrap.appendChild(tabContent);
       paintTabs();
       paintTab();
     }).catch(function (e) {
@@ -455,7 +454,25 @@
     });
   }
 
-  function tcard() { return 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;'; }
+  // Cards are tinted by KIND, not uniformly: a soft wash plus a coloured left edge
+  // lets the eye find "the health one" or "the placement one" before reading a
+  // heading, which is what makes a long record scannable. White-on-white relies
+  // entirely on the shadow, and the shadow is the first thing to disappear on the
+  // APK's brighter screen.
+  var CARD_TONES = {
+    neutral:   ['#FFFFFF', '#CBD5E1'],
+    placement: ['#F5F9FF', '#1F6FB2'],
+    health:    ['#FFF9F0', '#B45309'],
+    care:      ['#F2FBFA', '#0E7C90'],
+    people:    ['#F8F5FF', '#7C3AED'],
+    files:     ['#F7FAFC', '#64748B'],
+  };
+  function tcard(tone) {
+    var t = CARD_TONES[tone] || CARD_TONES.neutral;
+    return 'background:' + t[0] + ';border-radius:14px;padding:20px 24px;margin-bottom:16px;'
+      + 'border:1px solid #EDF2F7;border-left:4px solid ' + t[1] + ';'
+      + 'box-shadow:0 1px 3px rgba(15,23,42,.05);';
+  }
   function loadingBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, msg || 'Loading…'); }
   function emptyBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#6B7280;' }, msg); }
   function fmtDateTime(s) { if (!s) return '—'; try { return new Date(s).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return s; } }
@@ -492,7 +509,7 @@
   }
 
   function renderEnrollmentTab(c, child) {
-    var card = Dom.el('div', { style: tcard() });
+    var card = Dom.el('div', { style: tcard('placement') });
     card.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Current placement'));
     card.appendChild(detailRow('Agency', child.agency ? child.agency.name : '—'));
     card.appendChild(detailRow('Centre', child.centre ? (child.centre.name + (child.centre.city ? ' · ' + child.centre.city : '')) : '—'));
@@ -508,7 +525,7 @@
     else sc.appendChild(emptyBox('No school on file (for school-age children, add it via Edit).'));
     c.appendChild(sc);
 
-    var hist = Dom.el('div', { style: tcard() });
+    var hist = Dom.el('div', { style: tcard('placement') });
     hist.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Enrollment history'));
     var hh = child.enrollment_history || [];
     if (!hh.length) hist.appendChild(emptyBox('No enrollment history.'));
@@ -522,7 +539,7 @@
     // Rendered by the pattern screen itself (KT.AttendancePattern.renderInto) with
     // this child preselected, so there is one editor rather than a read-only copy
     // here and the real thing somewhere else.
-    var pat = Dom.el('div', { style: tcard() });
+    var pat = Dom.el('div', { style: tcard('care') });
     pat.appendChild(Dom.el('h3', { style: 'margin:0 0 4px;font-size:16px;' }, 'Attendance pattern'));
     pat.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:10px;' },
       'Which days this child normally attends, and when in the day. Drives ratios, room planning and tuition projections.'));
