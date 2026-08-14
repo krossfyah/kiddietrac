@@ -713,6 +713,11 @@ final class PlatformController extends Controller
         // Never ship the (potentially huge) stored HTML body in the LIST — expose a
         // has_body flag; the actual preview is fetched per-row via emailPreview().
         $cols = ['id', 'to_email', 'to_name', 'from_email', 'subject', 'mailer', 'status', 'error', 'created_at', 'opened_at', 'opens'];
+        // Copied recipients. Added conditionally so this keeps working if the code
+        // deploys ahead of the migration on any environment.
+        foreach (['cc', 'bcc'] as $extra) {
+            if (Schema::hasColumn('email_logs', $extra)) $cols[] = $extra;
+        }
         // STRICT per-tenant isolation: when the platform admin has switched INTO a
         // specific agency (X-Active-Agency-Id is a numeric id), show ONLY that
         // agency's emails. 'all'/unset = the platform-wide super-admin view. Previously
@@ -796,7 +801,12 @@ final class PlatformController extends Controller
             return response()->json(['message' => 'Email previews are not available.'], 404);
         }
         $row = DB::table('email_logs')->where('id', $id)
-            ->first(['id', 'subject', 'to_email', 'to_name', 'from_email', 'status', 'created_at', 'body_html']);
+            // cc/bcc included: the preview panel is where "was the director copied?"
+            // is actually asked, and without them here the UI has nothing to show.
+            ->first(array_merge(
+                ['id', 'subject', 'to_email', 'to_name', 'from_email', 'status', 'created_at', 'body_html'],
+                array_values(array_filter(['cc', 'bcc'], fn ($c) => Schema::hasColumn('email_logs', $c)))
+            ));
         if (! $row) return response()->json(['message' => 'Not found'], 404);
         return response()->json([
             'id'         => $row->id,
@@ -806,6 +816,10 @@ final class PlatformController extends Controller
             'from_email' => $row->from_email,
             'status'     => $row->status,
             'created_at' => $row->created_at,
+            // Selecting these from the table was not enough - the response is an
+            // explicit array, so they were fetched and then dropped on the way out.
+            'cc'         => $row->cc ?? null,
+            'bcc'        => $row->bcc ?? null,
             'html'       => $row->body_html ?: null,
         ]);
     }

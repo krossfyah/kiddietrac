@@ -979,7 +979,17 @@
       m.querySelector('#ep-head').innerHTML =
         '<h3 style="margin:0;font-size:16px;">' + esc(d.subject || '(no subject)') + '</h3>' +
         '<div style="font-size:12px;color:#6B7280;margin-top:2px;">To ' + esc((d.to_name ? d.to_name + ' ' : '') + '<' + (d.to_email || '') + '>') +
-          ' · ' + esc(fmtDate(d.created_at)) + (d.status ? ' · ' + esc(d.status) : '') + '</div>';
+          ' · ' + esc(fmtDate(d.created_at)) + (d.status ? ' · ' + esc(d.status) : '') + '</div>' +
+        // Shown only when there were copied recipients. An empty "Bcc:" on every
+        // routine email is noise, and noise is how a line stops being read — which
+        // matters here because this is the line that answers "was the director copied?"
+        // for an access-removal, suspension or de-enrolment notice.
+        ((d.cc || d.bcc)
+          ? '<div style="font-size:12px;color:#475569;margin-top:4px;padding:6px 9px;background:#F1F5F9;border-radius:7px;">' +
+              (d.cc ? '<div><b>Cc:</b> ' + esc(d.cc) + '</div>' : '') +
+              (d.bcc ? '<div><b>Bcc:</b> ' + esc(d.bcc) + '</div>' : '') +
+            '</div>'
+          : '');
       var epBody = m.querySelector('#ep-body');
       if (!d.html) {
         epBody.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;">No stored content for this message (it predates preview capture, or was plain-text only).</div>';

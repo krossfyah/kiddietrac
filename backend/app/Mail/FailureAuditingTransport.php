@@ -42,9 +42,13 @@ final class FailureAuditingTransport implements TransportInterface
     {
         try {
             $to = null;
+            $cc = null;
+            $bcc = null;
             $subject = null;
             if ($message instanceof Email) {
                 $to = collect($message->getTo())->map(fn ($a) => $a->getAddress())->filter()->implode(', ');
+                $cc = collect($message->getCc())->map(fn ($a) => $a->getAddress())->filter()->implode(', ') ?: null;
+                $bcc = collect($message->getBcc())->map(fn ($a) => $a->getAddress())->filter()->implode(', ') ?: null;
                 $subject = $message->getSubject();
                 try { $h = $message->getHtmlBody(); if (! is_string($h)) $h = $message->getTextBody(); $bodyHtml = (is_string($h) && $h !== '') ? mb_substr($h, 0, 500000) : null; } catch (\Throwable $eb) { $bodyHtml = null; }
             }
@@ -56,6 +60,10 @@ final class FailureAuditingTransport implements TransportInterface
                 DB::table('email_logs')->insert([
                     'agency_id'  => $failAgency,
                     'to_email'   => $to ?: null,
+                    // A failed send that was copied to the directors still needs to show
+                    // who WOULD have been copied, or the failure looks smaller than it is.
+                    'cc'         => Schema::hasColumn('email_logs', 'cc') ? $cc : null,
+                    'bcc'        => Schema::hasColumn('email_logs', 'bcc') ? $bcc : null,
                     'from_email' => 'noreply@kiddietrac.com',
                     'subject'    => $subject,
                     'mailer'     => config('mail.default'),

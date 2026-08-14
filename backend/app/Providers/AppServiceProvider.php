@@ -146,6 +146,12 @@ class AppServiceProvider extends ServiceProvider
                 DB::table('email_logs')->insert([
                     'to_email'   => $addr($msg->getTo()) ?: null,
                     'to_name'    => $name($msg->getTo()) ?: null,
+                    // Copied recipients were never recorded, so "was the director
+                    // copied?" — the whole reason these notices carry a BCC — could not
+                    // be answered from the log. Guarded on the column so an older
+                    // database keeps working if this deploys ahead of the migration.
+                    'cc'         => Schema::hasColumn('email_logs', 'cc') ? ($addr($msg->getCc()) ?: null) : null,
+                    'bcc'        => Schema::hasColumn('email_logs', 'bcc') ? ($addr($msg->getBcc()) ?: null) : null,
                     'from_email' => $addr($msg->getFrom()) ?: null,
                     'subject'    => $msg->getSubject(),
                     'mailer'     => config('mail.default'),

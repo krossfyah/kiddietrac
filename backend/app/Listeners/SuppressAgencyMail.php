@@ -240,8 +240,20 @@ class SuppressAgencyMail
                     if (! is_string($h)) $h = $event->message->getTextBody();
                     if (is_string($h) && $h !== '') $supBody = mb_substr($h, 0, 500000);
                 } catch (\Throwable $e) {}
+                // Copied recipients matter MOST on a suppressed row: a notice that was
+                // blocked was also not copied to anyone, and the log should say who
+                // missed it rather than naming only the primary recipient.
+                $supCc = null; $supBcc = null;
+                try {
+                    $m = $event->message;
+                    $supCc = collect($m->getCc() ?: [])->map(fn ($a) => $a->getAddress())->filter()->implode(', ') ?: null;
+                    $supBcc = collect($m->getBcc() ?: [])->map(fn ($a) => $a->getAddress())->filter()->implode(', ') ?: null;
+                } catch (\Throwable $e) {}
+
                 DB::table('email_logs')->insert([
                     'agency_id' => $supAgency,
+                    'cc' => \Illuminate\Support\Facades\Schema::hasColumn('email_logs', 'cc') ? $supCc : null,
+                    'bcc' => \Illuminate\Support\Facades\Schema::hasColumn('email_logs', 'bcc') ? $supBcc : null,
                     'to_email' => implode(', ', array_slice($hits, 0, 3)),
                     'to_name' => 'SUPPRESSED (live agency)',
                     'from_email' => 'noreply@kiddietrac.com',
