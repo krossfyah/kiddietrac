@@ -515,16 +515,46 @@ class ParentDailySummaryCommand extends Command
                 . '</td></tr></table>' . $body;
         }
 
-        // Sign in / out — with WHO did it, which is the part parents actually want
-        // and the part a compliance audit asks for.
-        $in = $day['check_in'] ? $t($day['check_in']->occurred_at) : 'Not signed in';
-        $out = $day['check_out'] ? $t($day['check_out']->occurred_at) : 'Still at the centre';
-        $inBy = $day['check_in']->by_name ?? null;
-        $outBy = $day['check_out']->by_name ?? null;
-        $body .= EmailTemplate::statRow(
-            EmailTemplate::statTile('Signed in', $in, $inBy ? 'by ' . $inBy : '', '#16A34A'),
-            EmailTemplate::statTile('Signed out', $out, $outBy ? 'by ' . $outBy : '', '#1F6080')
-        );
+        // DID THE CHILD ACTUALLY ATTEND? Everything below depends on the answer,
+        // and until now nothing asked it. A child with no sign-in and no logged care
+        // was still given sign-in/out cards, a story about their day and a thank-you
+        // for sharing them — about a day spent at home.
+        $attended = !empty($day['check_in'])
+            || !empty($day['events'])
+            || !empty($day['care_logs'])
+            || !empty($day['photos']);
+
+        if (! $attended) {
+            // Say it once, clearly, at the top. If the family told us why, repeat it
+            // back so they can see it was received.
+            $why = '';
+            if (!empty($day['absence'])) {
+                $reason = trim((string) ($day['absence']->reason ?? ''));
+                $why = $reason ? (' — reported as ' . e($reason)) : ' — reported absent';
+            }
+            $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>'
+                . '<td style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:5px solid #94A3B8;border-radius:12px;padding:14px 16px;">'
+                . '<div style="font-size:14.5px;font-weight:800;color:#334155;">' . e($name) . ' was not at '
+                . e($child->centre_name) . ' today' . $why . '.</div>'
+                . '<div style="font-size:13px;color:#475569;margin-top:3px;line-height:1.5;">'
+                . 'There is nothing to report for today. If this is wrong, please let the centre know so we can correct the record.'
+                . '</div></td></tr></table>';
+        } else {
+            // Sign in / out — with WHO did it, which is the part parents actually want
+            // and the part a compliance audit asks for.
+            $in = $day['check_in'] ? $t($day['check_in']->occurred_at) : 'Not signed in';
+            // Only a child who ARRIVED can still be here. Without a sign-in this said
+            // "Still at the centre" about a child who was never there.
+            $out = $day['check_out']
+                ? $t($day['check_out']->occurred_at)
+                : ($day['check_in'] ? 'Still at the centre' : 'Not signed out');
+            $inBy = $day['check_in']->by_name ?? null;
+            $outBy = $day['check_out']->by_name ?? null;
+            $body .= EmailTemplate::statRow(
+                EmailTemplate::statTile('Signed in', $in, $inBy ? 'by ' . $inBy : '', '#16A34A'),
+                EmailTemplate::statTile('Signed out', $out, $outBy ? 'by ' . $outBy : '', '#1F6080')
+            );
+        }
 
         // Late pickup — a factual, non-scolding note. Shows minutes over and the fee
         // if one was charged, so the line item on the invoice is never a surprise.
@@ -542,8 +572,10 @@ class ParentDailySummaryCommand extends Command
                 . '</div>';
         }
 
-        // The AI story
-        if (!empty($day['digest'])) {
+        // The AI story — only for a day that happened. A narrative assembled from
+        // no events still produces confident prose, and prose about a child who was
+        // at home is worse than sending nothing.
+        if ($attended && !empty($day['digest'])) {
             $body .= '<div style="background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border-radius:14px;padding:18px;margin:18px 0;">'
                 . '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:#a3d977;margin-bottom:7px;">✨ TODAY\'S STORY</div>'
                 . '<div style="font-size:14.5px;line-height:1.6;">' . nl2br(e($day['digest'])) . '</div>'
