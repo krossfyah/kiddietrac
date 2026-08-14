@@ -338,6 +338,37 @@ final class DayBriefController extends Controller
                 ];
             }
         }
+        // Absences, so the feed shows why a child has nothing logged against them
+        // rather than leaving a silent gap that reads as an educator who forgot.
+        //
+        // Read in here rather than written as a daily_events row on the way in:
+        // event_type is an ENUM with no 'absence' member, and those rows are what an
+        // educator's activity counts are built from — an absence would inflate the
+        // score of whoever recorded it, the same miscounting already fixed in the
+        // daily summaries.
+        if (!empty($childIds)) {
+            foreach (DB::table('child_absences as ab')
+                ->leftJoin('users as u', 'u.id', '=', 'ab.reported_by_id')
+                ->whereIn('ab.child_id', $childIds)
+                ->whereDate('ab.absent_on', $date)
+                ->get([
+                    'ab.id', 'ab.child_id', 'ab.reason', 'ab.note', 'ab.created_at',
+                    DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name,' ',u.last_name)),''),'') as reporter"),
+                ]) as $ab) {
+                $who = trim((string) $ab->reporter);
+                $events[] = [
+                    'at' => $ab->created_at,
+                    'time' => AgencyTime::fmt($ab->created_at, $tz),
+                    'logged_at' => $ab->created_at,
+                    'seq' => (int) $ab->id,
+                    'icon' => '🚫',
+                    'title' => 'Marked absent' . ($ab->reason ? ' — ' . ucfirst((string) $ab->reason) : ''),
+                    'child' => $nameById[$ab->child_id] ?? 'Child',
+                    'detail' => trim(((string) ($ab->note ?? '')) . ($who !== '' ? ' · reported by ' . $who : '')),
+                ];
+            }
+        }
+
         // ORDER OF RECORDING, not the time typed into the entry. Sorting by
         // occurred_at meant one mistyped time jumped its entry across the day and
         // pulled the sequence around it out of shape - in the one view you open to

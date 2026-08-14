@@ -50,7 +50,7 @@ class AbsenceController extends Controller
             ->join('agencies as a', 'a.id', '=', 'ce.agency_id')
             ->where('c.id', $data['child_id'])
             ->select([
-                'c.id', 'c.first_name', 'c.preferred_name', 'c.primary_room_id',
+                'c.id', 'c.first_name', 'c.preferred_name', 'c.primary_room_id', 'c.family_id',
                 'ce.id as centre_id', 'ce.name as centre_name',
                 'a.id as agency_id', 'a.timezone as tz',
             ])
@@ -76,6 +76,8 @@ class AbsenceController extends Controller
 
         $reporter = trim(($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? ''));
         $this->tellTheCentre($child, $date, $data['reason'] ?? null, $data['note'] ?? null, $reporter, $tz);
+        $this->tellTheFamily($child, $date, $data['reason'] ?? null, $data['note'] ?? null,
+            $reporter, (int) $request->user()->id, $tz);
 
         return response()->json(['ok' => true, 'date' => $date]);
     }
@@ -110,6 +112,109 @@ class AbsenceController extends Controller
             ->get();
 
         return response()->json(['absences' => $rows]);
+    }
+
+    /**
+     * Tell the family, on the same three channels the centre gets.
+     *
+     * This existed for staff only, which left the case that actually matters
+     * unhandled: an EDUCATOR marks a child absent and the parent never learns that
+     * it was recorded against their child. If it was a mistake — wrong child on a
+     * list of similar names — nobody who could correct it was told.
+     *
+     * Every guardian is notified, including the one who reported it. For them the
+     * wording is a confirmation rather than news, because being told your own action
+     * as though it were information is how a parent stops trusting the notification.
+     */
+    private function tellTheFamily($child, string $date, ?string $reason, ?string $note,
+                                   string $reporter, int $reporterId, string $tz): void
+    {
+        try {
+            $name = $child->preferred_name ?: $child->first_name;
+            $d = Carbon::parse($date, $tz);
+            $when = $d->isToday() ? 'today' : ($d->isTomorrow() ? 'tomorrow' : 'on ' . $d->format('D j M'));
+
+            $guardians = DB::table('guardians as g')
+                ->join('users as u', 'u.id', '=', 'g.user_id')
+                ->where('g.family_id', $child->family_id)
+                ->whereNull('u.deleted_at')
+                ->get([
+                    'u.id', 'u.email', 'u.status',
+                    DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name,' ',u.last_name)),''),'there') as name"),
+                ]);
+
+            foreach ($guardians as $g) {
+                $isReporter = ((int) $g->id === $reporterId);
+
+                $title = $isReporter
+                    ? "✅ Absence recorded for {$name}"
+                    : "🚫 {$name} has been marked absent {$when}";
+
+                $line = $isReporter
+                    ? "You told {$child->centre_name} that {$name} will not be in {$when}."
+                    : "{$child->centre_name} has recorded {$name} as absent {$when}. Reported by {$reporter}.";
+                $line = trim($line
+                    . ($reason ? ' Reason: ' . ucfirst($reason) . '.' : '')
+                    . ($note ? ' Note: “' . $note . '”' : ''));
+
+                // In-app + push.
+                try {
+                    DB::table('notifications')->insert([
+                        'user_id' => (int) $g->id,
+                        'type' => 'absence',
+                        'title' => $title,
+                        'body' => $line,
+                        'data' => json_encode(['link' => '#today', 'child_id' => $child->id]),
+                        'created_at' => now(),
+                    ]);
+                    app(FcmService::class)->sendToUser((int) $g->id, $title, $line, '#today', true);
+                } catch (\Throwable $e) {
+                }
+
+                // Email — but not to somebody who has never accepted their invite.
+                // The mail layer would refuse them anyway; stopping here saves
+                // building the message at all.
+                if (empty($g->email) || in_array((string) $g->status, ['invited', 'not_invited', 'deactivated', 'suspended'], true)) {
+                    continue;
+                }
+
+                $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($line) . '</p>'
+                    . EmailTemplate::calloutBox(
+                        '<strong>Child:</strong> ' . e($name) . '<br>'
+                        . '<strong>Date:</strong> ' . e($d->format('l, j F Y')) . '<br>'
+                        . '<strong>Reason:</strong> ' . e($reason ? ucfirst($reason) : 'Not given')
+                        . ($note ? '<br><strong>Note:</strong> ' . e($note) : '')
+                        . '<br><strong>Recorded by:</strong> ' . e($isReporter ? 'You' : $reporter),
+                        $isReporter ? 'info' : 'warning'
+                    )
+                    . '<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:#475569;">'
+                    . ($isReporter
+                        ? 'Nothing further is needed. If plans change, cancel the absence in the app and ' . e($child->centre_name) . ' will be told.'
+                        : 'If this is not right, contact ' . e($child->centre_name) . ' so it can be corrected.')
+                    . '</p>';
+
+                $html = EmailTemplate::wrap((int) $child->agency_id, $body, [
+                    'eyebrow' => 'ATTENDANCE',
+                    'title' => $title,
+                    'subtitle' => $child->centre_name . ' · ' . $d->format('D, j M Y'),
+                    'preheader' => $line,
+                ]);
+
+                $to = $g->email;
+                $subject = $title . ' — ' . $d->format('j M Y');
+                dispatch(function () use ($child, $to, $html, $subject) {
+                    \App\Services\AgencyMailer::forAgency((int) $child->agency_id)->mailer()
+                        ->html($html, function ($m) use ($to, $subject) {
+                            $m->to($to)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($subject);
+                        });
+                })->onQueue('mail');
+            }
+        } catch (\Throwable $e) {
+            // Recording the absence must succeed even if telling people fails.
+            \Illuminate\Support\Facades\Log::error('Absence family notice failed', [
+                'child' => $child->id ?? null, 'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
