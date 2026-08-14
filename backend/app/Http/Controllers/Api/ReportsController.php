@@ -259,6 +259,7 @@ final class ReportsController extends Controller
     {
         return [
             'attendance'  => ['title' => 'Attendance log',        'icon' => '🕘', 'desc' => 'Daily child check-in / check-out for the period.',  'dated' => true],
+            'provider_daily' => ['title' => 'Daily overview', 'icon' => '🗓️', 'desc' => 'Per-child daily summary: attendance + meals, naps, diapers, activities.', 'dated' => true],
             'enrollment'  => ['title' => 'Enrollment roster',     'icon' => '👶', 'desc' => 'Every child with status, family and centre.',       'dated' => false],
             'payments'    => ['title' => 'Payments received',     'icon' => '💳', 'desc' => 'Payments collected in the period.',                 'dated' => true],
             'invoices'    => ['title' => 'Invoices & balances',   'icon' => '🧾', 'desc' => 'Invoices issued, amounts paid and owing.',          'dated' => true],
@@ -328,25 +329,33 @@ final class ReportsController extends Controller
                     ->join('rooms as r', 'r.id', '=', 'ce.room_id')
                     ->join('centres as c', 'c.id', '=', 'r.centre_id')
                     ->join('children as ch', 'ch.id', '=', 'ce.child_id')
+                    ->leftJoin('users as bu', 'bu.id', '=', 'ce.by_user_id')
+                    ->leftJoin('authorized_pickups as ap', 'ap.id', '=', 'ce.by_pickup_id')
                     ->where('c.agency_id', $agencyId);
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->whereDate('ce.occurred_at', '>=', $from);
                 if ($to) $q->whereDate('ce.occurred_at', '<=', $to);
-                $events = $q->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'r.name as room', 'c.name as centre',
-                        DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"))
+                $events = $q->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'r.name as room', 'c.name as centre', 'ce.kiosk_source',
+                        DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"),
+                        DB::raw("TRIM(CONCAT(COALESCE(bu.first_name,''),' ',COALESCE(bu.last_name,''))) as by_user"),
+                        'ap.full_name as by_pickup')
                     ->orderBy('ce.occurred_at')->limit(4000)->get();
                 $byDay = [];
                 foreach ($events as $e) {
                     $d = substr((string) $e->occurred_at, 0, 10);
                     $key = $e->child_id . '|' . $d;
-                    if (! isset($byDay[$key])) $byDay[$key] = ['Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Check in' => '—', 'Check out' => '—'];
+                    if (! isset($byDay[$key])) $byDay[$key] = ['Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—'];
                     $t = date('g:i A', strtotime((string) $e->occurred_at));
-                    if ($e->event_type === 'check_in') { if ($byDay[$key]['Check in'] === '—') $byDay[$key]['Check in'] = $t; }
-                    else { $byDay[$key]['Check out'] = $t; }
+                    $who = trim((string) $e->by_user) ?: (trim((string) $e->by_pickup) ?: ($e->kiosk_source ? 'Kiosk' : '—'));
+                    if ($e->event_type === 'check_in') {
+                        if ($byDay[$key]['Check in'] === '—') { $byDay[$key]['Check in'] = $t; $byDay[$key]['Checked in by'] = $who; }
+                    } else {
+                        $byDay[$key]['Check out'] = $t; $byDay[$key]['Checked out by'] = $who;
+                    }
                 }
                 $rows = array_values($byDay);
                 usort($rows, fn ($a, $b) => [$b['Date'], $a['Child']] <=> [$a['Date'], $b['Child']]);
-                return [['Date', 'Child', 'Room', 'Centre', 'Check in', 'Check out'], $rows];
+                return [['Date', 'Child', 'Room', 'Centre', 'Check in', 'Checked in by', 'Check out', 'Checked out by'], $rows];
 
             case 'enrollment':
                 $q = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
@@ -404,29 +413,113 @@ final class ReportsController extends Controller
                 return [['Family', 'Email', 'Phone', 'City', 'Centre', 'Autopay'], $rows];
 
             case 'staff_hours':
-                $q = DB::table('time_entries as t')->join('users as u', 'u.id', '=', 't.user_id')
+                // Educator clock-in/out lives in `time_punches` (the live clock
+                // system) — NOT the legacy `time_entries` table, which is why this
+                // report was empty. Columns: punched_in_at / punched_out_at.
+                $q = DB::table('time_punches as t')->join('users as u', 'u.id', '=', 't.user_id')
                     ->join('centres as c', 'c.id', '=', 't.centre_id')->where('c.agency_id', $agencyId);
                 if ($centreId) $q->where('c.id', $centreId);
-                if ($from) $q->whereDate('t.clocked_in_at', '>=', $from);
-                if ($to) $q->whereDate('t.clocked_in_at', '<=', $to);
-                $data = $q->select('t.clocked_in_at', 't.clocked_out_at', 't.total_break_min', 'c.name as centre',
+                if ($from) $q->whereDate('t.punched_in_at', '>=', $from);
+                if ($to) $q->whereDate('t.punched_in_at', '<=', $to);
+                $data = $q->select('t.punched_in_at', 't.punched_out_at', 'c.name as centre',
                         DB::raw("TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) as staff"))
-                    ->orderByDesc('t.clocked_in_at')->limit(5000)->get();
+                    ->orderByDesc('t.punched_in_at')->limit(5000)->get();
                 $rows = array_map(function ($r) {
-                    if ($r->clocked_out_at) {
-                        $mins = (strtotime((string) $r->clocked_out_at) - strtotime((string) $r->clocked_in_at)) / 60 - (int) $r->total_break_min;
+                    if ($r->punched_out_at) {
+                        $mins = (strtotime((string) $r->punched_out_at) - strtotime((string) $r->punched_in_at)) / 60;
                         $hrs = number_format(max(0, $mins) / 60, 2) . ' h';
                     } else {
                         $hrs = 'On floor';
                     }
                     return [
-                        'Staff' => $r->staff, 'Centre' => $r->centre, 'Date' => substr((string) $r->clocked_in_at, 0, 10),
-                        'Clock in' => date('g:i A', strtotime((string) $r->clocked_in_at)),
-                        'Clock out' => $r->clocked_out_at ? date('g:i A', strtotime((string) $r->clocked_out_at)) : '—',
+                        'Staff' => $r->staff, 'Centre' => $r->centre, 'Date' => substr((string) $r->punched_in_at, 0, 10),
+                        'Clock in' => date('g:i A', strtotime((string) $r->punched_in_at)),
+                        'Clock out' => $r->punched_out_at ? date('g:i A', strtotime((string) $r->punched_out_at)) : '—',
                         'Hours' => $hrs,
                     ];
                 }, $data->all());
                 return [['Staff', 'Centre', 'Date', 'Clock in', 'Clock out', 'Hours'], $rows];
+
+            case 'provider_daily':
+                // Provider Daily Overview report — per child per day: attendance
+                // window plus a tally of care logged (meals, naps, diapers, activities).
+                $ceq = DB::table('check_events as ce')
+                    ->join('rooms as r', 'r.id', '=', 'ce.room_id')
+                    ->join('centres as c', 'c.id', '=', 'r.centre_id')
+                    ->join('children as ch', 'ch.id', '=', 'ce.child_id')
+                    ->where('c.agency_id', $agencyId);
+                if ($centreId) $ceq->where('c.id', $centreId);
+                if ($from) $ceq->whereDate('ce.occurred_at', '>=', $from);
+                if ($to) $ceq->whereDate('ce.occurred_at', '<=', $to);
+                $ceRows = $ceq->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'c.name as centre',
+                        DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"))
+                    ->orderBy('ce.occurred_at')->limit(6000)->get();
+
+                $days = [];
+                foreach ($ceRows as $e) {
+                    $d = substr((string) $e->occurred_at, 0, 10);
+                    $key = $e->child_id . '|' . $d;
+                    if (! isset($days[$key])) {
+                        $days[$key] = ['Date' => $d, 'Child' => $e->child, 'Centre' => $e->centre, '_cid' => $e->child_id,
+                            'Check in' => '—', 'Check out' => '—', 'Meals' => 0, 'Naps' => 0, 'Diapers' => 0, 'Activities' => 0];
+                    }
+                    $t = date('g:i A', strtotime((string) $e->occurred_at));
+                    if ($e->event_type === 'check_in') { if ($days[$key]['Check in'] === '—') $days[$key]['Check in'] = $t; }
+                    else { $days[$key]['Check out'] = $t; }
+                }
+                // Tally care events (daily_events) for the same child-days.
+                $deq = DB::table('daily_events as de')
+                    ->join('children as ch', 'ch.id', '=', 'de.child_id')
+                    ->join('families as f', 'f.id', '=', 'ch.family_id')
+                    ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                    ->where('c.agency_id', $agencyId)
+                    ->whereNull('de.deleted_at');
+                if ($centreId) $deq->where('c.id', $centreId);
+                if ($from) $deq->whereDate('de.occurred_at', '>=', $from);
+                if ($to) $deq->whereDate('de.occurred_at', '<=', $to);
+                $deRows = $deq->select('de.child_id', 'de.event_type', 'de.occurred_at')->limit(20000)->get();
+                foreach ($deRows as $e) {
+                    $key = $e->child_id . '|' . substr((string) $e->occurred_at, 0, 10);
+                    if (! isset($days[$key])) continue; // only annotate days the child was present
+                    switch ($e->event_type) {
+                        case 'meal': case 'snack': $days[$key]['Meals']++; break;
+                        case 'nap_start': $days[$key]['Naps']++; break;
+                        case 'diaper': $days[$key]['Diapers']++; break;
+                        case 'activity': $days[$key]['Activities']++; break;
+                    }
+                }
+                // The OTHER care table. The care screen writes daily_care_logs while the
+                // roster quick-log writes daily_events; counting only the second has been
+                // under-stating every one of these columns. Report cards had the same
+                // fault and the same fix.
+                if (\Illuminate\Support\Facades\Schema::hasTable('daily_care_logs')) {
+                    $clq = DB::table('daily_care_logs as cl')
+                        ->join('children as ch', 'ch.id', '=', 'cl.child_id')
+                        ->join('families as f', 'f.id', '=', 'ch.family_id')
+                        ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                        ->where('c.agency_id', $agencyId);
+                    if ($centreId) $clq->where('c.id', $centreId);
+                    if ($from) $clq->whereDate('cl.occurred_at', '>=', $from);
+                    if ($to) $clq->whereDate('cl.occurred_at', '<=', $to);
+                    $clRows = $clq->select('cl.child_id', 'cl.log_type', 'cl.occurred_at')->limit(20000)->get();
+                    foreach ($clRows as $e) {
+                        $key = $e->child_id . '|' . substr((string) $e->occurred_at, 0, 10);
+                        if (! isset($days[$key])) continue;   // same rule: only days the child was present
+                        switch ($e->log_type) {
+                            case 'meal': case 'snack': case 'bottle': $days[$key]['Meals']++; break;
+                            case 'nap': $days[$key]['Naps']++; break;
+                            case 'diaper': case 'bathroom': $days[$key]['Diapers']++; break;
+                            case 'sunscreen': $days[$key]['Activities']++; break;
+                        }
+                    }
+                }
+
+                $rows = array_map(function ($r) {
+                    unset($r['_cid']);
+                    return $r;
+                }, array_values($days));
+                usort($rows, fn ($a, $b) => [$b['Date'], $a['Child']] <=> [$a['Date'], $b['Child']]);
+                return [['Date', 'Child', 'Centre', 'Check in', 'Check out', 'Meals', 'Naps', 'Diapers', 'Activities'], $rows];
 
             case 'waitlist':
                 $q = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
@@ -589,6 +682,51 @@ final class ReportsController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="' . $base . '-' . date('Y-m-d') . '.pdf"',
         ]);
+    }
+
+    /**
+     * Build a canned report as PDF and/or CSV bytes for out-of-request use
+     * (scheduled email delivery). Reuses the exact same data + branded layout
+     * as the interactive canned reports.
+     *
+     * @return array{ok:bool,title:string,count:int,pdf:?string,csv:?string,filename_base:string}
+     */
+    public function buildScheduledReport(int $agencyId, string $type, ?int $centreId, ?string $from, ?string $to, string $by = 'Scheduled report'): array
+    {
+        $defs = self::cannedDefs();
+        if (! isset($defs[$type])) {
+            return ['ok' => false, 'title' => $type, 'count' => 0, 'pdf' => null, 'csv' => null, 'filename_base' => $type];
+        }
+        if ($centreId && ! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()) {
+            $centreId = null;
+        }
+        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to);
+        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+        $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
+
+        // PDF (same HTML + dompdf as cannedPdf)
+        $html = $this->cannedHtml($defs[$type], $columns, $rows, $agency, $centre, $from, $to, $by);
+        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true, 'defaultFont' => 'DejaVu Sans']);
+        $dompdf->setPaper('letter', 'landscape');
+        $dompdf->loadHtml($html);
+        $dompdf->render();
+        $pdf = $dompdf->output();
+
+        // CSV (rows are keyed by display header)
+        $enc = fn ($v) => '"' . str_replace('"', '""', (string) $v) . '"';
+        $csv = implode(',', array_map($enc, $columns)) . "\r\n";
+        foreach ($rows as $r) {
+            $csv .= implode(',', array_map(fn ($c) => $enc($r[$c] ?? ''), $columns)) . "\r\n";
+        }
+
+        return [
+            'ok' => true,
+            'title' => $defs[$type]['title'],
+            'count' => count($rows),
+            'pdf' => $pdf,
+            'csv' => $csv,
+            'filename_base' => $type . '-' . date('Y-m-d'),
+        ];
     }
 
     private function producedBy(Request $request): string
