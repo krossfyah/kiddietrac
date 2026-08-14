@@ -409,6 +409,39 @@ input.kt-switchified.kt-switchified {
 #appMain table > tbody > tr:nth-child(even) { background-color: #F1F5F9; }
 #appMain table > tbody > tr:nth-child(even):hover { background-color: #E5EDF4; }
 
+/* ── Table legibility (2026-08-14) ────────────────────────────────────────────
+   Striping alone was not enough to read a wide table across: every row looked the
+   same weight, the header was indistinguishable from the data, and only even rows
+   responded to the cursor. These give a table the same visual structure the cards
+   on the record screens now have — a tinted head, a defined edge, and a row that
+   answers when you point at it.
+
+   Still no !important: a row with its own inline background (announcements stripes
+   itself in JS, selected rows, status colours) must keep winning, which is what the
+   rule above was written to allow. */
+#appMain table > thead > tr > th,
+#appMain table > tr:first-child > th {
+  background-color: #EEF3F8;
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  border-bottom: 2px solid #DDE5EE;
+}
+/* A quiet line between rows so the eye can track across a wide one. */
+#appMain table > tbody > tr > td { border-bottom: 1px solid #EDF2F7; }
+/* Every row answers the cursor, not only the tinted ones. */
+#appMain table > tbody > tr:hover { background-color: #E8F0F7; }
+/* A defined edge, so a table reads as one object rather than loose text. */
+#appMain table {
+  border: 1px solid #E7EBF0;
+  border-radius: 12px;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
 /* ── Parent · Today timeline density (2026-08-11) ─────────────────────────────
    A normal day is 10–15 short events ("8:00 AM · Meal"). Rendered as one narrow
    ribbon in a wide card, ~70% of the row was empty and the card ran the height of
