@@ -2427,19 +2427,19 @@
     }));
     if (f.suspended) {
       bar.appendChild(mk('▶️', 'kt-act-teal', 'Reactivate', async function () {
-        if (!await KT.confirm('Reactivate this family? Their guardian logins will be restored.')) return;
+        if (!await KT.confirm('Reactivate this family?\n' + '  - Guardian logins are restored' + '\n  - Their children reappear on educator rosters' + '\n  - Notifications and daily emails resume' + '\n  - Each guardian is emailed to say access is back')) return;
         try { await Api.post('/admin/families/' + f.id + '/reactivate', {}); await renderFamiliesTab(content); }
         catch (e) { alert('Could not reactivate: ' + (e.message || 'error')); }
       }));
     } else {
       bar.appendChild(mk('⏸️', 'kt-act-info', 'Suspend', async function () {
-        if (!await KT.confirm('Suspend this family? Their guardian logins are blocked until you reactivate. Enrollment is kept.')) return;
+        if (!await KT.confirm('Suspend this family?\n' + '  - Guardian logins are blocked until you reactivate' + '\n  - Their children are hidden from educator rosters' + '\n  - All notifications and daily emails stop' + '\n  - Each guardian is emailed to explain the pause' + '\n  - The retention clock starts from today' + '\n\nEnrolment is kept, and this is reversible.')) return;
         try { await Api.post('/admin/families/' + f.id + '/suspend', {}); await renderFamiliesTab(content); }
         catch (e) { alert('Could not suspend: ' + (e.message || 'error')); }
       }));
     }
-    bar.appendChild(mk('🗑️', 'kt-act-danger', 'Inactivate', async function () {
-      if (!await KT.confirm('Inactivate this family permanently? The record is archived (children + history preserved).')) return;
+    bar.appendChild(mk('🗑️', 'kt-act-danger', 'De-enrol', async function () {
+      if (!await KT.confirm('De-enrol this family?\n' + '  - Their children are marked WITHDRAWN as of today' + '\n  - Guardian accounts are closed - they can no longer sign in' + '\n  - Each guardian is emailed a goodbye notice with your retention policy' + '\n\nCare records, attendance and history are preserved. The email cannot be unsent.')) return;
       try { await Api.delete('/admin/families/' + f.id); await renderFamiliesTab(content); }
       catch (e) { alert('Could not inactivate: ' + (e.message || 'error')); }
     }));
@@ -2453,7 +2453,7 @@
     var selectedIds = new Set();
     var bulkBar = Dom.el('div', { style: 'display:none;align-items:center;gap:10px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:10px 14px;margin-bottom:12px;' });
     var bulkCount = Dom.el('div', { style: 'flex:1;font-size:13px;color:#92400E;font-weight:600;' }, '0 selected');
-    var bulkDelete = Dom.el('button', { style: 'background:white;color:#DC2626;border:1px solid #FCA5A5;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;' }, 'Delete');
+    var bulkDelete = Dom.el('button', { style: 'background:white;color:#DC2626;border:1px solid #FCA5A5;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;' }, 'De-enrol');
     bulkBar.appendChild(bulkCount);
     bulkBar.appendChild(bulkDelete);
     wrap.appendChild(bulkBar);
@@ -2466,12 +2466,15 @@
     bulkDelete.addEventListener('click', async function () {
       var ids = Array.from(selectedIds);
       if (!ids.length) return;
-      if (!await KT.confirm('Delete ' + ids.length + ' family record(s)? Children + audit history are preserved; only the family-level row is removed.')) return;
+      // Spelled out at length on purpose: this is a checkbox that sends one
+      // irreversible goodbye email per selected family, and it used to promise that
+      // nothing beyond a row was touched.
+      if (!await KT.confirm('De-enrol ' + ids.length + ' famil' + (ids.length === 1 ? 'y' : 'ies') + '?\n\nFor EACH one:' + '\n  - Their children are marked WITHDRAWN as of today' + '\n  - Guardian accounts are closed' + '\n  - A goodbye email is sent to every guardian' + '\n\nThat is up to ' + ids.length + ' email(s) which cannot be unsent. Care records and history are preserved.')) return;
       bulkDelete.disabled = true;
       var ok = 0, fail = 0;
       for (const id of ids) { try { await Api.delete('/admin/families/' + id); ok++; } catch (e) { fail++; } }
       bulkDelete.disabled = false;
-      alert('Deleted ' + ok + ' family record(s), ' + fail + ' failed.');
+      alert('De-enrolled ' + ok + ' famil' + (ok === 1 ? 'y' : 'ies') + ', ' + fail + ' failed.');
       selectedIds.clear();
       await renderFamiliesTab(content);
     });
