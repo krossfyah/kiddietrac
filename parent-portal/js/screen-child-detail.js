@@ -491,7 +491,7 @@
 
   function renderOverviewTab(c, child) {
     if (child.guardians && child.guardians.length) {
-      var g = Dom.el('div', { style: tcard() });
+      var g = Dom.el('div', { style: tcard('people') });
       g.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Guardians'));
       child.guardians.forEach(function (gu) {
         var line = (gu.first_name || '') + ' ' + (gu.last_name || '') + (gu.relationship ? ' · ' + gu.relationship : '') + (gu.is_primary ? ' (primary)' : '') + (gu.email ? '  ·  ' + gu.email : '') + (!gu.can_pickup ? '  ·  cannot pick up' : '');
@@ -519,7 +519,7 @@
     card.appendChild(detailRow('Monthly fee', (child.enrollment && child.enrollment.monthly_fee) ? ('$' + child.enrollment.monthly_fee) : '—'));
     c.appendChild(card);
 
-    var sc = Dom.el('div', { style: tcard() });
+    var sc = Dom.el('div', { style: tcard('placement') });
     sc.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, '🏫 School details'));
     if (child.school_name) { sc.appendChild(detailRow('School', child.school_name)); sc.appendChild(detailRow('Grade', child.school_grade)); }
     else sc.appendChild(emptyBox('No school on file (for school-age children, add it via Edit).'));
@@ -569,7 +569,7 @@
         (d.events || []).map(function (x) { return { t: x.occurred_at, type: 'event', label: (x.event_type || x.type || 'event').replace(/_/g, ' '), notes: x.notes }; }));
       all.sort(function (a, b) { return (b.t || '').localeCompare(a.t || ''); });
       if (!all.length) { c.appendChild(emptyBox('No daily activity in the last 21 days.')); return; }
-      var card = Dom.el('div', { style: tcard() });
+      var card = Dom.el('div', { style: tcard('neutral') });
       all.forEach(function (e) {
         var r = Dom.el('div', { style: 'display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
         r.appendChild(Dom.el('div', { style: 'width:150px;flex-shrink:0;color:#6B7280;font-size:12px;' }, fmtDateTime(e.t)));
@@ -591,7 +591,7 @@
       var media = d.media || [], obs = d.observations || [];
       if (!media.length && !obs.length) { c.appendChild(emptyBox('No photos or observations yet.')); return; }
       if (media.length) {
-        var grid = Dom.el('div', { style: tcard() + 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;' });
+        var grid = Dom.el('div', { style: tcard('neutral') + 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;' });
         media.forEach(function (m) {
           var url = m.url || m.file_url || m.media_url || m.thumbnail_url; if (!url) return;
           var fig = Dom.el('div', {});
@@ -603,7 +603,7 @@
         c.appendChild(grid);
       }
       if (obs.length) {
-        var oc = Dom.el('div', { style: tcard() });
+        var oc = Dom.el('div', { style: tcard('care') });
         oc.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Observations'));
         obs.forEach(function (o) {
           var r = Dom.el('div', { style: 'padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
@@ -622,7 +622,7 @@
       Dom.clear(c);
       var docs = d.documents || [];
       if (!docs.length) { c.appendChild(emptyBox('No attachments on file for this child.')); return; }
-      var card = Dom.el('div', { style: tcard() });
+      var card = Dom.el('div', { style: tcard('neutral') });
       docs.forEach(function (doc) {
         var r = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
         r.appendChild(Dom.el('span', {}, '📎'));
