@@ -308,16 +308,21 @@ final class SchedulingController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $entries = DB::table('time_entries')
-            ->join('users', 'users.id', '=', 'time_entries.user_id')
-            ->where('time_entries.centre_id', $centreId)
-            ->where('time_entries.clocked_in_at', '>=', Carbon::parse($from)->startOfDay())
-            ->where('time_entries.clocked_in_at', '<=', Carbon::parse($to)->endOfDay())
-            ->whereNotNull('time_entries.clocked_out_at')
+        // time_punches, not time_entries. The clock was consolidated onto /staff/punch
+        // and nothing has written time_entries since 23 July — the StaffController
+        // /clock-in and /clock-out endpoints that fed it have no callers left in the
+        // app. This report was returning an empty month with no error while the hours
+        // sat in the other table.
+        $entries = DB::table('time_punches')
+            ->join('users', 'users.id', '=', 'time_punches.user_id')
+            ->where('time_punches.centre_id', $centreId)
+            ->where('time_punches.punched_in_at', '>=', Carbon::parse($from)->startOfDay())
+            ->where('time_punches.punched_in_at', '<=', Carbon::parse($to)->endOfDay())
+            ->whereNotNull('time_punches.punched_out_at')
             ->orderBy('users.last_name')
-            ->orderBy('time_entries.clocked_in_at')
+            ->orderBy('time_punches.punched_in_at')
             ->select(
-                'time_entries.*',
+                'time_punches.*',
                 'users.first_name',
                 'users.last_name',
                 'users.email'
@@ -325,18 +330,23 @@ final class SchedulingController extends Controller
             ->get();
 
         $rows = $entries->map(function ($e) {
-            $in = Carbon::parse($e->clocked_in_at);
-            $out = Carbon::parse($e->clocked_out_at);
+            $in = Carbon::parse($e->punched_in_at);
+            $out = Carbon::parse($e->punched_out_at);
+            // time_punches has no total_break_min — breaks were a feature of the old
+            // clock and the current one does not record them. Reported as 0 rather than
+            // silently omitted, so the hours are not presented as break-adjusted when
+            // nothing was deducted.
+            $breakMin = (int) ($e->total_break_min ?? 0);
             // abs(): Carbon 3 diffInMinutes is signed, and $out->diffInMinutes($in)
             // yields a NEGATIVE value here (in precedes out) → every row was 0h.
-            $minutes = abs($out->diffInMinutes($in)) - (int) $e->total_break_min;
+            $minutes = abs($out->diffInMinutes($in)) - $breakMin;
             return [
                 'date' => $in->toDateString(),
                 'staff_name' => trim($e->first_name . ' ' . $e->last_name),
                 'staff_email' => $e->email,
                 'clock_in' => $in->format('H:i'),
                 'clock_out' => $out->format('H:i'),
-                'break_min' => (int) $e->total_break_min,
+                'break_min' => $breakMin,
                 'worked_min' => max(0, $minutes),
                 'worked_hours' => round(max(0, $minutes) / 60, 2),
                 'notes' => $e->notes,
@@ -350,6 +360,8 @@ final class SchedulingController extends Controller
             'rows' => $rows,
             'total_hours' => round($rows->sum('worked_min') / 60, 2),
             'staff_count' => $rows->pluck('staff_email')->unique()->count(),
+            // Stated outright so a payroll figure is never mistaken for break-adjusted.
+            'breaks_tracked' => false,
         ]);
     }
 

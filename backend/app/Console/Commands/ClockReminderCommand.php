@@ -87,7 +87,7 @@ final class ClockReminderCommand extends Command
                     ? ''
                     : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.';
                 $subject = 'Reminder: you\'re still clocked in';
-                $bodyText = "You clocked in at {$inAt} today and have been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly — or, if you left already, log your out time from the time clock.";
+                $bodyText = "You clocked in at {$inAt} today and have been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly. If you have already left, ask your administrator to correct the time — clocking out now would record the hours since you clocked in.";
             } else {
                 // An older shift. Quoting the elapsed hours here would produce
                 // "on the clock for 732.0 hours", which reads as a broken system
@@ -97,7 +97,7 @@ final class ClockReminderCommand extends Command
                 $subject = 'Your shift on ' . $in->format('j F') . ' was never clocked out';
                 $bodyText = "You clocked in on {$when} and no clock-out was recorded, so that day's hours are still incomplete "
                     . ($days === 1 ? 'from yesterday' : "after {$days} days")
-                    . ". Please set the out time from the time clock so your hours are right.";
+                    . ". Clocking out now would record every hour since then, so please ask your administrator to set the correct out time instead.";
             }
 
             $this->sendReminder(
