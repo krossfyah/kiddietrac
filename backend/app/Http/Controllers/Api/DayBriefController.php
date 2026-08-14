@@ -364,7 +364,11 @@ final class DayBriefController extends Controller
                     'icon' => '🚫',
                     'title' => 'Marked absent' . ($ab->reason ? ' — ' . ucfirst((string) $ab->reason) : ''),
                     'child' => $nameById[$ab->child_id] ?? 'Child',
-                    'detail' => trim(((string) ($ab->note ?? '')) . ($who !== '' ? ' · reported by ' . $who : '')),
+                    // No reporter means nothing was asserted by a person — an
+                    // administrative record, not a report. Say that, rather than
+                    // leaving a blank that invites the question of who marked it.
+                    'detail' => trim(((string) ($ab->note ?? ''))
+                        . ($who !== '' ? ' · reported by ' . $who : ' · recorded automatically, not reported by a person')),
                 ];
             }
         }
