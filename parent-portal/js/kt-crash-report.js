@@ -21,6 +21,17 @@
       if (isNetworkNoise(e && (e.error || e.message))) return;
       var where = (e && e.filename ? e.filename : '') + ':' + (e && e.lineno ? e.lineno : '') + ':' + (e && e.colno ? e.colno : '');
       var stack = (e && e.error && e.error.stack) ? e.error.stack : ((e && e.message ? e.message : 'error') + ' @ ' + where);
+      // "Script error." with no filename and no line is the browser refusing to
+      // describe an error raised by a cross-origin script - typically an extension,
+      // a content blocker or a password manager injected into the page. There is no
+      // stack behind it to recover. Say so, rather than filing a high-priority
+      // ticket whose trace looks like something a human failed to read properly.
+      if (!(e && e.filename) && /^script error\.?/i.test(String((e && e.message) || ''))) {
+        stack = 'Script error (opaque). The browser withheld the detail because the '
+              + 'error came from a cross-origin script - usually a browser extension '
+              + 'or injected script, not KiddieTrac code. No file, line or stack is '
+              + 'recoverable for this class of error.';
+      }
       set('kt_js_error', nowIso() + '  JS ERROR  ' + String(stack).slice(0, 4000));
     } catch (x) {}
   });
@@ -140,8 +151,30 @@
 
   // On launch, if a crash was captured (native from MainActivity, or a prior JS
   // error), offer to send it. Delayed so it never fights the biometric lock.
+  // How old is a stored trace? Both are written with a leading ISO timestamp.
+  function traceAgeMs(t) {
+    try {
+      var m = String(t || '').match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)/);
+      if (!m) return 0;                       // no stamp - treat as current
+      var age = Date.now() - new Date(m[1]).getTime();
+      return (isFinite(age) && age > 0) ? age : 0;
+    } catch (e) { return 0; }
+  }
+  var MAX_TRACE_AGE_MS = 6 * 60 * 60 * 1000;  // six hours
+
   setTimeout(function () {
-    var trace = get('kt_last_crash') || get('kt_js_error');
+    var native = get('kt_last_crash');
+    var js = get('kt_js_error');
+
+    // A trace only ever cleared when somebody ANSWERS the prompt will outlive the
+    // session that produced it - close the tab and it is offered again on every
+    // launch from then on. That is how a report filed on 13 August came to carry an
+    // error from 6 August, sending triage a week away from what the user was
+    // actually doing. Anything stale is dropped, not offered.
+    if (native && traceAgeMs(native) > MAX_TRACE_AGE_MS) { del('kt_last_crash'); native = null; }
+    if (js && traceAgeMs(js) > MAX_TRACE_AGE_MS) { del('kt_js_error'); js = null; }
+
+    var trace = native || js;
     if (trace) promptSend(trace);
   }, 3500);
 })();
