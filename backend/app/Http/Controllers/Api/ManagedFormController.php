@@ -651,10 +651,21 @@ class ManagedFormController extends Controller
         // provider. Same lookup either way; only the word changes.
         [$placeName, $placeWord] = $this->signerPlace($signerId, (int) $form->agency_id);
 
-        $subject = 'Completed form: ' . $form->title . ($placeName ? " \u{2014} " . $placeName : '');
+        // Date-stamped in the AGENCY's timezone, in the subject AND the body. These
+        // land in an inbox that collects many of them; without a date the only way to
+        // tell two sign-offs of the same form apart is to open both and hunt.
+        $tz = \App\Support\AgencyTime::tz((int) $form->agency_id);
+        $signedAt = now()->setTimezone($tz);
+        $stamp = $signedAt->format('D, M j, Y');
+        $stampFull = $signedAt->format('D, M j, Y') . ' at ' . $signedAt->format('g:i A')
+            . ' (' . $signedAt->format('T') . ')';
+
+        $subject = 'Completed form: ' . $form->title . ($placeName ? " \u{2014} " . $placeName : '')
+            . " \u{2014} " . $stamp;
 
         $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
-              . e($who) . ' has completed and signed <strong>' . e($form->title) . '</strong>.</p>'
+              . e($who) . ' has completed and signed <strong>' . e($form->title) . '</strong> on '
+              . e($stampFull) . '.</p>'
               . \App\Services\EmailTemplate::calloutBox(
                     '<strong>Form:</strong> ' . e($form->title)
                     . ($form->description ? '<br><strong>About:</strong> ' . e($form->description) : '')
