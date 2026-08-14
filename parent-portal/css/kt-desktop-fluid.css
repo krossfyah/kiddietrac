@@ -30,10 +30,14 @@
    more specific and better tested — continues to own small screens.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Three columns are too many below ~1400px ──────────────────────────
-   Three cards side by side need roughly 1400px before each one is wide
-   enough to read. Below that they become two. */
-@media (min-width: 769px) and (max-width: 1400px) {
+/* ── Three columns are too many below ~1500px ──────────────────────────
+   The shell spends 240px on the sidebar before content gets any, so a 1500px
+   window is really about 1210px of content — roughly 390px per column across
+   three. Below that they become two. Thresholds are viewport width, so they
+   must be quoted with the sidebar included, which the first version did not
+   do: its 1400/1080 pair meant nothing changed at ordinary laptop widths and
+   the whole file looked inert. */
+@media (min-width: 769px) and (max-width: 1500px) {
   #appMain [style*="grid-template-columns:1fr 1fr 1fr"],
   #appMain [style*="grid-template-columns: 1fr 1fr 1fr"],
   #appMain [style*="grid-template-columns:2fr 1fr 1fr"],
@@ -43,11 +47,12 @@
   }
 }
 
-/* ── Two columns are too many below ~1080px ────────────────────────────
-   Two columns inside the 1800px shell, minus sidebar and padding, leaves
-   each side around 420px at 1080px — about the point where a card's own
-   contents start wrapping badly. Below this they stack. */
-@media (min-width: 769px) and (max-width: 1080px) {
+/* ── Two columns are too many below ~1300px ────────────────────────────
+   1300px viewport - 240px sidebar - padding leaves ~1010px, so two columns of
+   about 490px. That is the floor for a card carrying stat tiles or a small
+   table. Below it they stack. A 1366px laptop keeps two columns (~530px each);
+   a 1280px window drops to one. */
+@media (min-width: 769px) and (max-width: 1300px) {
   #appMain [style*="grid-template-columns:1fr 1fr"],
   #appMain [style*="grid-template-columns: 1fr 1fr"],
   #appMain [style*="grid-template-columns:2fr 1fr"],
@@ -68,7 +73,7 @@
    the table keep its natural width inside a scrolling box is the readable
    failure. The page body itself must never scroll sideways — only the
    table's own container. */
-@media (min-width: 769px) and (max-width: 1400px) {
+@media (min-width: 769px) and (max-width: 1500px) {
   #appMain .kt-table-wrap,
   #appMain [data-kt-list],
   #appMain table[data-kt-filtered] {
@@ -83,13 +88,32 @@
    Inline min-widths of 220–380px are fine on a wide screen and are exactly
    what forces a narrow one to overflow sideways. Cap them to the container
    so a flex row wraps instead of pushing the page wider than the window. */
-@media (min-width: 769px) and (max-width: 1080px) {
+@media (min-width: 769px) and (max-width: 1300px) {
   #appMain [style*="min-width:220px"],
   #appMain [style*="min-width:240px"],
   #appMain [style*="min-width:280px"],
   #appMain [style*="min-width:320px"],
   #appMain [style*="min-width:380px"] {
     min-width: 0 !important;
+  }
+}
+
+
+/* ── Grids defined in CSS CLASSES, not inline styles ───────────────────
+   The attribute selectors above only see inline styles. These four are
+   declared in app-v2.css and were therefore untouched by the whole file, on
+   screens where they are the main layout — which is a large part of why the
+   reflow appeared to do nothing. */
+@media (min-width: 769px) and (max-width: 1300px) {
+  #appMain .room-tile-stats,
+  #appMain .quick-log-grid,
+  #appMain .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (min-width: 769px) and (max-width: 1500px) {
+  #appMain .centre-card-v17 .stats {
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
