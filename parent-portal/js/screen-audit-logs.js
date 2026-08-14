@@ -268,8 +268,29 @@
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
       tE.style.borderBottomColor = which === 'email' ? '#1F6080' : 'transparent'; tE.style.color = which === 'email' ? '#1F6080' : '#64748B';
       Dom.clear(pane);
-      if (which === 'email') { var inner = Dom.el('div', { style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' }); pane.appendChild(inner); KT.EmailLog.render(inner); }
+      if (which === 'email') {
+        var inner = Dom.el('div', { style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
+        // The Email log had no banner at all, so it opened straight onto a table while
+        // its sibling tab had the gradient hero. Same construction as renderAudit's
+        // hero, so kt-banner-normalize treats them identically.
+        var eHero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#0F172A 0%,#1F6080 60%,#16637A 100%);' });
+        eHero.innerHTML = '<div class="kt-hero-greet">📧 ADMIN</div><h1>Email log</h1>'
+          + '<div class="kt-hero-sub">Every message the platform tried to send — delivered, suppressed or failed — '
+          + 'with the reason why. All times are shown in your agency timezone (' + auditTz() + ').</div>';
+        inner.appendChild(eHero);
+        var eBody = Dom.el('div', { style: 'margin-top:16px;' });
+        inner.appendChild(eBody);
+        pane.appendChild(inner);
+        KT.EmailLog.render(eBody);
+      }
       else { renderAudit(pane); }
+
+      // Re-run the banner normaliser by hand. It observes #appMain with
+      // { childList: true } and NO subtree flag, so a tab swap inside `pane` — a
+      // descendant — never reaches it. Without this the new hero would sit flat until
+      // the periodic sweep wandered past, which is also why the Audit tab can look
+      // right on arrival and unshimmered when you switch back to it.
+      try { if (window.KT && KT.normalizeBanner) KT.normalizeBanner(); } catch (e) {}
     };
     tA.addEventListener('click', function () { activate('audit'); });
     tE.addEventListener('click', function () { activate('email'); });
