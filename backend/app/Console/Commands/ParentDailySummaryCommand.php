@@ -531,7 +531,12 @@ class ParentDailySummaryCommand extends Command
             || $countOf($day['photos'] ?? null) > 0;
 
         $greeting = '';
-        $intro = 'Here is how <strong>' . $name . '</strong>\'s day went at ' . e($child->centre_name) . '.';
+        // Varies by child and by day so a parent is not read the same sentence every
+        // evening for a year. Only the DEFAULT varies — the agency-editable block below
+        // overwrites it, and an agency's own wording is left exactly as written.
+        $phraseSeed = \App\Support\Phrasing::seed((int) $child->id, $day['date']);
+        $phraseVars = ['name' => '<strong>' . $name . '</strong>', 'centre' => e($child->centre_name)];
+        $intro = \App\Support\Phrasing::pick($phraseSeed, \App\Support\Phrasing::PARENT_INTRO, $phraseVars);
         $signoff = '';
         try {
             $tplData = [
@@ -551,9 +556,10 @@ class ParentDailySummaryCommand extends Command
         // sharing a child who stayed home, under a heading promising the story of
         // their day, is the part that reads as though nobody checked.
         if (! $attended) {
-            $greeting = e($name) . ' was not in today';
-            $intro = 'We did not see ' . e($name) . ' at ' . e($child->centre_name) . ' today, so there is nothing to report.';
-            $signoff = 'We hope to see ' . e($name) . ' again soon.';
+            $absentVars = ['name' => e($name), 'centre' => e($child->centre_name)];
+            $greeting = \App\Support\Phrasing::pick($phraseSeed, \App\Support\Phrasing::PARENT_ABSENT_GREETING, $absentVars);
+            $intro = \App\Support\Phrasing::pick($phraseSeed, \App\Support\Phrasing::PARENT_ABSENT_INTRO, $absentVars);
+            $signoff = \App\Support\Phrasing::pick($phraseSeed, \App\Support\Phrasing::PARENT_ABSENT_SIGNOFF, $absentVars);
         }
 
         $day['_signoff'] = $signoff;   // rendered near the foot, before the quote
