@@ -93,5 +93,15 @@
   }
 }
 
-/* Nothing should ever push the page itself sideways. */
-#appMain { max-width: 100%; overflow-x: clip; }
+/* Nothing should push the page sideways — but NOT via overflow on #appMain.
+   Per spec, `overflow-x: clip` with `overflow-y: visible` forces the y axis to
+   compute as `auto`, which turns #appMain into a scroll container. This app has
+   30 `position: sticky` elements inside it — sticky table headers, the top nav —
+   and every one of them would then stick to #appMain's box instead of the
+   viewport, plus a second scrollbar would appear inside the page. The earlier
+   version of this file had exactly that bug.
+
+   max-width alone is safe: it bounds the container without changing its
+   formatting context. Anything that still overflows is handled per-element by the
+   rules above, which is where the fix belongs anyway. */
+#appMain { max-width: 100%; }
