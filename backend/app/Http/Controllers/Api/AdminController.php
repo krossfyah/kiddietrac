@@ -2660,15 +2660,54 @@ final class AdminController extends Controller
             }
         }
 
+        // Withdraw the children. Without this their enrolment still read 'enrolled'
+        // after the family had gone, so they stayed in every roster count and capacity
+        // figure the agency reports on. 'withdrawn' + withdrawn_at is what the
+        // withdrawals feature already means by a departure; this uses the same words.
+        $childIds = DB::table('children')->where('family_id', $familyId)->whereNull('deleted_at')
+            ->pluck('id')->all();
+        $withdrawn = 0;
+        if ($childIds) {
+            $withdrawn = DB::table('children')->whereIn('id', $childIds)
+                ->where('enrollment_status', 'enrolled')
+                ->update([
+                    'enrollment_status' => 'withdrawn',
+                    'withdrawn_at' => now()->toDateString(),
+                    'updated_at' => now(),
+                ]);
+        }
+
+        // End the guardians' access. Removing the family left their logins working —
+        // nothing is exposed today only because no removed family currently has an
+        // active guardian, which is luck rather than design.
+        $guardianIds = DB::table('guardians')->where('family_id', $familyId)
+            ->whereNotNull('user_id')->pluck('user_id')->all();
+
+        // Send BEFORE the accounts are closed, so the notice is composed from a family
+        // that still exists — and the send itself is exempt from the suspension gate.
+        $notified = $this->notifyFamilyDeparture($family, $guardianIds, $request);
+
+        if ($guardianIds) {
+            DB::table('users')->whereIn('id', $guardianIds)->update(['status' => 'deactivated']);
+        }
+
         DB::table('families')->where('id', $familyId)->update([
             'deleted_at' => now(),
             'updated_at' => now(),
         ]);
         $this->audit($request->user()->id, 'family.deleted', 'family', $familyId, [
             'family_name' => $family->family_name,
+            'children_withdrawn' => $withdrawn,
+            'accounts_closed' => count($guardianIds),
+            'notice_attempted' => $notified,   // handed to the mail layer; it may still suppress a recipient
         ]);
 
-        return response()->json(['message' => 'Family deleted', 'id' => $familyId]);
+        return response()->json([
+            'message' => 'Family removed', 'id' => $familyId,
+            'children_withdrawn' => $withdrawn,
+            'accounts_closed' => count($guardianIds),
+            'notice_attempted' => $notified,   // handed to the mail layer; it may still suppress a recipient
+        ]);
     }
 
     /**
@@ -2692,9 +2731,9 @@ final class AdminController extends Controller
         $notified = $this->notifyFamilyAccess($family, $userIds, $request, false);
         $this->audit($request->user()->id, 'family.suspended', 'family', $familyId, [
             'family_name' => $family->family_name, 'accounts' => count($userIds),
-            'notice_emailed' => $notified,
+            'notice_attempted' => $notified,   // handed to the mail layer; it may still suppress a recipient
         ]);
-        return response()->json(['ok' => true, 'suspended_accounts' => count($userIds), 'notice_emailed' => $notified]);
+        return response()->json(['ok' => true, 'suspended_accounts' => count($userIds), 'notice_attempted' => $notified]);
     }
 
     /** Undo a suspension: flip suspended guardians back to active. */
@@ -2711,9 +2750,134 @@ final class AdminController extends Controller
         $notified = $this->notifyFamilyAccess($family, $userIds, $request, true);
         $this->audit($request->user()->id, 'family.reactivated', 'family', $familyId, [
             'family_name' => $family->family_name, 'accounts' => count($userIds),
-            'notice_emailed' => $notified,
+            'notice_attempted' => $notified,   // handed to the mail layer; it may still suppress a recipient
         ]);
-        return response()->json(['ok' => true, 'restored_accounts' => count($userIds), 'notice_emailed' => $notified]);
+        return response()->json(['ok' => true, 'restored_accounts' => count($userIds), 'notice_attempted' => $notified]);
+    }
+
+    /**
+     * Tell a family that they have been de-enrolled.
+     *
+     * Distinct from the suspension notice: this one is final, so it has to answer the
+     * question a departing family actually has — what happens to my child's records? —
+     * rather than explain a pause. It quotes the agency's own retention period instead
+     * of a number invented here, and it thanks them, because the last message a family
+     * receives from a service they trusted with their child should not read like a
+     * database operation.
+     *
+     * Returns how many people were emailed.
+     */
+    private function notifyFamilyDeparture($family, array $userIds, Request $request): int
+    {
+        if (empty($userIds)) return 0;
+        $sent = 0;
+
+        try {
+            $agencyId = (int) $this->getAgencyId($request);
+            $agency = DB::table('agencies')->where('id', $agencyId)->first();
+            $agencyName = $agency->name ?? 'KiddieTrac';
+            $contact = $agency->contact_email ?? null;
+            $phone = $agency->contact_phone ?? null;
+            $tz = \App\Support\AgencyTime::tz($agencyId);
+            $when = now()->setTimezone($tz);
+
+            // The agency's own retention period, not a number chosen here.
+            $years = null;
+            try {
+                $st = json_decode((string) ($agency->settings ?? ''), true);
+                $y = $st['compliance']['child_record_years'] ?? null;
+                if ($y) $years = (int) $y;
+            } catch (\Throwable $e) {}
+
+            $kids = DB::table('children')->where('family_id', $family->id)->whereNull('deleted_at')
+                ->get(['first_name', 'preferred_name'])
+                ->map(fn ($c) => trim((string) ($c->preferred_name ?: $c->first_name)))
+                ->filter()->values()->all();
+            $kidList = count($kids) ? implode(', ', $kids) : 'your child';
+
+            $oversight = DB::table('users as u')
+                ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                ->where('ra.agency_id', $agencyId)->where('ra.active', true)
+                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
+                ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                ->distinct()->pluck('u.email')->all();
+            if (!empty($agency->contact_email)) $oversight[] = $agency->contact_email;
+
+            $users = DB::table('users')->whereIn('id', $userIds)->whereNull('deleted_at')
+                ->whereNotNull('email')->get(['id', 'first_name', 'email']);
+
+            foreach ($users as $u) {
+                $first = trim((string) ($u->first_name ?? '')) ?: 'Hello';
+
+                $records = '<strong>What happens to the records.</strong> '
+                    . e($kidList) . '\'s enrolment, attendance, daily care notes, and any medication, '
+                    . 'allergy or incident information form part of ' . e($agencyName) . '\'s licensed '
+                    . 'child care records. The agency is required to keep these'
+                    . ($years ? ' for ' . (int) $years . ' years after a child leaves' : ' for a period set by law')
+                    . ', and cannot delete them on request while that requirement applies. '
+                    . 'Invoices, payments and receipts are kept for as long as tax rules require. '
+                    . 'Photos and videos shared with you through the app are no longer reachable from '
+                    . 'your account; copies you have already saved remain yours.';
+
+                $reach = 'If you would like a copy of your records, or you think this has been done in '
+                    . 'error, please contact ' . e($agencyName);
+                if ($contact || $phone) {
+                    $reach .= ' — ' . implode(' or ', array_filter([
+                        $contact ? '<a href="mailto:' . e($contact) . '" style="color:#1F6FB2;">' . e($contact) . '</a>' : null,
+                        $phone ? e($phone) : null,
+                    ]));
+                }
+                $reach .= '.';
+
+                $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($first) . ',</p>'
+                    . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
+                    . e($kidList) . ' has been de-enrolled from ' . e($agencyName)
+                    . ', and your access to the parent portal has now ended. You will not be able to sign in.</p>'
+                    . \App\Services\EmailTemplate::calloutBox($records, 'info')
+                    . '<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:#475569;">' . $reach . '</p>'
+                    . '<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#0F172A;">'
+                    . 'Thank you for the time ' . e($kidList) . ' spent with ' . e($agencyName) . '. '
+                    . 'It was a privilege to be part of their days, and we wish your family every '
+                    . 'happiness in what comes next.</p>'
+                    . '<p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#94A3B8;">'
+                    . 'Recorded ' . e($when->format('l, j F Y')) . ' at ' . e($when->format('g:i A'))
+                    . ' (' . e($when->format('T')) . ').</p>';
+
+                $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                    'eyebrow' => 'DE-ENROLMENT',
+                    'title' => 'Thank you, and goodbye for now',
+                    'subtitle' => $agencyName,
+                    'preheader' => e($kidList) . ' has been de-enrolled from ' . e($agencyName) . '.',
+                ]);
+
+                $bcc = array_values(array_unique(array_filter($oversight, function ($e) use ($u) {
+                    return $e && strcasecmp(trim($e), trim((string) $u->email)) !== 0;
+                })));
+                $bcc = array_slice($bcc, 0, 15);
+
+                try {
+                    \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
+                        ->html($html, function ($m) use ($u, $agencyName, $bcc) {
+                            $m->to($u->email)->subject('Leaving ' . $agencyName . ' — your records and access');
+                            if ($bcc) $m->bcc($bcc);
+                            // The accounts are closed moments after this is sent, and a
+                            // closed account is exactly what the mail gate blocks.
+                            $m->getHeaders()->addTextHeader('X-KT-Account-Notice', '1');
+                        });
+                    $sent++;
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('De-enrolment notice could not be sent', [
+                        'user_id' => $u->id, 'family_id' => $family->id, 'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('De-enrolment notice failed', [
+                'family_id' => $family->id ?? null, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $sent;
     }
 
     /**
