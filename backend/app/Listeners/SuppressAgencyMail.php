@@ -101,6 +101,49 @@ class SuppressAgencyMail
             }
         }
 
+        // 0b) SUSPENDED / DEACTIVATED gate. Suspending a family blocks its guardians
+        //     from signing in; it did not stop the mail, so they carried on receiving
+        //     daily summaries and "has your child arrived?" reminders about a portal
+        //     that refuses them at the door.
+        //
+        //     Enforced HERE rather than in each command on purpose. Three commands
+        //     filtered suspended users and the rest did not, because a rule that lives
+        //     at the call sites is a rule every new call site has to remember. In the
+        //     mail layer it covers senders that do not exist yet.
+        //
+        //     The account-notice exemption is not a loophole, it is the point: the
+        //     email explaining the suspension is addressed to a suspended user by
+        //     definition, as is the deactivation notice. Without it this gate would
+        //     swallow the one message that makes the lockout explicable.
+        $isAccountNotice = false;
+        try {
+            $hdrs3 = $event->message->getHeaders();
+            $isAccountNotice = (bool) ($hdrs3 && $hdrs3->has('X-KT-Account-Notice'));
+            if ($isAccountNotice && $hdrs3) {
+                $hdrs3->remove('X-KT-Account-Notice');
+            }
+        } catch (\Throwable $e) {
+        }
+
+        if (! $isAccountNotice) {
+            try {
+                $barred = DB::table('users')
+                    ->whereIn('status', ['suspended', 'deactivated'])
+                    ->whereNotNull('email')
+                    ->whereIn(DB::raw('LOWER(TRIM(email))'), $recipients)
+                    ->pluck('email')
+                    ->map(fn ($e) => mb_strtolower(trim((string) $e)))
+                    ->values()->all();
+                if ($barred) {
+                    $this->cancel($event, $barred,
+                        'Recipient\'s access is suspended or deactivated — notifications are paused.');
+                    return false;
+                }
+            } catch (\Throwable $e) {
+                // never let this gate break the mail layer
+            }
+        }
+
         // 1) The agency's OWN toggle ("Send notifications and emails") is
         //    ABSOLUTE — off means off, even for allowlisted addresses. This is
         //    what the Settings switch strictly controls.

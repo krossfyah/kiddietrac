@@ -2685,10 +2685,12 @@ final class AdminController extends Controller
         if ($userIds) {
             DB::table('users')->whereIn('id', $userIds)->update(['status' => 'suspended']);
         }
+        $notified = $this->notifyFamilyAccess($family, $userIds, $request, false);
         $this->audit($request->user()->id, 'family.suspended', 'family', $familyId, [
             'family_name' => $family->family_name, 'accounts' => count($userIds),
+            'notice_emailed' => $notified,
         ]);
-        return response()->json(['ok' => true, 'suspended_accounts' => count($userIds)]);
+        return response()->json(['ok' => true, 'suspended_accounts' => count($userIds), 'notice_emailed' => $notified]);
     }
 
     /** Undo a suspension: flip suspended guardians back to active. */
@@ -2701,10 +2703,154 @@ final class AdminController extends Controller
         if ($userIds) {
             DB::table('users')->whereIn('id', $userIds)->where('status', 'suspended')->update(['status' => 'active']);
         }
+        $notified = $this->notifyFamilyAccess($family, $userIds, $request, true);
         $this->audit($request->user()->id, 'family.reactivated', 'family', $familyId, [
             'family_name' => $family->family_name, 'accounts' => count($userIds),
+            'notice_emailed' => $notified,
         ]);
-        return response()->json(['ok' => true, 'restored_accounts' => count($userIds)]);
+        return response()->json(['ok' => true, 'restored_accounts' => count($userIds), 'notice_emailed' => $notified]);
+    }
+
+    /**
+     * Tell a family that their portal access has been paused, or restored.
+     *
+     * Suspending a family locks out exactly the same people that deactivating a user
+     * does, and that path has sent a notice for some time. This one sent nothing, so
+     * a parent met a refused login with no reason given and nobody named to ask.
+     *
+     * The wording is not the deactivation notice reworded. A suspension is temporary,
+     * and the thing a parent most needs to hear is the thing a lockout most strongly
+     * implies is false: the child's place and records are untouched. That goes first.
+     *
+     * Returns how many people were actually emailed.
+     */
+    private function notifyFamilyAccess($family, array $userIds, Request $request, bool $restored): int
+    {
+        if (empty($userIds)) return 0;
+        $sent = 0;
+
+        try {
+            $agencyId = (int) $this->getAgencyId($request);
+            $agency = DB::table('agencies')->where('id', $agencyId)->first();
+            $agencyName = $agency->name ?? 'KiddieTrac';
+            $contact = $agency->contact_email ?? null;
+            $phone = $agency->contact_phone ?? null;
+            $tz = \App\Support\AgencyTime::tz($agencyId);
+            $when = now()->setTimezone($tz);
+
+            // Children on this family, named — a parent reads their child's name
+            // before they read anything else on the page.
+            $kids = DB::table('children')->where('family_id', $family->id)->whereNull('deleted_at')
+                ->get(['first_name', 'preferred_name'])
+                ->map(fn ($c) => trim((string) ($c->preferred_name ?: $c->first_name)))
+                ->filter()->values()->all();
+            $kidList = count($kids) ? implode(', ', $kids) : 'your child';
+
+            // The same oversight copy the deactivation notice takes: BCC, never CC,
+            // so the family is not handed a list of who was told.
+            $oversight = DB::table('users as u')
+                ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                ->where('ra.agency_id', $agencyId)->where('ra.active', true)
+                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
+                ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                ->distinct()->pluck('u.email')->all();
+            if (!empty($agency->contact_email)) $oversight[] = $agency->contact_email;
+
+            $users = DB::table('users')->whereIn('id', $userIds)->whereNull('deleted_at')
+                ->whereNotNull('email')->get(['id', 'first_name', 'email']);
+
+            foreach ($users as $u) {
+                $first = trim((string) ($u->first_name ?? '')) ?: 'Hello';
+
+                if ($restored) {
+                    $lead = 'Your access to the ' . e($agencyName) . ' parent portal has been restored. '
+                          . 'You can sign in again as normal.';
+                    $box = '<strong>Nothing was lost.</strong> Your messages, photos, daily updates and '
+                         . 'records for ' . e($kidList) . ' are exactly as you left them.';
+                    $tone = 'success';
+                    $subject = 'Your ' . $agencyName . ' portal access has been restored';
+                    $eyebrow = 'ACCESS RESTORED';
+                } else {
+                    $lead = 'Your access to the ' . e($agencyName) . ' parent portal has been paused. '
+                          . 'You will not be able to sign in until it is lifted.';
+                    // Said first and said plainly, because the lockout itself implies
+                    // the opposite and that is the fear worth answering immediately.
+                    $box = '<strong>This does not affect ' . e($kidList) . '.</strong> '
+                         . 'Their enrolment, attendance and care records are unchanged, and nothing has been '
+                         . 'deleted. This is a pause on portal sign-in only, and it can be lifted.';
+                    $tone = 'warning';
+                    $subject = 'Your ' . $agencyName . ' portal access has been paused';
+                    $eyebrow = 'ACCESS PAUSED';
+                }
+
+                $reach = 'Please speak to ' . e($agencyName);
+                if ($contact || $phone) {
+                    $reach .= ' — ' . implode(' or ', array_filter([
+                        $contact ? '<a href="mailto:' . e($contact) . '" style="color:#1F6FB2;">' . e($contact) . '</a>' : null,
+                        $phone ? e($phone) : null,
+                    ]));
+                }
+                $reach .= $restored ? '.' : ' if you are not sure why, or to have it lifted.';
+
+                // A suspension is an administrative state, not a verdict on the family.
+                // The people reading this have been trusting the agency with their
+                // child; the note costs nothing and the absence of it reads as coldness
+                // at the exact moment it lands hardest.
+                $thanks = $restored
+                    ? 'Thank you for your patience, and for continuing to trust '
+                      . e($agencyName) . ' with ' . e($kidList) . '.'
+                    : 'Thank you for the time ' . e($kidList) . ' has spent with '
+                      . e($agencyName) . '. We appreciate your family choosing us, and '
+                      . 'this note is not a reflection on you or your child.';
+
+                $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($first) . ',</p>'
+                    . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . $lead . '</p>'
+                    . \App\Services\EmailTemplate::calloutBox($box, $tone)
+                    . '<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:#475569;">' . $reach . '</p>'
+                    . '<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:#334155;">' . $thanks . '</p>'
+                    . '<p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#94A3B8;">'
+                    . 'Recorded ' . e($when->format('l, j F Y')) . ' at ' . e($when->format('g:i A'))
+                    . ' (' . e($when->format('T')) . ').</p>';
+
+                $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                    'eyebrow' => $eyebrow,
+                    'title' => $restored ? 'Your portal access is back' : 'Your portal access has been paused',
+                    'subtitle' => $agencyName,
+                    'preheader' => strip_tags($lead),
+                ]);
+
+                $bcc = array_values(array_unique(array_filter($oversight, function ($e) use ($u) {
+                    return $e && strcasecmp(trim($e), trim((string) $u->email)) !== 0;
+                })));
+                $bcc = array_slice($bcc, 0, 15);
+
+                try {
+                    \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
+                        ->html($html, function ($m) use ($u, $subject, $bcc) {
+                            $m->to($u->email)->subject($subject);
+                            if ($bcc) $m->bcc($bcc);
+                            // This notice is ABOUT the suspension, so it has to reach
+                            // a suspended address. Without the header the gate that
+                            // pauses their notifications would swallow the very email
+                            // that explains why they are paused.
+                            $m->getHeaders()->addTextHeader('X-KT-Account-Notice', '1');
+                        });
+                    $sent++;
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('Family access notice could not be sent', [
+                        'user_id' => $u->id, 'family_id' => $family->id, 'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Suspending must succeed even when telling people fails - but the failure
+            // is logged, because "was the family told?" is what gets asked later.
+            \Illuminate\Support\Facades\Log::error('Family access notice failed', [
+                'family_id' => $family->id ?? null, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $sent;
     }
 
     /** Shared scope guard for family write actions (mirrors destroyFamily). */
@@ -3012,6 +3158,10 @@ final class AdminController extends Controller
                 \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($user, $agencyName, $bcc) {
                     $m->to($user->email)->subject('Your ' . $agencyName . ' account has been deactivated');
                     if ($bcc) $m->bcc($bcc);
+                    // Same reason as the suspension notice: it is addressed to someone
+                    // whose account has just been closed, which is precisely the state
+                    // the new gate blocks.
+                    $m->getHeaders()->addTextHeader('X-KT-Account-Notice', '1');
                 });
                 $emailSent = true;
             } catch (\Throwable $e) {
