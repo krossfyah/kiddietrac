@@ -2924,7 +2924,11 @@ final class AdminController extends Controller
                 $body = '<div style="margin:0;padding:0;background:#F1F5F9;">'
                     . '<div style="max-width:620px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
                     . '<div style="background:linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);padding:22px 24px;border-radius:14px 14px 0 0;text-align:center;">'
-                    .   '<img src="https://app.kiddietrac.com/login-wordmark.png" alt="KiddieTrac" width="170" style="max-width:170px;height:auto;display:block;margin:0 auto 10px;">'
+                    .   '<img src="https://app.kiddietrac.com/login-wordmark.png" alt="KiddieTrac" width="170" style="max-width:170px;height:auto;display:block;margin:0 auto 6px;">'
+                    // The tagline as TEXT, not the login-tagline.png asset: that image is
+                    // dark-on-light and would vanish against this navy header. Text also
+                    // survives a client that blocks remote images, which is most of them.
+                    .   '<div style="color:rgba(255,255,255,.82);font-size:11.5px;font-weight:600;letter-spacing:.4px;margin-bottom:12px;">Smart Childcare Management Platform</div>'
                     .   '<div style="color:#fff;font-size:17px;font-weight:800;">Your access has been removed</div>'
                     . '</div>'
                     . '<div style="background:#fff;padding:22px 24px;border:1px solid #E2E8F0;border-top:0;font-size:14.5px;color:#1E293B;line-height:1.6;">'
