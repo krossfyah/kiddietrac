@@ -1689,3 +1689,11 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('pulse', [App\Http\Controllers\Api\PulseController::class, 'index']);
 });
+
+/* "What do we hold about this person, and when is it destroyed?" - the question a
+   privacy request actually asks. Reads the SAME agencies.settings->compliance policy
+   the retention purge acts on, so the answer shown and the deletion performed cannot
+   disagree. */
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    Route::get('admin/users/{user}/data-map', [App\Http\Controllers\Api\UserDataMapController::class, 'show'])->whereNumber('user');
+});
