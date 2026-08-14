@@ -44,7 +44,9 @@ final class EmailTemplate
     public static function wrap(?int $agencyId, string $bodyHtml, array $opts = []): string
     {
         $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
-        $brand = self::brand($agency);
+        // force_brand ('kt' | 'agency') overrides white-label detection — used to
+        // preview both looks. Omit for the normal per-agency behaviour.
+        $brand = self::brand($agency, $opts['force_brand'] ?? null);
 
         $eyebrow   = htmlspecialchars($opts['eyebrow']   ?? '');
         $title     = htmlspecialchars($opts['title']     ?? $brand['product_name']);
@@ -183,20 +185,40 @@ final class EmailTemplate
     }
 
     /** Resolve the brand bundle to use for this agency (handles white-label fallbacks). */
-    private static function brand(?object $agency): array
+    private static function brand(?object $agency, ?string $force = null): array
     {
-        $primary = $agency->brand_primary_color ?? '#1F6080';
-        $secondary = self::secondaryFromPrimary($primary);
+        // A white-label agency (powered_by_visible = 0) is shown with ONLY its own
+        // branding; everyone else is KiddieTrac-branded throughout. `$force` lets a
+        // caller preview either look.
+        $whiteLabel = $agency ? !($agency->powered_by_visible ?? 1) : false;
+        if ($force === 'kt') $whiteLabel = false;
+        elseif ($force === 'agency') $whiteLabel = true;
+
+        $ktLogo = 'https://app.kiddietrac.com/logo-wordmark.png';
+        $primary = ($whiteLabel ? ($agency->brand_primary_color ?? null) : null) ?: '#1F6080';
+
+        if ($whiteLabel) {
+            // White-label with no logo on file → the agency's initial avatar, never
+            // the KiddieTrac mark (that would break the white-label illusion).
+            $logo = $agency->brand_logo_url ?? null;
+            $name = $agency->name ?? 'Kiddietrac';
+            $support = $agency->brand_support_email ?? 'noreply@kiddietrac.com';
+        } else {
+            // Not white-label → KiddieTrac branding throughout, regardless of any
+            // agency logo on file.
+            $logo = $ktLogo;
+            $name = 'KiddieTrac';
+            $support = 'noreply@kiddietrac.com';
+        }
+
         return [
             'primary' => $primary,
-            'secondary' => $secondary,
-            // Default to the Kiddietrac wordmark when there's no agency logo, so
-            // platform emails (invites etc.) always carry the brand.
-            'logo_url' => $agency->brand_logo_url ?? 'https://app.kiddietrac.com/logo-wordmark.png',
-            'product_name' => $agency->name ?? 'Kiddietrac',
-            'support_email' => $agency->brand_support_email ?? 'noreply@kiddietrac.com',
-            'powered_by_visible' => $agency ? (bool) ($agency->powered_by_visible ?? 1) : true,
-            'is_white_label' => $agency && !($agency->powered_by_visible ?? 1),
+            'secondary' => self::secondaryFromPrimary($primary),
+            'logo_url' => $logo,
+            'product_name' => $name,
+            'support_email' => $support,
+            'powered_by_visible' => !$whiteLabel,
+            'is_white_label' => $whiteLabel,
         ];
     }
 
@@ -211,13 +233,60 @@ final class EmailTemplate
     }
 
     /** Render the logo (or first-letter avatar) at the top of the banner. */
+    /**
+     * A warm daily inspirational quote block. Chosen deterministically by the day
+     * (default seed = YYYYMMDD) so everyone gets the same quote each day and it
+     * rotates daily. Pass a $seed to pin a specific day.
+     */
+    public static function dailyQuote(?int $seed = null): string
+    {
+        $quotes = [
+            ['Children are not things to be molded, but people to be unfolded.', 'Jess Lair'],
+            ['Play is the highest form of research.', 'Albert Einstein'],
+            ['There is no such thing as other people’s children.', 'Hillary Clinton'],
+            ['A child who is allowed to be disrespectful will become an adult who has no respect for anyone. Kindness, taught early, lasts a lifetime.', 'Anonymous'],
+            ['If we want children to flourish, to truly educate them, we need to build them a childhood of experiences.', 'Anonymous'],
+            ['To the world you may be one person, but to one child you may be the world.', 'Anonymous'],
+            ['Every child deserves a champion — an adult who will never give up on them.', 'Rita Pierson'],
+            ['The way we talk to our children becomes their inner voice.', 'Peggy O’Mara'],
+            ['Children learn more from what you are than what you teach.', 'W.E.B. Du Bois'],
+            ['It is easier to build strong children than to repair broken adults.', 'Frederick Douglass'],
+            ['A hundred years from now it will not matter what my bank account was… but the world may be different because I was important in the life of a child.', 'Forest Witcraft'],
+            ['Kindness is a language which the deaf can hear and the blind can see.', 'Mark Twain'],
+            ['Tell me and I forget. Teach me and I remember. Involve me and I learn.', 'Benjamin Franklin'],
+            ['The best way to make children good is to make them happy.', 'Oscar Wilde'],
+            ['Childhood is not a race to see how quickly a child can read, write and count. It is a small window of time to learn and develop at the pace that is right for each child.', 'Magda Gerson'],
+            ['Behind every young child who believes in themselves is a caring adult who believed first.', 'Anonymous'],
+            ['Teaching is the greatest act of optimism.', 'Colleen Wilcox'],
+            ['You are not just caring for children; you are shaping the future.', 'Anonymous'],
+            ['The days are long, but the years are short.', 'Gretchen Rubin'],
+            ['Love the children first, teach them second.', 'Anonymous'],
+            ['A little progress each day adds up to big results.', 'Anonymous'],
+            ['The heart of teaching is the teaching of heart.', 'Anonymous'],
+            ['Patience and love can turn any ordinary day into a memory a child keeps forever.', 'Anonymous'],
+            ['Children see magic because they look for it.', 'Christopher Moore'],
+            ['Wherever you find children, you find the future being built one small moment at a time.', 'Anonymous'],
+            ['What we love to do, we find time to do — and loving these children is time well spent.', 'John Lancaster Spalding'],
+            ['Great things are done by a series of small things brought together.', 'Vincent van Gogh'],
+            ['Be the reason a child smiles today.', 'Anonymous'],
+        ];
+        $seed = $seed ?? (int) date('Ymd');
+        $q = $quotes[abs($seed) % count($quotes)];
+        return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="margin:22px 0 6px;">'
+            . '<tr><td style="background:linear-gradient(135deg,#F0F7FB 0%,#F6F1FB 100%);border-left:4px solid #7C3AED;border-radius:12px;padding:16px 20px;">'
+            . '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#8B5CF6;margin-bottom:6px;">✨ A thought for today</div>'
+            . '<div style="font-size:15.5px;font-style:italic;color:#334155;line-height:1.55;">“' . htmlspecialchars($q[0]) . '”</div>'
+            . '<div style="font-size:12.5px;color:#7A8AA3;margin-top:8px;font-weight:700;">— ' . htmlspecialchars($q[1]) . '</div>'
+            . '</td></tr></table>';
+    }
+
     private static function logoBlock(array $brand): string
     {
         $name = $brand['product_name'];
         $initial = strtoupper(mb_substr($name, 0, 1));
         if (!empty($brand['logo_url'])) {
             $url = self::absoluteUrl($brand['logo_url']);
-            return '<table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td class="kt-logobox" style="background:#FFFFFF;padding:10px 18px;border-radius:10px;box-shadow:0 2px 6px rgba(15,23,42,.10);"><img src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($name) . '" height="42" style="height:42px;max-height:42px;border:0;display:block;"></td></tr></table>';
+            return '<table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td class="kt-logobox" style="background:#FFFFFF;padding:13px 22px;border-radius:12px;box-shadow:0 3px 10px rgba(15,23,42,.14);"><img src="' . htmlspecialchars($url) . '" alt="' . htmlspecialchars($name) . '" height="60" style="height:60px;max-height:60px;border:0;display:block;"></td></tr></table>';
         }
         return '<div style="display:inline-block;background:#FFFFFF;color:' . $brand['primary'] . ';font-weight:800;font-size:20px;width:44px;height:44px;line-height:44px;text-align:center;border-radius:12px;box-shadow:0 2px 6px rgba(15,23,42,.10);">' . htmlspecialchars($initial) . '</div>';
     }
@@ -231,6 +300,32 @@ final class EmailTemplate
         $isNoReply = empty($supportRaw) || strtolower($supportRaw) === 'noreply@kiddietrac.com';
 
         $html = '';
+
+        // The AGENCY first. Their logo is stored (brand_logo_url) but was only ever
+        // used for white-labelled agencies, so an email from iLearn arrived carrying
+        // nothing but KiddieTrac's mark. A parent should see who is writing to them.
+        if ($agency) {
+            $agencyName = htmlspecialchars((string) ($agency->name ?? ''));
+            $agencyLogo = $agency->brand_logo_url ?? ($agency->logo_url ?? null);
+            if ($agencyLogo) {
+                // Stored paths are relative to the app host; emails need absolute URLs.
+                if (! preg_match('~^https?://~i', (string) $agencyLogo)) {
+                    $agencyLogo = 'https://app.kiddietrac.com/' . ltrim((string) $agencyLogo, '/');
+                }
+            }
+            if ($agencyName !== '' || $agencyLogo) {
+                $html .= '<div style="margin-bottom:10px;">';
+                if ($agencyLogo) {
+                    $html .= '<img src="' . htmlspecialchars($agencyLogo) . '" alt="' . $agencyName
+                        . '" height="34" style="max-height:34px;width:auto;display:block;margin:0 auto 6px;border:0;">';
+                }
+                if ($agencyName !== '') {
+                    $html .= '<div style="font-weight:800;color:#0F172A;">' . $agencyName . '</div>';
+                }
+                $html .= '</div>';
+            }
+        }
+
         if ($note) {
             $html .= '<div style="margin-bottom:8px;color:#475569;">' . $note . '</div>';
         }
@@ -244,9 +339,21 @@ final class EmailTemplate
             $s = htmlspecialchars($supportRaw);
             $html .= ' Questions? Contact <a href="mailto:' . $s . '" style="color:' . $brand['primary'] . ';text-decoration:none;">' . $s . '</a>.';
         }
-        // 'Powered by KiddieTrac' only when NOT on the white-label plan
+        // Legal links — every email carries Privacy & Terms.
+        $primary = $brand['primary'];
+        $legalStyle = 'color:' . $primary . ';text-decoration:none;';
+        $html .= '<div style="margin-top:10px;font-size:11.5px;color:#94A3B8;">'
+            . '<a href="https://www.kiddietrac.com/privacy" style="' . $legalStyle . '">Privacy Policy</a>'
+            . ' &nbsp;·&nbsp; <a href="https://www.kiddietrac.com/terms" style="' . $legalStyle . '">Terms of Use</a>'
+            . '</div>';
+
+        // KiddieTrac platform footer — only when NOT on the white-label plan.
         if ($brand['powered_by_visible']) {
-            $html .= '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0;font-size:11px;color:#94A3B8;">Powered by <a href="https://kiddietrac.com" style="color:#94A3B8;text-decoration:none;">KiddieTrac</a> — The Smart Childcare Management Platform.</div>';
+            $html .= '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0;font-size:11px;color:#94A3B8;line-height:1.7;">'
+                . 'Powered by <a href="https://www.kiddietrac.com" style="color:#94A3B8;text-decoration:none;font-weight:700;">KiddieTrac</a> — The Smart Childcare Management Platform.<br>'
+                . '🌐 <a href="https://www.kiddietrac.com" style="color:#94A3B8;text-decoration:none;">www.kiddietrac.com</a>'
+                . ' &nbsp;·&nbsp; ✉️ <a href="https://www.kiddietrac.com/#subscribe" style="color:#94A3B8;text-decoration:none;">Subscribe for updates</a>'
+                . '</div>';
         }
         return $html;
     }
