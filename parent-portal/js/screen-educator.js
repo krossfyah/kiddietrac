@@ -527,7 +527,11 @@
     const msg = Dom.el('div', { style: 'font-size:12.5px;font-weight:700;margin-top:10px;' });
     body.appendChild(msg);
 
-    activeModal = Modal.open({
+    // Declared locally. Assigning to a bare activeModal here threw
+    // 'ReferenceError: activeModal is not defined' under 'use strict': the two
+    // let activeModal declarations in this file sit in OTHER functions, so this
+    // assignment had no binding and the Mark absent button crashed on tap.
+    var absentModal = Modal.open({
       title: '🏠  Mark absent — ' + (child.display_name || 'child'),
       body: body,
       actions: [
