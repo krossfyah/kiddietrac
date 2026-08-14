@@ -173,6 +173,15 @@ final class ChildController extends Controller
             'photo_url' => $child->photo_url,
             'medical_notes' => $child->medical_notes,
             'dietary_notes' => $child->dietary_notes,
+            // #10 — the dedicated safety fields, surfaced on the child detail record.
+            'allergies' => $child->allergies ?? null,
+            'health_alerts' => $child->health_alerts ?? null,
+            'dietary_restrictions' => $child->dietary_restrictions ?? null,
+            'cultural_notes' => $child->cultural_notes ?? null,
+            'doctor_name' => $child->doctor_name ?? null,
+            'doctor_phone' => $child->doctor_phone ?? null,
+            'health_card_last4' => $child->health_card_last4 ?? null,
+            'pronouns' => $child->pronouns ?? null,
             'family' => $family,
             'guardians' => $guardians,
             'room' => $room,
@@ -373,11 +382,46 @@ final class ChildController extends Controller
         $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
         if (! $child) return response()->json(['message' => 'Not found'], 404);
         $this->authorizeChild($request->user(), $child);
-        $days = max(1, min(90, (int) $request->query('days', 14)));
-        $since = now()->subDays($days)->startOfDay();
-        $events = DB::table('daily_events')->where('child_id', $childId)->where('occurred_at', '>=', $since)->orderByDesc('occurred_at')->limit(200)->get();
-        $checks = DB::table('check_events')->where('child_id', $childId)->where('occurred_at', '>=', $since)->orderByDesc('occurred_at')->limit(200)->get();
-        return response()->json(['events' => $events, 'checks' => $checks]);
+        // A specific DAY when asked for one, otherwise a trailing window. The record
+        // needs both: "what happened today" and "what happened on the 3rd".
+        $on = (string) $request->query('date', '');
+        if ($on !== '') {
+            try {
+                $since = \Illuminate\Support\Carbon::parse($on)->startOfDay();
+                $until = \Illuminate\Support\Carbon::parse($on)->endOfDay();
+            } catch (\Throwable $e) { $on = ''; }
+        }
+        if ($on === '') {
+            $days = max(1, min(90, (int) $request->query('days', 14)));
+            $since = now()->subDays($days)->startOfDay();
+            $until = now()->endOfDay();
+        }
+
+        // Recorder names, so the record says WHO logged each moment rather than
+        // leaving an educator's work anonymous on the child's own file.
+        $withWho = function ($q, string $table) {
+            return $q->leftJoin('users as ru', 'ru.id', '=', $table . '.recorded_by_id')
+                ->selectRaw($table . ".*, TRIM(CONCAT(COALESCE(ru.first_name,''),' ',COALESCE(ru.last_name,''))) as recorded_by_name");
+        };
+
+        $events = $withWho(DB::table('daily_events')->where('daily_events.child_id', $childId)
+            ->whereBetween('daily_events.occurred_at', [$since, $until]), 'daily_events')
+            ->orderByDesc('daily_events.occurred_at')->limit(200)->get();
+        $checks = $withWho(DB::table('check_events')->where('check_events.child_id', $childId)
+            ->whereBetween('check_events.occurred_at', [$since, $until]), 'check_events')
+            ->orderByDesc('check_events.occurred_at')->limit(200)->get();
+
+        // The OTHER care table. The care screen writes daily_care_logs while the
+        // roster quick-log writes daily_events; reading only the second meant a
+        // provider's logged moments never appeared on the child's own record — the
+        // same split that under-counted the educator summary.
+        $careLogs = \Illuminate\Support\Facades\Schema::hasTable('daily_care_logs')
+            ? $withWho(DB::table('daily_care_logs')->where('daily_care_logs.child_id', $childId)
+                ->whereBetween('daily_care_logs.occurred_at', [$since, $until]), 'daily_care_logs')
+                ->orderByDesc('daily_care_logs.occurred_at')->limit(200)->get()
+            : collect();
+        return response()->json(['events' => $events, 'checks' => $checks,
+            'care_logs' => $careLogs]);
     }
 
     /** v22p88: GET /director/children/{child}/feed — photos/media + observations. */

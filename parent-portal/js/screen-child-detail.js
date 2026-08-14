@@ -584,26 +584,96 @@
   }
 
   function renderDailyTab(c, child) {
-    c.appendChild(loadingBox());
-    Api.get('/director/children/' + child.id + '/daily-events?days=21').then(function (d) {
-      Dom.clear(c);
-      var all = [].concat((d.checks || []).map(function (x) { return { t: x.occurred_at, type: 'check', label: (x.event_type || '').replace(/_/g, ' '), notes: x.notes }; }),
-        (d.events || []).map(function (x) { return { t: x.occurred_at, type: 'event', label: (x.event_type || x.type || 'event').replace(/_/g, ' '), notes: x.notes }; }));
-      all.sort(function (a, b) { return (b.t || '').localeCompare(a.t || ''); });
-      if (!all.length) { c.appendChild(emptyBox('No daily activity in the last 21 days.')); return; }
-      var card = Dom.el('div', { style: tcard('neutral') });
-      all.forEach(function (e) {
-        var r = Dom.el('div', { style: 'display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
-        r.appendChild(Dom.el('div', { style: 'width:150px;flex-shrink:0;color:#6B7280;font-size:12px;' }, fmtDateTime(e.t)));
-        r.appendChild(Dom.el('span', { style: 'flex-shrink:0;' + (e.type === 'check' ? 'background:#DBEAFE;color:#1E40AF;' : 'background:#F3E8FF;color:#7C3AED;') + 'font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;height:fit-content;' }, e.type));
-        var txt = Dom.el('div', {});
-        txt.appendChild(Dom.el('div', { style: 'font-weight:600;text-transform:capitalize;' }, e.label || '—'));
-        if (e.notes) txt.appendChild(Dom.el('div', { style: 'color:#6B7280;font-size:13px;' }, e.notes));
-        r.appendChild(txt);
-        card.appendChild(r);
+    // A date picker, because "what happened on the 3rd" is as common a question as
+    // "what happened today" — and until now the tab could only answer the second,
+    // and only as an undated 21-day scroll.
+    var state = { mode: 'day', date: (new Date()).toISOString().slice(0, 10) };
+
+    var bar = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;' });
+    var prev = Dom.el('button', { style: 'padding:8px 12px;border:1px solid #E2E8F0;background:#fff;border-radius:9px;cursor:pointer;font-weight:700;' }, '‹');
+    var dateIn = Dom.el('input', { type: 'date', value: state.date, style: 'padding:8px 10px;border:1px solid #E2E8F0;border-radius:9px;font-size:14px;' });
+    var next = Dom.el('button', { style: 'padding:8px 12px;border:1px solid #E2E8F0;background:#fff;border-radius:9px;cursor:pointer;font-weight:700;' }, '›');
+    var todayBtn = Dom.el('button', { style: 'padding:8px 12px;border:1px solid #E2E8F0;background:#fff;border-radius:9px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Today');
+    var recentBtn = Dom.el('button', { style: 'padding:8px 12px;border:1px solid #E2E8F0;background:#fff;border-radius:9px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Last 21 days');
+    bar.appendChild(prev); bar.appendChild(dateIn); bar.appendChild(next);
+    bar.appendChild(todayBtn); bar.appendChild(recentBtn);
+    c.appendChild(bar);
+    var host = Dom.el('div', {});
+    c.appendChild(host);
+
+    function shift(days) {
+      var d = new Date(state.date + 'T12:00:00');
+      d.setDate(d.getDate() + days);
+      state.date = d.toISOString().slice(0, 10);
+      dateIn.value = state.date; state.mode = 'day'; load();
+    }
+    prev.addEventListener('click', function () { shift(-1); });
+    next.addEventListener('click', function () { shift(1); });
+    dateIn.addEventListener('change', function () { state.date = dateIn.value; state.mode = 'day'; load(); });
+    todayBtn.addEventListener('click', function () { state.date = (new Date()).toISOString().slice(0, 10); dateIn.value = state.date; state.mode = 'day'; load(); });
+    recentBtn.addEventListener('click', function () { state.mode = 'recent'; load(); });
+
+    var ICON = { meal: '🍽️', snack: '🍎', nap: '😴', nap_start: '😴', nap_end: '🌅', diaper: '🧷',
+      bathroom: '🚽', activity: '✨', mood: '🙂', note: '📝', bottle: '🍼', sunscreen: '☀️',
+      check_in: '✅', check_out: '👋' };
+
+    function load() {
+      Dom.clear(host);
+      host.appendChild(loadingBox());
+      var qs = state.mode === 'day' ? ('date=' + encodeURIComponent(state.date)) : 'days=21';
+      Api.get('/director/children/' + child.id + '/daily-events?' + qs).then(function (d) {
+        Dom.clear(host);
+        var rows = [];
+        (d.checks || []).forEach(function (x) {
+          rows.push({ t: x.occurred_at, kind: 'Attendance', label: (x.event_type || '').replace(/_/g, ' '),
+            notes: x.notes, who: x.recorded_by_name, icon: ICON[x.event_type] || '•' });
+        });
+        (d.events || []).forEach(function (x) {
+          var p = {};
+          try { p = typeof x.payload === 'string' ? (JSON.parse(x.payload) || {}) : (x.payload || {}); } catch (e) {}
+          // The payload carries what actually happened — the meal, the nap length,
+          // the activity name. Showing only the event type threw that away.
+          var detail = p.meal || p.name || p.type || p.score || '';
+          rows.push({ t: x.occurred_at, kind: 'Care', label: (x.event_type || 'event').replace(/_/g, ' '),
+            detail: detail, notes: p.note || x.notes, who: x.recorded_by_name, icon: ICON[x.event_type] || '•' });
+        });
+        // The care screen's own table, which this tab never read.
+        (d.care_logs || []).forEach(function (x) {
+          rows.push({ t: x.occurred_at, kind: 'Care', label: (x.log_type || 'care').replace(/_/g, ' '),
+            detail: x.details, notes: x.notes, who: x.recorded_by_name, icon: ICON[x.log_type] || '•' });
+        });
+        rows.sort(function (a, b) { return (b.t || '').localeCompare(a.t || ''); });
+
+        if (!rows.length) {
+          host.appendChild(emptyBox(state.mode === 'day'
+            ? 'Nothing logged on ' + state.date + '.'
+            : 'No daily activity in the last 21 days.'));
+          return;
+        }
+        host.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:8px;' },
+          rows.length + (rows.length === 1 ? ' entry' : ' entries')
+          + (state.mode === 'day' ? ' on ' + state.date : ' in the last 21 days')));
+
+        var card = Dom.el('div', { style: tcard('care') });
+        rows.forEach(function (e) {
+          var r = Dom.el('div', { style: 'display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #EEF3F7;font-size:14px;align-items:flex-start;' });
+          r.appendChild(Dom.el('div', { style: 'width:132px;flex-shrink:0;color:#6B7280;font-size:12px;' }, fmtDateTime(e.t)));
+          r.appendChild(Dom.el('div', { style: 'flex-shrink:0;font-size:16px;width:22px;text-align:center;' }, e.icon));
+          var txt = Dom.el('div', { style: 'flex:1;min-width:0;' });
+          txt.appendChild(Dom.el('div', { style: 'font-weight:700;text-transform:capitalize;color:#0F172A;' },
+            (e.label || '—') + (e.detail ? ' — ' + e.detail : '')));
+          if (e.notes) txt.appendChild(Dom.el('div', { style: 'color:#475569;font-size:13px;margin-top:2px;' }, e.notes));
+          if (e.who) txt.appendChild(Dom.el('div', { style: 'color:#94A3B8;font-size:11.5px;margin-top:3px;' }, 'logged by ' + e.who));
+          r.appendChild(txt);
+          card.appendChild(r);
+        });
+        host.appendChild(card);
+      }).catch(function (err) {
+        Dom.clear(host);
+        host.appendChild(emptyBox('Could not load daily activity' + (err && err.message ? ' — ' + err.message : '') + '.'));
       });
-      c.appendChild(card);
-    }).catch(function (e) { Dom.clear(c); c.appendChild(emptyBox('Could not load daily reports: ' + (e.message || 'error'))); });
+    }
+    load();
   }
 
   function renderFeedTab(c, child) {
