@@ -107,12 +107,32 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sweep);
   else sweep();
 
+  // Coalesce a burst of mutations into a single sweep on the next frame. Without
+  // this, subtree observation would call normalize() once per inserted node.
+  var pending = false;
+  function sweepSoon() {
+    if (pending) return;
+    pending = true;
+    var run = function () { pending = false; sweep(); };
+    (w.requestAnimationFrame ? w.requestAnimationFrame(run) : setTimeout(run, 16));
+  }
+
   var main0 = document.getElementById('appMain');
   if (w.MutationObserver && main0) {
-    new MutationObserver(sweep).observe(main0, { childList: true });
+    // subtree: true, because childList alone only fires for DIRECT children of
+    // #appMain. Every tabbed screen swaps its banner deeper than that — the Audit
+    // screen's Email log tab, and screen-admin's Centres, Users and Families tabs via
+    // tabHero() — so their heroes appeared unshimmered until the periodic sweep
+    // happened past. Watching only the top level meant the guarantee this file exists
+    // to provide silently did not hold on exactly the screens that re-render most.
+    //
+    // Safe against self-triggering: normalize() mutates the banner it just found, which
+    // trips this observer, but the next pass sees data-kt-banner and returns without
+    // mutating. It settles after one extra frame.
+    new MutationObserver(sweepSoon).observe(main0, { childList: true, subtree: true });
   }
   // Safety net for async screen renders that swap the banner in late.
-  setInterval(sweep, 900);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 4000);
 
   if (w.KT) w.KT.normalizeBanner = sweep;
 })(window);
