@@ -2960,8 +2960,34 @@ final class AdminController extends Controller
                     .   '<div style="margin-top:10px;color:#CBD5E1;">Sent ' . e($when->format('D, M j, Y g:i A T')) . ' &middot; powered by KiddieTrac</div>'
                     . '</div></div></div>';
 
-                \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($user, $agencyName) {
+                // BCC the people accountable for the decision: the agency's own contact
+                // address (the owner) and its admins and directors. BCC rather than CC
+                // deliberately — the person being deactivated should not be handed a
+                // list of who was told, and the recipients do not need to see each
+                // other. It doubles as the agency's own copy of the notice, which is
+                // the record that matters if the removal is ever questioned.
+                $oversight = DB::table('users as u')
+                    ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                    ->where('ra.agency_id', $agencyId)
+                    ->where('ra.active', true)
+                    ->whereIn('ra.role', ['agency_admin', 'centre_director'])
+                    ->whereNull('u.deleted_at')
+                    ->whereNotNull('u.email')
+                    ->distinct()
+                    ->pluck('u.email')
+                    ->all();
+                if (!empty($agency->contact_email)) $oversight[] = $agency->contact_email;
+
+                // Never copy the person being removed on the notice about their own
+                // removal, and keep the list sane if an agency has many directors.
+                $bcc = array_values(array_unique(array_filter($oversight, function ($e) use ($user) {
+                    return $e && strcasecmp(trim($e), trim((string) $user->email)) !== 0;
+                })));
+                $bcc = array_slice($bcc, 0, 15);
+
+                \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($user, $agencyName, $bcc) {
                     $m->to($user->email)->subject('Your ' . $agencyName . ' account has been deactivated');
+                    if ($bcc) $m->bcc($bcc);
                 });
                 $emailSent = true;
             } catch (\Throwable $e) {
