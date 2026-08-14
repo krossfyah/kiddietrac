@@ -351,6 +351,76 @@
       card.appendChild(row('Cultural notes', child.cultural_notes));
       wrap.appendChild(card);
 
+      // #10 — Allergies & health alerts: safety-critical, so shown prominently in
+      // a red-bordered banner whenever there's an allergy or health alert on file.
+      (function () {
+        var items = [];
+        if (child.allergies) items.push(['Allergies', child.allergies, true]);
+        if (child.health_alerts) items.push(['Health alerts', child.health_alerts, true]);
+        if (child.dietary_restrictions) items.push(['Dietary restrictions', child.dietary_restrictions, false]);
+        var critical = !!(child.allergies || child.health_alerts);
+        var sec = Dom.el('div', { style: 'border-radius:14px;padding:16px 20px;margin-bottom:16px;border:2px solid ' + (critical ? '#EF4444' : '#E5E7EB') + ';background:' + (critical ? '#FEF2F2' : '#F9FAFB') + ';' });
+        sec.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + (critical ? '#B91C1C' : '#6B7280') + ';margin-bottom:' + (items.length ? '12px' : '0') + ';' }, (critical ? '⚠️ ' : '') + 'Allergies & health alerts'));
+        if (!items.length) {
+          sec.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13.5px;' }, 'None on file.'));
+        } else {
+          items.forEach(function (it) {
+            var r = Dom.el('div', { style: 'display:flex;gap:14px;padding:7px 0;border-top:1px solid ' + (critical ? '#FECACA' : '#EEF2F5') + ';' });
+            r.appendChild(Dom.el('div', { style: 'flex:0 0 150px;font-size:12.5px;font-weight:700;color:' + (it[2] ? '#B91C1C' : '#6B7280') + ';text-transform:uppercase;letter-spacing:.3px;' }, it[0]));
+            r.appendChild(Dom.el('div', { style: 'flex:1;font-size:14px;font-weight:600;color:#0F172A;white-space:pre-wrap;' }, String(it[1])));
+            sec.appendChild(r);
+          });
+        }
+        wrap.appendChild(sec);
+      })();
+
+      // #10 — Family record: full address + contacts + guardians, right on the
+      // child's detail so staff can reach the family without hunting for it.
+      (function () {
+        var f = child.family;
+        if (!f) return;
+        var esc2 = function (s) { return String(s == null ? '' : s); };
+        var addr = [f.address_line1, f.address_line2, f.city, f.province, f.postal_code].filter(Boolean).join(', ');
+        var sec = Dom.el('div', { style: 'background:white;border-radius:14px;padding:16px 20px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;' });
+        var head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;' });
+        head.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#6B7280;' }, '👪 Family record'));
+        var openLink = Dom.el('a', { href: '#admin-families', style: 'font-size:12.5px;color:#1F6080;text-decoration:none;font-weight:700;' }, 'Open in Families →');
+        head.appendChild(openLink);
+        sec.appendChild(head);
+        var grid = Dom.el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;font-size:13.5px;' });
+        var addRow = function (label, value) {
+          if (!value) return;
+          var tr = Dom.el('tr', {});
+          tr.appendChild(Dom.el('td', { style: 'padding:5px 14px 5px 0;color:#64748B;white-space:nowrap;vertical-align:top;width:150px;' }, label));
+          tr.appendChild(Dom.el('td', { style: 'padding:5px 0;font-weight:600;color:#0F172A;' }, esc2(value)));
+          grid.appendChild(tr);
+        };
+        addRow('Family', f.family_name);
+        addRow('Address', addr);
+        addRow('Phone', f.primary_phone);
+        addRow('Email', f.primary_email);
+        addRow('Language', f.preferred_lang);
+        sec.appendChild(grid);
+        // Guardians / contacts.
+        if (child.guardians && child.guardians.length) {
+          sec.appendChild(Dom.el('div', { style: 'font-size:11.5px;font-weight:800;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;margin:12px 0 6px;' }, 'Guardians'));
+          child.guardians.forEach(function (g) {
+            var name = ((g.first_name || '') + ' ' + (g.last_name || '')).trim() || 'Guardian';
+            var bits = [];
+            if (g.relationship) bits.push(g.relationship);
+            if (g.is_primary) bits.push('primary');
+            if (g.can_pickup) bits.push('can pick up');
+            var gr = Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid #EEF2F5;font-size:13px;' });
+            gr.appendChild(Dom.el('div', {}, [
+              Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, name + (bits.length ? ' · ' + bits.join(', ') : '')),
+              g.email ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, g.email) : Dom.el('span', {}),
+            ]));
+            sec.appendChild(gr);
+          });
+        }
+        wrap.appendChild(sec);
+      })();
+
       // v22p88: tabbed sections — Overview / Enrollment / Daily reports / Live feed / Attachments
       var TABS = [['overview', '👤 Overview'], ['enrollment', '🏫 Enrollment'], ['daily', '📊 Daily reports'], ['feed', '📸 Live feed'], ['attachments', '📎 Attachments']];
       var activeTab = 'overview';
@@ -386,7 +456,7 @@
   }
 
   function tcard() { return 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;'; }
-  function loadingBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;' }, msg || 'Loading…'); }
+  function loadingBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, msg || 'Loading…'); }
   function emptyBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#6B7280;' }, msg); }
   function fmtDateTime(s) { if (!s) return '—'; try { return new Date(s).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return s; } }
   function mediaUrl(u) {
@@ -447,6 +517,31 @@
       hist.appendChild(Dom.el('div', { style: 'padding:7px 0;font-size:14px;border-bottom:1px solid #F3F4F6;' }, line));
     });
     c.appendChild(hist);
+
+    // The child's attendance pattern, on their record where it is actually needed.
+    // Rendered by the pattern screen itself (KT.AttendancePattern.renderInto) with
+    // this child preselected, so there is one editor rather than a read-only copy
+    // here and the real thing somewhere else.
+    var pat = Dom.el('div', { style: tcard() });
+    pat.appendChild(Dom.el('h3', { style: 'margin:0 0 4px;font-size:16px;' }, 'Attendance pattern'));
+    pat.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:10px;' },
+      'Which days this child normally attends, and when in the day. Drives ratios, room planning and tuition projections.'));
+    var patHost = Dom.el('div', {});
+    pat.appendChild(patHost);
+    c.appendChild(pat);
+    try {
+      if (window.KT && KT.AttendancePattern && KT.AttendancePattern.renderInto) {
+        KT.AttendancePattern.renderInto(patHost, child.id);
+      } else {
+        // The pattern screen's file has not loaded — say so and offer the screen,
+        // rather than leaving an empty card that looks like "no pattern".
+        patHost.appendChild(Dom.el('div', { style: 'font-size:13px;color:#64748B;' },
+          'Open Attendance pattern from the menu to set this.'));
+      }
+    } catch (e) {
+      patHost.appendChild(Dom.el('div', { style: 'font-size:13px;color:#B45309;' },
+        'Could not load the attendance pattern editor.'));
+    }
   }
 
   function renderDailyTab(c, child) {
@@ -485,7 +580,7 @@
           var fig = Dom.el('div', {});
           fig.appendChild(Dom.el('img', { src: mediaUrl(url), style: 'width:100%;height:130px;object-fit:cover;border-radius:10px;background:#F3F4F6;' }));
           if (m.caption) fig.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:4px;' }, m.caption));
-          fig.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;' }, fmtDate(m.created_at)));
+          fig.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, fmtDate(m.created_at)));
           grid.appendChild(fig);
         });
         c.appendChild(grid);
@@ -495,7 +590,7 @@
         oc.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Observations'));
         obs.forEach(function (o) {
           var r = Dom.el('div', { style: 'padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:14px;' });
-          r.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:12px;' }, fmtDate(o.created_at) + (o.domain ? '  ·  ' + String(o.domain).replace(/_/g, ' ') : '')));
+          r.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, fmtDate(o.created_at) + (o.domain ? '  ·  ' + String(o.domain).replace(/_/g, ' ') : '')));
           r.appendChild(Dom.el('div', {}, o.note || o.text || o.title || '—'));
           oc.appendChild(r);
         });
