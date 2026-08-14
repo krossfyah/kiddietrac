@@ -1970,6 +1970,9 @@
       clockSection.appendChild(clockBody);
       body.appendChild(clockSection);
 
+      // Named so the editor below can re-run it after a correction; it was an
+      // anonymous one-shot call.
+      function loadPunches() {
       Api.get('/admin/users/' + user.id + '/punches').then(function (d) {
         Dom.clear(clockBody);
         const rows = d.punches || [];
@@ -1991,16 +1994,87 @@
             Dom.el('div', { style: 'font-size:11.5px;color:#64748B;' },
               (p.in_time || '—') + ' – ' + (open ? 'still clocked in' : (p.out_time || '—'))),
           ]));
-          row.appendChild(Dom.el('div', {
+          const right = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
+          right.appendChild(Dom.el('div', {
             style: 'font-weight:800;color:' + (open ? '#B45309' : '#0E7C90') + ';',
           }, open ? 'open' : (p.hours + 'h')));
+
+          // Correcting a punch had no control anywhere, which is why some have been
+          // open for a month. Compact, and only opens on request — this edits payroll.
+          const editBtn = Dom.el('button', {
+            style: 'background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;height:28px;padding:0 10px;'
+                 + 'font-size:12px;font-weight:700;color:#475569;cursor:pointer;',
+          }, 'Edit');
+          right.appendChild(editBtn);
+          row.appendChild(right);
           list.appendChild(row);
+
+          const editor = Dom.el('div', { style: 'display:none;padding:10px 0 14px;border-bottom:1px solid #F3F4F6;' });
+          list.appendChild(editor);
+
+          editBtn.addEventListener('click', function () {
+            if (editor.style.display === 'block') { editor.style.display = 'none'; editBtn.textContent = 'Edit'; return; }
+            editor.style.display = 'block';
+            editBtn.textContent = 'Cancel';
+            Dom.clear(editor);
+
+            const mkIn = function (label, value) {
+              const wrap = Dom.el('div', { style: 'display:flex;flex-direction:column;gap:3px;' });
+              wrap.appendChild(Dom.el('label', { style: 'font-size:11px;font-weight:700;color:#64748B;' }, label));
+              const i = Dom.el('input', { type: 'datetime-local', value: value || '',
+                style: 'height:30px;padding:0 8px;border:1px solid #E2E8F0;border-radius:8px;font-size:12.5px;' });
+              wrap.appendChild(i);
+              return { wrap: wrap, input: i };
+            };
+            const fIn = mkIn('Clock in', p.in_local);
+            const fOut = mkIn('Clock out', p.out_local);
+            const fWhy = Dom.el('input', { type: 'text', placeholder: 'Reason (optional)',
+              style: 'height:30px;padding:0 8px;border:1px solid #E2E8F0;border-radius:8px;font-size:12.5px;flex:1;min-width:150px;' });
+            const save = Dom.el('button', {
+              style: 'height:30px;padding:0 14px;background:#1F6080;color:#fff;border:none;border-radius:8px;'
+                   + 'font-size:12.5px;font-weight:800;cursor:pointer;',
+            }, 'Save');
+            const msg = Dom.el('div', { style: 'font-size:12px;color:#B45309;margin-top:6px;' });
+
+            const bar = Dom.el('div', { style: 'display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;' });
+            bar.appendChild(fIn.wrap); bar.appendChild(fOut.wrap);
+            bar.appendChild(Dom.el('div', { style: 'display:flex;flex-direction:column;gap:3px;flex:1;min-width:150px;' }, [
+              Dom.el('label', { style: 'font-size:11px;font-weight:700;color:#64748B;' }, 'Reason'), fWhy,
+            ]));
+            bar.appendChild(save);
+            editor.appendChild(bar);
+            editor.appendChild(Dom.el('div', { style: 'font-size:11px;color:#94A3B8;margin-top:6px;' },
+              'Times are in the centre\'s timezone. The change is recorded against your name.'));
+            editor.appendChild(msg);
+
+            save.addEventListener('click', async function () {
+              msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+              save.disabled = true;
+              try {
+                const r = await Api.patch('/admin/users/' + user.id + '/punches/' + p.id, {
+                  punched_in_at: fIn.input.value || null,
+                  punched_out_at: fOut.input.value || null,
+                  reason: fWhy.value.trim() || null,
+                });
+                msg.style.color = '#0E7C90';
+                msg.textContent = 'Saved — ' + (r.punch && r.punch.hours !== null ? r.punch.hours + ' hours' : 'still open') + '.';
+                if (window.KT && KT.Dom && KT.Dom.toast) KT.Dom.toast('Time punch corrected', 'success');
+                loadPunches();
+              } catch (e) {
+                msg.style.color = '#DC2626';
+                msg.textContent = (e && e.message) || 'Could not save.';
+                save.disabled = false;
+              }
+            });
+          });
         });
         clockBody.appendChild(list);
       }).catch(function () {
         Dom.clear(clockBody);
         clockBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' }, 'Could not load clock records.'));
       });
+      }
+      loadPunches();
     })();
 
     // v22p23: role section — show current roles as pills + a "Change role" form.

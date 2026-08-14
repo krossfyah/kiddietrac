@@ -248,6 +248,11 @@ class EducatorRoomsController extends Controller
                 'day' => $in->format('D j M Y'),
                 'in_time' => $in->format('g:i A'),
                 'out_time' => $out?->format('g:i A'),
+                // For <input type="datetime-local">, in the AGENCY's zone. The display
+                // strings above are for people; parsing them back into a date in the
+                // browser is how off-by-one-day errors get into payroll.
+                'in_local' => $in->format('Y-m-d\TH:i'),
+                'out_local' => $out?->format('Y-m-d\TH:i'),
                 'punched_out_at' => $p->punched_out_at,
                 'hours' => $hours,
                 'notes' => $p->notes,
