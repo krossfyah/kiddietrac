@@ -489,6 +489,22 @@ class ParentDailySummaryCommand extends Command
         // Opening greeting + intro come from the agency-editable "parent-daily-summary"
         // template (Settings → Email templates, #77). Falls back to the original line
         // if anything goes wrong — a nightly email must never break over wording.
+        // Decided HERE, before any wording is chosen. It was previously worked out
+        // further down, which is why the cards and story could be suppressed while
+        // the greeting still said "Here's how their day went".
+        $countOf = static function ($v): int {
+            if ($v === null) return 0;
+            if (is_array($v)) return count($v);
+            if ($v instanceof \Countable) return count($v);
+            if (is_object($v) && method_exists($v, 'count')) return (int) $v->count();
+            return $v ? 1 : 0;
+        };
+        $attended = !empty($day['check_in'])
+            || $countOf($day['events'] ?? null) > 0
+            || $countOf($day['care_logs'] ?? null) > 0
+            || $countOf($day['logs'] ?? null) > 0
+            || $countOf($day['photos'] ?? null) > 0;
+
         $greeting = '';
         $intro = 'Here is how <strong>' . $name . '</strong>\'s day went at ' . e($child->centre_name) . '.';
         $signoff = '';
@@ -505,6 +521,16 @@ class ParentDailySummaryCommand extends Command
             if ($i !== '') $intro = $i;
             if ($s !== '') $signoff = $s;
         } catch (\Throwable $e) { /* keep the safe defaults */ }
+
+        // A day that did not happen gets wording that says so. Thanking a parent for
+        // sharing a child who stayed home, under a heading promising the story of
+        // their day, is the part that reads as though nobody checked.
+        if (! $attended) {
+            $greeting = e($name) . ' was not in today';
+            $intro = 'We did not see ' . e($name) . ' at ' . e($child->centre_name) . ' today, so there is nothing to report.';
+            $signoff = 'We hope to see ' . e($name) . ' again soon.';
+        }
+
         $day['_signoff'] = $signoff;   // rendered near the foot, before the quote
         $body = ($greeting !== '' ? '<div style="font-size:19px;font-weight:800;color:#0B2545;margin:0 0 8px;">' . $greeting . '</div>' : '')
             . '<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">' . $intro . '</p>';
@@ -521,25 +547,7 @@ class ParentDailySummaryCommand extends Command
                 . '</td></tr></table>' . $body;
         }
 
-        // DID THE CHILD ACTUALLY ATTEND? Everything below depends on the answer,
-        // and until now nothing asked it. A child with no sign-in and no logged care
-        // was still given sign-in/out cards, a story about their day and a thank-you
-        // for sharing them — about a day spent at home.
-        // COUNT, do not use empty(). These arrive as Collections, and empty() on an
-        // OBJECT is always false - so an empty photo collection read as "attended"
-        // and a child who never arrived still got a story. That is the bug this
-        // block was written to prevent, reintroduced by the check itself.
-        $countOf = static function ($v): int {
-            if ($v === null) return 0;
-            if (is_array($v)) return count($v);
-            if ($v instanceof \Countable) return count($v);
-            if (is_object($v) && method_exists($v, 'count')) return (int) $v->count();
-            return $v ? 1 : 0;
-        };
-        $attended = !empty($day['check_in'])
-            || $countOf($day['events'] ?? null) > 0
-            || $countOf($day['care_logs'] ?? null) > 0
-            || $countOf($day['photos'] ?? null) > 0;
+        // $attended was established at the top, before the wording was chosen.
 
         if (! $attended) {
             // Say it once, clearly, at the top. If the family told us why, repeat it
@@ -717,7 +725,10 @@ class ParentDailySummaryCommand extends Command
         $body .= EmailTemplate::dailyQuote((int) $day['date']->format('Ymd'));
 
         $body .= '<p style="margin:22px 0 0;font-size:12px;color:#94A3B8;line-height:1.5;">'
-            . 'All times are ' . e($tz) . ' (your centre\'s local time). '
+            // $tz here held a DATE, so the footer read "All times are 2026-08-13
+            // 00:00:00 (your centre's local time)". Name the zone the email was
+            // actually rendered in.
+            . 'All times are ' . e(is_string($tz) && ! str_contains($tz, ':') ? $tz : (string) \App\Support\AgencyTime::tz((int) $child->agency_id)) . ' (your centre\'s local time). '
             . 'Open the KiddieTrac app to reply, see full-size photos, or view earlier days.</p>';
 
         return EmailTemplate::wrap((int) $child->agency_id, $body, [
