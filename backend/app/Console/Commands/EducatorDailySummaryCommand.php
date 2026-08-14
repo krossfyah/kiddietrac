@@ -112,6 +112,63 @@ class EducatorDailySummaryCommand extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Children who were expected today and were not signed in, split into those
+     * whose family reported it and those who simply never arrived.
+     *
+     * "Expected" comes from the attendance pattern for this weekday. A child with no
+     * pattern is not counted as missing — the agency has not said they were coming,
+     * and inventing an alarm from an absence of data is how a safeguarding signal
+     * becomes noise people learn to ignore.
+     */
+    private function awayToday(int $educatorId, string $tz, Carbon $date): array
+    {
+        $out = ['expected_absent' => [], 'reported' => []];
+        try {
+            $centreIds = DB::table('role_assignments')->where('user_id', $educatorId)
+                ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
+            if (! $centreIds) return $out;
+
+            $dow = strtolower($date->format('l'));               // monday..sunday
+            $start = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc();
+            $end = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
+
+            $children = DB::table('children as ch')
+                ->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->leftJoin('attendance_patterns as ap', function ($j) {
+                    $j->on('ap.child_id', '=', 'ch.id')->whereNull('ap.effective_until');
+                })
+                ->whereIn('f.centre_id', $centreIds)
+                ->whereNull('ch.deleted_at')
+                ->where('ch.enrollment_status', 'enrolled')
+                ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ap.' . $dow . ' as expected')
+                ->get();
+
+            foreach ($children as $c) {
+                if (empty($c->expected)) continue;               // not expected today
+                $wasIn = DB::table('check_events')->where('child_id', $c->id)
+                    ->where('event_type', 'check_in')
+                    ->whereBetween('occurred_at', [$start, $end])->exists();
+                if ($wasIn) continue;
+
+                $name = trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? ''));
+                $absence = Schema::hasTable('child_absences')
+                    ? DB::table('child_absences')->where('child_id', $c->id)
+                        ->whereDate('absent_on', $date->toDateString())->first()
+                    : null;
+                if ($absence) {
+                    $out['reported'][] = ['name' => $name, 'reason' => $absence->reason ?? null];
+                } else {
+                    $out['expected_absent'][] = ['name' => $name];
+                }
+            }
+        } catch (\Throwable $e) {
+            // A summary email must still send if this lookup fails.
+            \Illuminate\Support\Facades\Log::warning('Educator summary: away list failed', ['error' => $e->getMessage()]);
+        }
+        return $out;
+    }
+
     /** This educator's activity for the given agency-day. */
     private function statsFor(int $uid, string $tz, Carbon $date): array
     {
@@ -545,6 +602,39 @@ class EducatorDailySummaryCommand extends Command
             if ($i === 2) { $body .= '</tr><tr>'; }
         }
         $body .= '</tr></table>';
+
+        // ── Who wasn't in today ────────────────────────────────────────────
+        // The most important thing on this email, and it was missing. A child with
+        // a pattern for today who never signed in, and no absence reported, is a
+        // question somebody needs to ask — not a number to celebrate.
+        $away = $this->awayToday((int) $ed->id, $tz, $date);
+        if ($away['expected_absent'] || $away['reported']) {
+            $body .= $this->sectionHead("\u{1F3E0}", "Who wasn't in today");
+            $body .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                . 'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;margin-bottom:6px;">';
+
+            foreach ($away['expected_absent'] as $c) {
+                $body .= '<tr><td style="padding:11px 13px;border-bottom:1px solid #F1F5F9;">'
+                    . '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DC2626;margin-right:8px;"></span>'
+                    . '<strong style="color:#0F172A;">' . e($c['name']) . '</strong>'
+                    . '<span style="color:#B91C1C;font-size:13px;"> — expected today, not signed in, no absence reported</span>'
+                    . '</td></tr>';
+            }
+            foreach ($away['reported'] as $c) {
+                $body .= '<tr><td style="padding:11px 13px;border-bottom:1px solid #F1F5F9;">'
+                    . '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#94A3B8;margin-right:8px;"></span>'
+                    . '<strong style="color:#0F172A;">' . e($c['name']) . '</strong>'
+                    . '<span style="color:#64748B;font-size:13px;"> — reported away'
+                    . ($c['reason'] ? ' (' . e($c['reason']) . ')' : '') . '</span>'
+                    . '</td></tr>';
+            }
+            $body .= '</table>';
+            if ($away['expected_absent']) {
+                $body .= '<p style="margin:0 0 6px;font-size:13px;color:#B91C1C;">'
+                    . 'Please check in with ' . (count($away['expected_absent']) === 1 ? 'this family' : 'these families')
+                    . ' if you have not already.</p>';
+            }
+        }
 
         // ── How today compares ─────────────────────────────────────────────
         $body .= $this->sectionHead("\u{1F4C8}", 'How today compares')
