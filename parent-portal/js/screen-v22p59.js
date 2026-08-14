@@ -167,7 +167,16 @@
   }
 
   // ============================ Attendance pattern (parent + admin) ============================
-  async function renderAttendancePattern(main) {
+  // Exposed so a child's record can embed this editor rather than growing a
+  // second copy that drifts from it.
+  function exposePatternApi(renderFn) {
+    window.KT = window.KT || {};
+    window.KT.AttendancePattern = {
+      renderInto: function (el, childId) { if (el) return renderFn(el, childId); },
+    };
+  }
+
+  async function renderAttendancePattern(main, preselectChildId) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
 
@@ -315,7 +324,23 @@
     });
     filter.addEventListener('change', fillChildren);
     fillChildren();
-  }
+  
+
+    // Opened for ONE child (from their record): preselect them and hide the
+    // picker, so the same editor serves both places without a second copy.
+    if (preselectChildId) {
+      try {
+        sel.value = String(preselectChildId);
+        sel.dispatchEvent(new Event("change"));
+        var _tools = document.getElementById("ap-filter");
+        if (_tools && _tools.parentElement && _tools.parentElement.parentElement) {
+          _tools.parentElement.parentElement.style.display = "none";
+        }
+      } catch (e) {}
+    }
+}
+  exposePatternApi(renderAttendancePattern);
+
   async function renderReportCards(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
