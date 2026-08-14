@@ -603,14 +603,14 @@
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th><th>Raised by</th><th>Created</th></tr></thead>
-          <tbody>${(r.data || []).map(t => `<tr style="cursor:pointer;" data-open="${t.id}">
+          <thead><tr><th>Ticket</th><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th><th>Raised by</th><th>Created</th></tr></thead>
+          <tbody>${(r.data || []).map(t => `<tr style="cursor:pointer;" data-open="${t.id}"><td style="font-weight:800;color:#475569;white-space:nowrap;">#${t.id}</td>
             <td><strong>${esc(t.subject)}</strong></td>
             <td><span class="kt-pill kt-pill-info">${esc(t.category)}</span></td>
             <td><span class="kt-pill ${t.priority === 'urgent' ? 'kt-pill-danger' : t.priority === 'high' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.priority)}</span></td>
             <td><span class="kt-pill ${t.status === 'resolved' || t.status === 'closed' ? 'kt-pill-success' : t.status === 'awaiting_user' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.status)}</span></td>
             <td>${esc(t.raised_by_name)}</td>
-            <td>${fmtDate(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No tickets yet.</td></tr>'}</tbody>
+            <td>${fmtDate(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No tickets yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
