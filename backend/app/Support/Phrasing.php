@@ -74,6 +74,12 @@ class Phrasing
         'Here is what the day held for {name} at {centre}.',
         'From {centre} — how {name} spent today.',
         'The story of {name}\'s day at {centre}.',
+        'Today at a glance — {name} at {centre}.',
+        'How {name} filled the day at {centre}.',
+        'A quick round-up of {name} at {centre} today.',
+        'Everything {name} got up to at {centre} today.',
+        '{name} at {centre}: today in short.',
+        'Here is today, as {name} spent it at {centre}.',
     ];
 
     public const PARENT_ABSENT_GREETING = [
@@ -87,6 +93,10 @@ class Phrasing
         '{name} was not with us today',
         'We did not see {name} today',
         '{name} stayed away today',
+        'A quiet day without {name}',
+        'No {name} with us today',
+        '{name} was off today',
+        'Missing {name} from the room today',
     ];
 
     public const PARENT_ABSENT_INTRO = [
@@ -100,6 +110,10 @@ class Phrasing
         'No day to report — {name} was not at {centre} today.',
         '{name} was not with us at {centre} today, so there is nothing recorded.',
         'There is nothing to report today, as {name} was not at {centre}.',
+        '{name} was off from {centre} today, so there is no day to write up.',
+        'Nothing to pass on today — {name} was not in at {centre}.',
+        'Today was a quiet one without {name} at {centre}, so this update is brief.',
+        'We had no {name} at {centre} today, so there is nothing recorded to share.',
     ];
 
     public const PARENT_ABSENT_SIGNOFF = [
@@ -113,5 +127,9 @@ class Phrasing
         'See you and {name} soon, we hope.',
         'We will keep {name}\'s spot ready.',
         'Until {name} is back with us — take care.',
+        'We will be looking out for {name} next time.',
+        'Wishing you well, and hoping to see {name} soon.',
+        'Whenever {name} is ready, we are here.',
+        'Take care, and see you both before long.',
     ];
 }

@@ -595,6 +595,20 @@ class EducatorDailySummaryCommand extends Command
             e($name) . ', you did wonderful work today. 💛',
             'Good evening ' . e($name) . '! Here\'s how today unfolded. 🌇',
             'Well done today, ' . e($name) . '. 🌿',
+            'That is the day done, ' . e($name) . '. 🌙',
+            e($name) . ', here is what today added up to. 📋',
+            'Evening, ' . e($name) . ' — today in one page. 🌆',
+            'Made it, ' . e($name) . '. Here is the day. ☕',
+            'A good shift, ' . e($name) . '. Here is the shape of it. 🌤️',
+            e($name) . ', today is in the books. 📖',
+            'Winding down, ' . e($name) . '? Here is your day. 🕯️',
+            'Nice work out there today, ' . e($name) . '. 🌻',
+            e($name) . ' — a look back at today before you switch off. 🌒',
+            'Hello ' . e($name) . '. Today, gathered up for you. 🧺',
+            'Another one done, ' . e($name) . '. Here is how it went. 🍂',
+            e($name) . ', your day at a glance. 🔎',
+            'Hi ' . e($name) . ' — the day you just had, in short. 🌼',
+            'Signing off, ' . e($name) . '? Here is today first. 🌘',
         ]);
         $opener = $pick([
             'Thank you for the warmth, patience and love you brought to your room today — it truly makes a difference.',
@@ -603,6 +617,15 @@ class EducatorDailySummaryCommand extends Command
             'Behind every happy child today was your steady, caring presence. Here\'s what that looked like.',
             'You poured so much heart into today. Take a moment to see everything you accomplished.',
             'Another day of shaping little lives — here\'s a look at all the good you did.',
+            'The care you gave today does not show up in numbers, but here are the numbers anyway.',
+            'Children remember how a room felt long after they forget what they did in it. Yours felt safe today.',
+            'A day of small kindnesses, most of which nobody saw. Here is the part that was recorded.',
+            'You kept a room of little people fed, rested and looked after today. That is not a small thing.',
+            'Here is today, laid out — though the best parts of it never fit in a summary.',
+            'Steady hands, a calm voice, and a long day. Here is what came of it.',
+            'The work you did today will show up in these children for years. Here is the short version.',
+            'You gave a lot today. Here is a record of where it went.',
+            'Somebody had to notice every small thing in that room today, and you did. Here is the tally.',
         ]);
         // Score + place lead the email: the first thing you see is how the day went and
         // whose room it was, not a wall of six equal tiles.
@@ -774,8 +797,21 @@ class EducatorDailySummaryCommand extends Command
             'What you do matters, ' . e($name) . ' — more than any number can show. The warmth you give these children stays with them for life. Have a lovely, restful evening. ✨',
             'Every child in your room felt safe and cared for today, ' . e($name) . ', and that is everything. Be proud, and rest easy tonight. 💛',
             'Days like today are quietly building brighter futures, ' . e($name) . '. Thank you for your patience and heart. Enjoy a well-earned evening. 🌙',
+            'Whatever today threw at you, ' . e($name) . ', you met it. That is enough for one day. Rest well. 🌙',
+            'The children in your room were safe, seen and looked after today, ' . e($name) . '. Go and put the kettle on. ☕',
+            'Not every day feels like progress, ' . e($name) . ', but the children felt the difference today. Have a proper rest. 🌿',
+            'Thank you for the patience today asked of you, ' . e($name) . '. Close the door on it now and enjoy your evening. 🌇',
+            'You showed up and gave it your full attention, ' . e($name) . '. The children know. Sleep well. ✨',
+            'Long days like this one are the job, ' . e($name) . ', and you did it well. Take the evening back for yourself. 🌷',
+            'The small things you did today will be remembered by people too young to thank you, ' . e($name) . '. So: thank you. 💛',
+            'That is a day well spent, ' . e($name) . '. Put it down now — it will keep until tomorrow. 🌙',
+            'Care like yours is quiet work, ' . e($name) . ', and it matters enormously. Enjoy a restful evening. 🍃',
         ]);
-        $signoff = $pick(['With gratitude,', 'With appreciation,', 'Warmly,', 'Cheering you on,', 'Thank you,']);
+        $signoff = $pick([
+            'With gratitude,', 'With appreciation,', 'Warmly,', 'Cheering you on,', 'Thank you,',
+            'With thanks,', 'Gratefully,', 'In appreciation,', 'With real thanks,',
+            'Thank you, sincerely,', 'With admiration,', 'Very best,',
+        ]);
         $body .= '<p style="margin-top:20px;font-size:15px;">' . $close . '</p>'
             . '<p style="font-weight:800;color:#0F172A;">' . $signoff . '<br>'
             . 'The team at ' . e((string) (DB::table('agencies')->where('id', (int) $ed->agency_id)->value('name') ?: 'your team')) . '</p>';
