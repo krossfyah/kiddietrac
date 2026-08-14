@@ -224,6 +224,16 @@ class ParentDailySummaryCommand extends Command
 
         $logs = $careLogs->concat($eventLogs)->sortBy('at')->values();
 
+        // The absence record, if the family or the centre filed one. buildHtml has
+        // read $day['absence'] since it was written, but nothing ever put it there —
+        // so a family that told the centre WHY their child was away never saw that
+        // reason acknowledged in the email. Dead code on one side, silence on the
+        // other.
+        $absence = DB::table('child_absences')
+            ->where('child_id', $child->id)
+            ->whereDate('absent_on', $date->toDateString())
+            ->first();
+
         // Who actually looked after them today. Both care tables stamp
         // recorded_by_id; this reads the distinct authors so the email can show the
         // parent a face rather than an anonymous list of times.
@@ -353,6 +363,7 @@ class ParentDailySummaryCommand extends Command
             'awards' => $awards,
             'late_pickup' => $latePickup,
             'educators' => $educators,
+            'absence' => $absence,
             'digest' => $digest,
             'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $awards->count() || $latePickup || $digest),
         ];
@@ -581,12 +592,19 @@ class ParentDailySummaryCommand extends Command
                 $reason = trim((string) ($day['absence']->reason ?? ''));
                 $why = $reason ? (' — reported as ' . e($reason)) : ' — reported absent';
             }
+            // The heading and the intro above have ALREADY said that the child was
+            // not in and that there is nothing to report. This box used to say both
+            // again, so an absent-day email stated the same fact three times before
+            // it said anything else. What is genuinely only here is the reason the
+            // family gave and the line telling them how to correct a mistake, so
+            // that is all that is left.
             $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>'
                 . '<td style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:5px solid #94A3B8;border-radius:12px;padding:14px 16px;">'
-                . '<div style="font-size:14.5px;font-weight:800;color:#334155;">' . e($name) . ' was not at '
-                . e($child->centre_name) . ' today' . $why . '.</div>'
-                . '<div style="font-size:13px;color:#475569;margin-top:3px;line-height:1.5;">'
-                . 'There is nothing to report for today. If this is wrong, please let the centre know so we can correct the record.'
+                . ($why !== ''
+                    ? '<div style="font-size:14.5px;font-weight:800;color:#334155;">' . ucfirst(ltrim($why, ' —')) . '.</div>'
+                      . '<div style="font-size:13px;color:#475569;margin-top:3px;line-height:1.5;">'
+                    : '<div style="font-size:13px;color:#475569;line-height:1.5;">')
+                . 'If this is wrong, please let the centre know so we can correct the record.'
                 . '</div></td></tr></table>';
         } else {
             // Sign in / out — with WHO did it, which is the part parents actually want
