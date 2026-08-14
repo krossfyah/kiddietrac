@@ -2868,6 +2868,7 @@ final class AdminController extends Controller
                 $agency = DB::table('agencies')->where('id', $agencyId)->first();
                 $agencyName = $agency->name ?? 'KiddieTrac';
                 $contact = $agency->contact_email ?? null;
+                $phone = $agency->contact_phone ?? null;
                 $tz = \App\Support\AgencyTime::tz($agencyId);
                 $when = now()->setTimezone($tz);
                 $first = trim((string) ($user->first_name ?? '')) ?: 'Hello';
@@ -2881,6 +2882,44 @@ final class AdminController extends Controller
                         ?? ($settings['retention_months'] ?? null);
                     if ($months) $retention = (int) $months;
                 } catch (\Throwable $e) {}
+
+                // Who is this? A parent's question is about their CHILD's records; an
+                // educator's is about employment. Answering with the other one is
+                // the same as not answering.
+                $roles = DB::table('role_assignments')->where('user_id', $userId)
+                    ->pluck('role')->map(fn ($r) => (string) $r)->all();
+                $isGuardian = in_array('guardian', $roles, true);
+                $isStaff = (bool) array_intersect($roles,
+                    ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor', 'sales_rep', 'platform_admin']);
+
+                $records = [];
+                if ($isGuardian) {
+                    $records[] = '<strong>Your child\'s records</strong> — enrolment, attendance, daily care notes, '
+                        . 'medication and allergy information, and any incident reports — are part of the agency\'s '
+                        . 'licensed child care records. The agency is required to keep these, and cannot delete them '
+                        . 'on request while that requirement applies.';
+                    $records[] = '<strong>Your own contact and billing records</strong> — invoices, payments and receipts — '
+                        . 'are kept for as long as tax and financial record-keeping rules require.';
+                    $records[] = '<strong>Photos and videos of your child</strong> shared with you through the app are '
+                        . 'removed from your access immediately. Copies you have already downloaded remain yours.';
+                }
+                if ($isStaff) {
+                    $records[] = '<strong>Employment and payroll records</strong> — hours worked, pay, and related '
+                        . 'documents — are kept for the period employment and tax rules require.';
+                    $records[] = '<strong>Qualification and screening records</strong> — certifications, first aid and CPR, '
+                        . 'and police record checks — form part of the agency\'s licensing records and are kept for as '
+                        . 'long as those obligations apply.';
+                    $records[] = '<strong>Work you recorded</strong> — attendance you took, care you logged, reports you '
+                        . 'filed — stays on the children\'s records, because it is part of those children\'s history and '
+                        . 'not personal information about you that can be withdrawn.';
+                }
+                if (!$records) {
+                    $records[] = 'Records the agency is required by law to keep are retained for as long as that '
+                        . 'requirement applies; everything else is removed.';
+                }
+                $recordsHtml = '<ul style="margin:8px 0 0;padding-left:18px;font-size:13.5px;color:#334155;">'
+                    . implode('', array_map(fn ($r) => '<li style="margin-bottom:7px;line-height:1.55;">' . $r . '</li>', $records))
+                    . '</ul>';
 
                 $body = '<div style="margin:0;padding:0;background:#F1F5F9;">'
                     . '<div style="max-width:620px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
@@ -2896,17 +2935,25 @@ final class AdminController extends Controller
                     .     'No further emails or notifications will be sent to you from this agency.</p>'
                     .   '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;margin:16px 0;">'
                     .     '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">What happens to your information</div>'
-                    .     '<p style="margin:0;font-size:13.5px;color:#334155;">Records connected to your time with the agency — employment and payroll records, and anything the agency must keep to meet its licensing obligations — are retained for as long as the law requires'
-                    .       ($retention ? ' (this agency\'s policy is ' . (int) $retention . ' months)' : '')
-                    .       ', and are then securely destroyed. Everything not subject to those obligations is removed. '
-                    .       'You may ask for a copy of the personal information held about you, or ask about its deletion, using the contact below.</p>'
+                    .     '<p style="margin:0;font-size:13.5px;color:#334155;">Some records must be kept by law even after access ends. Those are retained for as long as the law requires'
+                    .       ($retention ? ', in line with this agency\'s retention policy of ' . (int) $retention . ' months' : '')
+                    .       ', held securely, used for no other purpose, and then destroyed. Anything not covered by such an obligation is removed.</p>'
+                    .     $recordsHtml
+                    .     '<p style="margin:10px 0 0;font-size:13.5px;color:#334155;">You may ask for a copy of the personal information held about you, ask for a correction, or ask what is kept and for how long. Write to the contact below and the agency will respond.</p>'
                     .   '</div>'
                     .   '<p style="margin:0 0 6px;">If this was not expected, please contact '
                     .     ($contact ? '<a href="mailto:' . e($contact) . '" style="color:#1F6FB2;">' . e($contact) . '</a>' : 'your agency administrator')
                     .     ' — it can be reversed.</p>'
                     . '</div>'
-                    . '<div style="text-align:center;padding:14px 24px 24px;color:#94A3B8;font-size:11.5px;">'
-                    .   e($agencyName) . ' · sent automatically by KiddieTrac'
+                    . '<div style="padding:16px 24px 26px;color:#94A3B8;font-size:11.5px;line-height:1.65;text-align:center;">'
+                    .   '<div style="font-weight:700;color:#64748B;">' . e($agencyName) . '</div>'
+                    .   ($contact ? '<div><a href="mailto:' . e($contact) . '" style="color:#94A3B8;">' . e($contact) . '</a>'
+                        . ($phone ? ' &middot; ' . e($phone) : '') . '</div>' : ($phone ? '<div>' . e($phone) . '</div>' : ''))
+                    .   '<div style="margin-top:8px;">This is an automated message about your account. It was sent because your '
+                    .   'access was removed, and it is not marketing — there is nothing to unsubscribe from.</div>'
+                    .   '<div style="margin-top:6px;">For questions about your information, or to request a copy, reply to this '
+                    .   'email or contact the agency directly.</div>'
+                    .   '<div style="margin-top:10px;color:#CBD5E1;">Sent ' . e($when->format('D, M j, Y g:i A T')) . ' &middot; powered by KiddieTrac</div>'
                     . '</div></div></div>';
 
                 \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($user, $agencyName) {
