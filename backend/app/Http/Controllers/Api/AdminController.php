@@ -2685,6 +2685,10 @@ final class AdminController extends Controller
         if ($userIds) {
             DB::table('users')->whereIn('id', $userIds)->update(['status' => 'suspended']);
         }
+        // Stamp the family itself, so the suspension is visible to the rosters the
+        // educators work from and not only to the guardians' own logins. It also
+        // dates the pause, which is what a retention question needs to answer.
+        DB::table('families')->where('id', $familyId)->update(['suspended_at' => now(), 'updated_at' => now()]);
         $notified = $this->notifyFamilyAccess($family, $userIds, $request, false);
         $this->audit($request->user()->id, 'family.suspended', 'family', $familyId, [
             'family_name' => $family->family_name, 'accounts' => count($userIds),
@@ -2703,6 +2707,7 @@ final class AdminController extends Controller
         if ($userIds) {
             DB::table('users')->whereIn('id', $userIds)->where('status', 'suspended')->update(['status' => 'active']);
         }
+        DB::table('families')->where('id', $familyId)->update(['suspended_at' => null, 'updated_at' => now()]);
         $notified = $this->notifyFamilyAccess($family, $userIds, $request, true);
         $this->audit($request->user()->id, 'family.reactivated', 'family', $familyId, [
             'family_name' => $family->family_name, 'accounts' => count($userIds),

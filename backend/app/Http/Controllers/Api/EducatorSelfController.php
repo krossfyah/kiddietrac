@@ -99,6 +99,11 @@ class EducatorSelfController extends Controller
             ->join('rooms as r', 'r.id', '=', 'e.room_id')
             ->leftJoin('centres as ce', 'ce.id', '=', 'r.centre_id')
             ->whereIn('r.centre_id', $centreIds)
+            // A suspended family is hidden from the people delivering care, not just
+            // from its own login.
+            ->whereNotExists(fn ($q) => $q->from('families')
+                ->whereColumn('families.id', '=', 'c.family_id')
+                ->whereNotNull('families.suspended_at'))
             ->whereNull('e.end_date')
             ->whereNull('c.deleted_at')
             ->distinct()
@@ -124,6 +129,11 @@ class EducatorSelfController extends Controller
             ->leftJoin('rooms as r', 'r.id', '=', 'c.primary_room_id')
             ->leftJoin('families as f', 'f.id', '=', 'c.family_id')
             ->where('c.id', $child)
+            // A suspended family is hidden from the people delivering care, not just
+            // from its own login.
+            ->whereNotExists(fn ($q) => $q->from('families')
+                ->whereColumn('families.id', '=', 'c.family_id')
+                ->whereNotNull('families.suspended_at'))
             ->whereNull('c.deleted_at')
             ->select([
                 'c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.pronouns', 'c.gender',

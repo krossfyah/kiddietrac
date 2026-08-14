@@ -44,6 +44,7 @@ final class DayBriefController extends Controller
                 ->join('families as f', 'f.id', '=', 'c.family_id')
                 ->whereIn('f.centre_id', $centreIds ?: [0])
                 ->where('c.enrollment_status', 'enrolled')
+                ->whereNull('f.suspended_at')
                 ->whereNull('c.deleted_at')
                 ->pluck('c.id')->all();
             $expected = count($childIds);
@@ -265,6 +266,7 @@ final class DayBriefController extends Controller
 
         $children = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
             ->where('f.centre_id', $centreId)->whereNull('c.deleted_at')
+            ->whereNull('f.suspended_at')
             ->get(['c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.photo_url', 'c.gender']);
         $nameById = [];
         foreach ($children as $c) {
