@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * v22p98 — Staff clock-in/out reminders.
  *
- * Educators/directors record their hours via the time clock (time_entries).
+ * Educators/directors record their hours via the time clock (time_punches).
  * Accurate punches matter for THREE reasons we spell out in the email:
  *   • Compliance — licensing requires verifiable educator:child ratio records.
  *   • Payroll    — hours worked drive pay; a missing punch means a missed shift.
@@ -51,14 +51,18 @@ final class ClockReminderCommand extends Command
     /** Open time entry from today → they forgot to clock out. */
     private function remindMissingClockOut(Carbon $today): int
     {
-        $open = DB::table('time_entries as t')
+        $open = DB::table('time_punches as t')
             ->join('users as u', 'u.id', '=', 't.user_id')
-            ->whereNull('t.clocked_out_at')
-            ->whereDate('t.clocked_in_at', $today)
+            ->whereNull('t.punched_out_at')
+            // Not whereDate(today): a punch left open overnight would never be
+            // chased again, because the single evening that might have caught it has
+            // gone. That is how one reaches 30 days. Fourteen days back is enough to
+            // catch a forgotten shift while staying bounded.
+            ->where('t.punched_in_at', '>=', $today->copy()->subDays(14))
             // Cheap floor; the real test is against each person's own usual day below.
-            ->where('t.clocked_in_at', '<=', Carbon::now()->subHours(4))
+            ->where('t.punched_in_at', '<=', Carbon::now()->subHours(4))
             ->whereNotNull('u.email')->whereNull('u.deleted_at')
-            ->select('t.user_id', 't.centre_id', 't.clocked_in_at', 'u.email', 'u.first_name')
+            ->select('t.user_id', 't.centre_id', 't.punched_in_at', 'u.email', 'u.first_name')
             ->get();
 
         $n = 0;
@@ -70,20 +74,35 @@ final class ClockReminderCommand extends Command
             // Nudge once they are past their OWN usual day, not a flat six hours: an
             // afternoon shift that started at 12:30 is not overdue at 18:30, and
             // someone whose day normally ends at 15:00 should hear from us sooner.
-            $in = Carbon::parse($e->clocked_in_at);
+            $in = Carbon::parse($e->punched_in_at);
             $usual = $this->usualShiftHours((int) $e->user_id, $today);
             $threshold = $usual === null ? 6.0 : max(5.0, $usual + 1.0);
             if ($in->floatDiffInHours(Carbon::now()) < $threshold) continue;
 
             $inAt = $in->format('g:i A');
-            $howLong = number_format($in->floatDiffInHours(Carbon::now()), 1);
-            $usualLine = $usual === null
-                ? ''
-                : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.';
+
+            if ($in->isSameDay($today)) {
+                $howLong = number_format($in->floatDiffInHours(Carbon::now()), 1);
+                $usualLine = $usual === null
+                    ? ''
+                    : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.';
+                $subject = 'Reminder: you\'re still clocked in';
+                $bodyText = "You clocked in at {$inAt} today and have been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly — or, if you left already, log your out time from the time clock.";
+            } else {
+                // An older shift. Quoting the elapsed hours here would produce
+                // "on the clock for 732.0 hours", which reads as a broken system
+                // rather than a request. Give the date and ask for the out time.
+                $days = (int) $in->copy()->startOfDay()->diffInDays($today->copy()->startOfDay());
+                $when = $in->format('l j F') . ' at ' . $inAt;
+                $subject = 'Your shift on ' . $in->format('j F') . ' was never clocked out';
+                $bodyText = "You clocked in on {$when} and no clock-out was recorded, so that day's hours are still incomplete "
+                    . ($days === 1 ? 'from yesterday' : "after {$days} days")
+                    . ". Please set the out time from the time clock so your hours are right.";
+            }
+
             $this->sendReminder(
                 (int) $e->user_id, (int) $e->centre_id, $e->email, $e->first_name,
-                'Reminder: you\'re still clocked in',
-                "You clocked in at {$inAt} today and have been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly — or, if you left already, log your out time from the time clock.",
+                $subject, $bodyText,
             );
             $n++;
         }
@@ -111,8 +130,8 @@ final class ClockReminderCommand extends Command
 
         $n = 0;
         foreach ($staff as $s) {
-            $clockedToday = DB::table('time_entries')
-                ->where('user_id', $s->user_id)->whereDate('clocked_in_at', $today)->exists();
+            $clockedToday = DB::table('time_punches')
+                ->where('user_id', $s->user_id)->whereDate('punched_in_at', $today)->exists();
             if ($clockedToday) continue;
 
             // Approved vacation, sick or personal leave — they are not missing, they
@@ -122,10 +141,10 @@ final class ClockReminderCommand extends Command
             // Did they work this same weekday in the last 14 days? (regular pattern —
             // we still have no shift schedule table, so their own history is the
             // best available statement of when they are expected in)
-            $worksThisWeekday = DB::table('time_entries')
+            $worksThisWeekday = DB::table('time_punches')
                 ->where('user_id', $s->user_id)
-                ->where('clocked_in_at', '>=', $today->copy()->subDays(14))
-                ->whereRaw('WEEKDAY(clocked_in_at) = ?', [$dow - 1]) // MySQL WEEKDAY: 0=Mon
+                ->where('punched_in_at', '>=', $today->copy()->subDays(14))
+                ->whereRaw('WEEKDAY(punched_in_at) = ?', [$dow - 1]) // MySQL WEEKDAY: 0=Mon
                 ->exists();
             if (! $worksThisWeekday) continue;
 
@@ -165,17 +184,17 @@ final class ClockReminderCommand extends Command
      */
     private function usualShiftHours(int $userId, Carbon $today): ?float
     {
-        $rows = DB::table('time_entries')
+        $rows = DB::table('time_punches')
             ->where('user_id', $userId)
-            ->whereNotNull('clocked_out_at')
-            ->where('clocked_in_at', '>=', $today->copy()->subDays(28))
-            ->select('clocked_in_at', 'clocked_out_at')
+            ->whereNotNull('punched_out_at')
+            ->where('punched_in_at', '>=', $today->copy()->subDays(28))
+            ->select('punched_in_at', 'punched_out_at')
             ->get();
         if ($rows->count() < 3) return null;
 
         $hours = [];
         foreach ($rows as $r) {
-            $h = Carbon::parse($r->clocked_in_at)->floatDiffInHours(Carbon::parse($r->clocked_out_at));
+            $h = Carbon::parse($r->punched_in_at)->floatDiffInHours(Carbon::parse($r->punched_out_at));
             if ($h > 0.5 && $h < 18) $hours[] = $h;       // ignore mis-punches at both ends
         }
         if (count($hours) < 3) return null;
