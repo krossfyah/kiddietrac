@@ -180,9 +180,6 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
 
-    // One call: every child in the agency with status, centre, room and current
-    // rotations, plus the rotation vocabulary. Previously this screen asked
-    // /parent/children, which is why it never showed the whole agency.
     let ov;
     try {
       ov = await Api.get('/attendance/weekly-overview');
@@ -192,153 +189,245 @@
       return;
     }
     const rows = ov.data || [];
-    // Sent by the API so this file cannot drift from what the server accepts.
     const ROT = ov.rotations || [
       { key: 'full', label: 'Full day', short: 'Full' }, { key: 'am', label: 'Morning only', short: 'AM' },
       { key: 'pm', label: 'Afternoon only', short: 'PM' }, { key: 'before', label: 'Before school', short: 'Before' },
       { key: 'after', label: 'After school', short: 'After' }, { key: 'bna', label: 'Before and after school', short: 'B&A' },
     ];
     const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     if (!rows.length) {
       main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children yet.</div>';
       return;
     }
 
+    // ── Why this is a grid ────────────────────────────────────────────────
+    // The previous version showed ONE child at a time behind a dropdown, with
+    // seven stacked rows of seven option pills — 49 pills per child, and no way
+    // to see the agency at all. Setting a term's patterns meant 77 rounds of
+    // pick-scroll-save, and answering "who is in on Wednesday?" was impossible.
+    //
+    // Children down, days across is the shape the data already has. It makes the
+    // whole week visible, comparable between children, and editable in place —
+    // and it gives room for the two things the old screen could not do at all:
+    // apply a pattern to many children at once, and see who has no pattern yet.
+    // Compact pill buttons, matching the tight control sizing used elsewhere.
+    const BTN = 'height:28px;padding:0 11px;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:999px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;';
+    const dirty = {};                       // child_id -> true, rows with unsaved edits
+    const draft = {};                       // child_id -> { monday: 'full', ... }
+    rows.forEach((c) => { draft[c.id] = {}; DAYS.forEach((d) => { draft[c.id][d] = c[d] || ''; }); });
+
     const nameOf = (c) => ((c.first_name || '') + ' ' + (c.last_name || '')).trim();
-    const statusPill = (st) => {
-      const s = String(st || '').toLowerCase();
-      const on = s === 'enrolled';
-      const col = on ? ['#065F46', '#D1FAE5'] : (s === 'withdrawn' ? ['#991B1B', '#FEE2E2'] : ['#92400E', '#FEF3C7']);
-      return '<span style="background:' + col[1] + ';color:' + col[0] + ';border-radius:999px;padding:2px 9px;'
-        + 'font-size:11px;font-weight:800;text-transform:capitalize;">' + esc(s || 'unknown') + '</span>';
-    };
+    // A tint per rotation so a week reads at a glance rather than by reading text.
+    const TINT = { full: '#DCFCE7', am: '#DBEAFE', pm: '#FEF3C7', before: '#EDE9FE', after: '#FFE4E6', bna: '#E0F2FE' };
+    const INK = { full: '#166534', am: '#1E40AF', pm: '#92400E', before: '#5B21B6', after: '#9F1239', bna: '#075985' };
 
-    main.innerHTML = '<div style="padding:24px;max-width:1100px;margin:0 auto;">'
-      + '<div class="kt-page-hero"><h2>📅 Multi-day attendance pattern</h2>'
-      + '<p>Which days each child normally attends, and when in the day. Drives ratios, room planning and tuition projections.</p></div>'
-      + '<div class="kt-card">'
-      +   '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
-      +     '<div style="flex:2 1 260px;"><label style="font-size:13px;font-weight:600;">Child</label>'
-      +       '<select id="ap-child" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;"></select></div>'
-      +     '<div style="flex:1 1 160px;"><label style="font-size:13px;font-weight:600;">Show</label>'
-      +       '<select id="ap-filter" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">'
-      +         '<option value="enrolled">Enrolled only</option><option value="all">All children</option>'
+    main.innerHTML =
+      '<div style="padding:24px;max-width:1600px;margin:0 auto;">'
+      + '<div class="kt-hero" style="background:linear-gradient(135deg,#0F172A 0%,#1F6080 60%,#16637A 100%);">'
+      +   '<div class="kt-hero-greet">📅 PLANNING</div><h1>Attendance pattern</h1>'
+      +   '<div class="kt-hero-sub">Which days each child normally attends, and when in the day. '
+      +   'Drives ratios, room planning and tuition projections.</div></div>'
+      + '<div class="kt-card" style="margin-top:16px;">'
+      +   '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+      +     '<div style="flex:2 1 220px;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Search</label>'
+      +       '<input id="ap-q" type="search" placeholder="Name, centre or room" autocomplete="off" '
+      +       'style="width:100%;height:32px;padding:0 10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;box-sizing:border-box;"></div>'
+      +     '<div style="flex:1 1 170px;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Show</label>'
+      +       '<select id="ap-filter" style="width:100%;height:32px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;padding:0 8px;">'
+      +         '<option value="enrolled">Enrolled only</option>'
+      +         '<option value="missing">Missing a pattern</option>'
+      +         '<option value="all">Everyone</option>'
       +       '</select></div>'
+      +     '<div style="flex:1 1 150px;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Changes apply from</label>'
+      +       '<input id="ap-from" type="date" value="' + (new Date().toISOString().slice(0, 10)) + '" '
+      +       'style="width:100%;height:32px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;padding:0 8px;box-sizing:border-box;"></div>'
+      +     '<button id="ap-save" disabled style="height:32px;padding:0 16px;background:#1F6080;color:#fff;border:0;'
+      +       'border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;opacity:.45;">Save changes</button>'
+      +     '<span id="ap-msg" style="font-size:12.5px;font-weight:700;"></span>'
       +   '</div>'
-      +   '<div id="ap-detail" style="margin-top:18px;"></div>'
-      + '</div></div>';
+      // Bulk fill: most children share one pattern, and setting it 77 times by
+      // hand was the single biggest cost of the old screen.
+      +   '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #EDF2F7;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+      +     '<span style="font-size:11.5px;font-weight:800;color:#64748B;">Apply to everyone shown:</span>'
+      +     '<button class="ap-bulk" data-p="mf-full" style="' + BTN + '">Mon–Fri, full day</button>'
+      +     '<button class="ap-bulk" data-p="mf-am" style="' + BTN + '">Mon–Fri, mornings</button>'
+      +     '<button class="ap-bulk" data-p="mf-pm" style="' + BTN + '">Mon–Fri, afternoons</button>'
+      +     '<button class="ap-bulk" data-p="mf-bna" style="' + BTN + '">Mon–Fri, before &amp; after</button>'
+      +     '<button class="ap-bulk" data-p="clear" style="' + BTN + '">Clear all days</button>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="kt-card" style="margin-top:16px;padding:0;overflow-x:auto;">'
+      +   '<table id="ap-grid" style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px;"></table>'
+      + '</div>'
+      + '<div id="ap-empty" style="display:none;padding:34px;text-align:center;color:#64748B;">No children match.</div>'
+      + '</div>';
 
-    const sel = document.getElementById('ap-child');
+    const q = document.getElementById('ap-q');
     const filter = document.getElementById('ap-filter');
+    const grid = document.getElementById('ap-grid');
+    const saveBtn = document.getElementById('ap-save');
+    const msg = document.getElementById('ap-msg');
 
-    function fillChildren() {
-      const only = filter.value === 'enrolled';
-      const list = rows.filter((r) => !only || String(r.enrollment_status || '').toLowerCase() === 'enrolled');
-      sel.innerHTML = list.map((c) => '<option value="' + c.id + '">' + esc(nameOf(c))
-        + (c.centre_name ? ' — ' + esc(c.centre_name) : '')
-        + (c.room_name ? ' / ' + esc(c.room_name) : '')
-        + (String(c.enrollment_status || '').toLowerCase() === 'enrolled' ? '' : ' (' + esc(c.enrollment_status || '?') + ')')
-        + '</option>').join('');
-      sel.dispatchEvent(new Event('change'));
-    }
-
-    function draw(c) {
-      const dayRow = (d) => {
-        const cur = c[d] || '';
-        const label = d.charAt(0).toUpperCase() + d.slice(1);
-        // Radio-style: exactly one rotation per day, "Not in" included as a real
-        // choice rather than the absence of one — a day off is a decision.
-        const opts = [{ key: '', label: 'Not in', short: 'Not in' }].concat(ROT);
-        return '<div style="border-top:1px solid #F1F5F9;padding:10px 0;">'
-          + '<div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:6px;">' + label + '</div>'
-          + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
-          + opts.map((o) => {
-              const on = String(cur) === String(o.key);
-              return '<label style="cursor:pointer;">'
-                + '<input type="radio" name="ap-' + d + '" value="' + esc(o.key) + '"' + (on ? ' checked' : '')
-                + ' style="position:absolute;opacity:0;width:0;height:0;">'
-                + '<span class="ap-opt" style="display:inline-block;padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:700;'
-                + 'border:1.5px solid ' + (on ? '#1F6FB2' : '#E2E8F0') + ';background:' + (on ? '#EFF6FF' : '#fff') + ';'
-                + 'color:' + (on ? '#1F4E79' : '#475569') + ';">' + esc(o.short || o.label) + '</span></label>';
-            }).join('')
-          + '</div></div>';
-      };
-
-      document.getElementById('ap-detail').innerHTML =
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">'
-        +   statusPill(c.enrollment_status)
-        +   (c.centre_name ? '<span style="font-size:12.5px;color:#475569;">🏫 ' + esc(c.centre_name) + '</span>' : '')
-        +   (c.room_name ? '<span style="font-size:12.5px;color:#475569;">🚪 ' + esc(c.room_name) + '</span>' : '')
-        +   (c.has_pattern
-              ? '<span style="font-size:12px;color:#059669;font-weight:700;">Pattern active' + (c.effective_from ? ' since ' + esc(String(c.effective_from).slice(0, 10)) : '') + '</span>'
-              : '<span style="font-size:12px;color:#B45309;font-weight:700;">No pattern set yet</span>')
-        + '</div>'
-        + DAYS.map(dayRow).join('')
-        + '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:14px;">'
-        +   '<div><label style="font-size:12.5px;font-weight:600;">Effective from</label><br>'
-        +     '<input type="date" id="ap-from" value="' + (new Date().toISOString().slice(0, 10))
-        +     '" style="padding:9px;border:1px solid #E2E8F0;border-radius:8px;"></div>'
-        +   '<div style="flex:1 1 200px;"><label style="font-size:12.5px;font-weight:600;">Notes</label><br>'
-        +     '<input type="text" id="ap-notes" maxlength="200" placeholder="Optional" value="' + esc(c.notes || '')
-        +     '" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;"></div>'
-        +   '<button id="ap-save" style="background:#1F6080;color:#fff;border:0;border-radius:9px;padding:11px 20px;font-weight:800;cursor:pointer;">Save pattern</button>'
-        +   '<span id="ap-msg" style="font-size:12.5px;font-weight:700;"></span>'
-        + '</div>';
-
-      // Repaint the pills as the selection changes.
-      document.getElementById('ap-detail').addEventListener('change', (e) => {
-        if (!e.target.name || e.target.name.indexOf('ap-') !== 0) return;
-        [].slice.call(document.getElementsByName(e.target.name)).forEach((r) => {
-          const pill = r.nextElementSibling;
-          if (!pill) return;
-          const on = r.checked;
-          pill.style.borderColor = on ? '#1F6FB2' : '#E2E8F0';
-          pill.style.background = on ? '#EFF6FF' : '#fff';
-          pill.style.color = on ? '#1F4E79' : '#475569';
-        });
-      });
-
-      document.getElementById('ap-save').addEventListener('click', async () => {
-        const msg = document.getElementById('ap-msg');
-        const payload = { effective_from: document.getElementById('ap-from').value, notes: document.getElementById('ap-notes').value };
-        DAYS.forEach((d) => {
-          const picked = document.querySelector('input[name="ap-' + d + '"]:checked');
-          payload[d] = picked && picked.value ? picked.value : null;
-        });
-        if (c.room_id) payload.room_id = c.room_id;
-        msg.style.color = '#64748B'; msg.textContent = 'Saving…';
-        try {
-          await Api.post('/attendance/pattern/' + c.id, payload);
-          msg.style.color = '#16A34A'; msg.textContent = '✓ Saved';
-          DAYS.forEach((d) => { c[d] = payload[d]; });
-          c.has_pattern = true;
-        } catch (e) {
-          msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save';
+    function visible() {
+      const term = (q.value || '').trim().toLowerCase();
+      const mode = filter.value;
+      return rows.filter((c) => {
+        const st = String(c.enrollment_status || '').toLowerCase();
+        if (mode === 'enrolled' && st !== 'enrolled') return false;
+        if (mode === 'missing') {
+          const any = DAYS.some((d) => draft[c.id][d]);
+          if (any) return false;
         }
+        if (!term) return true;
+        return (nameOf(c) + ' ' + (c.centre_name || '') + ' ' + (c.room_name || '')).toLowerCase().indexOf(term) > -1;
       });
     }
 
-    sel.addEventListener('change', () => {
-      const c = rows.filter((r) => String(r.id) === String(sel.value))[0];
-      if (c) draw(c);
+    function cell(c, d) {
+      const cur = draft[c.id][d] || '';
+      const bg = cur ? (TINT[cur] || '#F1F5F9') : '#fff';
+      const fg = cur ? (INK[cur] || '#334155') : '#94A3B8';
+      let html = '<td style="padding:4px;text-align:center;border-bottom:1px solid #F1F5F9;">'
+        + '<select data-child="' + c.id + '" data-day="' + d + '" '
+        + 'style="width:100%;min-width:74px;height:30px;border:1px solid ' + (cur ? 'transparent' : '#E2E8F0') + ';'
+        + 'border-radius:7px;background:' + bg + ';color:' + fg + ';font-size:12px;font-weight:700;'
+        + 'text-align:center;cursor:pointer;padding:0 4px;">';
+      html += '<option value=""' + (cur === '' ? ' selected' : '') + '>—</option>';
+      ROT.forEach((r) => {
+        html += '<option value="' + esc(r.key) + '"' + (cur === r.key ? ' selected' : '') + '>' + esc(r.short) + '</option>';
+      });
+      return html + '</select></td>';
+    }
+
+    function statusPill(st) {
+      const s = String(st || '').toLowerCase();
+      const col = s === 'enrolled' ? ['#065F46', '#D1FAE5']
+        : (s === 'withdrawn' ? ['#991B1B', '#FEE2E2'] : ['#92400E', '#FEF3C7']);
+      return '<span style="background:' + col[1] + ';color:' + col[0] + ';border-radius:999px;padding:1px 7px;'
+        + 'font-size:10px;font-weight:800;text-transform:capitalize;">' + esc(s || 'unknown') + '</span>';
+    }
+
+    function draw() {
+      const list = visible();
+      document.getElementById('ap-empty').style.display = list.length ? 'none' : 'block';
+
+      // Column totals answer "how many are in on Wednesday?" — a question the old
+      // one-child-at-a-time screen could not answer at all.
+      const totals = DAYS.map((d) => list.filter((c) => draft[c.id][d]).length);
+
+      let html = '<thead><tr>'
+        + '<th style="text-align:left;padding:10px 12px;position:sticky;left:0;background:#EEF3F8;z-index:2;">Child</th>';
+      DAY_SHORT.forEach((s, i) => {
+        html += '<th style="padding:8px 4px;text-align:center;min-width:80px;">' + s
+          + '<div style="font-size:10.5px;font-weight:700;color:#64748B;margin-top:1px;">' + totals[i] + ' in</div></th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      list.forEach((c) => {
+        const isDirty = !!dirty[c.id];
+        html += '<tr data-row="' + c.id + '" style="background:' + (isDirty ? '#FFFBEB' : 'transparent') + ';">'
+          + '<td style="padding:7px 12px;border-bottom:1px solid #F1F5F9;position:sticky;left:0;'
+          + 'background:' + (isDirty ? '#FFFBEB' : '#fff') + ';z-index:1;">'
+          +   '<div style="font-weight:700;color:#0F172A;">' + esc(nameOf(c))
+          +   (isDirty ? ' <span style="color:#B45309;font-size:11px;font-weight:800;">• unsaved</span>' : '') + '</div>'
+          +   '<div style="font-size:11px;color:#64748B;margin-top:1px;">'
+          +     statusPill(c.enrollment_status)
+          +     (c.centre_name ? ' ' + esc(c.centre_name) : '')
+          +     (c.room_name ? ' · ' + esc(c.room_name) : '')
+          +   '</div>'
+          + '</td>';
+        DAYS.forEach((d) => { html += cell(c, d); });
+        html += '</tr>';
+      });
+      grid.innerHTML = html + '</tbody>';
+
+      const n = Object.keys(dirty).length;
+      saveBtn.textContent = n ? 'Save ' + n + ' change' + (n === 1 ? '' : 's') : 'Save changes';
+      saveBtn.disabled = !n;
+      saveBtn.style.opacity = n ? '1' : '.45';
+    }
+
+    // One delegated listener for the whole grid, rather than one per control that
+    // the old version re-attached on every redraw.
+    grid.addEventListener('change', (e) => {
+      const s = e.target;
+      if (!s || s.tagName !== 'SELECT' || !s.getAttribute('data-child')) return;
+      const id = s.getAttribute('data-child');
+      draft[id][s.getAttribute('data-day')] = s.value || '';
+      dirty[id] = true;
+      draw();
     });
-    filter.addEventListener('change', fillChildren);
-    fillChildren();
-  
 
-    // Opened for ONE child (from their record): preselect them and hide the
-    // picker, so the same editor serves both places without a second copy.
+    q.addEventListener('input', draw);
+    filter.addEventListener('change', draw);
+
+    [].slice.call(document.getElementsByClassName('ap-bulk')).forEach((b) => {
+      b.addEventListener('click', async () => {
+        const list = visible();
+        if (!list.length) return;
+        const p = b.getAttribute('data-p');
+        const label = b.textContent.trim();
+        const ok = await KT.confirm({
+          title: 'Apply "' + label + '" to ' + list.length + ' child' + (list.length === 1 ? '' : 'ren') + '?',
+          description: 'This fills the grid for everyone currently shown. Nothing is written until you press Save changes.',
+          okLabel: 'Fill grid',
+        });
+        if (!ok) return;
+        const rot = p === 'mf-full' ? 'full' : p === 'mf-am' ? 'am' : p === 'mf-pm' ? 'pm' : p === 'mf-bna' ? 'bna' : '';
+        list.forEach((c) => {
+          DAYS.forEach((d, i) => { draft[c.id][d] = (p === 'clear' || i > 4) ? '' : rot; });
+          dirty[c.id] = true;
+        });
+        draw();
+      });
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const ids = Object.keys(dirty);
+      if (!ids.length) return;
+      const from = document.getElementById('ap-from').value || new Date().toISOString().slice(0, 10);
+      saveBtn.disabled = true; saveBtn.style.opacity = '.45';
+      let done = 0, failed = 0;
+      for (const id of ids) {
+        const c = rows.filter((r) => String(r.id) === String(id))[0];
+        if (!c) continue;
+        const payload = { effective_from: from, notes: c.notes || null };
+        DAYS.forEach((d) => { payload[d] = draft[id][d] || null; });
+        if (c.room_id) payload.room_id = c.room_id;
+        msg.style.color = '#64748B';
+        msg.textContent = 'Saving ' + (done + failed + 1) + ' of ' + ids.length + '…';
+        try {
+          await Api.post('/attendance/pattern/' + id, payload);
+          DAYS.forEach((d) => { c[d] = draft[id][d] || null; });
+          c.has_pattern = DAYS.some((d) => draft[id][d]);
+          delete dirty[id];
+          done++;
+        } catch (e) { failed++; }
+      }
+      msg.style.color = failed ? '#B91C1C' : '#16A34A';
+      msg.textContent = failed ? (done + ' saved, ' + failed + ' failed') : ('✓ Saved ' + done);
+      draw();
+    });
+
+    // Opened from a child's record: show only them, and hide the tools that only
+    // make sense across the agency.
     if (preselectChildId) {
-      try {
-        sel.value = String(preselectChildId);
-        sel.dispatchEvent(new Event("change"));
-        var _tools = document.getElementById("ap-filter");
-        if (_tools && _tools.parentElement && _tools.parentElement.parentElement) {
-          _tools.parentElement.parentElement.style.display = "none";
-        }
-      } catch (e) {}
+      q.value = String(preselectChildId);
+      const one = rows.filter((r) => String(r.id) === String(preselectChildId))[0];
+      if (one) {
+        q.value = nameOf(one);
+        filter.value = 'all';
+      }
+      const bulk = document.getElementsByClassName('ap-bulk')[0];
+      if (bulk && bulk.parentElement) bulk.parentElement.style.display = 'none';
+      q.parentElement.style.display = 'none';
+      filter.parentElement.style.display = 'none';
     }
-}
+
+    draw();
+  }
+
   exposePatternApi(renderAttendancePattern);
 
   async function renderReportCards(main) {
