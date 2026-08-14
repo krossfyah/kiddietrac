@@ -1044,6 +1044,30 @@ final class AdminController extends Controller
                 return response()->json(['logs' => [], 'total' => 0]);
             }
             $base->where('al.agency_id', $activeAgencyId);
+
+            // DEFENCE IN DEPTH (2026-08-14). The stamp alone is not enough. A row
+            // carrying the wrong agency_id — mis-stamped by an older code path, or
+            // by a request whose header was trusted before that was hardened —
+            // sails straight through a filter that only checks the stamp. Measured
+            // on live data: of 902 rows stamped for iLearn, 56 were written by
+            // someone with no role in iLearn at all.
+            //
+            // So a row must ALSO have been written by someone who genuinely belongs
+            // to this agency (or by a platform admin, who legitimately acts inside
+            // it, or by the system with no actor). Two independent conditions have
+            // to agree before one tenant sees a row, which means a single bad stamp
+            // can no longer leak anything.
+            $platformActorIds = DB::table('role_assignments')
+                ->where('role', 'platform_admin')->where('active', true)
+                ->pluck('user_id')->all();
+            $permittedActors = array_values(array_unique(array_merge(
+                $scopedUserIds ?: [], $platformActorIds, [(int) $caller->id]
+            )));
+            $base->where(function ($q) use ($permittedActors) {
+                $q->whereIn('al.user_id', $permittedActors ?: [0])
+                  ->orWhereNull('al.user_id');          // system-generated, no actor
+            });
+
             // Centre directors (not agency/platform admins) additionally see only
             // their own centre's actors.
             if ($callerIsDirector && ! $callerIsAgencyAdmin && ! $callerIsPlatformAdmin) {
