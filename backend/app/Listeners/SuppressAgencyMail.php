@@ -110,15 +110,29 @@ class SuppressAgencyMail
                 continue;
             }
             if (\App\Support\Suppression::agencyOff((int) $uid)) {
-                $this->cancel($event, [$addr]);
+                // Name the ACTUAL switch. Falling through to cancel()'s default
+                // blamed MAIL_SUPPRESS_AGENCIES, so the log said the env kill-switch
+                // stopped mail that the env kill-switch had nothing to do with —
+                // which is why 857 suppressed emails looked inexplicable against an
+                // empty suppression list.
+                $this->cancel($event, [$addr],
+                    'The agency master switch for notifications and emails is OFF (Settings).');
                 return false;
             }
             // 1a) Centre / room switch (pre-boarding). A recipient whose every
             //     centre / room is switched off for email is held back even while
             //     the agency master switch is on. SKIPPED for invites — an invite
             //     is the pre-boarding step itself and must reach the recipient.
-            if (! $isInvite && \App\Support\Suppression::blockedByCentreRoom((int) $uid)) {
-                $this->cancel($event, [$addr]);
+            // The tester allowlist exempts an address from the env kill-switch but not,
+            // until now, from this gate - so a requested test send was silently held
+            // back because the ADMIN doing the testing happens to belong to centres
+            // whose email is switched off. A send you explicitly asked for should
+            // arrive; the gate still applies to everyone else.
+            if (! $isInvite && ! in_array($addr, $this->allowlist(), true)
+                && \App\Support\Suppression::blockedByCentreRoom((int) $uid)) {
+                $this->cancel($event, [$addr],
+                    'Every centre/room this recipient belongs to has email switched OFF '
+                    . '(Settings → Email settings → Centre & room email delivery).');
                 return false;
             }
         }
@@ -132,7 +146,8 @@ class SuppressAgencyMail
             }
             $uid = DB::table('users')->where('email', $addr)->value('id');
             if ($uid && \App\Support\Suppression::isUser((int) $uid)) {
-                $this->cancel($event, [$addr]);
+                $this->cancel($event, [$addr],
+                    'Recipient belongs to an agency listed in MAIL_SUPPRESS_AGENCIES (.env kill-switch).');
                 return false;
             }
         }
