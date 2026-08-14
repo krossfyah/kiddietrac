@@ -125,6 +125,11 @@
     body.kt-show-back #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px) !important; }
   </style>
   <link rel="stylesheet" href="/css/kt-select-fix.css?v=20260811scheme">
+  <!-- Desktop reflow. Every other breakpoint in this app stops at 980px and the
+       content cap is 1800px, so a 1000-1400px window (laptop, half-screen split,
+       restored window) got the wide layout with no adaptation. Loaded last so it
+       wins over the inline grids it corrects. -->
+  <link rel="stylesheet" href="/css/kt-desktop-fluid.css?v=20260814fluid">
 </head>
 <body>
 <!-- ── Signed-out launch: leave immediately ──────────────────────────────────

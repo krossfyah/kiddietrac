@@ -1,0 +1,97 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — desktop reflow (2026-08-14)
+
+   THE GAP THIS FILLS. Every existing breakpoint in this app stops at 980px:
+   34 rules at 768px, 8 at 920px, 2 at 980px. Above that, nothing until the
+   1800px content cap. So a browser window anywhere between roughly 1000px
+   and 1400px — a laptop, a half-screen split, a restored (non-maximised)
+   window — got the full wide-desktop layout with no adaptation at all.
+
+   That is where "squished" comes from. There are 94 rigid two-column grids
+   written as `grid-template-columns:1fr 1fr` inline in the screens, plus
+   two- and three-column variants. A rigid 1fr 1fr does not reflow: at 1000px
+   it just makes both columns 480px, then 400px, then 320px, until the cards
+   inside are unreadable. Grids written with auto-fit/minmax already reflow
+   correctly and are deliberately untouched.
+
+   WHY ATTRIBUTE SELECTORS. Those 94 grids are inline styles generated in
+   JavaScript across dozens of screens. Rewriting each call site would be a
+   large diff touching working code, and every new screen would have to
+   remember. Matching the inline declaration instead fixes all of them at
+   once, including screens not yet written, and reverses cleanly by deleting
+   this file.
+
+   Deliberately NOT matched: `1fr auto` and `auto 1fr` (toolbars, where the
+   second column is a button and collapsing it would look broken), fixed
+   sidebar splits like `240px 1fr`, and anything already using auto-fit.
+
+   The rules are scoped to #appMain so the shell, sidebar and login are
+   untouched, and they stop at 769px so the existing mobile CSS — which is
+   more specific and better tested — continues to own small screens.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Three columns are too many below ~1400px ──────────────────────────
+   Three cards side by side need roughly 1400px before each one is wide
+   enough to read. Below that they become two. */
+@media (min-width: 769px) and (max-width: 1400px) {
+  #appMain [style*="grid-template-columns:1fr 1fr 1fr"],
+  #appMain [style*="grid-template-columns: 1fr 1fr 1fr"],
+  #appMain [style*="grid-template-columns:2fr 1fr 1fr"],
+  #appMain [style*="grid-template-columns: 2fr 1fr 1fr"],
+  #appMain [style*="grid-template-columns:1.4fr 1fr 1fr"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* ── Two columns are too many below ~1080px ────────────────────────────
+   Two columns inside the 1800px shell, minus sidebar and padding, leaves
+   each side around 420px at 1080px — about the point where a card's own
+   contents start wrapping badly. Below this they stack. */
+@media (min-width: 769px) and (max-width: 1080px) {
+  #appMain [style*="grid-template-columns:1fr 1fr"],
+  #appMain [style*="grid-template-columns: 1fr 1fr"],
+  #appMain [style*="grid-template-columns:2fr 1fr"],
+  #appMain [style*="grid-template-columns: 2fr 1fr"],
+  #appMain [style*="grid-template-columns:1.4fr 1fr"],
+  #appMain [style*="grid-template-columns:1.35fr 1fr"],
+  #appMain [style*="grid-template-columns:1fr 1fr 1fr"],
+  #appMain [style*="grid-template-columns: 1fr 1fr 1fr"],
+  #appMain [style*="grid-template-columns:2fr 1fr 1fr"],
+  #appMain [style*="grid-template-columns: 2fr 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Wide content scrolls rather than squeezing ────────────────────────
+   A table with more columns than the window can hold will otherwise
+   compress its cells until the text wraps one character per line. Letting
+   the table keep its natural width inside a scrolling box is the readable
+   failure. The page body itself must never scroll sideways — only the
+   table's own container. */
+@media (min-width: 769px) and (max-width: 1400px) {
+  #appMain .kt-table-wrap,
+  #appMain [data-kt-list],
+  #appMain table[data-kt-filtered] {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── A fixed minimum that exceeds the space available ──────────────────
+   Inline min-widths of 220–380px are fine on a wide screen and are exactly
+   what forces a narrow one to overflow sideways. Cap them to the container
+   so a flex row wraps instead of pushing the page wider than the window. */
+@media (min-width: 769px) and (max-width: 1080px) {
+  #appMain [style*="min-width:220px"],
+  #appMain [style*="min-width:240px"],
+  #appMain [style*="min-width:280px"],
+  #appMain [style*="min-width:320px"],
+  #appMain [style*="min-width:380px"] {
+    min-width: 0 !important;
+  }
+}
+
+/* Nothing should ever push the page itself sideways. */
+#appMain { max-width: 100%; overflow-x: clip; }
