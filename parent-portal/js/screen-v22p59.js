@@ -170,74 +170,152 @@
   async function renderAttendancePattern(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const childrenRes = await Api.get('/parent/children').catch(() => Api.get('/admin/children').catch(() => ({ data: [] })));
-    const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
-    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children.</div>'; return; }
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <div class="kt-page-hero">
-        <h2>📅 Multi-day attendance pattern</h2>
-        <p>Declare which days each child normally attends. Used for ratios + tuition projections.</p>
-      </div>
-      <div class="kt-card">
-        <label style="font-size:13px;font-weight:600;">Child</label>
-        <select id="ap-child" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-          ${children.map(c => `<option value="${c.id}">${esc(c.first_name)} ${esc(c.last_name)}</option>`).join('')}
-        </select>
-        <div id="ap-detail" style="margin-top:18px;"></div>
-      </div>
-    </div>`;
-    const load = async (cid) => {
-      const r = await Api.get(`/attendance/pattern/${cid}`);
-      const p = r.data || { monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 0, sunday: 0 };
-      document.getElementById('ap-detail').innerHTML = `
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
-          ${['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d => {
-            const label = d.charAt(0).toUpperCase() + d.slice(1, 3);
-            const on = !!p[d];
-            return `<button type="button" class="ap-day" data-day="${d}" data-on="${on ? '1' : '0'}" aria-pressed="${on ? 'true' : 'false'}"
-              style="flex:1 1 0;min-width:60px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;box-sizing:border-box;
-              padding:12px 6px;border-radius:12px;font-family:inherit;transition:background .14s,border-color .14s,color .14s,box-shadow .14s;
-              border:1.5px solid ${on ? '#159FB4' : '#E2E8F0'};background:${on ? 'linear-gradient(135deg,#0FA3B1,#1F6FB2)' : '#F8FAFC'};
-              color:${on ? '#fff' : '#64748B'};box-shadow:${on ? '0 6px 14px -8px rgba(31,111,178,.7)' : 'none'};">
-              <span style="font-weight:800;font-size:13.5px;letter-spacing:.3px;">${label}</span>
-              <span class="ap-day-state" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;opacity:.9;">${on ? 'In' : 'Off'}</span>
-            </button>`;
-          }).join('')}
-        </div>
-        <label style="display:block;font-size:13px;font-weight:600;margin:18px 0 4px;">Effective from</label>
-        <input id="ap-from" type="date" value="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;max-width:220px;">
-        <button id="ap-save" class="kt-btn kt-btn-primary" style="margin-top:14px;">Save pattern</button>
-      `;
-      // Each day is a single toggle button (was a raw checkbox stacked under the
-      // label — visually inconsistent with the platform's pill toggles). Clicking
-      // flips data-on and restyles to the selected/unselected states.
-      const styleDay = (btn, on) => {
-        btn.setAttribute('data-on', on ? '1' : '0');
-        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        btn.style.border = '1.5px solid ' + (on ? '#159FB4' : '#E2E8F0');
-        btn.style.background = on ? 'linear-gradient(135deg,#0FA3B1,#1F6FB2)' : '#F8FAFC';
-        btn.style.color = on ? '#fff' : '#64748B';
-        btn.style.boxShadow = on ? '0 6px 14px -8px rgba(31,111,178,.7)' : 'none';
-        const st = btn.querySelector('.ap-day-state');
-        if (st) st.textContent = on ? 'In' : 'Off';
-      };
-      document.querySelectorAll('#ap-detail .ap-day').forEach(btn => {
-        btn.addEventListener('click', () => styleDay(btn, btn.getAttribute('data-on') !== '1'));
-      });
-      document.getElementById('ap-save').onclick = async () => {
-        const days = {};
-        ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(d => {
-          days[d] = document.querySelector(`.ap-day[data-day="${d}"]`).getAttribute('data-on') === '1';
-        });
-        await Api.post(`/attendance/pattern/${cid}`, { ...days, effective_from: document.getElementById('ap-from').value });
-        (window.KT && window.KT.toast) ? KT.toast('Saved.', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Saved.') ? 'success' : 'info') : alert('Saved.');
-      };
-    };
-    document.getElementById('ap-child').onchange = (e) => load(+e.target.value);
-    load(children[0].id);
-  }
 
-  // ============================ Report cards (staff) ============================
+    // One call: every child in the agency with status, centre, room and current
+    // rotations, plus the rotation vocabulary. Previously this screen asked
+    // /parent/children, which is why it never showed the whole agency.
+    let ov;
+    try {
+      ov = await Api.get('/attendance/weekly-overview');
+    } catch (e) {
+      main.innerHTML = '<div class="kt-card" style="margin:24px;padding:32px;text-align:center;color:#B45309;">'
+        + 'Could not load attendance patterns' + (e && e.message ? ' — ' + esc(e.message) : '') + '.</div>';
+      return;
+    }
+    const rows = ov.data || [];
+    // Sent by the API so this file cannot drift from what the server accepts.
+    const ROT = ov.rotations || [
+      { key: 'full', label: 'Full day', short: 'Full' }, { key: 'am', label: 'Morning only', short: 'AM' },
+      { key: 'pm', label: 'Afternoon only', short: 'PM' }, { key: 'before', label: 'Before school', short: 'Before' },
+      { key: 'after', label: 'After school', short: 'After' }, { key: 'bna', label: 'Before and after school', short: 'B&A' },
+    ];
+    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    if (!rows.length) {
+      main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children yet.</div>';
+      return;
+    }
+
+    const nameOf = (c) => ((c.first_name || '') + ' ' + (c.last_name || '')).trim();
+    const statusPill = (st) => {
+      const s = String(st || '').toLowerCase();
+      const on = s === 'enrolled';
+      const col = on ? ['#065F46', '#D1FAE5'] : (s === 'withdrawn' ? ['#991B1B', '#FEE2E2'] : ['#92400E', '#FEF3C7']);
+      return '<span style="background:' + col[1] + ';color:' + col[0] + ';border-radius:999px;padding:2px 9px;'
+        + 'font-size:11px;font-weight:800;text-transform:capitalize;">' + esc(s || 'unknown') + '</span>';
+    };
+
+    main.innerHTML = '<div style="padding:24px;max-width:1100px;margin:0 auto;">'
+      + '<div class="kt-page-hero"><h2>📅 Multi-day attendance pattern</h2>'
+      + '<p>Which days each child normally attends, and when in the day. Drives ratios, room planning and tuition projections.</p></div>'
+      + '<div class="kt-card">'
+      +   '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+      +     '<div style="flex:2 1 260px;"><label style="font-size:13px;font-weight:600;">Child</label>'
+      +       '<select id="ap-child" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;"></select></div>'
+      +     '<div style="flex:1 1 160px;"><label style="font-size:13px;font-weight:600;">Show</label>'
+      +       '<select id="ap-filter" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">'
+      +         '<option value="enrolled">Enrolled only</option><option value="all">All children</option>'
+      +       '</select></div>'
+      +   '</div>'
+      +   '<div id="ap-detail" style="margin-top:18px;"></div>'
+      + '</div></div>';
+
+    const sel = document.getElementById('ap-child');
+    const filter = document.getElementById('ap-filter');
+
+    function fillChildren() {
+      const only = filter.value === 'enrolled';
+      const list = rows.filter((r) => !only || String(r.enrollment_status || '').toLowerCase() === 'enrolled');
+      sel.innerHTML = list.map((c) => '<option value="' + c.id + '">' + esc(nameOf(c))
+        + (c.centre_name ? ' — ' + esc(c.centre_name) : '')
+        + (c.room_name ? ' / ' + esc(c.room_name) : '')
+        + (String(c.enrollment_status || '').toLowerCase() === 'enrolled' ? '' : ' (' + esc(c.enrollment_status || '?') + ')')
+        + '</option>').join('');
+      sel.dispatchEvent(new Event('change'));
+    }
+
+    function draw(c) {
+      const dayRow = (d) => {
+        const cur = c[d] || '';
+        const label = d.charAt(0).toUpperCase() + d.slice(1);
+        // Radio-style: exactly one rotation per day, "Not in" included as a real
+        // choice rather than the absence of one — a day off is a decision.
+        const opts = [{ key: '', label: 'Not in', short: 'Not in' }].concat(ROT);
+        return '<div style="border-top:1px solid #F1F5F9;padding:10px 0;">'
+          + '<div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:6px;">' + label + '</div>'
+          + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
+          + opts.map((o) => {
+              const on = String(cur) === String(o.key);
+              return '<label style="cursor:pointer;">'
+                + '<input type="radio" name="ap-' + d + '" value="' + esc(o.key) + '"' + (on ? ' checked' : '')
+                + ' style="position:absolute;opacity:0;width:0;height:0;">'
+                + '<span class="ap-opt" style="display:inline-block;padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:700;'
+                + 'border:1.5px solid ' + (on ? '#1F6FB2' : '#E2E8F0') + ';background:' + (on ? '#EFF6FF' : '#fff') + ';'
+                + 'color:' + (on ? '#1F4E79' : '#475569') + ';">' + esc(o.short || o.label) + '</span></label>';
+            }).join('')
+          + '</div></div>';
+      };
+
+      document.getElementById('ap-detail').innerHTML =
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">'
+        +   statusPill(c.enrollment_status)
+        +   (c.centre_name ? '<span style="font-size:12.5px;color:#475569;">🏫 ' + esc(c.centre_name) + '</span>' : '')
+        +   (c.room_name ? '<span style="font-size:12.5px;color:#475569;">🚪 ' + esc(c.room_name) + '</span>' : '')
+        +   (c.has_pattern
+              ? '<span style="font-size:12px;color:#059669;font-weight:700;">Pattern active' + (c.effective_from ? ' since ' + esc(String(c.effective_from).slice(0, 10)) : '') + '</span>'
+              : '<span style="font-size:12px;color:#B45309;font-weight:700;">No pattern set yet</span>')
+        + '</div>'
+        + DAYS.map(dayRow).join('')
+        + '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:14px;">'
+        +   '<div><label style="font-size:12.5px;font-weight:600;">Effective from</label><br>'
+        +     '<input type="date" id="ap-from" value="' + (new Date().toISOString().slice(0, 10))
+        +     '" style="padding:9px;border:1px solid #E2E8F0;border-radius:8px;"></div>'
+        +   '<div style="flex:1 1 200px;"><label style="font-size:12.5px;font-weight:600;">Notes</label><br>'
+        +     '<input type="text" id="ap-notes" maxlength="200" placeholder="Optional" value="' + esc(c.notes || '')
+        +     '" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;"></div>'
+        +   '<button id="ap-save" style="background:#1F6080;color:#fff;border:0;border-radius:9px;padding:11px 20px;font-weight:800;cursor:pointer;">Save pattern</button>'
+        +   '<span id="ap-msg" style="font-size:12.5px;font-weight:700;"></span>'
+        + '</div>';
+
+      // Repaint the pills as the selection changes.
+      document.getElementById('ap-detail').addEventListener('change', (e) => {
+        if (!e.target.name || e.target.name.indexOf('ap-') !== 0) return;
+        [].slice.call(document.getElementsByName(e.target.name)).forEach((r) => {
+          const pill = r.nextElementSibling;
+          if (!pill) return;
+          const on = r.checked;
+          pill.style.borderColor = on ? '#1F6FB2' : '#E2E8F0';
+          pill.style.background = on ? '#EFF6FF' : '#fff';
+          pill.style.color = on ? '#1F4E79' : '#475569';
+        });
+      });
+
+      document.getElementById('ap-save').addEventListener('click', async () => {
+        const msg = document.getElementById('ap-msg');
+        const payload = { effective_from: document.getElementById('ap-from').value, notes: document.getElementById('ap-notes').value };
+        DAYS.forEach((d) => {
+          const picked = document.querySelector('input[name="ap-' + d + '"]:checked');
+          payload[d] = picked && picked.value ? picked.value : null;
+        });
+        if (c.room_id) payload.room_id = c.room_id;
+        msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+        try {
+          await Api.post('/attendance/pattern/' + c.id, payload);
+          msg.style.color = '#16A34A'; msg.textContent = '✓ Saved';
+          DAYS.forEach((d) => { c[d] = payload[d]; });
+          c.has_pattern = true;
+        } catch (e) {
+          msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save';
+        }
+      });
+    }
+
+    sel.addEventListener('change', () => {
+      const c = rows.filter((r) => String(r.id) === String(sel.value))[0];
+      if (c) draw(c);
+    });
+    filter.addEventListener('change', fillChildren);
+    fillChildren();
+  }
   async function renderReportCards(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
