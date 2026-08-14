@@ -429,7 +429,29 @@
           tabbar.appendChild(b);
         });
       }
+      // Everything appended straight to the page - guardians, contacts and the
+      // rest - lives outside the tab system. With the tabs at the top it renders
+      // beneath whichever tab is open and reads as another tab leaking in.
+      //
+      // It is MOVED into one Overview-owned container rather than hidden in place.
+      // Hiding only caught what existed at the first paint and only direct
+      // children; sections appended later by other closures were missed, which is
+      // why content still showed under Live feed. Once moved, a tab can only show
+      // what it renders, because nothing else remains loose on the page.
+      var looseBox = null;
+      function gatherLoose() {
+        try {
+          if (!looseBox) { looseBox = Dom.el('div', {}); wrap.appendChild(looseBox); }
+          var fixed = [header, tabbar, tabContent, looseBox];
+          [].slice.call(wrap.children).forEach(function (el) {
+            if (fixed.indexOf(el) === -1) looseBox.appendChild(el);   // appendChild MOVES
+          });
+        } catch (e) {}
+      }
+
       function paintTab() {
+        gatherLoose();
+        if (looseBox) looseBox.style.display = (activeTab === 'overview') ? '' : 'none';
         Dom.clear(tabContent);
         if (activeTab === 'enrollment') renderEnrollmentTab(tabContent, child);
         else if (activeTab === 'daily') renderDailyTab(tabContent, child);
