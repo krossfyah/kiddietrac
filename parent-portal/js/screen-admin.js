@@ -1727,6 +1727,62 @@
       // above now renders the same complete record map, so keeping both showed
       // every field twice.
 
+      // ── Data & retention ────────────────────────────────────────────────
+      // What is held about this person and when it is destroyed. This is the view
+      // to open when someone asks "what do you have about me?" — previously that
+      // answer existed only as an API nothing called.
+      (function () {
+        var uid = user.id;
+        var card = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F8FAFC;border-radius:10px;border:1px solid #E5E7EB;' });
+        card.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;' }, '🗄️ Data & retention'));
+        card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' },
+          'Everything held about this person, why it is kept, and when it is destroyed.'));
+        var mapBody = Dom.el('div', { style: 'font-size:13px;color:#64748B;' }, 'Loading…');
+        card.appendChild(mapBody);
+        body.appendChild(card);
+
+        Api.get('/admin/users/' + uid + '/data-map').then(function (d) {
+          Dom.clear(mapBody);
+          var cats = (d && d.categories) || [];
+          if (!cats.length) {
+            mapBody.appendChild(Dom.el('div', {}, 'Nothing recorded against this person yet.'));
+            return;
+          }
+          var tbl = Dom.el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+          cats.forEach(function (c) {
+            var tr = Dom.el('tr', {});
+            var left = Dom.el('td', { style: 'padding:8px 12px 8px 0;vertical-align:top;' });
+            left.appendChild(Dom.el('div', { style: 'font-weight:700;color:#0F172A;' },
+              c.label + ' · ' + c.count));
+            left.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:12px;line-height:1.5;margin-top:2px;' }, c.basis || ''));
+            if (c.where) left.appendChild(Dom.el('div', { style: 'color:#94A3B8;font-size:11px;margin-top:2px;' }, c.where));
+            tr.appendChild(left);
+            var right = Dom.el('td', { style: 'padding:8px 0;vertical-align:top;text-align:right;white-space:nowrap;' });
+            if (c.destroy_on) {
+              right.appendChild(Dom.el('div', { style: 'font-weight:700;color:#B45309;font-size:12.5px;' }, 'Destroy ' + c.destroy_on));
+              if (c.auto_purged) right.appendChild(Dom.el('div', { style: 'color:#16A34A;font-size:11px;margin-top:2px;' }, 'automatic'));
+            } else {
+              // No date is a real answer, not a gap: the agency has not set a period
+              // for this category and the system will not guess one.
+              right.appendChild(Dom.el('div', { style: 'color:#94A3B8;font-size:11.5px;' }, 'no date set'));
+            }
+            tr.appendChild(right);
+            tbl.appendChild(tr);
+          });
+          mapBody.appendChild(tbl);
+          if (d.note) {
+            mapBody.appendChild(Dom.el('div', { style: 'margin-top:10px;font-size:11.5px;color:#94A3B8;line-height:1.5;' }, d.note));
+          }
+          var p = (d && d.policy) || {};
+          mapBody.appendChild(Dom.el('div', { style: 'margin-top:8px;font-size:11.5px;font-weight:700;color:' + (p.purge_enabled ? '#16A34A' : '#B45309') + ';' },
+            p.purge_enabled ? 'Automatic purge is ON for this agency.' : 'Automatic purge is OFF — nothing is deleted automatically.'));
+        }).catch(function (e) {
+          Dom.clear(mapBody);
+          mapBody.appendChild(Dom.el('div', { style: 'color:#B45309;' },
+            'Could not load the data map' + (e && e.message ? ' — ' + e.message : '') + '.'));
+        });
+      })();
+
       // This user's background-check records (managed on the Background checks screen).
       (function () {
         var bc = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
