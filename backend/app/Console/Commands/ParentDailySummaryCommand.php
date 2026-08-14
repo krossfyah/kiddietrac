@@ -453,6 +453,12 @@ class ParentDailySummaryCommand extends Command
             ->where('g.family_id', $familyId)
             ->whereNull('u.deleted_at')
             ->whereNotNull('u.email')
+            // Skip anyone who has not accepted their invite. The mail layer already
+            // refuses to deliver to them, but only AFTER the whole digest has been
+            // built - AI story included - so the work was done and thrown away. On
+            // iLearn that is 29 people generating roughly 400 discarded emails a
+            // week. Excluding them here stops the work, not just the delivery.
+            ->whereNotIn('u.status', ['invited', 'not_invited', 'deactivated', 'suspended'])
             ->get([
                 'u.email',
                 DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name,' ',u.last_name)),''),'there') as name"),
