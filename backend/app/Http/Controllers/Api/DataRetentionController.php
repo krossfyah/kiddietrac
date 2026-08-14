@@ -25,9 +25,14 @@ final class DataRetentionController extends Controller
     private const DEFAULTS = [
         'child_record_years' => 7,          // keep child/enrolment records this long after departure
         'daily_log_months'   => 36,         // attendance / daily logs
-        'message_months'     => 24,         // parent–educator messages
+        'message_months'     => 24,         // parent–educator messages (chat)
+        'announcement_months' => 24,        // announcements / news history
         'document_years'     => 7,          // uploaded documents
         'audit_log_months'   => 24,         // security/audit trail
+        // How long a SUSPENDED family is held before it drops out of the portal.
+        // 0 means never - deliberately, because a default here would start removing
+        // family records at agencies that never asked for it.
+        'suspended_family_months' => 0,
         'auto_enforce'       => false,      // apply retention automatically (nightly)
         'enforce_mode'       => 'anonymize', // anonymize | delete
         'require_consent'    => true,       // require parent consent at enrolment
@@ -38,9 +43,10 @@ final class DataRetentionController extends Controller
 
     private function resolveAgencyId(Request $request): int
     {
-        $header = $request->header('X-Active-Agency-Id');
-        if ($header) {
-            return (int) $header;
+        $header = (int) $request->header('X-Active-Agency-Id');
+        if ($header && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                ->where(function ($q) use ($header) { $q->where('role', 'platform_admin')->orWhere('agency_id', $header); })->exists()) {
+            return $header;
         }
         $u = $request->user();
         return (int) DB::table('role_assignments')
@@ -92,6 +98,13 @@ final class DataRetentionController extends Controller
             'child_record_years' => ['nullable', 'integer', 'min:1', 'max:50'],
             'daily_log_months'   => ['nullable', 'integer', 'min:1', 'max:600'],
             'message_months'     => ['nullable', 'integer', 'min:1', 'max:600'],
+            // announcement_months was in DEFAULTS but never in this list, and the save
+            // loop below reads from the VALIDATED array - so the "Announcements & news"
+            // field on the settings screen could not be saved and silently snapped back
+            // to 24 every time. It has to be validated to be stored.
+            'announcement_months' => ['nullable', 'integer', 'min:1', 'max:600'],
+            // min:0 here, unlike the others: 0 is the meaningful "never" value.
+            'suspended_family_months' => ['nullable', 'integer', 'min:0', 'max:600'],
             'document_years'     => ['nullable', 'integer', 'min:1', 'max:50'],
             'audit_log_months'   => ['nullable', 'integer', 'min:1', 'max:600'],
             'auto_enforce'       => ['nullable', 'boolean'],

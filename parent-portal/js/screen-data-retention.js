@@ -37,7 +37,7 @@
     return '<label style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;cursor:pointer;">'
       + '<input id="c_' + key + '" type="checkbox" ' + (on ? 'checked' : '') + ' style="margin-top:3px;width:17px;height:17px;flex-shrink:0;">'
       + '<span><span style="font-size:14px;color:#334155;font-weight:600;">' + esc(label) + '</span>'
-      + (hint ? '<span style="display:block;font-size:12.5px;color:#94A3B8;margin-top:2px;">' + esc(hint) + '</span>' : '') + '</span></label>';
+      + (hint ? '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;">' + esc(hint) + '</span>' : '') + '</span></label>';
   }
 
   async function render(main) {
@@ -58,7 +58,9 @@
           numField('child_record_years', 'Child & enrolment records (after departure)', 'years', c.child_record_years)
           + numField('document_years', 'Uploaded documents', 'years', c.document_years)
           + numField('daily_log_months', 'Attendance & daily logs', 'months', c.daily_log_months)
-          + numField('message_months', 'Parent–educator messages', 'months', c.message_months)
+          + numField('message_months', 'Parent–educator messages (chat)', 'months', c.message_months)
+          + numField('announcement_months', 'Announcements & news', 'months', c.announcement_months)
+          + numField('suspended_family_months', 'Suspended families', 'months (0 = never)', c.suspended_family_months)
           + numField('audit_log_months', 'Security & audit trail', 'months', c.audit_log_months))
 
       + card('Automatic enforcement', 'Off by default. When on, records past their retention period are handled automatically by a nightly review. Deletion is permanent — anonymising keeps aggregate stats while removing identifying details.',
@@ -74,7 +76,7 @@
           + '<input id="c_privacy_policy_url" type="url" placeholder="https://…" value="' + esc(c.privacy_policy_url || '') + '" style="' + WIDE + '"></div>'
           + '<div style="padding:2px 0;"><label for="c_data_contact_email" style="display:block;font-size:13px;font-weight:700;color:#475569;margin-bottom:5px;">Data-protection contact email</label>'
           + '<input id="c_data_contact_email" type="email" placeholder="privacy@youragency.com" value="' + esc(c.data_contact_email || '') + '" style="' + WIDE + '">'
-          + '<div style="font-size:12.5px;color:#94A3B8;margin-top:5px;">Where parents send data-access or deletion requests.</div></div>')
+          + '<div style="font-size:12.5px;color:#64748B;margin-top:5px;">Where parents send data-access or deletion requests.</div></div>')
 
       + card('Notes', 'Internal notes on your retention/compliance obligations (visible to your admins only).',
           '<textarea id="c_notes" rows="3" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;font-family:inherit;resize:vertical;">' + esc(c.notes || '') + '</textarea>')
@@ -91,6 +93,8 @@
       var body = {
         child_record_years: +v('child_record_years'), document_years: +v('document_years'),
         daily_log_months: +v('daily_log_months'), message_months: +v('message_months'),
+        announcement_months: +v('announcement_months'),
+        suspended_family_months: +v('suspended_family_months'),
         audit_log_months: +v('audit_log_months'),
         auto_enforce: chk('auto_enforce'), enforce_mode: v('enforce_mode'),
         require_consent: chk('require_consent'),
