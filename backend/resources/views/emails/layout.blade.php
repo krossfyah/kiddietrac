@@ -49,16 +49,20 @@
 
   /* ── Dark mode ── */
   @media (prefers-color-scheme: dark) {
-    body { background: #0A1224; color: #E1E5EE; }
-    .card { background: #142A57; border-color: #1F3568; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
-    .header { border-bottom-color: #1F3568; }
-    h1, h2 { color: #FFFFFF; }
-    p, .totals td { color: #C8D0E0; }
-    strong, .totals .total-row td { color: #FFFFFF; }
-    .creds { background: #1F3568; color: #E1E5EE; }
-    .creds strong { color: #5BCDD0; }
-    .footer { border-top-color: #1F3568; color: #8693A8; }
-    .logo-fallback { color: #5BCDD0; }
+    /* Only the area AROUND the card follows dark mode. The card itself stays a
+       LIGHT "sheet" (white, dark text) so every content block — including the
+       inline-styled critical-change and maintenance emails — keeps its intended
+       contrast and is always readable, instead of dark text on a dark card. */
+    body { background: #0A1224 !important; }
+    .card { background: #FFFFFF !important; border-color: #E4E8EF !important; box-shadow: 0 1px 4px rgba(0, 0, 0, .3) !important; }
+    h1, h2 { color: #081C41 !important; }
+    p, .totals td { color: #2A3D5F !important; }
+    strong, .totals .total-row td { color: #0B1A33 !important; }
+    .creds { background: #EEF1F8 !important; color: #0B1A33 !important; }
+    .creds strong { color: #081C41 !important; }
+    .footer { border-top-color: #E4E8EF !important; color: #8693A8 !important; }
+    .logo-fallback { color: #081C41 !important; }
+    a { color: #1F6FB2 !important; }
   }
 
   /* ── Mobile ── */
@@ -74,8 +78,23 @@
 <span class="preheader">{{ $preheader ?? $title ?? 'A message from Kiddietrac' }}</span>
 <div class="wrap">
 <div class="card">
+  @php
+    // Embed the logo INLINE (cid:) for real Mailables so Outlook and other clients
+    // render it even when external images are blocked for a not-yet-trusted sender.
+    // Direct View::make() renders (e.g. CriticalNotifier) have no $message → fall
+    // back to the hosted URL, which is fine for those internal alerts.
+    $__logoSrc = 'https://app.kiddietrac.com/logo-wordmark-large.png';
+    // Deliberately NOT $message->embed(). A CID inline attachment does not reliably
+    // survive the per-agency transports this platform routes mail through, and when
+    // it does not the src points at a content ID that is not in the message — the
+    // broken logo reported on this email. The hosted URL is the same file, always
+    // reachable, and degrades to alt text rather than a broken-image icon.
+    //
+    // If inline embedding is ever wanted again, it has to be proven against an
+    // agency using its OWN mail transport, not against the default one.
+  @endphp
   <div class="header" style="text-align:center;">
-    <img src="https://app.kiddietrac.com/logo-wordmark-large.png" alt="KiddieTrac" height="56" class="logo-img" style="height:56px;max-height:56px;display:inline-block;margin:0 auto;">
+    <img src="{{ $__logoSrc }}" alt="KiddieTrac" height="56" class="logo-img" style="height:56px;max-height:56px;display:inline-block;margin:0 auto;">
   </div>
 
   {!! $slot ?? $content ?? '' !!}
@@ -83,11 +102,12 @@
   <div class="footer">
     <p style="margin:0 0 10px;color:inherit;font-size:12px;">This email was sent by <strong style="color:inherit;">Kiddietrac</strong> on behalf of your childcare centre. Visit <a href="{{ $appUrl ?? 'https://app.kiddietrac.com' }}">app.kiddietrac.com</a> to manage your account.</p>
     <p style="margin:0 0 6px;">
-      <a href="https://kiddietrac.ca/privacy" style="margin-right:14px;">Privacy policy</a>
-      <a href="https://kiddietrac.ca/terms"   style="margin-right:14px;">Terms of service</a>
+      <a href="https://www.kiddietrac.com/privacy" style="margin-right:14px;">Privacy policy</a>
+      <a href="https://www.kiddietrac.com/terms"   style="margin-right:14px;">Terms of service</a>
       <a href="mailto:info@kiddietrac.com">Contact us</a>
     </p>
     <p style="margin:0;color:#8693A8;font-size:11px;">
+      &copy; 2021&ndash;{{ date('Y') }} KiddieTrac. All rights reserved.<br>
       Powered by KiddieTrac &mdash; The Smart Childcare Management Platform<br>
       <span style="color:#9AA6B8;">noreply@kiddietrac.com is not monitored — contact your site administrator or info@kiddietrac.com</span>
     </p>
