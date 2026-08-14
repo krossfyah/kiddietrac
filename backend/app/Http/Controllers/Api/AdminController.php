@@ -2858,9 +2858,76 @@ final class AdminController extends Controller
             ]);
         });
 
-        $this->audit($request->user()->id, 'user.deleted', 'user', $userId, ['email' => $user->email]);
+        // Tell the person. Their access has just been withdrawn; finding out by
+        // failing to sign in is both discourteous and, for a privacy request, no
+        // record at all. States what was withdrawn, when (in the agency's own
+        // timezone), what happens to their information, and who to ask about it.
+        $emailSent = false;
+        if (!empty($user->email)) {
+            try {
+                $agency = DB::table('agencies')->where('id', $agencyId)->first();
+                $agencyName = $agency->name ?? 'KiddieTrac';
+                $contact = $agency->contact_email ?? null;
+                $tz = \App\Support\AgencyTime::tz($agencyId);
+                $when = now()->setTimezone($tz);
+                $first = trim((string) ($user->first_name ?? '')) ?: 'Hello';
 
-        return response()->json(['message' => 'User deleted', 'id' => $userId]);
+                // Retention is a per-agency policy setting; quote theirs when it is
+                // set rather than inventing a number in an email about their rights.
+                $retention = null;
+                try {
+                    $settings = json_decode((string) ($agency->settings ?? ''), true);
+                    $months = $settings['retention']['staff_records_months']
+                        ?? ($settings['retention_months'] ?? null);
+                    if ($months) $retention = (int) $months;
+                } catch (\Throwable $e) {}
+
+                $body = '<div style="margin:0;padding:0;background:#F1F5F9;">'
+                    . '<div style="max-width:620px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
+                    . '<div style="background:linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);padding:22px 24px;border-radius:14px 14px 0 0;text-align:center;">'
+                    .   '<img src="https://app.kiddietrac.com/login-wordmark.png" alt="KiddieTrac" width="170" style="max-width:170px;height:auto;display:block;margin:0 auto 10px;">'
+                    .   '<div style="color:#fff;font-size:17px;font-weight:800;">Your access has been removed</div>'
+                    . '</div>'
+                    . '<div style="background:#fff;padding:22px 24px;border:1px solid #E2E8F0;border-top:0;font-size:14.5px;color:#1E293B;line-height:1.6;">'
+                    .   '<p style="margin:0 0 12px;">' . e($first) . ',</p>'
+                    .   '<p style="margin:0 0 12px;">Your KiddieTrac account with <strong>' . e($agencyName) . '</strong> was deactivated on '
+                    .     e($when->format('D, M j, Y')) . ' at ' . e($when->format('g:i A')) . ' (' . e($when->format('T')) . ').</p>'
+                    .   '<p style="margin:0 0 12px;">You can no longer sign in, and you have been signed out of any device where you were still signed in. '
+                    .     'No further emails or notifications will be sent to you from this agency.</p>'
+                    .   '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;margin:16px 0;">'
+                    .     '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">What happens to your information</div>'
+                    .     '<p style="margin:0;font-size:13.5px;color:#334155;">Records connected to your time with the agency — employment and payroll records, and anything the agency must keep to meet its licensing obligations — are retained for as long as the law requires'
+                    .       ($retention ? ' (this agency\'s policy is ' . (int) $retention . ' months)' : '')
+                    .       ', and are then securely destroyed. Everything not subject to those obligations is removed. '
+                    .       'You may ask for a copy of the personal information held about you, or ask about its deletion, using the contact below.</p>'
+                    .   '</div>'
+                    .   '<p style="margin:0 0 6px;">If this was not expected, please contact '
+                    .     ($contact ? '<a href="mailto:' . e($contact) . '" style="color:#1F6FB2;">' . e($contact) . '</a>' : 'your agency administrator')
+                    .     ' — it can be reversed.</p>'
+                    . '</div>'
+                    . '<div style="text-align:center;padding:14px 24px 24px;color:#94A3B8;font-size:11.5px;">'
+                    .   e($agencyName) . ' · sent automatically by KiddieTrac'
+                    . '</div></div></div>';
+
+                \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($user, $agencyName) {
+                    $m->to($user->email)->subject('Your ' . $agencyName . ' account has been deactivated');
+                });
+                $emailSent = true;
+            } catch (\Throwable $e) {
+                // Never block the deactivation itself — but do not lose the failure,
+                // because "was the person told?" is exactly what gets asked later.
+                \Illuminate\Support\Facades\Log::error('Deactivation notice could not be sent', [
+                    'user_id' => $userId, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $this->audit($request->user()->id, 'user.deleted', 'user', $userId, [
+            'email' => $user->email,
+            'notice_emailed' => $emailSent,
+        ]);
+
+        return response()->json(['message' => 'User deleted', 'id' => $userId, 'notice_emailed' => $emailSent]);
     }
 
     /**
