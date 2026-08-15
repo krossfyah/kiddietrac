@@ -171,6 +171,36 @@ final class StaffController extends Controller
         return response()->json(['certification_id' => $id], 201);
     }
 
+    public function updateCertification(Request $request, int $id): JsonResponse
+    {
+        $cert = DB::table('staff_certifications')->where('id', $id)->first();
+        if (! $cert) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        // NOTE: staff_certifications has no updated_at column — do not set it.
+        $data = $request->validate([
+            'cert_type'    => ['sometimes', 'in:RECE,First_Aid,CPR,Vulnerable_Sector_Check,Health_Card,Other'],
+            'certifier'    => ['nullable', 'string', 'max:120'],
+            'issued_at'    => ['sometimes', 'date'],
+            'expires_at'   => ['nullable', 'date'],
+            'document_url' => ['nullable', 'url'],
+        ]);
+        if (! empty($data)) {
+            DB::table('staff_certifications')->where('id', $id)->update($data);
+        }
+        return response()->json(['ok' => true]);
+    }
+
+    public function deleteCertification(Request $request, int $id): JsonResponse
+    {
+        $cert = DB::table('staff_certifications')->where('id', $id)->first();
+        if (! $cert) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        DB::table('staff_certifications')->where('id', $id)->delete();
+        return response()->json(['ok' => true]);
+    }
+
     public function schedule(Request $request): JsonResponse
     {
         $centreId = $this->resolveCentreId($request->user());
@@ -234,6 +264,21 @@ final class StaffController extends Controller
             return response()->json(['message' => 'No centre assignment'], 422);
         }
 
+        // The centre is shut — there is no shift to start. Checked before the
+        // already-clocked-in test so somebody who forgot to clock out yesterday gets told
+        // about the closure rather than a confusing "already clocked in".
+        if ($closure = \App\Support\Closures::forDate($centreId)) {
+            return response()->json([
+                'message' => 'The centre is closed today (' . \App\Support\Closures::reason($closure)
+                    . '), so there is no shift to clock into. Enjoy the day.',
+                'closed' => true,
+                'closure' => [
+                    'dates' => \App\Support\Closures::dateLabel($closure),
+                    'reason' => \App\Support\Closures::reason($closure),
+                ],
+            ], 422);
+        }
+
         $open = DB::table('time_entries')
             ->where('user_id', $user->id)
             ->whereNull('clocked_out_at')
@@ -241,7 +286,7 @@ final class StaffController extends Controller
 
         if ($open) {
             return response()->json([
-                'message' => 'Already clocked in at '.Carbon::parse($open->clocked_in_at)->format('g:i A'),
+                'message' => 'Already clocked in at '.\App\Support\AgencyTime::fmt($open->clocked_in_at, \App\Support\AgencyTime::tzForCentre($open->centre_id ?? null)),
                 'time_entry_id' => $open->id,
             ], 422);
         }

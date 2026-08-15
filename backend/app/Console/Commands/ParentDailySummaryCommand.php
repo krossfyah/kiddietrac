@@ -160,12 +160,12 @@ class ParentDailySummaryCommand extends Command
         if ($isOpenDay) {
             try {
                 $d = $date->toDateString();
-                $cl = DB::table('centre_closures')->where('centre_id', $centreId)
-                    ->whereDate('closure_date', '<=', $d)
-                    ->where(function ($q) use ($d) {
-                        $q->whereNull('end_date')->orWhereDate('end_date', '>=', $d);
-                    })
-                    ->orderByDesc('closure_date')->first(['reason', 'closure_type']);
+                // Was: closure_date <= d AND (end_date IS NULL OR end_date >= d). A
+                // single-day closure has a null end_date, so the second branch stayed
+                // true for every later date and this reported the centre closed forever
+                // after its first holiday. Centre 16 has been "closed" since 13 July.
+                // App\Support\Closures is the shared version of this rule.
+                $cl = \App\Support\Closures::forDate((int) $centreId, $d);
                 if ($cl) { $isClosed = true; $reason = $cl->reason ?: ($cl->closure_type ?: 'Closed'); }
             } catch (\Throwable $e) {}
         }

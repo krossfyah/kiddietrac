@@ -52,13 +52,29 @@ class CheckinReminderCommand extends Command
             ->where('c.enrollment_status', 'enrolled')
             ->select([
                 'c.id', 'c.first_name', 'c.preferred_name', 'c.family_id',
-                'ce.name as centre_name', 'a.id as agency_id', 'a.timezone as tz',
+                // ce.id is selected so the closure check below has a centre to test.
+                // Without it $child->centre_id is null and the guard silently passes
+                // every child through on a day the centre is shut.
+                'ce.id as centre_id', 'ce.name as centre_name', 'a.id as agency_id', 'a.timezone as tz',
             ])
             ->get();
 
         $sent = 0;
 
+        // Nothing to chase on a day the centre is shut. Without this the reminder told
+        // parents their child "hasn't been signed in" on a statutory holiday.
+        $closedCentres = [];
+
         foreach ($children as $child) {
+            $centreKey = (int) ($child->centre_id ?? 0);
+            if ($centreKey) {
+                if (! array_key_exists($centreKey, $closedCentres)) {
+                    $closedCentres[$centreKey] = \App\Support\Closures::isClosed($centreKey);
+                }
+                if ($closedCentres[$centreKey]) {
+                    continue;
+                }
+            }
             // Never nag a LIVE agency's parents while we are testing. This command
             // reached 39 real iLearn families before this guard existed.
             if (\App\Support\Suppression::isAgency((int) $child->agency_id)) {

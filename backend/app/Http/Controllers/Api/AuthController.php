@@ -76,6 +76,20 @@ final class AuthController extends Controller
             return response()->json(['message' => 'Account is not active.'], 403);
         }
 
+        // Scheduled maintenance / downtime — nobody signs in except platform
+        // admins (so they can manage or lift the window).
+        if (\App\Http\Controllers\Api\MaintenanceController::isDown()) {
+            $isPlatformAdmin = \Illuminate\Support\Facades\DB::table('role_assignments')
+                ->where('user_id', $user->id)->where('role', 'platform_admin')->where('active', true)->exists();
+            if (! $isPlatformAdmin) {
+                $w = \App\Http\Controllers\Api\MaintenanceController::window();
+                return response()->json([
+                    'message' => ($w && $w->message) ? $w->message : 'KiddieTrac is temporarily down for scheduled maintenance. Please try again shortly.',
+                    'maintenance' => true,
+                ], 503);
+            }
+        }
+
         // v22p7.1: TOTP gate — block token issue if MFA is enabled and the
         // provided code is missing or invalid. Accepts a 6-digit TOTP
         // or a one-time recovery code; consumes the recovery code if used.
@@ -125,6 +139,13 @@ final class AuthController extends Controller
             'last_login_ip' => $request->ip(),
             'updated_at' => now(),
         ]);
+
+        // Refresh the analytics device type from the ACTUAL device signing in.
+        // It used to be captured once at onboarding and never updated, so a person
+        // onboarded via desktop Chrome device-emulation (UA "Android 10; K") stayed
+        // "Android" forever even on their real iPhone. device_platform is the native
+        // signal (ios/android from the app); for the web we sniff the User-Agent.
+        $this->refreshDeviceType($user, (string) ($data['device_platform'] ?? 'unknown'), (string) $request->userAgent());
 
         DB::table('device_tokens')->updateOrInsert(
             ['user_id' => $user->id, 'device_name' => $data['device_name']],
@@ -471,6 +492,42 @@ final class AuthController extends Controller
         ], 403);
     }
 
+    /**
+     * Update users.profile_extras.device_type / device_detail from the device that
+     * is actually signing in. Mirrors the client detectDevice(): native platform
+     * (ios/android) wins; otherwise sniff the User-Agent. Keeps the "which device
+     * families use" analytics current instead of frozen at onboarding.
+     */
+    private function refreshDeviceType(User $user, string $platform, string $ua): void
+    {
+        $platform = strtolower(trim($platform));
+        $isIpad = (bool) preg_match('/iPad/i', $ua)
+            || (preg_match('/Macintosh/i', $ua) && (int) ($_SERVER['HTTP_SEC_CH_UA_MOBILE'] ?? 0));
+        if ($platform === 'ios') {
+            $type = $isIpad ? 'Apple iPad' : 'Apple iPhone';
+            $native = 'KiddieTrac iOS app · ';
+        } elseif ($platform === 'android') {
+            $type = 'Android';
+            $native = 'KiddieTrac Android app · ';
+        } else { // web / unknown → sniff the UA
+            $native = '';
+            if (preg_match('/iPhone/i', $ua))            $type = 'Apple iPhone';
+            elseif (preg_match('/iPad/i', $ua))          $type = 'Apple iPad';
+            elseif (preg_match('/Android/i', $ua))       $type = 'Android';
+            elseif (preg_match('/Windows|Macintosh|Linux|CrOS/i', $ua)) $type = 'Desktop / laptop';
+            else                                          $type = 'Other';
+        }
+
+        try {
+            $extras = is_string($user->profile_extras ?? null)
+                ? (json_decode($user->profile_extras, true) ?: [])
+                : (is_array($user->profile_extras ?? null) ? $user->profile_extras : []);
+            $extras['device_type'] = $type;
+            $extras['device_detail'] = mb_substr($native . $ua, 0, 160);
+            DB::table('users')->where('id', $user->id)->update(['profile_extras' => json_encode($extras)]);
+        } catch (\Throwable $e) { /* analytics only — never block login */ }
+    }
+
     private function formatUser(User $user): array
     {
         $assignments = DB::table('role_assignments')
@@ -484,6 +541,17 @@ final class AuthController extends Controller
 
         $centre = $centreId
             ? DB::table('centres')->where('id', $centreId)->select('id', 'name')->first()
+            : null;
+
+        // Provider identity: in this system a home-daycare "provider" IS a centre,
+        // linked to the person by a matching email. Surface a flag + the current
+        // bio so the onboarding wizard can require a full bio from providers.
+        $providerCentre = $user->email
+            ? DB::table('centres')
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
+                ->whereNull('deleted_at')
+                ->select('id', 'provider_bio')
+                ->first()
             : null;
 
         // The agency's timezone. Every time shown in the app should be the
@@ -504,6 +572,10 @@ final class AuthController extends Controller
             'email' => $user->email,
             'username' => $user->username ?? null,
             'agency_timezone' => $agencyTz ?: 'America/Toronto',
+            // Shown once when the app opens: the centre is closed today, or will be
+            // shortly. Omitted entirely when there is nothing to say, so the client can
+            // test for the key rather than unpacking an empty object.
+            'closure_notice' => \App\Support\Closures::noticeForUser((int) $user->id),
             // Which agency a platform admin lands in by default. Without this the
             // switcher fell back to agencies[0] — alphabetically the LIVE agency —
             // so a super admin opened the app inside real families' data.
@@ -511,6 +583,7 @@ final class AuthController extends Controller
             'default_agency_id' => env('DEFAULT_ADMIN_AGENCY_ID') ? (int) env('DEFAULT_ADMIN_AGENCY_ID') : null,
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
+            'sex' => $user->sex ?? null,
             'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')),
             'preferred_name' => $user->preferred_name ?? null,
             'phone' => $user->phone ?? null,
@@ -526,10 +599,45 @@ final class AuthController extends Controller
             // v22p3.5: onboarding state surfaced so the frontend wizard knows
             // whether to auto-trigger on this user's next dashboard load.
             'onboarded_at' => $user->onboarded_at ?? null,
+            // Provider (home-daycare) identity — drives the mandatory bio step.
+            'is_provider' => (bool) $providerCentre,
+            'provider_centre_id' => $providerCentre->id ?? null,
+            'provider_bio' => $providerCentre->provider_bio ?? null,
             'profile_extras' => is_string($user->profile_extras ?? null)
                 ? json_decode($user->profile_extras, true)
                 : ($user->profile_extras ?? null),
         ];
+    }
+
+    /**
+     * PATCH /auth/me/provider-bio
+     * Lets a home-daycare provider write/edit their own bio after onboarding
+     * (onboarding only fires once, so already-onboarded providers need this).
+     * Saves to their matched centre (centres.provider_bio).
+     */
+    public function updateProviderBio(Request $request): JsonResponse
+    {
+        $data = $request->validate(['provider_bio' => ['required', 'string', 'max:4000']]);
+        $user = $request->user();
+        $centre = $user->email
+            ? DB::table('centres')
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
+                ->whereNull('deleted_at')
+                ->first(['id'])
+            : null;
+        if (! $centre) {
+            return response()->json(['message' => 'Only providers can set a provider bio.'], 403);
+        }
+        $bio = trim($data['provider_bio']);
+        if (mb_strlen($bio) < 40) {
+            return response()->json([
+                'message' => 'Please write at least a sentence or two (40+ characters) so families get to know you.',
+                'errors' => ['provider_bio' => ['Your bio is a little short.']],
+            ], 422);
+        }
+        DB::table('centres')->where('id', $centre->id)->update(['provider_bio' => $bio, 'updated_at' => now()]);
+
+        return response()->json(['ok' => true, 'provider_bio' => $bio]);
     }
 
     /**
@@ -544,8 +652,11 @@ final class AuthController extends Controller
             // Standard profile fields (also editable via /auth/me)
             'first_name'      => ['nullable', 'string', 'max:80'],
             'last_name'       => ['nullable', 'string', 'max:80'],
+            'sex'             => ['nullable', 'string', 'max:16'],
             'preferred_name'  => ['nullable', 'string', 'max:80'],
             'phone'           => ['nullable', 'string', 'max:40'],
+            'direct_phone'    => ['nullable', 'string', 'max:40'],
+            'home_phone'      => ['nullable', 'string', 'max:40'],
             'locale'          => ['nullable', 'string', 'max:10'],
             'timezone'        => ['nullable', 'string', 'max:60'],
 
@@ -556,18 +667,33 @@ final class AuthController extends Controller
             'province'        => ['nullable', 'string', 'max:40'],
             'postal_code'     => ['nullable', 'string', 'max:12'],
 
+            // Demographics + device (analytics; stored in profile_extras). Race /
+            // ethnicity is OPTIONAL and self-reported. Device is auto-detected by the
+            // client (Android / iOS / iPadOS / Desktop) with a UA detail string.
+            'ethnicity'       => ['nullable', 'string', 'max:80'],
+            'device_type'     => ['nullable', 'string', 'max:40'],
+            'device_detail'   => ['nullable', 'string', 'max:160'],
+
             // Common emergency contact
-            'emergency_contact_name'  => ['nullable', 'string', 'max:120'],
-            'emergency_contact_phone' => ['nullable', 'string', 'max:40'],
+            'emergency_contact_name'     => ['nullable', 'string', 'max:120'],
+            'emergency_contact_phone'    => ['nullable', 'string', 'max:40'],
+            'emergency_contact_email'    => ['nullable', 'email', 'max:160'],
+            'emergency_contact_relation' => ['nullable', 'string', 'max:80'],
 
             // Role-specific extras — captured as a generic object so we don't
             // grow the users table for every new field a role needs.
             'role_extras'     => ['nullable', 'array'],
 
-            // Additional emergency contacts (optional): [{name, phone}, ...]
+            // Provider bio — home-daycare providers describe themselves for parents.
+            // Saved to their centre (centres.provider_bio), required for providers.
+            'provider_bio'    => ['nullable', 'string', 'max:4000'],
+
+            // Additional emergency contacts (optional): [{name, phone, email, relation}, ...]
             'extra_contacts'            => ['nullable', 'array'],
             'extra_contacts.*.name'     => ['nullable', 'string', 'max:120'],
             'extra_contacts.*.phone'    => ['nullable', 'string', 'max:40'],
+            'extra_contacts.*.email'    => ['nullable', 'email', 'max:160'],
+            'extra_contacts.*.relation' => ['nullable', 'string', 'max:80'],
 
             // Optional username — lets one person hold several accounts under one
             // email and sign in to the right one. Letters/numbers/._- only.
@@ -578,6 +704,16 @@ final class AuthController extends Controller
         ]);
 
         $user = $request->user();
+
+        // A person cannot be their OWN emergency contact — that defeats the point.
+        // The email is the reliable identity signal; the client also checks name/phone.
+        if (! empty($data['emergency_contact_email'])
+            && mb_strtolower(trim($data['emergency_contact_email'])) === mb_strtolower(trim((string) $user->email))) {
+            return response()->json([
+                'message' => 'Your emergency contact can’t be yourself — please give someone else who can be reached in an emergency.',
+                'errors' => ['emergency_contact_email' => ['Enter a different person’s email.']],
+            ], 422);
+        }
 
         // Username uniqueness (case-insensitive), ignoring this user's own row.
         if (! empty($data['username'])) {
@@ -598,15 +734,22 @@ final class AuthController extends Controller
             : (is_array($user->profile_extras ?? null) ? $user->profile_extras : []);
 
         $extras = array_replace($existingExtras, array_filter([
+            'direct_phone'            => $data['direct_phone']    ?? null,
+            'home_phone'              => $data['home_phone']      ?? null,
             'address_line1'           => $data['address_line1']   ?? null,
             'address_line2'           => $data['address_line2']   ?? null,
             'city'                    => $data['city']            ?? null,
             'province'                => $data['province']        ?? null,
             'postal_code'             => $data['postal_code']     ?? null,
-            'emergency_contact_name'  => $data['emergency_contact_name']  ?? null,
-            'emergency_contact_phone' => $data['emergency_contact_phone'] ?? null,
+            'ethnicity'               => $data['ethnicity']       ?? null,
+            'device_type'             => $data['device_type']     ?? null,
+            'device_detail'           => $data['device_detail']   ?? null,
+            'emergency_contact_name'     => $data['emergency_contact_name']     ?? null,
+            'emergency_contact_phone'    => $data['emergency_contact_phone']    ?? null,
+            'emergency_contact_email'    => $data['emergency_contact_email']    ?? null,
+            'emergency_contact_relation' => $data['emergency_contact_relation'] ?? null,
             'extra_contacts'          => !empty($data['extra_contacts'])
-                ? array_values(array_filter($data['extra_contacts'], fn ($c) => !empty($c['name']) || !empty($c['phone'])))
+                ? array_values(array_filter($data['extra_contacts'], fn ($c) => !empty($c['name']) || !empty($c['phone']) || !empty($c['email'])))
                 : null,
             'role_extras'             => $data['role_extras']     ?? null,
         ], fn ($v) => $v !== null && $v !== ''));
@@ -614,6 +757,7 @@ final class AuthController extends Controller
         $userUpdate = array_filter([
             'first_name'     => $data['first_name']     ?? null,
             'last_name'      => $data['last_name']      ?? null,
+            'sex'            => $data['sex']            ?? null,
             'preferred_name' => $data['preferred_name'] ?? null,
             'phone'          => $data['phone']          ?? null,
             'locale'         => $data['locale']         ?? null,
@@ -625,11 +769,82 @@ final class AuthController extends Controller
         }
         $userUpdate['profile_extras'] = json_encode($extras);
         $userUpdate['updated_at']     = now();
-        if (($data['complete'] ?? true) === true) {
+        $wasOnboarded = ! empty($user->onboarded_at);
+        $isCompleting = ($data['complete'] ?? true) === true;
+        if ($isCompleting) {
             $userUpdate['onboarded_at'] = now();
         }
 
+        // Provider bio — a home-daycare provider (a centre matched by email) must
+        // write a full bio during onboarding so families know who will care for
+        // their child. Required when completing; saved to their centre. Checked
+        // BEFORE the user update so a missing bio doesn't mark them onboarded.
+        $providerCentre = $user->email
+            ? DB::table('centres')
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
+                ->whereNull('deleted_at')
+                ->first(['id', 'provider_bio'])
+            : null;
+        if ($providerCentre) {
+            $bio = trim((string) ($data['provider_bio'] ?? ''));
+            if ($isCompleting && mb_strlen($bio) < 40) {
+                return response()->json([
+                    'message' => 'Please write a short bio (at least a sentence or two) so families know who will be caring for their child.',
+                    'errors' => ['provider_bio' => ['Your provider bio is required — tell families a little about yourself.']],
+                ], 422);
+            }
+            if ($bio !== '') {
+                DB::table('centres')->where('id', $providerCentre->id)->update([
+                    'provider_bio' => $bio, 'updated_at' => now(),
+                ]);
+            }
+        }
+
         DB::table('users')->where('id', $user->id)->update($userUpdate);
+
+        // Onboarding-success confirmation — sent ONCE, the first time onboarding
+        // completes. Uses the branded layout (logo header + privacy/terms footer);
+        // AccountNotice carries X-KT-Invite so it reaches a just-onboarded user
+        // (agency master suppression still applies). Never block finishing on it.
+        if ($isCompleting && ! $wasOnboarded) {
+            try {
+                $name   = trim((($data['first_name'] ?? $user->first_name) ?? '') . ' ' . (($data['last_name'] ?? $user->last_name) ?? ''));
+                $portal = config('app.url', 'https://app.kiddietrac.com');
+                $body   = "You're all set — your Kiddietrac account is ready to use.\n\n"
+                        . "Sign in anytime to access your portal, stay up to date, and manage your details. "
+                        . "We've saved your profile and preferences, so you can jump right in.\n\n"
+                        . "Need a hand? Reply to your administrator or contact info@kiddietrac.com. "
+                        . "Our Privacy Policy and Terms of Use are linked at the bottom of this email.";
+                $ctaLabel = 'Go to your portal';
+
+                // Use the agency-editable "onboarding-welcome" template when set (#77).
+                // Resolve the user's agency (staff → role_assignments, parent → family).
+                $onbAgencyId = DB::table('role_assignments')->where('user_id', $user->id)->where('active', true)->whereNotNull('agency_id')->value('agency_id')
+                    ?: DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')->where('ra.user_id', $user->id)->where('ra.active', true)->value('c.agency_id')
+                    ?: DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')->join('centres as c', 'c.id', '=', 'f.centre_id')->where('g.user_id', $user->id)->value('c.agency_id');
+                if ($onbAgencyId) {
+                    $agencyName = (string) (DB::table('agencies')->where('id', $onbAgencyId)->value('name') ?? 'Kiddietrac');
+                    $md = ['name' => $name ?: 'there', 'agency_name' => $agencyName, 'portal_url' => $portal];
+                    $flat = fn ($s) => trim(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</div>'], "\n", (string) $s)));
+                    $hd = $flat(\App\Support\EmailTemplates::block((int) $onbAgencyId, 'onboarding-welcome', 'heading', $md));
+                    $bd = $flat(\App\Support\EmailTemplates::block((int) $onbAgencyId, 'onboarding-welcome', 'body', $md));
+                    $cl = $flat(\App\Support\EmailTemplates::block((int) $onbAgencyId, 'onboarding-welcome', 'cta_label', $md));
+                    if ($bd !== '') $body = ($hd !== '' ? $hd . "\n\n" : '') . $bd;
+                    if ($cl !== '') $ctaLabel = $cl;
+                }
+                \Illuminate\Support\Facades\Mail::to($user->email, $name ?: null)->queue(
+                    (new \App\Mail\AccountNotice(
+                        recipientName: $name ?: 'there',
+                        subjectLine:   'Welcome to Kiddietrac — your account is ready',
+                        bodyText:      $body,
+                        ctaLabel:      $ctaLabel,
+                        ctaUrl:        $portal,
+                    ))->onQueue('mail')
+                );
+            } catch (\Throwable $e) {
+                // email must never block onboarding completion
+            }
+        }
 
         return response()->json($this->formatUser(User::find($user->id)));
     }
@@ -661,6 +876,9 @@ final class AuthController extends Controller
         try {
             DB::table('audit_logs')->insert([
                 'user_id' => $userId,
+                // Stamp the acting agency so login/mfa events are agency-scoped in
+                // the per-agency audit log + activity feed (no cross-tenant bleed).
+                'agency_id' => $userId ? \App\Support\AuditScope::resolve((int) $userId, $request) : null,
                 'entity_type' => 'centre', 'entity_id' => null,
                 'action' => $action,
                 'entity_type' => $targetType,

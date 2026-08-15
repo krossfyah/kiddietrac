@@ -57,19 +57,95 @@ final class OperationsV2Controller extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        // Notify all families at this centre
-        $familyIds = DB::table('families')->where('centre_id', $data['centre_id'])->whereNull('deleted_at')->pluck('id');
-        $guardianIds = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id')->unique();
-        foreach ($guardianIds as $gid) {
+        $this->announceClosure((int) $id, (int) $data['centre_id']);
+
+        return response()->json(['id' => $id], 201);
+    }
+
+    /**
+     * Tell everyone the centre is closed — families AND the staff who work there.
+     *
+     * The original notified guardians only, by in-app bell only, and titled it with
+     * closure_date alone, so a week-long closure announced a single day of itself and the
+     * educators due in on those days were never told at all.
+     *
+     * A bell is what you see next time you open the app. A closure is something you need
+     * to know BEFORE you set off, so it goes by email too.
+     */
+    private function announceClosure(int $closureId, int $centreId): void
+    {
+        $row = DB::table('centre_closures')->where('id', $closureId)->first();
+        if (! $row) {
+            return;
+        }
+
+        $centre = DB::table('centres')->where('id', $centreId)->first();
+        $agencyId = $centre->agency_id ?? null;
+        $dates = \App\Support\Closures::dateLabel($row);
+        $reason = \App\Support\Closures::reason($row);
+        $centreName = $centre->name ?? 'Your centre';
+
+        // Families at the centre, and the staff assigned to it. Both need to know; only
+        // one of them was ever told.
+        $familyIds = DB::table('families')->where('centre_id', $centreId)->whereNull('deleted_at')->pluck('id');
+        $guardianIds = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id');
+        $staffIds = DB::table('role_assignments')->where('centre_id', $centreId)->where('active', true)->pluck('user_id');
+        $userIds = $guardianIds->merge($staffIds)->map(fn ($i) => (int) $i)->unique()->values();
+
+        $recipients = DB::table('users')->whereIn('id', $userIds)->whereNull('deleted_at')
+            ->select('id', 'email', 'first_name', 'last_name')->get();
+
+        foreach ($recipients as $u) {
             DB::table('notifications')->insert([
-                'user_id' => $gid, 'type' => 'closure',
-                'title' => 'Centre closed: ' . Carbon::parse($data['closure_date'])->format('M j'),
-                'body' => $data['reason'] ?? ucfirst($data['closure_type']),
-                'data' => json_encode(['link' => '#closures', 'closure_id' => $id]),
+                'user_id' => $u->id, 'type' => 'closure',
+                'title' => $centreName . ' closed: ' . $dates,
+                'body' => $reason,
+                'data' => json_encode(['link' => '#closures', 'closure_id' => $closureId]),
                 'created_at' => now(),
             ]);
+
+            if (! filter_var((string) $u->email, FILTER_VALIDATE_EMAIL)
+                || \App\Support\Suppression::isUser((int) $u->id)) {
+                continue;
+            }
+
+            // One recipient's bad address must not abort the announcement for everybody
+            // after them in the loop.
+            try {
+                $this->mailClosure($agencyId, $u, $centreName, $dates, $reason);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Closure email failed', [
+                    'user' => $u->id, 'closure' => $closureId, 'error' => $e->getMessage(),
+                ]);
+            }
         }
-        return response()->json(['id' => $id], 201);
+    }
+
+    private function mailClosure(?int $agencyId, object $u, string $centreName, string $dates, string $reason): void
+    {
+        $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+        $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+            . '<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
+            . 'We are letting you know that <strong>' . $e($centreName) . '</strong> will be closed.</td></tr>'
+            . '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
+            . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">When</div>'
+            . '<div style="font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 10px;">' . $e($dates) . '</div>'
+            . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">Why</div>'
+            . '<div style="font-size:15px;color:#0F172A;margin-top:2px;">' . $e($reason) . '</div></div></td></tr>'
+            . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
+            . 'There is nothing you need to do. Sign-in is switched off for those days, and we will '
+            . 'see you when we reopen.</td></tr></table>';
+
+        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+            'eyebrow' => 'CENTRE CLOSURE',
+            'title' => $centreName . ' will be closed',
+            'subtitle' => $dates . ' · ' . $reason,
+            'preheader' => $centreName . ' closed ' . $dates . ' — ' . $reason,
+        ]);
+        $name = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''));
+        \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($u, $name, $centreName, $dates) {
+            $m->to($u->email, $name ?: null)->subject($centreName . ' is closed ' . $dates);
+        });
     }
 
     public function removeClosure(Request $request, int $id): JsonResponse
@@ -84,6 +160,20 @@ final class OperationsV2Controller extends Controller
     // =========================================================
     // Late pickup fee — director logs the pickup
     // =========================================================
+    /** Centres + children for the late-pickup log picker, scoped to the caller's agency. */
+    public function latePickupOptions(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        if (! $agencyId) return response()->json(['centres' => [], 'children' => []]);
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name']);
+        $children = DB::table('children as c')
+            ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->whereIn('f.centre_id', $centres->pluck('id'))
+            ->whereNull('c.deleted_at')
+            ->orderBy('c.first_name')->get(['c.id', 'c.first_name', 'c.last_name']);
+        return response()->json(['centres' => $centres, 'children' => $children]);
+    }
+
     public function logLatePickup(Request $request): JsonResponse
     {
         $data = $request->validate([
