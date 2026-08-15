@@ -231,11 +231,44 @@
   }
 
   // ─── Data load + render ────────────────────────────────────────────
+  /* A request carries a start and an end; a calendar needs one entry per day. Walked in
+     agency-date terms via ymd() so a range that ends at midnight does not bleed into the
+     following day. Capped at a year in case of a bad range — an open-ended loop over dates
+     is how a calendar hangs the browser. */
+  function indexTimeOff(rows) {
+    var byDay = {};
+    (rows || []).forEach(function (r) {
+      var s = new Date(r.start_at);
+      var e = new Date(r.end_at);
+      if (isNaN(s) || isNaN(e) || e < s) return;
+      var cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+      var last = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+      var guard = 0;
+      while (cur <= last && guard++ < 366) {
+        var k = ymd(cur);
+        (byDay[k] || (byDay[k] = [])).push(r);
+        cur = addDays(cur, 1);
+      }
+    });
+    return byDay;
+  }
+
+  function timeOffChip(r) {
+    var name = r.user_name || 'Someone';
+    var type = String(r.request_type || 'time off');
+    return Dom.el('div', {
+      title: name + ' — ' + type + ' (approved)',
+      style: 'position:relative;z-index:1;background:#FEF3C7;border-left:3px solid #F59E0B;'
+        + 'border-radius:5px;padding:3px 6px;margin-bottom:3px;font-size:11px;font-weight:700;'
+        + 'color:#92400E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+    }, '🌴 ' + name);
+  }
+
   function reload(calRoot) {
     var titleEl = document.getElementById('kt-cal-title');
     if (titleEl) titleEl.textContent = titleForCursor();
     Dom.clear(calRoot);
-    calRoot.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#9CA3AF;font-size:13px;' }, 'Loading shifts…'));
+    calRoot.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading shifts…'));
 
     var start, end;
     if (state.view === 'week') {
@@ -249,7 +282,17 @@
       end = addDays(startOfWeek(monthEnd), 6);
     }
     var q = new URLSearchParams({ centre_id: String(state.centreId), start: ymd(start), end: ymd(end) }).toString();
-    Api.get('/director/schedule/range?' + q).then(function (data) {
+    // Approved leave, fetched alongside the shifts. /director/schedule/time-off-blocks has
+    // existed all along and no screen ever called it — so a director scheduling a week
+    // could not see who was away, which is the one thing they need before assigning a
+    // shift. A failure here must not lose the calendar, so it degrades to no blocks.
+    var tq = new URLSearchParams({ start: ymd(start), end: ymd(end) }).toString();
+    Promise.all([
+      Api.get('/director/schedule/range?' + q),
+      Api.get('/director/schedule/time-off-blocks?' + tq).catch(function () { return { data: [] }; }),
+    ]).then(function (both) {
+      var data = both[0];
+      state.timeOff = indexTimeOff((both[1] && both[1].data) || []);
       state.days = data.days || {};
       state.rooms = data.rooms || [];
       Dom.clear(calRoot);
@@ -265,7 +308,7 @@
     var grid = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     // Header row
     var header = Dom.el('div', { style: 'display:grid;grid-template-columns:64px repeat(7,1fr);border-bottom:1px solid #E5E7EB;background:#FAFBFC;' });
-    header.appendChild(Dom.el('div', { style: 'padding:10px;font-size:11px;color:#9CA3AF;font-weight:700;text-transform:uppercase;' }, ''));
+    header.appendChild(Dom.el('div', { style: 'padding:10px;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase;' }, ''));
     for (var i = 0; i < 7; i++) {
       var d = addDays(start, i);
       var isToday = ymd(d) === ymd(new Date());
@@ -278,7 +321,7 @@
 
     // Body — single day-cell per column with shifts stacked
     var body = Dom.el('div', { style: 'display:grid;grid-template-columns:64px repeat(7,1fr);min-height:480px;' });
-    body.appendChild(Dom.el('div', { style: 'border-right:1px solid #F3F4F6;background:#FAFBFC;font-size:10px;color:#9CA3AF;padding:6px;text-align:right;line-height:1.4;' }, ' '));
+    body.appendChild(Dom.el('div', { style: 'border-right:1px solid #F3F4F6;background:#FAFBFC;font-size:10px;color:#64748B;padding:6px;text-align:right;line-height:1.4;' }, ' '));
     installDragSelect(body, calRoot);
     for (var j = 0; j < 7; j++) {
       var dj = addDays(start, j);
@@ -295,6 +338,8 @@
       // Cell hover hint
       var hint = Dom.el('div', { 'data-cell-bg': '1', style: 'position:absolute;inset:0;pointer-events:auto;' });
       cell.appendChild(hint);
+      // Above the shifts: who is away is the thing you need before reading who is on.
+      ((state.timeOff && state.timeOff[key]) || []).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
       dayShifts.forEach(function (s) { cell.appendChild(renderShiftPill(s, calRoot)); });
       body.appendChild(cell);
     }
@@ -330,8 +375,9 @@
       cell.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:700;color:' + (isToday ? '#1F6080' : (inMonth ? '#374151' : '#9CA3AF')) + ';margin-bottom:4px;display:inline-block;padding:2px 6px;border-radius:6px;background:' + (isToday ? '#DBEAFE' : 'transparent') + ';' }, String(cursor.getDate())));
       var hint = Dom.el('div', { 'data-cell-bg': '1', style: 'position:absolute;inset:0;' });
       cell.appendChild(hint);
+      ((state.timeOff && state.timeOff[key]) || []).slice(0, 2).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
       dayShifts.slice(0, 3).forEach(function (s) { cell.appendChild(renderShiftChip(s, calRoot)); });
-      if (dayShifts.length > 3) cell.appendChild(Dom.el('div', { style: 'font-size:10px;color:#9CA3AF;margin-top:2px;position:relative;z-index:1;' }, '+ ' + (dayShifts.length - 3) + ' more'));
+      if (dayShifts.length > 3) cell.appendChild(Dom.el('div', { style: 'font-size:10px;color:#64748B;margin-top:2px;position:relative;z-index:1;' }, '+ ' + (dayShifts.length - 3) + ' more'));
       body.appendChild(cell);
       cursor = addDays(cursor, 1);
     }
@@ -346,7 +392,7 @@
     });
     pill.appendChild(Dom.el('div', { style: 'font-weight:700;color:' + color + ';' }, s.starts_hm + '–' + s.ends_hm));
     pill.appendChild(Dom.el('div', { style: 'color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, s.user_name));
-    pill.appendChild(Dom.el('div', { style: 'color:#9CA3AF;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, s.room_name + ' · ' + s.role));
+    pill.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, s.room_name + ' · ' + s.role));
     pill.addEventListener('click', function (e) { e.stopPropagation(); openShiftModal(s, calRoot); });
     return pill;
   }
@@ -426,8 +472,8 @@
     var leftAct = Dom.el('div', {});
     if (isEdit) {
       var delBtn = Dom.el('button', { style: 'background:white;color:#DC2626;border:1px solid #DC2626;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Delete');
-      delBtn.addEventListener('click', function () {
-        if (!confirm('Delete this shift?')) return;
+      delBtn.addEventListener('click', async function () {
+        if (!await KT.confirm('Delete this shift?')) return;
         Api.delete('/director/schedule/shift/' + prefill.id).then(function () { overlay.remove(); reload(calRoot); });
       });
       leftAct.appendChild(delBtn);

@@ -14,10 +14,17 @@
   // ============================ Time-off ============================
   async function renderTimeOff(main) {
     main.innerHTML = '<div style="padding:20px;">Loading…</div>';
-    const [mine, pending] = await Promise.all([
+    // No status filter. Asking only for pending meant a request disappeared from this
+    // screen the instant it was decided, so nobody could see what had been agreed to —
+    // or who agreed to it.
+    const [mine, all] = await Promise.all([
       Api.get('/time-off/mine').catch(() => ({ data: [] })),
-      isStaffOrAdmin() ? Api.get('/admin/time-off?status=pending').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      isStaffOrAdmin() ? Api.get('/admin/time-off').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     ]);
+    const allRows = all.data || [];
+    const pending = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() === 'pending') };
+    const decided = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() !== 'pending')
+      .sort((a, b) => String(b.decided_at || '').localeCompare(String(a.decided_at || ''))).slice(0, 50) };
     main.innerHTML = '';
     main.appendChild(html(`
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
@@ -25,11 +32,15 @@
         <button id="tor-new" class="btn btn-primary" style="margin-top:6px;${isMobile() ? 'width:100%;' : ''}">🌴 Request time off</button>
         <h3 style="margin-top:32px;font-size:16px;color:#374151;">Your requests</h3>
         <div id="tor-mine"></div>
-        ${isStaffOrAdmin() ? '<h3 style="margin-top:32px;font-size:16px;color:#374151;">Pending team requests</h3><div id="tor-pending"></div>' : ''}
+        ${isStaffOrAdmin() ? '<h3 style="margin-top:32px;font-size:16px;color:#374151;">Team requests</h3>'
+          + '<div id="tor-tabs" style="display:flex;gap:6px;margin:10px 0 4px;flex-wrap:wrap;"></div>'
+          + '<div id="tor-team"></div>' : ''}
       </div>`).firstElementChild);
 
     renderTorList(document.getElementById('tor-mine'), mine.data || [], false);
-    if (isStaffOrAdmin()) renderTorList(document.getElementById('tor-pending'), pending.data || [], true);
+    if (isStaffOrAdmin()) {
+      renderTorTabs(pending.data || [], decided.data || []);
+    }
     document.getElementById('tor-new').onclick = () => openTorModal();
   }
   function isMobile() { return window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native'); }
@@ -42,6 +53,29 @@
     other:       { icon: '🗓️', label: 'Other' },
   };
   function torMeta(t) { return TOR_META[String(t || '').toLowerCase()] || { icon: '🗓️', label: (t || 'Time off') }; }
+  /* Who decided, and when. KT.fmtDateTime renders in the AGENCY timezone; this file's own
+     fmtDate does not, and a decision timestamp shown in the wrong zone is exactly the
+     complaint that started this. Falls back only if kt-tz.js has not loaded. */
+  function decidedStamp(ts) {
+    if (!ts) return '';
+    if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(ts);
+    return fmtDate(ts);
+  }
+  function decidedText(r) {
+    var st = (r.status || 'pending').toLowerCase();
+    if (st === 'pending') return '';
+    var verb = st === 'approved' ? 'Approved' : 'Declined';
+    var who = r.decided_by_name || '';
+    var when = decidedStamp(r.decided_at);
+    return verb + (who ? ' by ' + who : '') + (when ? ' · ' + when : '');
+  }
+  function decidedCell(r) {
+    var st = (r.status || 'pending').toLowerCase();
+    if (st === 'pending') return '<span style="color:#94A3B8;">—</span>';
+    var who = r.decided_by_name ? escapeHtml(r.decided_by_name) : '<span style="color:#94A3B8;">(unknown)</span>';
+    var when = decidedStamp(r.decided_at);
+    return who + (when ? '<div style="font-size:11.5px;color:#94A3B8;">' + escapeHtml(when) + '</div>' : '');
+  }
   function torStatusColors(st) {
     return st === 'approved' ? { bg: '#DCFCE7', fg: '#15803D' }
       : st === 'denied' ? { bg: '#FEE2E2', fg: '#B91C1C' }
@@ -66,6 +100,11 @@
     card.appendChild(head);
     card.appendChild(el('div', { style: 'font-size:13.5px;font-weight:600;color:#334155;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;' }, '📅 ' + fmtDate(r.start_at) + ' – ' + fmtDate(r.end_at)));
     if (r.reason) card.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.45;' }, r.reason));
+    // Mobile renders cards, not the table, so the decision has to be added here too.
+    var decidedLine = decidedText(r);
+    if (decidedLine) {
+      card.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-top:8px;padding-top:8px;border-top:1px solid #F1F5F9;' }, decidedLine));
+    }
     if (isApprover && status === 'pending') {
       var actions = el('div', { style: 'display:flex;gap:8px;margin-top:12px;' });
       var appr = el('button', { type: 'button', style: 'flex:1;background:#16A34A;color:#fff;border:0;padding:11px;border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;' }, 'Approve');
@@ -83,7 +122,7 @@
     if (isMobile()) { rows.forEach(function (r) { host.appendChild(torCard(r, isApprover)); }); return; }
     const tbl = document.createElement('table');
     tbl.style.cssText = 'width:100%;border-collapse:collapse;margin-top:8px;';
-    tbl.innerHTML = '<thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Who</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Type</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Dates</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Status</th><th></th></tr></thead><tbody></tbody>';
+    tbl.innerHTML = '<thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Who</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Type</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Dates</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Decided by</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Status</th><th></th></tr></thead><tbody></tbody>';
     const tb = tbl.querySelector('tbody');
     rows.forEach(r => {
       const tr = document.createElement('tr');
@@ -92,6 +131,7 @@
       tr.innerHTML = `<td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name || 'You')}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-transform:capitalize;">${escapeHtml(r.request_type)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${fmtDate(r.start_at)} – ${fmtDate(r.end_at)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span></td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && status === 'pending' ? `<button data-act="approved" data-id="${r.id}" style="background:#10B981;color:#fff;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;margin-right:6px;">Approve</button><button data-act="denied" data-id="${r.id}" style="background:#EF4444;color:#fff;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;">Deny</button>` : ''}</td>`;
       tb.appendChild(tr);
@@ -104,6 +144,39 @@
       };
     });
   }
+  /* Pending is the default: it is the only tab with anything to DO. The decided tab is
+     the record of approvals and declines — who decided, and when — which is worth keeping
+     but is not what you open this screen for. Counts sit on the tabs so the history is
+     visibly there without having to look. */
+  var TOR_TAB = 'pending';
+  function renderTorTabs(pendingRows, decidedRows) {
+    var tabs = document.getElementById('tor-tabs');
+    var host = document.getElementById('tor-team');
+    if (!tabs || !host) return;
+    var defs = [
+      { key: 'pending', label: 'Awaiting decision', rows: pendingRows },
+      { key: 'decided', label: 'Approved & declined', rows: decidedRows },
+    ];
+    tabs.innerHTML = '';
+    defs.forEach(function (d) {
+      var on = TOR_TAB === d.key;
+      var b = el('button', {
+        type: 'button',
+        style: 'border-radius:999px;padding:8px 14px;font-size:13px;font-weight:800;cursor:pointer;'
+          + 'border:1.5px solid ' + (on ? '#159FB4' : '#E2E8F0') + ';'
+          + 'background:' + (on ? '#159FB4' : '#fff') + ';color:' + (on ? '#fff' : '#64748B') + ';',
+      }, d.label + ' (' + d.rows.length + ')');
+      b.dataset.ktIconized = '1';
+      b.addEventListener('click', function () {
+        TOR_TAB = d.key;
+        renderTorTabs(pendingRows, decidedRows);
+      });
+      tabs.appendChild(b);
+    });
+    var rows = TOR_TAB === 'pending' ? pendingRows : decidedRows;
+    renderTorList(host, rows, true);
+  }
+
   function openTorModal() {
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
