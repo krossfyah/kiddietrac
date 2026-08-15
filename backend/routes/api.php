@@ -290,6 +290,11 @@ Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteContr
 Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat']);
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
+
+// PUBLIC — Twilio inbound SMS: STOP, START and HELP. No auth (Twilio holds no session);
+// the request is Twilio-signature-verified inside, and refused outright when TWILIO_TOKEN
+// is unset, since an unverifiable endpoint here would let anyone opt a number in or out.
+Route::post('/sms/inbound', [\App\Http\Controllers\Api\SmsConsentController::class, 'inbound']);
 // Signed (session-less) e-document view — a mobile WebView can open this URL directly.
 Route::get('/edoc/{id}/view', [\App\Http\Controllers\Api\EDocumentController::class, 'signedStream'])->name('edoc.signed')->middleware('signed');
 
@@ -486,6 +491,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // A parent's own notification preferences (email / SMS / in-app), e.g.
         // being told when their child is signed in or out. Scoped to the caller.
         Route::get('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'index']);
+        // Consent to be texted at all — a separate question from which events you want,
+        // and the one a carrier wants evidence of. See kiddietrac.com/privacy#sms.
+        Route::get('/me/sms-consent',  [\App\Http\Controllers\Api\SmsConsentController::class, 'show']);
+        Route::post('/me/sms-consent', [\App\Http\Controllers\Api\SmsConsentController::class, 'store']);
         // 'My child isn't coming in today' — reported by a parent, tells the centre.
         Route::get('/parent/absences',    [\App\Http\Controllers\Api\AbsenceController::class, 'index']);
         Route::post('/parent/absences',   [\App\Http\Controllers\Api\AbsenceController::class, 'store']);

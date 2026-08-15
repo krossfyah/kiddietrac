@@ -90,6 +90,30 @@ final class SmsController extends Controller
             return false;
         }
 
+        // Consent. The docblock above has always described this method as "a single point
+        // of opt-in respect" and nothing here ever checked: resolveRecipients filtered on
+        // a users.sms_opt_in column that did not exist, and the check-in path came
+        // straight here with only its per-event preference. One text to someone who never
+        // agreed is a complaint to the carrier and the number gets taken away, so the gate
+        // belongs at the choke point where a new category inherits it by default.
+        //
+        // Logged as a skipped row rather than dropped silently, so "why did that not
+        // send?" has an answer.
+        if (! DB::table('users')->where('id', $userId)->value('sms_opt_in')) {
+            DB::table('sms_messages')->insert([
+                'agency_id' => $agencyId,
+                'to_user_id' => $userId,
+                'to_phone' => $phone,
+                'body' => $body,
+                'category' => $category,
+                'status' => 'skipped',
+                'error' => 'no sms consent',
+                'created_at' => now(),
+            ]);
+
+            return false;
+        }
+
         $rowId = DB::table('sms_messages')->insertGetId([
             'agency_id'  => $agencyId,
             'to_user_id' => $userId,

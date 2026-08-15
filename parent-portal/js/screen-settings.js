@@ -366,6 +366,47 @@
         prefsBody.appendChild(el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;' }, ['Loading…']));
         paneProfile.appendChild(pc2);
 
+        // Consent to be texted at all — a different question from which events you
+        // want, and the one that has to be asked explicitly. Loaded in parallel so a
+        // pill can tell "never consented" from "consented, switched off".
+        var smsConsent = { opted_in: false, consent_text: '' };
+        Api.get('/me/sms-consent').then(function (c) {
+          smsConsent.opted_in = !!(c && c.opted_in);
+          smsConsent.consent_text = (c && c.consent_text) || '';
+          if (KT._smsConsentPainted) { KT._smsConsentPainted(); }
+        }).catch(function () { /* pills still work; the ask below just refuses */ });
+
+        // Ask, record, and only then let the caller move the pill. Never opts in without
+        // an explicit yes — including when the dialog helper is missing, where the safe
+        // answer is no rather than carrying on.
+        function askSmsConsent(done) {
+          if (!KT.confirm || !smsConsent.consent_text) {
+            if (KT.toast) KT.toast('⚠️', 'Not available', 'Please try again in a moment.', '#B91C1C');
+            done(false);
+            return;
+          }
+          KT.confirm({
+            title: 'Receive text messages?',
+            description: smsConsent.consent_text,
+            okLabel: 'Yes',
+            cancelLabel: 'No',
+          }).then(function (ok) {
+            if (!ok) { done(false); return; }
+            Api.post('/me/sms-consent', { agree: true }).then(function () {
+              smsConsent.opted_in = true;
+              if (KT.toast) KT.toast('💬', 'Text messages on', 'We have sent you a confirmation text.', '#159FB4');
+              done(true);
+            }).catch(function (e) {
+              // A number that replied STOP cannot be re-enrolled from a screen — the
+              // server answers 409 and says to reply START from that handset instead.
+              var m = (e && e.data && e.data.message) || (e && e.message)
+                || 'Could not turn text messages on.';
+              if (KT.toast) KT.toast('⚠️', 'Not enabled', m, '#B91C1C');
+              done(false);
+            });
+          });
+        }
+
         Api.get('/me/notification-prefs').then(function (res) {
           Dom.clear ? Dom.clear(prefsBody) : (prefsBody.innerHTML = '');
           (res.preferences || []).forEach(function (p) {
@@ -375,6 +416,9 @@
 
             var chans = el('div', { style: 'display:flex;gap:7px;flex-wrap:wrap;' });
             var state = { email: !!p.email, push: !!p.push, sms: !!p.sms };
+            // paintChan is per-channel and scoped to the forEach below; the stop-all
+            // link needs the SMS one, so it is captured on the way past.
+            var smsPaint = null;
             [['email', '✉️ Email'], ['push', '🔔 In-app'], ['sms', '💬 Text']].forEach(function (c) {
               var key = c[0];
               var b = el('button', { type: 'button', style: 'border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;border:1.5px solid;' }, [c[1]]);
@@ -384,20 +428,69 @@
                 b.style.color = on ? '#fff' : '#64748B';
                 b.style.borderColor = on ? '#159FB4' : '#E2E8F0';
               };
-              b.addEventListener('click', function () {
-                state[key] = !state[key];
-                paintChan();
+              var savePrefs = function (revertKey) {
                 Api.put('/me/notification-prefs', {
                   key: p.key, email: state.email, push: state.push, sms: state.sms,
                 }).catch(function () {
-                  state[key] = !state[key]; paintChan();     // put it back
+                  state[revertKey] = !state[revertKey]; paintChan();     // put it back
                   if (KT.toast) KT.toast('⚠️', 'Could not save', 'Please try again.', '#B91C1C');
                 });
+              };
+              b.addEventListener('click', function () {
+                // Switching text messages on for the first time is a consent decision,
+                // not a preference. Ask, and leave the pill alone until the answer is
+                // yes — a pill that flips first and asks after has already told the
+                // user they are enrolled. Once consent is recorded this is an ordinary
+                // switch again.
+                if (key === 'sms' && !state.sms && !smsConsent.opted_in) {
+                  askSmsConsent(function (granted) {
+                    if (!granted) { return; }
+                    state.sms = true;
+                    paintChan();
+                    savePrefs('sms');
+                  });
+                  return;
+                }
+                state[key] = !state[key];
+                paintChan();
+                savePrefs(key);
               });
               paintChan();
+              if (key === 'sms') { smsPaint = paintChan; }
               chans.appendChild(b);
             });
             row.appendChild(chans);
+
+            // Stopping the lot, without having to wait for a text to reply STOP to.
+            // Only shown when there is something to stop.
+            var stopWrap = el('div', { style: 'margin-top:10px;display:none;' });
+            var stopLink = el('button', {
+              type: 'button',
+              style: 'background:none;border:0;padding:0;font-size:12px;color:#64748B;'
+                + 'text-decoration:underline;cursor:pointer;',
+            }, ['Stop all text messages']);
+            stopLink.dataset.ktIconized = '1';
+            var paintStop = function () {
+              stopWrap.style.display = smsConsent.opted_in ? 'block' : 'none';
+            };
+            stopLink.addEventListener('click', function () {
+              Api.post('/me/sms-consent', { agree: false }).then(function () {
+                smsConsent.opted_in = false;
+                state.sms = false;
+                if (smsPaint) { smsPaint(); }
+                paintStop();
+                if (KT.toast) KT.toast('💬', 'Text messages off', 'You will not receive any more texts.', '#159FB4');
+              }).catch(function () {
+                if (KT.toast) KT.toast('⚠️', 'Could not save', 'Please try again.', '#B91C1C');
+              });
+            });
+            stopWrap.appendChild(stopLink);
+            row.appendChild(stopWrap);
+            // The consent request may still be in flight when this row renders, so it
+            // paints now and again when that lands.
+            paintStop();
+            KT._smsConsentPainted = paintStop;
+
             prefsBody.appendChild(row);
           });
         }).catch(function () {
