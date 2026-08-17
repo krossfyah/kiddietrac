@@ -373,13 +373,18 @@ final class SchedulingController extends Controller
             )
             ->get();
 
-        $rows = $entries->map(function ($e) {
-            $in = Carbon::parse($e->punched_in_at);
+        // The agency's zone. time_punches stores UTC, and this formatted it raw — so
+        // every clock-in on the sheet read four hours late: a 07:02 start showed as 11:02.
+        // Payroll was being read off UTC.
+        $sheetTz = \App\Support\AgencyTime::tzForCentre($centreIds[0] ?? null);
+
+        $rows = $entries->map(function ($e) use ($sheetTz) {
+            $in = Carbon::parse($e->punched_in_at)->timezone($sheetTz);
             // Carbon::parse(null) returns NOW, which would quietly present a shift nobody
             // has clocked out of as a finished one, with hours, and pay it. An open punch
             // is reported as open with no hours — it is a thing to chase, not to total.
             $isOpen = empty($e->punched_out_at);
-            $out = $isOpen ? null : Carbon::parse($e->punched_out_at);
+            $out = $isOpen ? null : Carbon::parse($e->punched_out_at)->timezone($sheetTz);
             // time_punches has no total_break_min — breaks were a feature of the old
             // clock and the current one does not record them. Reported as 0 rather than
             // silently omitted, so the hours are not presented as break-adjusted when
@@ -389,6 +394,8 @@ final class SchedulingController extends Controller
             // yields a NEGATIVE value here (in precedes out) → every row was 0h.
             $minutes = $isOpen ? 0 : abs($out->diffInMinutes($in)) - $breakMin;
             return [
+                // The centre's date, not UTC's. An evening shift is stamped after midnight
+                // UTC and would otherwise be filed on the following day.
                 'date' => $in->toDateString(),
                 // Surfaced so the screen can mark it rather than showing a silent 0h.
                 'open' => $isOpen,
