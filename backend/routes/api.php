@@ -493,6 +493,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'index']);
         // Consent to be texted at all — a separate question from which events you want,
         // and the one a carrier wants evidence of. See kiddietrac.com/privacy#sms.
+        // Biometric unlock, reported by the device that enrolled. Enrolment has been a
+        // localStorage flag with no server record since it shipped, so nobody was told an
+        // unlock method had been added to their account and nobody could report on it.
+        Route::post('/me/biometric-enrolled', [\App\Http\Controllers\Api\BiometricController::class, 'enrolled']);
+        Route::post('/me/biometric-revoked',  [\App\Http\Controllers\Api\BiometricController::class, 'revoked']);
+        Route::get ('/admin/biometric-report', [\App\Http\Controllers\Api\BiometricController::class, 'report']);
         Route::get('/me/sms-consent',  [\App\Http\Controllers\Api\SmsConsentController::class, 'show']);
         Route::post('/me/sms-consent', [\App\Http\Controllers\Api\SmsConsentController::class, 'store']);
         // 'My child isn't coming in today' — reported by a parent, tells the centre.

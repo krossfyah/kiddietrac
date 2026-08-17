@@ -28,6 +28,10 @@ use Illuminate\Support\Facades\Log;
  */
 final class BiometricController extends Controller
 {
+    // resolveAgencyId lives here, header-aware, and is how every other controller in
+    // this API scopes to the agency the caller has switched into.
+    use \App\Http\Concerns\ResolvesCentreContext;
+
     /** Report that biometric unlock has been enabled on the device making this request. */
     public function enrolled(Request $request): JsonResponse
     {
@@ -69,6 +73,63 @@ final class BiometricController extends Controller
         $sent = self::alert($user, $device, $ip, now(), ! empty($data['catch_up']));
 
         return response()->json(['recorded' => true, 'alerted' => $sent]);
+    }
+
+    /**
+     * Biometric unlock switched OFF on this device.
+     *
+     * Recorded, not alerted: turning a lock off is done from inside an unlocked session, so
+     * whoever did it is already in. The value is that the report stays honest — without
+     * this it accumulates enrolments that ended months ago and reads as a list of live
+     * unlock methods when it is a list of everything that ever happened.
+     */
+    public function revoked(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $fingerprint = hash('sha256', $user->id . '|' . (string) $request->userAgent() . '|' . self::describeDevice((string) $request->userAgent()));
+
+        $n = DB::table('biometric_enrolments')
+            ->where('user_id', $user->id)
+            ->where('fingerprint', $fingerprint)
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
+
+        return response()->json(['revoked' => $n > 0]);
+    }
+
+    /**
+     * Who has biometric unlock, on what, since when.
+     *
+     * Scoped to the caller's agency like everything else here — a director should see
+     * their own centre's staff and families, not the platform. Live enrolments first,
+     * because "who can unlock this account right now" is the question being asked.
+     */
+    public function report(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+
+        $rows = DB::table('biometric_enrolments as b')
+            ->join('users as u', 'u.id', '=', 'b.user_id')
+            ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+            ->where('ra.agency_id', $agencyId)
+            ->where('ra.active', true)
+            ->select('b.id', 'b.user_id', 'b.device', 'b.ip', 'b.enrolled_at', 'b.revoked_at',
+                'b.was_catch_up', 'u.email', 'ra.role',
+                DB::raw("TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) as name"))
+            ->orderByRaw('b.revoked_at IS NOT NULL')     // live ones first
+            ->orderByDesc('b.enrolled_at')
+            ->limit(500)
+            ->get()
+            ->unique('id')->values();
+
+        return response()->json([
+            'data' => $rows,
+            'active' => $rows->whereNull('revoked_at')->count(),
+            'revoked' => $rows->whereNotNull('revoked_at')->count(),
+            // People, not devices: one person with a phone and a tablet is one person who
+            // can unlock, and that is what somebody reviewing this wants counted.
+            'users_with_biometrics' => $rows->whereNull('revoked_at')->pluck('user_id')->unique()->count(),
+        ]);
     }
 
     /**
