@@ -335,7 +335,10 @@ final class ReportsController extends Controller
     {
         // type => [table, alias, date column, how it reaches a centre]
         $map = [
+            // Mirrored invoices count towards "where the data is" too, or the hint on an
+            // empty report would point at the wrong fortnight.
             'invoices'   => ['invoices',     'i',  'issued_at',   'centre_id'],
+            'invoices_external' => ['external_invoices', 'x', 'issued_at', 'agency_direct'],
             'payments'   => ['payments',     'p',  'paid_at',     'via_invoice'],
             'attendance' => ['check_events', 'ce', 'occurred_at', 'via_room'],
         ];
@@ -344,8 +347,41 @@ final class ReportsController extends Controller
         }
         [$table, $alias, $col, $reach] = $map[$type];
 
+        // Invoices live in two places; the hint should span both.
+        if ($type === 'invoices' && \Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+            $native = $this->rangeOf('invoices', 'i', 'issued_at', 'centre_id', $agencyId, $centreId);
+            $mirror = $this->rangeOf('external_invoices', 'x', 'issued_at', 'agency_direct', $agencyId, $centreId);
+            $count = ($native['count'] ?? 0) + ($mirror['count'] ?? 0);
+            if (! $count) {
+                return ['count' => 0, 'from' => null, 'to' => null];
+            }
+            $froms = array_filter([$native['from'] ?? null, $mirror['from'] ?? null]);
+            $tos = array_filter([$native['to'] ?? null, $mirror['to'] ?? null]);
+
+            return ['count' => $count, 'from' => $froms ? min($froms) : null, 'to' => $tos ? max($tos) : null];
+        }
+
+        return $this->rangeOf($table, $alias, $col, $reach, $agencyId, $centreId);
+    }
+
+    /** The min/max of one table's date column, scoped to the agency. */
+    private function rangeOf(string $table, string $alias, string $col, string $reach, int $agencyId, ?int $centreId): ?array
+    {
         try {
             $q = DB::table($table . ' as ' . $alias);
+            if ($reach === 'agency_direct') {
+                // external_invoices carries agency_id itself — no join needed, and joining
+                // through families would drop any invoice whose family link has gone.
+                $q->where($alias . '.agency_id', $agencyId);
+                if ($centreId) {
+                    $q->join('families as f', 'f.id', '=', $alias . '.family_id')->where('f.centre_id', $centreId);
+                }
+                $row = $q->selectRaw("MIN({$alias}.{$col}) mn, MAX({$alias}.{$col}) mx, COUNT(*) n")->first();
+
+                return (! $row || ! $row->n)
+                    ? ['count' => 0, 'from' => null, 'to' => null]
+                    : ['count' => (int) $row->n, 'from' => substr((string) $row->mn, 0, 10), 'to' => substr((string) $row->mx, 0, 10)];
+            }
             if ($reach === 'centre_id') {
                 $q->join('centres as c', 'c.id', '=', $alias . '.centre_id');
             } elseif ($reach === 'via_room') {
@@ -487,6 +523,7 @@ final class ReportsController extends Controller
                 return [['Date', 'Family', 'Centre', 'Amount', 'Method', 'Reference'], $rows];
 
             case 'invoices':
+                // Invoices raised IN KiddieTrac.
                 $q = DB::table('invoices as i')->join('families as f', 'f.id', '=', 'i.family_id')
                     ->join('centres as c', 'c.id', '=', 'i.centre_id')->where('c.agency_id', $agencyId);
                 if ($centreId) $q->where('c.id', $centreId);
@@ -499,8 +536,47 @@ final class ReportsController extends Controller
                     'Issued' => $r->issued_at ? substr((string) $r->issued_at, 0, 10) : '—', 'Due' => $r->due_at ? substr((string) $r->due_at, 0, 10) : '—',
                     'Total' => '$' . number_format((float) $r->total, 2), 'Paid' => '$' . number_format((float) $r->amount_paid, 2),
                     'Balance' => '$' . number_format((float) $r->balance_due, 2), 'Status' => ucfirst((string) $r->status),
+                    'Source' => 'KiddieTrac',
                 ], $data->all());
-                return [['Invoice', 'Family', 'Centre', 'Issued', 'Due', 'Total', 'Paid', 'Balance', 'Status'], $rows];
+
+                // And invoices MIRRORED from the platform the agency actually bills on.
+                // iLearn's live invoices are all of this kind — 422 of them — and reading
+                // only the native table is why this report came back empty for the one
+                // agency with real billing in it.
+                if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+                    $eq = DB::table('external_invoices as x')
+                        ->leftJoin('families as f', 'f.id', '=', 'x.family_id')
+                        ->leftJoin('centres as c', 'c.id', '=', 'f.centre_id')
+                        ->where('x.agency_id', $agencyId);
+                    if ($centreId) $eq->where('c.id', $centreId);
+                    if ($from) $eq->whereDate('x.issued_at', '>=', $from);
+                    if ($to) $eq->whereDate('x.issued_at', '<=', $to);
+                    $ext = $eq->select('x.number', 'x.issued_at', 'x.due_at', 'x.total', 'x.amount_paid',
+                            'x.balance_due', 'x.status', 'x.source_label', 'x.external_source',
+                            'f.family_name', 'c.name as centre')
+                        ->orderByDesc('x.issued_at')->limit(5000)->get();
+
+                    foreach ($ext as $r) {
+                        $rows[] = [
+                            'Invoice' => $r->number,
+                            // A mirrored invoice can outlive the family link, so say so
+                            // rather than printing a blank cell somebody has to interpret.
+                            'Family' => $r->family_name ?: '—',
+                            'Centre' => $r->centre ?: '—',
+                            'Issued' => $r->issued_at ? substr((string) $r->issued_at, 0, 10) : '—',
+                            'Due' => $r->due_at ? substr((string) $r->due_at, 0, 10) : '—',
+                            'Total' => '$' . number_format((float) $r->total, 2),
+                            'Paid' => '$' . number_format((float) $r->amount_paid, 2),
+                            'Balance' => '$' . number_format((float) $r->balance_due, 2),
+                            'Status' => ucfirst((string) $r->status),
+                            'Source' => $r->source_label ?: ucfirst((string) ($r->external_source ?: 'External')),
+                        ];
+                    }
+                    // Newest first across BOTH sources, or the mirrored ones would all sit
+                    // in a block underneath and the report would read as two reports.
+                    usort($rows, fn ($a, $b) => strcmp((string) $b['Issued'], (string) $a['Issued']));
+                }
+                return [['Invoice', 'Family', 'Centre', 'Issued', 'Due', 'Total', 'Paid', 'Balance', 'Status', 'Source'], $rows];
 
             case 'families':
                 $q = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
