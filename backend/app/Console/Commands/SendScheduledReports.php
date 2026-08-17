@@ -247,7 +247,12 @@ class SendScheduledReports extends Command
         ]);
 
         try {
-            Mail::html($body, function ($m) use ($to, $subject, $atts) {
+            // Resolved OUT here, not inside the closure. It was written as $r->agency_id
+            // in there, where $r is not captured — an undefined variable, swallowed whole
+            // by the try/catch around the header call, so the header was never set and the
+            // failure was completely silent. A plain value cannot fail that way.
+            $schedAgencyId = (string) ($r->agency_id ?? '');
+            Mail::html($body, function ($m) use ($to, $subject, $atts, $schedAgencyId) {
                 $m->to($to)->subject($subject);
                 // A scheduled report goes to a DESTINATION somebody configured — a shared
                 // mailbox, a team address, an accountant — not to a person in their
@@ -261,7 +266,9 @@ class SendScheduledReports extends Command
                 // recipient. These were landing in the demo agency's log because the
                 // recipient held a role there too, so they were invisible in the log of the
                 // agency that sent them.
-                try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $r->agency_id); } catch (\Throwable $e) {}
+                if ($schedAgencyId !== '') {
+                    $m->getHeaders()->addTextHeader('X-KT-Agency-Id', $schedAgencyId);
+                }
                 foreach ($atts as $a) {
                     $m->attachData($a['data'], $a['name'], ['mime' => $a['mime']]);
                 }
