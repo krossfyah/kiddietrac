@@ -48,13 +48,21 @@ final class CalendarOverlayController extends Controller
             return response()->json(['events' => []]);
         }
 
+        // Which layers this agency wants. Filtering here rather than in the browser:
+        // a layer that is switched off should never be sent, not merely not drawn.
+        $cal = \App\Http\Controllers\Api\CalendarSettingsController::read($agencyId);
+
         $events = array_merge(
-            $this->birthdays($centreIds, $agencyId, $from, $to),
-            $this->childAbsences($centreIds, $from, $to),
-            $this->staffTimeOff($agencyId, $centreIds, $from, $to),
-            $this->vacationHolds($centreIds, $from, $to),
-            $this->closures($centreIds, $from, $to),
+            $cal['show_birthdays'] ? $this->birthdays($centreIds, $agencyId, $from, $to, $cal) : [],
+            $cal['show_absences'] ? $this->childAbsences($centreIds, $from, $to) : [],
+            $cal['show_timeoff'] ? $this->staffTimeOff($agencyId, $centreIds, $from, $to) : [],
+            $cal['show_vacations'] ? $this->vacationHolds($centreIds, $from, $to) : [],
+            $cal['show_closures'] ? $this->closures($centreIds, $from, $to) : [],
         );
+
+        if (! $cal['show_pending']) {
+            $events = array_values(array_filter($events, fn ($e) => $e['tone'] !== 'pending'));
+        }
 
         usort($events, fn ($a, $b) => [$a['date'], $a['kind']] <=> [$b['date'], $b['kind']]);
 
@@ -66,9 +74,11 @@ final class CalendarOverlayController extends Controller
     }
 
     /** Birthdays recur, so they are matched on month-day across the range, not on the stored year. */
-    private function birthdays(array $centreIds, int $agencyId, Carbon $from, Carbon $to): array
+    private function birthdays(array $centreIds, int $agencyId, Carbon $from, Carbon $to, array $cal = []): array
     {
         $out = [];
+        $wantChild = $cal['show_child_birthdays'] ?? true;
+        $wantStaff = $cal['show_staff_birthdays'] ?? true;
 
         $children = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
@@ -86,7 +96,7 @@ final class CalendarOverlayController extends Controller
             ->whereNull('u.deleted_at')->whereNotNull('u.date_of_birth')
             ->distinct()->get(['u.first_name', 'u.last_name', 'u.date_of_birth']);
 
-        foreach ([['child', $children], ['staff', $staff]] as [$who, $rows]) {
+        foreach ([['child', $wantChild ? $children : collect()], ['staff', $wantStaff ? $staff : collect()]] as [$who, $rows]) {
             foreach ($rows as $r) {
                 $dob = Carbon::parse($r->date_of_birth);
                 // Check each year the range touches — a range can straddle New Year.

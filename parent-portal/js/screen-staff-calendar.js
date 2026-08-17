@@ -308,11 +308,22 @@
       state.days = data.days || {};
       state.rooms = data.rooms || [];
       Dom.clear(calRoot);
-      calRoot.appendChild(
-        state.view === 'day' ? renderDay(start, calRoot)
-          : state.view === 'week' ? renderWeek(start, end, calRoot)
-          : renderMonth(start, end, calRoot)
-      );
+      var view = state.view === 'day' ? renderDay(start, calRoot)
+        : state.view === 'week' ? renderWeek(start, end, calRoot)
+        : renderMonth(start, end, calRoot);
+
+      // Grid on the left, the week's agenda on the right. The Day view is already an
+      // agenda, so it does not get a second one beside it.
+      if (state.view === 'day') {
+        calRoot.appendChild(view);
+      } else {
+        var shell = Dom.el('div', { style: 'display:flex;gap:14px;align-items:flex-start;' });
+        var left = Dom.el('div', { style: 'flex:1 1 auto;min-width:0;' });
+        left.appendChild(view);
+        shell.appendChild(left);
+        shell.appendChild(renderAgenda(calRoot));
+        calRoot.appendChild(shell);
+      }
     }).catch(function (e) {
       Dom.clear(calRoot);
       calRoot.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
@@ -493,6 +504,75 @@
     wrap.appendChild(add);
 
     return wrap;
+  }
+
+  /* ── Week agenda sidebar ───────────────────────────────────────────────
+     Always the seven days of the week containing the cursor, whichever view is on the
+     left — the month grid shows five weeks, and an agenda that long is a list nobody
+     reads. Hidden below 1100px, where it would squeeze the grid it is meant to explain. */
+  function renderAgenda(calRoot) {
+    // Below 1100px the sidebar would squeeze the grid it exists to explain, so it stands
+    // down rather than competing for the width.
+    if (!document.getElementById('kt-cal-agenda-css')) {
+      var st = document.createElement('style');
+      st.id = 'kt-cal-agenda-css';
+      st.textContent = '@media (max-width:1100px){.kt-cal-agenda{display:none !important;}}';
+      document.head.appendChild(st);
+    }
+    var wk = startOfWeek(state.cursor);
+    var side = Dom.el('div', {
+      class: 'kt-cal-agenda',
+      style: 'flex:0 0 292px;width:292px;background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);padding:14px;max-height:78vh;overflow-y:auto;',
+    });
+
+    side.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:0 0 10px;' },
+      'This week · ' + wk.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' }) + ' – ' + addDays(wk, 6).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })));
+
+    var todayKey = ymd(new Date());
+    var anything = false;
+
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(wk, i);
+      var key = ymd(d);
+      var evs = overlaysFor(key);
+      var offs = (state.timeOff && state.timeOff[key]) || [];
+      var shifts = (state.days[key] && state.days[key].shifts) || [];
+      if (state.roleFilter) shifts = shifts.filter(function (x) { return x.role === state.roleFilter; });
+      if (!evs.length && !offs.length && !shifts.length) continue;
+      anything = true;
+
+      var isToday = key === todayKey;
+      var dayBox = Dom.el('div', { style: 'margin:0 0 12px;' });
+      dayBox.appendChild(Dom.el('div', {
+        style: 'font-size:12.5px;font-weight:800;color:' + (isToday ? '#1F6080' : '#0D1B2A') + ';margin:0 0 5px;'
+          + (isToday ? 'background:#DBEAFE;display:inline-block;padding:1px 8px;border-radius:6px;' : ''),
+      }, d.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' }) + (isToday ? ' · today' : '')));
+
+      evs.forEach(function (ev) {
+        var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
+        var r = Dom.el('div', { style: 'background:' + t.bg + ';border-left:3px solid ' + t.bar + ';border-radius:6px;padding:5px 8px;margin-bottom:4px;' });
+        r.appendChild(Dom.el('div', { style: 'font-size:12.5px;font-weight:700;color:' + t.fg + ';' }, (ev.icon || '') + ' ' + (ev.title || '')));
+        if (ev.detail) {
+          r.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:' + t.fg + ';opacity:.85;line-height:1.4;' }, ev.detail));
+        }
+        dayBox.appendChild(r);
+      });
+
+      offs.forEach(function (o) { dayBox.appendChild(timeOffChip(o)); });
+
+      // Shifts are summarised, not listed: the grid beside this already draws every one,
+      // and repeating them turns the agenda into a second, worse calendar.
+      if (shifts.length) {
+        dayBox.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;padding:2px 2px 0;' },
+          shifts.length + (shifts.length === 1 ? ' shift' : ' shifts') + ' scheduled'));
+      }
+      side.appendChild(dayBox);
+    }
+
+    if (!anything) {
+      side.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;padding:6px 2px;' }, 'Nothing scheduled or noted this week.'));
+    }
+    return side;
   }
 
   function renderShiftPill(s, calRoot) {
