@@ -516,6 +516,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Correcting a punch. Nothing could do this before — the educator's clock only
         // toggles, and there was no admin route — which is why punches sat open for weeks.
         Route::patch('/admin/users/{user}/punches/{punch}', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'updatePunch']);
+        // Enter a shift by hand — there was no create, so a shift that was never clocked
+        // could not be added at all and payroll had no way to be made whole.
+        Route::post('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'storePunch']);
         Route::put('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'update']);
 
         // Onboarding — Privacy Policy & NDA. Every role signs once; the signature,

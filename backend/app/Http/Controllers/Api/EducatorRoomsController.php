@@ -121,6 +121,79 @@ class EducatorRoomsController extends Controller
      * because that is the clock the person actually worked to. Storing what an admin in
      * another zone happened to type would silently shift the shift.
      */
+    /**
+     * POST /admin/users/{user}/punches — enter a shift by hand.
+     *
+     * There was no create. The admin routes could list punches and edit an existing one,
+     * so a shift that was never clocked — flat tablet, forgotten press, someone covering at
+     * short notice — could not be added at all, and payroll had no way to be made whole
+     * short of editing the database directly.
+     *
+     * Recorded with a reason and stamped in the notes, because a hand-entered shift is a
+     * claim about hours somebody will be paid for. It should be obvious later which shifts
+     * were clocked and which were typed, and by whom.
+     */
+    public function storePunch(Request $request, int $user): JsonResponse
+    {
+        $centreId = $this->centreOf($user);
+        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $data = $request->validate([
+            'punched_in_at'  => ['required', 'date'],
+            'punched_out_at' => ['nullable', 'date'],
+            'reason'         => ['required', 'string', 'max:200'],
+        ]);
+
+        $tz = DB::table('centres as c')
+            ->join('agencies as a', 'a.id', '=', 'c.agency_id')
+            ->where('c.id', $centreId)
+            ->value('a.timezone') ?: 'America/Toronto';
+
+        // Typed as the centre's wall clock; stored as UTC, like every other timestamp here.
+        $toUtc = fn ($v) => $v ? \Illuminate\Support\Carbon::parse($v, $tz)->utc() : null;
+        $in = $toUtc($data['punched_in_at']);
+        $out = $toUtc($data['punched_out_at'] ?? null);
+
+        if ($out && $out->lte($in)) {
+            return response()->json(['message' => 'The end of the shift must be after the start.'], 422);
+        }
+        // A shift longer than a day is a typo — usually the wrong date on one end — and
+        // silently paying it is worse than refusing it.
+        if ($out && $in->diffInHours($out) > 24) {
+            return response()->json(['message' => 'That shift is longer than 24 hours. Check the dates.'], 422);
+        }
+
+        // Overlapping an existing punch would double-count the hours.
+        $clash = DB::table('time_punches')->where('user_id', $user)
+            ->where(function ($q) use ($in, $out) {
+                $end = $out ?: $in;
+                $q->where(function ($w) use ($in, $end) {
+                    $w->where('punched_in_at', '<=', $end->toDateTimeString())
+                      ->where(function ($x) use ($in) {
+                          $x->whereNull('punched_out_at')->orWhere('punched_out_at', '>=', $in->toDateTimeString());
+                      });
+                });
+            })->exists();
+        if ($clash) {
+            return response()->json(['message' => 'That overlaps a shift already recorded for this person.'], 422);
+        }
+
+        $by = trim((string) (($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? ''))) ?: 'an administrator';
+        $id = DB::table('time_punches')->insertGetId([
+            'user_id' => $user,
+            'centre_id' => $centreId,
+            'punched_in_at' => $in->toDateTimeString(),
+            'punched_out_at' => $out?->toDateTimeString(),
+            'notes' => 'Entered manually by ' . $by . ' on ' . now()->timezone($tz)->format('j M Y')
+                . ' — ' . $data['reason'],
+            'created_at' => now(),
+        ]);
+
+        return response()->json(['id' => $id, 'created' => true], 201);
+    }
+
     public function updatePunch(Request $request, int $user, int $punch): JsonResponse
     {
         $centreId = $this->centreOf($user);

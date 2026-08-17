@@ -332,6 +332,28 @@ final class CareController extends Controller
         $centreId = $this->resolveCentreId($request->user());
         if (!$centreId) return response()->json(['message' => 'No centre assigned'], 422);
 
+        // The centre is shut — there is no shift to start.
+        //
+        // This guard was written onto StaffController::clockIn, which serves /clock-in, and
+        // nothing calls that route: the clock was consolidated onto /staff/punch. So it has
+        // never fired. It belongs here, on the endpoint people actually press.
+        //
+        // Only blocks clocking IN. Somebody already on shift when a closure is entered must
+        // still be able to clock OUT, or their hours are stranded and payroll is wrong —
+        // which is the opposite of what this is for.
+        $isClockingIn = ! DB::table('time_punches')->where('user_id', $userId)->whereNull('punched_out_at')->exists();
+        if ($isClockingIn && ($closure = \App\Support\Closures::forDate($centreId))) {
+            return response()->json([
+                'message' => 'The centre is closed today (' . \App\Support\Closures::reason($closure)
+                    . '), so there is no shift to clock into. Enjoy the day.',
+                'closed' => true,
+                'closure' => [
+                    'dates' => \App\Support\Closures::dateLabel($closure),
+                    'reason' => \App\Support\Closures::reason($closure),
+                ],
+            ], 422);
+        }
+
         $open = DB::table('time_punches')
             ->where('user_id', $userId)
             ->whereNull('punched_out_at')
