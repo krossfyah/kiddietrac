@@ -113,6 +113,10 @@
     };
   }
 
+  // Lives as a tab inside Email settings, which calls this. The standalone route is
+  // kept so an existing #birthday-settings link still resolves rather than 404ing.
+  KT.BirthdaySettings = { render: render };
+
   ['agency_admin', 'platform_admin'].forEach(function (role) {
     Shell.registerScreen(role + ':birthday-settings', render);
   });

@@ -208,7 +208,6 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
 
-          { hash: 'birthday-settings',  label: 'Birthday emails', icon: '🎂' },
           { hash: 'data-retention',     label: 'Data retention & compliance', icon: '🗄️' },
           { hash: 'mfa',                label: 'Two-factor (MFA)',    icon: '🔐' },
           { hash: 'help',               label: 'Help & guides',       icon: '📖' },

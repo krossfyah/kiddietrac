@@ -410,6 +410,92 @@
   async function patch(path, body) { return reqJson('PATCH', path, body); }
   async function del(path) { return reqJson('DELETE', path); }
 
+
+  /* ── Email settings sub-tabs ─────────────────────────────────────────────
+     Built by relocating the rendered cards, not by rewriting the string that
+     produces them: that string carries its own event wiring, and splitting it
+     would put every handler on this screen at risk for a visual change.
+     Unmatched cards fall through to General, so a card added later still shows. */
+  var EMAIL_TABS = [
+    { key: 'general',   label: 'General',   icon: '📬', match: /mail\s*&?(amp;)?\s*notifications|master switch/i },
+    { key: 'outbound',  label: 'Outbound',  icon: '📤', match: /outbound email|smtp/i },
+    { key: 'mailbox',   label: 'Mailbox',   icon: '📥', match: /mailbox|microsoft 365/i },
+    { key: 'delivery',  label: 'Delivery',  icon: '🎛️', id: 'es-delivery' },
+    { key: 'birthdays', label: 'Birthdays', icon: '🎂', birthdays: true }
+  ];
+
+  function applyEmailTabs(main) {
+    var root = main.firstElementChild;
+    if (!root || root.getAttribute('data-kt-tabbed')) { return; }
+    root.setAttribute('data-kt-tabbed', '1');
+    var hero = root.querySelector('.kt-page-hero');
+
+    var panes = {};
+    EMAIL_TABS.forEach(function (t) {
+      var p = document.createElement('div');
+      p.setAttribute('data-es-pane', t.key);
+      p.style.display = 'none';
+      panes[t.key] = p;
+    });
+
+    // Relocate. The delivery card is filled in asynchronously, so it is matched on its
+    // placeholder id — by text it would still be empty at this point and fall through.
+    Array.prototype.slice.call(root.children).forEach(function (child) {
+      if (child === hero) { return; }
+      var key = 'general';
+      for (var i = 0; i < EMAIL_TABS.length; i++) {
+        var t = EMAIL_TABS[i];
+        if (t.id && child.id === t.id) { key = t.key; break; }
+        if (t.match && t.match.test(child.textContent || '')) { key = t.key; break; }
+      }
+      panes[key].appendChild(child);
+    });
+
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 18px;padding:0 0 2px;';
+    bar.innerHTML = EMAIL_TABS.map(function (t) {
+      return '<button type="button" data-es-tab="' + t.key + '" style="background:none;border:0;border-bottom:2px solid transparent;'
+        + 'padding:9px 13px;font-size:13.5px;font-weight:700;color:#64748B;cursor:pointer;border-radius:8px 8px 0 0;">'
+        + t.icon + ' ' + t.label + '</button>';
+    }).join('');
+
+    if (hero && hero.nextSibling) { root.insertBefore(bar, hero.nextSibling); }
+    else { root.appendChild(bar); }
+    EMAIL_TABS.forEach(function (t) { root.appendChild(panes[t.key]); });
+
+    var birthdaysLoaded = false;
+    function show(key) {
+      EMAIL_TABS.forEach(function (t) {
+        panes[t.key].style.display = (t.key === key) ? '' : 'none';
+        var b = bar.querySelector('[data-es-tab="' + t.key + '"]');
+        if (b) {
+          b.style.color = (t.key === key) ? '#0F172A' : '#64748B';
+          b.style.borderBottomColor = (t.key === key) ? '#1F6FB2' : 'transparent';
+        }
+      });
+      try { sessionStorage.setItem('kt_es_tab', key); } catch (e) {}
+      // Loaded on first view rather than up front: it is its own API call, and most
+      // visits to this screen are not about birthdays.
+      if (key === 'birthdays' && !birthdaysLoaded) {
+        birthdaysLoaded = true;
+        if (window.KT && KT.BirthdaySettings && KT.BirthdaySettings.render) {
+          KT.BirthdaySettings.render(panes.birthdays);
+        } else {
+          panes.birthdays.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Birthday settings could not be loaded.</div>';
+        }
+      }
+    }
+
+    bar.querySelectorAll('[data-es-tab]').forEach(function (b) {
+      b.addEventListener('click', function () { show(b.getAttribute('data-es-tab')); });
+    });
+
+    var want = 'general';
+    try { want = sessionStorage.getItem('kt_es_tab') || 'general'; } catch (e) {}
+    if (!panes[want]) { want = 'general'; }
+    show(want);
+  }
+
   function card(html) { return '<div class="kt-card">' + html + '</div>'; }
   function field(label, id, val, ph, type) {
     return '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">' + esc(label) + '</label>'
@@ -422,7 +508,13 @@
     if (!(window.KT && window.KT.Shell && window.KT.Shell.registerScreen)) { setTimeout(reg, 200); return; }
     ['agency_admin', 'platform_admin', 'centre_director'].forEach(function (r) {
       window.KT.Shell.registerScreen(r + ':quickbooks', renderQuickbooks);
-      window.KT.Shell.registerScreen(r + ':email-settings', renderEmailSettings);
+      // Wrapped rather than folded into renderEmailSettings: the tabs are a layer over
+      // whatever that function rendered, and keeping them separate means the render path
+      // is unchanged if the tabs are ever dropped.
+      window.KT.Shell.registerScreen(r + ':email-settings', async function (main, ctx) {
+        await renderEmailSettings(main, ctx);
+        try { applyEmailTabs(main); } catch (e) { /* an un-tabbed screen still works */ }
+      });
     });
   }
   reg();

@@ -161,17 +161,21 @@ html, body.auth-body { margin: 0; padding: 0; min-height: 100vh; background: #ff
 .ktl-mobile-hero { display: none; }
 
 /* ─────────────────── responsive ─────────────────── */
-/* Tablet: single column, hide the showcase, keep the light form. */
-@media (max-width: 940px) and (min-width: 601px) {
+/* Tablet: single column, hide the showcase, keep the light form.
+   Lower bound is 769px so the APK WebView (inflated ~600–768 CSS width) gets the
+   real PHONE login below, not this intermediate layout. */
+@media (max-width: 940px) and (min-width: 769px) {
   .ktl-wrap { grid-template-columns: 1fr; }
   .ktl-brand-side { display: none; }
   .ktl-form-side { background: radial-gradient(900px 380px at 50% -10%, #E4F1F7 0%, transparent 60%), linear-gradient(180deg, #F4FAFD, #FFFFFF 60%); }
 }
 
-/* ─────────── Phone (≤600): warm, friendly, light login ───────────
+/* ─────────── Phone (≤768): warm, friendly, light login ───────────
    Soft sky gradient · real KiddieTrac logo · form in a clean white card.
-   Airy and welcoming — reads like a parent app, not a corporate portal. */
-@media (max-width: 600px) {
+   Airy and welcoming — reads like a parent app, not a corporate portal.
+   Breakpoint is ≤768 (not ≤600) so the APK's inflated WebView width still gets
+   the phone login — matching what the desktop mobile-emulator shows. */
+@media (max-width: 768px) {
   /* A clean, flat, native-app login: solid ground, logo, roomy filled fields,
      a full-width primary button — no floating card, no decorative blobs. */
   html, body.auth-body { background: #FFFFFF; }
@@ -189,7 +193,7 @@ html, body.auth-body { margin: 0; padding: 0; min-height: 100vh; background: #ff
   /* Logo, centred, with breathing room above the form. */
   .ktl-mobile-hero { display: block; position: relative; z-index: 2; text-align: center; margin-bottom: 38px; }
   .ktl-mhero-card { display: inline-block; background: none; box-shadow: none; padding: 0; }
-  .ktl-mhero-card img { height: 62px; width: auto; display: block; margin: 0 auto; }
+  .ktl-mhero-card img { height: 92px; width: auto; display: block; margin: 0 auto; }
   .ktl-mhero-tag { display: none; }
 
   /* The form sits directly on the page (no card) — flatter and more app-like. */
@@ -209,9 +213,20 @@ html, body.auth-body { margin: 0; padding: 0; min-height: 100vh; background: #ff
     transition: background .15s, border-color .15s, box-shadow .15s;
   }
   .ktl-wrap .auth-form input:focus { background: #fff; border-color: #13B7CC; box-shadow: 0 0 0 3px rgba(19,183,204,.16); outline: none; }
+  /* Sign in: still the primary action but noticeably slimmer than before. */
   .ktl-wrap #submitBtn, .ktl-wrap .btn-primary {
-    width: 100%; padding: 16px 18px; font-size: 16px; font-weight: 800; border-radius: 14px; margin-top: 16px;
+    width: 100%; padding: 11px 18px; font-size: 15px; font-weight: 800; border-radius: 12px; margin-top: 14px;
   }
+  /* Biometric = a COMPACT, secondary pill (fingerprint icon + short label),
+     centred and auto-width — no longer a chunky full-width block. Overrides the
+     inline styles kt-biometric.js sets, hence !important. */
+  #kt-bio-loginbtn-wrap { margin-top: 10px !important; display: flex !important; justify-content: center !important; }
+  #kt-bio-loginbtn {
+    width: auto !important; padding: 8px 16px !important; font-size: 13px !important;
+    border-radius: 100px !important; gap: 7px !important; border-width: 1.4px !important;
+  }
+  #kt-bio-loginbtn span:last-child { font-weight: 700 !important; }
+  #kt-bio-loginbtn span:first-child { font-size: 15px !important; }
 
   .ktl-foot { margin-top: 22px; text-align: center; }
   .ktl-legal { position: static; margin-top: 30px; color: #B6C2CE; }

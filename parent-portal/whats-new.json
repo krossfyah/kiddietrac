@@ -1,6 +1,13 @@
 {
-  "updated": "2026-07-10",
+  "updated": "2026-08-05",
   "entries": [
+    { "type": "new", "date": "2026-08-05", "icon": "🎛️", "title": "Turn email on centre-by-centre", "body": "New pre-boarding controls under Settings → Email settings: a master switch per agency, plus a switch for every centre and room. Set up a new agency quietly and turn email on only where you're live. The Agency overview now shows an email on/off badge for the agency and each centre." },
+    { "type": "new", "date": "2026-08-05", "icon": "🏆", "title": "Child awards & printable certificates", "body": "Educators can celebrate a child with an award (daily/weekly/monthly); parents see it in their app. Print a professional portrait certificate — now stamped with your agency name and presented on behalf of the agency owner, ready to frame. Find Awards in the left menu." },
+    { "type": "new", "date": "2026-08-05", "icon": "🕐", "title": "Centre hours & capacity", "body": "When you edit a centre you can now set its opening and closing time and the maximum number of children enrolled." },
+    { "type": "new", "date": "2026-08-05", "icon": "🎨", "title": "Clearer centres list", "body": "The Centres & rooms list now shows colour-coded enrolled / families / staff counts and an email badge per centre, and it's moved to the top of the menu for quick access. Editing a centre opens right where you are instead of jumping screens." },
+    { "type": "new", "date": "2026-08-05", "icon": "🖼️", "title": "Faces in your activity feed", "body": "The Agency overview activity feed now shows each child's or staff member's photo next to check-ins, clock-ins and more." },
+    { "type": "new", "date": "2026-08-05", "icon": "👤", "title": "Agency owner at a glance", "body": "The Edit-agency window now shows the agency owner's name, photo and contact details." },
+    { "type": "new", "date": "2026-08-05", "icon": "🗂️", "title": "Your view, remembered", "body": "Switch any list between card and table view and the portal remembers your preference across sections." },
     { "type": "new", "date": "2026-07-10", "icon": "💬", "title": "Richer parent chat", "body": "Parents can now send emoji, voice notes and photos, see everyone's avatar in the thread, and “nudge” the team for a quick reply." },
     { "type": "new", "date": "2026-07-10", "icon": "📧", "title": "Missed-message email alerts", "body": "If a chat message goes unread for 15 minutes, the intended recipients get an email so nothing slips through." },
     { "type": "new", "date": "2026-07-10", "icon": "🔔", "title": "Custom notification sound", "body": "The app now plays a branded KiddieTrac chime for push notifications on Android." },
