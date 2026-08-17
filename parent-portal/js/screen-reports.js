@@ -104,47 +104,79 @@
         '<label style="font-size:11px;color:#64748B;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" data-toggle="' + s.id + '"' + (s.active ? ' checked' : '') + '> Active</label>' +
         // Actions behind a kebab. Delete was sitting in red on every row of a list
         // somebody reads weekly; one slip removed a schedule with no way back.
-        '<div style="position:relative;">' +
-          '<button data-kebab="' + s.id + '" title="Actions" aria-label="Actions" aria-haspopup="true" aria-expanded="false" ' +
-            'style="width:32px;height:32px;border-radius:9px;border:1px solid #E2E8F0;background:#fff;cursor:pointer;font-size:16px;line-height:1;color:#475569;">⋮</button>' +
-          '<div data-menu="' + s.id + '" style="display:none;position:absolute;right:0;top:36px;z-index:20;background:#fff;border:1px solid #E2E8F0;' +
-            'border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.16);min-width:168px;overflow:hidden;">' +
-            '<button data-run="' + s.id + '" style="display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;font-size:13px;color:#0F172A;cursor:pointer;">📤 Send now</button>' +
-            '<button data-edit="' + s.id + '" style="display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;font-size:13px;color:#0F172A;cursor:pointer;">✏️ Edit</button>' +
-            '<button data-del="' + s.id + '" style="display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;font-size:13px;color:#B91C1C;cursor:pointer;border-top:1px solid #F1F5F9;">🗑 Delete</button>' +
-          '</div>' +
-        '</div>' +
+        // Just the button. The menu is built on <body> when opened — see openKebab —
+        // because an absolutely positioned menu lives inside whatever the row lives
+        // inside, and something up that chain was cutting it off.
+        '<button data-kebab="' + s.id + '" title="Actions" aria-label="Actions" aria-haspopup="true" aria-expanded="false" ' +
+          'style="width:32px;height:32px;border-radius:9px;border:1px solid #E2E8F0;background:#fff;cursor:pointer;font-size:16px;line-height:1;color:#475569;">⋮</button>' +
         '</div>';
     }).join('') + '</div>';
-    // One menu at a time, and a click anywhere else closes it — a menu that stays open
-    // behind the next one is how you delete the wrong row.
-    var closeMenus = function () {
-      host.querySelectorAll('[data-menu]').forEach(function (m) { m.style.display = 'none'; });
+    // One menu at a time, on <body>, so nothing up the DOM can clip it.
+    var openMenu = null;
+    function closeMenus() {
+      if (openMenu && openMenu.parentNode) { openMenu.parentNode.removeChild(openMenu); }
+      openMenu = null;
       host.querySelectorAll('[data-kebab]').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
-    };
+    }
+
+    function openKebab(btn, sched) {
+      closeMenus();
+      var menu = document.createElement('div');
+      menu.style.cssText = 'position:fixed;z-index:9998;background:#fff;border:1px solid #E2E8F0;border-radius:10px;' +
+        'box-shadow:0 10px 30px rgba(15,23,42,.16);min-width:180px;overflow:hidden;padding:4px 0;';
+      var item = function (label, colour, fn) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.dataset.ktIconized = '1';
+        b.style.cssText = 'display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;' +
+          'font-size:13px;color:' + colour + ';cursor:pointer;';
+        b.addEventListener('mouseenter', function () { b.style.background = '#F8FAFC'; });
+        b.addEventListener('mouseleave', function () { b.style.background = 'none'; });
+        b.addEventListener('click', function (e) { e.stopPropagation(); closeMenus(); fn(b); });
+        menu.appendChild(b);
+        return b;
+      };
+
+      item('📤 Send now', '#0F172A', function () { runSchedule(sched.id); });
+      item('✏️ Edit', '#0F172A', function () { openScheduleModal(sched); });
+      var del = item('🗑 Delete', '#B91C1C', function () { deleteSchedule(sched); });
+      del.style.borderTop = '1px solid #F1F5F9';
+
+      document.body.appendChild(menu);
+
+      // Placed from the button's own rectangle, and flipped above it when there is no
+      // room below — which is exactly the case for the last row in the list, the one
+      // most likely to have been cut off.
+      var r = btn.getBoundingClientRect();
+      var h = menu.offsetHeight || 132;
+      var w = menu.offsetWidth || 180;
+      var top = (r.bottom + 6 + h > window.innerHeight) ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+      var left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+      menu.style.top = top + 'px';
+      menu.style.left = left + 'px';
+
+      menu.addEventListener('click', function (e) { e.stopPropagation(); });
+      btn.setAttribute('aria-expanded', 'true');
+      openMenu = menu;
+    }
+
     host.querySelectorAll('[data-kebab]').forEach(function (b) {
       b.dataset.ktIconized = '1';
       b.addEventListener('click', function (e) {
         e.stopPropagation();
+        var wasOpen = b.getAttribute('aria-expanded') === 'true';
         var id = b.getAttribute('data-kebab');
-        var menu = host.querySelector('[data-menu="' + id + '"]');
-        var open = menu && menu.style.display === 'block';
-        closeMenus();
-        if (menu && !open) { menu.style.display = 'block'; b.setAttribute('aria-expanded', 'true'); }
-      });
-    });
-    document.addEventListener('click', closeMenus);
-    host.querySelectorAll('[data-menu]').forEach(function (m) {
-      m.addEventListener('click', function (e) { e.stopPropagation(); });
-    });
-    host.querySelectorAll('[data-edit]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        closeMenus();
-        var id = b.getAttribute('data-edit');
         var sched = list.filter(function (x) { return String(x.id) === String(id); })[0];
-        if (sched) { openScheduleModal(sched); }
+        if (wasOpen || !sched) { closeMenus(); return; }
+        openKebab(b, sched);
       });
     });
+    // A fixed menu does not travel with the page, so it closes rather than floating
+    // away from the row it belongs to.
+    document.addEventListener('click', closeMenus);
+    window.addEventListener('resize', closeMenus);
+    window.addEventListener('scroll', closeMenus, true);
 
     host.querySelectorAll('[data-toggle]').forEach(function (cb) {
       cb.addEventListener('change', async function () {
@@ -152,30 +184,22 @@
         catch (e) { cb.checked = !cb.checked; repToast(e.message || 'Failed', 'error'); }
       });
     });
-    host.querySelectorAll('[data-del]').forEach(function (b) {
-      b.addEventListener('click', async function () {
-        closeMenus();
-        // Named, because "Delete this schedule?" on a list of six is not a question
-        // somebody can answer correctly.
-        var sid = b.getAttribute('data-del');
-        var srow = list.filter(function (x) { return String(x.id) === String(sid); })[0];
-        if (window.KT && KT.confirm && !(await KT.confirm({
-          title: 'Delete this schedule?',
-          description: srow ? (srow.report_title + ' — ' + srow.schedule_label + ' to ' + srow.recipient) : '',
-        }))) return;
-        try { await Api.delete('/admin/report-schedules/' + b.getAttribute('data-del')); loadSchedules(); }
-        catch (e) { repToast(e.message || 'Failed', 'error'); }
-      });
-    });
-    host.querySelectorAll('[data-run]').forEach(function (b) {
-      b.addEventListener('click', async function () {
-        closeMenus();
-        b.disabled = true; var t = b.textContent; b.textContent = 'Sending…';
-        try { await Api.post('/admin/report-schedules/' + b.getAttribute('data-run') + '/run', {}); repToast('Report sent', 'success'); }
-        catch (e) { repToast(e.message || 'Could not send', 'error'); }
-        b.disabled = false; b.textContent = t;
-      });
-    });
+    // Named, because "Delete this schedule?" on a list of six is not a question anybody
+    // can answer correctly — it reads back the report, the cadence and the recipient.
+    async function deleteSchedule(sched) {
+      if (window.KT && KT.confirm && !(await KT.confirm({
+        title: 'Delete this schedule?',
+        description: sched.report_title + ' — ' + sched.schedule_label + ' to ' + sched.recipient,
+      }))) return;
+      try { await Api.delete('/admin/report-schedules/' + sched.id); loadSchedules(); repToast('Schedule deleted', 'success'); }
+      catch (e) { repToast(e.message || 'Failed', 'error'); }
+    }
+
+    async function runSchedule(id) {
+      repToast('Sending…', 'info');
+      try { await Api.post('/admin/report-schedules/' + id + '/run', {}); repToast('Report sent', 'success'); loadSchedules(); }
+      catch (e) { repToast(e.message || 'Could not send', 'error'); }
+    }
   }
 
   function schedFld(label, control) { return '<label style="font-size:13px;font-weight:700;color:#334155;display:block;">' + esc(label) + '<div style="margin-top:4px;">' + control + '</div></label>'; }
