@@ -140,6 +140,26 @@ final class TeamChatController extends Controller
             ->get(['p.thread_id', 'u.id as uid', 'u.first_name', 'u.last_name', 'u.photo_url'])
             ->keyBy('thread_id');
 
+        // Who each counterpart IS, so the list can say "Sarah Mitchell (Educator)".
+        // One lookup for everybody rather than one per thread. Lowest rank wins, so a
+        // person who is both a parent and staff shows as staff - the hat they are being
+        // messaged in here.
+        $otherIds = $others->pluck('uid')->filter()->unique()->all();
+        $rank = ['agency_admin' => 0, 'platform_admin' => 0, 'centre_director' => 1,
+            'home_visitor' => 2, 'educator' => 3, 'auditor' => 4, 'guardian' => 5];
+        $roleLabel = ['agency_admin' => 'Admin', 'platform_admin' => 'Admin', 'centre_director' => 'Director',
+            'educator' => 'Educator', 'home_visitor' => 'Home visitor', 'auditor' => 'Auditor', 'guardian' => 'Parent'];
+        $roleBy = [];
+        if ($otherIds) {
+            foreach (DB::table('role_assignments')->whereIn('user_id', $otherIds)
+                ->where('active', true)->get(['user_id', 'role']) as $ra) {
+                $cur = $roleBy[$ra->user_id] ?? null;
+                if ($cur === null || ($rank[$ra->role] ?? 9) < ($rank[$cur] ?? 9)) {
+                    $roleBy[$ra->user_id] = $ra->role;
+                }
+            }
+        }
+
         $threads = DB::table('staff_threads')->whereIn('id', $mine)->orderByDesc('last_message_at')->get();
         $out = [];
         foreach ($threads as $t) {
@@ -153,6 +173,7 @@ final class TeamChatController extends Controller
                 'name'       => $o ? (trim(($o->first_name ?? '') . ' ' . ($o->last_name ?? '')) ?: 'Colleague') : 'Colleague',
                 'photo_url'  => $o->photo_url ?? null,
                 'other_id'   => $o->uid ?? null,
+                'role'       => $roleLabel[$roleBy[$o->uid ?? 0] ?? ''] ?? 'Staff',
                 'preview'    => $last ? mb_substr(($last->sender_id == $uid ? 'You: ' : '') . strip_tags((string) $last->body), 0, 80) : '',
                 'at'         => $last->created_at ?? $t->last_message_at,
                 'unread'     => $unread,

@@ -158,8 +158,11 @@
             kind: 'staff',
             // Namespaced: conversation 7 and thread 7 are different things.
             id: 'staff:' + t.id,
-            family_name: t.name,
-            centre_name: t.name,
+            // The role rides along in the displayed name so it shows in the From
+            // column, the mobile card and the search, without three render paths each
+            // learning about roles separately.
+            family_name: t.role ? (t.name + ' (' + t.role + ')') : t.name,
+            centre_name: t.role ? (t.name + ' (' + t.role + ')') : t.name,
             photo_url: t.photo_url || '',
             preview: t.preview || '',
             last_message_at: t.at,
