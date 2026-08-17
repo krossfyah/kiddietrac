@@ -103,6 +103,102 @@
     }
   }
 
+  /* ── Draft with AI ─────────────────────────────────────────────────────
+     The generator speaks HDLH foundations (belonging / wellbeing / engagement /
+     expression); the planner stores learning domains. They are different taxonomies, so
+     this is a deliberate approximation rather than a lookup — an educator can change any
+     of it before saving, which is the point of dropping it into the grid rather than
+     saving it for them. */
+  var HDLH_TO_DOMAIN = {
+    belonging: 'social_emotional',
+    wellbeing: 'self_care',
+    engagement: 'cognitive',
+    expression: 'creative_arts',
+  };
+  var AI_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+  function aiPlanToDays(plan) {
+    var out = { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [] };
+    var days = (plan && plan.days) || [];
+    days.forEach(function (d, i) {
+      // Prefer the day's own name; fall back to position, since a generator that returns
+      // five days in order but mislabels one should not lose a day.
+      var key = String(d.day || '').toLowerCase().trim();
+      if (AI_DAYS.indexOf(key) === -1) { key = AI_DAYS[i] || null; }
+      if (!key) { return; }
+      (d.activities || []).forEach(function (a) {
+        var notes = String(a.description || '');
+        if (Array.isArray(a.materials) && a.materials.length) {
+          notes += (notes ? ' ' : '') + 'Materials: ' + a.materials.join(', ') + '.';
+        }
+        out[key].push({
+          time: '',                       // the educator places it in the day
+          title: String(a.title || '').trim(),
+          domain: HDLH_TO_DOMAIN[String(a.hdlh_foundation || '').toLowerCase()] || null,
+          notes: notes.trim(),
+        });
+      });
+    });
+    return out;
+  }
+
+  function openAiDialog(container) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:20px 22px;box-shadow:0 18px 48px rgba(0,0,0,.28);">'
+      + '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">✨ Draft this week with AI</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin:0 0 14px;">Five days of activities land in the grid for you to edit. Nothing is saved until you press save.</div>'
+      + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Theme</label>'
+      + '<input id="kt-ai-theme" type="text" placeholder="e.g. All about me" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;margin-bottom:12px;">'
+      + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Age group</label>'
+      + '<select id="kt-ai-age" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;background:#fff;margin-bottom:12px;">'
+      + '<option value="infant">Infant</option><option value="toddler" selected>Toddler</option>'
+      + '<option value="preschool">Preschool</option><option value="school-age">School age</option></select>'
+      + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Anything to keep in mind (optional)</label>'
+      + '<textarea id="kt-ai-notes" rows="2" placeholder="e.g. Several children are new — emphasise belonging." style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>'
+      + '<div id="kt-ai-msg" style="font-size:12.5px;color:#64748B;min-height:18px;margin:8px 0 0;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">'
+      + '<button id="kt-ai-cancel" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+      + '<button id="kt-ai-go" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Generate</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) { overlay.remove(); } });
+    overlay.querySelector('#kt-ai-cancel').addEventListener('click', function () { overlay.remove(); });
+
+    var themeEl = overlay.querySelector('#kt-ai-theme');
+    themeEl.value = (currentPlan && currentPlan.theme) || '';
+    setTimeout(function () { themeEl.focus(); }, 40);
+
+    overlay.querySelector('#kt-ai-go').addEventListener('click', async function () {
+      var theme = themeEl.value.trim();
+      var msg = overlay.querySelector('#kt-ai-msg');
+      var go = overlay.querySelector('#kt-ai-go');
+      if (theme.length < 3) { msg.innerHTML = '<span style="color:#DC2626;">Give it a theme to work from.</span>'; return; }
+      go.disabled = true; go.textContent = 'Drafting…';
+      msg.textContent = 'Drafting five days — usually 10–20 seconds.';
+      try {
+        var res = await api('POST', '/director/lesson-plans-ai/generate', {
+          centre_id: parseInt(activeCentreId, 10),
+          age_group: overlay.querySelector('#kt-ai-age').value,
+          theme: theme,
+          week_starting: activeWeek,
+          starter_notes: overlay.querySelector('#kt-ai-notes').value.trim() || null,
+        });
+        var days = aiPlanToDays(res && res.plan);
+        currentPlan = currentPlan || {};
+        currentPlan.theme = theme;
+        currentPlan.days = days;
+        overlay.remove();
+        renderProvider(container);
+        if (window.KT && KT.toast) { KT.toast('✨', 'Draft ready', 'Edit anything, then save.'); }
+      } catch (e) {
+        var detail = (e && e.message) || 'Server error';
+        msg.innerHTML = '<span style="color:#DC2626;">Could not draft: ' + esc(detail) + '</span>';
+        go.disabled = false; go.textContent = 'Generate';
+      }
+    });
+  }
+
   async function renderProvider(container) {
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading lesson planner…</div>';
     const rooms = await getRooms();
@@ -170,6 +266,7 @@
             <button id="kt-prev-week" style="${navBtnStyle()}">‹</button>
             <input type="date" id="kt-week" value="${activeWeek}" style="${selectStyle()};width:160px;">
             <button id="kt-next-week" style="${navBtnStyle()}">›</button>
+            <button id="kt-ai" class="kt-icon-tip" title="Draft with AI" data-kttip="Draft this week with AI" aria-label="Draft with AI" style="height:36px;padding:0 12px;box-sizing:border-box;background:#fff;color:#1F6080;border:1px solid #CFE3EB;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:6px;">✨ Draft with AI</button>
             <button id="kt-save" class="kt-icon-tip" title="Save" data-kttip="Save" aria-label="Save" style="height:36px;width:36px;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;">💾</button>
           </div>
         </div>
@@ -208,6 +305,7 @@
     $('#kt-prev-week', container).addEventListener('click', () => { const d = new Date(activeWeek); d.setDate(d.getDate()-7); activeWeek = mondayOf(d); renderProvider(container); });
     $('#kt-next-week', container).addEventListener('click', () => { const d = new Date(activeWeek); d.setDate(d.getDate()+7); activeWeek = mondayOf(d); renderProvider(container); });
     $('#kt-save', container).addEventListener('click', () => save(container));
+    $('#kt-ai', container).addEventListener('click', () => openAiDialog(container));
   }
 
   /* Planner times were free text, so "10am", "1030am" and "10:00" all appear in real
