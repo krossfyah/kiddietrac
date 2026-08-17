@@ -57,8 +57,43 @@ class SendScheduledReports extends Command
         }
 
         $this->info("Scheduled reports sent: {$sent}");
+        // Name the schedules that cannot deliver, so a run that sends nothing explains
+        // itself rather than just reporting zero.
+        foreach ($rows as $r) {
+            $to = $r->recipient_email ?: DB::table('users')->where('id', $r->recipient_user_id)->value('email');
+            if ($to && ($why = self::undeliverableReason($to))) {
+                $this->warn("  schedule #{$r->id} ({$r->report_type}) -> {$to}: {$why}");
+            }
+        }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Why this address cannot be delivered to, or null if it can.
+     *
+     * Only speaks to accounts we hold: an address belonging to nobody in the system is a
+     * plain external recipient and perfectly deliverable. It is an address that maps to a
+     * DEPARTED account that gets blocked downstream, and that is the case worth naming.
+     */
+    public static function undeliverableReason(string $email): ?string
+    {
+        $u = DB::table('users')->where('email', $email)->first(['id', 'status', 'deleted_at', 'first_name', 'last_name']);
+        if (! $u) {
+            return null;
+        }
+        $who = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: $email;
+
+        if (! empty($u->deleted_at)) {
+            return "the recipient address belongs to {$who}, whose account was removed on "
+                . substr((string) $u->deleted_at, 0, 10) . ' — notifications to it are paused';
+        }
+        if (in_array((string) $u->status, ['deactivated', 'suspended'], true)) {
+            return "the recipient address belongs to {$who}, whose account is {$u->status}"
+                . ' — notifications to it are paused';
+        }
+
+        return null;
     }
 
     /** Date range [from, to] (Y-m-d or null) for a schedule's range_kind. */
@@ -83,6 +118,24 @@ class SendScheduledReports extends Command
             $to = DB::table('users')->where('id', $r->recipient_user_id)->value('email');
         }
         if (! $to) {
+            return false;
+        }
+
+        // Can this address actually receive anything?
+        //
+        // The mail layer pauses notifications for a suspended or deactivated account, and
+        // it does that in a listener — downstream of Mail::html(), which throws nothing and
+        // looks like success from here. So a schedule pointed at somebody who has left
+        // stamped last_sent_on every week and showed as sent, while three weeks of reports
+        // were dropped. Checked here, before the PDF is built, so the failure is visible
+        // and cheap.
+        if ($blocked = self::undeliverableReason($to)) {
+            Log::warning('Scheduled report NOT sent — ' . $blocked, [
+                'schedule_id' => $r->id ?? null,
+                'recipient' => $to,
+                'report' => $r->report_type ?? null,
+            ]);
+
             return false;
         }
 
