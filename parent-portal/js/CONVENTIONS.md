@@ -88,6 +88,32 @@ gets counted as one record, so the screen reads "1 record" while showing nothing
 
 ---
 
+## Where patched code LANDS is not where it belongs
+
+Two crashes in one week came from this, so it earns its own section.
+
+An anchor-based edit inserts text **where the anchor is**. If that anchor sits inside a
+function body, everything you insert is silently nested in that function:
+
+```js
+function renderGrid() {
+  ...
+  function toHHMM(raw) { ... }   // <- nested, invisible outside renderGrid
+  ...
+}
+function activityCard() {
+  toHHMM(a.time);                // ReferenceError: toHHMM is not defined
+}
+```
+
+Function declarations hoist **within their scope and only within it**. A sibling function
+cannot see them. The same trap in reverse: a `var` read by a hoisted function before the
+assignment line runs gives `undefined`, not an error at the definition site — which is
+how `ROLE_ORDER` produced `undefined['Parent']`.
+
+After any insertion, check the *brace nesting* of the anchor, not its indentation —
+indentation is cosmetic and will look perfectly correct while the scope is wrong.
+
 ## Popups appended to `<body>`
 
 Any menu or dialog moved to `document.body` is **outside** the screen's container, so
