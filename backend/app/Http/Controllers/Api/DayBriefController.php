@@ -38,6 +38,39 @@ final class DayBriefController extends Controller
             $items[] = compact('key', 'icon', 'label', 'value', 'detail', 'tone', 'hash');
         };
 
+        // ── Today's lesson plan ─────────────────────────────────────────
+        // The educator's own room first, then the centre-wide plan a room inherits when
+        // it has none of its own — the same order the planner and both summary emails
+        // use, via the same helper, so the day brief cannot disagree with them.
+        try {
+            $lpRooms = $roomIds instanceof \Illuminate\Support\Collection ? $roomIds->all() : (array) $roomIds;
+            $lpCentres = $centreIds instanceof \Illuminate\Support\Collection ? $centreIds->all() : (array) $centreIds;
+            $lpCentre = $lpCentres ? (int) reset($lpCentres) : null;
+
+            $plan = ['theme' => null, 'items' => []];
+            foreach (array_slice(array_values($lpRooms), 0, 8) as $rid) {
+                $p = \App\Support\LessonPlans::forDate((int) $rid, $lpCentre, $todayStr);
+                if ($p['items']) { $plan = $p; break; }
+            }
+            if (! $plan['items'] && $lpCentre) {
+                $plan = \App\Support\LessonPlans::forDate(null, $lpCentre, $todayStr);
+            }
+
+            if ($plan['items']) {
+                $n = count($plan['items']);
+                $first = $plan['items'][0];
+                $add(
+                    'lesson-plan', '📘', 'Today’s plan',
+                    $plan['theme'] ?: ($n . ' activit' . ($n === 1 ? 'y' : 'ies')),
+                    trim(($first['time_label'] ? $first['time_label'] . ' · ' : '') . $first['title'])
+                        . ($n > 1 ? ' +' . ($n - 1) . ' more' : ''),
+                    'info', '#lesson-plans'
+                );
+            }
+        } catch (\Throwable $e) {
+            // A day brief is more useful without this tile than not at all.
+        }
+
         // ── Attendance: expected / in / out / late pickups ──────────────
         try {
             $childIds = DB::table('children as c')

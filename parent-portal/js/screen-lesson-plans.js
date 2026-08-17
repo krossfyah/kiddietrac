@@ -210,17 +210,6 @@
     $('#kt-save', container).addEventListener('click', () => save(container));
   }
 
-  function renderGrid() {
-    const grid = $('#kt-grid');
-    if (!grid) return;
-    if (!currentPlan || !currentPlan.days) currentPlan = { days: {} };
-    DAYS.forEach(d => { if (!Array.isArray(currentPlan.days[d])) currentPlan.days[d] = []; });
-
-    grid.innerHTML = DAYS.map(day => dayColumn(day, currentPlan.days[day])).join('');
-
-    grid.querySelectorAll('.kt-add-activity').forEach(b => b.addEventListener('click', () => {
-      const day = b.dataset.day;
-
   /* Planner times were free text, so "10am", "1030am" and "10:00" all appear in real
      plans. toHHMM feeds the native picker; fmtTime is what everything else displays.
      Both mirror App\Support\LessonPlans on the server so the planner, the parent
@@ -250,6 +239,17 @@
     h = h % 12; if (h === 0) h = 12;
     return h + ':' + p[1] + ' ' + mer;
   }
+
+  function renderGrid() {
+    const grid = $('#kt-grid');
+    if (!grid) return;
+    if (!currentPlan || !currentPlan.days) currentPlan = { days: {} };
+    DAYS.forEach(d => { if (!Array.isArray(currentPlan.days[d])) currentPlan.days[d] = []; });
+
+    grid.innerHTML = DAYS.map(day => dayColumn(day, currentPlan.days[day])).join('');
+
+    grid.querySelectorAll('.kt-add-activity').forEach(b => b.addEventListener('click', () => {
+      const day = b.dataset.day;
 
       currentPlan.days[day].push({ time: '', title: '', domain: null, notes: '' });
       renderGrid();
