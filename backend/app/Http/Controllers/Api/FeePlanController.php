@@ -18,8 +18,11 @@ final class FeePlanController extends Controller
 {
     private function agencyId(Request $r): ?int
     {
-        $h = $r->header('X-Active-Agency-Id');
-        if ($h) return (int) $h;
+        $h = (int) $r->header('X-Active-Agency-Id');
+        if ($h && DB::table('role_assignments')->where('user_id', $r->user()->id)->where('active', true)
+                ->where(function ($q) use ($h) { $q->where('role', 'platform_admin')->orWhere('agency_id', $h); })->exists()) {
+            return $h;   // active-agency header honoured only for a platform_admin or a real member of that agency
+        }
         $v = DB::table('role_assignments')->where('user_id', $r->user()->id)
             ->where('active', 1)->value('agency_id');
         return $v ? (int) $v : null;

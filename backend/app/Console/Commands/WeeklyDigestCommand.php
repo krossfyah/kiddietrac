@@ -174,6 +174,13 @@ final class WeeklyDigestCommand extends Command
 
         $body = '';
 
+        // The agency's own logo at the top of the body (header/footer stay KiddieTrac-branded).
+        if (!empty($agency->brand_logo_url)) {
+            $lu = $agency->brand_logo_url;
+            $abs = (strpos($lu, 'http') === 0) ? $lu : ('https://app.kiddietrac.com' . $lu);
+            $body .= '<div style="text-align:center;margin:0 0 18px;"><img src="' . htmlspecialchars($abs) . '" alt="' . htmlspecialchars($agency->name) . '" style="max-height:64px;max-width:230px;height:auto;border:0;display:inline-block;"></div>';
+        }
+
         // Friendly opener
         $body .= '<p style="margin:0 0 18px;font-size:14px;color:#0F172A;line-height:1.5;">Good morning. Here\'s how the week of <strong>' . $weekLabel . '</strong> shook out across <strong>' . htmlspecialchars($agency->name) . '</strong>.</p>';
 
@@ -189,7 +196,13 @@ final class WeeklyDigestCommand extends Command
             EmailTemplate::statTile('Distinct children · day attended', (string) ($s['check_events'] ?? 0),
                 'unique children signed in last week', '#1F6080'),
             EmailTemplate::statTile('Observations logged', (string) $s['observations'],
-                'HDLH / ELECT / ELOF · ' . $s['incidents'] . ' incident' . ($s['incidents'] === 1 ? '' : 's'), '#7C3AED')
+                'HDLH / ELECT / ELOF frameworks', '#7C3AED')
+        );
+        $body .= EmailTemplate::statRow(
+            EmailTemplate::statTile('Collected', $paidFmt,
+                $collectionPct . '% of ' . $billedFmt . ' billed', $collectionPct >= 80 ? '#16A34A' : '#F59E0B'),
+            EmailTemplate::statTile('Incidents', (string) $s['incidents'],
+                'reports filed last week', ($s['incidents'] > 0) ? '#DC2626' : '#16A34A')
         );
 
         // Per-centre movement table

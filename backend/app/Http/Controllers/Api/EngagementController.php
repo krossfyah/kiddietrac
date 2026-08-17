@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * v22p56 — Procare-parity engagement:
@@ -283,22 +284,89 @@ final class EngagementController extends Controller
     public function listSignedDocs(Request $request): JsonResponse
     {
         $u = $request->user();
+
+        // TENANT ISOLATION: an admin/director may see signed documents ONLY for
+        // users in THEIR agency/centre — never every agency's. (The old query
+        // returned ALL signed_documents to anyone holding an admin role anywhere,
+        // leaking other agencies' signed docs.) Build the allowed signer set.
+        $roles = DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->pluck('role')->all();
+        $isPlatform    = in_array('platform_admin', $roles, true);
+        $isAgencyAdmin = in_array('agency_admin', $roles, true);
+        $isDirector    = in_array('centre_director', $roles, true);
+
+        $scopedUserIds = [(int) $u->id]; // always your own signed docs
+        if ($isPlatform || $isAgencyAdmin || $isDirector) {
+            $centreIds = [];
+            if ($isDirector && ! $isAgencyAdmin && ! $isPlatform) {
+                // Director: only the centre(s) they direct.
+                $centreIds = DB::table('role_assignments')->where('user_id', $u->id)
+                    ->where('role', 'centre_director')->where('active', 1)->whereNotNull('centre_id')
+                    ->pluck('centre_id')->all();
+            } else {
+                // Agency admin / platform admin: the active agency they're viewing.
+                $agencyId = $isPlatform ? (int) $request->header('X-Active-Agency-Id') : (\App\Support\AuditScope::ownAgency((int) $u->id) ?? 0);
+                if ($agencyId && DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists()) {
+                    $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+                    $agencyStaff = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)->pluck('user_id')->all();
+                    $scopedUserIds = array_merge($scopedUserIds, $agencyStaff);
+                }
+            }
+            if (! empty($centreIds)) {
+                $centreStaff = DB::table('role_assignments')->whereIn('centre_id', $centreIds)->where('active', 1)->pluck('user_id')->all();
+                $guardians = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                    ->whereIn('f.centre_id', $centreIds)->pluck('g.user_id')->all();
+                $scopedUserIds = array_merge($scopedUserIds, $centreStaff, $guardians);
+            }
+        }
+        $scopedUserIds = array_values(array_unique(array_map('intval', $scopedUserIds)));
+
         $rows = DB::table('signed_documents as sd')
             ->leftJoin('users as u', 'u.id', '=', 'sd.signer_user_id')
-            ->where(function ($q) use ($u) {
-                $q->where('sd.signer_user_id', $u->id)
-                  ->orWhereExists(function ($q) use ($u) {
-                      $q->select(DB::raw(1))->from('role_assignments as ra')
-                        ->where('ra.user_id', $u->id)
-                        ->whereIn('ra.role', ['agency_admin', 'centre_director', 'platform_admin'])
-                        ->where('ra.active', 1);
-                  });
-            })
+            ->whereIn('sd.signer_user_id', $scopedUserIds ?: [(int) $u->id])
             ->orderByDesc('sd.signed_at')
             ->limit(200)
-            ->select('sd.*', DB::raw("CONCAT(u.first_name,' ',u.last_name) as signer_full_name"))
+            ->select('sd.*', DB::raw("CONCAT(u.first_name,' ',u.last_name) as signer_full_name"), DB::raw("(CASE WHEN sd.document_type='privacy_nda' THEN (SELECT d.file_url FROM documents d WHERE d.scope_type='user' AND d.scope_id=sd.signer_user_id AND d.category='agreement' ORDER BY d.id DESC LIMIT 1) ELSE NULL END) as doc_file_url"))
             ->get();
         return response()->json(['data' => $rows]);
+    }
+
+    public function downloadSignedDoc(Request $request, int $id): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $u = $request->user();
+        $sd = DB::table('signed_documents')->where('id', $id)->first();
+        abort_unless($sd, 404);
+        // Same access as the list: the signer, or any admin/director/platform_admin.
+        $isAdmin = DB::table('role_assignments')->where('user_id', $u->id)
+            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
+            ->where('active', 1)->exists();
+        abort_unless((int) $sd->signer_user_id === (int) $u->id || $isAdmin, 403);
+
+        $disk = Storage::disk('public');
+        $rel = null;
+        if ($sd->document_type === 'privacy_nda') {
+            $doc = DB::table('documents')->where('scope_type', 'user')
+                ->where('scope_id', $sd->signer_user_id)->where('category', 'agreement')
+                ->orderByDesc('id')->first();
+            if ($doc && $doc->file_url) {
+                $rel = ltrim(preg_replace('#^/?storage/#', '', $doc->file_url), '/');
+            }
+        }
+        if (! $rel || ! $disk->exists($rel)) {
+            $sig = (string) ($sd->signature_data ?? '');
+            if (str_starts_with($sig, '/storage/') || str_starts_with($sig, 'storage/')) {
+                $rel = ltrim(preg_replace('#^/?storage/#', '', $sig), '/');
+            }
+        }
+        abort_unless($rel && $disk->exists($rel), 404, 'No downloadable file is stored for this signature.');
+
+        // Datestamped, human filename: <DocumentType>-<Signer>-<YYYY-MM-DD>.<ext>
+        $ext = strtolower(pathinfo($rel, PATHINFO_EXTENSION)) ?: 'pdf';
+        $date = Carbon::parse($sd->signed_at ?? now())->format('Y-m-d');
+        $type = trim(preg_replace('/[^A-Za-z0-9]+/', '-', (string) $sd->document_type), '-') ?: 'document';
+        $who = trim(preg_replace('/[^A-Za-z0-9]+/', '-', (string) ($sd->signer_name ?? 'signer')), '-') ?: 'signer';
+        $name = $type . '-' . $who . '-' . $date . '.' . $ext;
+
+        return response()->download($disk->path($rel), $name);
     }
 
     private function resolveAgencyId(Request $request): int

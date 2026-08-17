@@ -215,6 +215,63 @@ final class WaitlistController extends Controller
         return response()->json(['success' => true]);
     }
 
+    /** Email the family a "still on our waitlist" reminder, with an optional note. */
+    public function remind(Request $request, int $childId): JsonResponse
+    {
+        $data = $request->validate(['note' => ['nullable', 'string', 'max:1000']]);
+
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) return response()->json(['message' => 'Child not found'], 404);
+        if ($child->enrollment_status !== 'waitlist') return response()->json(['message' => 'Child is not waitlisted'], 422);
+
+        $family = DB::table('families')->where('id', $child->family_id)->first();
+        if (! $family || ! $this->hasCentreAccess($request->user()->id, $family->centre_id)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $email = $family->primary_email ?? null;
+        if (! $email) return response()->json(['message' => 'This family has no email on file.'], 422);
+
+        $agencyId = (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
+        $centreName = DB::table('centres')->where('id', $family->centre_id)->value('name');
+        $childName = trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? '')) ?: 'your child';
+        $note = trim((string) ($data['note'] ?? ''));
+
+        $body = '<p style="margin:0 0 12px;font-size:14.5px;color:#243244;">Hello ' . htmlspecialchars((string) $family->family_name) . ',</p>'
+            . '<p style="margin:0 0 12px;font-size:14px;color:#334155;">This is a friendly reminder that <strong>' . htmlspecialchars($childName) . '</strong> is still on the waitlist' . ($centreName ? ' at ' . htmlspecialchars((string) $centreName) : '') . '. We will be in touch as soon as a space becomes available.</p>'
+            . ($note !== '' ? '<div style="margin:12px 0;padding:12px 14px;background:#F1F5F9;border-radius:8px;font-size:13.5px;color:#334155;"><strong>A note from us:</strong><br>' . nl2br(htmlspecialchars($note)) . '</div>' : '')
+            . '<p style="margin:14px 0 0;font-size:12.5px;color:#64748b;">If your plans have changed, just reply to let us know.</p>';
+
+        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+            'eyebrow'   => 'WAITLIST',
+            'title'     => 'You are still on our waitlist',
+            'subtitle'  => $centreName ?: null,
+            'preheader' => $childName . ' is still on the waitlist.',
+        ]);
+
+        try {
+            $mailer = \App\Services\AgencyMailer::forAgency($agencyId);
+            $fromA = $mailer->fromAddress();
+            $fromN = $mailer->fromName();
+            $mailer->mailer()->html($html, function ($m) use ($email, $family, $fromA, $fromN) {
+                $m->to($email, $family->family_name ?? null)->from($fromA, $fromN)->subject('You are still on our waitlist');
+            });
+        } catch (\Throwable $e) {
+            Log::warning('Waitlist reminder failed', ['child' => $childId, 'e' => $e->getMessage()]);
+            return response()->json(['message' => 'Could not send the email — please try again.'], 500);
+        }
+
+        DB::table('audit_logs')->insert([
+            'user_id' => $request->user()->id,
+            'action' => 'waitlist.reminded',
+            'entity_type' => 'child',
+            'entity_id' => $childId,
+            'payload' => json_encode(['email' => $email, 'note' => $note ?: null]),
+            'created_at' => now(),
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
     /**
      * POST /api/v1/director/waitlist/{childId}/move
      * Move waitlist position up or down.

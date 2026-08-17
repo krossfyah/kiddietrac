@@ -60,6 +60,11 @@ class Incident extends Model
         return $this->hasMany(IncidentAcknowledgment::class);
     }
 
+    public function notes(): HasMany
+    {
+        return $this->hasMany(IncidentNote::class)->orderBy('created_at');
+    }
+
     public function attachments(): HasMany
     {
         return $this->hasMany(IncidentAttachment::class);

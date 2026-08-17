@@ -77,6 +77,22 @@ final class BackgroundCheckController extends Controller
         return response()->json(['id' => $id, 'status' => 'created'], 201);
     }
 
+    /** Attach a file (scan/PDF) to a background-check record -> background_checks.document_url. */
+    public function uploadDocument(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAccess($request, $agencyId);
+        $bgc = DB::table('background_checks')->where('id', $id)->where('agency_id', $agencyId)->first();
+        abort_unless($bgc, 404);
+        $request->validate(['file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx', 'max:10240']]);
+        $f = $request->file('file');
+        $name = (string) \Illuminate\Support\Str::uuid() . '.' . strtolower($f->getClientOriginalExtension() ?: $f->extension());
+        $f->storeAs('background-checks/' . $id, $name, 'public');
+        $url = '/storage/background-checks/' . $id . '/' . $name;
+        DB::table('background_checks')->where('id', $id)->update(['document_url' => $url, 'updated_at' => now()]);
+        return response()->json(['document_url' => $url]);
+    }
+
     public function destroy(Request $request, int $id): JsonResponse
     {
         $row = DB::table('background_checks')->where('id', $id)->first();

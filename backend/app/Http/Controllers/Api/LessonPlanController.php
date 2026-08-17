@@ -62,6 +62,26 @@ final class LessonPlanController extends Controller
         }
         $plan = $query->first();
 
+        // Centre-wide fallback: a room with no plan of its OWN inherits its
+        // centre's centre-wide plan for the week. This is the behaviour the UI
+        // already promises ("applies to every room in the centre") and the reason
+        // an educator saw an empty week after an admin used "Use template → whole
+        // centre" — the room-scoped read never looked at the centre plan.
+        $inheritedFromCentre = false;
+        if (!$plan && $roomId) {
+            $roomCentreId = DB::table('rooms')->where('id', $roomId)->value('centre_id');
+            if ($roomCentreId) {
+                $plan = DB::table('lesson_plans')
+                    ->where('week_starting', $week)
+                    ->where('centre_id', $roomCentreId)
+                    ->whereNull('room_id')
+                    ->first();
+                if ($plan) {
+                    $inheritedFromCentre = true;
+                }
+            }
+        }
+
         $data = $plan ? json_decode($plan->plan_data, true) : null;
         if (!$data || !isset($data['days'])) {
             $data = ['days' => array_fill_keys(self::DAYS, [])];
@@ -74,6 +94,7 @@ final class LessonPlanController extends Controller
             'week_starting' => $week,
             'theme' => $plan->theme ?? null,
             'plan' => $data,
+            'inherited_from_centre' => $inheritedFromCentre,
             'updated_at' => $plan->updated_at ?? null,
             'updated_by_id' => $plan->created_by_id ?? null,
         ]);

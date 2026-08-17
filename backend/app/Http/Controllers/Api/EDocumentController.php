@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -325,6 +326,45 @@ class EDocumentController extends Controller
         if (! $allowed) return response()->json(['message' => 'Forbidden'], 403);
 
         return $this->streamPdf($template);
+    }
+
+    /** Short-lived signed URL a mobile WebView can open directly (blob: / <a download>
+     *  does not work in the Android WebView). */
+    public function parentLink(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $template = EDocumentTemplate::whereNull('deleted_at')->find($id);
+        if (! $template) return response()->json(['message' => 'Not found'], 404);
+        $allowed = DB::table('guardians')
+            ->join('families', 'families.id', '=', 'guardians.family_id')
+            ->where('guardians.user_id', $user->id)
+            ->where('families.centre_id', $template->centre_id)
+            ->exists();
+        if (! $allowed) return response()->json(['message' => 'Forbidden'], 403);
+        return response()->json([
+            'url' => URL::temporarySignedRoute('edoc.signed', now()->addMinutes(15), ['id' => $id, 'u' => $user->id]),
+        ]);
+    }
+
+    /** Session-less signed download — serves the PDF INLINE so the browser/WebView
+     *  renders it. Access re-checked from the signed `u` param. */
+    public function signedStream(Request $request, int $id)
+    {
+        $uid = (int) $request->query('u');
+        $template = EDocumentTemplate::whereNull('deleted_at')->find($id);
+        if (! $template || ! $uid) abort(404);
+        $allowed = DB::table('guardians')
+            ->join('families', 'families.id', '=', 'guardians.family_id')
+            ->where('guardians.user_id', $uid)
+            ->where('families.centre_id', $template->centre_id)
+            ->exists();
+        if (! $allowed) abort(403);
+        if (! Storage::disk('local')->exists($template->storage_path)) abort(410);
+        return Storage::disk('local')->response(
+            $template->storage_path,
+            $template->original_filename ?: 'document.pdf',
+            ['Content-Type' => 'application/pdf']
+        );
     }
 
     private function streamPdf(EDocumentTemplate $row)

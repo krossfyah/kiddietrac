@@ -169,10 +169,44 @@ final class DailyDigestCommand extends Command
             ->limit(8)
             ->get(['invoice_number', 'due_at', 'balance_due', 'family_id']);
 
+        // Yesterday's incidents to review (this is a MORNING briefing — today's haven't
+        // happened yet). Incidents link to a room, room to a centre.
+        $incidentsYday = 0; $seriousYday = 0;
+        try {
+            $iq = DB::table('incidents as i')->join('rooms as rm', 'rm.id', '=', 'i.room_id')
+                ->whereIn('rm.centre_id', $centreIds)
+                ->whereBetween('i.occurred_at', [$yesterday, $today]);
+            $incidentsYday = (clone $iq)->count();
+            $seriousYday = (clone $iq)->where(function ($q) {
+                $q->where('i.is_serious_occurrence', 1)->orWhere('i.serious_occurrence', 1);
+            })->count();
+        } catch (\Throwable $e) {}
+
+        // Who is clocked in to start the day.
+        $staffClockedToday = 0; $staffOnFloor = 0;
+        try {
+            $staffClockedToday = (int) DB::table('time_punches')->whereIn('centre_id', $centreIds)
+                ->whereDate('punched_in_at', $today)->distinct('user_id')->count('user_id');
+            $staffOnFloor = (int) DB::table('time_punches')->whereIn('centre_id', $centreIds)
+                ->whereDate('punched_in_at', $today)->whereNull('punched_out_at')->distinct('user_id')->count('user_id');
+        } catch (\Throwable $e) {}
+
+        // Enrolment pipeline.
+        $waitlistWaiting = 0;
+        try {
+            $waitlistWaiting = (int) DB::table('external_waitlist')->where('agency_id', (int) $agency->id)
+                ->whereNull('deleted_at')->whereRaw("LOWER(status) IN ('waiting','contacted','approved')")->count();
+        } catch (\Throwable $e) {}
+
         // Today's signed-in vs enrolled percentage (rounded for display)
         $checkedPct = $enrolled > 0 ? round(($checkedIn / $enrolled) * 100) : 0;
 
         return [
+            'incidents_yesterday' => $incidentsYday,
+            'serious_yesterday' => $seriousYday,
+            'staff_clocked_today' => $staffClockedToday,
+            'staff_on_floor' => $staffOnFloor,
+            'waitlist_waiting' => $waitlistWaiting,
             'enrolled' => $enrolled,
             'checked_in' => $checkedIn,
             'checked_pct' => $checkedPct,
@@ -216,6 +250,13 @@ final class DailyDigestCommand extends Command
 
         $body = '';
 
+        // The agency's own logo at the top of the body (header/footer stay KiddieTrac-branded).
+        if (!empty($agency->brand_logo_url)) {
+            $lu = $agency->brand_logo_url;
+            $abs = (strpos($lu, 'http') === 0) ? $lu : ('https://app.kiddietrac.com' . $lu);
+            $body .= '<div style="text-align:center;margin:0 0 18px;"><img src="' . htmlspecialchars($abs) . '" alt="' . htmlspecialchars($agency->name) . '" style="max-height:64px;max-width:230px;height:auto;border:0;display:inline-block;"></div>';
+        }
+
         // Greeting line gives the email a human start
         $body .= '<p style="margin:0 0 18px;font-size:14px;color:#0F172A;line-height:1.5;">Good morning. Here is your snapshot for <strong>' . htmlspecialchars($agency->name) . '</strong> on ' . $today->format('l, F j') . '.</p>';
 
@@ -233,6 +274,19 @@ final class DailyDigestCommand extends Command
             EmailTemplate::statTile('Observations · yesterday', (string) $s['observations_yesterday'],
                 'notes + photos by your team', '#7C3AED')
         );
+        $body .= EmailTemplate::statRow(
+            EmailTemplate::statTile('Staff clocked in', (string) ($s['staff_clocked_today'] ?? 0),
+                (($s['staff_on_floor'] ?? 0)) . ' on the floor right now', '#0E7C90'),
+            EmailTemplate::statTile('Waitlist', (string) ($s['waitlist_waiting'] ?? 0),
+                'families waiting / in progress', '#0EA5E9')
+        );
+
+        // Yesterday's incidents to review (a morning safety follow-up).
+        if (!empty($s['incidents_yesterday'])) {
+            $iMsg = '<strong>' . $s['incidents_yesterday'] . ' incident report' . ($s['incidents_yesterday'] === 1 ? '' : 's') . ' from yesterday</strong> to review'
+                . (!empty($s['serious_yesterday']) ? ' — including <strong>' . $s['serious_yesterday'] . ' serious occurrence' . ($s['serious_yesterday'] === 1 ? '' : 's') . '</strong> requiring director sign-off' : '') . '.';
+            $body .= EmailTemplate::calloutBox($iMsg, 'warning');
+        }
 
         // Per-centre capacity bars
         if (!empty($s['centre_ratios'])) {

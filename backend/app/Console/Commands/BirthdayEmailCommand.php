@@ -95,12 +95,14 @@ class BirthdayEmailCommand extends Command
 
         // ── children ────────────────────────────────────────────────────────
         if ($cfg['children_notify_guardians'] || $cfg['children_notify_educators']) {
-            $children = DB::table('children')
-                ->whereIn('centre_id', $centreIds)
-                ->whereNull('deleted_at')
-                ->whereNotNull('date_of_birth')
-                ->whereRaw("DATE_FORMAT(date_of_birth, '%m-%d') = ?", [$mmdd])
-                ->get(['id', 'first_name', 'last_name', 'date_of_birth', 'family_id', 'centre_id']);
+            $children = DB::table('children as ch')
+                ->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->whereIn('f.centre_id', $centreIds)
+                ->where('ch.enrollment_status', 'enrolled')
+                ->whereNull('ch.deleted_at')
+                ->whereNotNull('ch.date_of_birth')
+                ->whereRaw("DATE_FORMAT(ch.date_of_birth, '%m-%d') = ?", [$mmdd])
+                ->get(['ch.id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth', 'ch.family_id', 'f.centre_id']);
 
             foreach ($children as $ch) {
                 $turning = (int) Carbon::parse($ch->date_of_birth)->diffInYears($target);

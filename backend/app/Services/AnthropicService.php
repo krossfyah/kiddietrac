@@ -226,4 +226,65 @@ Rules:
 OUTPUT ONLY THE NOTE. No subject line, no headings, no sign-off block, no quotation marks.
 PROMPT;
     }
+
+    /** A warm WEEKLY wrap-up for parents, written from a week of aggregated facts. */
+    public function generateWeeklySummary(array $context): string
+    {
+        $apiKey = $this->key();
+        if (!$apiKey) {
+            throw new RuntimeException('ANTHROPIC_API_KEY not configured.');
+        }
+        $response = Http::timeout($this->timeoutSeconds)
+            ->withHeaders([
+                'x-api-key' => $apiKey,
+                'anthropic-version' => self::API_VERSION,
+                'content-type' => 'application/json',
+            ])
+            ->post(self::API_URL, [
+                'model' => $this->modelName(),
+                'max_tokens' => 800,
+                'messages' => [
+                    ['role' => 'user', 'content' => $this->buildWeeklyPrompt($context)],
+                ],
+            ]);
+        if (!$response->successful()) {
+            Log::error('Anthropic weekly summary failed', ['status' => $response->status(), 'body' => $response->body()]);
+            throw new RuntimeException('AI weekly summary failed: ' . $response->status());
+        }
+        $text = $response->json()['content'][0]['text'] ?? '';
+        if (empty(trim($text))) {
+            throw new RuntimeException('AI weekly summary returned empty response.');
+        }
+        return trim($text);
+    }
+
+    private function buildWeeklyPrompt(array $c): string
+    {
+        $name = $c['child_name'] ?? 'the child';
+        $weekLabel = $c['week_label'] ?? 'this week';
+        $wk = (int) ($c['week_of_year'] ?? 0);
+        $facts = json_encode($c['facts'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return <<<PROMPT
+You are a warm, experienced early-childhood educator writing a WEEKLY wrap-up note home to {$name}'s parents at a childcare centre, for {$weekLabel}.
+
+Here is everything recorded for {$name} this week, aggregated per day, as JSON. Each day may include a "menu" object with the meals actually served that day:
+
+{$facts}
+
+Write the note that sits at the top of their weekly summary email.
+
+Rules:
+- Address the parents directly and warmly. Never "Dear parent".
+- 3 to 4 short paragraphs, about 160-220 words. Plain sentences, no bullet points, no headings.
+- Talk about the WEEK'S PATTERNS, not a single day: how eating went across the week, how naps/sleep looked, activity highlights, and overall mood/settling. Use the real numbers (e.g. "napped well most afternoons", "ate heartily on all but Wednesday").
+- RECAP THE FOOD: mention a couple of specific meals from the "menu" data the children were served this week (e.g. "loved Tuesday's spaghetti"), when menu data is present.
+- REASSURE the parents: make them feel their child was safe, cared for, seen as an individual, and supported to learn and play. Warmth and trust are the point of this email.
+- VARY YOUR LANGUAGE. This note goes out every week, so it must not read from a template. Do NOT reuse the same opening or closing sentence week to week. Vary sentence structure and vocabulary. Use variation seed {$wk} to pick a genuinely different opening line and a different closing line each week. Avoid clichés like "what a wonderful week".
+- Be specific and honest. If some days had little logged, or eating/sleep dipped, say so kindly and factually. Never invent anything not in the data. If the week is sparse, keep it shorter.
+- No medical advice, no diagnosis, no judgement of the parents.
+- End with one warm, non-repetitive closing line from the team.
+
+OUTPUT ONLY THE NOTE. No subject line, no headings, no sign-off block, no quotation marks.
+PROMPT;
+    }
 }

@@ -35,6 +35,10 @@ class AiLessonPlanController extends Controller
             'room_name'      => 'nullable|string|max:80',
         ]);
 
+        if (! in_array((int) $data['centre_id'], $this->callerCentreIds($request), true)) {
+            return response()->json(['error' => 'That centre is not in your agency.'], 403);
+        }
+
         $result = $this->ai->generate($data);
 
         if (! ($result['success'] ?? false)) {
@@ -69,6 +73,10 @@ class AiLessonPlanController extends Controller
             'published'      => 'nullable|boolean',
         ]);
 
+        if (! in_array((int) $data['centre_id'], $this->callerCentreIds($request), true)) {
+            return response()->json(['error' => 'That centre is not in your agency.'], 403);
+        }
+
         $row = [
             'centre_id'     => $data['centre_id'],
             'room_id'       => $data['room_id'] ?? null,
@@ -93,9 +101,35 @@ class AiLessonPlanController extends Controller
         ], 201);
     }
 
+    /**
+     * Centres the caller may see AI lesson plans for. TENANT ISOLATION: without
+     * this the list returned EVERY agency's plans (so an agency saw another
+     * agency's demo/published plans it never created). platform_admin → the
+     * switched-into agency; agency_admin → all their agency's centres; others →
+     * the centres they're assigned to.
+     */
+    private function callerCentreIds(Request $request): array
+    {
+        $uid = (int) $request->user()->id;
+        $isPlatform = DB::table('role_assignments')->where('user_id', $uid)->where('role', 'platform_admin')->where('active', true)->exists();
+        if ($isPlatform) {
+            $aid = (int) $request->header('X-Active-Agency-Id');
+            return ($aid && DB::table('agencies')->where('id', $aid)->whereNull('deleted_at')->exists())
+                ? DB::table('centres')->where('agency_id', $aid)->pluck('id')->all() : [];
+        }
+        $centreIds = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
+        $agencyIds = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->where('role', 'agency_admin')->whereNotNull('agency_id')->pluck('agency_id')->all();
+        if ($agencyIds) {
+            $centreIds = array_merge($centreIds, DB::table('centres')->whereIn('agency_id', $agencyIds)->pluck('id')->all());
+        }
+        return array_values(array_unique(array_map('intval', $centreIds)));
+    }
+
     public function index(Request $request): JsonResponse
     {
+        $allowed = $this->callerCentreIds($request);
         $q = DB::table('ai_lesson_plans')
+            ->whereIn('centre_id', $allowed ?: [0])   // agency-scoped — no cross-tenant plans
             ->orderByDesc('week_starting')
             ->limit(50);
 
@@ -127,8 +161,11 @@ class AiLessonPlanController extends Controller
 
     public function publish(Request $request, int $id): JsonResponse
     {
+        // Only publish a plan in the caller's own agency (was an IDOR — any user
+        // could publish any agency's plan by id).
         $updated = DB::table('ai_lesson_plans')
             ->where('id', $id)
+            ->whereIn('centre_id', $this->callerCentreIds($request) ?: [0])
             ->update(['published' => true, 'updated_at' => now()]);
 
         if ($updated === 0) {

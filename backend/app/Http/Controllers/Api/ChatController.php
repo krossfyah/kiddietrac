@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -153,6 +154,7 @@ final class ChatController extends Controller
         if (empty($centreIds)) return response()->json(['conversations' => []]);
 
         $conversations = DB::table('conversations')
+            ->whereNull('deleted_at')                 // hide deleted conversations
             ->whereIn('centre_id', $centreIds)
             ->orderByDesc('last_message_at')
             ->limit(100)
@@ -195,6 +197,26 @@ final class ChatController extends Controller
 
         $attachments = $this->extractAttachment($request);
         return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments));
+    }
+
+    /**
+     * POST /api/v1/provider/chats/{conversation}/nudge
+     * A one-tap "please check your messages" ping from the centre to the family —
+     * the provider-side mirror of the parent nudge (👋). Reuses insertMessage so
+     * the family's guardians get the same urgent FCM full-screen takeover any
+     * other chat message triggers; no separate notification path to drift.
+     */
+    public function providerNudge(Request $request, int $conversationId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->providerCanAccess($user->id, $conversationId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $sender = DB::table('users')->where('id', $user->id)->first(['first_name', 'last_name']);
+        $name = $sender ? trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? '')) : 'Your centre';
+        if ($name === '') $name = 'Your centre';
+        $body = '👋 ' . $name . ' sent a nudge — please check your messages when you have a moment.';
+        return response()->json($this->insertMessage($conversationId, $user->id, $body));
     }
 
     /**
@@ -285,7 +307,7 @@ final class ChatController extends Controller
 
     private function fetchConversations(array $familyIds, ?array $centreIds, int $userId): array
     {
-        $q = DB::table('conversations');
+        $q = DB::table('conversations')->whereNull('deleted_at');   // hide deleted conversations
         if (!empty($familyIds)) $q->whereIn('family_id', $familyIds);
         if (!empty($centreIds)) $q->whereIn('centre_id', $centreIds);
         $conversations = $q->orderByDesc('last_message_at')->limit(50)->get();
@@ -340,6 +362,7 @@ final class ChatController extends Controller
                 'family_name' => $families[$c->family_id] ?? 'Family',
                 'child_id' => $c->child_id,
                 'child_name' => $child ? trim(($child->first_name ?? '').' '.($child->last_name ?? '')) : null,
+                'child_photo_url' => $child->photo_url ?? null,
                 'subject' => $c->subject,
                 'last_message_at' => $c->last_message_at,
                 'unread_count' => (int) ($unread[$c->id] ?? 0),
@@ -365,15 +388,27 @@ final class ChatController extends Controller
             ? DB::table('users')->whereIn('id', $senderIds)->get()->keyBy('id')
             : collect();
 
-        $msgArr = $messages->map(function ($m) use ($senders, $userId) {
+        // Emoji reactions for all messages in this thread, grouped by message id.
+        $msgIds = $messages->pluck('id')->all();
+        $reactsByMsg = (!empty($msgIds)
+            ? DB::table('message_reactions')->whereIn('message_id', $msgIds)->get()
+            : collect())->groupBy('message_id');
+
+        $msgArr = $messages->map(function ($m) use ($senders, $userId, $reactsByMsg) {
             $s = $senders[$m->sender_id] ?? null;
+            $isMe = $m->sender_id == $userId;
+            $deleted = ! empty($m->deleted_at);
             return [
                 'id' => $m->id,
-                'body' => $m->body,
-                'attachments' => $m->attachments ? (json_decode($m->attachments, true) ?: []) : [],
+                'body' => $deleted ? null : $m->body,
+                'attachments' => $deleted ? [] : ($m->attachments ? (json_decode($m->attachments, true) ?: []) : []),
                 'sender_id' => $m->sender_id,
                 'sender_name' => $s ? trim(($s->first_name ?? '').' '.($s->last_name ?? '')) : 'Unknown',
-                'is_me' => $m->sender_id == $userId,
+                'sender_photo_url' => $s->photo_url ?? null,   // so the chat shows real photos, not just initials
+                'is_me' => $isMe,
+                'deleted' => $deleted,
+                'can_delete' => $isMe && ! $deleted,
+                'reactions' => $this->groupReactions($reactsByMsg[$m->id] ?? collect(), (int) $userId),
                 'created_at' => $m->created_at,
                 'read_at' => $m->read_at,
             ];
@@ -394,9 +429,160 @@ final class ChatController extends Controller
                 'centre_name' => $centre->name ?? 'Centre',
                 'child_id' => $conv->child_id,
                 'child_name' => $child ? trim(($child->first_name ?? '').' '.($child->last_name ?? '')) : null,
+                'child_photo_url' => $child->photo_url ?? null,
             ],
             'messages' => $msgArr,
+            'typing_users' => $this->typingUsers($conversationId, $userId),
         ];
+    }
+
+    /** Record the caller as typing (cache-backed, ~8s). Access already checked. */
+    private function markTyping(int $conversationId, $user): void
+    {
+        $key = 'kt_typing:' . $conversationId;
+        $now = time();
+        $map = Cache::get($key, []);
+        if (!is_array($map)) $map = [];
+        foreach ($map as $uid => $e) { if (!isset($e['at']) || ($now - $e['at']) > 8) unset($map[$uid]); }
+        $map[(int) $user->id] = [
+            'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: 'Someone',
+            'at'   => $now,
+        ];
+        Cache::put($key, $map, now()->addSeconds(30));
+    }
+
+    /** Names of OTHER participants typing within the last 6s. */
+    private function typingUsers(int $conversationId, int $exceptId): array
+    {
+        $map = Cache::get('kt_typing:' . $conversationId, []);
+        if (!is_array($map)) return [];
+        $now = time(); $out = [];
+        foreach ($map as $uid => $e) {
+            if ((int) $uid === $exceptId) continue;
+            if (!isset($e['at']) || ($now - $e['at']) > 6) continue;
+            $out[] = $e['name'] ?? 'Someone';
+        }
+        return array_values(array_unique($out));
+    }
+
+    /** POST /parent/chats/{c}/typing — parent typing ping. */
+    public function parentTyping(Request $request, int $conversationId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->parentCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        $this->markTyping($conversationId, $user);
+        return response()->json(['ok' => true]);
+    }
+
+    /** POST /provider/chats/{c}/typing — provider (educator/director/home-visitor) typing ping. */
+    public function providerTyping(Request $request, int $conversationId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        $this->markTyping($conversationId, $user);
+        return response()->json(['ok' => true]);
+    }
+
+    /** DELETE /parent/chats/{c}/messages/{m} — a guardian removes their own message. */
+    public function parentDeleteMessage(Request $request, int $conversationId, int $messageId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->parentCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        return $this->doDeleteMessage($conversationId, $messageId, (int) $user->id);
+    }
+
+    /** DELETE /provider/chats/{c}/messages/{m} — an educator/director/admin removes their own message. */
+    public function providerDeleteMessage(Request $request, int $conversationId, int $messageId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        return $this->doDeleteMessage($conversationId, $messageId, (int) $user->id);
+    }
+
+    /** DELETE /parent/chats/{c} — remove an entire conversation from the guardian's list. */
+    public function parentDeleteConversation(Request $request, int $conversationId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->parentCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        return $this->doDeleteConversation($conversationId);
+    }
+
+    /** DELETE /provider/chats/{c} — remove an entire conversation from the staff list. */
+    public function providerDeleteConversation(Request $request, int $conversationId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        return $this->doDeleteConversation($conversationId);
+    }
+
+    /** Soft-delete a whole conversation (it drops off everyone's list; recoverable in the DB). */
+    private function doDeleteConversation(int $conversationId): JsonResponse
+    {
+        $conv = DB::table('conversations')->where('id', $conversationId)->first();
+        if (! $conv) return response()->json(['message' => 'Not found'], 404);
+        if (empty($conv->deleted_at)) {
+            DB::table('conversations')->where('id', $conversationId)->update(['deleted_at' => now()]);
+        }
+        return response()->json(['ok' => true]);
+    }
+
+    /** POST /parent/chats/{c}/messages/{m}/react — toggle a guardian's emoji reaction. */
+    public function parentReactMessage(Request $request, int $conversationId, int $messageId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->parentCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        return $this->doReact($conversationId, $messageId, (int) $user->id, (string) $request->input('emoji', ''));
+    }
+
+    /** POST /provider/chats/{c}/messages/{m}/react — toggle a staff member's emoji reaction. */
+    public function providerReactMessage(Request $request, int $conversationId, int $messageId): JsonResponse
+    {
+        $user = $request->user();
+        if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        return $this->doReact($conversationId, $messageId, (int) $user->id, (string) $request->input('emoji', ''));
+    }
+
+    /** Toggle an emoji reaction on a message (add, or remove if the caller already reacted with it). */
+    private function doReact(int $conversationId, int $messageId, int $userId, string $emoji): JsonResponse
+    {
+        $emoji = trim($emoji);
+        if ($emoji === '' || mb_strlen($emoji) > 8) return response()->json(['message' => 'Invalid emoji'], 422);
+        $m = DB::table('messages')->where('id', $messageId)->where('conversation_id', $conversationId)->first();
+        if (! $m || ! empty($m->deleted_at)) return response()->json(['message' => 'Not found'], 404);
+        $existing = DB::table('message_reactions')
+            ->where('message_id', $messageId)->where('user_id', $userId)->where('emoji', $emoji)->first();
+        if ($existing) {
+            DB::table('message_reactions')->where('id', $existing->id)->delete();
+        } else {
+            DB::table('message_reactions')->insert([
+                'message_id' => $messageId, 'user_id' => $userId, 'emoji' => $emoji, 'created_at' => now(),
+            ]);
+        }
+        $rows = DB::table('message_reactions')->where('message_id', $messageId)->get();
+        return response()->json(['ok' => true, 'reactions' => $this->groupReactions($rows, $userId)]);
+    }
+
+    /** @param \Illuminate\Support\Collection $rows */
+    private function groupReactions($rows, int $userId): array
+    {
+        $grouped = [];
+        foreach ($rows as $r) {
+            if (! isset($grouped[$r->emoji])) $grouped[$r->emoji] = ['emoji' => $r->emoji, 'count' => 0, 'mine' => false];
+            $grouped[$r->emoji]['count']++;
+            if ((int) $r->user_id === $userId) $grouped[$r->emoji]['mine'] = true;
+        }
+        return array_values($grouped);
+    }
+
+    /** Soft-delete a message the caller sent (only their own). */
+    private function doDeleteMessage(int $conversationId, int $messageId, int $userId): JsonResponse
+    {
+        $m = DB::table('messages')->where('id', $messageId)->where('conversation_id', $conversationId)->first();
+        if (! $m) return response()->json(['message' => 'Not found'], 404);
+        if ((int) $m->sender_id !== $userId) return response()->json(['message' => 'You can only delete your own messages.'], 403);
+        if (! empty($m->deleted_at)) return response()->json(['ok' => true]);
+        DB::table('messages')->where('id', $messageId)->update(['deleted_at' => now()]);
+        return response()->json(['ok' => true]);
     }
 
     private function insertMessage(int $conversationId, int $senderId, string $body, array $attachments = []): array
@@ -470,7 +656,7 @@ final class ChatController extends Controller
                     try {
                         $fcm = app(\App\Services\FcmService::class);
                         foreach ($recipients as $rid) {
-                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true);   // context added to the inbox row below
+                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true, true);   // urgent + forceUrgent → full-screen takeover for staff AND parents
                         }
                     } catch (\Throwable $fe) {
                         \Illuminate\Support\Facades\Log::warning('FCM push from chat failed', ['error' => $fe->getMessage()]);
@@ -547,18 +733,38 @@ final class ChatController extends Controller
         $request->validate([
             // Accept images OR audio (voice notes). Max 10 MB.
             'attachment' => ['file', 'max:10240', function ($attr, $value, $fail) {
-                $m = (string) $value->getMimeType();
-                if (! str_starts_with($m, 'image/') && ! str_starts_with($m, 'audio/')) {
+                $m = strtolower((string) $value->getMimeType());
+                $c = strtolower((string) $value->getClientMimeType());
+                // Browser voice notes ARE audio, but the webm/ogg CONTAINER is
+                // content-detected server-side as video/webm|video/ogg — so a
+                // desktop-recorded voice note ($m = video/webm) was wrongly rejected
+                // here while the parent-side MessageController already allowed it.
+                // Accept those audio containers (and a trusted audio/* client mime).
+                $audioContainer = in_array($m, ['video/webm', 'video/ogg', 'application/ogg'], true)
+                    || str_starts_with($c, 'audio/');
+                if (! str_starts_with($m, 'image/') && ! str_starts_with($m, 'audio/') && ! $audioContainer) {
                     $fail('Only images or audio are allowed.');
                 }
             }],
         ]);
         $file = $request->file('attachment');
         $path = $file->store('chat-attachments', 'public');
+        $detected = strtolower((string) $file->getMimeType());
+        $client   = strtolower((string) $file->getClientMimeType());
+        $name     = (string) $file->getClientOriginalName();
+        // Normalise a voice note to an audio/* mime so the client renders it as a
+        // player (a webm/ogg audio container otherwise reports as video/*). Images
+        // keep their real detected image/* mime.
+        $isAudio = str_starts_with($client, 'audio/')
+            || in_array($detected, ['video/webm', 'video/ogg', 'application/ogg'], true)
+            || (bool) preg_match('/\.(webm|ogg|oga|m4a|mp3|wav|aac|opus)$/i', $name);
+        $mime = str_starts_with($detected, 'image/')
+            ? $detected
+            : ($isAudio ? (str_starts_with($client, 'audio/') ? $client : 'audio/webm') : $detected);
         return [[
             'url' => '/storage/' . $path,
-            'mime' => $file->getMimeType(),
-            'name' => $file->getClientOriginalName(),
+            'mime' => $mime,
+            'name' => $name,
             'size' => $file->getSize(),
         ]];
     }
@@ -597,11 +803,19 @@ final class ChatController extends Controller
     private function providerCentreIds(int $userId): array
     {
         // Platform admins can access every centre (their role_assignment carries no
-        // agency_id/centre_id, so the role-scoped joins below would exclude them).
+        // agency_id/centre_id, so the role-scoped joins below would exclude them) —
+        // BUT only within the agency they've SWITCHED INTO. Without this the chat
+        // list showed every agency's conversations to a super admin regardless of
+        // the active-agency switch (cross-tenant leak). No agency selected → none.
         $isPlatform = DB::table('role_assignments')
             ->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
         if ($isPlatform) {
-            return DB::table('centres')->pluck('id')->all();
+            $active = 0;
+            try { $active = (int) request()->header('X-Active-Agency-Id'); } catch (\Throwable $e) {}
+            if ($active && DB::table('agencies')->where('id', $active)->whereNull('deleted_at')->exists()) {
+                return DB::table('centres')->where('agency_id', $active)->pluck('id')->all();
+            }
+            return [];
         }
 
         $directIds = DB::table('role_assignments')
@@ -612,10 +826,11 @@ final class ChatController extends Controller
             ->pluck('centre_id')
             ->all();
 
-        // Agency admins see all centres in their agencies
+        // Agency admins — and agency-attached home visitors — see all centres in
+        // their agencies (home_visitor has no centre_id, only an agency_id).
         $agencyIds = DB::table('role_assignments')
             ->where('user_id', $userId)
-            ->where('role', 'agency_admin')
+            ->whereIn('role', ['agency_admin', 'home_visitor'])
             ->where('active', true)
             ->whereNotNull('agency_id')
             ->pluck('agency_id')

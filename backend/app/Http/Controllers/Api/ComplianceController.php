@@ -44,6 +44,12 @@ final class ComplianceController extends Controller
             'enrolled_at' => 'nullable|date',
             'subsidy_rate' => 'nullable|numeric|min:0|max:100',
         ]);
+        // SECURITY: the family MUST belong to the caller's active agency. This took
+        // $familyId straight from the URL with no ownership check (cross-tenant IDOR).
+        $agencyId = $this->resolveAgencyId($request);
+        $famAgency = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('f.id', $familyId)->value('c.agency_id');
+        abort_unless($famAgency && (int) $famAgency === (int) $agencyId, 403, 'That family is not in your agency.');
         DB::table('families')->where('id', $familyId)->update([
             'cwelcc_enrolled' => $data['enrolled'] ? 1 : 0,
             'cwelcc_enrolled_at' => $data['enrolled_at'] ?? null,
@@ -215,7 +221,10 @@ final class ComplianceController extends Controller
     private function resolveAgencyId(Request $request): int
     {
         $activeId = (int) $request->header('X-Active-Agency-Id');
-        if ($activeId) return $activeId;
+        if ($activeId && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                ->where(function ($q) use ($activeId) { $q->where('role', 'platform_admin')->orWhere('agency_id', $activeId); })->exists()) {
+            return $activeId;
+        }
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
+use App\Support\AgencyTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -91,6 +92,7 @@ final class RoomController extends Controller
             ->select(
                 'children.id', 'children.first_name', 'children.last_name',
                 'children.preferred_name', 'children.date_of_birth', 'children.photo_url',
+                'children.gender',
             )
             ->orderBy('children.first_name')
             ->get();
@@ -113,11 +115,20 @@ final class RoomController extends Controller
 
         $lastEvents = empty($childIds) ? collect() : $this->getLastEvents($childIds, $today);
 
-        $roster = $children->map(function ($child) use ($checkEvents, $allFlags, $lastEvents) {
+        // Clock-in / activity times are stored in UTC but must be shown in the
+        // agency's local zone (Eastern for Ontario), not UTC.
+        $tz = AgencyTime::tzForCentre((int) $room->centre_id);
+
+        $roster = $children->map(function ($child) use ($checkEvents, $allFlags, $lastEvents, $tz) {
             $checks = $checkEvents->get($child->id, collect());
             $lastCheck = $checks->last();
             $isAtCentre = $lastCheck && $lastCheck->event_type === 'check_in';
-            $arrivedAt = $isAtCentre ? Carbon::parse($lastCheck->occurred_at) : null;
+            $arrivedAt = $isAtCentre ? $lastCheck->occurred_at : null;
+            // Presence status drives the roster card colour: 'in' (here now),
+            // 'out' (arrived earlier, since signed out), 'away' (not in today).
+            $status = $isAtCentre ? 'in' : ($checks->isNotEmpty() ? 'out' : 'away');
+            $departedAt = (! $isAtCentre && $lastCheck && $lastCheck->event_type === 'check_out')
+                ? $lastCheck->occurred_at : null;
 
             $flags = $allFlags->get($child->id, collect());
             $lastEvent = $lastEvents[$child->id] ?? null;
@@ -129,15 +140,18 @@ final class RoomController extends Controller
                 'display_name' => $child->preferred_name ?: $child->first_name,
                 'initials' => strtoupper(substr($child->first_name, 0, 1).substr($child->last_name, 0, 1)),
                 'photo_url' => $child->photo_url,
+                'gender' => $child->gender ?? null,
                 'age_human' => $this->ageHuman($child->date_of_birth),
                 'is_at_centre' => $isAtCentre,
-                'arrived_at' => $arrivedAt?->format('g:i A'),
+                'status' => $status,
+                'arrived_at' => AgencyTime::fmt($arrivedAt, $tz),
+                'departed_at' => AgencyTime::fmt($departedAt, $tz),
                 'urgent_flags' => $flags->map(fn ($f) => [
                     'short_label' => strtoupper(substr($f->category, 0, 8)),
                     'severity' => $f->severity,
                     'category' => $f->category,
                 ])->values(),
-                'last_event' => $lastEvent ? $this->summarizeEvent($lastEvent) : null,
+                'last_event' => $lastEvent ? $this->summarizeEvent($lastEvent, $tz) : null,
             ];
         });
 
@@ -167,7 +181,13 @@ final class RoomController extends Controller
                 ->from('check_events as co')
                 ->whereColumn('co.child_id', 'ci.child_id')
                 ->where('co.event_type', 'check_out')
-                ->where('co.occurred_at', '>', DB::raw('ci.occurred_at')))
+                // A check-out is "later" if its timestamp is greater OR the same
+                // second but a higher id — otherwise a same-second check-in→check-out
+                // (rapid re-scan/toggle) wrongly reads as still-present and triggers a
+                // phantom ratio breach even though the child is signed out.
+                ->where(fn ($w) => $w->whereColumn('co.occurred_at', '>', 'ci.occurred_at')
+                    ->orWhere(fn ($w2) => $w2->whereColumn('co.occurred_at', 'ci.occurred_at')
+                        ->whereColumn('co.id', '>', 'ci.id'))))
             ->distinct('ci.child_id')
             ->count('ci.child_id');
 
@@ -179,10 +199,15 @@ final class RoomController extends Controller
             ->count();
 
         if ($educatorsPresent === 0) {
-            $clockedIn = DB::table('time_entries')
+            // No scheduled shift rows — fall back to who is actually CLOCKED IN.
+            // The time clock writes `time_punches` (user_id, centre_id, punched_in_at,
+            // punched_out_at); the old code read `time_entries`, which the clock never
+            // populates, so a clocked-in educator counted as 0 and one checked-in child
+            // showed a FALSE ratio breach. Count open punches for this centre today.
+            $clockedIn = DB::table('time_punches')
                 ->where('centre_id', $room->centre_id)
-                ->whereDate('clocked_in_at', now())
-                ->whereNull('clocked_out_at')
+                ->whereDate('punched_in_at', now())
+                ->whereNull('punched_out_at')
                 ->count();
             $totalRooms = DB::table('rooms')
                 ->where('centre_id', $room->centre_id)
@@ -195,10 +220,24 @@ final class RoomController extends Controller
             ? 0
             : (int) ceil($childrenPresent / max(1, (int) $room->ratio_children));
 
-        $compliant = $educatorsPresent >= $required;
+        // Two independent safety limits: the educator:child RATIO, and the room's
+        // licensed CAPACITY (max children regardless of staffing). A room can be
+        // within ratio but over its licensed headcount, or vice-versa — surface both.
+        $capacity = (int) $room->capacity;
+        $overCapacity = $capacity > 0 && $childrenPresent > $capacity;
+        $atCapacity = $capacity > 0 && $childrenPresent >= $capacity;
+        $overBy = $overCapacity ? $childrenPresent - $capacity : 0;
+
+        // How many children the educators on the floor can cover at this ratio.
+        // "Tight" = the room is exactly at that limit (one more child would breach),
+        // NOT merely at the minimum educator count — 1 educator on a 1:3 ratio with
+        // 1 child has headroom for 2 more and should read OK, not "at the limit".
+        $coverage = $educatorsPresent * max(1, (int) $room->ratio_children);
+        $compliant = $educatorsPresent >= $required && ! $overCapacity;
         $status = match (true) {
-            ! $compliant => 'breach',
-            $educatorsPresent - $required <= 0 && $childrenPresent > 0 => 'tight',
+            $educatorsPresent < $required => 'breach',
+            $overCapacity => 'over_capacity',
+            ($childrenPresent > 0 && $childrenPresent >= $coverage) || $atCapacity => 'tight',
             default => 'ok',
         };
 
@@ -209,9 +248,53 @@ final class RoomController extends Controller
             'educators_present' => $educatorsPresent,
             'required_educators' => $required,
             'ratio_target' => "{$room->ratio_educators}:{$room->ratio_children}",
+            'capacity' => $capacity,
+            'over_capacity' => $overCapacity,
+            'at_capacity' => $atCapacity,
+            'over_capacity_by' => $overBy,
             'compliant' => $compliant,
             'status' => $status,
         ]);
+    }
+
+    /**
+     * How many children are STILL checked in across the caller's centre(s) right
+     * now — used to warn an educator who is clocking out while children remain
+     * signed in (they must be handed over / signed out first).
+     */
+    public function presentCount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $centreIds = DB::table('role_assignments')
+            ->where('user_id', $user->id)
+            ->where('active', 1)
+            ->whereNotNull('centre_id')
+            ->pluck('centre_id')->unique()->values()->all();
+        if (empty($centreIds)) {
+            return response()->json(['present' => 0]);
+        }
+        $roomIds = DB::table('rooms')->whereIn('centre_id', $centreIds)->pluck('id')->all();
+        if (empty($roomIds)) {
+            return response()->json(['present' => 0]);
+        }
+        $present = DB::table('check_events as ci')
+            ->whereIn('ci.room_id', $roomIds)
+            ->where('ci.event_type', 'check_in')
+            ->whereDate('ci.occurred_at', now())
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
+                ->from('check_events as co')
+                ->whereColumn('co.child_id', 'ci.child_id')
+                ->where('co.event_type', 'check_out')
+                // A check-out counts as "later" if its timestamp is greater, OR the
+                // same second but a higher id — otherwise a same-second check-in then
+                // check-out (rapid re-scan) would wrongly read as still-present.
+                ->where(fn ($w) => $w->whereColumn('co.occurred_at', '>', 'ci.occurred_at')
+                    ->orWhere(fn ($w2) => $w2->whereColumn('co.occurred_at', 'ci.occurred_at')
+                        ->whereColumn('co.id', '>', 'ci.id'))))
+            ->distinct('ci.child_id')
+            ->count('ci.child_id');
+
+        return response()->json(['present' => $present]);
     }
 
     // ─── helpers ────────────────────────────────────────────────────
@@ -246,7 +329,7 @@ final class RoomController extends Controller
         return $years > 0 ? "{$years}y {$m}m" : "{$months}m";
     }
 
-    private function summarizeEvent(object $event): array
+    private function summarizeEvent(object $event, string $tz = 'America/Toronto'): array
     {
         $payload = is_string($event->payload)
             ? (json_decode($event->payload, true) ?? [])
@@ -266,7 +349,7 @@ final class RoomController extends Controller
         return [
             'type' => $event->event_type,
             'occurred_at' => $event->occurred_at,
-            'time_display' => Carbon::parse($event->occurred_at)->format('g:i A'),
+            'time_display' => AgencyTime::fmt($event->occurred_at, $tz),
             'summary' => $summary,
         ];
     }

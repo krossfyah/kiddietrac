@@ -1225,6 +1225,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/admin/email-delivery',                [\App\Http\Controllers\Api\EmailDeliveryController::class, 'index']);
         Route::patch('/admin/email-delivery/centre/{centre}', [\App\Http\Controllers\Api\EmailDeliveryController::class, 'setCentre']);
         Route::patch('/admin/email-delivery/room/{room}',    [\App\Http\Controllers\Api\EmailDeliveryController::class, 'setRoom']);
+        Route::get  ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'show']);
+        Route::patch('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
+        Route::post ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
         Route::get('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'show']);
         Route::post('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'update']);
         Route::post('/admin/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'set']);

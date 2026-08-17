@@ -59,10 +59,27 @@ final class FeedbackController extends Controller
             'rating' => 'required|integer|min:1|max:5',
             'category' => 'nullable|string|max:60',
             'comment' => 'nullable|string|max:2000',
+            'images' => 'nullable|array|max:5',
+            'images.*' => 'file|mimes:jpg,jpeg,png,webp,gif|max:5120',
         ]);
         $u = $request->user();
         $familyId = DB::table('guardians')->where('user_id', $u->id)->value('family_id');
         $family = $familyId ? DB::table('families')->where('id', $familyId)->first() : null;
+
+        // Screenshots / images — stored on the public disk, URLs kept in JSON.
+        $attachments = [];
+        if ($request->hasFile('images')) {
+            foreach ((array) $request->file('images') as $file) {
+                if (! $file || ! $file->isValid()) {
+                    continue;
+                }
+                $ext = strtolower($file->getClientOriginalExtension() ?: ($file->extension() ?: 'png'));
+                $name = (string) \Illuminate\Support\Str::uuid() . '.' . $ext;
+                $file->storeAs('feedback-attachments', $name, 'public');
+                $attachments[] = ['url' => '/storage/feedback-attachments/' . $name, 'name' => $file->getClientOriginalName()];
+            }
+        }
+
         $id = DB::table('parent_feedback')->insertGetId([
             'family_id' => $familyId,
             'centre_id' => $family ? $family->centre_id : null,
@@ -70,6 +87,7 @@ final class FeedbackController extends Controller
             'rating' => $data['rating'],
             'category' => $data['category'] ?? 'general',
             'comment' => $data['comment'] ?? null,
+            'attachments' => $attachments ? json_encode($attachments) : null,
             'created_at' => now(),
         ]);
         // notify directors of low ratings

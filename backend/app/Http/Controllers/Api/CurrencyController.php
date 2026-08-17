@@ -91,8 +91,11 @@ final class CurrencyController extends Controller
 
     private function resolveAgencyId(Request $request): int
     {
-        $h = $request->header('X-Active-Agency-Id');
-        if ($h) return (int) $h;
+        $h = (int) $request->header('X-Active-Agency-Id');
+        if ($h && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                ->where(function ($q) use ($h) { $q->where('role', 'platform_admin')->orWhere('agency_id', $h); })->exists()) {
+            return $h;
+        }
         return (int) DB::table('role_assignments')->where('user_id', $request->user()->id)
             ->where('active', 1)->value('agency_id');
     }

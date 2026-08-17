@@ -29,6 +29,17 @@ class AuditActivity
     private const SKIP = [
         'unread-count', 'auth/me', 'auth/refresh', '/e/o/', 'heartbeat',
         'presence', 'ping', '/read', 'typing', 'csrf',
+        // push/device is a routine FCM token upsert that fires on EVERY app launch/
+        // foreground — it flooded the audit trail with "Registered a device for push"
+        // and isn't a meaningful user action. staff/punch is skipped here because
+        // CareController@punch writes its OWN detailed audit entry (clock IN vs OUT
+        // with the centre + duration), which the generic middleware entry can't.
+        'push/device', 'push/subscribe', 'staff/punch',
+        // integration/* = machine-to-machine sync between iLearn and KiddieTrac
+        // (waitlist + contacts, every 5 min). It re-pushes the same rows on a schedule
+        // and was writing ~1,500 identical "integration/waitlist" audit rows a DAY —
+        // pure noise, not a person's action. Skip the whole integration namespace.
+        'integration/',
     ];
 
     /** Request fields to redact from the stored payload. */
@@ -104,13 +115,19 @@ class AuditActivity
             'status'  => $status,
             'input'   => $this->safeInput($request),
         ];
-        $agencyId = $request->header('X-Active-Agency-Id');
-        if ($agencyId) {
-            $payload['active_agency_id'] = (int) $agencyId;
+        $headerAgency = $request->header('X-Active-Agency-Id');
+        if ($headerAgency) {
+            $payload['active_agency_id'] = (int) $headerAgency;
         }
+
+        // The agency this action BELONGS to — stamped so the per-agency audit log
+        // can filter strictly by it (no cross-tenant leakage). A platform_admin is
+        // tagged to the agency they've switched into; everyone else to their own.
+        $agencyId = \App\Support\AuditScope::resolve((int) ($user->id ?? 0), $request);
 
         DB::table('audit_logs')->insert([
             'user_id'     => $user->id ?? null,
+            'agency_id'   => $agencyId,
             'action'      => $action,
             'entity_type' => $entityType,
             'entity_id'   => $entityId,

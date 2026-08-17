@@ -20,8 +20,10 @@ final class AgencyTermController extends Controller
     private function resolveAgencyId(Request $request): ?int
     {
         $h = $request->header('X-Active-Agency-Id');
-        if ($h && strtolower(trim((string) $h)) !== 'all') {
-            return (int) $h;
+        $hid = (int) $h;
+        if ($hid && strtolower(trim((string) $h)) !== 'all' && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                ->where(function ($q) use ($hid) { $q->where('role', 'platform_admin')->orWhere('agency_id', $hid); })->exists()) {
+            return $hid;
         }
         $u = $request->user();
         $aid = $u ? DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id') : null;
@@ -36,7 +38,7 @@ final class AgencyTermController extends Controller
         $row = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
         $s = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
         $t = $s['centre_term'] ?? 'centre';
-        return in_array($t, ['centre', 'room'], true) ? $t : 'centre';
+        return in_array($t, ['centre', 'room', 'provider'], true) ? $t : 'centre';
     }
 
     private const COUNTRY_LABELS = [
@@ -66,10 +68,12 @@ final class AgencyTermController extends Controller
         $t = $this->readTerm($agencyId);
         $country = $this->readCountry($agencyId);
         $lbl = self::COUNTRY_LABELS[$country];
+        $labels = ['centre' => ['Centre', 'Centres'], 'room' => ['Room', 'Rooms'], 'provider' => ['Provider', 'Providers']];
+        $sl = $labels[$t] ?? $labels['centre'];
         return response()->json([
             'term'        => $t,
-            'singular'    => $t === 'room' ? 'Room' : 'Centre',
-            'plural'      => $t === 'room' ? 'Rooms' : 'Centres',
+            'singular'    => $sl[0],
+            'plural'      => $sl[1],
             'country'     => $country,
             'state_label' => $lbl[0],
             'zip_label'   => $lbl[1],
@@ -84,7 +88,7 @@ final class AgencyTermController extends Controller
             ->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
         abort_unless($ok, 403, 'Admin only');
 
-        $data = $request->validate(['term' => ['required', 'in:centre,room']]);
+        $data = $request->validate(['term' => ['required', 'in:centre,room,provider']]);
         $agencyId = $this->resolveAgencyId($request);
         abort_unless($agencyId, 404, 'No active agency');
 

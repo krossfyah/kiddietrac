@@ -92,7 +92,8 @@ final class ZonesController extends Controller
             ->orderBy('zv.visited_at')->get();
 
         $byZone = $visits->groupBy('zone_name')->map(fn ($g) => $g->count());
-        $byChild = $visits->groupBy('child_name')->map(fn ($g) => $g->map(fn ($v) => ['zone' => $v->zone_name, 'icon' => $v->icon, 'time' => Carbon::parse($v->visited_at)->format('g:i A')])->values());
+        $zTz = \App\Support\AgencyTime::tzForCentre($centreId);
+        $byChild = $visits->groupBy('child_name')->map(fn ($g) => $g->map(fn ($v) => ['zone' => $v->zone_name, 'icon' => $v->icon, 'time' => \App\Support\AgencyTime::fmt($v->visited_at, $zTz)])->values());
 
         return response()->json([
             'date' => $date,

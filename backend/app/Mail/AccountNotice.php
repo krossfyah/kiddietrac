@@ -8,6 +8,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Mail\Mailables\Headers;
 use Illuminate\Queue\SerializesModels;
 
 /**
@@ -31,6 +32,14 @@ final class AccountNotice extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(subject: $this->subjectLine);
+    }
+
+    // Account/welcome/reset emails are how a user gets INTO their account, so they
+    // must reach even a not-yet-onboarded user. This header exempts them from the
+    // not-onboarded suppression gate.
+    public function headers(): Headers
+    {
+        return new Headers(text: ['X-KT-Invite' => '1']);
     }
 
     public function content(): Content

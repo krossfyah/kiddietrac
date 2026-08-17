@@ -39,6 +39,11 @@ final class AnnouncementController extends Controller
             'scheduled_at' => ['nullable', 'date', 'after_or_equal:now'],
         ]);
 
+        // SECURITY: sanitize the rich-text body to a safe allowlist BEFORE storing
+        // and blasting it into broadcast EMAILS (an educator could otherwise inject
+        // phishing links / arbitrary HTML delivered to every family as trusted mail).
+        $data['body'] = $this->sanitizeAnnouncementHtml((string) $data['body']);
+
         $user = $request->user();
         if (! $this->canBroadcast($user->id, $data['scope_type'], $data['scope_id'])) {
             return response()->json(['message' => 'You don\'t have permission to broadcast to that scope.'], 403);
@@ -94,10 +99,11 @@ final class AnnouncementController extends Controller
         $user = $request->user();
         $centreIds = $this->myCentres($user->id);
 
-        // Agency IDs the user can see
+        // Agency IDs the user can see (agency admins + agency-attached home
+        // visitors, who read their agency's announcements but can't broadcast).
         $agencyIds = DB::table('role_assignments')
             ->where('user_id', $user->id)
-            ->whereIn('role', ['agency_admin'])
+            ->whereIn('role', ['agency_admin', 'home_visitor'])
             ->where('active', true)
             ->whereNotNull('agency_id')
             ->pluck('agency_id')
@@ -352,7 +358,7 @@ final class AnnouncementController extends Controller
                             $m = $svc->mailer(); $from = $svc->fromAddress(); $fn = $svc->fromName();
                             $m->html($html, function ($msg) use ($email, $from, $fn, $emailSubject) { $msg->to($email)->from($from, $fn)->subject($emailSubject); });
                         } else {
-                            \Illuminate\Support\Facades\Mail::html($html, function ($msg) use ($email, $emailSubject) { $msg->to($email)->from('noreply@kiddietrac.com', 'Kiddietrac')->subject($emailSubject); });
+                            \Illuminate\Support\Facades\Mail::html($html, function ($msg) use ($email, $emailSubject) { $msg->to($email)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($emailSubject); });
                         }
                     } catch (\Throwable $e) {
                         \Illuminate\Support\Facades\Log::warning('Announcement email failed', ['email' => $email, 'error' => $e->getMessage()]);
@@ -549,5 +555,78 @@ final class AnnouncementController extends Controller
             $direct = array_unique(array_merge($direct, $agencyCentres));
         }
         return $direct;
+    }
+
+    /**
+     * Sanitize rich-text announcement HTML to a safe allowlist (tags + attributes)
+     * via a DOMDocument re-parse — regex sanitizers get bypassed. Drops scripts/styles/
+     * iframes/etc. and their contents, strips all attributes except safe http(s)/mailto
+     * hrefs on <a>, and unwraps unknown tags (keeping their text). Runs on store so the
+     * value is clean everywhere it is later used (in-app render AND broadcast email).
+     */
+    private function sanitizeAnnouncementHtml(string $html): string
+    {
+        $html = trim($html);
+        if ($html === '') {
+            return '';
+        }
+        $allowed = ['a', 'b', 'strong', 'i', 'em', 'u', 's', 'p', 'br', 'ul', 'ol', 'li', 'span', 'div', 'h2', 'h3', 'h4', 'blockquote'];
+        $drop = ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'link', 'meta', 'svg', 'math', 'base', 'noscript', 'template'];
+        $doc = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $doc->loadHTML('<?xml encoding="UTF-8"><div>' . $html . '</div>', LIBXML_NOERROR | LIBXML_NONET);
+        libxml_clear_errors();
+        $body = $doc->getElementsByTagName('body')->item(0);
+        $wrap = $body ? $body->firstChild : null;
+        if (! $wrap) {
+            return '';
+        }
+        $this->cleanAnnouncementNode($wrap, $allowed, $drop);
+        $out = '';
+        foreach (iterator_to_array($wrap->childNodes) as $ch) {
+            $out .= $doc->saveHTML($ch);
+        }
+        $out = trim($out);
+        return mb_substr($out, 0, 8000);
+    }
+
+    private function cleanAnnouncementNode(\DOMNode $node, array $allowed, array $drop): void
+    {
+        foreach (iterator_to_array($node->childNodes) as $child) {
+            if ($child->nodeType === XML_COMMENT_NODE) {
+                $child->parentNode->removeChild($child);
+                continue;
+            }
+            if ($child->nodeType !== XML_ELEMENT_NODE) {
+                continue; // keep text nodes
+            }
+            $tag = strtolower($child->nodeName);
+            if (in_array($tag, $drop, true)) {
+                $child->parentNode->removeChild($child); // drop element AND its contents
+                continue;
+            }
+            if (! in_array($tag, $allowed, true)) {
+                $this->cleanAnnouncementNode($child, $allowed, $drop);
+                while ($child->firstChild) {
+                    $child->parentNode->insertBefore($child->firstChild, $child); // unwrap
+                }
+                $child->parentNode->removeChild($child);
+                continue;
+            }
+            if ($child->hasAttributes()) {
+                foreach (iterator_to_array($child->attributes) as $attr) {
+                    $keep = ($tag === 'a' && strtolower($attr->name) === 'href'
+                        && preg_match('#^\s*(https?:|mailto:)#i', (string) $attr->value));
+                    if (! $keep) {
+                        $child->removeAttribute($attr->name);
+                    }
+                }
+            }
+            if ($tag === 'a' && $child->getAttribute('href') !== '') {
+                $child->setAttribute('target', '_blank');
+                $child->setAttribute('rel', 'noopener noreferrer nofollow');
+            }
+            $this->cleanAnnouncementNode($child, $allowed, $drop);
+        }
     }
 }

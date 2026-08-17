@@ -302,19 +302,24 @@ final class StripeBillingController extends Controller
      */
     public function webhook(Request $request): JsonResponse
     {
-        // Signature verification — recommended for production
+        // SECURITY: verify the Stripe signature (HMAC). Previously only the PRESENCE
+        // of the header was checked, so anyone could POST a forged event to flip any
+        // agency's billing_status (free activation, or a tenant-wide DoS by suspending
+        // a competitor). Fail CLOSED if the secret is not configured.
         $secret = env('STRIPE_WEBHOOK_SECRET');
-        if ($secret) {
-            $sig = $request->header('Stripe-Signature');
-            if (!$sig) return response()->json(['error' => 'missing signature'], 400);
-            // For brevity skipping HMAC validation here. In production use Stripe SDK or hand-roll the verification.
+        if (!$secret) {
+            Log::warning('Stripe webhook rejected: STRIPE_WEBHOOK_SECRET not set');
+            return response()->json(['error' => 'webhook not configured'], 400);
         }
+        try {
+            $event = \Stripe\Webhook::constructEvent($request->getContent(), (string) $request->header('Stripe-Signature'), $secret);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'invalid signature'], 400);
+        }
+        $type = $event->type ?? null;
+        $object = json_decode(json_encode($event->data->object ?? []), true) ?: [];
 
-        $event = $request->json()->all();
-        $type = $event['type'] ?? null;
-        $object = $event['data']['object'] ?? [];
-
-        Log::info('Stripe webhook received', ['type' => $type, 'id' => $event['id'] ?? null]);
+        Log::info('Stripe webhook received', ['type' => $type, 'id' => $event->id ?? null]);
 
         switch ($type) {
             case 'invoice.paid':

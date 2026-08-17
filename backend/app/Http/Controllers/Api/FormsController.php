@@ -272,23 +272,37 @@ final class FormsController extends Controller
         if (!$form) return response()->json(['message' => 'Form not found'], 404);
         if ($form->status !== 'published') return response()->json(['message' => 'Publish the form before emailing it.'], 422);
 
-        // Recipient guardians: families in this agency (or the form's centre).
-        $familyQuery = DB::table('families')->whereNull('deleted_at');
-        if ($form->centre_id) {
-            $familyQuery->where('centre_id', $form->centre_id);
+        // Recipients depend on the form's AUDIENCE: a 'staff' form goes to educators /
+        // directors / home-visitors of the agency; family audiences go to guardians.
+        if ($form->audience === 'staff') {
+            $staffQ = DB::table('role_assignments as ra')
+                ->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->whereIn('ra.role', ['educator', 'centre_director', 'agency_admin', 'home_visitor'])
+                ->where('ra.active', true)
+                ->whereNull('u.deleted_at')->whereNotNull('u.email');
+            if ($form->centre_id) {
+                $staffQ->where(function ($w) use ($form, $agencyId) { $w->where('ra.centre_id', $form->centre_id)->orWhere('ra.agency_id', $agencyId); });
+            } else {
+                $staffQ->where('ra.agency_id', $agencyId);
+            }
+            $emails = $staffQ->pluck('u.email')->unique()->values()->all();
         } else {
-            $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
-            if (empty($centreIds)) return response()->json(['sent' => 0]);
-            $familyQuery->whereIn('centre_id', $centreIds);
+            $familyQuery = DB::table('families')->whereNull('deleted_at');
+            if ($form->centre_id) {
+                $familyQuery->where('centre_id', $form->centre_id);
+            } else {
+                $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+                if (empty($centreIds)) return response()->json(['sent' => 0]);
+                $familyQuery->whereIn('centre_id', $centreIds);
+            }
+            $familyIds = $familyQuery->pluck('id')->all();
+            if (empty($familyIds)) return response()->json(['sent' => 0]);
+            $emails = DB::table('guardians')
+                ->join('users', 'users.id', '=', 'guardians.user_id')
+                ->whereIn('guardians.family_id', $familyIds)
+                ->whereNotNull('users.email')
+                ->pluck('users.email')->unique()->values()->all();
         }
-        $familyIds = $familyQuery->pluck('id')->all();
-        if (empty($familyIds)) return response()->json(['sent' => 0]);
-
-        $emails = DB::table('guardians')
-            ->join('users', 'users.id', '=', 'guardians.user_id')
-            ->whereIn('guardians.family_id', $familyIds)
-            ->whereNotNull('users.email')
-            ->pluck('users.email')->unique()->values()->all();
         if (empty($emails)) return response()->json(['sent' => 0]);
 
         $agency = DB::table('agencies')->where('id', $agencyId)->first();

@@ -163,7 +163,7 @@ final class BrandingController extends Controller
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $request->validate([
-            'logo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,svg', 'max:2048'],
+            'logo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'kind' => ['nullable', 'in:logo,favicon'],
         ]);
 

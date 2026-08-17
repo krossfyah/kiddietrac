@@ -268,6 +268,7 @@ final class AgencyManagementController extends Controller
             'billing_status' => ['nullable', 'in:trial,active,past_due,suspended'],
             'trial_ends_at' => ['nullable', 'date'],
             'plan' => ['nullable', 'in:starter,centre,agency'],
+            'notifications_enabled' => ['sometimes', 'boolean'],
         ]);
 
         $update = [];
@@ -275,11 +276,13 @@ final class AgencyManagementController extends Controller
             if (array_key_exists($k, $data)) $update[$k] = $data[$k];
         }
 
-        if (isset($data['plan'])) {
+        if (isset($data['plan']) || array_key_exists('notifications_enabled', $data)) {
             $agency = DB::table('agencies')->where('id', $id)->first();
             $settings = json_decode($agency->settings ?? '{}', true) ?: [];
-            $settings['plan'] = $data['plan'];
+            if (isset($data['plan'])) $settings['plan'] = $data['plan'];
+            if (array_key_exists('notifications_enabled', $data)) $settings['notifications_enabled'] = (bool) $data['notifications_enabled'];
             $update['settings'] = json_encode($settings);
+            \Illuminate\Support\Facades\Cache::forget('kt.agency_notifications:' . $id);
         }
 
         if (!empty($update)) {
@@ -385,7 +388,7 @@ final class AgencyManagementController extends Controller
         try {
             Mail::raw($body, function ($m) use ($data) {
                 $m->to($data['admin_email'], $data['admin_first_name'] . ' ' . $data['admin_last_name'])
-                  ->from('noreply@kiddietrac.com', 'Kiddietrac')
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->subject('Welcome to Kiddietrac — set your password');
             });
         } catch (\Throwable $e) {

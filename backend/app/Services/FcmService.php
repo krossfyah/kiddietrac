@@ -22,7 +22,7 @@ class FcmService
     private function sa(): ?array
     {
         if ($this->sa !== null) return $this->sa ?: null;
-        $path = env('FCM_CREDENTIALS');
+        $path = config('services.fcm.credentials') ?: env('FCM_CREDENTIALS');
         if (!$path || !is_file($path)) { $this->sa = []; return null; }
         $this->sa = json_decode((string) file_get_contents($path), true) ?: [];
         return $this->sa ?: null;
@@ -79,7 +79,7 @@ class FcmService
         if (!$token) return ['sent' => 0, 'failed' => count($tokens), 'error' => 'no_access_token'];
 
         $sa = $this->sa();
-        $project = env('FCM_PROJECT_ID') ?: ($sa['project_id'] ?? null);
+        $project = config('services.fcm.project_id') ?: env('FCM_PROJECT_ID') ?: ($sa['project_id'] ?? null);
         if (!$project) return ['sent' => 0, 'failed' => count($tokens), 'error' => 'no_project'];
         $url = "https://fcm.googleapis.com/v1/projects/{$project}/messages:send";
 
@@ -178,7 +178,7 @@ class FcmService
      * applied ONLY to staff: the same code path pushes invoices and photos to
      * parents, and nobody wants their phone screaming about a nap photo.
      */
-    public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false): array
+    public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false): array
     {
         // Do-not-contact: a user at a suppressed (live) agency gets NOTHING while we
         // are testing. The email kill-switch didn't cover push, which is how 16
@@ -191,7 +191,9 @@ class FcmService
         $tokens = DB::table('device_tokens')->where('user_id', $userId)
             ->whereIn('platform', ['android', 'ios'])->pluck('token')->all();
 
-        $urgent = $urgent && $this->isStaff($userId);
+        // Urgent (full-screen takeover) normally only for staff; chat passes
+        // forceUrgent so the takeover reaches parents too when they get a message.
+        $urgent = $urgent && ($forceUrgent || $this->isStaff($userId));
 
         $data = [];
         if ($link !== '') $data['link'] = $link;

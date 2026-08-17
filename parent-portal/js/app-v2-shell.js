@@ -208,6 +208,7 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
 
+          { hash: 'birthday-settings',  label: 'Birthday emails', icon: '🎂' },
           { hash: 'data-retention',     label: 'Data retention & compliance', icon: '🗄️' },
           { hash: 'mfa',                label: 'Two-factor (MFA)',    icon: '🔐' },
           { hash: 'help',               label: 'Help & guides',       icon: '📖' },
@@ -593,6 +594,7 @@
     'cwelcc': 'CWELCC subsidy funding and claims.',
     'audit-logs': 'Every change made in the portal, and by whom.',
     'security-alerts': 'Sign-in anomalies and security events.',
+    'birthday-settings': 'Warm notes when a child or colleague has a birthday coming up.',
     'data-retention': 'How long records are kept before deletion.',
     'anomalies': 'Unusual activity worth a second look.',
 

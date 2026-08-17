@@ -107,6 +107,10 @@ Schedule::command('demo:seed-daily')->dailyAt('05:00')->withoutOverlapping();
 Schedule::command('drip:dispatch')->hourly();
 Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');
 
+// Mail goes out half an hour before the in-app bells, so the email about a birthday
+// arrives before the notification about it. Toronto explicitly: a birthday greeting
+// timed by a UTC server lands in the middle of the night.
+Schedule::command('kiddietrac:birthday-emails')->dailyAt('07:00')->timezone('America/Toronto');
 Schedule::command('birthdays:celebrate')->dailyAt('07:30');
 
 // v22p98 — staff time-clock reminders (compliance/payroll/reporting)

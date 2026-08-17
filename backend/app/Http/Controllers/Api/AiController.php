@@ -169,17 +169,36 @@ final class AiController extends Controller
     {
         $key = env('ANTHROPIC_API_KEY');
         abort_unless($key, 503, 'AI not configured');
+        $hasFile = $request->hasFile('file');
         $data = $request->validate([
-            'document_url' => 'required|string|url',
+            'document_url' => ($hasFile ? 'nullable|string' : 'required|string|url'),
             'doc_type'     => 'required|string|in:immunization,certification,background_check,id,enrollment',
+            'file'         => 'sometimes|file|mimes:jpg,jpeg,png,webp|max:10240',
         ]);
 
         $agencyId = $this->resolveAgencyId($request);
+
+        // Uploaded file -> base64 image block (works for private files, no public-URL needed);
+        // otherwise use the supplied URL as before.
+        $storedUrl = $data['document_url'] ?? null;
+        if ($hasFile) {
+            $f = $request->file('file');
+            $mime = $f->getClientMimeType() ?: 'image/png';
+            $imageBlock = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mime, 'data' => base64_encode((string) file_get_contents($f->getRealPath()))]];
+            try {
+                $name = (string) \Illuminate\Support\Str::uuid() . '.' . strtolower($f->getClientOriginalExtension() ?: 'png');
+                $f->storeAs('ai-extractions/' . $agencyId, $name, 'public');
+                $storedUrl = '/storage/ai-extractions/' . $agencyId . '/' . $name;
+            } catch (\Throwable $e) {}
+        } else {
+            $imageBlock = ['type' => 'image', 'source' => ['type' => 'url', 'url' => $data['document_url']]];
+        }
+
         $extractionId = DB::table('ai_doc_extractions')->insertGetId([
             'agency_id'      => $agencyId,
             'uploaded_by_id' => $request->user()->id,
             'doc_type'       => $data['doc_type'],
-            'document_url'   => $data['document_url'],
+            'document_url'   => $storedUrl,
             'status'         => 'processing',
             'created_at'     => now(),
             'updated_at'     => now(),
@@ -204,7 +223,7 @@ final class AiController extends Controller
                 'messages' => [[
                     'role' => 'user',
                     'content' => [
-                        ['type' => 'image', 'source' => ['type' => 'url', 'url' => $data['document_url']]],
+                        $imageBlock,
                         ['type' => 'text', 'text' => "Extract structured fields from this document. {$promptForType} Only return valid JSON, no commentary. Use null for missing fields."],
                     ],
                 ]],

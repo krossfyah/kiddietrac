@@ -88,25 +88,53 @@ final class WidgetsController extends Controller
             ? ($latest->event_type === 'check_in' ? 'Signed in' : 'Signed out')
             : 'Not yet today';
         $statusHint = $latest
-            ? Carbon::parse($latest->occurred_at)->format('g:i A')
+            ? \App\Support\AgencyTime::fmt($latest->occurred_at, \App\Support\AgencyTime::tzForCentre(
+                DB::table('families as f')->join('children as ch', 'ch.family_id', '=', 'f.id')->where('ch.id', $latest->child_id)->value('f.centre_id')
+              ))
             : 'Check-in pending';
 
-        // Outstanding balance across all this family's invoices
+        // Outstanding balance across all this family's invoices. Includes BOTH
+        // KiddieTrac-native `invoices` AND `external_invoices` (billing synced from
+        // an integrated system like iLearn — its `balance_due` already reflects
+        // payments, so a paid invoice contributes 0). Without the external table an
+        // iLearn family's card wrongly read $0.00 while they owed money there.
+        // THIS MONTH only (not the cumulative all-time balance): invoices issued in
+        // the current calendar month, in the agency's Eastern zone.
+        $monthStart = Carbon::now('America/Toronto')->startOfMonth()->utc()->format('Y-m-d H:i:s');
+        $monthEnd   = Carbon::now('America/Toronto')->endOfMonth()->utc()->format('Y-m-d H:i:s');
         $familyIds = DB::table('guardians')->where('user_id', $user->id)->pluck('family_id')->all();
+        // Filter by DUE date — invoices are billed as installments with staggered
+        // due dates, so "this month" means what falls due this month (not when the
+        // batch was issued).
         $balance = (float) DB::table('invoices')
             ->whereIn('family_id', $familyIds)
             ->whereIn('status', ['sent', 'partial', 'overdue'])
+            ->whereBetween('due_at', [$monthStart, $monthEnd])
             ->sum('balance_due');
+        if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices') && ! empty($familyIds)) {
+            $balance += (float) DB::table('external_invoices')
+                ->whereIn('family_id', $familyIds)
+                ->whereNotIn('status', ['void', 'cancelled', 'draft'])
+                ->whereBetween('due_at', [$monthStart, $monthEnd])
+                ->sum('balance_due');
+        }
 
-        // Observations shared with the family in the last 7 days. observations.media_ids
-        // is a longtext JSON of media uuids, so any shared observation counts as a
-        // photo+note moment from the parent's perspective.
+        // ACTUAL photos of the family's children shared in the last 7 days. Photos
+        // live in `photos` with a `child_ids` JSON array (PhotoFeedController::upload).
+        // (This used to count SHARED OBSERVATIONS, so a shared learning-story with no
+        // image made the "Photos this week" card read "1 photo" with nothing to view.)
         $sinceWeek = Carbon::now()->subDays(7);
-        $photoCount = DB::table('observations')
-            ->whereIn('child_id', $childIds)
-            ->where('created_at', '>=', $sinceWeek)
-            ->where('shared_with_family', 1)
-            ->count();
+        $photoCount = 0;
+        if (! empty($childIds)) {
+            $photoCount = (int) DB::table('photos')
+                ->where('taken_at', '>=', $sinceWeek)
+                ->where(function ($q) use ($childIds) {
+                    foreach ($childIds as $cid) {
+                        $q->orWhereJsonContains('child_ids', (int) $cid);
+                    }
+                })
+                ->count();
+        }
 
         $childCount = count($childIds);
 
@@ -121,9 +149,9 @@ final class WidgetsController extends Controller
             ],
             [
                 'id' => 'balance',
-                'label' => 'Outstanding balance',
+                'label' => 'Balance this month',
                 'value' => '$' . number_format($balance, 2),
-                'hint' => $balance > 0 ? 'Open invoices on your family' : 'You are all paid up',
+                'hint' => $balance > 0 ? 'Due this month' : 'Nothing due this month',
                 'accent' => $balance > 0 ? '#DC2626' : '#16A34A',
                 'icon' => '💳',
             ],
@@ -143,6 +171,7 @@ final class WidgetsController extends Controller
                 'accent' => '#FF8A65',
                 'icon' => '👶',
             ],
+            $this->openTasksCard($user->id),
         ];
     }
 
@@ -216,6 +245,22 @@ final class WidgetsController extends Controller
             ->where('created_at', '>=', $sinceWeek)
             ->count();
 
+        // Hours worked so far this week (completed time-clock punches only).
+        $weekStart = Carbon::now()->startOfWeek();
+        $myPunches = DB::table('time_punches')
+            ->where('user_id', $user->id)
+            ->whereNotNull('punched_out_at')
+            ->where('punched_in_at', '>=', $weekStart)
+            ->get(['punched_in_at', 'punched_out_at']);
+        $weekMins = 0;
+        foreach ($myPunches as $mp) {
+            $weekMins += (int) Carbon::parse($mp->punched_in_at)->diffInMinutes(Carbon::parse($mp->punched_out_at));
+        }
+        $wH = intdiv($weekMins, 60);
+        $wM = $weekMins % 60;
+        $hoursDisplay = $weekMins > 0 ? ($wH . 'h' . ($wM ? ' ' . $wM . 'm' : '')) : '0h';
+        $shiftCount = count($myPunches);
+
         return [
             [
                 'id' => 'signed-in',
@@ -249,6 +294,33 @@ final class WidgetsController extends Controller
                 'accent' => '#1F6080',
                 'icon' => '👶',
             ],
+            [
+                'id' => 'my-hours',
+                'label' => 'My hours this week',
+                'value' => $hoursDisplay,
+                'hint' => $shiftCount > 0 ? ($shiftCount . ' shift' . ($shiftCount === 1 ? '' : 's') . ' logged') : 'No shifts logged yet',
+                'accent' => '#4F46E5',
+                'icon' => '⏱',
+            ],
+            $this->openTasksCard($user->id),
+        ];
+    }
+
+    /** A stat card for the number of tasks assigned to this user that are still open. */
+    private function openTasksCard($userId): array
+    {
+        $n = (int) DB::table('tasks')
+            ->whereNull('deleted_at')
+            ->where('assigned_to', $userId)
+            ->whereIn('status', ['open', 'in_progress'])
+            ->count();
+        return [
+            'id' => 'open-tasks',
+            'label' => 'Open tasks',
+            'value' => (string) $n,
+            'hint' => $n > 0 ? 'Assigned to you — tap to view' : 'You\'re all caught up',
+            'accent' => '#0E9BAF',
+            'icon' => '📋',
         ];
     }
 

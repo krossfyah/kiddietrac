@@ -86,10 +86,27 @@ final class OperationsController extends Controller
             ->where('centre_id', $centreId)
             ->where('week_start', $weekStart)
             ->first();
-        if (!$week) return response()->json(['data' => null, 'week_start' => $weekStart]);
+        $openDays = $this->centreOpenDays($centreId);
+        if (!$week) return response()->json(['data' => null, 'week_start' => $weekStart, 'open_days' => $openDays]);
         $items = DB::table('menu_items')->where('menu_week_id', $week->id)
             ->orderBy('day_of_week')->orderBy('meal_type')->get();
-        return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart]);
+        return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart, 'open_days' => $openDays]);
+    }
+
+    /**
+     * The days of the week a centre is open, as [1..7] (1 = Monday). Read from
+     * centres.settings.open_days; defaults to Mon–Fri when unset. Used to hide
+     * closed days from the menu grid (staff + parent).
+     */
+    private function centreOpenDays(int $centreId): array
+    {
+        $s = DB::table('centres')->where('id', $centreId)->value('settings');
+        $arr = $s ? json_decode($s, true) : null;
+        if (is_array($arr) && !empty($arr['open_days']) && is_array($arr['open_days'])) {
+            $days = array_values(array_filter(array_map('intval', $arr['open_days']), fn ($d) => $d >= 1 && $d <= 7));
+            if ($days) { $days = array_values(array_unique($days)); sort($days); return $days; }
+        }
+        return [1, 2, 3, 4, 5];
     }
 
     public function saveMenuWeek(Request $request): JsonResponse
@@ -234,6 +251,19 @@ final class OperationsController extends Controller
             ->limit(100)
             ->get();
         return response()->json(['data' => $rows]);
+    }
+
+    public function deleteFieldTrip(Request $request, int $id): JsonResponse
+    {
+        $trip = DB::table('field_trips')->where('id', $id)->first();
+        if (! $trip) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        // Same centre-access guard used to create a trip.
+        $this->assertCentreAccess($request, (int) $trip->centre_id);
+        DB::table('field_trip_permissions')->where('field_trip_id', $id)->delete();
+        DB::table('field_trips')->where('id', $id)->delete();
+        return response()->json(['ok' => true]);
     }
 
     public function createFieldTrip(Request $request): JsonResponse
@@ -607,6 +637,76 @@ final class OperationsController extends Controller
             ->value('agency_id');
         abort_unless($first, 400);
         return (int) $first;
+    }
+
+    /**
+     * GET /api/v1/operations/my-centres
+     * The centres the caller may act on, resolved from role_assignments — works
+     * for educators (whose users.centre_id may be null but who have a scoped
+     * assignment), directors, agency admins and (agency-scoped) platform admins.
+     * Lets the weekly-menu screen find an educator's centre without the
+     * director/admin-only centre endpoints.
+     */
+    public function myCentres(Request $request): JsonResponse
+    {
+        $u = $request->user();
+        $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+        if ($isPlatform) {
+            $agencyId = (int) $this->resolveAgencyId($request);
+            $centres = DB::table('centres')->where('agency_id', $agencyId)
+                ->whereNull('deleted_at')->orderBy('name')->get(['id', 'name']);
+            return response()->json(['centres' => $centres]);
+        }
+        $directIds = DB::table('role_assignments')->where('user_id', $u->id)
+            ->whereIn('role', ['educator', 'centre_director'])->where('active', true)
+            ->whereNotNull('centre_id')->pluck('centre_id')->all();
+        $agencyIds = DB::table('role_assignments')->where('user_id', $u->id)
+            ->where('role', 'agency_admin')->where('active', true)
+            ->whereNotNull('agency_id')->pluck('agency_id')->all();
+        $q = DB::table('centres')->whereNull('deleted_at');
+        if (! empty($agencyIds)) {
+            $q->where(function ($w) use ($directIds, $agencyIds) {
+                $w->whereIn('agency_id', $agencyIds);
+                if (! empty($directIds)) $w->orWhereIn('id', $directIds);
+            });
+        } else {
+            $q->whereIn('id', $directIds ?: [0]);
+        }
+        return response()->json(['centres' => $q->orderBy('name')->get(['id', 'name'])]);
+    }
+
+    /**
+     * GET /api/v1/parent/menu?week_start=YYYY-MM-DD
+     * The PUBLISHED weekly menu for the guardian's child's centre — read-only,
+     * drafts never leak. Centre resolved from guardians→families.
+     */
+    public function parentMenu(Request $request): JsonResponse
+    {
+        $u = $request->user();
+        $weekStart = Carbon::parse($request->query('week_start', Carbon::now()->startOfWeek()->toDateString()))->toDateString();
+        $centreIds = DB::table('guardians as g')
+            ->join('families as f', 'f.id', '=', 'g.family_id')
+            ->where('g.user_id', $u->id)
+            ->whereNotNull('f.centre_id')
+            ->distinct()->pluck('f.centre_id')->all();
+        if (empty($centreIds)) {
+            return response()->json(['data' => null, 'items' => [], 'week_start' => $weekStart, 'centre' => null, 'open_days' => [1, 2, 3, 4, 5]]);
+        }
+        $centreId = (int) $centreIds[0];
+        $centre = DB::table('centres')->where('id', $centreId)->first(['id', 'name']);
+        $openDays = $this->centreOpenDays($centreId);
+        $week = DB::table('menu_weeks')
+            ->where('centre_id', $centreId)
+            ->where('week_start', $weekStart)
+            ->where('status', 'published')
+            ->first();
+        if (! $week) {
+            return response()->json(['data' => null, 'items' => [], 'week_start' => $weekStart, 'centre' => $centre, 'open_days' => $openDays]);
+        }
+        $items = DB::table('menu_items')->where('menu_week_id', $week->id)
+            ->orderBy('day_of_week')->orderBy('meal_type')->get();
+        return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart, 'centre' => $centre, 'open_days' => $openDays]);
     }
 
     private function assertCentreAccess(Request $request, int $centreId): void

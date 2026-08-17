@@ -84,9 +84,15 @@ final class FieldTripGpsController extends Controller
             ->limit(100)
             ->select('lat', 'lon', 'recorded_at')
             ->get()->reverse()->values();
+        // Distance walked / estimated steps / duration (for parent + admin reports).
+        $summary = WalkController::walkSummary($tripId);
+
         return response()->json([
             'latest' => $latest,
             'trail' => $trail,
+            'distance_m' => $summary['distance_m'],
+            'steps_est' => $summary['steps_est'],
+            'duration_min' => $summary['duration_min'],
             'trip' => [
                 'id' => $trip->id, 'title' => $trip->title, 'destination' => $trip->destination,
                 'depart_time' => $trip->depart_time, 'return_time' => $trip->return_time,

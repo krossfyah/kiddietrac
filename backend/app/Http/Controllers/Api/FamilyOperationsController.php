@@ -9,6 +9,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * v22p57 — Family-facing operations:
@@ -64,6 +66,51 @@ final class FamilyOperationsController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // #15 — notify the child's centre director + educators (and the agency
+        // admins) that a new authorized pickup person was added. Child-safety
+        // matters, so staff on the floor should know who's now cleared to collect
+        // this child. Best-effort: never let a notification failure break the add.
+        try {
+            $centreId = (int) DB::table('families')->where('id', $child->family_id)->value('centre_id');
+            $agencyId = $centreId ? (int) DB::table('centres')->where('id', $centreId)->value('agency_id') : 0;
+            $childName = trim((string) ($child->first_name ?? '') . ' ' . (string) ($child->last_name ?? '')) ?: 'a child';
+            $actor = $request->user();
+            $actorName = trim((string) ($actor->first_name ?? '') . ' ' . (string) ($actor->last_name ?? '')) ?: 'A guardian';
+
+            $recipients = DB::table('role_assignments')
+                ->where('active', true)
+                ->where(function ($q) use ($centreId, $agencyId) {
+                    // Director + educators OF THIS CENTRE, plus the agency's admins.
+                    $q->where(function ($c) use ($centreId) {
+                        $c->whereIn('role', ['centre_director', 'educator'])->where('centre_id', $centreId);
+                    })->orWhere(function ($a) use ($agencyId) {
+                        $a->where('role', 'agency_admin')->where('agency_id', $agencyId);
+                    });
+                })
+                ->where('user_id', '!=', $actor->id)
+                ->distinct()->pluck('user_id')->all();
+
+            $rel = trim((string) ($data['relationship'] ?? ''));
+            $title = '🚗 New pickup contact · ' . $childName;
+            $body = $actorName . ' authorized ' . $data['full_name']
+                . ($rel ? ' (' . $rel . ')' : '') . ' to pick up ' . $childName . '.';
+            $payload = json_encode(['pickup_id' => $id, 'child_id' => (int) $data['child_id']]);
+            $now = now();
+            foreach ($recipients as $uid) {
+                DB::table('notifications')->insert([
+                    'user_id' => $uid,
+                    'type' => 'pickup_auth',
+                    'title' => $title,
+                    'body' => mb_substr($body, 0, 500),
+                    'data' => $payload,
+                    'created_at' => $now,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // notification is best-effort
+        }
+
         return response()->json(['id' => $id], 201);
     }
 
@@ -165,17 +212,114 @@ final class FamilyOperationsController extends Controller
 
     public function submitReferral(Request $request): JsonResponse
     {
-        $data = $request->validate(['referred_email' => 'required|email|max:160']);
+        // #16 — a simple referral form: who to refer + an optional note. On submit
+        // we store it, email the agency admins + centre director for review, and
+        // drop an in-app notification to each.
+        $data = $request->validate([
+            'referred_email' => 'required|email|max:160',
+            'referred_name'  => 'nullable|string|max:120',
+            'referred_phone' => 'nullable|string|max:40',
+            'message'        => 'nullable|string|max:1000',
+        ]);
         $u = $request->user();
         $famId = DB::table('guardians')->where('user_id', $u->id)->value('family_id');
         abort_unless($famId, 403);
+
         $id = DB::table('family_referrals')->insertGetId([
             'referrer_family_id' => $famId,
             'referred_email' => $data['referred_email'],
+            'referred_name'  => $data['referred_name'] ?? null,
+            'referred_phone' => $data['referred_phone'] ?? null,
+            'message'        => $data['message'] ?? null,
             'status' => 'pending',
             'created_at' => now(),
         ]);
+
+        // Best-effort: notify + email the agency admins and the family's centre
+        // director. Never let a delivery failure break the referral submission.
+        try {
+            $this->notifyReferral($u, (int) $famId, $id, $data);
+        } catch (\Throwable $e) {
+            Log::warning('Referral notify failed: ' . $e->getMessage());
+        }
+
         return response()->json(['id' => $id], 201);
+    }
+
+    /** Email + in-app notify the agency admins + centre director of a new referral. */
+    private function notifyReferral(object $actor, int $famId, int $referralId, array $data): void
+    {
+        $centreId = (int) DB::table('families')->where('id', $famId)->value('centre_id');
+        $agencyId = $centreId ? (int) DB::table('centres')->where('id', $centreId)->value('agency_id') : 0;
+        $referrerName = trim((string) ($actor->first_name ?? '') . ' ' . (string) ($actor->last_name ?? '')) ?: 'A family';
+        $famName = (string) DB::table('families')->where('id', $famId)->value('family_name');
+
+        $recipients = DB::table('role_assignments as ra')
+            ->join('users as usr', 'usr.id', '=', 'ra.user_id')
+            ->where('ra.active', true)
+            ->where(function ($q) use ($centreId, $agencyId) {
+                $q->where(function ($c) use ($centreId) {
+                    $c->where('ra.role', 'centre_director')->where('ra.centre_id', $centreId);
+                })->orWhere(function ($a) use ($agencyId) {
+                    $a->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId);
+                });
+            })
+            ->distinct()
+            ->get(['usr.id', 'usr.email', 'usr.first_name']);
+
+        $refName = trim((string) ($data['referred_name'] ?? ''));
+        $refEmail = (string) $data['referred_email'];
+        $refPhone = trim((string) ($data['referred_phone'] ?? ''));
+        $note = trim((string) ($data['message'] ?? ''));
+
+        // In-app notifications.
+        $title = '🎁 New family referral' . ($refName ? ' · ' . $refName : '');
+        $body = $referrerName . ($famName ? ' (' . $famName . ')' : '') . ' referred '
+            . ($refName ?: $refEmail) . ' to join. Review it under Referrals.';
+        $now = now();
+        foreach ($recipients as $r) {
+            DB::table('notifications')->insert([
+                'user_id' => (int) $r->id,
+                'type' => 'referral',
+                'title' => $title,
+                'body' => mb_substr($body, 0, 500),
+                'data' => json_encode(['referral_id' => $referralId]),
+                'created_at' => $now,
+            ]);
+        }
+
+        // Email for review — branded layout, from noreply, always deliver.
+        $rows = '<p><strong>Referred by:</strong> ' . e($referrerName) . ($famName ? ' (' . e($famName) . ')' : '') . '</p>'
+            . '<table style="border-collapse:collapse;margin:10px 0;font-size:14px;">'
+            . ($refName ? '<tr><td style="padding:4px 14px 4px 0;color:#64748B;">Name</td><td style="padding:4px 0;font-weight:600;">' . e($refName) . '</td></tr>' : '')
+            . '<tr><td style="padding:4px 14px 4px 0;color:#64748B;">Email</td><td style="padding:4px 0;font-weight:600;">' . e($refEmail) . '</td></tr>'
+            . ($refPhone ? '<tr><td style="padding:4px 14px 4px 0;color:#64748B;">Phone</td><td style="padding:4px 0;font-weight:600;">' . e($refPhone) . '</td></tr>' : '')
+            . '</table>'
+            . ($note ? '<p style="background:#EEF1F8;border-left:3px solid #3BBBBE;padding:12px 16px;border-radius:6px;">' . nl2br(e($note)) . '</p>' : '');
+        $content = '<h1>🎁 New family referral</h1>'
+            . '<p>A family in your agency has referred someone who may be interested in enrolling. Here are the details for your review:</p>'
+            . $rows
+            . '<p style="color:#64748B;font-size:13px;">Log in to KiddieTrac and open <strong>Referrals</strong> to follow up.</p>';
+
+        $emails = $recipients->pluck('email')->filter()->unique()->values()->all();
+        if (! $emails) {
+            return;
+        }
+        $html = view('emails.layout', [
+            'slot' => $content,
+            'title' => 'New family referral',
+            'preheader' => $referrerName . ' referred a new family for review.',
+        ])->render();
+
+        Mail::html($html, function ($m) use ($emails) {
+            $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
+            $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            $first = array_shift($emails);
+            $m->to($first)->subject('New family referral — for review');
+            foreach ($emails as $bcc) {
+                $m->bcc($bcc);
+            }
+        });
     }
 
     private function resolveAgencyId(Request $request): int

@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 final class MessageController extends Controller
@@ -98,14 +99,23 @@ final class MessageController extends Controller
         $messages = DB::table('messages')
             ->leftJoin('users', 'users.id', '=', 'messages.sender_id')
             ->where('messages.conversation_id', $conversationId)
-            ->orderBy('messages.created_at')
+            ->orderByDesc('messages.created_at')
             ->select(
                 'messages.*',
                 'users.first_name as sender_first',
                 'users.last_name as sender_last',
                 'users.photo_url as sender_photo',
             )
-            ->get();
+            ->limit(300)   // safety cap: most-recent 300 (a thread never nears this; avoids an unbounded payload on the poll)
+            ->get()
+            ->reverse()->values();
+
+        // Emoji reactions for every message in the thread, grouped by message id
+        // (same shape + toggle semantics as the staff chat).
+        $msgIds = $messages->pluck('id')->all();
+        $reactsByMsg = (!empty($msgIds)
+            ? DB::table('message_reactions')->whereIn('message_id', $msgIds)->get()->groupBy('message_id')
+            : collect());
 
         // Mark messages from others as read
         DB::table('messages')
@@ -116,7 +126,7 @@ final class MessageController extends Controller
 
         return response()->json([
             'conversation' => $convo,
-            'messages' => $messages->map(function ($m) use ($user) {
+            'messages' => $messages->map(function ($m) use ($user, $reactsByMsg) {
                 $mine = (int) $m->sender_id === (int) $user->id;
                 $deleted = !empty($m->deleted_at);
                 $system = !empty($m->is_system);
@@ -134,12 +144,56 @@ final class MessageController extends Controller
                     'edited' => !empty($m->edited_at),
                     'can_edit' => $mine && !$deleted && !$system && empty($atts),
                     'can_delete' => $mine && !$deleted && !$system,
+                    'reactions' => $this->groupReactions(($reactsByMsg[$m->id] ?? collect()), (int) $user->id),
                     'created_at' => $m->created_at,
                     'read_at' => $m->read_at,
                     'time_display' => Carbon::parse($m->created_at)->format('M j, g:i A'),
                 ];
             })->all(),
+            // Live "someone is typing…" — names of OTHER participants typing right now.
+            'typing_users' => $this->typingUsers($conversationId, (int) $user->id),
         ]);
+    }
+
+    /**
+     * POST .../messages/{conversation}/typing — record that the caller is typing.
+     * Lightweight, cache-backed (no DB write), ~8s TTL. The show() poll surfaces it
+     * to the other participant(s) as a real "is typing…" indicator.
+     */
+    public function typing(Request $request, int $conversationId): JsonResponse
+    {
+        $user = $request->user();
+        $convo = DB::table('conversations')->where('id', $conversationId)->first();
+        if (!$convo || !$this->canAccessConversation($user, $convo)) {
+            abort(403);
+        }
+        $key = 'kt_typing:' . $conversationId;
+        $now = time();
+        $map = Cache::get($key, []);
+        if (!is_array($map)) $map = [];
+        // prune stale + set/refresh the caller
+        foreach ($map as $uid => $e) { if (!isset($e['at']) || ($now - $e['at']) > 8) unset($map[$uid]); }
+        $map[(int) $user->id] = [
+            'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: 'Someone',
+            'at'   => $now,
+        ];
+        Cache::put($key, $map, now()->addSeconds(30));
+        return response()->json(['ok' => true]);
+    }
+
+    /** Names of participants (other than $exceptId) typing within the last 6s. */
+    private function typingUsers(int $conversationId, int $exceptId): array
+    {
+        $map = Cache::get('kt_typing:' . $conversationId, []);
+        if (!is_array($map)) return [];
+        $now = time();
+        $out = [];
+        foreach ($map as $uid => $e) {
+            if ((int) $uid === $exceptId) continue;
+            if (!isset($e['at']) || ($now - $e['at']) > 6) continue;
+            $out[] = $e['name'] ?? 'Someone';
+        }
+        return array_values(array_unique($out));
     }
 
     /**
@@ -313,6 +367,49 @@ final class MessageController extends Controller
      * PATCH /api/v1/parent/messages/{message}  { body }
      * Edit your own text message. Audit-logged for compliance.
      */
+    /**
+     * POST /parent/messages/{conversation}/react/{message}
+     * Toggle the caller's emoji reaction on ANY message in a conversation they can
+     * access — including the other person's messages (the whole point of #2).
+     */
+    public function reactMessage(Request $request, int $conversationId, int $messageId): JsonResponse
+    {
+        $user  = $request->user();
+        $convo = DB::table('conversations')->where('id', $conversationId)->first();
+        if (!$convo) return response()->json(['message' => 'Not found'], 404);
+        if (!$this->canAccessConversation($user, $convo)) abort(403);
+
+        $emoji = trim((string) $request->input('emoji', ''));
+        if ($emoji === '' || mb_strlen($emoji) > 8) return response()->json(['message' => 'Invalid emoji'], 422);
+
+        $m = DB::table('messages')->where('id', $messageId)->where('conversation_id', $conversationId)->first();
+        if (!$m || !empty($m->deleted_at)) return response()->json(['message' => 'Not found'], 404);
+
+        $existing = DB::table('message_reactions')
+            ->where('message_id', $messageId)->where('user_id', $user->id)->where('emoji', $emoji)->first();
+        if ($existing) {
+            DB::table('message_reactions')->where('id', $existing->id)->delete();
+        } else {
+            DB::table('message_reactions')->insert([
+                'message_id' => $messageId, 'user_id' => $user->id, 'emoji' => $emoji, 'created_at' => now(),
+            ]);
+        }
+        $rows = DB::table('message_reactions')->where('message_id', $messageId)->get();
+        return response()->json(['ok' => true, 'reactions' => $this->groupReactions($rows, (int) $user->id)]);
+    }
+
+    /** Group reaction rows into [{emoji, count, mine}] for the given viewer. */
+    private function groupReactions($rows, int $userId): array
+    {
+        $grouped = [];
+        foreach ($rows as $r) {
+            if (!isset($grouped[$r->emoji])) $grouped[$r->emoji] = ['emoji' => $r->emoji, 'count' => 0, 'mine' => false];
+            $grouped[$r->emoji]['count']++;
+            if ((int) $r->user_id === $userId) $grouped[$r->emoji]['mine'] = true;
+        }
+        return array_values($grouped);
+    }
+
     public function editMessage(Request $request, int $message): JsonResponse
     {
         $user = $request->user();
@@ -476,7 +573,7 @@ final class MessageController extends Controller
                     'data' => json_encode(['link' => '#messages', 'conversation_id' => $convo->id]),
                     'created_at' => now(),
                 ]);
-                try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New message from your centre 💬', $preview, '#messages'); } catch (\Throwable $e) {}
+                try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New message from your centre 💬', $preview, '#messages', true, true); } catch (\Throwable $e) {}
             }
         }
 

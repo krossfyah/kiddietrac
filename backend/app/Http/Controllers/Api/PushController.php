@@ -138,11 +138,24 @@ final class PushController extends Controller
         if (!$svc->configured()) {
             return response()->json(['message' => 'FCM not configured on the server.'], 503);
         }
-        $result = $svc->sendToUser(
-            $user->id,
+        // A SELF-test bypasses agency suppression — it's the user checking their own
+        // device, not an automated send to a live agency's families. Send straight
+        // to the user's app tokens.
+        $tokens = \Illuminate\Support\Facades\DB::table('device_tokens')
+            ->where('user_id', $user->id)->whereIn('platform', ['android', 'ios'])
+            ->pluck('token')->all();
+        if (!$tokens) {
+            return response()->json([
+                'sent' => 0, 'failed' => 0, 'no_device' => true,
+                'message' => 'No app device is registered yet. Open the app on your phone and allow notifications when prompted, then try again.',
+            ]);
+        }
+        $result = $svc->sendToTokens(
+            $tokens,
             'KiddieTrac test 🔔',
             'If your phone buzzed and made a sound, push is working!',
-            '#home'
+            ['link' => '#home'],
+            false
         );
         return response()->json($result);
     }

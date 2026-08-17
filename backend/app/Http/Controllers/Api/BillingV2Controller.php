@@ -72,6 +72,45 @@ final class BillingV2Controller extends Controller
         return response()->json(['id' => $id], 201);
     }
 
+    /** Staff/director adds a vacation hold on behalf of a specific family. */
+    public function createForFamily(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'family_id' => 'required|integer',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'reason' => 'nullable|string|max:120',
+        ]);
+        $family = DB::table('families')->where('id', $data['family_id'])->whereNull('deleted_at')->first();
+        abort_unless($family, 404, 'Family not found');
+        $agencyId = (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
+        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+            ->where(function ($q) use ($agencyId, $family) {
+                $q->where('agency_id', $agencyId)->orWhere('centre_id', $family->centre_id)->orWhere('role', 'platform_admin');
+            })->exists();
+        abort_unless($ok, 403, 'Forbidden');
+        $id = DB::table('vacation_holds')->insertGetId([
+            'family_id' => $data['family_id'],
+            'start_date' => $data['start_date'],
+            'end_date' => $data['end_date'],
+            'reason' => $data['reason'] ?? null,
+            'status' => 'requested',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $gids = DB::table('guardians')->where('family_id', $data['family_id'])->pluck('user_id');
+        foreach ($gids as $gid) {
+            DB::table('notifications')->insert([
+                'user_id' => $gid, 'type' => 'vacation_hold',
+                'title' => 'A vacation hold was added to your account',
+                'body' => Carbon::parse($data['start_date'])->format('M j') . ' – ' . Carbon::parse($data['end_date'])->format('M j'),
+                'data' => json_encode(['link' => '#billing', 'hold_id' => $id]),
+                'created_at' => now(),
+            ]);
+        }
+        return response()->json(['id' => $id], 201);
+    }
+
     public function decideHold(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([

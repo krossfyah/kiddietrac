@@ -6,6 +6,7 @@ use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Models\Incident;
 use App\Models\IncidentAcknowledgment;
+use App\Models\IncidentNote;
 use App\Models\Child;
 use App\Services\WebPushService;
 use Carbon\Carbon;
@@ -174,7 +175,7 @@ class IncidentController extends Controller
         // (the old `recordedBy:id,name` / `reviewedBy:id,name` 500'd once incidents
         // actually existed). A `name` accessor on User still derives from these.
         $q = Incident::query()
-            ->with(['child:id,first_name,last_name', 'recordedBy:id,first_name,last_name', 'reviewedBy:id,first_name,last_name'])
+            ->with(['child:id,first_name,last_name,photo_url', 'recordedBy:id,first_name,last_name', 'reviewedBy:id,first_name,last_name'])
             ->orderByDesc('occurred_at');
 
         // Filter by status if provided
@@ -242,17 +243,74 @@ class IncidentController extends Controller
     {
         // v22p98: users has no `name` column — select first_name/last_name.
         $incident = Incident::with([
-            'child:id,first_name,last_name',
+            'child:id,first_name,last_name,photo_url',
             'recordedBy:id,first_name,last_name',
             'reviewedBy:id,first_name,last_name',
             'acknowledgments.user:id,first_name,last_name',
+            'notes.user:id,first_name,last_name',
             'attachments',
         ])->findOrFail($id);
 
-        // SECURITY (v22p94): only the child's guardians/centre staff may read it.
-        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
+        // Access: the child's guardians / direct centre staff (canAccessChildId), OR
+        // any STAFF/ADMIN whose RESOLVED agency owns the child's centre — the SAME
+        // scoping index() uses, so anything you can see in the list you can open.
+        // Fixes the "server error" (a 403) a platform_admin hit opening an incident:
+        // index() scopes via resolveAgencyId() but show() used authorizeCentreAccess(),
+        // which checks the raw X-Active-Agency-Id header and didn't line up.
+        // The agency check is STAFF-ONLY so a guardian can never read another
+        // family's incident that happens to share their agency.
+        $allowed = $this->canAccessChildId($request->user(), (int) $incident->child_id);
+        if (! $allowed && $this->primaryRole($request->user()) !== 'guardian') {
+            $childCentreAgency = (int) DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+                ->where('c.id', (int) $incident->child_id)
+                ->value('ce.agency_id');
+            $allowed = $childCentreAgency > 0 && $childCentreAgency === (int) $this->resolveAgencyId($request);
+        }
+        abort_unless($allowed, 403);
+
+        // Notes are staff-internal — never expose them to a guardian.
+        if ($this->primaryRole($request->user()) === 'guardian') {
+            $incident->unsetRelation('notes');
+        }
 
         return response()->json(['data' => $incident]);
+    }
+
+    /* ============================================================
+     * ADD NOTE (staff-internal: educator / director / admin)
+     * Append-only audit trail — captures author + timestamp.
+     * ============================================================ */
+    public function addNote(Request $request, int $id): JsonResponse
+    {
+        $incident = Incident::findOrFail($id);
+        $user = $request->user();
+
+        // Staff-internal only — guardians can never add or see notes.
+        abort_if($this->primaryRole($user) === 'guardian', 403);
+        abort_unless($this->canAccessChildId($user, (int) $incident->child_id), 403);
+
+        $data = $request->validate([
+            'note' => 'required|string|min:1|max:5000',
+        ]);
+
+        $authorName = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
+        if ($authorName === '') {
+            $authorName = $user->name ?? 'Staff';
+        }
+
+        $note = IncidentNote::create([
+            'incident_id' => $incident->id,
+            'user_id'     => $user->id,
+            'author_name' => $authorName,
+            'note'        => $data['note'],
+            'ip_address'  => $request->ip(),
+        ]);
+
+        $note->load('user:id,first_name,last_name');
+
+        return response()->json(['data' => $note], 201);
     }
 
     /* ============================================================
@@ -340,19 +398,22 @@ class IncidentController extends Controller
         }
 
         $data = $request->validate([
-            'signed_name' => 'required|string|min:2|max:160',
-            'comment'     => 'nullable|string|max:1000',
+            'signed_name'    => 'required|string|min:2|max:160',
+            'comment'        => 'nullable|string|max:1000',
+            // Drawn signature (base64 PNG data URL from the signature pad).
+            'signature_data' => 'nullable|string|max:400000',
         ]);
 
         DB::transaction(function () use ($incident, $request, $data) {
             IncidentAcknowledgment::create([
-                'incident_id' => $incident->id,
-                'user_id'     => $request->user()->id,
-                'signed_name' => $data['signed_name'],
-                'comment'     => $data['comment'] ?? null,
-                'ip_address'  => $request->ip(),
-                'user_agent'  => substr((string) $request->userAgent(), 0, 255),
-                'signed_at'   => now(),
+                'incident_id'    => $incident->id,
+                'user_id'        => $request->user()->id,
+                'signed_name'    => $data['signed_name'],
+                'signature_data' => $data['signature_data'] ?? null,
+                'comment'        => $data['comment'] ?? null,
+                'ip_address'     => $request->ip(),
+                'user_agent'     => substr((string) $request->userAgent(), 0, 255),
+                'signed_at'      => now(),
             ]);
 
             $incident->update([
@@ -362,6 +423,93 @@ class IncidentController extends Controller
         });
 
         return response()->json(['data' => $incident->fresh(['acknowledgments'])]);
+    }
+
+    /* ============================================================
+     * EMAIL REPORT (staff: send the incident to parent / admin / director)
+     * ============================================================ */
+    public function emailReport(Request $request, int $id): JsonResponse
+    {
+        $incident = Incident::findOrFail($id);
+        abort_unless($this->canAccessChildId($request->user(), (int) $incident->child_id), 403);
+
+        $data = $request->validate([
+            'to'     => ['nullable', 'array'],
+            'to.*'   => ['in:parent,admin,director'],
+            'extra_email' => ['nullable', 'email', 'max:190'],
+        ]);
+        $groups = array_values(array_unique($data['to'] ?? []));
+
+        $child = DB::table('children')->where('id', $incident->child_id)->first();
+        $centreId = DB::table('rooms')->where('id', $incident->room_id)->value('centre_id');
+        $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
+        $agencyId = $centre->agency_id ?? null;
+
+        $recipients = collect();
+        if (in_array('parent', $groups, true) && $child) {
+            $emails = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                ->where('g.family_id', $child->family_id)->whereNotNull('u.email')->pluck('u.email');
+            $recipients = $recipients->merge($emails);
+        }
+        if (in_array('director', $groups, true) && $centreId) {
+            $emails = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.centre_id', $centreId)->where('ra.role', 'centre_director')->where('ra.active', true)
+                ->whereNotNull('u.email')->pluck('u.email');
+            $recipients = $recipients->merge($emails);
+        }
+        if (in_array('admin', $groups, true) && $agencyId) {
+            $emails = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.agency_id', $agencyId)->where('ra.role', 'agency_admin')->where('ra.active', true)
+                ->whereNotNull('u.email')->pluck('u.email');
+            $recipients = $recipients->merge($emails);
+        }
+        if (! empty($data['extra_email'])) {
+            $recipients->push($data['extra_email']);
+        }
+        $recipients = $recipients->map(fn ($e) => mb_strtolower(trim((string) $e)))->filter()->unique()->values();
+        if ($recipients->isEmpty()) {
+            return response()->json(['message' => 'No matching recipients found for the selected groups.'], 422);
+        }
+
+        $childName = $child ? trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? '')) : 'the child';
+        $recorder = DB::table('users')->where('id', $incident->recorded_by_id)->first();
+        $recorderName = $recorder ? trim(($recorder->first_name ?? '') . ' ' . ($recorder->last_name ?? '')) : 'Staff';
+        $occurred = $incident->occurred_at ? \Illuminate\Support\Carbon::parse($incident->occurred_at)->format('M j, Y g:i A') : '—';
+
+        $body = "An incident report has been shared with you for {$childName}.\n\n"
+              . "• Type: " . ucwords(str_replace('_', ' ', (string) $incident->incident_type)) . "\n"
+              . "• Severity: " . ucfirst((string) ($incident->severity ?: 'n/a')) . "\n"
+              . "• Occurred: {$occurred}\n"
+              . ($incident->location ? "• Location: {$incident->location}\n" : '')
+              . "• Recorded by: {$recorderName}\n\n"
+              . "What happened:\n" . (trim((string) $incident->description) ?: '(no description)') . "\n\n"
+              . "Action taken:\n" . (trim((string) $incident->action_taken) ?: '(none recorded)') . "\n\n"
+              . ($incident->first_aid_administered ? "First aid was administered.\n\n" : '')
+              . "Please sign in to your portal to view the full report and acknowledge receipt.";
+
+        $sent = 0;
+        foreach ($recipients as $email) {
+            try {
+                \Illuminate\Support\Facades\Mail::to($email)->queue(
+                    (new \App\Mail\AccountNotice(
+                        recipientName: 'there',
+                        subjectLine:   'Incident report — ' . $childName,
+                        bodyText:      $body,
+                        ctaLabel:      'Open in your portal',
+                        ctaUrl:        config('app.url', 'https://app.kiddietrac.com'),
+                    ))->onQueue('mail')
+                );
+                $sent++;
+            } catch (\Throwable $e) {
+            }
+        }
+
+        // Sending to the parent counts as notifying them.
+        if (in_array('parent', $groups, true) && empty($incident->parent_notified_at)) {
+            $incident->update(['parent_notified_at' => now(), 'status' => $incident->status === 'draft' ? $incident->status : 'parent_notified']);
+        }
+
+        return response()->json(['ok' => true, 'sent' => $sent, 'recipients' => $recipients->count()]);
     }
 
     /* ============================================================

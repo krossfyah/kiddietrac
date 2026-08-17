@@ -54,6 +54,8 @@ class IntegrationController extends Controller
         $data = $request->validate([
             'external_id'      => 'required|string|max:191',
             'name'             => 'required|string|max:191',
+            'supervisor_first_name' => 'nullable|string|max:120',
+            'supervisor_last_name'  => 'nullable|string|max:120',
             'license_number'   => 'nullable|string|max:120',
             'license_capacity' => 'nullable|integer|min:0',
             'address_line1'    => 'nullable|string|max:191',
@@ -88,10 +90,63 @@ class IntegrationController extends Controller
             $centre->update($attrs);
         }
 
+        // Home-childcare providers have no rooms; without at least one, an educator
+        // assigned here hits "No rooms assigned" and can't work. Guarantee a room.
+        $this->ensureDefaultRoom($centre);
+
         return response()->json([
             'ok' => true, 'entity' => 'centre', 'created' => $created,
             'id' => $centre->id, 'external_id' => $centre->external_id, 'slug' => $centre->slug,
         ], $created ? 201 : 200);
+    }
+
+    /**
+     * Every centre needs ≥1 room so the room-centric educator/care flows work,
+     * and its children must be ENROLLED in a room or the educator roster stays
+     * empty ("no children" even with a room). Ensures both.
+     */
+    private function ensureDefaultRoom($centre): void
+    {
+        $DB = \Illuminate\Support\Facades\DB::class;
+        try {
+            $roomId = \Illuminate\Support\Facades\DB::table('rooms')->where('centre_id', $centre->id)->value('id');
+            if (! $roomId) {
+                $roomId = \Illuminate\Support\Facades\DB::table('rooms')->insertGetId([
+                    'centre_id'       => $centre->id,
+                    'name'            => 'Main room',
+                    'age_group'       => 'preschool',
+                    'age_min_months'  => 0,
+                    'age_max_months'  => 72,
+                    'capacity'        => $centre->license_capacity ?: 6,
+                    'ratio_educators' => 1,
+                    'ratio_children'  => 6,
+                    'active'          => 1,
+                    'created_at'      => now(),
+                    'updated_at'      => now(),
+                ]);
+            }
+            // Enroll any of this centre's children who aren't in a room yet.
+            $unenrolled = \Illuminate\Support\Facades\DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->where('f.centre_id', $centre->id)->whereNull('c.deleted_at')
+                ->whereNotExists(function ($q) {
+                    $q->select(\Illuminate\Support\Facades\DB::raw(1))->from('enrollments')->whereColumn('enrollments.child_id', 'c.id');
+                })
+                ->pluck('c.id');
+            foreach ($unenrolled as $cid) {
+                \Illuminate\Support\Facades\DB::table('enrollments')->insert([
+                    'child_id'        => $cid,
+                    'room_id'         => $roomId,
+                    'start_date'      => now()->toDateString(),
+                    'schedule'        => json_encode(['mon', 'tue', 'wed', 'thu', 'fri']),
+                    'monthly_fee'     => 0,
+                    'cwelcc_eligible' => 1,
+                    'created_at'      => now(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // never fail the sync because of the default room / enrolment
+        }
     }
 
     /** POST /integration/families — upsert a family by external_id, linked to a centre. */
@@ -324,8 +379,231 @@ class IntegrationController extends Controller
     }
 
     /**
+     * POST /integration/invoices — upsert a parent invoice by external_id, linked
+     * to a family. Read-only mirror of the source platform's invoice so the parent
+     * portal can display it; KiddieTrac never collects payment on these.
+     */
+    public function upsertInvoice(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+
+        $data = $request->validate([
+            'external_id'         => 'required|string|max:191',
+            'family_external_id'  => 'required|string|max:191',
+            'number'              => 'nullable|string|max:120',
+            'status'              => 'nullable|string|max:40',
+            'issued_at'           => 'nullable|date',
+            'due_at'              => 'nullable|date',
+            'total'               => 'nullable|numeric',
+            'amount_paid'         => 'nullable|numeric',
+            'balance_due'         => 'nullable|numeric',
+            'currency'            => 'nullable|string|max:8',
+            'description'         => 'nullable|string',
+            'items'               => 'nullable|array',
+            'source_label'        => 'nullable|string|max:60',
+            'pdf_url'             => 'nullable|string|max:500',
+            'external_updated_at' => 'nullable|date',
+        ]);
+        $source = $this->source($request);
+
+        $agencyCentreIds = Centre::where('agency_id', $agencyId)->pluck('id');
+        $family = Family::whereIn('centre_id', $agencyCentreIds)
+            ->where('external_source', $source)
+            ->where('external_id', $data['family_external_id'])->first();
+        abort_unless($family, 422, 'Unknown family_external_id for this agency — upsert the family first.');
+
+        $status  = strtolower($data['status'] ?? 'open');
+        $total   = round((float) ($data['total'] ?? 0), 2);
+        $paid    = round((float) ($data['amount_paid'] ?? 0), 2);
+        $balance = array_key_exists('balance_due', $data) && $data['balance_due'] !== null
+            ? round((float) $data['balance_due'], 2)
+            : max(0, round($total - $paid, 2));
+
+        $existing = DB::table('external_invoices')
+            ->where('agency_id', $agencyId)->where('external_source', $source)
+            ->where('external_id', $data['external_id'])->first();
+        $created = ! $existing;
+
+        $attrs = [
+            'agency_id'           => $agencyId,
+            'family_id'           => $family->id,
+            'external_source'     => $source,
+            'external_id'         => $data['external_id'],
+            'number'              => $data['number'] ?? null,
+            'status'              => $status,
+            'issued_at'           => $data['issued_at'] ?? null,
+            'due_at'              => $data['due_at'] ?? null,
+            'total'               => $total,
+            'amount_paid'         => $paid,
+            'balance_due'         => $balance,
+            'currency'            => $data['currency'] ?? 'CAD',
+            'description'         => $data['description'] ?? null,
+            'items'               => isset($data['items']) ? json_encode($data['items']) : null,
+            'source_label'        => $data['source_label'] ?? ucfirst($source),
+            'pdf_url'             => $data['pdf_url'] ?? null,
+            // Normalize any ISO-8601 / offset datetime to a MySQL-storable string
+            // (a raw "2026-07-14T14:26:30-04:00" fails a direct query-builder insert).
+            'external_updated_at' => ! empty($data['external_updated_at'])
+                ? \Illuminate\Support\Carbon::parse($data['external_updated_at'])->utc()->format('Y-m-d H:i:s')
+                : null,
+            'updated_at'          => now(),
+        ];
+        if ($created) {
+            $attrs['created_at'] = now();
+            $id = DB::table('external_invoices')->insertGetId($attrs);
+        } else {
+            DB::table('external_invoices')->where('id', $existing->id)->update($attrs);
+            $id = $existing->id;
+        }
+
+        return response()->json([
+            'ok' => true, 'entity' => 'invoice', 'created' => $created,
+            'id' => $id, 'external_id' => $data['external_id'], 'family_id' => $family->id,
+        ], $created ? 201 : 200);
+    }
+
+    /**
+     * POST /integration/waitlist — mirror ONE of the partner's waitlist leads.
+     * Lightweight (no family/child records created); origin is always 'ilearn'
+     * here (this endpoint only ingests the partner's own entries). Pass
+     * deleted=true to soft-remove one that was cleared on the partner side.
+     */
+    public function upsertWaitlist(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        $data = $request->validate([
+            'external_id'         => 'required|string|max:191',
+            'child_name'          => 'nullable|string|max:191',
+            'child_dob'           => 'nullable|date',
+            'age_group'           => 'nullable|string|max:60',
+            'parent_name'         => 'nullable|string|max:191',
+            'email'               => 'nullable|string|max:191',
+            'phone'               => 'nullable|string|max:60',
+            'desired_start'       => 'nullable|date',
+            'days_needed'         => 'nullable|string|max:120',
+            'status'              => 'nullable|string|max:40',
+            'priority'            => 'nullable|string|max:40',
+            'source'              => 'nullable|string|max:80',
+            'position'            => 'nullable|integer',
+            'notes'               => 'nullable|string',
+            'area_of_interest'    => 'nullable|string|max:191',
+            'external_updated_at' => 'nullable|date',
+            'deleted'             => 'nullable|boolean',
+        ]);
+        $src = $this->source($request);
+        $existing = DB::table('external_waitlist')
+            ->where('agency_id', $agencyId)->where('external_source', $src)
+            ->where('external_id', $data['external_id'])->first();
+
+        if (! empty($data['deleted'])) {
+            if ($existing) {
+                DB::table('external_waitlist')->where('id', $existing->id)
+                    ->update(['deleted_at' => now(), 'updated_at' => now()]);
+            }
+            return response()->json(['ok' => true, 'entity' => 'waitlist', 'deleted' => true, 'external_id' => $data['external_id']]);
+        }
+
+        $attrs = [
+            'agency_id' => $agencyId, 'origin' => 'ilearn', 'external_source' => $src,
+            'external_id' => $data['external_id'],
+            'child_name' => $data['child_name'] ?? null, 'child_dob' => $data['child_dob'] ?? null,
+            'age_group' => $data['age_group'] ?? null,
+            'parent_name' => $data['parent_name'] ?? null, 'email' => $data['email'] ?? null,
+            'phone' => $data['phone'] ?? null,
+            'desired_start' => $data['desired_start'] ?? null, 'days_needed' => $data['days_needed'] ?? null,
+            'status' => $data['status'] ?? 'Waiting', 'priority' => $data['priority'] ?? null,
+            'source' => $data['source'] ?? null, 'position' => (int) ($data['position'] ?? 0),
+            'notes' => $data['notes'] ?? null, 'area_of_interest' => $data['area_of_interest'] ?? null,
+            'external_updated_at' => ! empty($data['external_updated_at'])
+                ? \Illuminate\Support\Carbon::parse($data['external_updated_at'])->utc()->format('Y-m-d H:i:s') : null,
+            'deleted_at' => null,   // an upsert un-deletes a previously-removed entry
+            'updated_at' => now(),
+        ];
+        // Preserve an admin's KiddieTrac-side decision on this lead — a routine
+        // re-push from the source must not reset an Approved/Declined status.
+        if ($existing && in_array($existing->status, ['Approved', 'Declined'], true)) {
+            $attrs['status'] = $existing->status;
+        }
+        $created = ! $existing;
+        if ($created) {
+            $attrs['created_at'] = now();
+            $id = DB::table('external_waitlist')->insertGetId($attrs);
+        } else {
+            DB::table('external_waitlist')->where('id', $existing->id)->update($attrs);
+            $id = $existing->id;
+        }
+        return response()->json(['ok' => true, 'entity' => 'waitlist', 'created' => $created, 'id' => $id, 'external_id' => $data['external_id']], $created ? 201 : 200);
+    }
+
+    /**
+     * GET /integration/waitlist/pull?since= — the reverse direction. Returns the
+     * KiddieTrac-ORIGINATED waitlist entries (origin='kiddietrac') so the partner
+     * can ingest them into its own waitlist. Includes soft-deleted rows (with
+     * deleted=true) so removals propagate. Never returns partner-origin rows, so
+     * there is no echo loop.
+     */
+    public function pullWaitlist(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        $q = DB::table('external_waitlist')->where('agency_id', $agencyId)->where('origin', 'kiddietrac');
+        if ($since = $request->query('since')) {
+            $q->where('updated_at', '>=', \Illuminate\Support\Carbon::parse($since)->utc()->format('Y-m-d H:i:s'));
+        }
+        $rows = $q->orderBy('updated_at')->limit(500)->get();
+        return response()->json(['ok' => true, 'entries' => $rows->map(function ($r) {
+            return [
+                'external_id' => $r->external_id, 'child_name' => $r->child_name, 'child_dob' => $r->child_dob,
+                'age_group' => $r->age_group, 'parent_name' => $r->parent_name, 'email' => $r->email, 'phone' => $r->phone,
+                'desired_start' => $r->desired_start, 'days_needed' => $r->days_needed, 'status' => $r->status,
+                'priority' => $r->priority, 'source' => $r->source, 'position' => $r->position, 'notes' => $r->notes,
+                'area_of_interest' => $r->area_of_interest, 'deleted' => ! is_null($r->deleted_at),
+                'updated_at' => $r->updated_at,
+            ];
+        })->values()]);
+    }
+
+    /**
+     * GET /integration/contacts/pull?since= — the reverse contact sync. Returns
+     * the CURRENT KiddieTrac field values for this agency's synced children so
+     * the partner can pull edits made in KiddieTrac back into its own records
+     * (last-writer-wins is decided partner-side by comparing updated_at). Only
+     * children that came FROM the partner (external_source + external_id) are
+     * returned — those are the ones with a stable id to match on.
+     */
+    public function pullContacts(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        $src = $this->source($request);
+        $centreIds = Centre::where('agency_id', $agencyId)->pluck('id');
+        $famIds = Family::whereIn('centre_id', $centreIds)->pluck('id');
+        $q = DB::table('children')
+            ->whereIn('family_id', $famIds)
+            ->where('external_source', $src)
+            ->whereNotNull('external_id');
+        if ($since = $request->query('since')) {
+            $q->where('updated_at', '>=', \Illuminate\Support\Carbon::parse($since)->utc()->format('Y-m-d H:i:s'));
+        }
+        $children = $q->orderBy('updated_at')->limit(2000)
+            ->get(['external_id', 'first_name', 'last_name', 'date_of_birth', 'gender', 'updated_at'])
+            ->map(fn ($c) => [
+                'external_id'   => $c->external_id,
+                'first_name'    => $c->first_name,
+                'last_name'     => $c->last_name,
+                'date_of_birth' => $c->date_of_birth,
+                'gender'        => $c->gender,
+                'updated_at'    => $c->updated_at,
+            ])->values();
+
+        return response()->json(['ok' => true, 'children' => $children]);
+    }
+
+    /**
      * POST /integration/sync — batch upsert in dependency order
-     * (centres -> families -> guardians -> children). Body: { centres:[], families:[], guardians:[], children:[] }.
+     * (centres -> families -> guardians -> children -> invoices -> withdrawals).
      * Each item uses the same shape as the single endpoints. Returns per-item results
      * so a partial failure never blocks the rest of the batch.
      */
@@ -335,10 +613,12 @@ class IntegrationController extends Controller
         $this->assertAgencyAdmin($request, $agencyId);
         $source = $request->header('X-Integration-Source');
 
-        $results = ['centres' => [], 'families' => [], 'guardians' => [], 'children' => [], 'withdrawals' => []];
+        $results = ['centres' => [], 'families' => [], 'guardians' => [], 'children' => [], 'invoices' => [], 'waitlist' => [], 'withdrawals' => []];
         // Order matters: enrol/upsert first, then withdraw — so a child re-pushed
         // as enrolled in the same batch isn't immediately undone by a stale withdrawal.
-        $map = ['centres' => 'upsertCentre', 'families' => 'upsertFamily', 'guardians' => 'upsertGuardian', 'children' => 'upsertChild', 'withdrawals' => 'deactivateChild'];
+        // Invoices need their family to exist, so they run after families/guardians.
+        // Waitlist is standalone (no family/child dependency).
+        $map = ['centres' => 'upsertCentre', 'families' => 'upsertFamily', 'guardians' => 'upsertGuardian', 'children' => 'upsertChild', 'invoices' => 'upsertInvoice', 'waitlist' => 'upsertWaitlist', 'withdrawals' => 'deactivateChild'];
         foreach ($map as $key => $method) {
             foreach ((array) $request->input($key, []) as $row) {
                 $sub = Request::create('/', 'POST', (array) $row);
