@@ -101,6 +101,49 @@ final class Closures
         return $out;
     }
 
+    /**
+     * Does this centre run on this weekday at all?
+     *
+     * Separate from a closure: a closure is an exception on a day the centre normally
+     * opens, this is the ordinary weekly pattern. A Sunday is not "closed for a holiday",
+     * it is simply not a day the centre operates, and nothing should be reported for it.
+     *
+     * Mon–Fri unless the centre says otherwise in settings.operating_days, which accepts
+     * either day numbers or names ('mon', 'Saturday') because both shapes exist in the
+     * data. An empty or unparseable list falls back to the default rather than closing the
+     * centre every day, which is the failure mode that would matter.
+     */
+    public static function isOperatingDay(?int $centreId, ?string $date = null): bool
+    {
+        $d = $date ?: self::todayFor($centreId);
+        $dow = Carbon::parse($d)->isoWeekday();          // 1 = Monday … 7 = Sunday
+        $open = $dow >= 1 && $dow <= 5;
+
+        if (! $centreId) {
+            return $open;
+        }
+
+        try {
+            $settings = DB::table('centres')->where('id', $centreId)->value('settings');
+            if ($settings) {
+                $st = json_decode((string) $settings, true);
+                if (is_array($st) && ! empty($st['operating_days']) && is_array($st['operating_days'])) {
+                    $names = ['mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7];
+                    $days = array_filter(array_map(function ($x) use ($names) {
+                        return is_numeric($x) ? (int) $x : ($names[strtolower(substr((string) $x, 0, 3))] ?? 0);
+                    }, $st['operating_days']));
+                    if ($days) {
+                        $open = in_array($dow, $days, true);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Never let a malformed settings blob stop a summary going out on a Tuesday.
+        }
+
+        return $open;
+    }
+
     /** "Thanksgiving Monday" — what to call it, falling back to the type. */
     public static function reason(?object $row): string
     {

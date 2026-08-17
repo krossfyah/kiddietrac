@@ -58,7 +58,10 @@ class EducatorDailySummaryCommand extends Command
             ->where('ra.role', 'educator')->where('ra.active', 1)
             ->whereNotNull('u.email')->whereNull('u.deleted_at')
             ->when($onlyUser, fn ($q) => $q->where('u.id', $onlyUser))
-            ->select('u.id', 'u.first_name', 'u.email', 'u.sex', 'ce.agency_id', 'a.timezone as tz')
+            // ce.id so the operating-day check below has a centre to ask about. Without
+            // it the check would read null and quietly pass every educator through on a
+             // Sunday — the same shape of bug as the check-in reminder's missing centre_id.
+            ->select('u.id', 'u.first_name', 'u.email', 'u.sex', 'ce.id as centre_id', 'ce.agency_id', 'a.timezone as tz')
             ->distinct()->get();
 
         if ($educators->isEmpty()) {
@@ -73,6 +76,14 @@ class EducatorDailySummaryCommand extends Command
             }
             $tz = $ed->tz ?: 'America/Toronto';
             $date = $this->option('date') ? Carbon::parse((string) $this->option('date'), $tz) : Carbon::now($tz);
+
+            // Not a day this centre runs — nothing to write up. The parent summary has
+            // always checked this; this one never did, so educators at a Monday–Friday
+            // centre were getting a Saturday summary of a day that did not happen.
+            if (! $override && ! \App\Support\Closures::isOperatingDay((int) ($ed->centre_id ?? 0), $date->toDateString())) {
+                $this->line("· {$ed->first_name}: not an operating day, skipping");
+                continue;
+            }
 
             $today = $this->statsFor((int) $ed->id, $tz, $date);
             if (! $override && $today['moments'] === 0 && $today['minutes'] === 0) {

@@ -140,21 +140,10 @@ class ParentDailySummaryCommand extends Command
      */
     private function openStatus(int $centreId, Carbon $date): array
     {
-        $dow = (int) $date->isoWeekday();   // 1=Mon … 7=Sun
-        $isOpenDay = $dow >= 1 && $dow <= 5; // default: Monday–Friday
-        try {
-            $settings = DB::table('centres')->where('id', $centreId)->value('settings');
-            if ($settings) {
-                $st = json_decode((string) $settings, true);
-                if (is_array($st) && !empty($st['operating_days']) && is_array($st['operating_days'])) {
-                    $names = ['mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6, 'sun' => 7];
-                    $days = array_filter(array_map(function ($d) use ($names) {
-                        return is_numeric($d) ? (int) $d : ($names[strtolower(substr((string) $d, 0, 3))] ?? 0);
-                    }, $st['operating_days']));
-                    if ($days) $isOpenDay = in_array($dow, $days, true);
-                }
-            }
-        } catch (\Throwable $e) {}
+        // The rule now lives in App\Support\Closures so the educator summary can use the
+        // same one. It was private here, which is exactly why that command never had it and
+        // wrote up weekends for centres that are shut on them.
+        $isOpenDay = \App\Support\Closures::isOperatingDay((int) $centreId, $date->toDateString());
 
         $isClosed = false; $reason = null;
         if ($isOpenDay) {
