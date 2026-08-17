@@ -138,7 +138,19 @@
         api('GET', endpointBase()),
         myRole === 'guardian' ? Promise.resolve(null)
           : api('GET', '/provider/team-threads').catch(function () { return null; }),
+        // Archived is per person, so it travels with the list rather than being baked
+        // into it. A failure here must not hide the inbox — it just shows everything.
+        api('GET', '/provider/chat-archive').catch(function () { return null; }),
       ]);
+      const archived = {
+        family: ((both[2] && both[2].family) || []).map(String),
+        staff: ((both[2] && both[2].staff) || []).map(String),
+      };
+      const isArchived = function (c) {
+        return c.kind === 'staff'
+          ? archived.staff.indexOf(String(c.id).replace('staff:', '')) !== -1
+          : archived.family.indexOf(String(c.id)) !== -1;
+      };
       const data = both[0] || {};
       const convs = (data.conversations || []).map(function (c) { c.kind = 'family'; return c; })
         .concat(((both[1] && both[1].threads) || []).map(function (t) {
@@ -148,6 +160,7 @@
             id: 'staff:' + t.id,
             family_name: t.name,
             centre_name: t.name,
+            photo_url: t.photo_url || '',
             preview: t.preview || '',
             last_message_at: t.at,
             unread_count: t.unread || 0,
@@ -177,7 +190,85 @@
       }
       const myId = getUser().id;
       const nameOf = (c) => (myRole === 'guardian' ? c.centre_name : c.family_name) || 'Conversation';
-      const state = { sort: 'date', dir: -1, q: '' };
+      // showArchived flips the list between the live inbox and the archived pile.
+      const state = { sort: 'date', dir: -1, q: '', showArchived: false };
+      const visible = () => convs.filter(c => isArchived(c) === state.showArchived);
+      const archivedCount = () => convs.filter(isArchived).length;
+
+      // A real photo when there is one, the coloured initial when there is not. The
+      // thread view below has always done this; the list never did.
+      const avatarFor = (nm, photo, size) => {
+        const p = absPhotoUrl(photo);
+        if (p && window.KT && KT.avatar) {
+          return `<span style="flex-shrink:0;display:inline-flex;">${KT.avatar(nm || '?', { size: size, photoUrl: p })}</span>`;
+        }
+        return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:${senderColor(nm)};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.38)}px;font-weight:800;flex-shrink:0;">${escapeHtml((String(nm || '?').charAt(0) || '?').toUpperCase())}</span>`;
+      };
+
+      const kebabBtn = (c) => `<button class="kt-conv-kebab" data-cid="${c.id}" type="button" title="More" aria-label="More actions" style="background:none;border:none;cursor:pointer;color:#64748B;font-size:17px;line-height:1;padding:5px 7px;border-radius:6px;">⋮</button>`;
+
+      // Body-appended: inside the row it gets clipped by the table's overflow, which is
+      // exactly how the last kebab on this platform ended up half-visible.
+      function openKebab(anchor, c) {
+        document.querySelectorAll('.kt-conv-menu').forEach(m => m.remove());
+        const staff = c.kind === 'staff';
+        const arch = isArchived(c);
+        const menu = document.createElement('div');
+        menu.className = 'kt-conv-menu';
+        menu.style.cssText = 'position:absolute;z-index:12000;background:#fff;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 8px 26px rgba(15,23,42,.16);padding:5px;min-width:172px;';
+        const item = (label, danger) => `<button class="kt-cm-item" data-act="${label.toLowerCase()}" style="display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:9px 12px;border-radius:7px;font-size:13.5px;color:${danger ? '#C0453B' : '#0D1B2A'};">${label}</button>`;
+        menu.innerHTML = item('Open')
+          + item(arch ? 'Restore' : 'Archive')
+          // No delete for staff threads: /provider/team-threads has no delete endpoint.
+          + (staff ? '' : item('Delete', true));
+        document.body.appendChild(menu);
+        const r = anchor.getBoundingClientRect();
+        menu.style.top = (window.scrollY + r.bottom + 6) + 'px';
+        menu.style.left = (window.scrollX + Math.min(r.left, window.innerWidth - menu.offsetWidth - 12)) + 'px';
+
+        menu.querySelectorAll('.kt-cm-item').forEach(b => {
+          b.addEventListener('mouseenter', () => { b.style.background = '#F1F5F9'; });
+          b.addEventListener('mouseleave', () => { b.style.background = 'none'; });
+          b.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const act = b.getAttribute('data-act');
+            menu.remove();
+            if (act === 'open') { return openThread(c.id, container); }
+            if (act === 'delete') { return deleteConv(c); }
+            const want = act === 'archive';
+            const bucket = c.kind === 'staff' ? archived.staff : archived.family;
+            const raw = String(c.id).replace('staff:', '');
+            try {
+              await api('POST', '/provider/chat-archive', { kind: c.kind === 'staff' ? 'staff' : 'family', id: parseInt(raw, 10), archived: want });
+              if (want) { bucket.push(raw); } else { bucket.splice(bucket.indexOf(raw), 1); }
+              repaint();
+              if (window.KT && KT.toast) KT.toast(want ? '📥' : '↩️', want ? 'Archived' : 'Restored');
+            } catch (err) {
+              if (window.KT && KT.toast) KT.toast('⚠️', 'Could not update', (err && err.message) || '', '#DC2626');
+            }
+          });
+        });
+        setTimeout(() => {
+          document.addEventListener('click', function away() { menu.remove(); document.removeEventListener('click', away); }, { once: true });
+        }, 0);
+      }
+
+      async function deleteConv(c) {
+        if (!await KT.confirm('Delete this entire conversation? It is removed for everyone and can\'t be undone from the app.')) return;
+        try {
+          await api('DELETE', endpointBase() + '/' + c.id);
+          const idx = convs.findIndex(x => String(x.id) === String(c.id));
+          if (idx >= 0) convs.splice(idx, 1);
+          repaint();
+          if (window.KT && KT.toast) KT.toast('🗑', 'Conversation deleted');
+        } catch (err) {
+          if (window.KT && KT.toast) KT.toast('⚠️', 'Could not delete', (err && err.message) || '', '#DC2626');
+        }
+      }
+
+      // Set by whichever render path runs below, so the menu can refresh the list
+      // without caring which one is on screen.
+      let repaint = function () {};
 
       // ── Mobile / APK: a card list matching the parent chat inbox ──────────
       // The desktop <table> below stacks its From/Message/Date columns into an
@@ -197,10 +288,8 @@
         const cardsWrap = $('#kt-msg-cards', container);
         const cardHtml = (c) => {
           const nm = nameOf(c), unread = c.unread_count > 0;
-          const initial = escapeHtml((String(nm).charAt(0) || '?').toUpperCase());
-          const col = senderColor(nm);
-          return `<button class="kt-msg-card" data-cid="${c.id}" style="width:100%;text-align:left;display:flex;align-items:center;gap:12px;border:1px solid #E7EBF0;background:#fff;cursor:pointer;padding:12px 13px;margin-bottom:9px;border-radius:14px;box-shadow:0 1px 3px rgba(15,23,42,.06);">
-            <span style="width:44px;height:44px;border-radius:50%;background:${col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0;">${initial}</span>
+          return `<div class="kt-msg-card" data-cid="${c.id}" style="width:100%;text-align:left;display:flex;align-items:center;gap:12px;border:1px solid #E7EBF0;background:#fff;cursor:pointer;padding:12px 13px;margin-bottom:9px;border-radius:14px;box-shadow:0 1px 3px rgba(15,23,42,.06);">
+            ${avatarFor(nm, c.photo_url || c.child_photo_url, 44)}
             <span style="flex:1;min-width:0;">
               <span style="display:flex;align-items:center;gap:8px;">
                 <span style="font-weight:${unread ? '800' : '700'};font-size:14.5px;color:#0D1B2A;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}${c.child_name ? ` · <span style="color:#64748B;font-weight:600;">${escapeHtml(c.child_name)}</span>` : ''}</span>
@@ -211,16 +300,28 @@
                 ${unread ? `<span style="background:#8EC73C;color:#fff;font-size:11px;font-weight:800;min-width:20px;height:20px;padding:0 6px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${c.unread_count}</span>` : ''}
               </span>
             </span>
-          </button>`;
+            ${kebabBtn(c)}
+          </div>`;
         };
         const paintM = () => {
           const q = state.q.trim().toLowerCase();
-          let listx = convs.slice();
+          let listx = visible();
           if (q) listx = listx.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
           listx.sort((a, b) => sortValM(b) - sortValM(a));
-          cardsWrap.innerHTML = listx.length ? listx.map(cardHtml).join('') : '<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">No matching conversations.</div>';
+          const n = archivedCount();
+          cardsWrap.innerHTML = (listx.length ? listx.map(cardHtml).join('')
+            : `<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</div>`)
+            + ((n || state.showArchived) ? `<button id="kt-arch-toggle" style="width:100%;margin-top:4px;background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:10px;">${state.showArchived ? '← Back to inbox' : '📥 Archived (' + n + ')'}</button>` : '');
           cardsWrap.querySelectorAll('.kt-msg-card').forEach(row => row.addEventListener('click', () => openThread(row.dataset.cid, container)));
+          cardsWrap.querySelectorAll('.kt-conv-kebab').forEach(b => b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const c = convs.find(x => String(x.id) === String(b.getAttribute('data-cid')));
+            if (c) openKebab(b, c);
+          }));
+          const at = cardsWrap.querySelector('#kt-arch-toggle');
+          if (at) at.addEventListener('click', () => { state.showArchived = !state.showArchived; paintM(); });
         };
+        repaint = paintM;
         const fiM = $('#kt-msg-filter', container);
         if (fiM) fiM.addEventListener('input', () => { state.q = fiM.value || ''; paintM(); });
         paintM();
@@ -275,17 +376,18 @@
             ${unread ? `<span style="background:#1F6080;color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;">${c.unread_count}</span>` : ''}
           </td>
           <td style="padding:10px 14px;text-align:right;color:#64748B;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatDateTime(c.last_message_at)}</td>
-          <td style="padding:10px 6px;text-align:center;">
-            ${c.kind === 'staff' ? '' : `<button class="kt-conv-del" data-cid="${c.id}" type="button" title="Delete conversation" style="background:none;border:none;cursor:pointer;color:#C0453B;font-size:15px;line-height:1;padding:5px;border-radius:6px;">🗑</button>`}
-          </td>
+          <td style="padding:10px 6px;text-align:center;">${kebabBtn(c)}</td>
         </tr>`;
       };
       const paint = () => {
         const q = state.q.trim().toLowerCase();
-        let list = convs.slice();
+        let list = visible();
         if (q) list = list.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
         list.sort((a, b) => { const va = sortVal(a), vb = sortVal(b); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
-        tbody.innerHTML = list.length ? list.map(rowHtml).join('') : '<tr><td colspan="4" style="padding:26px;text-align:center;color:#64748B;">No matching conversations.</td></tr>';
+        const n = archivedCount();
+        tbody.innerHTML = (list.length ? list.map(rowHtml).join('')
+          : `<tr><td colspan="4" style="padding:26px;text-align:center;color:#64748B;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</td></tr>`)
+          + ((n || state.showArchived) ? `<tr><td colspan="4" style="padding:10px;text-align:center;"><button id="kt-arch-toggle" style="background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:6px 10px;">${state.showArchived ? '← Back to inbox' : '📥 Archived (' + n + ')'}</button></td></tr>` : '');
         let z = 0;
         tbody.querySelectorAll('.kt-msg-row').forEach(row => {
           const base = (z++ % 2) ? '#F7F9FB' : '#FFFFFF';
@@ -294,24 +396,15 @@
           row.addEventListener('mouseleave', () => { row.style.background = row.dataset.base; });
           row.addEventListener('click', () => openThread(row.dataset.cid, container));
         });
-        // Delete-conversation buttons (stop the row's open-thread click).
-        tbody.querySelectorAll('.kt-conv-del').forEach(b => {
-          b.addEventListener('click', async (e) => {
+        tbody.querySelectorAll('.kt-conv-kebab').forEach(b => {
+          b.addEventListener('click', (e) => {
             e.stopPropagation();
-            const cid = b.getAttribute('data-cid');
-            if (!await KT.confirm('Delete this entire conversation? It is removed for everyone and can\'t be undone from the app.')) return;
-            b.disabled = true;
-            api('DELETE', endpointBase() + '/' + cid).then(() => {
-              const idx = convs.findIndex(x => String(x.id) === String(cid));
-              if (idx >= 0) convs.splice(idx, 1);
-              paint();
-              if (window.KT && KT.toast) KT.toast('🗑', 'Conversation deleted');
-            }).catch(err => {
-              b.disabled = false;
-              if (window.KT && KT.toast) KT.toast('⚠️', 'Could not delete', (err && err.message) || '', '#DC2626'); else alert('Could not delete the conversation.');
-            });
+            const c = convs.find(x => String(x.id) === String(b.getAttribute('data-cid')));
+            if (c) openKebab(b, c);
           });
         });
+        const at = tbody.querySelector('#kt-arch-toggle');
+        if (at) at.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = !state.showArchived; paint(); });
         container.querySelectorAll('.kt-msg-th').forEach(h => { const ar = h.querySelector('.kt-ar'); if (ar) ar.textContent = (h.getAttribute('data-sort') === state.sort) ? (state.dir < 0 ? '▾' : '▴') : ''; });
       };
       container.querySelectorAll('.kt-msg-th').forEach(h => h.addEventListener('click', () => {
@@ -321,6 +414,7 @@
       }));
       const fi = $('#kt-msg-filter', container);
       if (fi) fi.addEventListener('input', () => { state.q = fi.value || ''; paint(); });
+      repaint = paint;
       paint();
       var newBtn = $('#kt-new-chat-btn', container);
       if (newBtn) newBtn.addEventListener('click', function () { openNewChatModal(container); });
@@ -555,7 +649,17 @@
 
     function bubble(m) {
       var mine = !!m.mine;
-      return '<div style="display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin-bottom:10px;">' +
+      // Their photo beside their bubble, matching the family thread. Own messages get
+      // none — you know who you are.
+      var pic = '';
+      if (!mine) {
+        var url = absPhotoUrl(m.photo);
+        pic = (url && window.KT && KT.avatar)
+          ? '<span style="flex-shrink:0;align-self:flex-end;display:inline-flex;margin-right:8px;">' + KT.avatar(m.sender || '?', { size: 30, photoUrl: url }) + '</span>'
+          : '<span style="flex-shrink:0;align-self:flex-end;margin-right:8px;width:30px;height:30px;border-radius:50%;background:' + senderColor(m.sender) + ';color:#fff;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">' + escapeHtml((String(m.sender || '?').charAt(0) || '?').toUpperCase()) + '</span>';
+      }
+      return '<div style="display:flex;align-items:flex-end;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin-bottom:10px;">' +
+        pic +
         '<div style="max-width:78%;">' +
           (mine ? '' : '<div style="font-size:11px;color:#64748B;font-weight:700;margin:0 0 3px 4px;">' + escapeHtml(m.sender || '') + '</div>') +
           '<div style="background:' + (mine ? '#1F6080' : '#FFFFFF') + ';color:' + (mine ? '#FFFFFF' : '#0D1B2A') + ';' +

@@ -1037,6 +1037,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/team-threads/start',         [\App\Http\Controllers\Api\TeamChatController::class, 'start']);
         Route::get ('/team-threads/{thread}',      [\App\Http\Controllers\Api\TeamChatController::class, 'show'])->where('thread', '[0-9]+');
         Route::post('/team-threads/{thread}/send', [\App\Http\Controllers\Api\TeamChatController::class, 'send'])->where('thread', '[0-9]+');
+        // Archiving is per person and covers both kinds of thread, so it lives on its
+        // own endpoint rather than being duplicated into each chat controller.
+        Route::get ('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'index']);
+        Route::post('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'store']);
     });
     
     // Shared: unread badge (any authenticated user)
