@@ -102,10 +102,50 @@
         '<div style="font-size:12px;color:#64748B;">' + esc(s.schedule_label) + ' → ' + esc(s.recipient) + (s.centre_name ? ' · ' + esc(s.centre_name) : '') + '</div>' +
         (s.last_sent_on ? '<div style="font-size:11px;color:#94A3B8;">Last sent ' + esc(s.last_sent_on) + '</div>' : '') + '</div>' +
         '<label style="font-size:11px;color:#64748B;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" data-toggle="' + s.id + '"' + (s.active ? ' checked' : '') + '> Active</label>' +
-        '<button data-run="' + s.id + '" style="font-size:12px;border:1px solid #CBD5E1;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;">Send now</button>' +
-        '<button data-del="' + s.id + '" style="font-size:12px;border:none;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 10px;cursor:pointer;">Delete</button>' +
+        // Actions behind a kebab. Delete was sitting in red on every row of a list
+        // somebody reads weekly; one slip removed a schedule with no way back.
+        '<div style="position:relative;">' +
+          '<button data-kebab="' + s.id + '" title="Actions" aria-label="Actions" aria-haspopup="true" aria-expanded="false" ' +
+            'style="width:32px;height:32px;border-radius:9px;border:1px solid #E2E8F0;background:#fff;cursor:pointer;font-size:16px;line-height:1;color:#475569;">⋮</button>' +
+          '<div data-menu="' + s.id + '" style="display:none;position:absolute;right:0;top:36px;z-index:20;background:#fff;border:1px solid #E2E8F0;' +
+            'border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.16);min-width:168px;overflow:hidden;">' +
+            '<button data-run="' + s.id + '" style="display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;font-size:13px;color:#0F172A;cursor:pointer;">📤 Send now</button>' +
+            '<button data-edit="' + s.id + '" style="display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;font-size:13px;color:#0F172A;cursor:pointer;">✏️ Edit</button>' +
+            '<button data-del="' + s.id + '" style="display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;font-size:13px;color:#B91C1C;cursor:pointer;border-top:1px solid #F1F5F9;">🗑 Delete</button>' +
+          '</div>' +
+        '</div>' +
         '</div>';
     }).join('') + '</div>';
+    // One menu at a time, and a click anywhere else closes it — a menu that stays open
+    // behind the next one is how you delete the wrong row.
+    var closeMenus = function () {
+      host.querySelectorAll('[data-menu]').forEach(function (m) { m.style.display = 'none'; });
+      host.querySelectorAll('[data-kebab]').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+    };
+    host.querySelectorAll('[data-kebab]').forEach(function (b) {
+      b.dataset.ktIconized = '1';
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = b.getAttribute('data-kebab');
+        var menu = host.querySelector('[data-menu="' + id + '"]');
+        var open = menu && menu.style.display === 'block';
+        closeMenus();
+        if (menu && !open) { menu.style.display = 'block'; b.setAttribute('aria-expanded', 'true'); }
+      });
+    });
+    document.addEventListener('click', closeMenus);
+    host.querySelectorAll('[data-menu]').forEach(function (m) {
+      m.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    host.querySelectorAll('[data-edit]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        closeMenus();
+        var id = b.getAttribute('data-edit');
+        var sched = list.filter(function (x) { return String(x.id) === String(id); })[0];
+        if (sched) { openScheduleModal(sched); }
+      });
+    });
+
     host.querySelectorAll('[data-toggle]').forEach(function (cb) {
       cb.addEventListener('change', async function () {
         try { await Api.patch('/admin/report-schedules/' + cb.getAttribute('data-toggle'), { active: cb.checked }); repToast(cb.checked ? 'Schedule on' : 'Schedule paused', 'success'); }
@@ -114,13 +154,22 @@
     });
     host.querySelectorAll('[data-del]').forEach(function (b) {
       b.addEventListener('click', async function () {
-        if (window.KT && KT.confirm && !(await KT.confirm('Delete this schedule?'))) return;
+        closeMenus();
+        // Named, because "Delete this schedule?" on a list of six is not a question
+        // somebody can answer correctly.
+        var sid = b.getAttribute('data-del');
+        var srow = list.filter(function (x) { return String(x.id) === String(sid); })[0];
+        if (window.KT && KT.confirm && !(await KT.confirm({
+          title: 'Delete this schedule?',
+          description: srow ? (srow.report_title + ' — ' + srow.schedule_label + ' to ' + srow.recipient) : '',
+        }))) return;
         try { await Api.delete('/admin/report-schedules/' + b.getAttribute('data-del')); loadSchedules(); }
         catch (e) { repToast(e.message || 'Failed', 'error'); }
       });
     });
     host.querySelectorAll('[data-run]').forEach(function (b) {
       b.addEventListener('click', async function () {
+        closeMenus();
         b.disabled = true; var t = b.textContent; b.textContent = 'Sending…';
         try { await Api.post('/admin/report-schedules/' + b.getAttribute('data-run') + '/run', {}); repToast('Report sent', 'success'); }
         catch (e) { repToast(e.message || 'Could not send', 'error'); }
@@ -131,14 +180,17 @@
 
   function schedFld(label, control) { return '<label style="font-size:13px;font-weight:700;color:#334155;display:block;">' + esc(label) + '<div style="margin-top:4px;">' + control + '</div></label>'; }
 
-  function openScheduleModal() {
+  /* Create AND edit. One form rather than two: nine fields duplicated across two modals
+     drift apart, and the bug arrives later as "the edit screen forgets my centre". */
+  function openScheduleModal(existing) {
+    var editing = !!(existing && existing.id);
     var reps = META.reports || [], centres = META.centres || [];
     var isM = window.matchMedia && window.matchMedia('(max-width:768px)').matches;
     var inp = 'width:100%;padding:9px 11px;border:1.5px solid #E2E8F0;border-radius:9px;font-size:14px;box-sizing:border-box;font-family:inherit;';
     var ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:9999;display:flex;align-items:center;justify-content:center;' + (isM ? 'padding:10px 12px calc(84px + env(safe-area-inset-bottom,0px)) 12px;' : 'padding:16px;');
     ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;padding:22px;max-height:' + (isM ? 'calc(100vh - 150px)' : '92vh') + ';overflow:auto;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><div style="font-weight:800;font-size:18px;color:#0F172A;">📅 Schedule a report</div><button type="button" data-x style="background:none;border:none;font-size:22px;color:#94A3B8;cursor:pointer;line-height:1;">×</button></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><div style="font-weight:800;font-size:18px;color:#0F172A;">' + (editing ? '✏️ Edit schedule' : '📅 Schedule a report') + '</div><button type="button" data-x style="background:none;border:none;font-size:22px;color:#94A3B8;cursor:pointer;line-height:1;">×</button></div>' +
       '<div style="display:grid;gap:12px;">' +
         schedFld('Report', '<select id="sc-type" style="' + inp + '">' + reps.map(function (r) { return '<option value="' + esc(r.type) + '">' + esc(r.title) + '</option>'; }).join('') + '</select>') +
         schedFld('Centre', '<select id="sc-centre" style="' + inp + '"><option value="">All centres</option>' + centres.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('') + '</select>') +
@@ -154,12 +206,32 @@
         '<div style="font-size:11.5px;color:#94A3B8;margin-top:-4px;">Emailed to this address — staff, director, accountant, any valid email.</div>' +
       '</div>' +
       '<div id="sc-status" style="min-height:18px;font-size:13px;margin-top:8px;"></div>' +
-      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;"><button type="button" data-x style="background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:9px 16px;font-weight:800;cursor:pointer;">Cancel</button><button type="button" id="sc-save" style="background:#1F6080;color:#fff;border:none;border-radius:10px;padding:9px 18px;font-weight:800;cursor:pointer;">Save schedule</button></div>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;"><button type="button" data-x style="background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:9px 16px;font-weight:800;cursor:pointer;">Cancel</button><button type="button" id="sc-save" style="background:#1F6080;color:#fff;border:none;border-radius:10px;padding:9px 18px;font-weight:800;cursor:pointer;">' + (editing ? 'Save changes' : 'Save schedule') + '</button></div>' +
       '</div>';
     document.body.appendChild(ov);
     var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     ov.querySelectorAll('[data-x]').forEach(function (b) { b.addEventListener('click', close); });
+    // Fill from the existing schedule BEFORE syncFreq runs, so the weekly/monthly rows
+    // show or hide according to the saved frequency rather than the form's default.
+    if (editing) {
+      var setVal = function (sel, val) {
+        var el = ov.querySelector(sel);
+        if (el && val !== null && val !== undefined && val !== '') { el.value = String(val); }
+      };
+      setVal('#sc-type', existing.report_type);
+      setVal('#sc-centre', existing.centre_id);
+      setVal('#sc-format', existing.format);
+      setVal('#sc-range', existing.range_kind);
+      setVal('#sc-freq', existing.frequency);
+      // The API returns "07:00:00"; an <input type=time> wants "07:00" and silently
+      // ignores anything else, which would reset the time on every edit.
+      setVal('#sc-time', String(existing.send_time || '').slice(0, 5));
+      setVal('#sc-dow', existing.day_of_week);
+      setVal('#sc-dom', existing.day_of_month);
+      setVal('#sc-email', existing.recipient_email || existing.recipient);
+    }
+
     var freq = ov.querySelector('#sc-freq');
     function syncFreq() { ov.querySelector('#sc-dow-wrap').style.display = freq.value === 'weekly' ? '' : 'none'; ov.querySelector('#sc-dom-wrap').style.display = freq.value === 'monthly' ? '' : 'none'; }
     freq.addEventListener('change', syncFreq); syncFreq();
@@ -179,7 +251,11 @@
       if (!body.recipient_email) { st.style.color = '#B91C1C'; st.textContent = 'Enter a recipient email.'; return; }
       if (!body.send_time) { st.style.color = '#B91C1C'; st.textContent = 'Pick a send time.'; return; }
       var save = ov.querySelector('#sc-save'); save.disabled = true;
-      try { await Api.post('/admin/report-schedules', body); close(); loadSchedules(); repToast('Schedule created', 'success'); }
+      try {
+        if (editing) { await Api.patch('/admin/report-schedules/' + existing.id, body); }
+        else { await Api.post('/admin/report-schedules', body); }
+        close(); loadSchedules(); repToast(editing ? 'Schedule updated' : 'Schedule created', 'success');
+      }
       catch (e) { save.disabled = false; st.style.color = '#B91C1C'; st.textContent = '✗ ' + (e.message || 'Could not save'); }
     });
   }
