@@ -233,13 +233,16 @@ final class TeamChatController extends Controller
 
         $msgs = DB::table('staff_messages as m')->leftJoin('users as u', 'u.id', '=', 'm.sender_id')
             ->where('m.thread_id', $thread)->orderBy('m.id')
-            ->get(['m.id', 'm.sender_id', 'm.body', 'm.created_at', 'u.first_name', 'u.last_name', 'u.photo_url'])
+            // attachments must be SELECTED to be readable — the mapper below reads it, and
+            // without it every thread read 500'd on an undefined property.
+            ->get(['m.id', 'm.sender_id', 'm.body', 'm.attachments', 'm.created_at', 'u.first_name', 'u.last_name', 'u.photo_url'])
             ->map(fn ($m) => [
                 'id'      => $m->id,
                 'mine'    => $m->sender_id == $uid,
                 'sender'  => trim(($m->first_name ?? '') . ' ' . ($m->last_name ?? '')) ?: 'Colleague',
                 'photo'   => $m->photo_url,
                 'body'    => $m->body,
+                'attachments' => $m->attachments ? (json_decode($m->attachments, true) ?: []) : [],
                 'at'      => $m->created_at,
             ])->values();
 
@@ -261,8 +264,13 @@ final class TeamChatController extends Controller
     {
         $uid = (int) $request->user()->id;
         if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
-        $data = $request->validate(['body' => ['required', 'string', 'max:5000']]);
-        $id = $this->post($uid, $thread, (string) $data['body'], now());
+        // A message may be an attachment with no words — a photo of a rota does not
+        // need a caption. required_without mirrors the family chat rule.
+        $data = $request->validate([
+            'body' => ['required_without:attachment', 'nullable', 'string', 'max:5000'],
+        ]);
+        $attachments = \App\Support\ChatAttachments::extract($request);
+        $id = $this->post($uid, $thread, (string) ($data['body'] ?? ''), now(), $attachments);
         return response()->json(['id' => $id], 201);
     }
 
@@ -284,10 +292,12 @@ final class TeamChatController extends Controller
         return DB::table('staff_thread_participants')->where('thread_id', $thread)->where('user_id', $uid)->exists();
     }
 
-    private function post(int $uid, int $thread, string $body, $now): int
+    /** $attachments is optional, so start() — which never carries one — is untouched. */
+    private function post(int $uid, int $thread, string $body, $now, array $attachments = []): int
     {
         $id = DB::table('staff_messages')->insertGetId([
             'thread_id' => $thread, 'sender_id' => $uid, 'body' => trim($body),
+            'attachments' => $attachments ? json_encode($attachments) : null,
             'created_at' => $now, 'updated_at' => $now,
         ]);
         DB::table('staff_threads')->where('id', $thread)->update(['last_message_at' => $now, 'updated_at' => $now]);
@@ -300,7 +310,9 @@ final class TeamChatController extends Controller
                 DB::table('notifications')->insert([
                     'user_id' => (int) $oid, 'type' => 'team_message',
                     'title'   => '💬 New team message',
-                    'body'    => $meName . ': ' . mb_substr(strip_tags($body), 0, 140),
+                    'body'    => $meName . ': ' . (trim($body) !== ''
+                        ? mb_substr(strip_tags($body), 0, 140)
+                        : ($attachments ? '📎 sent an attachment' : 'New message')),
                     'data'    => json_encode(['thread_id' => $thread]),
                     'created_at' => $now,
                 ]);

@@ -158,11 +158,8 @@
             kind: 'staff',
             // Namespaced: conversation 7 and thread 7 are different things.
             id: 'staff:' + t.id,
-            // The role rides along in the displayed name so it shows in the From
-            // column, the mobile card and the search, without three render paths each
-            // learning about roles separately.
-            family_name: t.role ? (t.name + ' (' + t.role + ')') : t.name,
-            centre_name: t.role ? (t.name + ' (' + t.role + ')') : t.name,
+            family_name: t.name,
+            centre_name: t.name,
             photo_url: t.photo_url || '',
             preview: t.preview || '',
             last_message_at: t.at,
@@ -681,7 +678,23 @@
           (mine ? '' : '<div style="font-size:11px;color:#64748B;font-weight:700;margin:0 0 3px 4px;">' + escapeHtml(m.sender || '') + '</div>') +
           '<div style="background:' + (mine ? '#1F6080' : '#FFFFFF') + ';color:' + (mine ? '#FFFFFF' : '#0D1B2A') + ';' +
             'border:1px solid ' + (mine ? '#1F6080' : '#E7EBF0') + ';border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;">' +
-            escapeHtml(m.body || '') + '</div>' +
+            escapeHtml(m.body || '') +
+            (function () {
+              // A photo shows as a photo and a voice note as a player. The server has
+              // already normalised a browser voice note's video/* container to audio/*,
+              // so mime can be trusted here.
+              var atts = m.attachments || [];
+              return atts.map(function (a) {
+                var url = absPhotoUrl(a.url);
+                if (/^image\//.test(a.mime || '')) {
+                  return '<div style="margin-top:6px;"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(a.name || 'Photo') + '" style="max-width:100%;border-radius:9px;display:block;cursor:zoom-in;"></div>';
+                }
+                if (/^audio\//.test(a.mime || '')) {
+                  return '<div style="margin-top:6px;"><audio controls preload="none" src="' + escapeHtml(url) + '" style="width:210px;max-width:100%;"></audio></div>';
+                }
+                return '<div style="margin-top:6px;"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">📎 ' + escapeHtml(a.name || 'Attachment') + '</a></div>';
+              }).join('');
+            })() + '</div>' +
           '<div style="font-size:10.5px;color:#94A3B8;margin:3px 4px 0;text-align:' + (mine ? 'right' : 'left') + ';">' + formatDateTime(m.at) + '</div>' +
         '</div></div>';
     }
@@ -715,9 +728,17 @@
             (msgs.length ? msgs.map(bubble).join('')
               : '<div style="text-align:center;color:#64748B;padding:26px;font-size:13px;">No messages yet. Say hello.</div>') +
           '</div>' +
-          '<div style="flex:0 0 auto;display:flex;gap:8px;padding:10px;background:#fff;border-top:1px solid #E5E7EB;">' +
-            '<textarea id="kt-st-input" rows="1" placeholder="Type a message…" style="flex:1;min-width:0;padding:9px 11px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;font-family:inherit;resize:none;max-height:110px;box-sizing:border-box;"></textarea>' +
-            '<button id="kt-st-send" style="flex:0 0 auto;background:#1F6080;color:#fff;border:none;padding:0 16px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">Send</button>' +
+          '<div style="flex:0 0 auto;position:relative;background:#fff;border-top:1px solid #E5E7EB;">' +
+            '<div id="kt-st-pending" style="display:none;align-items:center;gap:8px;padding:8px 10px 0;font-size:12.5px;color:#475569;"></div>' +
+            '<div id="kt-st-emoji" style="display:none;position:absolute;bottom:56px;left:8px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;width:264px;max-height:170px;overflow-y:auto;z-index:40;font-size:22px;line-height:1.5;"></div>' +
+            '<div style="display:flex;align-items:flex-end;gap:6px;padding:8px 10px 10px;">' +
+              '<button id="kt-st-emoji-btn" type="button" title="Emoji" style="flex:0 0 auto;background:transparent;border:none;cursor:pointer;font-size:21px;padding:3px 5px;">😊</button>' +
+              '<button id="kt-st-photo-btn" type="button" title="Send a photo" style="flex:0 0 auto;background:transparent;border:none;cursor:pointer;font-size:20px;padding:3px 5px;">📷</button>' +
+              '<button id="kt-st-mic-btn" type="button" title="Record a voice note" style="flex:0 0 auto;background:transparent;border:none;cursor:pointer;font-size:20px;padding:3px 5px;">🎤</button>' +
+              '<input id="kt-st-file" type="file" accept="image/*" style="display:none;">' +
+              '<textarea id="kt-st-input" rows="1" placeholder="Type a message…" style="flex:1;min-width:0;padding:9px 11px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;font-family:inherit;resize:none;max-height:110px;box-sizing:border-box;"></textarea>' +
+              '<button id="kt-st-send" style="flex:0 0 auto;background:#1F6080;color:#fff;border:none;padding:0 16px;height:38px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">Send</button>' +
+            '</div>' +
           '</div>' +
         '</div>';
 
@@ -729,14 +750,102 @@
       var back = target.querySelector('#kt-st-back');
       if (back) { back.addEventListener('click', function () { stopStaffPoll(); closeThreadCleanup(); }); }
 
+      // ── emoji ─────────────────────────────────────────────────────────
+      var EMOJI = ['😀','😄','😊','🙂','😉','😍','🥳','😅','🤔','😴','🙌','👍','👏','🙏','💪','🤝',
+                   '❤️','🔥','✨','⭐','🎉','☀️','🌈','✅','❗','❓','📌','📎','🕗','🍎','🧸','👶'];
+      var emojiPanel = target.querySelector('#kt-st-emoji');
+      var emojiBtn = target.querySelector('#kt-st-emoji-btn');
+      emojiPanel.innerHTML = EMOJI.map(function (e) {
+        return '<button type="button" data-em="' + e + '" style="background:none;border:none;font-size:21px;cursor:pointer;padding:2px 4px;border-radius:7px;line-height:1;">' + e + '</button>';
+      }).join('');
+      emojiBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        emojiPanel.style.display = emojiPanel.style.display === 'none' ? 'block' : 'none';
+      });
+      emojiPanel.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-em]');
+        if (!b) { return; }
+        input.value = (input.value || '') + b.getAttribute('data-em');
+        input.focus();
+      });
+
+      // ── the file waiting to go, photo or voice note ───────────────────────
+      var pendingFile = null;
+      var pendingBox = target.querySelector('#kt-st-pending');
+      function setPending(f, label) {
+        pendingFile = f;
+        if (!f) { pendingBox.style.display = 'none'; pendingBox.innerHTML = ''; return; }
+        pendingBox.style.display = 'flex';
+        pendingBox.innerHTML = '<span>' + escapeHtml(label || f.name || 'Attachment') + '</span>'
+          + '<button type="button" id="kt-st-clear" style="background:none;border:none;color:#C0453B;cursor:pointer;font-size:13px;font-weight:700;">Remove</button>';
+        pendingBox.querySelector('#kt-st-clear').addEventListener('click', function () { setPending(null); });
+      }
+
+      var fileInput = target.querySelector('#kt-st-file');
+      target.querySelector('#kt-st-photo-btn').addEventListener('click', function () { fileInput.click(); });
+      fileInput.addEventListener('change', function () {
+        if (fileInput.files && fileInput.files[0]) { setPending(fileInput.files[0], '📷 ' + fileInput.files[0].name); }
+      });
+
+      // ── voice notes ───────────────────────────────────────────────────────
+      var micBtn = target.querySelector('#kt-st-mic-btn');
+      var recorder = null, chunks = [];
+      micBtn.addEventListener('click', async function () {
+        if (recorder && recorder.state === 'recording') {
+          recorder.stop();
+          return;
+        }
+        if (!navigator.mediaDevices || !window.MediaRecorder) {
+          if (window.KT && KT.toast) { KT.toast('⚠️', 'Recording is not available on this device'); }
+          return;
+        }
+        try {
+          var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          chunks = [];
+          recorder = new MediaRecorder(stream);
+          recorder.ondataavailable = function (e) { if (e.data && e.data.size) { chunks.push(e.data); } };
+          recorder.onstop = function () {
+            // Always release the microphone — leaving the track live keeps the
+            // browser's recording indicator on long after the thread is closed.
+            try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e2) {}
+            micBtn.textContent = '🎤';
+            var blob = new Blob(chunks, { type: 'audio/webm' });
+            if (blob.size) { setPending(new File([blob], 'voice-note.webm', { type: 'audio/webm' }), '🎤 Voice note'); }
+          };
+          recorder.start();
+          micBtn.textContent = '⏹️';
+        } catch (e) {
+          if (window.KT && KT.toast) { KT.toast('⚠️', 'Microphone blocked', 'Allow microphone access to record.', '#DC2626'); }
+        }
+      });
+
       var sendBtn = target.querySelector('#kt-st-send');
       async function doSend() {
         var text = (input.value || '').trim();
-        if (!text) { return; }
+        // An attachment on its own is a message — a photo of the rota needs no caption.
+        if (!text && !pendingFile) { return; }
         sendBtn.disabled = true;
         try {
-          await api('POST', '/provider/team-threads/' + tid + '/send', { body: text });
+          if (pendingFile) {
+            // Multipart, not api(): that helper sets a JSON content-type, which would
+            // corrupt a FormData body.
+            var fd = new FormData();
+            fd.append('body', text);
+            fd.append('attachment', pendingFile);
+            var res = await fetch(apiBase() + '/provider/team-threads/' + tid + '/send', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
+              body: fd,
+            });
+            if (!res.ok) {
+              var err = await res.json().catch(function () { return {}; });
+              throw new Error(err.message || ('Upload failed (HTTP ' + res.status + ')'));
+            }
+          } else {
+            await api('POST', '/provider/team-threads/' + tid + '/send', { body: text });
+          }
           input.value = '';
+          setPending(null);
           lastCount = -1;          // force the next paint to show it
           await paint(true);
         } catch (e) {

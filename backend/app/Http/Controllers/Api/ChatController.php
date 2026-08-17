@@ -729,44 +729,10 @@ final class ChatController extends Controller
      */
     private function extractAttachment(Request $request): array
     {
-        if (! $request->hasFile('attachment')) return [];
-        $request->validate([
-            // Accept images OR audio (voice notes). Max 10 MB.
-            'attachment' => ['file', 'max:10240', function ($attr, $value, $fail) {
-                $m = strtolower((string) $value->getMimeType());
-                $c = strtolower((string) $value->getClientMimeType());
-                // Browser voice notes ARE audio, but the webm/ogg CONTAINER is
-                // content-detected server-side as video/webm|video/ogg — so a
-                // desktop-recorded voice note ($m = video/webm) was wrongly rejected
-                // here while the parent-side MessageController already allowed it.
-                // Accept those audio containers (and a trusted audio/* client mime).
-                $audioContainer = in_array($m, ['video/webm', 'video/ogg', 'application/ogg'], true)
-                    || str_starts_with($c, 'audio/');
-                if (! str_starts_with($m, 'image/') && ! str_starts_with($m, 'audio/') && ! $audioContainer) {
-                    $fail('Only images or audio are allowed.');
-                }
-            }],
-        ]);
-        $file = $request->file('attachment');
-        $path = $file->store('chat-attachments', 'public');
-        $detected = strtolower((string) $file->getMimeType());
-        $client   = strtolower((string) $file->getClientMimeType());
-        $name     = (string) $file->getClientOriginalName();
-        // Normalise a voice note to an audio/* mime so the client renders it as a
-        // player (a webm/ogg audio container otherwise reports as video/*). Images
-        // keep their real detected image/* mime.
-        $isAudio = str_starts_with($client, 'audio/')
-            || in_array($detected, ['video/webm', 'video/ogg', 'application/ogg'], true)
-            || (bool) preg_match('/\.(webm|ogg|oga|m4a|mp3|wav|aac|opus)$/i', $name);
-        $mime = str_starts_with($detected, 'image/')
-            ? $detected
-            : ($isAudio ? (str_starts_with($client, 'audio/') ? $client : 'audio/webm') : $detected);
-        return [[
-            'url' => '/storage/' . $path,
-            'mime' => $mime,
-            'name' => $name,
-            'size' => $file->getSize(),
-        ]];
+        // Shared with the staff threads. The voice-note container handling this used
+        // to hold is subtle enough that a second copy would have drifted apart —
+        // see App\Support\ChatAttachments.
+        return \App\Support\ChatAttachments::extract($request);
     }
 
     private function markRead(int $conversationId, int $userId): void
