@@ -43,13 +43,22 @@ class AiObservationController extends Controller
         $child = Child::find($data['child_id']);
         if (! $child) return response()->json(['error' => 'Child not found'], 404);
 
-        $result = $this->ai->structure($child, $data['raw_text']);
+        try {
+            $result = $this->ai->structure($child, $data['raw_text']);
+        } catch (\Throwable $e) {
+            $result = ['success' => false, 'error' => $e->getMessage()];
+        }
 
         if (! ($result['success'] ?? false)) {
+            // The model call failed (outbound HTTPS to the AI provider is blocked on
+            // this host — same issue as report cards). NEVER lose the educator's
+            // observation: fall back to a data-grounded structure using their exact
+            // words so they can still review, edit and save it.
             return response()->json([
-                'error'  => 'AI structuring failed',
-                'detail' => $result['error'] ?? 'Unknown error',
-            ], 502);
+                'success'    => true,
+                'structured' => $this->fallbackStructure($child, $data['raw_text']),
+                'meta'       => ['model' => null, 'tokens_used' => null, 'fallback' => true],
+            ]);
         }
 
         return response()->json([
@@ -60,6 +69,38 @@ class AiObservationController extends Controller
                 'tokens_used' => $result['tokens_used'] ?? null,
             ],
         ]);
+    }
+
+    /**
+     * Data-grounded fallback when the AI is unavailable: keep the educator's raw
+     * words as the parent summary and pick an HDLH domain from simple keywords so
+     * the observation is never blocked or lost.
+     */
+    private function fallbackStructure(Child $child, string $raw): array
+    {
+        $summary = trim($raw);
+        if ($summary !== '' && ! preg_match('/[.!?]$/', $summary)) {
+            $summary .= '.';
+        }
+        $lc = mb_strtolower($raw);
+        $map = [
+            'Well-Being' => ['nap', 'sleep', 'ate', 'eat', 'food', 'rest', 'wash', 'clean', 'hurt', 'sick', 'tired', 'diaper', 'toilet', 'potty', 'run', 'climb', 'jump', 'physical'],
+            'Engagement' => ['built', 'build', 'puzzle', 'block', 'explore', 'curious', 'experiment', 'count', 'sort', 'discover', 'figure', 'problem', 'focus', 'concentrat'],
+            'Expression' => ['said', 'say', 'sang', 'sing', 'drew', 'draw', 'paint', 'story', 'talk', 'word', 'danc', 'music', 'pretend', 'role', 'craft', 'colour', 'color'],
+            'Belonging'  => ['friend', 'share', 'help', 'together', 'group', 'kind', 'care', 'comfort', 'hug', 'turn', 'gentle', 'include'],
+        ];
+        $domain = 'Belonging';
+        foreach ($map as $d => $kw) {
+            foreach ($kw as $k) {
+                if (str_contains($lc, $k)) { $domain = $d; break 2; }
+            }
+        }
+
+        return [
+            'domain'          => $domain,
+            'hdlh_milestones' => [],
+            'parent_summary'  => ucfirst($summary),
+        ];
     }
 
     /**
@@ -122,10 +163,33 @@ class AiObservationController extends Controller
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
             ->where('active', true)->exists();
         if ($isAdminView) {
-            $centreId = $this->resolveCentreId($user);
-            $childIds = $centreId
+            // EVERY centre in the active agency, not one of them. This resolved a single
+            // centre — which the comment above already says it should not — and on an
+            // agency whose centres ARE its providers, one centre means one provider. For
+            // iLearn, with nine, an admin saw at most a ninth of what was written and
+            // usually nothing, because the resolved centre rarely held the children whose
+            // observations existed.
+            $agencyId = $this->resolveAgencyId($request);
+            $centreIds = $agencyId
+                ? DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all()
+                : array_filter([$this->resolveCentreId($user)]);
+
+            // A director oversees their own centre rather than the whole agency; an
+            // agency admin or platform admin oversees all of it.
+            $isAgencyWide = DB::table('role_assignments')->where('user_id', $user->id)
+                ->whereIn('role', ['agency_admin', 'platform_admin'])
+                ->where('active', true)->exists();
+            if (! $isAgencyWide) {
+                $own = DB::table('role_assignments')->where('user_id', $user->id)
+                    ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
+                if ($own) {
+                    $centreIds = array_values(array_intersect($centreIds, $own)) ?: $own;
+                }
+            }
+
+            $childIds = $centreIds
                 ? DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
-                    ->where('f.centre_id', $centreId)->pluck('c.id')->all()
+                    ->whereIn('f.centre_id', $centreIds)->pluck('c.id')->all()
                 : [];
             $q->whereIn('child_id', $childIds ?: [0]);
         } else {
