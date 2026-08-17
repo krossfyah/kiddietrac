@@ -94,6 +94,18 @@ final class EmailTemplate
             . '.kt-card{background:#152033 !important;color:#E5E7EB !important;border-color:#26344A !important;}'
             . '.kt-card a{color:#7CC3E8 !important;}'
             . '.kt-card strong,.kt-card .kt-h{color:#F1F5F9 !important;}'
+            // Message bodies set their colours inline, which beats the .kt-card rule
+            // above - that rule is not on those elements. Dark body text therefore
+            // stayed dark on the dark card and became unreadable. !important in a media
+            // query outranks an inline style, so the text is reclaimed explicitly.
+            . '.kt-card p,.kt-card div,.kt-card span,.kt-card td,.kt-card th,.kt-card li{color:#D6DEE9 !important;}'
+            . '.kt-card .kt-muted,.kt-card small{color:#9AA8BC !important;}'
+            // Buttons keep their own contrast - they sit on a solid brand colour, so the
+            // reclaim above would make the label unreadable in the other direction.
+            . '.kt-btn,.kt-btn *,.kt-card .kt-btn,.kt-card .kt-btn *{color:#FFFFFF !important;}'
+            // Light info panels (#F8FAFC boxes and the like) opt in with .kt-panel.
+            . '.kt-panel{background:#1B2740 !important;border-color:#2C3B54 !important;}'
+            . '.kt-panel td,.kt-panel div,.kt-panel span,.kt-panel p{color:#D6DEE9 !important;}'
             . '.kt-footer{background:#101A2B !important;color:#94A3B8 !important;border-color:#26344A !important;}'
             . '.kt-footer a{color:#7CC3E8 !important;}'
             . '.kt-footer strong{color:#CBD5E1 !important;}'

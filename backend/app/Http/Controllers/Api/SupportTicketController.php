@@ -132,7 +132,7 @@ final class SupportTicketController extends Controller
                 . '</table>'
                 . '<div style="white-space:pre-wrap;border-left:3px solid #e2e8f0;padding:4px 0 4px 14px;color:#334155;font-size:14px;line-height:1.55;">'
                 . nl2br(e((string) ($data['body'] ?? '(no message)'))) . '</div>'
-                . '<p style="color:#94a3b8;font-size:12px;margin:16px 0 0;">Ticket #' . $id . ' &middot; open it under <strong>Support</strong> in the portal to reply.</p>';
+                . '<p class="kt-muted" style="color:#94a3b8;font-size:12px;margin:16px 0 0;">Ticket #' . $id . ' &middot; open it under <strong>Support</strong> in the portal to reply.</p>';
             // Brand the email with header/footer. An app-issue/bug goes to KiddieTrac
             // HQ so it always carries KiddieTrac branding; an agency-bound ticket
             // uses the agency's own logo/colours when that agency is white-labelled
@@ -277,10 +277,10 @@ final class SupportTicketController extends Controller
             $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($first) . ',</p>'
                 . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
                 . 'The request you raised with <strong>' . e($agencyName) . '</strong> has been ' . e($word) . '.</p>'
-                . '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:4px solid #1F6FB2;border-radius:10px;padding:14px 16px;margin:0 0 14px;">'
-                .   '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:4px;">Ticket #' . (int) $ticket->id . '</div>'
+                . '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:4px solid #1F6FB2;border-radius:10px;padding:14px 16px;margin:0 0 14px;">'
+                .   '<div class="kt-muted" style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:4px;">Ticket #' . (int) $ticket->id . '</div>'
                 .   '<div style="font-size:15px;font-weight:800;color:#0F172A;">' . e((string) $ticket->subject) . '</div>'
-                .   '<div style="font-size:12.5px;color:#64748B;margin-top:6px;">Raised ' . e(\App\Support\AgencyTime::fmt($ticket->created_at, $tz, 'D, M j, Y') ?? '') . '</div>'
+                .   '<div class="kt-muted" style="font-size:12.5px;color:#64748B;margin-top:6px;">Raised ' . e(\App\Support\AgencyTime::fmt($ticket->created_at, $tz, 'D, M j, Y') ?? '') . '</div>'
                 . '</div>'
                 . '<p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#475569;">'
                 . 'Marked ' . e($word) . ' on ' . e($when->format('D, M j, Y')) . ' at ' . e($when->format('g:i A'))
