@@ -496,6 +496,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Biometric unlock, reported by the device that enrolled. Enrolment has been a
         // localStorage flag with no server record since it shipped, so nobody was told an
         // unlock method had been added to their account and nobody could report on it.
+        // How today is going for the educator asking — same numbers as the evening email.
+        Route::get('/educator/day-score', [\App\Http\Controllers\Api\EducatorSelfController::class, 'dayScore']);
         Route::post('/me/biometric-enrolled', [\App\Http\Controllers\Api\BiometricController::class, 'enrolled']);
         Route::post('/me/biometric-revoked',  [\App\Http\Controllers\Api\BiometricController::class, 'revoked']);
         Route::get ('/admin/biometric-report', [\App\Http\Controllers\Api\BiometricController::class, 'report']);

@@ -317,4 +317,44 @@ class EducatorSelfController extends Controller
         $rem = $months % 12;
         return $rem ? ($years . 'y ' . $rem . 'm') : ($years . 'y');
     }
+
+    /**
+     * How today is going, for the educator asking.
+     *
+     * The same numbers and the same score the evening summary email uses — literally the
+     * same methods — so the tile on Today and the email that arrives at 11pm cannot
+     * disagree about the day the person just had.
+     *
+     * Live, so it climbs as the day is logged. That is the point of putting it on Today
+     * rather than only in the email: something to move, not just a verdict afterwards.
+     */
+    public function dayScore(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $centreId = DB::table('role_assignments')->where('user_id', $user->id)
+            ->where('active', true)->whereNotNull('centre_id')->value('centre_id');
+        $tz = \App\Support\AgencyTime::tzForCentre($centreId ? (int) $centreId : null);
+        $date = \Illuminate\Support\Carbon::now($tz);
+
+        $stats = \App\Console\Commands\EducatorDailySummaryCommand::statsFor((int) $user->id, $tz, $date);
+        $score = \App\Console\Commands\EducatorDailySummaryCommand::dayScore($stats);
+
+        return response()->json([
+            'date' => $date->toDateString(),
+            // A day the centre does not run should not be scored 0 out of 100 and shown as
+            // a failure — there was nothing to do. The tile hides itself instead.
+            'operating_day' => \App\Support\Closures::isOperatingDay($centreId ? (int) $centreId : null, $date->toDateString()),
+            'score' => $score['score'],
+            'label' => $score['label'],
+            'colour' => $score['colour'],
+            'blurb' => $score['blurb'],
+            'stats' => [
+                'moments' => $stats['moments'],
+                'children' => $stats['children'],
+                'observations' => $stats['observations'],
+                'minutes' => $stats['minutes'],
+                'photos' => $stats['media'],
+            ],
+        ]);
+    }
 }

@@ -85,13 +85,13 @@ class EducatorDailySummaryCommand extends Command
                 continue;
             }
 
-            $today = $this->statsFor((int) $ed->id, $tz, $date);
+            $today = self::statsFor((int) $ed->id, $tz, $date);
             if (! $override && $today['moments'] === 0 && $today['minutes'] === 0) {
                 $this->line("· {$ed->first_name}: nothing logged, skipping");
                 continue;
             }
-            $yesterday = $this->statsFor((int) $ed->id, $tz, $date->copy()->subDay());
-            $monthAgo  = $this->statsFor((int) $ed->id, $tz, $date->copy()->subDays(28));
+            $yesterday = self::statsFor((int) $ed->id, $tz, $date->copy()->subDay());
+            $monthAgo  = self::statsFor((int) $ed->id, $tz, $date->copy()->subDays(28));
 
             $html = $this->buildHtml($ed, $today, $yesterday, $monthAgo, $date, $tz);
             [$sPlace] = $this->placeFor((int) $ed->id, (int) $ed->agency_id);
@@ -194,7 +194,12 @@ class EducatorDailySummaryCommand extends Command
     }
 
     /** This educator's activity for the given agency-day. */
-    private function statsFor(int $uid, string $tz, Carbon $date): array
+    /**
+     * Public and static so the Today screen shows the SAME number as the evening email.
+     * Two implementations of "how did today go" drifting apart would be worse than
+     * having neither — the educator would not know which to believe.
+     */
+    public static function statsFor(int $uid, string $tz, Carbon $date): array
     {
         $start = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc();
         $end   = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
@@ -286,7 +291,7 @@ class EducatorDailySummaryCommand extends Command
      *
      * @return array{score:int, label:string, colour:string, blurb:string}
      */
-    private function dayScore(array $t): array
+    public static function dayScore(array $t): array
     {
         $moments = min(1.0, $t['moments'] / 12);        // ~12 logged moments = full marks
         $kids    = min(1.0, $t['children'] / 6);        // ~6 children cared for
@@ -640,7 +645,7 @@ class EducatorDailySummaryCommand extends Command
         ]);
         // Score + place lead the email: the first thing you see is how the day went and
         // whose room it was, not a wall of six equal tiles.
-        $sc = $this->dayScore($t);
+        $sc = self::dayScore($t);
         [$placeName, $placeWord] = $this->placeFor((int) $ed->id, (int) $ed->agency_id);
 
         $body = '<p style="font-size:16px;font-weight:700;color:#0F172A;margin:0 0 4px;">' . $greet . '</p>'

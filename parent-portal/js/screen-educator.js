@@ -83,6 +83,11 @@
       shell.appendChild(briefBox);
       renderDayBrief(briefBox);
 
+      // How the day is going — the same score the evening email sends, but live.
+      const scoreBox = Dom.el('div', { id: 'kt-day-score' });
+      shell.appendChild(scoreBox);
+      renderDayScore(scoreBox);
+
       // Room topbar (centre name + room selector + ratio) — now BELOW the brief.
       const topbar = buildTopbar(rooms, centreLabel, providerMode);
       shell.appendChild(topbar);
@@ -119,6 +124,79 @@
 
   // Start-of-day brief: fetch the aggregated summary and render clickable chips.
   // Silent on failure — it's a nice-to-have that must never block the roster.
+  /* The day score, drawn as an arc.
+     Deliberately quiet when there is nothing to say: an educator who has just walked in
+     does not need a 0 out of 100 in red, and a day the centre does not run should not be
+     scored at all. In both cases the card simply is not there. */
+  async function renderDayScore(container) {
+    let d;
+    try { d = await Api.get('/educator/day-score'); }
+    catch (e) { container.innerHTML = ''; return; }      // never break Today for a tile
+    if (!d || d.operating_day === false) { container.innerHTML = ''; return; }
+
+    const score = Math.max(0, Math.min(100, parseInt(d.score, 10) || 0));
+    const colour = d.colour || '#7C3AED';
+    const st = d.stats || {};
+    const hours = Math.floor((st.minutes || 0) / 60);
+    const mins = (st.minutes || 0) % 60;
+
+    // r=52 in a 120 box: the circumference is what the dash offset animates against.
+    const R = 52, C = 2 * Math.PI * R;
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    const chip = (icon, n, label) =>
+      '<div style="display:flex;align-items:center;gap:7px;background:#F8FAFC;border:1px solid #EEF2F7;' +
+      'border-radius:10px;padding:8px 11px;">' +
+      '<span style="font-size:15px;">' + icon + '</span>' +
+      '<span style="font-size:13px;color:#0F172A;font-weight:800;">' + esc(n) + '</span>' +
+      '<span style="font-size:12px;color:#64748B;">' + esc(label) + '</span></div>';
+
+    container.innerHTML =
+      '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:16px;padding:16px 18px;margin:0 0 14px;' +
+        'display:flex;align-items:center;gap:18px;flex-wrap:wrap;">' +
+        '<div style="position:relative;width:120px;height:120px;flex:0 0 auto;">' +
+          '<svg width="120" height="120" viewBox="0 0 120 120" style="transform:rotate(-90deg);">' +
+            '<circle cx="60" cy="60" r="' + R + '" fill="none" stroke="#EEF2F7" stroke-width="11"></circle>' +
+            '<circle cx="60" cy="60" r="' + R + '" fill="none" stroke="' + esc(colour) + '" stroke-width="11" ' +
+              'stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" ' +
+              'stroke-dashoffset="' + C.toFixed(1) + '" ' +
+              'style="transition:stroke-dashoffset 1.1s cubic-bezier(.22,1,.36,1);" data-arc></circle>' +
+          '</svg>' +
+          '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
+            '<div style="font-size:30px;font-weight:800;color:' + esc(colour) + ';line-height:1;" data-num>0</div>' +
+            '<div style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.08em;margin-top:2px;">TODAY</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="flex:1;min-width:190px;">' +
+          '<div style="font-size:17px;font-weight:800;color:#0F172A;">' + esc(d.label || '') + '</div>' +
+          '<div style="font-size:13px;color:#64748B;line-height:1.5;margin:3px 0 11px;">' + esc(d.blurb || '') + '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+            chip('📝', st.moments || 0, (st.moments === 1 ? 'moment' : 'moments')) +
+            chip('🧒', st.children || 0, (st.children === 1 ? 'child' : 'children')) +
+            chip('🔭', st.observations || 0, (st.observations === 1 ? 'observation' : 'observations')) +
+            (st.minutes ? chip('⏱', (hours ? hours + 'h ' : '') + mins + 'm', 'on the floor') : '') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Animated from empty on the next frame, so the arc is seen to fill rather than
+    // appearing already full — the movement is what makes it read as today's, not a
+    // static badge.
+    const arc = container.querySelector('[data-arc]');
+    const num = container.querySelector('[data-num]');
+    requestAnimationFrame(function () {
+      if (arc) { arc.style.strokeDashoffset = (C * (1 - score / 100)).toFixed(1); }
+      if (!num) { return; }
+      // Counts up over the same beat as the arc.
+      const t0 = Date.now(), dur = 1100;
+      (function step() {
+        const p = Math.min(1, (Date.now() - t0) / dur);
+        num.textContent = Math.round(score * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) { requestAnimationFrame(step); }
+      })();
+    });
+  }
+
   async function renderDayBrief(container) {
     try {
       const b = await Api.get('/provider/day-brief');
