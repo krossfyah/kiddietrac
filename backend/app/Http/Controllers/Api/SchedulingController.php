@@ -405,6 +405,49 @@ final class SchedulingController extends Controller
             ];
         });
 
+        // Everybody who should be ON a timesheet, not only everybody who clocked.
+        //
+        // Built from punches alone, somebody who never clocked in did not appear at all, so
+        // "logged no hours" and "not on the list" looked the same. A zero row is a question
+        // to ask; a missing row is invisible. Parents are excluded — they have no shifts.
+        $seen = collect($rows)->pluck('staff_email')->filter()->unique()->all();
+        $roleLabel = ['agency_admin' => 'Admin', 'platform_admin' => 'Admin', 'centre_director' => 'Director',
+            'educator' => 'Educator', 'home_visitor' => 'Home visitor', 'auditor' => 'Auditor'];
+        $agencyIds = DB::table('centres')->whereIn('id', $centreIds)->pluck('agency_id')->unique()->filter()->all();
+        $missing = DB::table('role_assignments as ra')
+            ->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', true)
+            ->where('ra.role', '!=', 'guardian')
+            ->whereNull('u.deleted_at')
+            ->where(function ($q) use ($centreIds, $agencyIds) {
+                $q->whereIn('ra.centre_id', $centreIds);
+                if ($agencyIds) {
+                    $q->orWhereIn('ra.agency_id', $agencyIds);
+                }
+            })
+            ->when($seen, fn ($q) => $q->whereNotIn('u.email', $seen))
+            ->select('u.first_name', 'u.last_name', 'u.email', 'ra.role')
+            ->distinct()->get()->unique('email');
+
+        $rows = collect($rows);
+        foreach ($missing as $m) {
+            $rows->push([
+                'date' => null,
+                'open' => false,
+                'status' => 'No hours logged',
+                'staff_name' => trim(($m->first_name ?? '') . ' ' . ($m->last_name ?? '')),
+                'staff_email' => $m->email,
+                'role' => $roleLabel[$m->role] ?? 'Staff',
+                'clock_in' => '—',
+                'clock_out' => '—',
+                'break_min' => 0,
+                'worked_min' => 0,
+                'worked_hours' => 0,
+                'notes' => null,
+            ]);
+        }
+        $rows = $rows->values();
+
         return response()->json([
             'centre_id' => $centreId,
             'from' => $from,

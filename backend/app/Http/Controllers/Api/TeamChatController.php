@@ -18,6 +18,15 @@ final class TeamChatController extends Controller
 {
     private const STAFF_ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'auditor', 'platform_admin'];
 
+    /**
+     * Everyone in the agency who can be messaged — staff AND parents.
+     *
+     * Parents were excluded because family conversations live in the separate parent chat.
+     * But an admin or director regularly needs to reach a parent about something that is
+     * not a particular child's day, and had no way to start that from here.
+     */
+    private const MESSAGEABLE_ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'auditor', 'platform_admin', 'guardian'];
+
     /** Is this a platform admin — somebody whose remit is every agency? */
     private function isPlatformAdmin(int $uid): bool
     {
@@ -49,7 +58,7 @@ final class TeamChatController extends Controller
         if (! $agencyIds) return [];
         $centreIds = DB::table('centres')->whereIn('agency_id', $agencyIds)->pluck('id')->all();
         return DB::table('role_assignments')->where('active', true)
-            ->whereIn('role', self::STAFF_ROLES)
+            ->whereIn('role', self::MESSAGEABLE_ROLES)
             ->where(function ($q) use ($agencyIds, $centreIds) {
                 $q->whereIn('agency_id', $agencyIds)->orWhereIn('centre_id', $centreIds ?: [0]);
             })
@@ -79,13 +88,16 @@ final class TeamChatController extends Controller
         if (! $ids) return response()->json(['contacts' => []]);
 
         // A user may hold several roles — show the most senior for the label.
-        $rank = ['agency_admin' => 0, 'platform_admin' => 0, 'centre_director' => 1, 'home_visitor' => 2, 'educator' => 3, 'auditor' => 4];
+        // Lowest rank wins, so somebody who is both a parent and staff shows as staff —
+        // that is the hat they are being messaged in here. Parents rank last so the
+        // colleagues people message daily stay at the top of the list.
+        $rank = ['agency_admin' => 0, 'platform_admin' => 0, 'centre_director' => 1, 'home_visitor' => 2, 'educator' => 3, 'auditor' => 4, 'guardian' => 5];
         $roleBy = [];
-        foreach (DB::table('role_assignments')->whereIn('user_id', $ids)->where('active', true)->whereIn('role', self::STAFF_ROLES)->get(['user_id', 'role']) as $r) {
+        foreach (DB::table('role_assignments')->whereIn('user_id', $ids)->where('active', true)->whereIn('role', self::MESSAGEABLE_ROLES)->get(['user_id', 'role']) as $r) {
             $cur = $roleBy[$r->user_id] ?? null;
             if ($cur === null || ($rank[$r->role] ?? 9) < ($rank[$cur] ?? 9)) $roleBy[$r->user_id] = $r->role;
         }
-        $label = ['agency_admin' => 'Admin', 'platform_admin' => 'Admin', 'centre_director' => 'Director', 'educator' => 'Educator', 'home_visitor' => 'Home visitor', 'auditor' => 'Auditor'];
+        $label = ['agency_admin' => 'Admin', 'platform_admin' => 'Admin', 'centre_director' => 'Director', 'educator' => 'Educator', 'home_visitor' => 'Home visitor', 'auditor' => 'Auditor', 'guardian' => 'Parent'];
 
         $contacts = DB::table('users')->whereIn('id', $ids)->whereNull('deleted_at')
             ->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'photo_url'])
