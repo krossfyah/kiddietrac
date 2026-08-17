@@ -188,11 +188,30 @@ class SendScheduledReports extends Command
         $agencyName = DB::table('agencies')->where('id', $r->agency_id)->value('name') ?: 'KiddieTrac';
         $subject = $rep['title'] . ' — ' . $agencyName;
         $rangeTxt = $from ? ($from . ' to ' . $toDate) : 'all records';
-        $body = '<p>Hello,</p>'
-            . '<p>Your scheduled <strong>' . e($rep['title']) . '</strong> report for <strong>' . e($agencyName)
-            . '</strong> is attached (' . e($rangeTxt) . ', ' . (int) $rep['count'] . ' row' . ($rep['count'] === 1 ? '' : 's') . ').</p>'
-            . '<p style="color:#64748B;font-size:12px;">You are receiving this because a report schedule was set up in KiddieTrac.'
-            . ($manual ? ' (Sent manually as a test.)' : '') . '</p>';
+
+        // Branded like everything else the platform sends. This went out as bare <p> tags
+        // on a white page — no header, no agency logo, no footer — which for an agency on
+        // the white-label plan meant their own scheduled report did not look like theirs.
+        // EmailTemplate::wrap is what every other outbound email already passes through.
+        $inner = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">Hello,</p>'
+            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">Your scheduled <strong>'
+            . e($rep['title']) . '</strong> report is attached.</p>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px">'
+            . '<tr><td style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
+            . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">Period</div>'
+            . '<div style="font-size:15px;font-weight:700;color:#0F172A;margin:2px 0 10px;">' . e($rangeTxt) . '</div>'
+            . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">Rows</div>'
+            . '<div style="font-size:15px;font-weight:700;color:#0F172A;margin-top:2px;">' . (int) $rep['count'] . '</div>'
+            . '</td></tr></table>'
+            . '<p style="margin:0;font-size:13px;line-height:1.6;color:#64748B;">You are receiving this because a report '
+            . 'schedule was set up in KiddieTrac.' . ($manual ? ' (Sent manually.)' : '') . '</p>';
+
+        $body = \App\Services\EmailTemplate::wrap((int) $r->agency_id, $inner, [
+            'eyebrow' => 'SCHEDULED REPORT',
+            'title' => $rep['title'],
+            'subtitle' => $agencyName . ' · ' . $rangeTxt,
+            'preheader' => $rep['title'] . ' — ' . $rangeTxt . ', ' . (int) $rep['count'] . ' rows',
+        ]);
 
         try {
             Mail::html($body, function ($m) use ($to, $subject, $atts) {
