@@ -188,15 +188,28 @@ Route::prefix('v1')->group(function () {
         // so the report and the thing you track it in are never separate items.
         try {
             $row = function ($label, $value) {
-                return '<tr><td style="padding:5px 14px 5px 0;color:#64748B;font-size:13px;white-space:nowrap;vertical-align:top;">'
-                    . e($label) . '</td><td style="padding:5px 0;color:#0F172A;font-size:13px;font-weight:600;word-break:break-word;">'
+                return '<tr><td class="kt-muted" style="padding:5px 14px 5px 0;color:#64748B;font-size:13px;white-space:nowrap;vertical-align:top;">'
+                    . e($label) . '</td><td class="kt-strong" style="padding:5px 0;color:#0F172A;font-size:13px;font-weight:600;word-break:break-word;">'
                     . e($value ?: '—') . '</td></tr>';
             };
             $ticketLine = $ticketId
                 ? '<div style="display:inline-block;background:#13b7cc;color:#04263a;font-weight:800;font-size:13px;letter-spacing:.4px;padding:6px 14px;border-radius:999px;">SUPPORT TICKET #' . (int) $ticketId . '</div>'
                 : '<div style="display:inline-block;background:#FEE2E2;color:#991B1B;font-weight:800;font-size:13px;padding:6px 14px;border-radius:999px;">NO TICKET FILED — SEE THE LOG</div>';
 
-            $body = '<div style="margin:0;padding:0;background:#F1F5F9;">'
+            $body = '<!doctype html><html><head><meta charset="UTF-8">'
+                . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                // Declaring the scheme is what stops a client inventing its own inversion
+                // of a white panel full of near-black text.
+                . '<meta name="color-scheme" content="light dark">'
+                . '<meta name="supported-color-schemes" content="light dark">'
+                . '<style>@media (prefers-color-scheme: dark){'
+                . '.kt-bg{background:#0E1726 !important;}'
+                . '.kt-panel{background:#152033 !important;border-color:#26344A !important;}'
+                . '.kt-panel td,.kt-panel div,.kt-panel span,.kt-panel p{color:#D6DEE9 !important;}'
+                . '.kt-strong{color:#F1F5F9 !important;}'
+                . '.kt-muted{color:#9AA8BC !important;}'
+                . '}</style></head><body style="margin:0;padding:0;">'
+                . '<div class="kt-bg" style="margin:0;padding:0;background:#F1F5F9;">'
                 . '<div style="max-width:640px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
                 // Branded navy header, matching the portal's other emails.
                 . '<div style="background:linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);padding:22px 24px;border-radius:14px 14px 0 0;text-align:center;">'
@@ -204,10 +217,10 @@ Route::prefix('v1')->group(function () {
                 .   '<div style="color:#fff;font-size:17px;font-weight:800;">Crash report</div>'
                 .   '<div style="color:rgba(255,255,255,.72);font-size:12.5px;margin-top:3px;">' . e($data['at']) . '</div>'
                 . '</div>'
-                . '<div style="background:#fff;padding:20px 24px;border:1px solid #E2E8F0;border-top:0;">'
+                . '<div class="kt-panel" style="background:#fff;padding:20px 24px;border:1px solid #E2E8F0;border-top:0;">'
                 .   '<div style="text-align:center;margin-bottom:16px;">' . $ticketLine . '</div>'
-                .   '<div style="font-size:15px;font-weight:800;color:#0F172A;margin:0 0 4px;">' . e($firstLine ?: 'Unknown error') . '</div>'
-                .   '<div style="font-size:12.5px;color:#64748B;margin-bottom:16px;">on ' . e($data['screen'] ?: 'an unknown screen') . '</div>'
+                .   '<div class="kt-strong" style="font-size:15px;font-weight:800;color:#0F172A;margin:0 0 4px;">' . e($firstLine ?: 'Unknown error') . '</div>'
+                .   '<div class="kt-muted" style="font-size:12.5px;color:#64748B;margin-bottom:16px;">on ' . e($data['screen'] ?: 'an unknown screen') . '</div>'
                 .   '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">'
                 .     $row('When', $data['at'])
                 .     $row('Who', ($data['user_name'] ?: 'Not signed in') . ($data['user_email'] ? ' <' . $data['user_email'] . '>' : '') . ($data['role'] ? ' · ' . $data['role'] : ''))
@@ -221,14 +234,14 @@ Route::prefix('v1')->group(function () {
                 .     $row('Service worker', $data['sw'])
                 .     $row('IP', $data['ip'])
                 .   '</table>'
-                .   '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Trace</div>'
+                .   '<div class="kt-muted" style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Trace</div>'
                 .   '<pre style="white-space:pre-wrap;word-break:break-word;background:#0B1220;color:#E2E8F0;padding:14px;border-radius:10px;font-size:11.5px;line-height:1.55;margin:0;">'
                 .   e($data['trace']) . '</pre>'
                 . '</div>'
-                . '<div style="text-align:center;padding:14px 24px 24px;color:#94A3B8;font-size:11.5px;">'
+                . '<div class="kt-muted" style="text-align:center;padding:14px 24px 24px;color:#94A3B8;font-size:11.5px;">'
                 .   'Times shown in ' . e($data['timezone']) . ' · recorded ' . e($data['at_utc']) . ' UTC<br>'
                 .   'Filed automatically by KiddieTrac from an in-app crash report.'
-                . '</div></div></div>';
+                . '</div></div></div></body></html>';
 
             $subject = '⚠️ KiddieTrac crash' . ($ticketId ? ' · ticket #' . (int) $ticketId : '')
                 . ' · ' . mb_substr($firstLine ?: 'Unknown error', 0, 80);
