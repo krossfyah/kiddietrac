@@ -79,6 +79,34 @@ class AgencyMail
     }
 
     /** Which agency a recipient address belongs to (staff role OR guardian family). */
+    /**
+     * Which agency this message belongs to.
+     *
+     * agencyOfEmail() infers the agency from the RECIPIENT, which is a guess and is wrong
+     * for anyone who belongs to more than one: it takes their first active role assignment.
+     * iLearn's weekly attendance report was filed under the demo agency for exactly that
+     * reason — its recipient held roles at both, and the wrong one came back first — so it
+     * never appeared in the log of the agency that actually sent it.
+     *
+     * A sender that KNOWS the agency can now say so with X-KT-Agency-Id, and what it says
+     * wins. The inference remains for the many senders that genuinely do not know.
+     */
+    public static function agencyForMessage($message, ?string $fallbackEmail = null): ?int
+    {
+        try {
+            $h = method_exists($message, 'getHeaders') ? $message->getHeaders() : null;
+            if ($h && $h->has('X-KT-Agency-Id')) {
+                $v = (int) trim((string) $h->get('X-KT-Agency-Id')->getBodyAsString());
+                if ($v > 0) {
+                    return $v;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $fallbackEmail ? self::agencyOfEmail($fallbackEmail) : null;
+    }
+
     public static function agencyOfEmail(string $email): ?int
     {
         $email = mb_strtolower(trim($email));

@@ -93,7 +93,7 @@ class AppServiceProvider extends ServiceProvider
                     try {
                         $firstTo = collect($msg->getTo() ?: [])->map(fn ($a) => method_exists($a, 'getAddress') ? $a->getAddress() : null)->filter()->first();
                         if ($firstTo) {
-                            $emailAgency = \App\Support\AgencyMail::agencyOfEmail($firstTo);
+                            $emailAgency = \App\Support\AgencyMail::agencyForMessage($msg, $firstTo);
                         }
                         if (! $emailAgency && auth()->id()) {
                             $emailAgency = \App\Support\AuditScope::resolve((int) auth()->id());
@@ -139,7 +139,7 @@ class AppServiceProvider extends ServiceProvider
                 if (Schema::hasColumn('email_logs', 'agency_id')) {
                     try {
                         $ft = collect($msg->getTo() ?: [])->map(fn ($a) => method_exists($a, 'getAddress') ? $a->getAddress() : null)->filter()->first();
-                        if ($ft) $logAgency = \App\Support\AgencyMail::agencyOfEmail($ft);
+                        if ($ft) $logAgency = \App\Support\AgencyMail::agencyForMessage($msg, $ft);
                         if (! $logAgency && auth()->id()) $logAgency = \App\Support\AuditScope::resolve((int) auth()->id());
                     } catch (\Throwable $e) {}
                 }

@@ -99,6 +99,39 @@ class SendScheduledReports extends Command
     }
 
     /**
+     * Point the log row for this send at the right agency.
+     *
+     * email_logs attributes by INFERRING the agency from the recipient — their first active
+     * role assignment — which is a guess, and wrong for anyone who belongs to more than one.
+     * iLearn's weekly report was filed under the demo agency because its recipient held a
+     * role at both, so it never appeared in the log of the agency that sent it.
+     *
+     * Narrow on purpose: this recipient, this subject, the last few minutes, and only when
+     * the row disagrees. It corrects a row this method caused and nothing else.
+     */
+    private static function fileUnderAgency(string $to, string $subject, int $agencyId): void
+    {
+        if (! $agencyId) {
+            return;
+        }
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('email_logs', 'agency_id')) {
+                return;
+            }
+            DB::table('email_logs')
+                ->where('to_email', $to)
+                ->where('created_at', '>=', now()->subMinutes(5))
+                ->where('subject', 'like', '%' . mb_substr($subject, 0, 40) . '%')
+                ->where(function ($q) use ($agencyId) {
+                    $q->whereNull('agency_id')->orWhere('agency_id', '!=', $agencyId);
+                })
+                ->update(['agency_id' => $agencyId]);
+        } catch (\Throwable $e) {
+            // A misfiled log row is not worth failing a delivered report over.
+        }
+    }
+
+    /**
      * Was the message we just handed to the mailer actually dropped?
      *
      * The listener records every suppression in email_logs with status 'suppressed', so the
@@ -224,6 +257,11 @@ class SendScheduledReports extends Command
                 // reasoning, and the same header, as the other 29 senders that address a
                 // configured recipient.
                 try { $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1'); } catch (\Throwable $e) {}
+                // File it under the agency the REPORT is for, not the one guessed from the
+                // recipient. These were landing in the demo agency's log because the
+                // recipient held a role there too, so they were invisible in the log of the
+                // agency that sent them.
+                try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $r->agency_id); } catch (\Throwable $e) {}
                 foreach ($atts as $a) {
                     $m->attachData($a['data'], $a['name'], ['mime' => $a['mime']]);
                 }
@@ -239,6 +277,16 @@ class SendScheduledReports extends Command
         // which is exactly how three weeks of reports went missing while this returned true
         // and stamped last_sent_on. Reading the log back covers every reason a message can
         // be dropped, including ones added later.
+        // File the log row under the agency the REPORT is for.
+        //
+        // The X-KT-Agency-Id header above is the tidy way and the log listener reads it,
+        // but the row still comes out attributed to the recipient's first role assignment —
+        // something between the send and the listener is not carrying it. Rather than leave
+        // the report invisible in its own agency's log while that is chased, the sender
+        // corrects the row it just caused: it knows the agency for certain, and it is
+        // already reading this row back to check for suppression.
+        self::fileUnderAgency($to, $subject, (int) $r->agency_id);
+
         if (self::wasSuppressed($to, $subject)) {
             Log::warning('Scheduled report was SUPPRESSED after sending — not marking as sent.', [
                 'schedule_id' => $r->id ?? null, 'recipient' => $to, 'subject' => $subject,
