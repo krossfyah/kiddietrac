@@ -21,6 +21,9 @@ use Illuminate\Support\Facades\Log;
  */
 final class SchedulingController extends Controller
 {
+    // resolveAgencyId — header-aware, so an admin gets the agency they switched into.
+    use \App\Http\Concerns\ResolvesCentreContext;
+
     /**
      * GET /api/v1/director/schedule?centre_id=X&week_starting=YYYY-MM-DD
      * Weekly view of all shifts for the centre.
@@ -298,14 +301,52 @@ final class SchedulingController extends Controller
      * GET /api/v1/director/timesheets?centre_id=X&from=&to=
      * Export-ready timesheet rows. CSV is generated client-side from this JSON.
      */
+    /** Centres this person can pull a timesheet for, when they did not name one. */
+    private function timesheetCentreIds(Request $request): array
+    {
+        $uid = (int) $request->user()->id;
+        $own = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            ->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($i) => (int) $i)->all();
+        if ($own) {
+            return $own;                       // a director sees their own centre(s)
+        }
+
+        // Agency-level roles have no centre of their own, so they get the agency's.
+        $agencyId = $this->resolveAgencyId($request);
+        if (! $agencyId) {
+            return [];
+        }
+        $isWide = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            ->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
+
+        return $isWide
+            ? DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->map(fn ($i) => (int) $i)->all()
+            : [];
+    }
+
     public function timesheets(Request $request): JsonResponse
     {
         $centreId = (int) $request->input('centre_id');
         $from = $request->input('from', Carbon::now()->startOfMonth()->toDateString());
         $to = $request->input('to', Carbon::now()->toDateString());
 
-        if (! $this->hasCentreAccess($request->user()->id, $centreId)) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        // No centre asked for? Use the ones this person can see.
+        //
+        // An agency admin has no centre_id on any role row — the role is agency-level — so
+        // the screen had no centre to send, sent nothing, and got a 403. The timesheet
+        // screen has been empty for every admin since it shipped, while directors, who do
+        // have a centre, saw theirs and nothing looked wrong.
+        $centreIds = [];
+        if ($centreId) {
+            if (! $this->hasCentreAccess($request->user()->id, $centreId)) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+            $centreIds = [$centreId];
+        } else {
+            $centreIds = $this->timesheetCentreIds($request);
+            if (! $centreIds) {
+                return response()->json(['message' => 'No centres you can see.'], 403);
+            }
         }
 
         // time_punches, not time_entries. The clock was consolidated onto /staff/punch
@@ -315,10 +356,13 @@ final class SchedulingController extends Controller
         // sat in the other table.
         $entries = DB::table('time_punches')
             ->join('users', 'users.id', '=', 'time_punches.user_id')
-            ->where('time_punches.centre_id', $centreId)
+            ->whereIn('time_punches.centre_id', $centreIds)
             ->where('time_punches.punched_in_at', '>=', Carbon::parse($from)->startOfDay())
             ->where('time_punches.punched_in_at', '<=', Carbon::parse($to)->endOfDay())
-            ->whereNotNull('time_punches.punched_out_at')
+            // Open punches are INCLUDED now. Dropping them hid 22 shifts, and a shift with
+            // no clock-out is precisely the one payroll needs to see before it is paid —
+            // silently omitting it makes the sheet look complete when it is short.
+
             ->orderBy('users.last_name')
             ->orderBy('time_punches.punched_in_at')
             ->select(
@@ -331,7 +375,11 @@ final class SchedulingController extends Controller
 
         $rows = $entries->map(function ($e) {
             $in = Carbon::parse($e->punched_in_at);
-            $out = Carbon::parse($e->punched_out_at);
+            // Carbon::parse(null) returns NOW, which would quietly present a shift nobody
+            // has clocked out of as a finished one, with hours, and pay it. An open punch
+            // is reported as open with no hours — it is a thing to chase, not to total.
+            $isOpen = empty($e->punched_out_at);
+            $out = $isOpen ? null : Carbon::parse($e->punched_out_at);
             // time_punches has no total_break_min — breaks were a feature of the old
             // clock and the current one does not record them. Reported as 0 rather than
             // silently omitted, so the hours are not presented as break-adjusted when
@@ -339,13 +387,17 @@ final class SchedulingController extends Controller
             $breakMin = (int) ($e->total_break_min ?? 0);
             // abs(): Carbon 3 diffInMinutes is signed, and $out->diffInMinutes($in)
             // yields a NEGATIVE value here (in precedes out) → every row was 0h.
-            $minutes = abs($out->diffInMinutes($in)) - $breakMin;
+            $minutes = $isOpen ? 0 : abs($out->diffInMinutes($in)) - $breakMin;
             return [
                 'date' => $in->toDateString(),
+                // Surfaced so the screen can mark it rather than showing a silent 0h.
+                'open' => $isOpen,
+                'status' => $isOpen ? 'Open' : 'Complete',
                 'staff_name' => trim($e->first_name . ' ' . $e->last_name),
                 'staff_email' => $e->email,
                 'clock_in' => $in->format('H:i'),
-                'clock_out' => $out->format('H:i'),
+                // Em dash rather than a time: there is no clock-out to show yet.
+                'clock_out' => $isOpen ? '—' : $out->format('H:i'),
                 'break_min' => $breakMin,
                 'worked_min' => max(0, $minutes),
                 'worked_hours' => round(max(0, $minutes) / 60, 2),
