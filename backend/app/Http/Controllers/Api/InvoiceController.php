@@ -314,8 +314,21 @@ final class InvoiceController extends Controller
             ->where('ei.status', '!=', 'void');
         $base = DB::table('external_invoices as ei')
             ->leftJoin('agencies as a', 'a.id', '=', 'ei.agency_id')
-            ->where('ei.agency_id', $agencyId)
-            ->where('ei.status', '!=', 'void');
+            ->where('ei.agency_id', $agencyId);
+
+        // Void is hidden unless it is asked for by name. A voided invoice is a real
+        // record — raised, then cancelled — but it is not part of "what is outstanding",
+        // which is what this list answers by default. $statsBase keeps excluding it in
+        // every case: voided money is neither owed nor received, and counting it would
+        // misstate the totals above the table.
+        $statusFilter = strtolower(trim((string) $request->query('status', '')));
+        if ($statusFilter === 'void') {
+            $base->where('ei.status', 'void');
+        } elseif ($statusFilter !== '' && $statusFilter !== 'all') {
+            $base->where('ei.status', $statusFilter)->where('ei.status', '!=', 'void');
+        } else {
+            $base->where('ei.status', '!=', 'void');
+        }
 
         // Optional per-family filter.
         if ($famFilter = (int) $request->query('family_id', 0)) {

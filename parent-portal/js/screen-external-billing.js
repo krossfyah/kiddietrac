@@ -91,7 +91,8 @@
     var qs = '?page=' + state.page + '&per_page=20'
       + (state.family_id ? '&family_id=' + state.family_id : '')
       + (state.search ? '&search=' + encodeURIComponent(state.search) : '')
-      + (state.sort ? '&sort=' + state.sort + '&dir=' + state.dir : '');
+      + (state.sort ? '&sort=' + state.sort + '&dir=' + state.dir : '')
+      + (state.status ? '&status=' + encodeURIComponent(state.status) : '');
     var d;
     try { d = await Api.get('/agency/external-invoices' + qs); }
     catch (e) {
@@ -213,16 +214,46 @@
 
   async function render(container) {
     container.setAttribute('data-kt-pretty', '1');
-    state = { page: 1, family_id: 0, search: '', sort: '', dir: 'asc', busy: false };
+    state = { page: 1, family_id: 0, search: '', sort: '', dir: 'asc', busy: false, status: '' };
     container.innerHTML =
       '<div style="padding:24px;max-width:1400px;margin:0 auto;">'
       + '<div class="kt-page-hero"><h2>🧾 Accounting</h2><p>Invoices and balances for the agency. Read-only — payments and balances update automatically as they change at the source.</p></div>'
       + '<div id="xb-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px;"></div>'
+      // Voided invoices are excluded from the default list on purpose — they are not
+      // part of what is outstanding — so they need a tab of their own to be reachable.
+      + '<div id="xb-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
       + '<div class="kt-card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'
       +   '<select id="xb-family" style="padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;min-width:220px;background:#fff;"><option value="0">All families</option></select>'
       +   '<input id="xb-search" placeholder="🔍 Search invoice # / description / status…" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;box-sizing:border-box;">'
       + '</div>'
       + '<div id="xb-body"></div></div>';
+
+    var TABS = [
+      { key: '', label: 'Outstanding', hint: 'Everything except voided' },
+      { key: 'open', label: 'Open' },
+      { key: 'paid', label: 'Paid' },
+      { key: 'overdue', label: 'Overdue' },
+      { key: 'void', label: 'Voided', hint: 'Raised, then cancelled' },
+    ];
+    var tabBar = container.querySelector('#xb-tabs');
+    function paintTabs() {
+      tabBar.innerHTML = TABS.map(function (t) {
+        var on = state.status === t.key;
+        return '<button type="button" data-xb-tab="' + t.key + '"' + (t.hint ? ' title="' + esc(t.hint) + '"' : '')
+          + ' style="background:none;border:0;border-bottom:2px solid ' + (on ? '#1F6FB2' : 'transparent')
+          + ';padding:9px 13px;font-size:13.5px;font-weight:700;color:' + (on ? '#0F172A' : '#64748B')
+          + ';cursor:pointer;border-radius:8px 8px 0 0;">' + esc(t.label) + '</button>';
+      }).join('');
+      tabBar.querySelectorAll('[data-xb-tab]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          state.status = b.getAttribute('data-xb-tab');
+          state.page = 1;
+          paintTabs();
+          load(container);
+        });
+      });
+    }
+    paintTabs();
 
     var famSel = container.querySelector('#xb-family');
     famSel.addEventListener('change', function () { state.family_id = +famSel.value || 0; state.page = 1; load(container); });
