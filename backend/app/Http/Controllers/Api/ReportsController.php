@@ -316,9 +316,64 @@ final class ReportsController extends Controller
             'agency'    => $agency ? ['name' => $agency->name, 'logo' => $agency->brand_logo_url ?: $agency->logo_url, 'color' => $agency->brand_primary_color ?: '#1F6080'] : null,
             'centre'    => $centre ? ['name' => $centre->name, 'logo' => $centre->logo_url, 'color' => $centre->brand_color ?: '#1F6080'] : null,
             'columns'   => $columns,
+            // Only when the answer was zero: where the records for this report actually
+            // are. Turns "try widening the range" — guess until it works — into a fact.
+            'available_range' => empty($rows) ? $this->availableRange($type, $agencyId, $centreId) : null,
             'rows'      => $rows,
             'count'     => count($rows),
         ]);
+    }
+
+    /**
+     * The span of dates this report has records for, ignoring the requested window.
+     *
+     * Deliberately narrow: a map of the dated reports to the table and column their date
+     * filter uses, rather than re-running each report's full query unbounded. A report not
+     * listed here simply gets no hint, which is the same as today.
+     */
+    private function availableRange(string $type, int $agencyId, ?int $centreId): ?array
+    {
+        // type => [table, alias, date column, how it reaches a centre]
+        $map = [
+            'invoices'   => ['invoices',     'i',  'issued_at',   'centre_id'],
+            'payments'   => ['payments',     'p',  'paid_at',     'via_invoice'],
+            'attendance' => ['check_events', 'ce', 'occurred_at', 'via_room'],
+        ];
+        if (! isset($map[$type])) {
+            return null;
+        }
+        [$table, $alias, $col, $reach] = $map[$type];
+
+        try {
+            $q = DB::table($table . ' as ' . $alias);
+            if ($reach === 'centre_id') {
+                $q->join('centres as c', 'c.id', '=', $alias . '.centre_id');
+            } elseif ($reach === 'via_room') {
+                $q->join('rooms as r', 'r.id', '=', $alias . '.room_id')
+                  ->join('centres as c', 'c.id', '=', 'r.centre_id');
+            } else {
+                $q->join('invoices as inv', 'inv.id', '=', $alias . '.invoice_id')
+                  ->join('centres as c', 'c.id', '=', 'inv.centre_id');
+            }
+            $q->where('c.agency_id', $agencyId);
+            if ($centreId) {
+                $q->where('c.id', $centreId);
+            }
+
+            $row = $q->selectRaw("MIN({$alias}.{$col}) mn, MAX({$alias}.{$col}) mx, COUNT(*) n")->first();
+            if (! $row || ! $row->n) {
+                return ['count' => 0, 'from' => null, 'to' => null];
+            }
+
+            return [
+                'count' => (int) $row->n,
+                'from' => substr((string) $row->mn, 0, 10),
+                'to' => substr((string) $row->mx, 0, 10),
+            ];
+        } catch (\Throwable $e) {
+            // A hint is not worth failing a report over.
+            return null;
+        }
     }
 
     private function cannedRows(string $type, int $agencyId, ?int $centreId, ?string $from, ?string $to): array
@@ -344,7 +399,7 @@ final class ReportsController extends Controller
                 foreach ($events as $e) {
                     $d = substr((string) $e->occurred_at, 0, 10);
                     $key = $e->child_id . '|' . $d;
-                    if (! isset($byDay[$key])) $byDay[$key] = ['Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—'];
+                    if (! isset($byDay[$key])) $byDay[$key] = ['Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Status' => 'Present', 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—', 'Absence reason' => '—', 'Reported by' => '—', 'Note' => ''];
                     $t = date('g:i A', strtotime((string) $e->occurred_at));
                     $who = trim((string) $e->by_user) ?: (trim((string) $e->by_pickup) ?: ($e->kiosk_source ? 'Kiosk' : '—'));
                     if ($e->event_type === 'check_in') {
@@ -353,9 +408,56 @@ final class ReportsController extends Controller
                         $byDay[$key]['Check out'] = $t; $byDay[$key]['Checked out by'] = $who;
                     }
                 }
+                // Who was NOT there, and why. Built from check_events alone, this report
+                // simply had no row for a child who never arrived — so "was my child in on
+                // the 12th, and if not why not" could not be answered from it, even though
+                // child_absences has held the reason and the note all along.
+                $abs = DB::table('child_absences as a')
+                    ->join('children as ch', 'ch.id', '=', 'a.child_id')
+                    ->join('families as f', 'f.id', '=', 'ch.family_id')
+                    ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                    ->leftJoin('users as ru', 'ru.id', '=', 'a.reported_by_id')
+                    ->where('c.agency_id', $agencyId);
+                if ($centreId) $abs->where('c.id', $centreId);
+                if ($from) $abs->whereDate('a.absent_on', '>=', $from);
+                if ($to) $abs->whereDate('a.absent_on', '<=', $to);
+                $absences = $abs->select('a.child_id', 'a.absent_on', 'a.reason', 'a.note', 'c.name as centre',
+                        DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"),
+                        // No room: a child is not attached to one directly — the link
+                        // runs through enrolments — and an absence needs the date, the
+                        // reason and who said so, not a room. Days that also have check
+                        // events keep the room those events carry.
+                        DB::raw("TRIM(CONCAT(COALESCE(ru.first_name,''),' ',COALESCE(ru.last_name,''))) as reported_by"))
+                    ->limit(4000)->get();
+
+                foreach ($absences as $a) {
+                    $d = substr((string) $a->absent_on, 0, 10);
+                    $key = $a->child_id . '|' . $d;
+                    // A blank reason is normal — the absence screen makes the note the
+                    // required part — so fall back to the note rather than showing nothing.
+                    $reason = trim((string) ($a->reason ?? ''));
+                    $reason = $reason !== '' ? ucfirst(str_replace('_', ' ', $reason)) : '—';
+                    // reported_by_id is null when the system inferred the absence rather
+                    // than a person recording it; say so instead of leaving a blank.
+                    $by = trim((string) $a->reported_by) ?: 'Recorded automatically';
+
+                    if (isset($byDay[$key])) {
+                        // Marked absent AND checked in. Both facts are kept: this is a
+                        // discrepancy somebody should see, not something to tidy away.
+                        $byDay[$key]['Status'] = 'Absence recorded (but signed in)';
+                    } else {
+                        $byDay[$key] = ['Date' => $d, 'Child' => $a->child, 'Room' => '—', 'Centre' => $a->centre,
+                            'Status' => 'Absent', 'Check in' => '—', 'Checked in by' => '—',
+                            'Check out' => '—', 'Checked out by' => '—'];
+                    }
+                    $byDay[$key]['Absence reason'] = $reason;
+                    $byDay[$key]['Reported by'] = $by;
+                    $byDay[$key]['Note'] = trim((string) ($a->note ?? ''));
+                }
+
                 $rows = array_values($byDay);
                 usort($rows, fn ($a, $b) => [$b['Date'], $a['Child']] <=> [$a['Date'], $b['Child']]);
-                return [['Date', 'Child', 'Room', 'Centre', 'Check in', 'Checked in by', 'Check out', 'Checked out by'], $rows];
+                return [['Date', 'Child', 'Room', 'Centre', 'Status', 'Check in', 'Checked in by', 'Check out', 'Checked out by', 'Absence reason', 'Reported by', 'Note'], $rows];
 
             case 'enrollment':
                 $q = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')

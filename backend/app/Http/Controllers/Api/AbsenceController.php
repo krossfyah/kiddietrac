@@ -294,12 +294,17 @@ class AbsenceController extends Controller
                         'preheader' => $body,
                     ]);
 
-                dispatch(function () use ($child, $emails, $html, $title) {
+                // The heading says "today", which is right when you are reading it and
+                // useless in an inbox a fortnight later — and a subject line is what gets
+                // searched and filed. So the date goes in it, as the parent-facing absence
+                // email already does.
+                $subject = $title . ' — ' . Carbon::parse($date, $tz)->format('j M Y');
+                dispatch(function () use ($child, $emails, $html, $subject) {
                     \App\Services\AgencyMailer::forAgency((int) $child->agency_id)->mailer()
-                        ->html($html, function ($m) use ($emails, $title) {
+                        ->html($html, function ($m) use ($emails, $subject) {
                             $m->to($emails)
                               ->from('noreply@kiddietrac.com', 'KiddieTrac')
-                              ->subject($title);
+                              ->subject($subject);
                         });
                 })->onQueue('mail');
             }
