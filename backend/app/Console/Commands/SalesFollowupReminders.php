@@ -84,6 +84,12 @@ class SalesFollowupReminders extends Command
 
                 Mail::html($html, function ($m) use ($to, $when, $who) {
                     $m->to($to)->subject('⏰ Sales follow-up ' . $when . ': ' . $who);
+                    // Every one of these has been suppressed since the feature shipped —
+                    // 4 of 4 — because the rep's address matched an account the gate had
+                    // paused. A follow-up reminder is an operational prompt to a working
+                    // mailbox, not a notification to a user, so it carries the same bypass
+                    // as the rest of that class.
+                    try { $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1'); } catch (\Throwable $e) {}
                 });
                 $sent++;
             } catch (\Throwable $e) {

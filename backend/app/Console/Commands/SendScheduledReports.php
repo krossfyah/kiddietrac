@@ -62,7 +62,9 @@ class SendScheduledReports extends Command
         foreach ($rows as $r) {
             $to = $r->recipient_email ?: DB::table('users')->where('id', $r->recipient_user_id)->value('email');
             if ($to && ($why = self::undeliverableReason($to))) {
-                $this->warn("  schedule #{$r->id} ({$r->report_type}) -> {$to}: {$why}");
+                $this->warn("  schedule #{$r->id} ({$r->report_type}) -> {$to}: {$why}."
+                    . ' The report is still delivered, but this usually means the schedule'
+                    . ' should be pointed at somebody still here.');
             }
         }
 
@@ -96,6 +98,32 @@ class SendScheduledReports extends Command
         return null;
     }
 
+    /**
+     * Was the message we just handed to the mailer actually dropped?
+     *
+     * The listener records every suppression in email_logs with status 'suppressed', so the
+     * log is the only honest answer available to a sender. Matched on recipient and subject
+     * within the last few minutes; missing table or no row means assume it went, since a
+     * false alarm here would stop a working schedule.
+     */
+    public static function wasSuppressed(string $to, string $subject): bool
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('email_logs')) {
+                return false;
+            }
+
+            return DB::table('email_logs')
+                ->where('to_email', $to)
+                ->where('created_at', '>=', now()->subMinutes(5))
+                ->where('status', 'suppressed')
+                ->where('subject', 'like', '%' . mb_substr($subject, 0, 40) . '%')
+                ->exists();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     /** Date range [from, to] (Y-m-d or null) for a schedule's range_kind. */
     public static function range(string $kind): array
     {
@@ -121,22 +149,15 @@ class SendScheduledReports extends Command
             return false;
         }
 
-        // Can this address actually receive anything?
-        //
-        // The mail layer pauses notifications for a suspended or deactivated account, and
-        // it does that in a listener — downstream of Mail::html(), which throws nothing and
-        // looks like success from here. So a schedule pointed at somebody who has left
-        // stamped last_sent_on every week and showed as sent, while three weeks of reports
-        // were dropped. Checked here, before the PDF is built, so the failure is visible
-        // and cheap.
+        // A note, not a refusal. An address that also happens to be a departed user's
+        // login is still a perfectly good destination for a report — see the bypass header
+        // on the send below — but it is worth saying out loud, because it usually means the
+        // schedule is pointed at somebody who has left and wants re-pointing.
         if ($blocked = self::undeliverableReason($to)) {
-            Log::warning('Scheduled report NOT sent — ' . $blocked, [
+            Log::notice('Scheduled report recipient is also a departed account — sending anyway: ' . $blocked, [
                 'schedule_id' => $r->id ?? null,
                 'recipient' => $to,
-                'report' => $r->report_type ?? null,
             ]);
-
-            return false;
         }
 
         [$from, $toDate] = self::range((string) $r->range_kind);
@@ -176,12 +197,33 @@ class SendScheduledReports extends Command
         try {
             Mail::html($body, function ($m) use ($to, $subject, $atts) {
                 $m->to($to)->subject($subject);
+                // A scheduled report goes to a DESTINATION somebody configured — a shared
+                // mailbox, a team address, an accountant — not to a person in their
+                // capacity as a user. The suspended/deactivated gate matches on the
+                // address, so without this an ops mailbox that happens to double as a
+                // departed user's login silently switches the schedule off. The same
+                // reasoning, and the same header, as the other 29 senders that address a
+                // configured recipient.
+                try { $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1'); } catch (\Throwable $e) {}
                 foreach ($atts as $a) {
                     $m->attachData($a['data'], $a['name'], ['mime' => $a['mime']]);
                 }
             });
         } catch (\Throwable $e) {
             Log::warning('Scheduled report send failed: ' . $e->getMessage(), ['schedule_id' => $r->id ?? null]);
+
+            return false;
+        }
+
+        // Did it actually leave? Suppression happens downstream in a listener and throws
+        // nothing, so a dropped send is indistinguishable from a delivered one from here —
+        // which is exactly how three weeks of reports went missing while this returned true
+        // and stamped last_sent_on. Reading the log back covers every reason a message can
+        // be dropped, including ones added later.
+        if (self::wasSuppressed($to, $subject)) {
+            Log::warning('Scheduled report was SUPPRESSED after sending — not marking as sent.', [
+                'schedule_id' => $r->id ?? null, 'recipient' => $to, 'subject' => $subject,
+            ]);
 
             return false;
         }
