@@ -152,9 +152,31 @@ class AiObservationController extends Controller
         $user = $request->user();
         $limit = min(100, max(5, (int) $request->query('limit', 30)));
 
+        // Joined so the ORDER BY can run in the database, before the limit. Sorting a
+        // page that has already been cut to thirty would arrange the newest thirty by
+        // child and present it as "sorted by child" — the wrong rows, tidily ordered.
         $q = Observation::query()
-            ->orderByDesc('observed_at')
+            ->leftJoin('children as ch', 'ch.id', '=', 'observations.child_id')
+            ->leftJoin('users as ru', 'ru.id', '=', 'observations.recorded_by_id')
+            ->leftJoin('families as fam', 'fam.id', '=', 'ch.family_id')
+            ->leftJoin('centres as ctr', 'ctr.id', '=', 'fam.centre_id')
+            ->select('observations.*',
+                DB::raw("TRIM(CONCAT(COALESCE(ch.first_name,''),' ',COALESCE(ch.last_name,''))) as _child"),
+                DB::raw("TRIM(CONCAT(COALESCE(ru.first_name,''),' ',COALESCE(ru.last_name,''))) as _educator"),
+                DB::raw('ctr.name as _centre'),
+                DB::raw('ctr.id as _centre_id'))
             ->limit($limit);
+
+        // Sort by what somebody is actually looking for. Date descending stays the
+        // default: an oversight screen opens on what just happened.
+        $dir = strtolower((string) $request->query('dir', '')) === 'asc' ? 'asc' : 'desc';
+        switch (strtolower((string) $request->query('sort', 'date'))) {
+            case 'child':    $q->orderBy('_child', $dir === 'desc' ? 'desc' : 'asc')->orderByDesc('observations.observed_at'); break;
+            case 'educator': $q->orderBy('_educator', $dir === 'desc' ? 'desc' : 'asc')->orderByDesc('observations.observed_at'); break;
+            case 'centre':
+            case 'provider': $q->orderBy('_centre', $dir === 'desc' ? 'desc' : 'asc')->orderByDesc('observations.observed_at'); break;
+            default:         $q->orderBy('observations.observed_at', $dir); break;
+        }
 
         // v22p98: educators see their OWN observations; an agency_admin /
         // centre_director / platform_admin gets a centre-wide oversight view
@@ -191,28 +213,57 @@ class AiObservationController extends Controller
                 ? DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
                     ->whereIn('f.centre_id', $centreIds)->pluck('c.id')->all()
                 : [];
-            $q->whereIn('child_id', $childIds ?: [0]);
+            $q->whereIn('observations.child_id', $childIds ?: [0]);
         } else {
-            $q->where('recorded_by_id', $user->id);
+            $q->where('observations.recorded_by_id', $user->id);
         }
 
+        // Qualified: child_id is now ambiguous across the joined tables.
         if ($childId = $request->query('child_id')) {
-            $q->where('child_id', (int) $childId);
+            $q->where('observations.child_id', (int) $childId);
+        }
+        if ($eduId = $request->query('educator_id')) {
+            $q->where('observations.recorded_by_id', (int) $eduId);
+        }
+        if ($ctrId = $request->query('centre_id')) {
+            $q->where('ctr.id', (int) $ctrId);
         }
 
         $rows = $q->get();
 
-        // Hydrate child names
-        $childIds = $rows->pluck('child_id')->unique()->all();
-        $children = DB::table('children')
-            ->whereIn('id', $childIds)
-            ->pluck(DB::raw("CONCAT(first_name, ' ', last_name)"), 'id');
+        // The room, per child, from the enrolment that is current. NOT joined into the
+        // query above: a child has many enrolments over time, and joining rooms would turn
+        // one observation into one row per enrolment that child has ever had.
+        $childIds = $rows->pluck('child_id')->unique()->filter()->all();
+        $rooms = [];
+        if ($childIds) {
+            foreach (DB::table('enrollments as e')->leftJoin('rooms as r', 'r.id', '=', 'e.room_id')
+                ->whereIn('e.child_id', $childIds)
+                ->orderByRaw('e.end_date IS NULL DESC')     // the open enrolment first
+                ->orderByDesc('e.start_date')
+                ->get(['e.child_id', 'r.name']) as $r) {
+                // First row per child wins, which the ordering above makes the current one.
+                if (! isset($rooms[$r->child_id]) && $r->name) {
+                    $rooms[$r->child_id] = $r->name;
+                }
+            }
+        }
 
-        $out = $rows->map(function ($o) use ($children) {
+        $out = $rows->map(function ($o) use ($rooms) {
             return [
                 'id'                 => $o->id,
                 'child_id'           => $o->child_id,
-                'child_name'         => $children[$o->child_id] ?? '-',
+                'child_name'         => $o->_child ?: '—',
+                // Who wrote it. On an agency whose centres are its providers this is most
+                // of the point of an oversight list, and it was not being returned at all.
+                'educator_id'        => $o->recorded_by_id,
+                'educator_name'      => $o->_educator ?: '—',
+                'centre_id'          => $o->_centre_id,
+                'centre_name'        => $o->_centre ?: '—',
+                'provider_name'      => $o->_centre ?: '—',   // a home-childcare centre IS the provider
+                'room_name'          => $rooms[$o->child_id] ?? '—',
+                'title'              => $o->title,            // was omitted, so rows had no headline
+                'framework'          => $o->framework,
                 'observed_at'        => $o->observed_at,
                 'domain'             => $o->domain,
                 'body'               => $o->body,
@@ -223,6 +274,11 @@ class AiObservationController extends Controller
             ];
         });
 
-        return response()->json(['observations' => $out]);
+        return response()->json([
+            'observations' => $out,
+            // Echoed so the screen can show which ordering is active without tracking it.
+            'sort' => strtolower((string) $request->query('sort', 'date')),
+            'dir' => $dir,
+        ]);
     }
 }
