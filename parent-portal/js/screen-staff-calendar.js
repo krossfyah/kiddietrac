@@ -173,7 +173,7 @@
 
     // View toggle
     var grp = Dom.el('div', { style: 'display:inline-flex;background:#F3F4F6;border-radius:8px;padding:2px;' });
-    ['week', 'month'].forEach(function (v) {
+    ['day', 'week', 'month'].forEach(function (v) {
       var b = Dom.el('button', {
         style: 'background:' + (state.view === v ? 'white' : 'transparent') + ';color:' + (state.view === v ? '#1F6080' : '#6B7280') + ';border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;text-transform:capitalize;' + (state.view === v ? 'box-shadow:0 1px 2px rgba(0,0,0,.08);' : ''),
       }, v);
@@ -216,12 +216,16 @@
 
   function stepCursor(direction) {
     var d = new Date(state.cursor);
-    if (state.view === 'week') d.setDate(d.getDate() + 7 * direction);
+    if (state.view === 'day') d.setDate(d.getDate() + direction);
+    else if (state.view === 'week') d.setDate(d.getDate() + 7 * direction);
     else d.setMonth(d.getMonth() + direction);
     state.cursor = d;
   }
 
   function titleForCursor() {
+    if (state.view === 'day') {
+      return state.cursor.toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    }
     if (state.view === 'week') {
       var s = startOfWeek(state.cursor); var e = addDays(s, 6);
       return s.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' }) + ' – ' +
@@ -271,7 +275,9 @@
     calRoot.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading shifts…'));
 
     var start, end;
-    if (state.view === 'week') {
+    if (state.view === 'day') {
+      start = new Date(state.cursor); end = new Date(state.cursor);
+    } else if (state.view === 'week') {
       start = startOfWeek(state.cursor); end = addDays(start, 6);
     } else {
       // Month grid spans from the Monday of the week containing day 1, to the
@@ -287,16 +293,26 @@
     // could not see who was away, which is the one thing they need before assigning a
     // shift. A failure here must not lose the calendar, so it degrades to no blocks.
     var tq = new URLSearchParams({ start: ymd(start), end: ymd(end) }).toString();
+    // Birthdays, absences, vacations, staff time off and closures — already flattened
+    // to one entry per day by the API, so nothing here needs to know which table any of
+    // it came from. Degrades to an empty overlay rather than losing the calendar.
+    var oq = new URLSearchParams({ from: ymd(start), to: ymd(end) }).toString();
     Promise.all([
       Api.get('/director/schedule/range?' + q),
       Api.get('/director/schedule/time-off-blocks?' + tq).catch(function () { return { data: [] }; }),
+      Api.get('/director/calendar/overlays?' + oq).catch(function () { return { events: [] }; }),
     ]).then(function (both) {
       var data = both[0];
       state.timeOff = indexTimeOff((both[1] && both[1].data) || []);
+      state.overlays = indexOverlays((both[2] && both[2].events) || []);
       state.days = data.days || {};
       state.rooms = data.rooms || [];
       Dom.clear(calRoot);
-      calRoot.appendChild(state.view === 'week' ? renderWeek(start, end, calRoot) : renderMonth(start, end, calRoot));
+      calRoot.appendChild(
+        state.view === 'day' ? renderDay(start, calRoot)
+          : state.view === 'week' ? renderWeek(start, end, calRoot)
+          : renderMonth(start, end, calRoot)
+      );
     }).catch(function (e) {
       Dom.clear(calRoot);
       calRoot.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
@@ -376,6 +392,11 @@
       var hint = Dom.el('div', { 'data-cell-bg': '1', style: 'position:absolute;inset:0;' });
       cell.appendChild(hint);
       ((state.timeOff && state.timeOff[key]) || []).slice(0, 2).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
+      // Closures first — a closed day changes what every other chip on it means.
+      overlaysFor(key).slice(0, 3).forEach(function (ev) { cell.appendChild(overlayChip(ev)); });
+      if (overlaysFor(key).length > 3) {
+        cell.appendChild(Dom.el('div', { style: 'font-size:10px;color:#64748B;position:relative;z-index:1;' }, '+ ' + (overlaysFor(key).length - 3) + ' more'));
+      }
       dayShifts.slice(0, 3).forEach(function (s) { cell.appendChild(renderShiftChip(s, calRoot)); });
       if (dayShifts.length > 3) cell.appendChild(Dom.el('div', { style: 'font-size:10px;color:#64748B;margin-top:2px;position:relative;z-index:1;' }, '+ ' + (dayShifts.length - 3) + ' more'));
       body.appendChild(cell);
@@ -383,6 +404,91 @@
     }
     grid.appendChild(body);
     return grid;
+  }
+
+  /* ── Overlays: birthdays, absences, vacations, time off, closures ──────
+     One flat list from the API, indexed by date here. Closures sort first because a
+     closed day changes what every other entry on it means. */
+  var OVERLAY_TONE = {
+    celebrate: { bg: '#FCE7F3', fg: '#9D174D', bar: '#DB2777' },
+    away:      { bg: '#E0F2FE', fg: '#075985', bar: '#0284C7' },
+    pending:   { bg: '#FEF3C7', fg: '#92400E', bar: '#F59E0B' },
+    closed:    { bg: '#FEE2E2', fg: '#991B1B', bar: '#DC2626' },
+  };
+  var OVERLAY_ORDER = { closure: 0, timeoff: 1, vacation: 2, absence: 3, birthday: 4 };
+
+  function indexOverlays(events) {
+    var byDay = {};
+    (events || []).forEach(function (e) {
+      if (!e || !e.date) return;
+      (byDay[e.date] || (byDay[e.date] = [])).push(e);
+    });
+    Object.keys(byDay).forEach(function (k) {
+      byDay[k].sort(function (a, b) {
+        return (OVERLAY_ORDER[a.kind] == null ? 9 : OVERLAY_ORDER[a.kind])
+             - (OVERLAY_ORDER[b.kind] == null ? 9 : OVERLAY_ORDER[b.kind]);
+      });
+    });
+    return byDay;
+  }
+
+  function overlaysFor(key) { return (state.overlays && state.overlays[key]) || []; }
+
+  function overlayChip(ev) {
+    var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
+    return Dom.el('div', {
+      title: (ev.icon || '') + ' ' + (ev.title || '') + (ev.detail ? ' — ' + ev.detail : ''),
+      style: 'position:relative;z-index:1;background:' + t.bg + ';border-left:3px solid ' + t.bar + ';'
+        + 'border-radius:5px;padding:3px 6px;margin-bottom:3px;font-size:11px;font-weight:700;'
+        + 'color:' + t.fg + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+    }, (ev.icon || '') + ' ' + (ev.title || ''));
+  }
+
+  /* ── Day view ──────────────────────────────────────────────────────────
+     An agenda, not a one-column hour grid: on a single day the question is "what is
+     happening and who is missing", and an hour grid one column wide is mostly empty
+     space. The week grid still answers "when". */
+  function renderDay(day, calRoot) {
+    var key = ymd(day);
+    var wrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);padding:16px;' });
+
+    var shifts = (state.days[key] && state.days[key].shifts) || [];
+    if (state.roleFilter) shifts = shifts.filter(function (s) { return s.role === state.roleFilter; });
+    shifts = shifts.slice().sort(function (a, b) { return String(a.starts_hm).localeCompare(String(b.starts_hm)); });
+
+    var evs = overlaysFor(key);
+    var offs = (state.timeOff && state.timeOff[key]) || [];
+
+    if (evs.length) {
+      wrap.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:0 0 8px;' }, 'On this day'));
+      var list = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;' });
+      evs.forEach(function (ev) {
+        var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
+        var row = Dom.el('div', { style: 'background:' + t.bg + ';border-left:3px solid ' + t.bar + ';border-radius:8px;padding:7px 11px;min-width:190px;' });
+        row.appendChild(Dom.el('div', { style: 'font-size:13px;font-weight:800;color:' + t.fg + ';' }, (ev.icon || '') + ' ' + (ev.title || '')));
+        if (ev.detail) row.appendChild(Dom.el('div', { style: 'font-size:12px;color:' + t.fg + ';opacity:.85;margin-top:1px;' }, ev.detail));
+        list.appendChild(row);
+      });
+      wrap.appendChild(list);
+    }
+
+    wrap.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:0 0 8px;' }, 'Shifts'));
+    if (!shifts.length) {
+      var none = Dom.el('div', { style: 'color:#64748B;font-size:13px;padding:10px 0 4px;' }, 'No shifts scheduled.');
+      wrap.appendChild(none);
+    } else {
+      shifts.forEach(function (sh) { wrap.appendChild(renderShiftPill(sh, calRoot)); });
+    }
+
+    offs.forEach(function (o) { wrap.appendChild(timeOffChip(o)); });
+
+    var add = Dom.el('button', {
+      style: 'margin-top:14px;background:#1F6080;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;',
+    }, '+ Add a shift');
+    add.addEventListener('click', function () { openShiftModal({ date: key }, calRoot); });
+    wrap.appendChild(add);
+
+    return wrap;
   }
 
   function renderShiftPill(s, calRoot) {

@@ -22,7 +22,7 @@
         (the old staleness came from cache-first on UNVERSIONED urls). HTML + any
         unversioned asset stay network-first. Net: near-instant repeat launches.
    =================================================================== */
-const CACHE = "kt-v484-2026081721";
+const CACHE = "kt-v485-2026081722";
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a

@@ -1614,6 +1614,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Time-off calendar block read endpoint
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get('/director/schedule/time-off-blocks',   [\App\Http\Controllers\Api\SchedulingController::class, 'timeOffBlocks']);
+        // Birthdays, absences, time off, vacations and closures for the calendar grid.
+        Route::get('/director/calendar/overlays',          [\App\Http\Controllers\Api\CalendarOverlayController::class, 'index']);
     });
 
 
