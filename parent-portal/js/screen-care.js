@@ -435,7 +435,10 @@
       head.textContent = l.log_type.charAt(0).toUpperCase() + l.log_type.slice(1);
       if (l.details) head.textContent += ' — ' + l.details;
       body.appendChild(head);
-      var meta = fmt(l.occurred_at) + ' · by ' + (l.logged_by || 'staff');
+      // time_display is the server's own rendering, in the CENTRE's timezone. Preferred
+      // over re-deriving it here: this screen's fmt() reads the DEVICE clock, which is
+      // right only while everyone happens to be in the same zone as the centre.
+      var meta = (l.time_display || fmt(l.occurred_at)) + ' · by ' + (l.logged_by || 'staff');
       if (childName) meta = childName + ' · ' + meta;
       body.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, meta));
       if (l.notes) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:2px;' }, l.notes));

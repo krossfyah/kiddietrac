@@ -56,8 +56,11 @@ final class CareController extends Controller
             'child_id' => (int) $data['child_id'],
             'recorded_by_id' => $request->user()->id,
             'log_type' => $data['log_type'],
-            'occurred_at' => $data['occurred_at'] ?? now(),
-            'ended_at' => $data['ended_at'] ?? null,
+            // Parse to a real datetime — the app sends ISO 8601 ("2026-08-07T12:30:00.000Z")
+            // and inserting that raw string into a MySQL datetime column 500s (invalid
+            // format). Carbon normalises it to 'Y-m-d H:i:s' (UTC, the app timezone).
+            'occurred_at' => ! empty($data['occurred_at']) ? \Illuminate\Support\Carbon::parse($data['occurred_at']) : now(),
+            'ended_at' => ! empty($data['ended_at']) ? \Illuminate\Support\Carbon::parse($data['ended_at']) : null,
             'details' => $data['details'] ?? null,
             'notes' => $data['notes'] ?? null,
             'amount_ml' => $data['amount_ml'] ?? null,
@@ -159,12 +162,25 @@ final class CareController extends Controller
                 ->count();
         }
 
-        // Hand the client times already in the centre's zone, so its own
-        // "is this today?" check agrees with ours.
+        // Times in the centre's zone, sent so that they SAY SO.
+        //
+        // This used to emit 'Y-m-d H:i:s' — the centre's wall clock with no zone marker,
+        // which is indistinguishable from the UTC datetimes the rest of this API returns.
+        // A client cannot tell the two apart, so it has to guess, and any guess is wrong
+        // half the time. It broke for real: a client-side fix that (correctly) treats
+        // zone-less datetimes as UTC re-stamped these already-local times and every
+        // educator daily log rendered four hours early.
+        //
+        // ISO-8601 with the offset attached is unambiguous — "2026-08-17T10:45:00-04:00"
+        // means one instant and only one, whatever the reader's device is set to.
+        // time_display is the same moment ready to render, so a screen never has to
+        // compute a wall clock at all.
         $rows = $rows->map(function ($r) use ($tz) {
-            $r->occurred_at = \Carbon\Carbon::parse($r->occurred_at)->timezone($tz)->format('Y-m-d H:i:s');
+            $at = \Carbon\Carbon::parse($r->occurred_at)->timezone($tz);
+            $r->occurred_at = $at->toIso8601String();
+            $r->time_display = \App\Support\AgencyTime::fmt($at, $tz);
             if (!empty($r->ended_at)) {
-                $r->ended_at = \Carbon\Carbon::parse($r->ended_at)->timezone($tz)->format('Y-m-d H:i:s');
+                $r->ended_at = \Carbon\Carbon::parse($r->ended_at)->timezone($tz)->toIso8601String();
             }
             return $r;
         });
@@ -323,9 +339,14 @@ final class CareController extends Controller
                 'punched_out_at' => now(),
                 'notes' => $request->input('notes') ?: $open->notes,
             ]);
+            // diffInMinutes returns a (possibly negative) FLOAT on Carbon 3 — force a
+            // positive int for both the audit (?int param) and the response.
+            $mins = (int) abs(now()->diffInMinutes(\Carbon\Carbon::parse($open->punched_in_at)));
+            $this->notifyClockEvent($request->user(), (int) ($open->centre_id ?: $centreId), 'out');
+            $this->auditClock($request, $userId, 'out', (int) ($open->centre_id ?: $centreId), $mins);
             return response()->json([
                 'action' => 'out',
-                'minutes_worked' => now()->diffInMinutes(\Carbon\Carbon::parse($open->punched_in_at)),
+                'minutes_worked' => $mins,
                 'message' => 'Clocked out',
             ]);
         }
@@ -338,7 +359,99 @@ final class CareController extends Controller
             'source' => $request->input('source') ?: 'web',
             'created_at' => now(),
         ]);
+        $this->notifyClockEvent($request->user(), (int) $centreId, 'in');
+        $this->auditClock($request, $userId, 'in', (int) $centreId, null);
         return response()->json(['action' => 'in', 'id' => $id, 'message' => 'Clocked in']);
+    }
+
+    /**
+     * Write a DETAILED audit entry for a clock punch, so the audit trail says
+     * exactly whether the user clocked IN or OUT, at which centre, and (on clock
+     * out) for how long — instead of the generic "post:staff/punch" the middleware
+     * would record for a toggle endpoint. The distinct action (staff.clock_in /
+     * staff.clock_out) + a top-level `summary` string drive a clean line in the
+     * audit viewer. Never throws.
+     */
+    private function auditClock(Request $request, int $userId, string $action, int $centreId, ?int $minutes): void
+    {
+        try {
+            $u        = $request->user();
+            $name     = trim((($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))) ?: ($u->name ?? ('User #' . $userId));
+            $centreNm = DB::table('centres')->where('id', $centreId)->value('name') ?: ('centre #' . $centreId);
+            $verb     = $action === 'in' ? 'clocked IN' : 'clocked OUT';
+            $summary  = $name . ' ' . $verb . ' at ' . $centreNm;
+            $payload  = [
+                'summary'   => $summary,
+                'event'     => 'clock_' . $action,
+                'direction' => $action === 'in' ? 'in' : 'out',
+                'centre_id' => $centreId,
+                'centre'    => $centreNm,
+                'at'        => now()->toDateTimeString(),
+                'source'    => $request->input('source') ?: 'web',
+            ];
+            if ($minutes !== null) {
+                $payload['minutes_worked'] = $minutes;
+                $payload['duration'] = intdiv($minutes, 60) . 'h ' . ($minutes % 60) . 'm';
+                $payload['summary'] = $summary . ' · shift ' . $payload['duration'];
+            }
+            DB::table('audit_logs')->insert([
+                'user_id'     => $userId,
+                'action'      => 'staff.clock_' . $action,
+                'entity_type' => 'time_punch',
+                'entity_id'   => null,
+                'payload'     => json_encode($payload),
+                'ip_address'  => substr((string) $request->ip(), 0, 45),
+                'user_agent'  => substr((string) $request->userAgent(), 0, 500),
+                'created_at'  => now(),
+            ]);
+        } catch (\Throwable $e) { /* auditing must never break the punch */ }
+    }
+
+    /**
+     * Alert the centre's directors + the agency's admins when an educator clocks
+     * in/out (in-app notification + high-priority FCM push). Wrapped so a failure
+     * here can NEVER break the punch itself.
+     */
+    private function notifyClockEvent($actor, int $centreId, string $action): void
+    {
+        try {
+            if (!$centreId) return;
+            $agencyId  = DB::table('centres')->where('id', $centreId)->value('agency_id');
+            $centreNm  = DB::table('centres')->where('id', $centreId)->value('name') ?: 'the centre';
+            $recipients = DB::table('role_assignments')->where('active', true)
+                ->where(function ($q) use ($centreId, $agencyId) {
+                    $q->where(function ($a) use ($centreId) {
+                        $a->where('role', 'centre_director')->where('centre_id', $centreId);
+                    });
+                    if ($agencyId) {
+                        $q->orWhere(function ($b) use ($agencyId) {
+                            $b->where('role', 'agency_admin')->where('agency_id', $agencyId);
+                        });
+                    }
+                })
+                ->pluck('user_id')->unique();
+
+            $name = trim((($actor->first_name ?? '') . ' ' . ($actor->last_name ?? ''))) ?: ($actor->name ?? 'An educator');
+            $inOut = $action === 'in' ? 'clocked in' : 'clocked out';
+            $icon  = $action === 'in' ? '🟢' : '🔴';
+            $title = $icon . ' ' . $name . ' ' . $inOut;
+            $body  = $centreNm;
+
+            foreach ($recipients as $rid) {
+                if ((int) $rid === (int) ($actor->id ?? 0)) continue;   // don't notify the actor
+                DB::table('notifications')->insert([
+                    'user_id'    => $rid,
+                    'type'       => 'clock',
+                    'title'      => $title,
+                    'body'       => $body,
+                    'data'       => json_encode(['link' => '#dashboard']),
+                    'created_at' => now(),
+                ]);
+                try {
+                    app(\App\Services\FcmService::class)->sendToUser((int) $rid, $title, $body, '#dashboard', false);
+                } catch (\Throwable $e) { /* push is best-effort */ }
+            }
+        } catch (\Throwable $e) { /* never break the punch */ }
     }
 
     public function myPunches(Request $request): JsonResponse

@@ -211,7 +211,11 @@ class EducatorSelfController extends Controller
                 'detail' => null,
                 'note' => $e->notes,
                 'by' => $e->by_name,
-                'at' => \Carbon\Carbon::parse($e->occurred_at)->timezone($tz)->format('Y-m-d H:i:s'),
+                // ISO-8601 with offset, not a bare wall clock: a zone-less datetime is
+                // indistinguishable from the UTC ones elsewhere in this API, and a client
+                // that guesses UTC renders it hours early. See CareController.
+                'at' => \Carbon\Carbon::parse($e->occurred_at)->timezone($tz)->toIso8601String(),
+                'time_display' => \App\Support\AgencyTime::fmt(\Carbon\Carbon::parse($e->occurred_at), $tz),
             ]);
 
         $careLogs = DB::table('daily_care_logs as l')
@@ -229,7 +233,8 @@ class EducatorSelfController extends Controller
                 'detail' => $l->details,
                 'note' => $l->notes,
                 'by' => $l->by_name,
-                'at' => \Carbon\Carbon::parse($l->occurred_at)->timezone($tz)->format('Y-m-d H:i:s'),
+                'at' => \Carbon\Carbon::parse($l->occurred_at)->timezone($tz)->toIso8601String(),
+                'time_display' => \App\Support\AgencyTime::fmt(\Carbon\Carbon::parse($l->occurred_at), $tz),
             ]);
 
         // The roster quick-log writes to daily_events, not daily_care_logs — read
@@ -258,7 +263,8 @@ class EducatorSelfController extends Controller
                     'detail' => $detail,
                     'note' => $d->notes,
                     'by' => $d->by_name,
-                    'at' => \Carbon\Carbon::parse($d->occurred_at)->timezone($tz)->format('Y-m-d H:i:s'),
+                    'at' => \Carbon\Carbon::parse($d->occurred_at)->timezone($tz)->toIso8601String(),
+                    'time_display' => \App\Support\AgencyTime::fmt(\Carbon\Carbon::parse($d->occurred_at), $tz),
                 ];
             });
 
