@@ -75,8 +75,11 @@
        somebody actually needs — the director, the admin — sat scattered among twenty
        educators, so "I can't see the directors" was true in practice even though they were
        all in the list. */
-    var ROLE_ORDER = { 'Admin': 0, 'Director': 1, 'Home visitor': 2, 'Educator': 3, 'Auditor': 4, 'Staff': 5 };
+    // Inside the function, not a var read from an outer scope: groupedRows is a hoisted
+    // FUNCTION declaration, so it ran before `var ROLE_ORDER = {...}` had been assigned
+    // and the sort comparator crashed on undefined['Parent'] — support ticket #11.
     function groupedRows(list) {
+      var ROLE_ORDER = { 'Admin': 0, 'Director': 1, 'Home visitor': 2, 'Educator': 3, 'Auditor': 4, 'Parent': 5, 'Staff': 6 };
       var sorted = list.slice().sort(function (a, b) {
         var ra = ROLE_ORDER[a.role] === undefined ? 9 : ROLE_ORDER[a.role];
         var rb = ROLE_ORDER[b.role] === undefined ? 9 : ROLE_ORDER[b.role];

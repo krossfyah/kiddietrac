@@ -50,12 +50,6 @@
   reg(directors, 'timesheets',     'KT.Timesheets');
   reg(directors, 'waitlist',       'KT.Waitlist');
 
-  // Team chat — staff-to-staff messaging. The screen has existed since it was built and
-  // was never registered anywhere: KT.TeamChatScreen was defined and referenced by nothing,
-  // so there was no route, no nav entry, and no way to open it. Messages only ever listed
-  // family conversations, which is why colleagues appeared unreachable.
-  reg(allStaff,  'team-chat',      'KT.TeamChatScreen');
-
   // Staff (educator + director + admin)
   reg(allStaff,  'announcements',  'KT.Announcements');
   reg(allStaff,  'lesson-plans',   'KT.LessonPlans');

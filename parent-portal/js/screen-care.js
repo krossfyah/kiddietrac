@@ -316,25 +316,34 @@
     }
     var VIEW_DATE = agencyToday();
 
-    var dayHead = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;' });
-    var dayTitle = Dom.el('h3', { style: 'margin:0;flex:1;min-width:120px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Today\'s log');
+    // Heading on its own line, controls on theirs.
+    //
+    // These were one flex row with flex-wrap, which on a phone broke wherever it happened
+    // to run out of width — the date landing half on one line and half on the next. Two
+    // deliberate rows look the same at every width instead of ragged at one.
+    var dayHead = Dom.el('div', { style: 'margin:0 0 14px;' });
+    var dayTitle = Dom.el('h3', { style: 'margin:0 0 8px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Today\'s log');
+    var dayCtrls = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
     var navBtn = function (label, title) {
-      var b = Dom.el('button', { type: 'button', title: title, style: 'width:32px;height:32px;border-radius:9px;border:1px solid #D1D5DB;background:#fff;cursor:pointer;font-size:14px;line-height:1;color:#374151;' }, label);
+      var b = Dom.el('button', { type: 'button', title: title, style: 'flex:0 0 auto;width:32px;height:32px;border-radius:9px;border:1px solid #D1D5DB;background:#fff;cursor:pointer;font-size:14px;line-height:1;color:#374151;' }, label);
       b.dataset.ktIconized = '1';
       return b;
     };
     var prevDay = navBtn('‹', 'Previous day');
     var nextDay = navBtn('›', 'Next day');
     var dayInput = Dom.el('input', { type: 'date', value: VIEW_DATE, max: agencyToday(),
-      style: 'padding:7px 9px;border:1px solid #D1D5DB;border-radius:9px;font-size:13px;background:#fff;color:#374151;' });
-    var todayBtn = Dom.el('button', { type: 'button', style: 'padding:7px 12px;border-radius:9px;border:1px solid #D1D5DB;background:#fff;cursor:pointer;font-size:12.5px;font-weight:700;color:#374151;' }, 'Today');
+      // flex:1 with min-width:0 so the date field SHRINKS to fit rather than shoving the
+      // arrows and Today onto a new line — the actual cause of the wrap on the APK.
+      style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #D1D5DB;border-radius:9px;font-size:13px;background:#fff;color:#374151;' });
+    var todayBtn = Dom.el('button', { type: 'button', style: 'flex:0 0 auto;white-space:nowrap;padding:7px 12px;border-radius:9px;border:1px solid #D1D5DB;background:#fff;cursor:pointer;font-size:12.5px;font-weight:700;color:#374151;' }, 'Today');
     todayBtn.dataset.ktIconized = '1';
 
     dayHead.appendChild(dayTitle);
-    dayHead.appendChild(prevDay);
-    dayHead.appendChild(dayInput);
-    dayHead.appendChild(nextDay);
-    dayHead.appendChild(todayBtn);
+    dayCtrls.appendChild(prevDay);
+    dayCtrls.appendChild(dayInput);
+    dayCtrls.appendChild(nextDay);
+    dayCtrls.appendChild(todayBtn);
+    dayHead.appendChild(dayCtrls);
     recentWrap.appendChild(dayHead);
 
     function shiftDate(iso, days) {

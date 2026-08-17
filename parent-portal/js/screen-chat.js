@@ -421,15 +421,13 @@
     // unreachable from Messages — the complaint that started this. Staff threads are a
     // different backend (keyed on a user, not a family), so both lists are loaded here and
     // the send routes to whichever the chosen row belongs to.
-    var families = [], staff = [];
-    var results = await Promise.all([
-      famPath ? api('GET', famPath).catch(function () { return null; }) : Promise.resolve(null),
-      api('GET', '/provider/team-contacts').catch(function () { return null; }),
-    ]);
-    if (results[0]) { families = results[0].data || results[0].families || []; }
-    if (results[1]) { staff = results[1].contacts || []; }
+    var families = [];
+    if (famPath) {
+      var fdata = await api('GET', famPath).catch(function () { return null; });
+      if (fdata) { families = fdata.data || fdata.families || []; }
+    }
 
-    if (! families.length && ! staff.length) {
+    if (! families.length) {
       modal.querySelector('#kt-new-chat-form-body').innerHTML = '<div style="color:#6B7280;">Nobody to message yet.</div>';
       return;
     }
@@ -438,31 +436,6 @@
       '<div style="margin-bottom:14px;">' +
         '<label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">To</label>' +
         '<select id="kt-nc-family" style="width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;background:white;">' +
-          // Staff first, grouped by role, each with the role in brackets — a flat list
-          // where some rows are parents and some are directors cannot be read at a glance.
-          // The value carries the KIND, because the two go to different endpoints.
-          (function () {
-            var order = ['Admin', 'Director', 'Home visitor', 'Educator', 'Auditor', 'Parent', 'Staff'];
-            var byRole = {};
-            staff.forEach(function (p) { (byRole[p.role || 'Staff'] = byRole[p.role || 'Staff'] || []).push(p); });
-            var html = '';
-            order.forEach(function (role) {
-              var list = byRole[role];
-              if (! list || ! list.length) { return; }
-              html += '<optgroup label="' + escapeHtml(role === 'Admin' ? 'Admins' : role + 's') + '">' +
-                list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }).map(function (p) {
-                  return '<option value="user:' + p.id + '">' + escapeHtml(p.name) + ' (' + escapeHtml(role) + ')</option>';
-                }).join('') + '</optgroup>';
-              delete byRole[role];
-            });
-            // Any role the list above does not know about still gets shown.
-            Object.keys(byRole).forEach(function (role) {
-              html += '<optgroup label="' + escapeHtml(role) + '">' + byRole[role].map(function (p) {
-                return '<option value="user:' + p.id + '">' + escapeHtml(p.name) + ' (' + escapeHtml(role) + ')</option>';
-              }).join('') + '</optgroup>';
-            });
-            return html;
-          })() +
           (families.length
             ? '<optgroup label="Families">' + families.map(function (f) {
                 return '<option value="family:' + f.id + '">' + escapeHtml(f.family_name || ('Family #' + f.id)) + ' (Family)</option>';
@@ -486,12 +459,10 @@
 
     modal.querySelector('#kt-nc-cancel').addEventListener('click', function () { overlay.remove(); });
     modal.querySelector('#kt-nc-send').addEventListener('click', async function () {
-      // "user:12" or "family:34" — the picker holds both kinds and they post to
-      // different endpoints, so the kind travels with the choice rather than being
-      // guessed from the id.
+      // Values are still prefixed "family:" so the picker can grow back to carrying
+      // staff without the id meaning two different things.
       var picked = String(modal.querySelector('#kt-nc-family').value || '');
-      var isStaff = picked.indexOf('user:') === 0;
-      var fid = parseInt(picked.replace(/^(user|family):/, ''), 10);
+      var fid = parseInt(picked.replace(/^family:/, ''), 10);
       var subj = modal.querySelector('#kt-nc-subject').value.trim();
       var body = modal.querySelector('#kt-nc-body').value.trim();
       var errBox = modal.querySelector('#kt-nc-err');
@@ -500,18 +471,6 @@
       var sendBtn = modal.querySelector('#kt-nc-send');
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
       try {
-        // A staff thread and a family thread are different things on the server — one is
-        // keyed on a user, the other on a family — so the send follows the choice.
-        if (isStaff) {
-          await api('POST', '/provider/team-threads/start', { recipient_user_id: fid, body: body });
-          overlay.remove();
-          // Staff conversations live in Team chat, which is where the reply will arrive;
-          // sending from here and then showing a family list would look like it failed.
-          if (window.location.hash.indexOf('team') === -1) { window.location.hash = '#team-chat'; }
-          else { renderList(container); }
-          return;
-        }
-
         var resp = await api('POST', '/provider/chats/start', { family_id: fid, subject: subj || null, body: body });
         overlay.remove();
         if (resp && resp.conversation_id) {

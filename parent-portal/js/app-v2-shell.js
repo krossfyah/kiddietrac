@@ -86,9 +86,6 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
-          // Staff-to-staff, beside the family Messages it is distinct from. The screen
-          // existed but was never routed, so colleagues looked unreachable.
-          { hash: 'team-chat', label: 'Team chat', icon: '🧑‍🤝‍🧑' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -236,9 +233,6 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
-          // Staff-to-staff, beside the family Messages it is distinct from. The screen
-          // existed but was never routed, so colleagues looked unreachable.
-          { hash: 'team-chat', label: 'Team chat', icon: '🧑‍🤝‍🧑' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -321,9 +315,6 @@
           { hash: 'observations',  label: 'Observations',  icon: '👀' },
           { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
           { hash: 'chat',          label: 'Messages',      icon: '💬', badgeKey: 'chat_unread' },
-          // Staff-to-staff, beside the family Messages it is distinct from. The screen
-          // existed but was never routed, so colleagues looked unreachable.
-          { hash: 'team-chat', label: 'Team chat', icon: '🧑‍🤝‍🧑' },
           { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
           { hash: 'announcements', label: 'News',          icon: '📢' },
