@@ -207,8 +207,10 @@
 
       const kebabBtn = (c) => `<button class="kt-conv-kebab" data-cid="${c.id}" type="button" title="More" aria-label="More actions" style="background:none;border:none;cursor:pointer;color:#64748B;font-size:17px;line-height:1;padding:5px 7px;border-radius:6px;">⋮</button>`;
 
-      // Body-appended: inside the row it gets clipped by the table's overflow, which is
-      // exactly how the last kebab on this platform ended up half-visible.
+      // MOBILE ONLY. The desktop table gets its kebab from kt-row-actions.js, which
+      // collapses the last cell's buttons automatically — building one there produces a
+      // kebab inside a kebab. The card list is not a table, so nothing collapses it and
+      // this menu is the only way to reach these actions on a phone. See CONVENTIONS.md.
       function openKebab(anchor, c) {
         document.querySelectorAll('.kt-conv-menu').forEach(m => m.remove());
         const staff = c.kind === 'staff';
@@ -235,22 +237,25 @@
             menu.remove();
             if (act === 'open') { return openThread(c.id, container); }
             if (act === 'delete') { return deleteConv(c); }
-            const want = act === 'archive';
-            const bucket = c.kind === 'staff' ? archived.staff : archived.family;
-            const raw = String(c.id).replace('staff:', '');
-            try {
-              await api('POST', '/provider/chat-archive', { kind: c.kind === 'staff' ? 'staff' : 'family', id: parseInt(raw, 10), archived: want });
-              if (want) { bucket.push(raw); } else { bucket.splice(bucket.indexOf(raw), 1); }
-              repaint();
-              if (window.KT && KT.toast) KT.toast(want ? '📥' : '↩️', want ? 'Archived' : 'Restored');
-            } catch (err) {
-              if (window.KT && KT.toast) KT.toast('⚠️', 'Could not update', (err && err.message) || '', '#DC2626');
-            }
+            return setArchived(c, act === 'archive');
           });
         });
         setTimeout(() => {
           document.addEventListener('click', function away() { menu.remove(); document.removeEventListener('click', away); }, { once: true });
         }, 0);
+      }
+
+      async function setArchived(c, want) {
+        const bucket = c.kind === 'staff' ? archived.staff : archived.family;
+        const raw = String(c.id).replace('staff:', '');
+        try {
+          await api('POST', '/provider/chat-archive', { kind: c.kind === 'staff' ? 'staff' : 'family', id: parseInt(raw, 10), archived: want });
+          if (want) { bucket.push(raw); } else { bucket.splice(bucket.indexOf(raw), 1); }
+          repaint();
+          if (window.KT && KT.toast) KT.toast(want ? '📥' : '↩️', want ? 'Archived' : 'Restored');
+        } catch (err) {
+          if (window.KT && KT.toast) KT.toast('⚠️', 'Could not update', (err && err.message) || '', '#DC2626');
+        }
       }
 
       async function deleteConv(c) {
@@ -367,7 +372,7 @@
         return `<tr class="kt-msg-row" data-cid="${c.id}" style="border-top:1px solid #F1F3F5;cursor:pointer;">
           <td style="padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             <span style="display:inline-flex;align-items:center;gap:9px;max-width:100%;">
-              <span style="width:30px;height:30px;border-radius:50%;background:${senderColor(nm)};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">${escapeHtml(nm.charAt(0))}</span>
+              ${avatarFor(nm, c.photo_url || c.child_photo_url, 30)}
               <span style="font-weight:${unread ? '800' : '600'};color:#111827;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(nm)}${c.child_name ? ` <span style="color:#64748B;font-weight:400;">· ${escapeHtml(c.child_name)}</span>` : ''}</span>
             </span>
           </td>
@@ -376,7 +381,11 @@
             ${unread ? `<span style="background:#1F6080;color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;">${c.unread_count}</span>` : ''}
           </td>
           <td style="padding:10px 14px;text-align:right;color:#64748B;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatDateTime(c.last_message_at)}</td>
-          <td style="padding:10px 6px;text-align:center;">${kebabBtn(c)}</td>
+          <td style="padding:10px 6px;text-align:center;white-space:nowrap;">
+            <button class="kt-conv-act kt-conv-open" data-cid="${c.id}" type="button" title="Open">Open</button>
+            <button class="kt-conv-act kt-conv-arch" data-cid="${c.id}" type="button" title="${isArchived(c) ? 'Restore' : 'Archive'}">${isArchived(c) ? 'Restore' : 'Archive'}</button>
+            ${c.kind === 'staff' ? '' : `<button class="kt-conv-act kt-conv-del" data-cid="${c.id}" type="button" title="Delete">Delete</button>`}
+          </td>
         </tr>`;
       };
       const paint = () => {
@@ -396,13 +405,18 @@
           row.addEventListener('mouseleave', () => { row.style.background = row.dataset.base; });
           row.addEventListener('click', () => openThread(row.dataset.cid, container));
         });
-        tbody.querySelectorAll('.kt-conv-kebab').forEach(b => {
-          b.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const c = convs.find(x => String(x.id) === String(b.getAttribute('data-cid')));
-            if (c) openKebab(b, c);
-          });
-        });
+        // Wired straight onto the buttons. kt-row-actions.js forwards a real click
+        // from its menu item to the hidden button, so these fire either way.
+        const convOf = (b) => convs.find(x => String(x.id) === String(b.getAttribute('data-cid')));
+        tbody.querySelectorAll('.kt-conv-open').forEach(b => b.addEventListener('click', (e) => {
+          e.stopPropagation(); const c = convOf(b); if (c) openThread(c.id, container);
+        }));
+        tbody.querySelectorAll('.kt-conv-arch').forEach(b => b.addEventListener('click', (e) => {
+          e.stopPropagation(); const c = convOf(b); if (c) setArchived(c, !isArchived(c));
+        }));
+        tbody.querySelectorAll('.kt-conv-del').forEach(b => b.addEventListener('click', (e) => {
+          e.stopPropagation(); const c = convOf(b); if (c) deleteConv(c);
+        }));
         const at = tbody.querySelector('#kt-arch-toggle');
         if (at) at.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = !state.showArchived; paint(); });
         container.querySelectorAll('.kt-msg-th').forEach(h => { const ar = h.querySelector('.kt-ar'); if (ar) ar.textContent = (h.getAttribute('data-sort') === state.sort) ? (state.dir < 0 ? '▾' : '▴') : ''; });
