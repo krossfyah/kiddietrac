@@ -35,14 +35,28 @@ final class TeamChatController extends Controller
     }
 
     /** Agencies the current user belongs to (direct role or via a centre). */
-    private function myAgencyIds(int $uid): array
+    private function myAgencyIds(int $uid, ?Request $request = null): array
     {
         // A platform admin's role row carries agency_id NULL — the point of the role is
         // that it is not tied to one — so this returned nothing for them and they could
-        // message nobody at all. Anthony only had contacts because he ALSO holds an
-        // agency_admin role at agency 2; a pure platform admin got an empty list.
+        // message nobody at all.
+        //
+        // They get the agency they are VIEWING, not every agency. Returning all of them
+        // put 89 people from two agencies in one list: a super admin looking at iLearn
+        // could see, and start a conversation with, a parent from another agency, and the
+        // name and role of every user on the platform was exposed in that picker.
+        // Switching agency changed nothing, which is the tell.
+        //
+        // Fails CLOSED: no active agency and no agency of their own means no contacts,
+        // rather than everybody.
         if ($this->isPlatformAdmin($uid)) {
-            return DB::table('agencies')->pluck('id')->map(fn ($i) => (int) $i)->values()->all();
+            // Taken from the request that was handed in, not the global helper: the
+            // active agency is a property of THIS call, and reaching for a global makes
+            // the scoping depend on container state rather than on the caller.
+            $active = (int) (($request ? $request->header('X-Active-Agency-Id') : null) ?: 0);
+            if ($active && DB::table('agencies')->where('id', $active)->exists()) {
+                return [$active];
+            }
         }
 
         $direct = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
@@ -84,7 +98,7 @@ final class TeamChatController extends Controller
     public function contacts(Request $request): JsonResponse
     {
         $uid = (int) $request->user()->id;
-        $ids = $this->staffUserIds($this->myAgencyIds($uid), $uid);
+        $ids = $this->staffUserIds($this->myAgencyIds($uid, $request), $uid);
         if (! $ids) return response()->json(['contacts' => []]);
 
         // A user may hold several roles — show the most senior for the label.
@@ -159,13 +173,13 @@ final class TeamChatController extends Controller
         if ($recipient === $uid) return response()->json(['message' => 'You can’t message yourself.'], 422);
 
         // Recipient must be a colleague in a shared agency.
-        if (! in_array($recipient, $this->staffUserIds($this->myAgencyIds($uid), $uid), true)) {
+        if (! in_array($recipient, $this->staffUserIds($this->myAgencyIds($uid, $request), $uid), true)) {
             return response()->json(['message' => 'That person isn’t a colleague you can message.'], 403);
         }
         // Stamp the thread with the RECIPIENT's agency, not the sender's first one. For a
         // platform admin the sender's list is every agency, so taking the first would file
         // a conversation with an agency-6 director under agency 2.
-        $agencyId = $this->agencyOfUser($recipient) ?? ($this->myAgencyIds($uid)[0] ?? null);
+        $agencyId = $this->agencyOfUser($recipient) ?? ($this->myAgencyIds($uid, $request)[0] ?? null);
 
         // Existing 1:1 thread = a thread both are in, with exactly 2 participants.
         $threadId = DB::table('staff_thread_participants as a')
