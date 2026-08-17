@@ -18,9 +18,24 @@ final class TeamChatController extends Controller
 {
     private const STAFF_ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'auditor', 'platform_admin'];
 
+    /** Is this a platform admin — somebody whose remit is every agency? */
+    private function isPlatformAdmin(int $uid): bool
+    {
+        return DB::table('role_assignments')->where('user_id', $uid)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+    }
+
     /** Agencies the current user belongs to (direct role or via a centre). */
     private function myAgencyIds(int $uid): array
     {
+        // A platform admin's role row carries agency_id NULL — the point of the role is
+        // that it is not tied to one — so this returned nothing for them and they could
+        // message nobody at all. Anthony only had contacts because he ALSO holds an
+        // agency_admin role at agency 2; a pure platform admin got an empty list.
+        if ($this->isPlatformAdmin($uid)) {
+            return DB::table('agencies')->pluck('id')->map(fn ($i) => (int) $i)->values()->all();
+        }
+
         $direct = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
             ->whereNotNull('agency_id')->pluck('agency_id');
         $viaCentre = DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')
@@ -40,6 +55,20 @@ final class TeamChatController extends Controller
             })
             ->where('user_id', '!=', $exclude)
             ->pluck('user_id')->unique()->filter()->values()->all();
+    }
+
+    /** The agency a user actually belongs to, for filing a thread against. */
+    private function agencyOfUser(int $uid): ?int
+    {
+        $direct = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            ->whereNotNull('agency_id')->value('agency_id');
+        if ($direct) {
+            return (int) $direct;
+        }
+        $viaCentre = DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $uid)->where('ra.active', true)->value('c.agency_id');
+
+        return $viaCentre ? (int) $viaCentre : null;
     }
 
     /** GET /provider/team-contacts — colleagues the user can start a chat with. */
@@ -121,7 +150,10 @@ final class TeamChatController extends Controller
         if (! in_array($recipient, $this->staffUserIds($this->myAgencyIds($uid), $uid), true)) {
             return response()->json(['message' => 'That person isn’t a colleague you can message.'], 403);
         }
-        $agencyId = $this->myAgencyIds($uid)[0] ?? null;
+        // Stamp the thread with the RECIPIENT's agency, not the sender's first one. For a
+        // platform admin the sender's list is every agency, so taking the first would file
+        // a conversation with an agency-6 director under agency 2.
+        $agencyId = $this->agencyOfUser($recipient) ?? ($this->myAgencyIds($uid)[0] ?? null);
 
         // Existing 1:1 thread = a thread both are in, with exactly 2 participants.
         $threadId = DB::table('staff_thread_participants as a')
