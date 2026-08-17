@@ -2,7 +2,9 @@
 
 use App\Http\Middleware\AuditActivity;
 use App\Http\Middleware\EnforceAuditorReadOnly;
+use App\Http\Middleware\EnsureOnboarded;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\NormalizeJsonTimestamps;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -34,6 +36,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // v22p94: pure-auditor accounts are read-only across the whole API.
         // SecurityHeaders: hardened response headers on every API response (SOC 2).
         $middleware->api(append: [
+            // Onboarding gate — blocks all non-onboarding API calls until the
+            // user has completed onboarding (server-side backstop; skips
+            // impersonation tokens + platform admins). Kill switch:
+            // ONBOARDING_GATE=false in .env + config:cache.
+            EnsureOnboarded::class,
             EnforceAuditorReadOnly::class,
             SecurityHeaders::class,
             // Portal-wide activity audit — records every write action to audit_logs.

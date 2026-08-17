@@ -116,12 +116,24 @@ class SeedDemoDaily extends Command
             return self::SUCCESS;
         }
 
-        $today = Carbon::today();
+        // Carbon::today() is midnight in app.timezone, which is UTC. Every setTime() below
+        // then meant a UTC wall clock: setTime(8, 5) wrote 08:05 UTC, which is 04:05 in
+        // Toronto. Ten thousand demo events were seeded at four in the morning — naps at
+        // 05:50, lunch at 08:00 — and anyone checking a timezone fix against Test Agency
+        // saw times that looked broken no matter how correct the display was.
+        //
+        // Midnight AT THE CENTRE, converted to UTC for storage. seedAt() does the
+        // conversion once so no call site has to remember.
+        $seedTz = \App\Support\AgencyTime::tzForCentre($centreId);
+        $today = Carbon::today($seedTz);
         $dstamp = $today->toDateString();
+
+        /** A wall-clock time at the centre, as the UTC instant that gets stored. */
+        $seedAt = fn (int $h, int $m = 0) => $today->copy()->setTime($h, $m)->utc();
 
         // ── 1b) Staff on the floor — clock in the centre's educators/director for
         //        today so "staff on floor" is realistic (and no false ratio breach). ──
-        $this->section('staff clock-in', function () use ($staff, $centreId, $today) {
+        $this->section('staff clock-in', function () use ($staff, $centreId, $today, $seedAt) {
             $n = 0;
             foreach ($staff as $s) {
                 // Guard on ANY open shift (not just today's) so re-runs / day
@@ -147,7 +159,7 @@ class SeedDemoDaily extends Command
                 if ($open) continue;
                 DB::table('time_punches')->insert([
                     'user_id' => $s->id, 'centre_id' => $centreId,
-                    'punched_in_at' => $today->copy()->setTime(7, 30),
+                    'punched_in_at' => $seedAt(7, 30),
                     // NOT NULL enum(web|kiosk|mobile); a seeded shift stands in for
                     // somebody tapping in at the door.
                     'source' => 'kiosk',
@@ -159,7 +171,7 @@ class SeedDemoDaily extends Command
         });
 
         // ── 2) Attendance (check in + out) — one pair per child per day ──
-        $this->section('attendance', function () use ($children, $roomFor, $recorder, $today) {
+        $this->section('attendance', function () use ($children, $roomFor, $recorder, $today, $seedAt) {
             $n = 0;
             foreach ($children as $i => $c) {
                 $already = DB::table('check_events')->where('child_id', $c->id)
@@ -172,13 +184,13 @@ class SeedDemoDaily extends Command
                 $moods = ['happy', 'calm', 'tired', 'happy'];
                 DB::table('check_events')->insert([
                     'child_id' => $c->id, 'room_id' => $room, 'event_type' => 'check_in',
-                    'occurred_at' => $today->copy()->setTime(8, 5 + ($i % 40)),
+                    'occurred_at' => $seedAt(8, 5 + ($i % 40)),
                     'by_user_id' => $recorder->id, 'recorded_by_id' => $recorder->id, 'mood_at_event' => $moods[$i % 4],
                     'notes' => '[Demo] Dropped off by parent', 'created_at' => now(),
                 ]);
                 DB::table('check_events')->insert([
                     'child_id' => $c->id, 'room_id' => $room, 'event_type' => 'check_out',
-                    'occurred_at' => $today->copy()->setTime(16, 10 + ($i % 40)),
+                    'occurred_at' => $seedAt(16, 10 + ($i % 40)),
                     'by_user_id' => $recorder->id, 'recorded_by_id' => $recorder->id, 'notes' => '[Demo] Picked up', 'created_at' => now(),
                 ]);
                 $n += 2;
@@ -187,7 +199,7 @@ class SeedDemoDaily extends Command
         });
 
         // ── 3) Daily log events (meal / nap / mood / activity) ──
-        $this->section('daily events', function () use ($children, $roomFor, $educators, $today) {
+        $this->section('daily events', function () use ($children, $roomFor, $educators, $today, $seedAt) {
             $n = 0;
             $plan = [
                 ['activity', 9, 30, '[Demo] Circle time — songs and calendar'],
@@ -203,7 +215,7 @@ class SeedDemoDaily extends Command
                 foreach ($plan as $p) {
                     DB::table('daily_events')->insert([
                         'child_id' => $c->id, 'room_id' => $roomFor($i), 'event_type' => $p[0],
-                        'occurred_at' => $today->copy()->setTime($p[1], $p[2]), 'payload' => '{}',
+                        'occurred_at' => $seedAt($p[1], $p[2]), 'payload' => '{}',
                         'notes' => $p[3], 'recorded_by_id' => $ed->id ?? null,
                         'created_at' => now(), 'updated_at' => now(),
                     ]);
@@ -214,7 +226,7 @@ class SeedDemoDaily extends Command
         });
 
         // ── 4) Observations (learning stories) — a few new ones per day ──
-        $this->section('observations', function () use ($children, $educators, $today, $dstamp) {
+        $this->section('observations', function () use ($children, $educators, $today, $dstamp, $seedAt) {
             $n = 0;
             $samples = [
                 ['physical', 'Confident on the climbing structure', 'Reached the top of the climber independently and beamed with pride. Growing gross-motor confidence.'],
@@ -231,7 +243,7 @@ class SeedDemoDaily extends Command
                 $ed = $educators[$k % max(1, $educators->count())];
                 DB::table('observations')->insert([
                     'child_id' => $c->id, 'domain' => $s[0], 'title' => $title, 'body' => $s[2],
-                    'observed_at' => $today->copy()->setTime(11, 0)->addMinutes($k * 7),
+                    'observed_at' => $seedAt(11, 0)->addMinutes($k * 7),
                     'recorded_by_id' => $ed->id ?? null, 'shared_with_family' => 1,
                     'created_at' => now(),
                 ]);
@@ -241,14 +253,14 @@ class SeedDemoDaily extends Command
         });
 
         // ── 5) One minor incident per day (best-effort — status enum varies) ──
-        $this->section('incident', function () use ($children, $roomFor, $recorder, $today, $dstamp) {
+        $this->section('incident', function () use ($children, $roomFor, $recorder, $today, $dstamp, $seedAt) {
             $marker = "[Demo] Minor bump ({$dstamp})";
             if (DB::table('incidents')->where('description', 'LIKE', "%({$dstamp})%")->where('description', 'LIKE', '[Demo]%')->exists()) return 0;
             $idx = $today->day % $children->count();
             $c = $children[$idx];
             DB::table('incidents')->insert([
                 'child_id' => $c->id, 'room_id' => $roomFor($idx), 'incident_type' => 'injury', 'severity' => 'minor',
-                'occurred_at' => $today->copy()->setTime(10, 45), 'location' => 'Outdoor play area',
+                'occurred_at' => $seedAt(10, 45), 'location' => 'Outdoor play area',
                 'description' => $marker . ' — small bump on the knee after a trip on the grass.',
                 'action_taken' => 'Cleaned, cold compress applied, comforted. No further concern.',
                 'first_aid_administered' => 1, 'recorded_by_id' => $recorder->id,

@@ -176,11 +176,15 @@ final class CareController extends Controller
         // time_display is the same moment ready to render, so a screen never has to
         // compute a wall clock at all.
         $rows = $rows->map(function ($r) use ($tz) {
-            $at = \Carbon\Carbon::parse($r->occurred_at)->timezone($tz);
-            $r->occurred_at = $at->toIso8601String();
+            // UTC on the wire, not the local offset. One format across the whole API
+            // keeps these strings sortable by plain comparison, which several screens
+            // rely on; mixed offsets sort wrongly while looking right. The human-facing
+            // time travels beside it as time_display, in the centre's zone.
+            $at = \Carbon\Carbon::parse($r->occurred_at);
+            $r->occurred_at = $at->copy()->utc()->toIso8601ZuluString();
             $r->time_display = \App\Support\AgencyTime::fmt($at, $tz);
             if (!empty($r->ended_at)) {
-                $r->ended_at = \Carbon\Carbon::parse($r->ended_at)->timezone($tz)->toIso8601String();
+                $r->ended_at = \Carbon\Carbon::parse($r->ended_at)->utc()->toIso8601ZuluString();
             }
             return $r;
         });

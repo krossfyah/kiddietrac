@@ -214,7 +214,7 @@ class EducatorSelfController extends Controller
                 // ISO-8601 with offset, not a bare wall clock: a zone-less datetime is
                 // indistinguishable from the UTC ones elsewhere in this API, and a client
                 // that guesses UTC renders it hours early. See CareController.
-                'at' => \Carbon\Carbon::parse($e->occurred_at)->timezone($tz)->toIso8601String(),
+                'at' => \Carbon\Carbon::parse($e->occurred_at)->utc()->toIso8601ZuluString(),
                 'time_display' => \App\Support\AgencyTime::fmt(\Carbon\Carbon::parse($e->occurred_at), $tz),
             ]);
 
@@ -233,7 +233,7 @@ class EducatorSelfController extends Controller
                 'detail' => $l->details,
                 'note' => $l->notes,
                 'by' => $l->by_name,
-                'at' => \Carbon\Carbon::parse($l->occurred_at)->timezone($tz)->toIso8601String(),
+                'at' => \Carbon\Carbon::parse($l->occurred_at)->utc()->toIso8601ZuluString(),
                 'time_display' => \App\Support\AgencyTime::fmt(\Carbon\Carbon::parse($l->occurred_at), $tz),
             ]);
 
@@ -263,7 +263,7 @@ class EducatorSelfController extends Controller
                     'detail' => $detail,
                     'note' => $d->notes,
                     'by' => $d->by_name,
-                    'at' => \Carbon\Carbon::parse($d->occurred_at)->timezone($tz)->toIso8601String(),
+                    'at' => \Carbon\Carbon::parse($d->occurred_at)->utc()->toIso8601ZuluString(),
                     'time_display' => \App\Support\AgencyTime::fmt(\Carbon\Carbon::parse($d->occurred_at), $tz),
                 ];
             });
