@@ -536,7 +536,6 @@
     'announcements': 'Broadcast news to a centre, a room, or the whole agency.',
     'awards': 'Celebrate a child’s effort — daily, weekly or monthly. Parents see it too, and you can print a certificate.',
     'lesson-plans': 'Weekly plans for each room.',
-    'lesson-plans-ai': 'HDLH-aware weekly plans, drafted in seconds.',
     'observations': 'Learning stories and developmental observations for each child.',
     'curriculum': 'Curriculum framework and coverage.',
     'hdlh-gaps': 'Where your programme is light against How Does Learning Happen.',
