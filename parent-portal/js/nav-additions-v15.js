@@ -52,7 +52,7 @@
 
   function sectionLabel(text) {
     const d = document.createElement('div');
-    d.style.cssText = 'padding:8px 16px 4px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:1px;';
+    d.style.cssText = 'padding:8px 16px 4px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:1px;';
     d.textContent = text;
     return d;
   }

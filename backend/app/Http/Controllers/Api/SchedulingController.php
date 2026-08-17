@@ -405,6 +405,13 @@ final class SchedulingController extends Controller
                 'clock_in' => $in->format('H:i'),
                 // Em dash rather than a time: there is no clock-out to show yet.
                 'clock_out' => $isOpen ? '—' : $out->format('H:i'),
+                // Display forms. Raw clock_in/clock_out above stay untouched — the CSV
+                // export and the sort read them, and a display format is not a data format.
+                // Each punch carries its own short date so a shift crossing midnight reads
+                // correctly: 20:00 in on the 17th, 00:45 out on the 18th, plainly.
+                'date_label' => $in->format('D, M j'),
+                'clock_in_label' => $in->format('M j, g:i A'),
+                'clock_out_label' => $isOpen ? '—' : $out->format('M j, g:i A'),
                 'break_min' => $breakMin,
                 'worked_min' => max(0, $minutes),
                 'worked_hours' => round(max(0, $minutes) / 60, 2),
@@ -451,6 +458,9 @@ final class SchedulingController extends Controller
                 'role' => $roleLabel[$m->role] ?? 'Staff',
                 'clock_in' => '—',
                 'clock_out' => '—',
+                'date_label' => '—',
+                'clock_in_label' => '—',
+                'clock_out_label' => '—',
                 'break_min' => 0,
                 'worked_min' => 0,
                 'worked_hours' => 0,

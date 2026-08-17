@@ -7,7 +7,7 @@
   // KT.confirm returns a PROMISE — it does not take a callback. Passing one meant
   // the action never ran: the confirm box appeared, you pressed Yes, and nothing
   // happened. This wraps both shapes safely.
-  function ktConfirmThen(message, onYes) {
+  async function ktConfirmThen(message, onYes) {
     try {
       if (window.KT && KT.confirm) {
         var r = KT.confirm(message);
@@ -15,7 +15,7 @@
         return;   // a non-promise KT.confirm would already have handled it
       }
     } catch (e) {}
-    if (window.confirm(message)) onYes();
+    if (await KT.confirm(message)) onYes();
   }
 
 
@@ -57,7 +57,7 @@
     return isNaN(d) ? '' : d.toLocaleString();
   }
 
-  function isMobile() { return window.matchMedia && window.matchMedia('(max-width:600px)').matches; }
+  function isMobile() { return window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native') || (window.matchMedia && window.matchMedia('(max-width:600px)').matches); }
 
   // ── Phone view: cards, not a table ───────────────────────────────────
   // The desktop view is a sortable/filterable table. Restacking that into cards
@@ -66,7 +66,7 @@
   // with select + delete (single and bulk). No filter box, no sort headers —
   // there's no room for them and the list is short.
   async function renderProviderMobile(container) {
-    container.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;">Loading…</div>';
+    container.innerHTML = '<div style="padding:28px;text-align:center;color:#64748B;">Loading…</div>';
     let data;
     try { data = await api('GET', '/provider/announcements'); }
     catch (e) {
@@ -81,7 +81,7 @@
     const paint = () => {
       const ids = Object.keys(selected).filter(k => selected[k]).map(Number);
       container.innerHTML = `
-        <div class="kt-hero" style="background:linear-gradient(135deg,#1F6080,#0E7C90);">
+        <div class="kt-hero" style="background:linear-gradient(120deg,#0E7C90 0%,#159FB4 42%,#7C3AED 100%);">
           <h1>📢 Alerts</h1>
           <div class="kt-hero-sub">${items.length} sent to your families</div>
         </div>
@@ -102,17 +102,21 @@
                <div style="font-size:38px;">📭</div>
                <div style="font-weight:800;color:#0F172A;margin-top:6px;">No alerts sent yet</div>
              </div>`
-          : items.map(a => {
-              const when = a.sent_at || a.scheduled_at || a.created_at;
-              const scope = a.centre_name || a.scope_name || (a.scope_type === 'agency' ? 'All centres' : a.scope_type) || '';
-              const chips = [a.send_email ? '📧' : '', a.send_push ? '🔔' : '', (a.scheduled_at && !a.sent_at) ? '⏱ scheduled' : ''].filter(Boolean).join(' ');
+          : items.map(function (a, i) {
+              var when = a.sent_at || a.scheduled_at || a.created_at;
+              var scope = a.centre_name || a.scope_name || (a.scope_type === 'agency' ? 'All centres' : a.scope_type) || '';
+              var PAL = [['#159FB4', '#0E7C90'], ['#7C3AED', '#5B21B6'], ['#EC4899', '#BE185D'], ['#F59E0B', '#B45309'], ['#10B981', '#047857'], ['#3B82F6', '#1D4ED8']];
+              var g = PAL[i % PAL.length];
+              var scheduled = (a.scheduled_at && !a.sent_at);
+              var chip = function (bg, fg, txt) { return '<span style="display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:20px;background:' + bg + ';color:' + fg + ';">' + txt + '</span>'; };
+              var chips = [a.send_email ? chip('#EFF6FF', '#1D4ED8', '📧 Email') : '', a.send_push ? chip('#ECFDF5', '#047857', '🔔 Push') : '', scheduled ? chip('#FEF3C7', '#B45309', '⏱ Scheduled') : ''].filter(Boolean).join(' ');
               return `
-                <div class="kt-ann-card" data-id="${a.id}" style="display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid #E7EDF3;border-left:5px solid #159FB4;border-radius:13px;padding:12px 13px;margin-bottom:9px;box-shadow:0 1px 4px rgba(15,23,42,.05);">
-                  ${selecting ? `<input type="checkbox" class="kt-ann-cb" data-id="${a.id}" ${selected[a.id] ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:#159FB4;">` : ''}
+                <div class="kt-ann-card" data-id="${a.id}" style="display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #EDF1F6;border-left:5px solid ${g[0]};border-radius:16px;padding:13px;margin-bottom:11px;box-shadow:0 3px 12px -5px rgba(15,23,42,.18);">
+                  ${selecting ? `<input type="checkbox" class="kt-ann-cb" data-id="${a.id}" ${selected[a.id] ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:${g[0]};">` : `<span style="flex:0 0 auto;width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,${g[0]},${g[1]});display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 6px 14px -6px ${g[0]};">📢</span>`}
                   <div style="flex:1;min-width:0;">
                     <div style="font-weight:800;font-size:15px;color:#0F172A;line-height:1.3;">${esc(a.title || '(untitled)')}</div>
-                    <div style="font-size:13px;color:#475569;line-height:1.45;margin-top:3px;">${esc(plainPreview(a.body, 150))}</div>
-                    <div style="font-size:11px;color:#94A3B8;margin-top:6px;">${esc(scope)} · ${esc(fmtDate(when))}${chips ? ' · ' + chips : ''}</div>
+                    <div style="font-size:13px;color:#475569;line-height:1.45;margin-top:3px;">${esc(plainPreview(a.body, 130))}</div>
+                    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:9px;">${chips}<span style="font-size:11px;color:#94A3B8;">${esc(scope)} · ${esc(fmtDate(when))}</span></div>
                   </div>
                   ${selecting ? '' : `<button class="kt-ann-x" data-id="${a.id}" aria-label="Delete" style="background:none;border:none;color:#CBD5E1;font-size:15px;cursor:pointer;padding:4px;flex-shrink:0;">🗑</button>`}
                 </div>`;
@@ -179,7 +183,7 @@
         <div style="padding:14px;">
           <div style="background:#fff;border:1px solid #E7EDF3;border-left:5px solid #159FB4;border-radius:14px;padding:15px;">
             <div style="font-weight:800;font-size:18px;color:#0F172A;line-height:1.3;">${esc(a.title || '(untitled)')}</div>
-            <div style="font-size:12px;color:#94A3B8;margin-top:6px;">${esc(fmtDate(when))}</div>
+            <div style="font-size:12px;color:#64748B;margin-top:6px;">${esc(fmtDate(when))}</div>
             <div style="font-size:14.5px;color:#334155;line-height:1.6;margin-top:12px;white-space:pre-wrap;">${esc(plainPreview(a.body, 4000))}</div>
           </div>
           <div style="background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:15px;margin-top:11px;">
@@ -210,7 +214,7 @@
 
     function detailRow(label, value) {
       return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #F1F5F9;">'
-        + '<span style="font-size:12.5px;color:#94A3B8;font-weight:700;">' + esc(label) + '</span>'
+        + '<span style="font-size:12.5px;color:#64748B;font-weight:700;">' + esc(label) + '</span>'
         + '<span style="font-size:13.5px;color:#0F172A;text-align:right;">' + esc(value) + '</span>'
         + '</div>';
     }
@@ -247,8 +251,17 @@
     }
     const items = data.announcements || [];
 
+    // Shared icon-button tooltip (used by the New-announcement icon; native `title`
+    // is the fallback). Injected once, reusable platform-wide via `.kt-icon-tip`.
+    if (!document.getElementById('kt-icon-tip-style')) {
+      const _ts = document.createElement('style'); _ts.id = 'kt-icon-tip-style';
+      _ts.textContent = '.kt-icon-tip[data-kttip]:hover::after{content:attr(data-kttip);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:4px 9px;border-radius:6px;z-index:10001;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28);}'
+        + '.kt-icon-tip[data-kttip]:hover::before{content:"";position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#0F172A;z-index:10001;pointer-events:none;}';
+      document.head.appendChild(_ts);
+    }
+
     const state = { sort: 'date', dir: -1, q: '' };
-    const th = (key, label, extra) => `<th data-sort="${key}" class="kt-ann-th" style="text-align:${extra && extra.right ? 'right' : 'left'};padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;cursor:pointer;user-select:none;${extra && extra.w ? 'width:' + extra.w + ';' : ''}">${label} <span class="kt-ar" style="color:#94A3B8;"></span></th>`;
+    const th = (key, label, extra) => `<th data-sort="${key}" class="kt-ann-th" style="text-align:${extra && extra.right ? 'right' : 'left'};padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;cursor:pointer;user-select:none;${extra && extra.w ? 'width:' + extra.w + ';' : ''}">${label} <span class="kt-ar" style="color:#64748B;"></span></th>`;
 
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:20px 24px 0;box-sizing:border-box;">
@@ -257,9 +270,9 @@
             <h2 style="font-size:22px;margin:0;">📢 Announcements</h2>
             <p style="color:#6B7280;font-size:13px;margin:3px 0 0;">${items.length} sent · tap a row to read it</p>
           </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:nowrap;">
             <input id="kt-ann-filter" type="search" placeholder="🔍 Filter…" style="padding:9px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:13px;min-width:190px;">
-            <button id="kt-new-ann" style="background:#1F6080;color:white;border:none;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;">+ New Announcement</button>
+            <button id="kt-new-ann" class="kt-icon-tip" title="New announcement" aria-label="New announcement" data-kttip="New announcement" style="background:#1F6080;color:white;border:none;width:37px;height:37px;border-radius:9px;font-size:17px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;position:relative;flex:0 0 auto;">➕</button>
           </div>
         </div>
         ${items.length === 0
@@ -267,8 +280,8 @@
               <div style="font-size:48px;margin-bottom:12px;">📭</div>
               No announcements sent yet.
             </div>`
-          : `<div style="flex:1 1 auto;min-height:0;max-height:calc(100vh - 210px);overflow-y:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">
-              <table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
+          : `<div class="kt-tbl-scroll" style="flex:1 1 auto;min-height:0;max-height:calc(100vh - 210px);overflow-y:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">
+              <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
                 <thead>
                   <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
                     ${th('scope', 'Sent to', { w: '180px' })}
@@ -299,7 +312,7 @@
         let list = items.map((a, i) => ({ a, i }));
         if (q) list = list.filter(({ a }) => ((a.title || '') + ' ' + (a.centre_name || a.scope_type || '') + ' ' + plainPreview(a.body, 400)).toLowerCase().indexOf(q) !== -1);
         list.sort((x, y) => { const va = sortVal(x.a), vb = sortVal(y.a); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
-        tbody.innerHTML = list.length ? list.map(({ a, i }) => annRow(a, i)).join('') : '<tr><td colspan="4" style="padding:26px;text-align:center;color:#9CA3AF;">No matching announcements.</td></tr>';
+        tbody.innerHTML = list.length ? list.map(({ a, i }) => annRow(a, i)).join('') : '<tr><td colspan="4" style="padding:26px;text-align:center;color:#64748B;">No matching announcements.</td></tr>';
         // Zebra striping + hover + click-to-expand, re-applied after each sort/filter.
         let z = 0;
         tbody.querySelectorAll('.kt-ann-row').forEach((row) => {
@@ -331,7 +344,73 @@
       const fi = $('#kt-ann-filter', container);
       if (fi) fi.addEventListener('input', () => { state.q = fi.value || ''; paint(); });
       paint();
+      enableColResize(container);
     }
+  }
+
+  // Drag the right edge of any header to widen a column and read content that's
+  // otherwise clipped (title/preview especially). On the first drag every column
+  // is frozen to its current pixel width and the table switches to horizontal
+  // scroll — so widening one column never squashes the others.
+  function enableColResize(container) {
+    const table = $('table[data-kt-filtered]', container);
+    if (!table || table.dataset.ktResizable) return;
+    table.dataset.ktResizable = '1';
+    const wrapper = table.parentElement;               // the vertical scroll box
+    if (wrapper) wrapper.style.overflowX = 'auto';
+
+    if (!document.getElementById('kt-col-grip-css')) {
+      const s = document.createElement('style'); s.id = 'kt-col-grip-css';
+      s.textContent = '.kt-col-grip{position:absolute;top:0;right:0;width:9px;height:100%;cursor:col-resize;z-index:2;}'
+        + '.kt-col-grip:hover,.kt-col-grip.kt-grip-drag{background:linear-gradient(to right,transparent,rgba(31,96,128,.28));}';
+      document.head.appendChild(s);
+    }
+
+    const ths = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+    let frozen = false;
+    const freeze = () => {
+      if (frozen) return;
+      ths.forEach(h => { h.style.width = h.offsetWidth + 'px'; });
+      table.style.width = 'auto';
+      table.style.minWidth = '100%';
+      // Lock the scroll box to its current width so widening a column scrolls INSIDE
+      // it instead of growing the flex layout — which pushed the whole page + top bar.
+      if (wrapper) {
+        wrapper.style.boxSizing = 'border-box';
+        wrapper.style.width = wrapper.offsetWidth + 'px';
+        wrapper.style.maxWidth = '100%';
+        wrapper.style.overflowX = 'auto';
+      }
+      frozen = true;
+    };
+
+    ths.forEach((th, idx) => {
+      if (idx === ths.length - 1) return;              // last column just flexes
+      th.style.position = 'relative';
+      const grip = document.createElement('span');
+      grip.className = 'kt-col-grip';
+      grip.title = 'Drag to resize column';
+      th.appendChild(grip);
+      grip.addEventListener('click', (e) => { e.stopPropagation(); });   // never sort
+      grip.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        freeze();
+        grip.classList.add('kt-grip-drag');
+        const startX = e.clientX, startW = th.offsetWidth;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        const move = (ev) => { th.style.width = Math.max(60, startW + (ev.clientX - startX)) + 'px'; };
+        const up = () => {
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+          grip.classList.remove('kt-grip-drag');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+    });
   }
 
   function plainPreview(html, n) {
@@ -353,11 +432,11 @@
           <span style="color:#6B7280;"> — ${esc(plainPreview(a.body))}</span>
         </td>
         <td style="padding:11px 14px;color:#6B7280;white-space:nowrap;">${chips || '—'}</td>
-        <td style="padding:11px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;">${esc(fmtDateTime(a.sent_at || a.created_at))}</td>
+        <td style="padding:11px 14px;text-align:right;color:#64748B;white-space:nowrap;">${esc(fmtDateTime(a.sent_at || a.created_at))}</td>
       </tr>
       <tr class="kt-ann-detail" data-idx="${i}" style="display:none;background:#FAFCFD;">
         <td colspan="4" style="padding:4px 18px 18px;">
-          <div style="font-size:12px;color:#9CA3AF;margin:0 0 8px;">— ${esc(a.sender)} · ${esc(a.scope_type)}${a.centre_name ? ' · ' + esc(a.centre_name) : ''}${a.scheduled_at && !a.sent_at ? ' · ⏱ scheduled' : ''}</div>
+          <div style="font-size:12px;color:#64748B;margin:0 0 8px;">— ${esc(a.sender)} · ${esc(a.scope_type)}${a.centre_name ? ' · ' + esc(a.centre_name) : ''}${a.scheduled_at && !a.sent_at ? ' · ⏱ scheduled' : ''}</div>
           <div style="font-size:14px;color:#374151;line-height:1.6;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
         </td>
       </tr>`;
@@ -368,7 +447,7 @@
       <div style="background:white;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.04);">
         <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:6px;">
           <div style="font-weight:700;font-size:16px;color:#111827;">${esc(a.title)}</div>
-          <div style="font-size:12px;color:#9CA3AF;flex-shrink:0;">${esc(fmtDate(a.sent_at || a.created_at))}</div>
+          <div style="font-size:12px;color:#64748B;flex-shrink:0;">${esc(fmtDate(a.sent_at || a.created_at))}</div>
         </div>
         <div style="font-size:14px;color:#6B7280;display:flex;gap:10px;margin-bottom:8px;">
           <span>📍 ${esc(a.scope_type)} ${a.centre_name ? '· ' + esc(a.centre_name) : ''}</span>
@@ -377,7 +456,7 @@
           ${a.scheduled_at && !a.sent_at ? '<span style="color:#F59E0B;">⏱ scheduled</span>' : ''}
         </div>
         <div style="font-size:14px;color:#374151;line-height:1.5;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
-        <div style="font-size:12px;color:#9CA3AF;margin-top:8px;">— ${esc(a.sender)}</div>
+        <div style="font-size:12px;color:#64748B;margin-top:8px;">— ${esc(a.sender)}</div>
       </div>
     `;
   }
@@ -405,7 +484,7 @@
               </select>
               ${noCentres
                 ? `<div style="font-size:12px;color:#B91C1C;margin-top:4px;">⚠ No centres available for this account. Announcements can only be sent by a centre director or agency admin — check you're signed in with that role.</div>`
-                : `<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">All families with children at this centre will receive it.</div>`}
+                : `<div style="font-size:11px;color:#64748B;margin-top:2px;">All families with children at this centre will receive it.</div>`}
             </div>
             <input name="title" required placeholder="Title *" maxlength="200" style="${inp()}">
             <div>
@@ -529,21 +608,25 @@
     const items = data.announcements || [];
 
     container.innerHTML = `
-      <div style="padding:24px;max-width:1800px;">
-        <h2 style="font-size:24px;margin:0 0 16px;">📢 Announcements</h2>
+      <div style="padding:18px 14px;max-width:900px;margin:0 auto;">
+        <div class="kt-hero" style="background:linear-gradient(135deg,#1F6080,#0E7C90);margin-bottom:14px;">
+          <h1>📰 News</h1>
+          <div class="kt-hero-sub">${items.length ? items.length + ' update' + (items.length === 1 ? '' : 's') + ' from your centre' : 'Updates from your centre'}</div>
+        </div>
         ${items.length === 0
-          ? `<div style="text-align:center;padding:48px;background:white;border-radius:14px;color:#6B7280;">
-              <div style="font-size:48px;margin-bottom:12px;">📭</div>
-              Nothing here yet — when your centre sends an announcement, it'll appear here.
+          ? `<div style="text-align:center;padding:40px 20px;background:white;border-radius:14px;color:#6B7280;">
+              <div style="font-size:44px;margin-bottom:10px;">📭</div>
+              <div style="font-weight:800;color:#0F172A;margin-bottom:4px;">No news yet</div>
+              When your centre posts an update, it'll appear here.
             </div>`
-          : `<div data-kt-list="1" style="display:grid;gap:12px;">
+          : `<div data-kt-list="1" style="display:grid;gap:11px;">
               ${items.map(a => `
-                <div style="background:white;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.04);">
-                  <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                    <div style="font-weight:700;font-size:16px;">${esc(a.title)}</div>
-                    <div style="font-size:12px;color:#9CA3AF;">${esc(fmtDate(a.sent_at))}</div>
+                <div style="background:white;border:1px solid #E7EDF3;border-left:5px solid #159FB4;border-radius:13px;padding:14px 16px;box-shadow:0 1px 4px rgba(15,23,42,.05);">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:5px;">
+                    <div style="font-weight:800;font-size:15.5px;color:#0F172A;line-height:1.3;">${esc(a.title)}</div>
+                    <div style="font-size:11.5px;color:#64748B;white-space:nowrap;flex-shrink:0;">${esc(fmtDate(a.sent_at))}</div>
                   </div>
-                  <div style="font-size:14px;color:#374151;line-height:1.5;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
+                  <div style="font-size:14px;color:#374151;line-height:1.55;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
                 </div>
               `).join('')}
             </div>`
@@ -575,15 +658,43 @@
     if (document.getElementById('kt-rte-css')) return;
     var s = document.createElement('style');
     s.id = 'kt-rte-css';
-    s.textContent = '#kt-rte:empty:before{content:attr(data-ph);color:#9CA3AF;pointer-events:none;}'
+    s.textContent = '#kt-rte:empty:before{content:attr(data-ph);color:#64748B;pointer-events:none;}'
       + '#kt-rte-tb button:hover{background:#EFF2F6;}#kt-rte a{color:#1F6080;}';
     document.head.appendChild(s);
   })();
 
+  // Read-only announcements for the home visitor — they see their agency's
+  // announcements but never the composer (they don't broadcast).
+  async function renderReadOnly(container) {
+    container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading…</div>';
+    let data;
+    try { data = await api('GET', '/provider/announcements'); }
+    catch (e) { container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>'; return; }
+    const items = data.announcements || data.data || [];
+    const when = (a) => fmtDate(a.sent_at || a.created_at || a.scheduled_at || '');
+    container.innerHTML = `
+      <div style="padding:24px;max-width:900px;">
+        <h2 style="font-size:24px;margin:0 0 16px;">📢 Announcements</h2>
+        ${items.length === 0
+          ? `<div style="text-align:center;padding:48px;background:white;border-radius:14px;color:#6B7280;"><div style="font-size:48px;margin-bottom:12px;">📭</div>Nothing here yet — announcements from your agency will appear here.</div>`
+          : `<div data-kt-list="1" style="display:grid;gap:12px;">
+              ${items.map(a => `
+                <div style="background:white;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.04);">
+                  <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:6px;">
+                    <div style="font-weight:700;font-size:16px;">${esc(a.title)}</div>
+                    <div style="font-size:12px;color:#64748B;white-space:nowrap;">${esc(when(a))}</div>
+                  </div>
+                  <div style="font-size:14px;color:#374151;line-height:1.5;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
+                </div>`).join('')}
+            </div>`}
+      </div>`;
+  }
+
   function render(container) {
     const role = getRole();
-    if (role === 'guardian') renderParent(container);
-    else renderProvider(container);
+    if (role === 'guardian') return renderParent(container);
+    if (role === 'home_visitor') return renderReadOnly(container);
+    renderProvider(container);
   }
 
   window.KT = window.KT || {};

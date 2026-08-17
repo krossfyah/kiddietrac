@@ -141,7 +141,7 @@
         });
       };
       var sv = card.querySelector('.ss-save'); if (sv) sv.onclick = function () { save(false); };
-      var cl = card.querySelector('.ss-clear'); if (cl) cl.onclick = function () { if (confirm('Disable ' + provider + ' sign-in? Its credentials will be cleared.')) save(true); };
+      var cl = card.querySelector('.ss-clear'); if (cl) cl.onclick = async function () { if (await KT.confirm('Disable ' + provider + ' sign-in? Its credentials will be cleared.')) save(true); };
     });
   }
 

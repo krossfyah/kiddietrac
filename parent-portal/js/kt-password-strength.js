@@ -48,7 +48,7 @@
       '<button type="button" class="ktps-suggest" style="background:none;border:none;color:#7C3AED;font-weight:700;font-size:12px;cursor:pointer;padding:2px 0;">✨ Suggest a strong password</button>' +
       '<div class="ktps-meter" style="height:6px;border-radius:4px;background:#EEF0F4;overflow:hidden;margin:6px 0 4px;"><div style="height:100%;width:0;border-radius:4px;transition:width .25s,background .25s;"></div></div>' +
       '<div class="ktps-label" style="font-size:11px;font-weight:700;min-height:14px;"></div>' +
-      '<ul class="ktps-reqs" style="list-style:none;font-size:11px;color:#94A3B8;margin:4px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;">' +
+      '<ul class="ktps-reqs" style="list-style:none;font-size:11px;color:#64748B;margin:4px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;">' +
         '<li data-r="len">8+ characters</li><li data-r="upper">Uppercase letter</li>' +
         '<li data-r="num">A number</li><li data-r="spec">Special character</li>' +
       '</ul>';

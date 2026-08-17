@@ -72,6 +72,7 @@
     'Provider map': { fr: 'Carte des prestataires', es: 'Mapa de proveedores', hi: 'प्रदाता मानचित्र' },
     'Daily log': { fr: 'Journal quotidien', es: 'Registro diario', hi: 'दैनिक लॉग' },
     'Messages': { fr: 'Messages', es: 'Mensajes', hi: 'संदेश' },
+    'Messenger': { fr: 'Messagerie', es: 'Mensajería', hi: 'संदेशवाहक' },
     'Announcements': { fr: 'Annonces', es: 'Anuncios', hi: 'घोषणाएँ' },
     'Lesson plans': { fr: 'Plans de leçon', es: 'Planes de clase', hi: 'पाठ योजनाएँ' },
     'AI Lesson Plans': { fr: 'Plans de leçon IA', es: 'Planes de clase con IA', hi: 'एआई पाठ योजनाएँ' },
@@ -1167,7 +1168,7 @@
     } catch (e) {}
   }
 
-  function injectLoginPicker() {
+  function injectLoginPicker() { return; /* removed: language set at onboarding/settings */
     try {
       if (document.getElementById('kt-tb-locale')) return;      // the app top bar owns it
       if (document.getElementById('kt-login-locale')) return;   // already injected
@@ -1257,5 +1258,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
   else apply();
   window.addEventListener('hashchange', function () { setTimeout(apply, 60); });
-  setInterval(apply, 400);
+  setInterval(apply, 2500);
 })(window);

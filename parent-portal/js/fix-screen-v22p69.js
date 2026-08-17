@@ -124,19 +124,23 @@
         </div>`;
         return;
       }
+      var _dist = (r.distance_m == null) ? '—' : (r.distance_m >= 1000 ? (r.distance_m / 1000).toFixed(2) + ' km' : Math.round(r.distance_m) + ' m');
+      var _steps = (r.steps_est == null) ? '—' : (r.steps_est >= 1000 ? (r.steps_est / 1000).toFixed(1) + 'k' : String(r.steps_est));
+      var _dur = !r.duration_min ? '—' : (r.duration_min < 60 ? r.duration_min + ' min' : Math.floor(r.duration_min / 60) + 'h ' + (r.duration_min % 60) + 'm');
       det.innerHTML = `<div class="kt-kpi-grid">
-        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Latitude</div><div class="kt-kpi-value">${parseFloat(r.latest.lat).toFixed(5)}</div></div>
-        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Longitude</div><div class="kt-kpi-value">${parseFloat(r.latest.lon).toFixed(5)}</div></div>
+        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Distance</div><div class="kt-kpi-value">${_dist}</div></div>
+        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Steps (est.)</div><div class="kt-kpi-value">${_steps}</div></div>
+        <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Time out</div><div class="kt-kpi-value" style="font-size:18px;">${_dur}</div></div>
         <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Last ping</div><div class="kt-kpi-value" style="font-size:18px;">${fmtTime(r.latest.recorded_at)}</div></div>
-        <div class="kt-kpi"><div class="kt-kpi-label">Trail length</div><div class="kt-kpi-value">${r.trail.length}</div></div>
       </div>
-      <div style="margin-top:18px;">
-        <iframe width="100%" height="500" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"
-          src="https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(r.latest.lon)-0.01},${parseFloat(r.latest.lat)-0.01},${parseFloat(r.latest.lon)+0.01},${parseFloat(r.latest.lat)+0.01}&layer=mapnik&marker=${r.latest.lat},${r.latest.lon}"></iframe>
-        <div style="margin-top:8px;font-size:12px;color:#94A3B8;">
-          <a href="https://www.openstreetmap.org/?mlat=${r.latest.lat}&mlon=${r.latest.lon}#map=15/${r.latest.lat}/${r.latest.lon}" target="_blank" style="color:#1F6080;">View larger map</a>
-        </div>
-      </div>`;
+      <div id="ft-livemap" style="margin-top:18px;height:500px;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0;background:#EAF2F8;"></div>`;
+      // Live, moving Leaflet map (auto-refreshes) — same engine parents & educators see.
+      try {
+        if (det._ktstop) det._ktstop();
+        if (window.KT && KT.WalkTracker && KT.WalkTracker.mountLiveMap) {
+          det._ktstop = KT.WalkTracker.mountLiveMap(document.getElementById('ft-livemap'), tid);
+        }
+      } catch (e) {}
     };
   }
 
@@ -225,7 +229,7 @@
         <tbody>${rows.map(r => `<tr>
           <td style="padding:10px;border-bottom:1px solid #F1F5F9;"><strong>${esc(r.name)}</strong></td>
           <td style="padding:10px;border-bottom:1px solid #F1F5F9;color:#64748B;font-family:monospace;font-size:13px;">${esc(r.method)} ${esc(r.path)}</td>
-          <td style="padding:10px;border-bottom:1px solid #F1F5F9;text-align:right;color:#94A3B8;">${r.ms}ms</td>
+          <td style="padding:10px;border-bottom:1px solid #F1F5F9;text-align:right;color:#64748B;">${r.ms}ms</td>
           <td style="padding:10px;border-bottom:1px solid #F1F5F9;text-align:right;">${badge(r.code)}</td>
         </tr>`).join('')}</tbody></table>`;
     };

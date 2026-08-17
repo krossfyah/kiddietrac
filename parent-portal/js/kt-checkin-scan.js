@@ -4,8 +4,13 @@
    ("KTCHK.<centre>.<ymd>.<sig>") and toggles the parent's enrolled
    children in / out via POST /parent/checkin/scan.
 
-   • Uses the native BarcodeDetector (Android WebView / Chrome) — no CDN,
-     nothing leaves the device until a valid KiddieTrac code is submitted.
+   • Decoding, in order: the native @capacitor/barcode-scanner plugin, then
+     BarcodeDetector, then manual code entry. BarcodeDetector is a Chromium API
+     and does NOT exist in WKWebView, so on iOS the native plugin is the only
+     thing that scans — without it an iPhone silently falls through to typing
+     the code by hand. The plugin is absent from Android APKs built before
+     2026-07-17, which is why BarcodeDetector stays as the fallback.
+   • No CDN; nothing leaves the device until a valid KiddieTrac code is submitted.
    • Camera stream is always stopped on leave (back, success, or navigating
      away) so the light/indicator never stays on.
    • Registered as the `scan` screen for guardians; `checkin` also routes
@@ -38,13 +43,15 @@
     return e;
   }
 
-  function post(code) {
-    if (KT.Api && KT.Api.post) return KT.Api.post('/parent/checkin/scan', { code: code });
+  function post(code, childIds) {
+    var payload = { code: code };
+    if (childIds && childIds.length) payload.child_ids = childIds;
+    if (KT.Api && KT.Api.post) return KT.Api.post('/parent/checkin/scan', payload);
     var t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
     var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
     var h = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + t };
     try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; } catch (e) {}
-    return fetch(base + '/parent/checkin/scan', { method: 'POST', headers: h, body: JSON.stringify({ code: code }) })
+    return fetch(base + '/parent/checkin/scan', { method: 'POST', headers: h, body: JSON.stringify(payload) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message || 'Check-in failed'); return j; }); });
   }
 
@@ -98,7 +105,51 @@
     startCamera(video, status, foot);
   }
 
+  // The native scanner, when we're running inside the app and the plugin is in the
+  // build. Returns null in a browser, and in any Android APK built before the plugin
+  // was added — both of which fall through to the BarcodeDetector path below.
+  function nativeScanner() {
+    try {
+      var C = window.Capacitor;
+      if (!C || typeof C.isNativePlatform !== 'function' || !C.isNativePlatform()) return null;
+      var p = C.Plugins && C.Plugins.CapacitorBarcodeScanner;
+      return (p && typeof p.scanBarcode === 'function') ? p : null;
+    } catch (e) { return null; }
+  }
+
+  // hint 0 = QR_CODE, cameraDirection 1 = BACK. Raw numbers because the portal is
+  // served remotely and can't import the plugin's TS enums.
+  function nativeScan(plugin, video, status, foot) {
+    // The plugin presents its own full-screen native camera; our <video> and scan
+    // frame are never visible behind it, so don't leave a black rectangle there.
+    try { video.style.display = 'none'; } catch (e) {}
+    status.textContent = 'Opening camera…';
+    plugin.scanBarcode({
+      hint: 0,
+      cameraDirection: 1,
+      scanInstructions: 'Point your camera at the centre’s check-in QR code.'
+    }).then(function (res) {
+      var v = (res && res.ScanResult) || '';
+      if (/^KTCHK\./.test(v)) { submit(v, status, foot); return; }
+      if (!v) { location.hash = '#home'; return; }  // dismissed without scanning
+      fail(status, 'That isn’t a KiddieTrac check-in code.', foot);
+      retryBtn(foot);
+      manualFallback(status, foot, 'Or enter the code shown under the centre’s QR:');
+    }).catch(function (err) {
+      // Cancelling rejects rather than resolving empty on some platforms.
+      if (/cancel/i.test(String((err && (err.message || err.errorMessage)) || ''))) {
+        location.hash = '#home'; return;
+      }
+      fail(status, 'Could not start the camera.', foot);
+      retryBtn(foot);
+      manualFallback(status, foot, 'Or enter the code shown under the centre’s QR:');
+    });
+  }
+
   function startCamera(video, status, foot) {
+    var np = nativeScanner();
+    if (np) return nativeScan(np, video, status, foot);
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return fail(status, 'Camera not available on this device.', foot);
     }
@@ -142,11 +193,65 @@
     status.textContent = 'Checking you in…';
     if (navigator.vibrate) { try { navigator.vibrate(40); } catch (e) {} }
     post(code).then(function (res) {
+      if (res && res.needs_selection) { showSelect(code, res.children || []); return; }
       showResult((res && res.results) || [], status, foot);
     }).catch(function (e) {
       fail(status, (e && e.message) || 'Could not check in — please try again.', foot);
       retryBtn(foot);
     });
+  }
+
+  // More than one child on this account: ask WHICH to sign in/out (default all
+  // selected) and let the parent commit them together in one tap.
+  function showSelect(code, children) {
+    var main = document.getElementById('appMain'); if (!main) return;
+    main.innerHTML = '';
+    var wrap = el('div', 'position:fixed;inset:0;z-index:9700;background:linear-gradient(160deg,#0E7C90,#0D1B2A);overflow-y:auto;color:#fff;');
+    var sheet = el('div', 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(env(safe-area-inset-top,0px) + 28px) 24px calc(env(safe-area-inset-bottom,0px) + 28px);box-sizing:border-box;');
+    sheet.appendChild(el('div', 'font-size:52px;line-height:1;margin-bottom:8px;', '\uD83D\uDC4B'));
+    sheet.appendChild(el('div', 'font-weight:800;font-size:21px;margin-bottom:4px;', 'Who are you here for?'));
+    sheet.appendChild(el('div', 'font-size:13.5px;opacity:.85;margin-bottom:18px;max-width:320px;', 'Tap to include or leave out a child, then confirm — you can do them both at once.'));
+
+    var card = el('div', 'background:rgba(255,255,255,.12);border-radius:18px;padding:8px 8px;max-width:340px;width:100%;');
+    var chosen = {};
+    children.forEach(function (c) {
+      chosen[c.child_id] = true;   // default: everyone selected
+      var row = el('button', 'display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;color:#fff;padding:13px 12px;cursor:pointer;text-align:left;border-bottom:1px solid rgba(255,255,255,.14);');
+      var box = el('span', 'flex:0 0 auto;width:24px;height:24px;border-radius:7px;border:2px solid rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;', '\u2713');
+      var mid = el('div', 'flex:1;min-width:0;');
+      mid.appendChild(el('div', 'font-weight:700;font-size:16px;', c.name));
+      mid.appendChild(el('div', 'font-size:12px;opacity:.8;', c.is_in ? 'Currently checked in' : 'Not checked in yet'));
+      var tag = el('div', 'font-size:12px;font-weight:800;padding:4px 11px;border-radius:20px;white-space:nowrap;background:' + (c.action === 'check_in' ? 'rgba(52,211,153,.28)' : 'rgba(251,191,36,.28)') + ';', c.action_label);
+      row.appendChild(box); row.appendChild(mid); row.appendChild(tag);
+      function paint() {
+        var on = chosen[c.child_id];
+        box.style.background = on ? '#34D399' : 'transparent';
+        box.style.borderColor = on ? '#34D399' : 'rgba(255,255,255,.7)';
+        box.textContent = on ? '\u2713' : '';
+        row.style.opacity = on ? '1' : '.5';
+      }
+      row.addEventListener('click', function () { chosen[c.child_id] = !chosen[c.child_id]; paint(); });
+      paint();
+      card.appendChild(row);
+    });
+    if (card.lastChild) card.lastChild.style.borderBottom = 'none';
+    sheet.appendChild(card);
+
+    var btns = el('div', 'display:flex;flex-direction:column;gap:10px;margin-top:22px;width:100%;max-width:340px;');
+    var confirm = el('button', 'background:#fff;color:' + NAVY + ';border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:800;cursor:pointer;', 'Confirm');
+    confirm.addEventListener('click', function () {
+      var ids = children.map(function (c) { return c.child_id; }).filter(function (id) { return chosen[id]; });
+      if (!ids.length) { confirm.textContent = 'Pick at least one child'; setTimeout(function () { confirm.textContent = 'Confirm'; }, 1600); return; }
+      confirm.disabled = true; confirm.textContent = 'Saving…';
+      post(code, ids).then(function (res) { showResult((res && res.results) || [], null, null); })
+        .catch(function (e) { confirm.disabled = false; confirm.textContent = 'Confirm'; alert((e && e.message) || 'Could not save — please try again.'); });
+    });
+    var cancel = el('button', 'background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5);border-radius:14px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;', 'Cancel');
+    cancel.addEventListener('click', function () { location.hash = '#home'; });
+    btns.appendChild(confirm); btns.appendChild(cancel);
+    sheet.appendChild(btns);
+    wrap.appendChild(sheet);
+    main.appendChild(wrap);
   }
 
   function showResult(results, status, foot) {

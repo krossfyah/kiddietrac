@@ -77,7 +77,7 @@
   // ── My hours (the "payroll" view) ───────────────────────────────────
   async function renderMyHours(main) {
     main.innerHTML = hero('My hours', 'Your clocked time and scheduled shifts')
-      + '<div id="eh-body"><div style="padding:24px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+      + '<div id="eh-body"><div style="padding:24px;text-align:center;color:#64748B;">Loading…</div></div>';
     var body = main.querySelector('#eh-body');
 
     var punches = [], shifts = [];
@@ -110,10 +110,10 @@
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'
       + '<div style="' + CARD + 'margin:0;text-align:center;"><div style="font-size:11px;font-weight:800;color:#64748B;letter-spacing:.6px;">THIS MONTH</div>'
       + '<div style="font-size:26px;font-weight:800;color:#0F172A;margin-top:4px;">' + fmtHours(monthHours) + '</div>'
-      + '<div style="font-size:11.5px;color:#94A3B8;">worked</div></div>'
+      + '<div style="font-size:11.5px;color:#64748B;">worked</div></div>'
       + '<div style="' + CARD + 'margin:0;text-align:center;"><div style="font-size:11px;font-weight:800;color:#64748B;letter-spacing:.6px;">SCHEDULED</div>'
       + '<div style="font-size:26px;font-weight:800;color:' + TEAL + ';margin-top:4px;">' + fmtHours(scheduled) + '</div>'
-      + '<div style="font-size:11.5px;color:#94A3B8;">next 4 weeks</div></div>'
+      + '<div style="font-size:11.5px;color:#64748B;">next 4 weeks</div></div>'
       + '</div>';
 
     if (open) {
@@ -127,13 +127,13 @@
     html += '<div style="' + CARD + '">';
     html += '<div style="font-weight:800;font-size:15px;color:#0F172A;margin-bottom:10px;">Recent days</div>';
     if (!days.length) {
-      html += '<div style="color:#94A3B8;font-size:13.5px;padding:8px 0;">No completed shifts on the clock yet. Hours appear here once you clock out.</div>';
+      html += '<div style="color:#64748B;font-size:13.5px;padding:8px 0;">No completed shifts on the clock yet. Hours appear here once you clock out.</div>';
     } else {
       days.slice(0, 30).forEach(function (d) {
         var e = byDay[d];
         html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F1F5F9;">'
           + '<div><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + esc(fmtDay(d)) + '</div>'
-          + '<div style="font-size:11.5px;color:#94A3B8;">' + e.rows.map(function (r) { return fmtTime(r.punched_in_at) + '–' + fmtTime(r.punched_out_at); }).join(', ') + '</div></div>'
+          + '<div style="font-size:11.5px;color:#64748B;">' + e.rows.map(function (r) { return fmtTime(r.punched_in_at) + '–' + fmtTime(r.punched_out_at); }).join(', ') + '</div></div>'
           + '<div style="font-weight:800;font-size:14px;color:' + TEAL + ';">' + fmtHours(e.hours) + '</div>'
           + '</div>';
       });
@@ -142,7 +142,7 @@
     }
     html += '</div>';
 
-    html += '<div style="font-size:11.5px;color:#94A3B8;text-align:center;padding:0 12px 8px;line-height:1.5;">'
+    html += '<div style="font-size:11.5px;color:#64748B;text-align:center;padding:0 12px 8px;line-height:1.5;">'
       + 'Hours are taken from the time clock. Pay is worked out by your centre — talk to your director if something looks wrong.</div>';
 
     body.innerHTML = html;
@@ -151,7 +151,7 @@
   // ── My calendar ─────────────────────────────────────────────────────
   async function renderMySchedule(main) {
     main.innerHTML = hero('My calendar', 'Your upcoming shifts')
-      + '<div id="es-body"><div style="padding:24px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+      + '<div id="es-body"><div style="padding:24px;text-align:center;color:#64748B;">Loading…</div></div>';
     var body = main.querySelector('#es-body');
 
     var data = null;
@@ -178,7 +178,7 @@
     var html = '<div style="' + CARD + 'text-align:center;margin-bottom:14px;">'
       + '<div style="font-size:11px;font-weight:800;color:#64748B;letter-spacing:.6px;">SCHEDULED</div>'
       + '<div style="font-size:26px;font-weight:800;color:' + TEAL + ';margin-top:2px;">' + fmtHours(data.scheduled_hours || 0) + '</div>'
-      + '<div style="font-size:11.5px;color:#94A3B8;">' + shifts.length + ' shift' + (shifts.length === 1 ? '' : 's') + ' · to ' + esc(data.to || '') + '</div></div>';
+      + '<div style="font-size:11.5px;color:#64748B;">' + shifts.length + ' shift' + (shifts.length === 1 ? '' : 's') + ' · to ' + esc(data.to || '') + '</div></div>';
 
     Object.keys(byDay).sort().forEach(function (day) {
       var isToday = day === today;
@@ -190,7 +190,7 @@
         html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;">'
           + '<span style="width:9px;height:9px;border-radius:50%;background:' + esc(colour) + ';flex:0 0 auto;"></span>'
           + '<div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + fmtTime(s.starts_at) + ' – ' + fmtTime(s.ends_at) + '</div>'
-          + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(s.room_name || 'Centre') + (s.role ? ' · ' + esc(s.role) : '') + '</div></div>'
+          + '<div style="font-size:11.5px;color:#64748B;">' + esc(s.room_name || 'Centre') + (s.role ? ' · ' + esc(s.role) : '') + '</div></div>'
           + (s.hours ? '<div style="font-weight:800;font-size:13px;color:#64748B;">' + fmtHours(s.hours) + '</div>' : '')
           + '</div>';
       });
@@ -202,7 +202,7 @@
   // ── Child records ───────────────────────────────────────────────────
   async function renderChildren(main) {
     main.innerHTML = hero('Child records', 'Children in your rooms')
-      + '<div id="ec-body"><div style="padding:24px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+      + '<div id="ec-body"><div style="padding:24px;text-align:center;color:#64748B;">Loading…</div></div>';
     var body = main.querySelector('#ec-body');
 
     var boot;
@@ -242,7 +242,7 @@
         var sec = document.createElement('div');
         sec.style.cssText = CARD;
         sec.innerHTML = '<div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:6px;">'
-          + esc(r.room.name) + ' <span style="color:#94A3B8;font-weight:600;">· ' + kids.length + '</span></div>';
+          + esc(r.room.name) + ' <span style="color:#64748B;font-weight:600;">· ' + kids.length + '</span></div>';
         kids.forEach(function (c) {
           var row = document.createElement('button');
           row.type = 'button';
@@ -250,15 +250,15 @@
           var flags = (c.urgent_flags || []).length;
           row.innerHTML = KT.avatar((c.first_name || '') + ' ' + (c.last_name || ''), { size: 38, photoUrl: c.photo_url ? absUrl(c.photo_url) : '' })
             + '<span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:#0F172A;">' + esc((c.first_name || '') + ' ' + (c.last_name || '')) + '</span>'
-            + '<span style="display:block;font-size:11.5px;color:#94A3B8;">' + esc(c.age_human || '') + (c.is_at_centre ? ' · <span style="color:#16A34A;font-weight:700;">At centre</span>' : '') + '</span></span>'
+            + '<span style="display:block;font-size:11.5px;color:#64748B;">' + esc(c.age_human || '') + (c.is_at_centre ? ' · <span style="color:#16A34A;font-weight:700;">At centre</span>' : '') + '</span></span>'
             + (flags ? '<span style="font-size:15px;">⚠️</span>' : '')
             + '<span style="color:#CBD5E1;font-size:18px;">›</span>';
-          row.addEventListener('click', function () { openChildRecord(c.id); });
+          row.addEventListener('click', function () { location.hash = '#child-record?id=' + c.id; });
           sec.appendChild(row);
         });
         list.appendChild(sec);
       });
-      if (!shown) list.innerHTML = '<div style="' + CARD + 'text-align:center;color:#94A3B8;">No children match “' + esc(q) + '”.</div>';
+      if (!shown) list.innerHTML = '<div style="' + CARD + 'text-align:center;color:#64748B;">No children match “' + esc(q) + '”.</div>';
     }
     paint('');
     search.addEventListener('input', function () { paint(search.value); });
@@ -266,20 +266,24 @@
 
   // Full-screen child record. Registered with the overlay stack so the Android
   // back button (and the ‹ button) closes it instead of navigating away.
-  async function openChildRecord(childId) {
+  // Child record renders as a NORMAL in-#appMain screen (hash: #child-record?id=N)
+  // so it keeps the app chrome (top bar + bottom nav) and behaves like every other
+  // screen. It used to be a position:fixed;inset:0 body overlay that covered the
+  // whole app — that read as "opens full screen, not like the other screens".
+  async function renderChildRecordScreen(main) {
+    var childId = null;
+    try { childId = new URLSearchParams((location.hash.split('?')[1] || '')).get('id'); } catch (e) {}
     var ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:9600;background:#F6F9FC;overflow-y:auto;-webkit-overflow-scrolling:touch;';
-    ov.innerHTML = '<div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #E7EDF3;padding:12px 14px;display:flex;align-items:center;gap:10px;z-index:2;">'
-      + '<button type="button" data-back style="background:none;border:none;font-size:22px;color:' + TEAL + ';cursor:pointer;padding:0 4px;">‹</button>'
-      + '<span style="font-weight:800;font-size:16px;color:#0F172A;">Child record</span></div>'
-      + '<div id="cr-body" style="padding:14px;"><div style="text-align:center;color:#94A3B8;padding:30px;">Loading…</div></div>';
-    document.body.appendChild(ov);
-    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    ov.setAttribute('data-kt-no-autohero', '1');   // we render our own compact header below
+    ov.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 12px;">'
+      + '<button type="button" data-back style="background:none;border:none;font-size:24px;color:' + TEAL + ';cursor:pointer;padding:0 2px;line-height:1;">‹</button>'
+      + '<span style="font-weight:800;font-size:18px;color:#0F172A;">Child record</span></div>'
+      + '<div id="cr-body"><div style="text-align:center;color:#64748B;padding:30px;">Loading…</div></div>';
+    main.appendChild(ov);
     ov.querySelector('[data-back]').addEventListener('click', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      if (KT.popOverlay) KT.popOverlay(ov); else close();
+      e.preventDefault();
+      if (window.history.length > 1) window.history.back(); else location.hash = '#children';
     });
-    if (KT.pushOverlay) KT.pushOverlay(ov, close);
 
     var d;
     try { d = await Api.get('/provider/children/' + childId); }
@@ -320,14 +324,14 @@
 
     var guardians = d.guardians || [];
     html += '<div style="' + CARD + '"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">Parents / guardians</div>';
-    if (!guardians.length) html += '<div style="color:#94A3B8;font-size:13px;">No guardians on file.</div>';
+    if (!guardians.length) html += '<div style="color:#64748B;font-size:13px;">No guardians on file.</div>';
     guardians.forEach(function (g, i) {
       var gname = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
       html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
         + KT.avatar(gname, { size: 34, photoUrl: g.photo_url ? absUrl(g.photo_url) : '' })
         + '<div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + esc(gname)
         + (g.is_primary ? ' <span style="font-size:10px;background:#E1F3F6;color:#0E7C90;border-radius:5px;padding:1px 5px;font-weight:800;">PRIMARY</span>' : '') + '</div>'
-        + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(g.relationship || 'Guardian') + (g.can_pickup ? ' · may collect' : '') + '</div></div>'
+        + '<div style="font-size:11.5px;color:#64748B;">' + esc(g.relationship || 'Guardian') + (g.can_pickup ? ' · may collect' : '') + '</div></div>'
         + (g.phone ? '<a href="tel:' + esc(g.phone) + '" style="background:' + TEAL + ';color:#fff;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;text-decoration:none;">Call</a>' : '')
         + '</div>';
     });
@@ -339,11 +343,11 @@
 
     var ec = d.emergency_contacts || [];
     html += '<div style="' + CARD + '"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">Emergency contacts</div>';
-    if (!ec.length) html += '<div style="color:#94A3B8;font-size:13px;">None on file.</div>';
+    if (!ec.length) html += '<div style="color:#64748B;font-size:13px;">None on file.</div>';
     ec.forEach(function (e, i) {
       html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
         + '<div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + esc(e.name) + '</div>'
-        + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(e.relationship || '') + (e.can_pickup ? ' · may collect' : '') + '</div></div>'
+        + '<div style="font-size:11.5px;color:#64748B;">' + esc(e.relationship || '') + (e.can_pickup ? ' · may collect' : '') + '</div></div>'
         + (e.phone ? '<a href="tel:' + esc(e.phone) + '" style="background:#0F172A;color:#fff;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;text-decoration:none;">Call</a>' : '')
         + '</div>';
     });
@@ -374,9 +378,9 @@
       if (!el) return;
       var rows = hist.slice(0, shown);
       var h2 = '<div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">'
-        + 'Log history <span style="color:#94A3B8;font-weight:600;">· ' + hist.length + '</span></div>';
+        + 'Log history <span style="color:#64748B;font-weight:600;">· ' + hist.length + '</span></div>';
       if (!hist.length) {
-        h2 += '<div style="color:#94A3B8;font-size:13px;">Nothing logged for this child yet.</div>';
+        h2 += '<div style="color:#64748B;font-size:13px;">Nothing logged for this child yet.</div>';
       }
       h2 += rows.map(function (h, i) { return historyRow(h, i); }).join('');
       if (shown < hist.length) {
@@ -398,19 +402,19 @@
         + esc(LABELS[h.kind] || (h.kind.charAt(0).toUpperCase() + h.kind.slice(1)))
         + (h.detail ? ' <span style="font-weight:400;color:#475569;">· ' + esc(h.detail) + '</span>' : '') + '</div>'
         + (h.note ? '<div style="font-size:12px;color:#64748B;margin-top:1px;">' + esc(h.note) + '</div>' : '')
-        + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + esc(fmtHist(h.at))
+        + '<div style="font-size:11px;color:#64748B;margin-top:2px;">' + esc(fmtHist(h.at))
         + (h.by ? ' · by ' + esc(h.by) : '') + '</div>'
         + '</div></div>';
     }
 
     var pk = d.pickup_authorizations || [];
     html += '<div style="' + CARD + 'margin-bottom:40px;"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">Authorised for pickup</div>';
-    if (!pk.length) html += '<div style="color:#94A3B8;font-size:13px;">Only the guardians listed above.</div>';
+    if (!pk.length) html += '<div style="color:#64748B;font-size:13px;">Only the guardians listed above.</div>';
     pk.forEach(function (p, i) {
       html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
         + KT.avatar(p.full_name, { size: 32, photoUrl: p.photo_id_url ? absUrl(p.photo_id_url) : '' })
         + '<div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + esc(p.full_name) + '</div>'
-        + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(p.relationship || '') + (p.expires_at ? ' · until ' + esc(String(p.expires_at).slice(0, 10)) : '') + '</div></div>'
+        + '<div style="font-size:11.5px;color:#64748B;">' + esc(p.relationship || '') + (p.expires_at ? ' · until ' + esc(String(p.expires_at).slice(0, 10)) : '') + '</div></div>'
         + (p.phone ? '<a href="tel:' + esc(p.phone) + '" style="color:' + TEAL + ';font-weight:800;font-size:12.5px;text-decoration:none;">Call</a>' : '')
         + '</div>';
     });
@@ -450,7 +454,7 @@
       card.appendChild(body);
 
       var caret = document.createElement('span');
-      caret.style.cssText = 'float:right;color:#94A3B8;font-size:13px;transition:transform .18s;';
+      caret.style.cssText = 'float:right;color:#64748B;font-size:13px;transition:transform .18s;';
       caret.textContent = '▾';
       head.appendChild(caret);
       head.style.cursor = 'pointer';
@@ -473,6 +477,11 @@
   Shell.registerScreen('educator:my-hours', renderMyHours);
   Shell.registerScreen('educator:my-schedule', renderMySchedule);
   Shell.registerScreen('educator:children', renderChildren);
+  // Child record is now a real screen (was a full-screen body overlay) so it keeps
+  // the app chrome and matches every other screen. Registered for the roles that can
+  // reach the educator children list (incl. platform-admin view-as-educator).
+  Shell.registerScreen('educator:child-record', renderChildRecordScreen);
+  Shell.registerScreen('home_visitor:child-record', renderChildRecordScreen);
 
   // ── Tile launcher on the educator dashboard ─────────────────────────
   // The bottom bar lost its Menu button, so the dashboard carries every section.
@@ -489,29 +498,35 @@
   }
   function currentHash() { return (location.hash || '').replace('#', '').split('?')[0]; }
 
-  // role-widgets.js mounts its stat strip ~350ms after a hashchange, but the
-  // educator screen renders asynchronously (it awaits /provider/bootstrap) and
-  // starts with Dom.clear(main) — so on a slow load the strip is wiped straight
-  // after it mounts and the cards vanish. Put them back if they went missing.
-  // Guarded on "no strip present", so this can't loop against its own mutation.
-  function ensureWidgets() {
-    if (!isEducator() || !KT.RoleWidgets) return;
-    var hash = currentHash();
-    if (hash !== 'dashboard' && hash !== 'today' && hash !== '') return;
-    var main = document.getElementById('appMain');
-    if (!main || !main.children.length) return;
-    if (main.querySelector('.kt-role-widget-strip')) return;
-    KT.RoleWidgets.mount(main, { prepend: true });   // stats first, then roster
-  }
+  // NOTE: the educator Today/Dashboard used to FORCE-mount the role-widgets KPI
+  // strip here (it once belonged on that screen). It no longer does — the roster
+  // screen now carries its own "Today at a glance" brief and role-widgets.js
+  // deliberately suppresses the strip when .educator-shell is present. Re-mounting
+  // it here fought that suppression: this file re-added it, role-widgets cleared
+  // it, over and over — the "cards flapping back and forth" bug. Left removed.
 
   function ensureLauncher() {
-    ensureWidgets();
     if (!isEducator()) return;
+    // DESKTOP: the tiles belong ONLY on the home launcher (#home / renderHome), not
+    // stamped onto the Today/roster screen. On desktop the top-bar carries Home +
+    // navigation, so this "Everything else" grid (and its bottom Sign-out button)
+    // was pure mobile-chrome leaking into the desktop Today view — remove it there.
+    // Mobile keeps it: the bottom bar has no full menu, so the tiles are the menu.
+    if (window.innerWidth > 768) return;
     var hash = currentHash();
-    if (hash !== 'dashboard' && hash !== 'today' && hash !== '') return;
+    // The icon tile grid ('Everything else') belongs ONLY on Home, never on the
+    // Today/roster screen. Home (empty hash) already renders the full .kt-tilehome
+    // launcher (guarded below), so this keeps the icons off Today entirely.
+    if (hash !== '' && hash !== 'home') return;
     var main = document.getElementById('appMain');
     if (!main || !main.children.length) return;
     if (main.querySelector('#kt-edu-launcher')) return;
+    // On the empty-hash home the shell renders educator:home (screen-role-home.js)
+    // — the full .kt-tilehome launcher, which already lists every section. Adding
+    // our "Everything else" grid on top of it duplicated every tile. Only inject
+    // when the visible screen is NOT the launcher (e.g. the #today/#dashboard
+    // roster, which has no tile grid of its own).
+    if (main.querySelector('.kt-tilehome') || main.querySelector('.kt-tile-grid')) return;
     if (!KT.roleTilesHtml) return;
 
     var wrap = document.createElement('div');
@@ -528,12 +543,16 @@
 
     var so = wrap.querySelector('#kt-edu-signout');
     if (so) so.addEventListener('click', function () {
-      // Same teardown the parent launcher does: drop the biometric enrolment and
-      // purge the token from BOTH stores so nothing auto-resumes on a shared phone.
-      try { if (KT.biometric && KT.biometric.disable) KT.biometric.disable(); } catch (e) {}
-      try { if (KT.pin && KT.pin.remove) KT.pin.remove(); } catch (e) {}
+      // Same teardown the parent launcher does: end the session and purge the
+      // token from BOTH stores, but KEEP biometric/PIN enrolment so relaunching
+      // prompts to unlock. Full removal is in Settings → "Turn off biometric".
       try { if (KT.Auth && KT.Auth.clear) KT.Auth.clear(); } catch (e) {}
-      try { sessionStorage.clear(); localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user'); } catch (e) {}
+      try {
+        var bio = {}; ['kt_biometric_enabled','kt_bio_token','kt_bio_user','kt_bio_agency','kt_bio_view','kt_bio_cred','kt_pin_vault','kt_pin_enabled'].forEach(function(k){var v=localStorage.getItem(k); if(v!=null) bio[k]=v;});
+        sessionStorage.clear();
+        localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user');
+        Object.keys(bio).forEach(function(k){ localStorage.setItem(k, bio[k]); });
+      } catch (e) {}
       location.href = '/index.html';
     });
   }

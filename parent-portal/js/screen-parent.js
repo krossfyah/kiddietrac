@@ -222,7 +222,7 @@
     const tabs = [
       { id: 'today',    label: 'Today' },
       { id: 'photos',   label: 'Photos' },
-      { id: 'messages', label: 'Messages' },
+      { id: 'messages', label: 'Messenger' },
       { id: 'billing',  label: 'Billing' },
     ];
     tabs.forEach(t => {

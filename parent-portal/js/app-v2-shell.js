@@ -85,7 +85,7 @@
         { label: 'Operations', items: [
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
-          { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'chat',           label: 'Messenger',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -232,7 +232,7 @@
           { hash: 'today',          label: 'Today',            icon: '✨' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
-          { hash: 'chat',           label: 'Messages',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'chat',           label: 'Messenger',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -314,7 +314,7 @@
           { hash: 'care-log',      label: 'Daily log',     icon: '✅' },
           { hash: 'observations',  label: 'Observations',  icon: '👀' },
           { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
-          { hash: 'chat',          label: 'Messages',      icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'chat',          label: 'Messenger',      icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
           { hash: 'announcements', label: 'News',          icon: '📢' },
@@ -386,7 +386,7 @@
         { hash: 'home',               label: 'Home',       icon: '🏠' },
         { hash: 'today',              label: 'Today',      icon: '✨' },
         { hash: 'photos',             label: 'Photos & video', icon: '📸' },
-        { hash: 'messages',           label: 'Messages',   icon: '💬', badgeKey: 'chat_unread' },
+        { hash: 'messages',           label: 'Messenger',   icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
         { hash: 'checkin',            label: 'Check-in',   icon: '☀' },
         { hash: 'parent-forms',       label: 'Forms',      icon: '📝' },

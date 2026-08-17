@@ -159,12 +159,12 @@
                 <div>
                   <label style="font-size:13px;font-weight:600;">Subdomain</label>
                   <input name="subdomain" placeholder="acme" style="${inputStyle()}">
-                  <div style="font-size:11px;color:#9CA3AF;">acme.kiddietrac.com</div>
+                  <div style="font-size:11px;color:#64748B;">acme.kiddietrac.com</div>
                 </div>
                 <div>
                   <label style="font-size:13px;font-weight:600;">Custom domain</label>
                   <input name="custom_domain" placeholder="childcare.acme.com" style="${inputStyle()}">
-                  <div style="font-size:11px;color:#9CA3AF;">requires DNS setup</div>
+                  <div style="font-size:11px;color:#64748B;">requires DNS setup</div>
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -329,7 +329,7 @@
     const delBtn = $('#kt-delete', mount);
     if (delBtn) {
       delBtn.addEventListener('click', async () => {
-        if (!confirm('Permanently soft-delete ' + a.name + '? Their data is preserved but the agency is suspended.')) return;
+        if (!await KT.confirm('Permanently soft-delete ' + a.name + '? Their data is preserved but the agency is suspended.')) return;
         try { await api('DELETE', '/admin/agencies/' + a.id); close(); render(container); }
         catch (e) { alert('Delete failed: ' + e.message); }
       });

@@ -16,6 +16,29 @@
   function role() { var u = getUser(); return (u && (u.primary_role || (u.roles && u.roles[0]))) || ''; }
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+  // Best-effort device fingerprint for analytics (which device families onboard).
+  // { type: 'Android' | 'Apple iPhone' | 'Apple iPad' | 'Desktop / laptop' | 'Other',
+  //   detail: native-app flag + trimmed user-agent }. Never throws.
+  function detectDevice() {
+    var type = 'Other', native = '';
+    try {
+      var ua = navigator.userAgent || '';
+      var C = window.Capacitor;
+      if (C && typeof C.getPlatform === 'function') {
+        var p = C.getPlatform();               // 'ios' | 'android' | 'web'
+        if (p === 'android') { type = 'Android'; native = 'KiddieTrac Android app · '; }
+        else if (p === 'ios') { type = /iPad/i.test(ua) ? 'Apple iPad' : 'Apple iPhone'; native = 'KiddieTrac iOS app · '; }
+      }
+      if (type === 'Other') {                   // browser (no native shell)
+        if (/Android/i.test(ua)) type = 'Android';
+        else if (/iPhone/i.test(ua)) type = 'Apple iPhone';
+        else if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) type = 'Apple iPad';
+        else if (/Windows|Macintosh|Linux|CrOS/i.test(ua)) type = 'Desktop / laptop';
+      }
+      return { type: type, detail: (native + ua).slice(0, 160) };
+    } catch (e) { return { type: type, detail: native }; }
+  }
+
   async function api(method, path, body) {
     var opts = { method: method, headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' } };
     if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
@@ -166,10 +189,30 @@
     })();
   }
 
+  function removeOnbOverlay() {
+    var el = document.getElementById('kt-onboarding-overlay');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
   function buildWizard(container, user, r, whiteLabel) {
     var roleStep = roleStepConfig(r);
     COMMON_STEPS[2].title = roleStep.title;
     COMMON_STEPS[2].subtitle = roleStep.subtitle;
+
+    // Render onboarding as a DIMMED MODAL POPOUT over the portal — the portal
+    // must not be visible/usable behind the setup flow. We mount a fixed,
+    // full-viewport overlay on <body> (position:fixed is reliable there, immune
+    // to any transformed portal ancestor) and reassign `container` to it so all
+    // the existing #kt-* queries + submit/validate keep working unchanged.
+    try { container.innerHTML = ''; } catch (e) {}
+    removeOnbOverlay();
+    var overlay = document.createElement('div');
+    overlay.id = 'kt-onboarding-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(8,15,30,0.74);'
+      + '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);overflow-y:auto;overflow-x:hidden;'
+      + 'display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;';
+    document.body.appendChild(overlay);
+    container = overlay;
 
     var steps = COMMON_STEPS.slice();
     if (r === 'agency_admin') {
@@ -183,11 +226,20 @@
       data: {
         first_name:    user.first_name || '',
         last_name:     user.last_name || '',
+        sex:           user.sex || '',
+        ethnicity:     (user.profile_extras && user.profile_extras.ethnicity) || '',
         preferred_name: user.preferred_name || '',
         phone:         user.phone || '',
+        direct_phone:  (user.profile_extras && user.profile_extras.direct_phone) || '',
+        home_phone:    (user.profile_extras && user.profile_extras.home_phone) || '',
         photo_url:     user.photo_url || '',
         username:      user.username || '',
+        provider_bio:  user.provider_bio || '',
+        // Preferred language → users.locale. Seed only if it's one of the offered
+        // codes; the en-CA default won't match, so new users must pick one.
+        locale:        (['en', 'fr', 'es', 'hi'].indexOf(user.locale) !== -1 ? user.locale : ''),
       },
+      isProvider: !!user.is_provider,
       role_extras: (user.profile_extras && user.profile_extras.role_extras) || {},
       address: (function () {
         var pe = user.profile_extras || {};
@@ -199,6 +251,8 @@
           postal_code: pe.postal_code || '',
           emergency_contact_name: pe.emergency_contact_name || '',
           emergency_contact_phone: pe.emergency_contact_phone || '',
+          emergency_contact_email: pe.emergency_contact_email || '',
+          emergency_contact_relation: pe.emergency_contact_relation || '',
         };
       })(),
       team: [],
@@ -207,10 +261,10 @@
     };
 
     container.innerHTML =
-      '<div style="max-width:760px;margin:24px auto;padding:0 20px;">' +
+      '<div style="max-width:640px;width:100%;margin:8px auto;">' +
         '<div style="background:linear-gradient(135deg,#081C41,#1F6080);color:white;border-radius:18px 18px 0 0;padding:28px 32px;">' +
           '<div style="font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;opacity:0.85;margin-bottom:8px;">Welcome to Kiddietrac</div>' +
-          '<h1 style="font-family:\'Baloo 2\',system-ui,sans-serif;font-size:30px;margin:0 0 4px;font-weight:800;letter-spacing:-0.5px;">Let\'s set up your account</h1>' +
+          '<h1 style="font-family:\'Baloo 2\',system-ui,sans-serif;font-size:28px;margin:0 0 4px;font-weight:800;letter-spacing:-0.5px;">Let\'s set up your account</h1>' +
           '<p style="margin:0;opacity:0.9;font-size:14px;">A few questions to personalize your experience. You can edit any of this later from your profile.</p>' +
         '</div>' +
         '<div id="kt-onboarding-card" style="background:white;border-radius:0 0 18px 18px;padding:32px;box-shadow:0 8px 24px rgba(15,23,42,0.08);">' +
@@ -229,9 +283,15 @@
     function drawBar() {
       var bar = container.querySelector('#kt-step-bar');
       bar.innerHTML = '';
+      // Colourized progress: each completed step lights up in its own hue so the
+      // bar reads as a cheerful multi-colour progression, not one flat colour.
+      var palette = ['#EF4444', '#F59E0B', '#EAB308', '#10B981', '#06B6D4', '#3B82F6', '#8B5CF6', '#EC4899', '#F97316', '#14B8A6'];
       for (var i = 0; i < steps.length; i++) {
         var el = document.createElement('div');
-        el.style.cssText = 'flex:1;height:6px;border-radius:3px;background:' + (i <= state.step ? '#1F6080' : '#E2E8F0') + ';transition:background 200ms ease;';
+        var done = i <= state.step;
+        var col = done ? palette[i % palette.length] : '#E2E8F0';
+        el.style.cssText = 'flex:1;height:7px;border-radius:4px;background:' + col + ';transition:background 220ms ease;'
+          + (done ? 'box-shadow:0 1px 4px ' + col + '66;' : '');
         bar.appendChild(el);
       }
       container.querySelector('#kt-step-n').textContent = String(state.step + 1);
@@ -302,7 +362,82 @@
     return wrap;
   }
   function inputStyle() {
-    return 'width:100%;padding:11px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;box-sizing:border-box;';
+    return 'width:100%;padding:11px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;box-sizing:border-box;background:#fff;';
+  }
+
+  // ── Phone as separate area code + number ─────────────────────────────
+  function digits(s) { return (s == null ? '' : String(s)).replace(/[^0-9]/g, ''); }
+  function fmtLocal(d) { d = digits(d); if (d.length >= 7) return d.slice(0, 3) + '-' + d.slice(3, 7); if (d.length > 3) return d.slice(0, 3) + '-' + d.slice(3); return d; }
+  function splitPhone(v) {
+    var d = digits(v);
+    if (d.length === 11 && d[0] === '1') d = d.slice(1); // strip country code
+    if (d.length >= 10) return { area: d.slice(0, 3), num: fmtLocal(d.slice(3, 10)) };
+    if (d.length > 3)  return { area: d.slice(0, 3), num: fmtLocal(d.slice(3)) };
+    return { area: '', num: (v || '') };
+  }
+  function combinePhone(area, num) {
+    var a = digits(area), n = digits(num);
+    if (!a && !n) return '';
+    if (a && n) return '(' + a + ') ' + (n.length >= 7 ? n.slice(0, 3) + '-' + n.slice(3, 7) : n);
+    return (a ? '(' + a + ') ' : '') + (num || '');
+  }
+  function phoneInput(label, key, value, required) {
+    var p = splitPhone(value);
+    var req = required ? ' data-req="1"' : '';
+    var star = required ? ' <span style="color:#DC2626;font-weight:800;" title="Required">*</span>' : '';
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:14px;';
+    wrap.innerHTML =
+      '<label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;">' + esc(label) + star + '</label>'
+      + '<div style="display:grid;grid-template-columns:88px 1fr;gap:8px;">'
+      +   '<input data-parea="' + esc(key) + '" inputmode="numeric" maxlength="3" placeholder="Area" value="' + esc(p.area) + '" style="' + inputStyle() + 'text-align:center;letter-spacing:1px;">'
+      +   '<input data-pnum="' + esc(key) + '"' + req + ' inputmode="tel" placeholder="Phone number" value="' + esc(p.num) + '" style="' + inputStyle() + '">'
+      + '</div>';
+    return wrap;
+  }
+
+  // ── Camera capture (take a photo instead of uploading a file) ────────
+  // Uses getUserMedia for a live capture on desktop AND mobile; if the browser
+  // can't grant camera access it falls back to a native capture file input
+  // (which opens the device camera on phones). Result is a Blob passed to `cb`.
+  function openCamera(cb) {
+    var nav = window.navigator || {};
+    if (!(nav.mediaDevices && nav.mediaDevices.getUserMedia)) {
+      // Fallback: native camera via a capture-enabled file input.
+      var fi = document.createElement('input');
+      fi.type = 'file'; fi.accept = 'image/*'; fi.setAttribute('capture', 'user'); fi.style.display = 'none';
+      fi.addEventListener('change', function () { var f = fi.files && fi.files[0]; if (f) cb(f); });
+      document.body.appendChild(fi); fi.click();
+      setTimeout(function () { if (fi.parentNode) fi.parentNode.removeChild(fi); }, 60000);
+      return;
+    }
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:6000;background:rgba(6,12,24,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;';
+    ov.innerHTML =
+      '<div style="color:#E2E8F0;font-size:14px;font-weight:700;">Center your face, then capture</div>'
+      + '<video autoplay playsinline muted style="width:min(88vw,420px);aspect-ratio:1/1;object-fit:cover;border-radius:16px;background:#000;transform:scaleX(-1);"></video>'
+      + '<div style="display:flex;gap:12px;">'
+      +   '<button data-cam="shot" style="padding:12px 22px;background:#22D3EE;color:#062B36;border:none;border-radius:10px;font-weight:800;cursor:pointer;">📸 Capture</button>'
+      +   '<button data-cam="cancel" style="padding:12px 18px;background:transparent;color:#CBD5E1;border:1.5px solid #475569;border-radius:10px;font-weight:700;cursor:pointer;">Cancel</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    var video = ov.querySelector('video');
+    var stream = null;
+    function stop() { try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    nav.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+      .then(function (s) { stream = s; video.srcObject = s; })
+      .catch(function () { stop(); alert('Could not access the camera. You can upload a photo instead.'); });
+    ov.querySelector('[data-cam="cancel"]').addEventListener('click', stop);
+    ov.querySelector('[data-cam="shot"]').addEventListener('click', function () {
+      var vw = video.videoWidth || 720, vh = video.videoHeight || 720;
+      var side = Math.min(vw, vh);
+      var cv = document.createElement('canvas'); cv.width = side; cv.height = side;
+      var cx = cv.getContext('2d');
+      // mirror horizontally to match the on-screen preview, center-crop to square
+      cx.translate(side, 0); cx.scale(-1, 1);
+      cx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, side, side);
+      cv.toBlob(function (blob) { stop(); if (blob) cb(blob); }, 'image/jpeg', 0.92);
+    });
   }
 
   function renderProfileStep(state, container) {
@@ -314,9 +449,12 @@
     var prevBg = state.data.photo_url ? "background:#F1F5F9 url('" + absUrlO(state.data.photo_url) + "') center/cover no-repeat;" : 'background:#F1F5F9;';
     av.innerHTML =
       '<div id="kt-av-prev" style="width:72px;height:72px;border-radius:50%;' + prevBg + 'display:flex;align-items:center;justify-content:center;color:#64748B;font-size:26px;flex-shrink:0;border:2px solid #E2E8F0;">' + (state.data.photo_url ? '' : '👤') + '</div>' +
-      '<div><button type="button" id="kt-av-btn" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">Upload avatar</button>' +
+      '<div><div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<button type="button" id="kt-av-btn" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">Upload photo</button>' +
+        '<button type="button" id="kt-av-cam" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">📷 Take photo</button>' +
+        '</div>' +
         '<input id="kt-av-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">' +
-        '<div id="kt-av-msg" style="font-size:11px;color:#64748B;margin-top:5px;">Required · JPG/PNG, max 2 MB</div></div>';
+        '<div id="kt-av-msg" style="font-size:11px;color:#64748B;margin-top:5px;">Required · upload one or take a photo now</div></div>';
     var avLabel = document.createElement('div');
     avLabel.style.cssText = 'font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;';
     avLabel.innerHTML = 'Profile photo <span style="color:#DC2626;font-weight:800;" title="Required">*</span>';
@@ -328,8 +466,32 @@
     row.appendChild(input('First name',    'first_name',     state.data.first_name, 'text', null, null, true));
     row.appendChild(input('Last name',     'last_name',      state.data.last_name,  'text', null, null, true));
     box.appendChild(row);
+    // Sex — mandatory. Drives the default avatar when no photo is uploaded.
+    box.appendChild(input('Sex', 'sex', state.data.sex, 'select', null, ['Male', 'Female'], true));
+    // Preferred language — mandatory. Sets the app locale (users.locale) so the
+    // portal + emails speak the user's language from the first sign-in.
+    var LANGS_ONB = [['en', 'English'], ['fr', 'Français'], ['es', 'Español'], ['hi', 'हिन्दी']];
+    var langWrap = document.createElement('div');
+    langWrap.style.cssText = 'margin-bottom:14px;';
+    langWrap.innerHTML = '<label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;">Preferred language <span style="color:#DC2626;font-weight:800;" title="Required">*</span></label>'
+      + '<select data-k="locale" data-req="1" style="' + inputStyle() + 'background:white;">'
+      + '<option value="">Select…</option>'
+      + LANGS_ONB.map(function (l) { return '<option value="' + l[0] + '"' + (state.data.locale === l[0] ? ' selected' : '') + '>' + l[1] + '</option>'; }).join('')
+      + '</select>';
+    box.appendChild(langWrap);
+    // Race / ethnicity — optional + self-reported (analytics only). Lands in
+    // state.data.ethnicity → profile_extras on submit.
+    box.appendChild(input('Race / ethnicity (optional)', 'ethnicity', state.data.ethnicity, 'select', null,
+      ['White', 'Black', 'South Asian', 'Chinese', 'Filipino', 'Latin American', 'Arab',
+       'Southeast Asian', 'West Asian', 'Korean', 'Japanese',
+       'Indigenous (First Nations, Métis, Inuit)', 'Mixed / multiple', 'Other', 'Prefer not to say'], false));
     box.appendChild(input('Preferred name (optional, what we call you)', 'preferred_name', state.data.preferred_name));
-    box.appendChild(input('Phone', 'phone', state.data.phone, 'tel', null, null, true));
+    box.appendChild(phoneInput('Mobile phone', 'phone', state.data.phone, true));
+    var phRow = document.createElement('div');
+    phRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
+    phRow.appendChild(phoneInput('Direct phone (optional)', 'direct_phone', state.data.direct_phone));
+    phRow.appendChild(phoneInput('Home phone (optional)', 'home_phone', state.data.home_phone));
+    box.appendChild(phRow);
     // Optional username — lets one person keep several accounts under one email
     // and sign in to the right one. Letters, numbers, and . _ - only.
     box.appendChild(input('Username (optional — sign in with this if you share an email across accounts)', 'username', state.data.username, 'text'));
@@ -337,12 +499,24 @@
     setTimeout(function () {
       var fileEl = box.querySelector('#kt-av-file');
       var msg = box.querySelector('#kt-av-msg');
+      // Run any chosen/captured image through the cropper (reposition/zoom to fill
+      // the circle) then upload the cropped result.
+      function handleImage(f) {
+        if (!f) return;
+        if (f.size && f.size > 20 * 1024 * 1024) { msg.textContent = 'Image too large (max 20 MB)'; msg.style.color = '#DC2626'; return; }
+        if (window.KT && KT.AvatarCropper) {
+          KT.AvatarCropper.open(f, function (blob) { fileEl.value = ''; if (blob) uploadAvatar(blob); });
+        } else {
+          uploadAvatar(f);
+        }
+      }
       box.querySelector('#kt-av-btn').addEventListener('click', function () { fileEl.click(); });
-      fileEl.addEventListener('change', function () {
-        var f = fileEl.files[0]; if (!f) return;
-        if (f.size > 2 * 1024 * 1024) { msg.textContent = 'Max 2 MB'; msg.style.color = '#DC2626'; return; }
+      var camBtn = box.querySelector('#kt-av-cam');
+      if (camBtn) camBtn.addEventListener('click', function () { openCamera(handleImage); });
+      fileEl.addEventListener('change', function () { handleImage(fileEl.files[0]); });
+      function uploadAvatar(blob) {
         msg.textContent = 'Uploading…'; msg.style.color = '#64748B';
-        var fd = new FormData(); fd.append('avatar', f);
+        var fd = new FormData(); fd.append('avatar', blob, 'avatar.jpg');
         fetch(apiBase() + '/auth/me/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token() }, body: fd })
           .then(function (res) { return res.json().then(function (j) { if (!res.ok) throw new Error(j.message || ('HTTP ' + res.status)); return j; }); })
           .then(function (j) {
@@ -354,7 +528,7 @@
             try { var u = getUser(); u.photo_url = j.photo_url; setUser(u); } catch (e) {}
           })
           .catch(function (e) { msg.textContent = 'Upload failed: ' + (e.message || 'error'); msg.style.color = '#DC2626'; });
-      });
+      }
     }, 0);
     return box;
   }
@@ -408,7 +582,17 @@
           '<input id="kt-wl-file" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">' +
           '<div id="kt-wl-msg" style="font-size:11px;color:#64748B;margin-top:5px;">PNG/SVG, max 2 MB</div></div>' +
       '</div>';
-    box.appendChild(input('Primary colour (hex)', 'brand_primary_color', wl.brand_primary_color, 'text', '#1F6080'));
+    // Primary colour — pick from the colour WHEEL or type a hex; the two stay in
+    // sync. The wheel input carries data-k so it's the value that gets collected.
+    var colorRow = document.createElement('div');
+    colorRow.style.cssText = 'margin-bottom:14px;';
+    colorRow.innerHTML = '<label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;">Primary colour</label>'
+      + '<div style="display:flex;align-items:center;gap:10px;">'
+      + '<input id="kt-wl-wheel" data-k="brand_primary_color" type="color" value="' + esc(wl.brand_primary_color || '#1F6080') + '" title="Pick from the colour wheel" style="width:54px;height:42px;border:1.5px solid #E2E8F0;border-radius:10px;padding:3px;cursor:pointer;background:#fff;">'
+      + '<input id="kt-wl-hex" type="text" value="' + esc(wl.brand_primary_color || '#1F6080') + '" placeholder="#1F6080" maxlength="7" style="' + inputStyle() + 'max-width:140px;font-family:monospace;text-transform:lowercase;">'
+      + '<span id="kt-wl-swatch" style="width:30px;height:30px;border-radius:50%;border:1px solid #E2E8F0;flex-shrink:0;background:' + esc(wl.brand_primary_color || '#1F6080') + ';"></span>'
+      + '</div>';
+    box.appendChild(colorRow);
     box.appendChild(input('Support email', 'brand_support_email', wl.brand_support_email, 'email'));
     var r2 = document.createElement('div');
     r2.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
@@ -420,6 +604,18 @@
       var fileEl = box.querySelector('#kt-wl-file');
       var msg = box.querySelector('#kt-wl-msg');
       box.querySelector('#kt-wl-btn').addEventListener('click', function () { fileEl.click(); });
+
+      // Keep the colour wheel, hex box and swatch in sync.
+      var wheel = box.querySelector('#kt-wl-wheel');
+      var hex = box.querySelector('#kt-wl-hex');
+      var sw = box.querySelector('#kt-wl-swatch');
+      if (wheel && hex && sw) {
+        wheel.addEventListener('input', function () { hex.value = wheel.value.toLowerCase(); sw.style.background = wheel.value; });
+        hex.addEventListener('input', function () {
+          var v = hex.value.trim(); if (v && v[0] !== '#') v = '#' + v;
+          if (/^#[0-9a-fA-F]{6}$/.test(v)) { wheel.value = v; sw.style.background = v; }
+        });
+      }
       fileEl.addEventListener('change', function () {
         var f = fileEl.files[0]; if (!f) return;
         if (f.size > 2 * 1024 * 1024) { msg.textContent = 'Max 2 MB'; msg.style.color = '#DC2626'; return; }
@@ -452,11 +648,23 @@
       ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT']));
     row.appendChild(input('Postal code', 'postal_code', state.address.postal_code, 'text', 'M5G 1Z4'));
     box.appendChild(row);
-    var row2 = document.createElement('div');
-    row2.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px;';
-    row2.appendChild(input('Emergency contact name', 'emergency_contact_name', state.address.emergency_contact_name));
-    row2.appendChild(input('Emergency contact phone', 'emergency_contact_phone', state.address.emergency_contact_phone, 'tel'));
-    box.appendChild(row2);
+
+    // Emergency contact — a titled card. Must be someone OTHER than the user
+    // (validated on Next and again server-side).
+    var ec = document.createElement('div');
+    ec.style.cssText = 'margin-top:14px;padding:16px 16px 4px;border:1px solid #E2E8F0;border-radius:12px;background:#F8FAFC;';
+    var ecHead = document.createElement('div');
+    ecHead.innerHTML = '<div style="font-size:12px;font-weight:800;color:#334155;letter-spacing:.4px;text-transform:uppercase;margin-bottom:3px;">Emergency contact</div>'
+      + '<div style="font-size:12px;color:#64748B;margin-bottom:12px;">Someone <strong>other than yourself</strong> we can reach in an emergency.</div>';
+    ec.appendChild(ecHead);
+    ec.appendChild(input('Full name', 'emergency_contact_name', state.address.emergency_contact_name));
+    var ecRow = document.createElement('div');
+    ecRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
+    ecRow.appendChild(input('Relationship', 'emergency_contact_relation', state.address.emergency_contact_relation, 'text', 'e.g. spouse, parent'));
+    ecRow.appendChild(input('Email', 'emergency_contact_email', state.address.emergency_contact_email, 'email', 'name@example.com'));
+    ec.appendChild(ecRow);
+    ec.appendChild(phoneInput('Phone', 'emergency_contact_phone', state.address.emergency_contact_phone));
+    box.appendChild(ec);
 
     // Additional emergency contacts (optional) — add as many as needed.
     var extraWrap = document.createElement('div');
@@ -473,7 +681,9 @@
         + '<input data-ec="name" value="' + esc((preset && preset.name) || '') + '" style="' + inputStyle() + '"></div>'
         + '<div><label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:5px;">Phone</label>'
         + '<input data-ec="phone" type="tel" value="' + esc((preset && preset.phone) || '') + '" style="' + inputStyle() + '"></div>'
-        + '<button type="button" class="kt-ec-del" title="Remove" style="height:44px;width:40px;border:1px solid #E2E8F0;background:#fff;color:#B91C1C;border-radius:10px;font-size:16px;cursor:pointer;">✕</button>';
+        + '<button type="button" class="kt-ec-del" title="Remove" style="height:44px;width:40px;border:1px solid #E2E8F0;background:#fff;color:#B91C1C;border-radius:10px;font-size:16px;cursor:pointer;">✕</button>'
+        + '<div style="grid-column:1 / -1;"><label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:5px;">Email (optional)</label>'
+        + '<input data-ec="email" type="email" value="' + esc((preset && preset.email) || '') + '" placeholder="name@example.com" style="' + inputStyle() + '"></div>';
       r.querySelector('.kt-ec-del').addEventListener('click', function () { r.remove(); });
       extraWrap.appendChild(r);
     }
@@ -488,6 +698,25 @@
   }
   function renderRoleStep(state, roleStep) {
     var box = document.createElement('div');
+    // Home-daycare providers must introduce themselves to families. This bio
+    // shows on the family's provider card + the provider welcome email, so it's
+    // mandatory (min ~a sentence or two) and leads the role step.
+    if (state.isProvider) {
+      var bioWrap = document.createElement('div');
+      bioWrap.style.cssText = 'margin-bottom:18px;padding:16px;border:1px solid #CFE8EE;border-radius:12px;background:linear-gradient(135deg,#F2FBFD,#F8FAFC);';
+      bioWrap.innerHTML =
+        '<div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:3px;">Your bio <span style="color:#DC2626;">*</span></div>'
+        + '<div style="font-size:12px;color:#64748B;margin-bottom:10px;">Introduce yourself to the families in your care — your experience, your approach, what makes your home special. This appears on each family’s provider card and their welcome email.</div>'
+        + '<textarea data-bio="1" rows="5" placeholder="e.g. Hi, I’m Chearstine! I’ve run a licensed home daycare for 8 years and love nature walks, music, and cozy story time. Your little one will feel right at home…" style="' + inputStyle() + 'font-family:inherit;resize:vertical;">' + esc(state.data.provider_bio || '') + '</textarea>'
+        + '<div id="kt-bio-count" style="font-size:11px;color:#94A3B8;margin-top:5px;text-align:right;"></div>';
+      box.appendChild(bioWrap);
+      setTimeout(function () {
+        var ta = bioWrap.querySelector('[data-bio]');
+        var ct = bioWrap.querySelector('#kt-bio-count');
+        function upd() { var n = (ta.value || '').trim().length; ct.textContent = n + ' characters' + (n < 40 ? ' · at least 40' : ' ✓'); ct.style.color = n < 40 ? '#B45309' : '#16A34A'; }
+        ta.addEventListener('input', upd); upd();
+      }, 0);
+    }
     roleStep.fields.forEach(function (f) {
       box.appendChild(input(f.label, f.k, state.role_extras[f.k], f.type, f.placeholder, f.options));
     });
@@ -505,13 +734,27 @@
       else if (id === 'role') state.role_extras[k] = v;
       else if (id === 'whitelabel') state.whitelabel[k] = v;
     });
+    // Split phone fields (area code + number) → combine into the single stored value.
+    body.querySelectorAll('[data-pnum]').forEach(function (numEl) {
+      var key = numEl.getAttribute('data-pnum');
+      var areaEl = body.querySelector('[data-parea="' + key + '"]');
+      var combined = combinePhone(areaEl ? areaEl.value : '', numEl.value);
+      if (id === 'profile') state.data[key] = combined;
+      else if (id === 'address') state.address[key] = combined;
+    });
+    // Provider bio lives on the role step (its own attribute so it doesn't land
+    // in role_extras) → store on state.data.provider_bio.
+    if (id === 'role') {
+      var bioEl = body.querySelector('[data-bio]');
+      if (bioEl) state.data.provider_bio = bioEl.value;
+    }
     if (id === 'team') collectTeam(state, body);
     if (id === 'address') {
       var extras = [];
       body.querySelectorAll('.kt-ec-row').forEach(function (row) {
-        var n = row.querySelector('[data-ec="name"]'); var p = row.querySelector('[data-ec="phone"]');
-        var nm = n ? n.value.trim() : ''; var ph = p ? p.value.trim() : '';
-        if (nm || ph) extras.push({ name: nm, phone: ph });
+        var n = row.querySelector('[data-ec="name"]'); var p = row.querySelector('[data-ec="phone"]'); var em = row.querySelector('[data-ec="email"]');
+        var nm = n ? n.value.trim() : ''; var ph = p ? p.value.trim() : ''; var mail = em ? em.value.trim() : '';
+        if (nm || ph || mail) extras.push({ name: nm, phone: ph, email: mail });
       });
       state.address.extra_contacts = extras;
     }
@@ -555,11 +798,49 @@
       var avMsg = body.querySelector('#kt-av-msg');
       if (avMsg) { avMsg.textContent = 'Profile photo is required'; avMsg.style.color = '#DC2626'; }
     }
+    // Providers must write a real bio (≥ 40 chars) on the role step.
+    if (id === 'role' && state.isProvider) {
+      var bioEl2 = body.querySelector('[data-bio]');
+      var bioVal = bioEl2 ? (bioEl2.value || '').trim() : '';
+      if (bioVal.length < 40) {
+        if (bioEl2) { bioEl2.style.borderColor = '#DC2626'; if (!firstBad) firstBad = bioEl2; }
+        msg.style.color = '#DC2626';
+        msg.textContent = bioVal.length === 0
+          ? 'Please write a short bio so families know who will be caring for their child.'
+          : 'Your bio is a little short — add a sentence or two more (at least 40 characters).';
+        if (firstBad && firstBad.focus) try { firstBad.focus(); } catch (e) {}
+        return false;
+      }
+    }
     if (missing.length) {
       msg.style.color = '#DC2626';
       msg.textContent = 'Please complete: ' + missing.join(', ') + '.';
       if (firstBad && firstBad.focus) try { firstBad.focus(); } catch (e) {}
       return false;
+    }
+    // A person can't be their own emergency contact — compare the entered email,
+    // name or phone against the signed-in user's own details.
+    if (id === 'address') {
+      var u = getUser();
+      var ownEmail = (u.email || '').trim().toLowerCase();
+      var ownName = ((u.first_name || '') + ' ' + (u.last_name || '')).trim().toLowerCase().replace(/\s+/g, ' ');
+      var ownPhone = digits(u.phone);
+      var ecEmailEl = body.querySelector('[data-k="emergency_contact_email"]');
+      var ecNameEl = body.querySelector('[data-k="emergency_contact_name"]');
+      var ecEmail = ecEmailEl ? ecEmailEl.value.trim().toLowerCase() : '';
+      var ecName = ecNameEl ? ecNameEl.value.trim().toLowerCase().replace(/\s+/g, ' ') : '';
+      var areaEl = body.querySelector('[data-parea="emergency_contact_phone"]');
+      var numEl = body.querySelector('[data-pnum="emergency_contact_phone"]');
+      var ecPhone = digits((areaEl ? areaEl.value : '') + (numEl ? numEl.value : ''));
+      var clashes = (ecEmail && ecEmail === ownEmail)
+        || (ecName && ownName && ecName === ownName)
+        || (ecPhone && ownPhone && ecPhone.length >= 10 && ecPhone === ownPhone);
+      if (clashes) {
+        msg.style.color = '#DC2626';
+        msg.textContent = 'Your emergency contact can’t be yourself — please enter someone else who can be reached in an emergency.';
+        var bad = ecEmailEl || ecNameEl; if (bad && bad.focus) try { bad.focus(); } catch (e) {}
+        return false;
+      }
     }
     msg.textContent = '';
     return true;
@@ -579,6 +860,13 @@
       var ev = new CustomEvent('redraw'); container.dispatchEvent(ev);
       return;
     }
+    if (!state.data.sex) {
+      msg.textContent = 'Please select your sex.'; msg.style.color = '#DC2626';
+      btn.disabled = false; btn.textContent = 'Save and continue';
+      state.step = 0;
+      var evsx = new CustomEvent('redraw'); container.dispatchEvent(evsx);
+      return;
+    }
     // A profile photo is mandatory (marked with a red asterisk in the form).
     if (!state.data.photo_url) {
       msg.textContent = 'A profile photo is required — tap “Upload avatar”.'; msg.style.color = '#DC2626';
@@ -588,10 +876,21 @@
       return;
     }
 
-    var payload = Object.assign({}, state.data, state.address, { role_extras: state.role_extras, complete: true });
+    // Auto-detect the device the user is onboarding on (analytics only — no UI).
+    // Prefers Capacitor's native platform (the APK) then falls back to UA sniffing.
+    var dev = detectDevice();
+    var payload = Object.assign({}, state.data, state.address, {
+      role_extras: state.role_extras,
+      device_type: dev.type,
+      device_detail: dev.detail,
+      complete: true,
+    });
     try {
       var fresh = await api('PATCH', '/auth/me/onboarding', payload);
       setUser(fresh);
+      // Apply the chosen language immediately (kt-i18n reads localStorage first),
+      // mirroring the Settings language picker, so the portal loads translated.
+      try { if (state.data.locale) localStorage.setItem('kt_locale', state.data.locale); } catch (e) {}
       // v22p83: if an agency admin picked a country, apply its currency +
       // compliance to the agency. Best-effort — never block onboarding on it.
       if (state.role_extras && state.role_extras.country) {
@@ -641,7 +940,7 @@
       } catch (e) {}
       msg.textContent = '✓ All set' + (notes.length ? ' — ' + notes.join(' · ') : '') + ' — taking you to your home…';
       msg.style.color = '#16A34A';
-      setTimeout(function () { window.location.hash = '#' + landing; }, 800);
+      setTimeout(function () { removeOnbOverlay(); window.location.hash = '#' + landing; }, 800);
     } catch (e) {
       msg.textContent = 'Could not save: ' + e.message;
       msg.style.color = '#DC2626';
@@ -722,6 +1021,7 @@
         if (fresh.onboarded_at) {
           var h = (window.location.hash || '').replace('#', '').split('?')[0];
           if (h === 'onboarding') {              // stuck on the wizard but actually done → release
+            removeOnbOverlay();
             window.location.hash = '';
             if (window.KT && KT.Shell && KT.Shell.renderScreen) { try { KT.Shell.renderScreen(); } catch (e) {} }
           }

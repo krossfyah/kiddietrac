@@ -22,7 +22,7 @@
     // grab the parent's children
     const childrenRes = await Api.get('/parent/children').catch(() => ({ data: [] }));
     const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
-    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children on file.</div>'; return; }
+    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children on file.</div>'; return; }
 
     const auths = {};
     for (const c of children) {
@@ -49,12 +49,12 @@
             <td>${a.expires_at ? fmtDate(a.expires_at) : '—'}</td>
             <td><button class="kt-btn kt-btn-danger" data-rm="${a.id}">Remove</button></td>
           </tr>`).join('')}</tbody>
-        </table>` : '<div style="color:#94A3B8;padding:18px 0;">No additional authorisations.</div>'}
+        </table>` : '<div style="color:#64748B;padding:18px 0;">No additional authorisations.</div>'}
       </div>`).join('')}
     </div>`;
     main.querySelectorAll('button[data-add-child]').forEach(b => b.onclick = () => openPickupModal(+b.dataset.addChild));
     main.querySelectorAll('button[data-rm]').forEach(b => b.onclick = async () => {
-      if (!confirm('Remove this authorisation?')) return;
+      if (!await KT.confirm('Remove this authorisation?')) return;
       await Api.delete(`/family/pickup-auth/${b.dataset.rm}`);
       renderPickupAuth(main);
     });
@@ -101,7 +101,7 @@
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const childrenRes = await Api.get('/parent/children').catch(() => ({ data: [] }));
     const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
-    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children on file.</div>'; return; }
+    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children on file.</div>'; return; }
     const today = (await Api.get(`/family/checkin/today/${children[0].id}`)).data || {};
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
@@ -185,7 +185,7 @@
     main.innerHTML = '<div style="padding:24px;">Loading children…</div>';
     const childrenRes = await Api.get('/parent/children').catch(() => Api.get('/admin/children').catch(() => ({ data: [] })));
     const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
-    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children.</div>'; return; }
+    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children.</div>'; return; }
     const id = children[0].id;
     const t = await Api.get(`/analytics/trends/${id}?days=30`);
 
@@ -211,7 +211,7 @@
         <div style="display:flex;gap:3px;align-items:flex-end;height:160px;padding:14px 0;">
           ${days.map(d => `<div style="flex:1;min-width:8px;background:linear-gradient(180deg,#1F6080,#3a86ad);height:${(byDay[d]/max)*140}px;border-radius:3px 3px 0 0;" title="${d}: ${byDay[d]}"></div>`).join('')}
         </div>
-        <div style="display:flex;justify-content:space-between;color:#94A3B8;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;color:#64748B;font-size:11px;">
           <span>${days[0] || ''}</span><span>${days[days.length - 1] || ''}</span>
         </div>
       </div>
@@ -221,7 +221,7 @@
           <div style="width:80px;font-size:13px;text-transform:capitalize;">${esc(k)}</div>
           <div style="flex:1;background:#F1F5F9;height:14px;border-radius:7px;overflow:hidden;"><div style="background:linear-gradient(90deg,#1F6080,#3a86ad);height:100%;width:${(v / moodTotal) * 100}%;"></div></div>
           <div style="font-weight:700;color:#0F172A;min-width:30px;text-align:right;">${v}</div>
-        </div>`).join('') || '<div style="color:#94A3B8;">No mood data yet — start daily check-ins.</div>'}
+        </div>`).join('') || '<div style="color:#64748B;">No mood data yet — start daily check-ins.</div>'}
       </div>
     </div>`;
   }
@@ -232,7 +232,7 @@
     main.innerHTML = '<div style="padding:24px;">Loading children…</div>';
     const childrenRes = await Api.get('/admin/children').catch(() => ({ data: [] }));
     const children = (childrenRes.data || []).slice(0, 30);
-    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#94A3B8;padding:40px;">No children on file.</div>'; return; }
+    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children on file.</div>'; return; }
     const results = [];
     for (const c of children) {
       const r = await Api.get(`/analytics/hdlh-gaps/${c.id}`).catch(() => null);
@@ -294,7 +294,7 @@
             <td><span class="kt-pill kt-pill-info">${esc(d.trigger_event)}</span></td>
             <td>${d.trigger_delay_days} day(s)</td>
             <td><span class="kt-pill ${d.status === 'active' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(d.status)}</span></td>
-          </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#94A3B8;">No drip campaigns set up.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#64748B;">No drip campaigns set up.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -367,17 +367,114 @@
             ${(t.hdlh_domains || []).map(d => `<span class="kt-pill kt-pill-success">${esc(d)}</span>`).join('')}
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #F1F5F9;padding-top:12px;">
-            <span style="color:#94A3B8;font-size:12px;">Used ${t.use_count}× • ${esc(t.visibility)}</span>
+            <span style="color:#64748B;font-size:12px;">Used ${t.use_count}× • ${esc(t.visibility)}</span>
             <button class="kt-btn kt-btn-primary" data-use="${t.id}">Use template</button>
           </div>
-        </div>`).join('') || '<div class="kt-card" style="grid-column:1/-1;text-align:center;color:#94A3B8;padding:60px;">No curriculum templates yet.</div>'}
+        </div>`).join('') || '<div class="kt-card" style="grid-column:1/-1;text-align:center;color:#64748B;padding:60px;">No curriculum templates yet.</div>'}
       </div>
     </div>`;
     document.getElementById('cl-new').onclick = () => openCurriculumModal();
-    main.querySelectorAll('button[data-use]').forEach(b => b.onclick = async () => {
-      const r = await Api.post(`/curriculum/${b.dataset.use}/use`, {});
-      (window.KT && window.KT.toast) ? KT.toast(`Loaded "${r.data.title}". Use it as a starting point for a new lesson plan.`, /save|sent|added|created|approved|deleted|removed|done|charged/i.test(`Loaded "${r.data.title}". Use it as a starting point for a new lesson plan.`) ? 'success' : 'info') : alert(`Loaded "${r.data.title}". Use it as a starting point for a new lesson plan.`);
+    // "Use template" now actually adds the template's activities to a real weekly
+    // lesson plan (pick room/centre + week + day), so it shows up under Lesson
+    // plans — instead of only bumping a counter.
+    main.querySelectorAll('button[data-use]').forEach(b => b.onclick = () => {
+      const tpl = rows.find(x => String(x.id) === String(b.dataset.use));
+      if (tpl) openUseTemplateModal(tpl);
     });
+  }
+
+  function _mondayISO(d) {
+    d = d ? new Date(d + 'T00:00:00') : new Date();
+    var day = d.getDay(); var diff = (day === 0 ? -6 : 1) - day; d.setDate(d.getDate() + diff);
+    var mm = String(d.getMonth() + 1).padStart(2, '0'); var dd = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + mm + '-' + dd;
+  }
+
+  // Add a curriculum template's activities into a real weekly lesson plan.
+  async function openUseTemplateModal(tpl) {
+    var me = {}; try { me = JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) {}
+    var role = me.primary_role || (me.roles && me.roles[0]) || '';
+    var isAdmin = role === 'agency_admin' || (me.roles && me.roles.indexOf('platform_admin') !== -1);
+    var rooms = [], centres = [], seen = {};
+    try {
+      if (isAdmin) {
+        var res = await Api.get('/admin/centres');
+        (res.centres || []).forEach(function (c) {
+          centres.push({ id: c.id, name: c.name });
+          (c.rooms || []).forEach(function (r) { rooms.push({ id: r.id, name: r.name, centre_id: c.id, centre_name: c.name }); });
+        });
+      } else {
+        var b = await Api.get('/provider/bootstrap');
+        (b.rooms || []).forEach(function (r) {
+          rooms.push({ id: r.id, name: r.name, centre_id: r.centre_id, centre_name: r.centre_name });
+          if (r.centre_id && !seen[r.centre_id]) { seen[r.centre_id] = 1; centres.push({ id: r.centre_id, name: r.centre_name || ('Centre ' + r.centre_id) }); }
+        });
+      }
+    } catch (e) {}
+    var opts = [];
+    centres.forEach(function (c) { opts.push({ value: 'centre:' + c.id, label: '🏫 ' + c.name + ' (whole centre)' }); });
+    rooms.forEach(function (r) { opts.push({ value: 'room:' + r.id, label: (r.centre_name ? r.centre_name + ' · ' : '') + r.name }); });
+    if (!opts.length) { ((window.KT && KT.toast) ? KT.toast('No centres or rooms found to add this plan to.', 'error') : alert('No centres or rooms found.')); return; }
+
+    var acts = Array.isArray(tpl.activities) ? tpl.activities : [];
+    var m = document.createElement('div');
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;';
+    m.innerHTML = '<div style="background:#fff;padding:24px;border-radius:14px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);">'
+      + '<h3 style="margin:0 0 4px;color:#0F172A;font-size:18px;">📚 Add to lesson plan</h3>'
+      + '<div style="font-size:13px;color:#64748B;margin-bottom:16px;">Add <strong>' + esc(tpl.title) + '</strong> (' + acts.length + ' activit' + (acts.length === 1 ? 'y' : 'ies') + ') to a day in your weekly lesson plan.</div>'
+      + '<label style="display:block;font-size:13px;font-weight:600;margin:8px 0 4px;">Room / centre</label>'
+      + '<select id="ut-target" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">' + opts.map(function (o) { return '<option value="' + o.value + '">' + esc(o.label) + '</option>'; }).join('') + '</select>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">'
+      + '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Week of (Mon)</label><input id="ut-week" type="date" value="' + _mondayISO() + '" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;"></div>'
+      + '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Day</label><select id="ut-day" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">' + ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].map(function (d) { return '<option value="' + d + '">' + d.charAt(0).toUpperCase() + d.slice(1) + '</option>'; }).join('') + '</select></div>'
+      + '</div>'
+      + '<div id="ut-msg" style="min-height:18px;font-size:12.5px;margin-top:10px;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">'
+      + '<button id="ut-cancel" style="padding:9px 16px;border:1px solid #D1D5DB;background:#fff;border-radius:8px;font-weight:600;cursor:pointer;">Cancel</button>'
+      + '<button id="ut-add" style="padding:9px 16px;border:none;background:#1F6080;color:#fff;border-radius:8px;font-weight:700;cursor:pointer;">Add to plan</button>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click', function (e) { if (e.target === m) m.remove(); });
+    m.querySelector('#ut-cancel').onclick = function () { m.remove(); };
+    m.querySelector('#ut-add').onclick = async function () {
+      var target = m.querySelector('#ut-target').value;
+      var week = _mondayISO(m.querySelector('#ut-week').value);
+      var day = m.querySelector('#ut-day').value;
+      var msg = m.querySelector('#ut-msg'); var btn = m.querySelector('#ut-add');
+      btn.disabled = true; msg.style.color = '#64748B'; msg.textContent = 'Adding…';
+      try {
+        var isCentre = target.indexOf('centre:') === 0;
+        var tid = target.split(':')[1];
+        var qs = (isCentre ? 'centre_id=' : 'room_id=') + tid + '&week_starting=' + week;
+        var plan = await Api.get('/provider/lesson-plans?' + qs);
+        var days = (plan.plan && plan.plan.days) ? plan.plan.days : {};
+        ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].forEach(function (d) { if (!Array.isArray(days[d])) days[d] = []; });
+        var mats = Array.isArray(tpl.materials) ? tpl.materials : [];
+        acts.forEach(function (a, i) {
+          days[day].push({ time: '', title: String(a), domain: '', notes: i === 0 ? ('From template: ' + tpl.title + (mats.length ? (' · Materials: ' + mats.join(', ')) : '')) : '' });
+        });
+        var payload = { week_starting: week, theme: (plan.theme || tpl.title), plan: { days: days } };
+        if (isCentre) payload.centre_id = Number(tid); else payload.room_id = Number(tid);
+        await Api.put('/provider/lesson-plans', payload);
+        try { await Api.post('/curriculum/' + tpl.id + '/use', {}); } catch (e) {}
+        // Point the planner at EXACTLY what we just saved (scope + target + week),
+        // otherwise it opens on its remembered scope and shows an empty grid.
+        try {
+          if (window.KT && KT.LessonPlans && KT.LessonPlans.focus) {
+            KT.LessonPlans.focus({
+              scope: isCentre ? 'centre' : 'room',
+              centreId: isCentre ? Number(tid) : undefined,
+              roomId: isCentre ? undefined : Number(tid),
+              week: week,
+            });
+          }
+        } catch (e) {}
+        msg.style.color = '#16A34A'; msg.textContent = '✓ Added to ' + day.charAt(0).toUpperCase() + day.slice(1) + ' — opening lesson plans…';
+        setTimeout(function () { m.remove(); location.hash = '#lesson-plans'; }, 750);
+      } catch (e) {
+        btn.disabled = false; msg.style.color = '#DC2626'; msg.textContent = 'Could not add: ' + (e.message || 'error');
+      }
+    };
   }
   function openCurriculumModal() {
     const m = document.createElement('div');
@@ -497,19 +594,63 @@
         <table>
           <thead><tr><th>Referred</th><th>Status</th><th>Credit</th><th>When</th></tr></thead>
           <tbody>${(r.data || []).map(rf => `<tr>
-            <td>${esc(rf.referred_email || '')}</td>
+            <td>${rf.referred_name ? '<div style="font-weight:700;color:#0F172A;">' + esc(rf.referred_name) + '</div>' : ''}<div style="color:#64748B;font-size:12.5px;">${esc(rf.referred_email || '')}</div></td>
             <td><span class="kt-pill ${rf.status === 'enrolled' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(rf.status)}</span></td>
             <td>${rf.credit_amount ? fmtMoney(rf.credit_amount) : '—'}</td>
             <td>${fmtDate(rf.created_at)}</td>
-          </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#94A3B8;">No referrals yet.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#64748B;">No referrals yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
-    document.getElementById('rf-new').onclick = async () => {
-      const email = prompt('Email of the family you want to refer?');
-      if (!email) return;
-      await Api.post('/family/referrals', { referred_email: email });
-      renderReferrals(main);
+    document.getElementById('rf-new').onclick = () => openReferralForm(main);
+  }
+
+  // #16 — a simple referral form. On submit it's stored + emailed to the agency
+  // admins and the centre director for review, and they get a notification.
+  function openReferralForm(main) {
+    const m = document.createElement('div');
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    m.innerHTML = `<div style="background:#fff;padding:26px;border-radius:16px;max-width:440px;width:100%;box-sizing:border-box;">
+      <h3 style="margin:0 0 4px;color:#0F172A;">🎁 Refer a family</h3>
+      <p style="margin:0 0 16px;color:#64748B;font-size:13.5px;">Know a family who'd love it here? Send their details — your agency will reach out. You get a tuition credit when they enroll.</p>
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Family / parent name</label>
+      <input id="rf-name" placeholder="e.g. The Thompsons" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #E2E8F0;border-radius:8px;">
+      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Email <span style="color:#DC2626;">*</span></label>
+      <input id="rf-email" type="email" placeholder="parent@example.com" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #E2E8F0;border-radius:8px;">
+      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Phone</label>
+      <input id="rf-phone" placeholder="(optional)" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #E2E8F0;border-radius:8px;">
+      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Message</label>
+      <textarea id="rf-msg" rows="3" placeholder="Anything the team should know (optional)" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;resize:vertical;"></textarea>
+      <div id="rf-err" style="color:#DC2626;font-size:13px;margin-top:10px;min-height:0;"></div>
+      <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:10px;">
+        <button id="rf-cancel" style="background:#F1F5F9;color:#334155;border:0;padding:11px 20px;border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;line-height:1.2;min-height:0;">Cancel</button>
+        <button id="rf-send" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;padding:11px 20px;border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;line-height:1.2;min-height:0;">Send referral</button>
+      </div>
+    </div>`;
+    document.body.appendChild(m);
+    const close = () => m.remove();
+    m.addEventListener('click', (e) => { if (e.target === m) close(); });
+    m.querySelector('#rf-cancel').onclick = close;
+    setTimeout(() => { try { m.querySelector('#rf-name').focus(); } catch (e) {} }, 0);
+    m.querySelector('#rf-send').onclick = async () => {
+      const email = m.querySelector('#rf-email').value.trim();
+      const err = m.querySelector('#rf-err');
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = 'A valid email is required.'; return; }
+      const btn = m.querySelector('#rf-send'); btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        await Api.post('/family/referrals', {
+          referred_email: email,
+          referred_name: m.querySelector('#rf-name').value.trim(),
+          referred_phone: m.querySelector('#rf-phone').value.trim(),
+          message: m.querySelector('#rf-msg').value.trim(),
+        });
+        close();
+        if (window.KT && KT.toast) KT.toast('🎁', 'Referral sent', 'Your agency will follow up. Thank you!', '#16A34A');
+        renderReferrals(main);
+      } catch (e) {
+        btn.disabled = false; btn.textContent = 'Send referral';
+        err.textContent = (e && e.message) || 'Could not send. Please try again.';
+      }
     };
   }
 

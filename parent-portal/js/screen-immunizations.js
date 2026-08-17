@@ -81,7 +81,7 @@
 
   function immRow(r) {
     var status = '<span style="color:#16A34A;font-weight:600;">Current</span>';
-    if (r.exempt) status = '<span style="color:#9CA3AF;font-weight:600;">Exempt</span>';
+    if (r.exempt) status = '<span style="color:#64748B;font-weight:600;">Exempt</span>';
     else if (r.next_due_on && new Date(r.next_due_on) < new Date()) status = '<span style="color:#DC2626;font-weight:700;">OVERDUE</span>';
     else if (r.next_due_on) status = '<span style="color:#F59E0B;font-weight:600;">Due ' + fmtDate(r.next_due_on) + '</span>';
     return '<tr style="border-top:1px solid #E5E7EB;">' +

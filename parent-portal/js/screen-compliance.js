@@ -32,7 +32,7 @@
 
     var body = Dom.el('div', { style: 'margin-top:18px;' });
     wrap.appendChild(body);
-    body.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    body.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     Api.get('/admin/compliance').then(function (data) {
       Dom.clear(body);
@@ -70,9 +70,14 @@
   }
 
   function cardShell(title, subtitle) {
-    var c = Dom.el('div', { 'data-kt-list': '1', style: 'background:white;border-radius:14px;padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:14px;' });
+    // NOTE: no data-kt-list here. These are small curated compliance summary
+    // panels (2–5 items), not searchable record lists — the global card-list
+    // enhancer (kt-list-controls.js) was injecting misplaced Filter/Sort controls
+    // and miscounting (it treated the subtitle as a list item), which made the
+    // dashboard look broken ("fields all over"). No auto search/sort here.
+    var c = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:14px;' });
     c.appendChild(Dom.el('h3', { style: 'margin:0;font-size:14px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:1px;' }, title));
-    if (subtitle) c.appendChild(Dom.el('div', { style: 'font-size:12px;color:#9CA3AF;margin:4px 0 12px;' }, subtitle));
+    if (subtitle) c.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 12px;' }, subtitle));
     return c;
   }
 

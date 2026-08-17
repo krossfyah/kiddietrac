@@ -43,7 +43,7 @@
   // ── line-item mini editor ──────────────────────────────────────────
   function lineEditor(initial) {
     var wrap = Dom.el('div', {});
-    var head = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 70px 90px 90px 28px;gap:6px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;padding:0 2px 4px;' });
+    var head = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 70px 90px 90px 28px;gap:6px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;padding:0 2px 4px;' });
     ['Description', 'Qty', 'Unit $', 'Amount', ''].forEach(function (h) { head.appendChild(Dom.el('div', {}, h)); });
     wrap.appendChild(head);
     var rows = Dom.el('div', {});
@@ -124,7 +124,7 @@
 
     var content = Dom.el('div', {});
     wrap.appendChild(content);
-    content.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    content.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     // Load reference data (suppliers + centres) once, then draw the tab.
     Promise.all([
@@ -145,14 +145,14 @@
 
   // ── Summary tab ─────────────────────────────────────────────────────
   function drawSummary(content, container) {
-    content.appendChild(Dom.el('div', { style: 'padding:24px;text-align:center;color:#9CA3AF;' }, 'Loading summary…'));
+    content.appendChild(Dom.el('div', { style: 'padding:24px;text-align:center;color:#64748B;' }, 'Loading summary…'));
     Api.get('/admin/expenses/summary').then(function (d) {
       var s = d.summary || {};
       Dom.clear(content);
       var tiles = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px;' });
       function tile(labelTxt, value, color, sub) {
         var t = Dom.el('div', { style: 'background:white;border:1px solid #EEF0F3;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.03);' });
-        t.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.4px;' }, labelTxt));
+        t.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.4px;' }, labelTxt));
         t.appendChild(Dom.el('div', { style: 'font-size:26px;font-weight:800;color:' + color + ';margin-top:6px;' }, value));
         if (sub) t.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:2px;' }, sub));
         return t;
@@ -195,7 +195,7 @@
     r.appendChild(l); r.appendChild(Dom.el('div', { style: 'font-weight:700;color:#111827;font-size:14px;' }, right));
     return r;
   }
-  function emptyLine(t) { return Dom.el('div', { style: 'padding:12px 0;color:#9CA3AF;font-size:13px;' }, t); }
+  function emptyLine(t) { return Dom.el('div', { style: 'padding:12px 0;color:#64748B;font-size:13px;' }, t); }
 
   // ── Bills tab ───────────────────────────────────────────────────────
   function drawBills(content, container) {
@@ -211,7 +211,7 @@
     var list = Dom.el('div', { 'data-kt-list': '1', 'data-kt-sort': 'amount:Amount:num,due:Due date:date,status:Status', style: 'background:white;border:1px solid #EEF0F3;border-radius:12px;overflow:hidden;' });
     content.appendChild(list);
     function load() {
-      Dom.clear(list); list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+      Dom.clear(list); list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
       Api.get('/admin/expense-invoices' + (filter.value ? '?status=' + filter.value : '')).then(function (d) {
         var bills = d.expense_invoices || [];
         Dom.clear(list);
@@ -224,8 +224,6 @@
   }
   function billRow(b, container) {
     var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid #F3F4F6;cursor:pointer;' });
-    row.setAttribute('data-sort-outstanding', s.outstanding || 0);
-    row.setAttribute('data-sort-amount', po.total); row.setAttribute('data-sort-status', po.status || '');
     row.setAttribute('data-sort-amount', b.total); row.setAttribute('data-sort-due', b.due_date || ''); row.setAttribute('data-sort-status', b.status || '');
     row.addEventListener('mouseenter', function () { row.style.background = '#FAFBFC'; });
     row.addEventListener('mouseleave', function () { row.style.background = 'white'; });
@@ -275,7 +273,7 @@
         body.appendChild(lc);
       }
       if ((b.payments || []).length) {
-        body.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:700;color:#9CA3AF;text-transform:uppercase;margin:6px 0 4px;' }, 'Payments'));
+        body.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:700;color:#64748B;text-transform:uppercase;margin:6px 0 4px;' }, 'Payments'));
         b.payments.forEach(function (p) {
           body.appendChild(kvRow(Dom.el('span', { style: 'font-size:13px;color:#374151;' }, fmtDate(p.paid_at) + ' · ' + (p.method || '') + (p.reference ? ' · ' + p.reference : '')), money(p.amount)));
         });
@@ -289,14 +287,14 @@
         actions.push({ label: '💵 Record payment', primary: b.status === 'approved' || b.status === 'partial' || b.status === 'overdue', handler: function () { openPayment(b, container); return false; } });
       }
       actions.push({ label: 'Edit', style: 'btn-secondary', handler: function () { openBillEditor(b, container); return false; } });
-      if (b.status !== 'void') actions.push({ label: 'Void', style: 'btn-secondary', handler: function () { if (!window.confirm('Void this bill?')) return false; return Api.post('/admin/expense-invoices/' + id + '/void', {}).then(function () { toast('Bill voided'); Shell.Modal.close && Shell.Modal.close(); render(container); }).catch(function (e) { toast(e.message || 'Failed', 'error'); return false; }); } });
+      if (b.status !== 'void') actions.push({ label: 'Void', style: 'btn-secondary', handler: async function () { if (!await KT.confirm('Void this bill?')) return false; return Api.post('/admin/expense-invoices/' + id + '/void', {}).then(function () { toast('Bill voided'); Shell.Modal.close && Shell.Modal.close(); render(container); }).catch(function (e) { toast(e.message || 'Failed', 'error'); return false; }); } });
 
       Shell.Modal.open({ title: 'Bill ' + b.reference, body: body, actions: actions });
     }).catch(function (e) { toast(e.message || 'Could not open bill', 'error'); });
   }
   function metaBox(k, v) {
     var d = Dom.el('div', { style: 'background:#F9FAFB;border-radius:8px;padding:8px 10px;' });
-    d.appendChild(Dom.el('div', { style: 'font-size:11px;color:#9CA3AF;font-weight:700;text-transform:uppercase;' }, k));
+    d.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase;' }, k));
     d.appendChild(Dom.el('div', { style: 'font-weight:700;color:#111827;margin-top:2px;' }, v));
     return d;
   }
@@ -361,7 +359,7 @@
     bar.appendChild(add); content.appendChild(bar);
     var list = Dom.el('div', { 'data-kt-list': '1', 'data-kt-sort': 'amount:Amount:num,status:Status', style: 'background:white;border:1px solid #EEF0F3;border-radius:12px;overflow:hidden;' });
     content.appendChild(list);
-    list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
     Api.get('/admin/purchase-orders').then(function (d) {
       var pos = d.purchase_orders || []; Dom.clear(list);
       if (!pos.length) { list.appendChild(Dom.el('div', { style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No purchase orders yet.')); return; }
@@ -448,7 +446,7 @@
     bar.appendChild(add); content.appendChild(bar);
     var list = Dom.el('div', { 'data-kt-list': '1', 'data-kt-sort': 'outstanding:Outstanding:num', style: 'background:white;border:1px solid #EEF0F3;border-radius:12px;overflow:hidden;' });
     content.appendChild(list);
-    list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
     Api.get('/admin/suppliers').then(function (d) {
       var sups = d.suppliers || []; Dom.clear(list);
       if (!sups.length) { list.appendChild(Dom.el('div', { style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No suppliers yet. Add your first vendor.')); return; }
@@ -497,7 +495,7 @@
       var req = existing ? Api.patch('/admin/suppliers/' + existing.id, payload) : Api.post('/admin/suppliers', payload);
       return req.then(function () { toast('Supplier saved'); render(container); }).catch(function (e) { toast(e.message || 'Save failed', 'error'); return false; });
     } }];
-    if (existing) actions.unshift({ label: 'Delete', style: 'btn-secondary', handler: function () { if (!window.confirm('Delete supplier “' + existing.name + '”?')) return false; return Api.delete('/admin/suppliers/' + existing.id).then(function () { toast('Supplier deleted'); render(container); }).catch(function (e) { toast(e.message || 'Delete failed', 'error'); return false; }); } });
+    if (existing) actions.unshift({ label: 'Delete', style: 'btn-secondary', handler: async function () { if (!await KT.confirm('Delete supplier “' + existing.name + '”?')) return false; return Api.delete('/admin/suppliers/' + existing.id).then(function () { toast('Supplier deleted'); render(container); }).catch(function (e) { toast(e.message || 'Delete failed', 'error'); return false; }); } });
     Shell.Modal.open({ title: existing ? 'Edit supplier' : 'New supplier', body: body, actions: actions });
   }
 

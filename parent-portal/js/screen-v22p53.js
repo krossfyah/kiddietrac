@@ -33,81 +33,196 @@
   }
 
   // ============================ Meal planning ============================
+  // Monday (local) of the week containing d, and a local YYYY-MM-DD formatter —
+  // shared by the staff editor and the parent view so both page weeks identically.
+  function _mondayOf(d) { const x = new Date(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); x.setHours(0, 0, 0, 0); return x; }
+  function _ymd(d) { const x = new Date(d); return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+
   async function renderMenu(main) {
     main.innerHTML = '<div style="padding:24px;">Loading menu…</div>';
-    // resolve a centre for the user; try director endpoint first, then admin endpoint
+    // resolve a centre for the user (works for educator/director/admin/platform)
     let centreList = [];
-    try {
-      const r1 = await Api.get('/director/centres');
-      centreList = r1.centres || r1.data || (Array.isArray(r1) ? r1 : []);
-    } catch (e) { /* fall through */ }
-    if (!centreList.length) {
-      try {
-        const r2 = await Api.get('/admin/centres');
-        centreList = r2.centres || r2.data || (Array.isArray(r2) ? r2 : []);
-      } catch (e) {}
-    }
-    if (!centreList.length) { main.innerHTML = '<div style="padding:24px;color:#9CA3AF;">No centres found for your role.</div>'; return; }
-    const cid = centreList[0].id;
-    const weekStart = new Date(); const dow = (weekStart.getDay() + 6) % 7; weekStart.setDate(weekStart.getDate() - dow);
-    const weekStartStr = weekStart.toISOString().slice(0, 10);
-    const r = await Api.get(`/operations/menu?centre_id=${cid}&week_start=${weekStartStr}`).catch(() => ({}));
-    const week = r.data || { status: 'draft', notes: '' };
-    const itemsByDayMeal = {};
-    (r.items || []).forEach(it => { itemsByDayMeal[`${it.day_of_week}-${it.meal_type}`] = it; });
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    try { const r0 = await Api.get('/operations/my-centres'); centreList = r0.centres || r0.data || (Array.isArray(r0) ? r0 : []); } catch (e) {}
+    if (!centreList.length) { try { const r1 = await Api.get('/director/centres'); centreList = r1.centres || r1.data || (Array.isArray(r1) ? r1 : []); } catch (e) {} }
+    if (!centreList.length) { try { const r2 = await Api.get('/admin/centres'); centreList = r2.centres || r2.data || (Array.isArray(r2) ? r2 : []); } catch (e) {} }
+    if (!centreList.length) { main.innerHTML = '<div style="padding:24px;color:#64748B;">No centre is assigned to your account yet — ask an administrator to add you to a centre.</div>'; return; }
+    const cid = centreList[0].id, centreName = centreList[0].name || '';
     const meals = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'];
-    let table = `<table style="width:100%;border-collapse:collapse;margin-top:18px;">
-      <thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Meal</th>`;
-    days.forEach((d, i) => table += `<th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${d}</th>`);
-    table += `</tr></thead><tbody>`;
-    meals.forEach(m => {
-      table += `<tr><td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-weight:600;text-transform:capitalize;">${m.replace('_', ' ')}</td>`;
-      days.forEach((d, di) => {
-        const it = itemsByDayMeal[`${di + 1}-${m}`] || {};
-        table += `<td style="padding:6px 4px;border-bottom:1px solid #F3F4F6;">
-          <input data-d="${di + 1}" data-m="${m}" data-f="name" placeholder="—" value="${esc(it.name || '')}" style="width:100%;padding:6px;border:1px solid #E5E7EB;border-radius:4px;font-size:12px;">
-          <input data-d="${di + 1}" data-m="${m}" data-f="allergens" placeholder="allergens" value="${esc(it.allergens || '')}" style="width:100%;padding:4px;border:1px solid #FEF3C7;border-radius:4px;font-size:11px;margin-top:3px;color:#92400E;">
-        </td>`;
-      });
-      table += '</tr>';
-    });
-    table += '</tbody></table>';
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const thisMonday = _mondayOf(new Date());
+    let cur = _mondayOf(new Date());   // the week currently being edited
 
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <h2 style="margin:0 0 6px;color:#1F6080;">Weekly menu</h2>
-      <div style="color:#6B7280;font-size:14px;">${esc(centreList[0].name || '')} · Week of ${fmtDate(weekStartStr)}</div>
-      <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
-        <label style="font-size:13px;">Status
-          <select id="mp-status" style="padding:7px;border:1px solid #E5E7EB;border-radius:4px;margin-left:6px;">
-            <option value="draft" ${week.status === 'draft' ? 'selected' : ''}>Draft</option>
-            <option value="published" ${week.status === 'published' ? 'selected' : ''}>Published</option>
-            <option value="archived" ${week.status === 'archived' ? 'selected' : ''}>Archived</option>
-          </select></label>
-        <button id="mp-save" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:6px;cursor:pointer;">Save menu</button>
-        <span id="mp-msg" style="font-size:13px;color:#047857;"></span>
-      </div>
-      ${table}
-      <label style="display:block;margin-top:18px;font-size:13px;color:#374151;font-weight:600;">Notes (optional)
-        <textarea id="mp-notes" rows="3" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;">${esc(week.notes || '')}</textarea>
-      </label>
-    </div>`;
+    // Friendly allergy/dietary reminder — fetched once (independent of the week).
+    let allergyHtml = '';
+    try {
+      const ar = await Api.get(`/operations/allergy-alerts?centre_id=${cid}`);
+      const kids = (ar && ar.data) || [];
+      if (kids.length) {
+        const chip = (t) => { const hot = t.severity === 'severe' || t.severity === 'high'; return `<span style="display:inline-block;background:${hot ? '#FEE2E2' : '#FEF3C7'};color:${hot ? '#991B1B' : '#92400E'};padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;margin:1px 4px 1px 0;">${esc(t.label)}</span>`; };
+        allergyHtml = `<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;margin:12px 0;">
+          <div style="font-weight:800;font-size:13px;color:#9A3412;">⚠️ Allergy &amp; dietary reminders <span style="font-weight:600;color:#C2701C;">· ${kids.length} ${kids.length === 1 ? 'child' : 'children'}</span></div>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:7px;">
+            ${kids.map(k => `<div style="font-size:12.5px;color:#7C2D12;"><strong>${esc((k.first_name || '') + ' ' + String(k.last_name || '').charAt(0) + (k.last_name ? '.' : ''))}</strong> — ${(k.tags || []).map(chip).join('') || '<span style="color:#9A3412;">alert on file</span>'}</div>`).join('')}
+          </div>
+        </div>`;
+      }
+    } catch (e) {}
 
-    document.getElementById('mp-save').onclick = async () => {
-      const items = [];
-      main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach(inp => {
-        const name = inp.value.trim(); if (!name) return;
-        const allergens = main.querySelector(`input[data-d="${inp.dataset.d}"][data-m="${inp.dataset.m}"][data-f="allergens"]`).value.trim();
-        items.push({ day_of_week: +inp.dataset.d, meal_type: inp.dataset.m, name, allergens: allergens || null });
-      });
-      const status = document.getElementById('mp-status').value;
-      try {
-        await Api.post('/operations/menu', {
-          centre_id: cid, week_start: weekStartStr, status, notes: document.getElementById('mp-notes').value, items,
+    async function load() {
+      const weekStartStr = _ymd(cur);
+      main.innerHTML = '<div style="padding:24px;">Loading menu…</div>';
+      const r = await Api.get(`/operations/menu?centre_id=${cid}&week_start=${weekStartStr}`).catch(() => ({}));
+      const week = r.data || { status: 'draft', notes: '' };
+      // Only render the days the centre is open (configured per centre; Mon–Fri default).
+      const openDays = (r && Array.isArray(r.open_days) && r.open_days.length) ? r.open_days.slice() : [1, 2, 3, 4, 5];
+      const cols = openDays.map(dow => ({ dow, label: dayLabels[dow - 1] || ('D' + dow) }));
+      const itemsByDayMeal = {};
+      (r.items || []).forEach(it => { itemsByDayMeal[`${it.day_of_week}-${it.meal_type}`] = it; });
+
+      // The grid scrolls horizontally inside its own box on mobile; the Meal
+      // column stays pinned so you never lose which row you're editing.
+      let table = `<table style="min-width:${120 + cols.length * 116}px;width:100%;border-collapse:collapse;margin-top:12px;">
+        <thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;position:sticky;left:0;background:#fff;">Meal</th>`;
+      cols.forEach(c => table += `<th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${c.label}</th>`);
+      table += `</tr></thead><tbody>`;
+      meals.forEach(m => {
+        table += `<tr><td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-weight:600;text-transform:capitalize;font-size:12px;position:sticky;left:0;background:#fff;">${m.replace('_', ' ')}</td>`;
+        cols.forEach(c => {
+          const it = itemsByDayMeal[`${c.dow}-${m}`] || {};
+          table += `<td style="padding:6px 4px;border-bottom:1px solid #F3F4F6;min-width:112px;">
+            <input data-d="${c.dow}" data-m="${m}" data-f="name" placeholder="—" value="${esc(it.name || '')}" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid #E5E7EB;border-radius:4px;font-size:12px;">
+            <input data-d="${c.dow}" data-m="${m}" data-f="allergens" placeholder="allergens" value="${esc(it.allergens || '')}" style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #FEF3C7;border-radius:4px;font-size:11px;margin-top:3px;color:#92400E;">
+          </td>`;
         });
-        document.getElementById('mp-msg').textContent = 'Saved.';
-      } catch (e) { document.getElementById('mp-msg').textContent = 'Save failed.'; document.getElementById('mp-msg').style.color = '#B91C1C'; }
-    };
+        table += '</tr>';
+      });
+      table += '</tbody></table>';
+
+      const isThis = _ymd(cur) === _ymd(thisMonday);
+      const navBtn = 'width:30px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:14px;color:#1F6080;';
+      main.innerHTML = `<div style="padding:16px;max-width:1200px;margin:0 auto;">
+        <h2 style="margin:0 0 2px;color:#1F6080;font-size:19px;">Weekly menu</h2>
+        <div style="color:#6B7280;font-size:12.5px;">${esc(centreName)}</div>
+        ${allergyHtml}
+        <div style="display:flex;align-items:center;gap:2px;background:#F3F4F6;border-radius:10px;padding:2px;width:fit-content;margin-top:6px;">
+          <button id="mp-prev" title="Previous week" style="${navBtn}">◀</button>
+          <span style="font-weight:700;font-size:12.5px;color:#111827;min-width:120px;text-align:center;">Week of ${fmtDate(weekStartStr)}</span>
+          <button id="mp-next" title="Next week" style="${navBtn}">▶</button>
+          ${isThis ? '' : `<button id="mp-today" style="height:28px;border:none;background:#fff;border-radius:7px;padding:0 10px;font-size:12px;cursor:pointer;color:#1F6080;font-weight:600;margin-left:4px;">This week</button>`}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px;">
+          <label style="font-size:12.5px;color:#374151;font-weight:600;display:flex;align-items:center;gap:7px;">Status
+            <select id="mp-status" style="height:36px;padding:0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box;vertical-align:middle;">
+              <option value="draft" ${week.status === 'draft' ? 'selected' : ''}>Draft</option>
+              <option value="published" ${week.status === 'published' ? 'selected' : ''}>Published</option>
+              <option value="archived" ${week.status === 'archived' ? 'selected' : ''}>Archived</option>
+            </select>
+          </label>
+          <button id="mp-save" class="kt-icon-tip" title="Save menu" data-kttip="Save menu" aria-label="Save menu" style="height:36px;width:36px;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;box-shadow:0 6px 14px -8px rgba(31,96,128,.85);">💾</button>
+        </div>
+        <div id="mp-msg" style="font-size:12.5px;color:#047857;min-height:16px;margin-top:7px;"></div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">${table}</div>
+        <label style="display:block;margin-top:16px;font-size:12.5px;color:#374151;font-weight:600;">Notes (optional)
+          <textarea id="mp-notes" rows="3" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #E5E7EB;border-radius:6px;margin-top:4px;font-size:13px;">${esc(week.notes || '')}</textarea>
+        </label>
+      </div>`;
+
+      const go = (delta) => { cur.setDate(cur.getDate() + delta); load(); };
+      document.getElementById('mp-prev').onclick = () => go(-7);
+      document.getElementById('mp-next').onclick = () => go(7);
+      const todayBtn = document.getElementById('mp-today'); if (todayBtn) todayBtn.onclick = () => { cur = _mondayOf(new Date()); load(); };
+
+      document.getElementById('mp-save').onclick = async () => {
+        const items = [];
+        main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach(inp => {
+          const name = inp.value.trim(); if (!name) return;
+          const allergens = main.querySelector(`input[data-d="${inp.dataset.d}"][data-m="${inp.dataset.m}"][data-f="allergens"]`).value.trim();
+          items.push({ day_of_week: +inp.dataset.d, meal_type: inp.dataset.m, name, allergens: allergens || null });
+        });
+        const status = document.getElementById('mp-status').value;
+        const msg = document.getElementById('mp-msg');
+        msg.textContent = 'Saving…'; msg.style.color = '#6B7280';
+        try {
+          await Api.post('/operations/menu', { centre_id: cid, week_start: weekStartStr, status, notes: document.getElementById('mp-notes').value, items });
+          msg.textContent = status === 'published' ? 'Published — families notified.' : 'Saved.'; msg.style.color = '#047857';
+        } catch (e) { msg.textContent = 'Save failed.'; msg.style.color = '#B91C1C'; }
+      };
+    }
+    load();
+  }
+
+  // Parent-facing weekly menu — read-only, published weeks only, day-by-day cards
+  // with allergen chips and today highlighted; prev/next week navigation.
+  async function renderParentMenu(main) {
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const mealOrder = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'];
+    const mealMeta = { breakfast: ['🍳', 'Breakfast'], morning_snack: ['🍎', 'Morning snack'], lunch: ['🍽️', 'Lunch'], afternoon_snack: ['🧃', 'Afternoon snack'], dinner: ['🍲', 'Dinner'] };
+    const thisMonday = _mondayOf(new Date());
+    let cur = _mondayOf(new Date());
+
+    async function load() {
+      main.innerHTML = '<div style="padding:24px;color:#64748B;">Loading menu…</div>';
+      const weekStartStr = _ymd(cur);
+      const r = await Api.get(`/parent/menu?week_start=${weekStartStr}`).catch(() => ({}));
+      const centre = r && r.centre; const items = (r && r.items) || [];
+      const openDays = (r && Array.isArray(r.open_days) && r.open_days.length) ? r.open_days : [1, 2, 3, 4, 5];
+      const byDay = {}; items.forEach(it => { if (openDays.indexOf(it.day_of_week) === -1) return; (byDay[it.day_of_week] = byDay[it.day_of_week] || []).push(it); });
+      const isThisWeek = _ymd(cur) === _ymd(thisMonday);
+      const todayDow = ((new Date().getDay() + 6) % 7) + 1;
+      const navBtn = 'width:36px;height:36px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:15px;color:#0FA3B1;';
+
+      let html = `<div style="padding:14px;max-width:680px;margin:0 auto;">
+        <div class="kt-hero" style="background:linear-gradient(135deg,#0FA3B1,#1F6080 75%);color:#fff;border-radius:16px;padding:16px 18px;">
+          <div style="font-size:12px;opacity:.9;font-weight:700;letter-spacing:.04em;">🍽️ ON THE MENU</div>
+          <h1 style="margin:4px 0 0;font-size:20px;">${esc(centre ? centre.name : 'Weekly menu')}</h1>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px;background:#F3F4F6;border-radius:12px;padding:4px;margin:12px 0;">
+          <button id="pm-prev" title="Previous week" style="${navBtn}">◀</button>
+          <span style="font-weight:800;font-size:13px;color:#111827;min-width:150px;text-align:center;">Week of ${fmtDate(weekStartStr)}</span>
+          <button id="pm-next" title="Next week" style="${navBtn}">▶</button>
+        </div>`;
+      if (!isThisWeek) html += `<div style="text-align:center;margin:-4px 0 10px;"><button id="pm-today" style="border:1px solid #D1D5DB;background:#fff;border-radius:8px;padding:5px 12px;font-size:12.5px;cursor:pointer;">Jump to this week</button></div>`;
+
+      if (!centre) {
+        html += `<div style="text-align:center;color:#64748B;padding:40px 16px;">We couldn't find your centre yet.</div>`;
+      } else if (!Object.keys(byDay).length) {
+        html += `<div style="text-align:center;color:#64748B;padding:44px 16px;"><div style="font-size:42px;">🍽️</div><div style="margin-top:10px;font-size:14px;">No menu published for this week yet.</div></div>`;
+      } else {
+        for (let d = 1; d <= 7; d++) {
+          const dayItems = byDay[d]; if (!dayItems || !dayItems.length) continue;
+          const isToday = isThisWeek && d === todayDow;
+          const dayDate = new Date(cur); dayDate.setDate(dayDate.getDate() + (d - 1));
+          const map = {}; dayItems.forEach(it => { map[it.meal_type] = it; });
+          html += `<div style="background:#fff;border:1px solid ${isToday ? '#0FA3B1' : '#EAECEF'};${isToday ? 'box-shadow:0 0 0 2px rgba(15,163,177,.15);' : ''}border-radius:14px;padding:12px 14px;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-weight:800;font-size:14.5px;color:#0D1B2A;">${dayNames[d - 1]}</span>
+              <span style="font-size:11.5px;color:#64748B;">${dayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+              ${isToday ? '<span style="margin-left:auto;background:#0FA3B1;color:#fff;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:10px;">TODAY</span>' : ''}
+            </div>`;
+          mealOrder.forEach(mt => {
+            const it = map[mt]; if (!it) return;
+            const meta = mealMeta[mt] || ['•', mt];
+            html += `<div style="display:flex;gap:10px;padding:7px 0;border-top:1px solid #F3F4F6;">
+              <span style="font-size:17px;flex-shrink:0;width:22px;text-align:center;">${meta[0]}</span>
+              <div style="min-width:0;flex:1;">
+                <div style="font-size:10.5px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${meta[1]}</div>
+                <div style="font-size:14px;color:#0D1B2A;">${esc(it.name)}</div>
+                ${it.allergens ? `<div style="margin-top:3px;"><span style="display:inline-block;background:#FEF3C7;color:#92400E;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:8px;">⚠ ${esc(it.allergens)}</span></div>` : ''}
+              </div>
+            </div>`;
+          });
+          html += `</div>`;
+        }
+        if (r.data && r.data.notes) html += `<div style="background:#F9FAFB;border:1px solid #EAECEF;border-radius:12px;padding:12px 14px;font-size:13px;color:#374151;"><strong>Notes:</strong> ${esc(r.data.notes)}</div>`;
+      }
+      html += `</div>`;
+      main.innerHTML = html;
+      const go = (delta) => { cur.setDate(cur.getDate() + delta); load(); };
+      document.getElementById('pm-prev').onclick = () => go(-7);
+      document.getElementById('pm-next').onclick = () => go(7);
+      const t = document.getElementById('pm-today'); if (t) t.onclick = () => { cur = _mondayOf(new Date()); load(); };
+    }
+    load();
   }
 
   // ============================ Allergy banner ============================
@@ -128,7 +243,7 @@
               const c = colors[t.kind] || { bg: '#F3F4F6', fg: '#374151' };
               return `<span style="background:${c.bg};color:${c.fg};padding:4px 10px;border-radius:6px;margin-right:6px;margin-bottom:4px;font-size:13px;display:inline-block;font-weight:600;">${sevDot} ${esc((t.kind || '').toUpperCase())}: ${esc(t.label || '')}</span>`;
             }).join('')}
-          </div></div>`).join('') || '<div style="color:#9CA3AF;padding:20px;">No active allergy or dietary alerts.</div>'}
+          </div></div>`).join('') || '<div style="color:#64748B;padding:20px;">No active allergy or dietary alerts.</div>'}
       </div>
     </div>`;
   }
@@ -154,12 +269,24 @@
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${fmtDate(t.trip_date)}</td>
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${esc(t.centre_name)}</td>
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="background:#EFF6FF;color:#1E40AF;padding:2px 8px;border-radius:4px;font-size:12px;">${esc(t.status)}</span></td>
-          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;"><button data-ft-id="${t.id}" style="background:#F3F4F6;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;">Permissions</button></td>
-        </tr>`).join('') || '<tr><td colspan="5" style="padding:24px;color:#9CA3AF;text-align:center;">No field trips planned.</td></tr>'}
+          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;white-space:nowrap;"><button data-ft-id="${t.id}" class="kt-act-icon kt-act-info kt-icon-tip" title="Permission slips" data-kttip="Permission slips" aria-label="Permission slips">🔑</button><button data-ft-del="${t.id}" class="kt-act-icon kt-act-danger kt-icon-tip" title="Delete trip" data-kttip="Delete" aria-label="Delete">🗑️</button></td>
+        </tr>`).join('') || '<tr><td colspan="5" style="padding:24px;color:#64748B;text-align:center;">No field trips planned.</td></tr>'}
         </tbody></table>
     </div>`;
     document.getElementById('ft-new').onclick = () => openFieldTripModal();
-    main.querySelectorAll('button[data-ft-id]').forEach(b => b.onclick = () => openPermissionsModal(+b.dataset['ft-id']));
+    main.querySelectorAll('button[data-ft-id]').forEach(b => b.onclick = () => openPermissionsModal(+b.getAttribute('data-ft-id'), b));
+    main.querySelectorAll('button[data-ft-del]').forEach(b => b.onclick = async () => {
+      if (!await KT.confirm('Delete this field trip? This removes the trip and its permission slips.')) return;
+      try {
+        await Api.delete('/operations/field-trips/' + b.getAttribute('data-ft-del'));
+        if (window.KT && KT.toast) KT.toast('🗑', 'Deleted', 'Field trip removed.', '#0F172A');
+        renderFieldTrips(main);
+      } catch (e) {
+        if (window.KT && KT.toast) KT.toast('⚠️', 'Could not delete', (e && e.message) || 'Try again.', '#DC2626');
+      }
+    });
+    // Real <table> but renders async — nudge the ⋮ kebab sweep.
+    if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
   }
   async function openFieldTripModal() {
     /* v22p70: fix field-trip modal response keys */
@@ -201,8 +328,23 @@
       renderFieldTrips(document.querySelector('main') || document.getElementById('main'));
     };
   }
-  async function openPermissionsModal(tripId) {
-    const r = await Api.get(`/operations/field-trips/${tripId}/permissions`);
+  async function openPermissionsModal(tripId, btn) {
+    // Guard against a silent failure: a rejected fetch used to leave the button
+    // looking like it "did nothing". Show a busy state and surface any error.
+    const done = (btn && window.KT && KT.busy) ? KT.busy(btn) : function () {};
+    let r;
+    try {
+      r = await Api.get(`/operations/field-trips/${tripId}/permissions`);
+    } catch (e) {
+      done();
+      if (window.KT && KT.toast) KT.toast('⚠️', 'Could not load permissions', e && e.message ? e.message : 'Please try again.', '#DC2626');
+      else window.alert('Could not load permissions: ' + (e && e.message ? e.message : 'error'));
+      return;
+    }
+    done();
+    r = r || {};
+    const counts = r.counts || { approved: 0, denied: 0, pending: 0 };
+    r.counts = counts;
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
     m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:520px;width:92%;">
@@ -234,18 +376,18 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px;">
         <div>
           <h3 style="font-size:14px;color:#374151;">Pool (${(pool.data || []).length})</h3>
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Name</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Priority</th></tr></thead>
-            <tbody>${(pool.data || []).map(p => `<tr><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(p.user_name)}</td><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${p.contact_priority}</td></tr>`).join('') || '<tr><td colspan="2" style="padding:14px;color:#9CA3AF;font-size:13px;">No substitutes added yet.</td></tr>'}</tbody>
+          <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;table-layout:fixed;">
+            <thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Name</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:90px;">Priority</th></tr></thead>
+            <tbody>${(pool.data || []).map(p => `<tr><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(p.user_name)}</td><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${p.contact_priority}</td></tr>`).join('') || '<tr><td colspan="2" style="padding:14px;color:#64748B;font-size:13px;">No substitutes added yet.</td></tr>'}</tbody>
           </table>
         </div>
         <div>
           <h3 style="font-size:14px;color:#374151;">Recent requests (${(requests.data || []).length})</h3>
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Date</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Status</th><th></th></tr></thead>
+          <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;table-layout:fixed;">
+            <thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:110px;">Date</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:90px;">Status</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Filled by</th></tr></thead>
             <tbody>${(requests.data || []).map(r => `<tr><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${fmtDate(r.shift_date)}</td>
               <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;"><span style="color:${r.status === 'filled' ? '#047857' : '#D97706'};font-weight:600;">${r.status}</span></td>
-              <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(r.assigned_name || '')}</td></tr>`).join('') || '<tr><td colspan="3" style="padding:14px;color:#9CA3AF;font-size:13px;">No requests yet.</td></tr>'}</tbody>
+              <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(r.assigned_name || '')}</td></tr>`).join('') || '<tr><td colspan="3" style="padding:14px;color:#64748B;font-size:13px;">No requests yet.</td></tr>'}</tbody>
           </table>
           <button id="sr-new" style="margin-top:12px;background:#1F6080;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">+ Post open shift</button>
         </div>
@@ -352,7 +494,7 @@
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;">$${row.gross_fee.toFixed(2)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;">$${row.subsidy_amount.toFixed(2)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;">$${row.parent_portion.toFixed(2)}</td>
-        </tr>`).join('') || '<tr><td colspan="6" style="padding:24px;color:#9CA3AF;text-align:center;">No CWELCC-enrolled families for this month.</td></tr>'}</tbody>
+        </tr>`).join('') || '<tr><td colspan="6" style="padding:24px;color:#64748B;text-align:center;">No CWELCC-enrolled families for this month.</td></tr>'}</tbody>
       </table>
     </div>`;
     document.getElementById('cw-month').onchange = (e) => { renderCwelcc(main); };
@@ -427,7 +569,7 @@
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;color:#B91C1C;">${a.signals.join(' · ')}</td>
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${a.obs_30}</td>
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${a.obs_90}</td>
-        </tr>`).join('') || '<tr><td colspan="4" style="padding:24px;color:#9CA3AF;text-align:center;">No anomalies — all children showing normal activity.</td></tr>'}</tbody></table>
+        </tr>`).join('') || '<tr><td colspan="4" style="padding:24px;color:#64748B;text-align:center;">No anomalies — all children showing normal activity.</td></tr>'}</tbody></table>
     </div>`;
   }
 
@@ -447,7 +589,7 @@
           ${groups[b].length ? `<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:9px 12px;border-bottom:2px solid #E5E7EB;font-size:11px;color:#6B7280;">Name / certification</th><th style="text-align:left;padding:9px 12px;border-bottom:2px solid #E5E7EB;font-size:11px;color:#6B7280;">Expires</th></tr></thead><tbody>${groups[b].map(r => `<tr style="background:${colors[b]};">
             <td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;font-size:13px;width:60%;"><strong>${esc(r.user_name)}</strong> · ${esc(r.type)} <span style="color:#6B7280;font-size:11px;">(${esc(r.source)})</span></td>
             <td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;font-size:13px;">${fmtDate(r.expires_at)} <span style="color:#6B7280;font-size:11px;">(${Math.abs(r.days_until)}d ${r.days_until < 0 ? 'ago' : 'left'})</span></td>
-          </tr>`).join('')}</tbody></table>` : '<div style="color:#9CA3AF;padding:8px;font-size:13px;">None.</div>'}`;
+          </tr>`).join('')}</tbody></table>` : '<div style="color:#64748B;padding:8px;font-size:13px;">None.</div>'}`;
       }).join('')}
     </div>`;
   }
@@ -455,7 +597,7 @@
   // Expose
   window.KT = window.KT || {};
   window.KT.V22p53 = {
-    renderMenu, renderAllergyAlerts, renderFieldTrips, renderSubstitutes,
+    renderMenu, renderParentMenu, renderAllergyAlerts, renderFieldTrips, renderSubstitutes,
     renderInspection, renderCwelcc, renderRetention, renderForecast,
     renderAnomalies, renderExpiryCalendar,
   };

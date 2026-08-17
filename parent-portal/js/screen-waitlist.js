@@ -80,7 +80,7 @@
               <div style="font-size:48px;margin-bottom:12px;">📋</div>
               No one on the waitlist for this centre.
             </div>`
-          : `<div data-kt-list="1" style="background:white;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+          : `<div data-kt-list="1" style="background:white;border-radius:14px;overflow:visible;box-shadow:0 2px 8px rgba(0,0,0,.06);">
               ${data.waitlist.map(w => waitlistRow(w)).join('')}
             </div>`
         }
@@ -95,11 +95,69 @@
     $('#kt-add-waitlist', container).addEventListener('click', () => openAddModal(container));
     $$('.kt-promote', container).forEach(b => b.addEventListener('click', () => openPromoteModal(container, parseInt(b.dataset.cid, 10), b.dataset.name)));
     $$('.kt-decline', container).forEach(b => b.addEventListener('click', () => declineChild(container, parseInt(b.dataset.cid, 10), b.dataset.name)));
+    $$('.kt-remind', container).forEach(b => b.addEventListener('click', () => openRemindModal(container, parseInt(b.dataset.cid, 10), b.dataset.name, b.dataset.email)));
+
+    // Collapse each row's action icons into the standard ⋮ kebab (desktop). This
+    // list re-renders in place (centre switch / after an action) with no hashchange,
+    // so nudge the row-actions sweep directly rather than waiting for its timer.
+    if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
+  }
+
+  // Confirmation modal (dimmed backdrop) with a note field, before sending a "still on the
+  // waitlist" reminder email to the family.
+  function openRemindModal(container, childId, childName, email) {
+    const mount = $('#kt-modal-mount', container);
+    const hasEmail = !!(email && String(email).trim());
+    mount.innerHTML = `
+      <div class="kt-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;">
+        <div style="background:#fff;border-radius:14px;max-width:460px;width:100%;padding:24px;box-shadow:0 20px 50px -12px rgba(15,23,42,.4);">
+          <h3 style="margin:0 0 4px;color:#0F172A;font-size:18px;">✉️ Send waitlist reminder</h3>
+          <p style="margin:0 0 14px;color:#64748B;font-size:13px;">Let <strong>${esc(childName)}</strong>'s family know they're still on the waitlist${hasEmail ? ' — email to ' + esc(email) : ''}.</p>
+          ${hasEmail ? '' : '<div style="background:#FEF2F2;color:#B91C1C;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:12px;">This family has no email on file — add one on their record first.</div>'}
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Add a note (optional)</label>
+          <textarea id="kt-remind-note" rows="4" placeholder="e.g. A space may open soon — please reply to confirm you're still interested." style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:13.5px;box-sizing:border-box;"></textarea>
+          <div id="kt-remind-status" style="font-size:12.5px;min-height:16px;margin-top:8px;"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+            <button id="kt-remind-cancel" style="background:#F1F5F9;color:#475569;border:none;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;">Cancel</button>
+            <button id="kt-remind-send" ${hasEmail ? '' : 'disabled'} style="background:#1D4ED8;color:#fff;border:none;border-radius:9px;padding:9px 18px;font-weight:700;cursor:${hasEmail ? 'pointer' : 'not-allowed'};${hasEmail ? '' : 'opacity:.5;'}">Send reminder</button>
+          </div>
+        </div>
+      </div>`;
+    const overlay = $('.kt-modal-overlay', container);
+    const close = () => { mount.innerHTML = ''; };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    $('#kt-remind-cancel', container).addEventListener('click', close);
+    const sendBtn = $('#kt-remind-send', container);
+    if (sendBtn && hasEmail) {
+      sendBtn.addEventListener('click', async () => {
+        const note = ($('#kt-remind-note', container).value || '').trim();
+        const status = $('#kt-remind-status', container);
+        const done = (window.KT && KT.busy) ? KT.busy(sendBtn) : function () {};
+        sendBtn.disabled = true;
+        try {
+          await api('POST', '/director/waitlist/' + childId + '/remind', { note: note });
+          status.style.color = '#047857'; status.textContent = '✓ Reminder sent.';
+          setTimeout(close, 1200);
+        } catch (e) {
+          status.style.color = '#B91C1C'; status.textContent = '✗ ' + (e.message || 'Could not send.');
+          sendBtn.disabled = false;
+        } finally { done(); }
+      });
+    }
+  }
+
+  // Whole days, expressed in months once it's been a while (no more "12.34 days").
+  function formatWait(days) {
+    const d = Math.round(Number(days) || 0);
+    if (d < 45) return d + (d === 1 ? ' day' : ' days');
+    const m = Math.floor(d / 30.44);
+    const rem = d - Math.round(m * 30.44);
+    return m + ' mo' + (rem > 0 ? ' ' + rem + 'd' : '') + ' (' + d + ' days)';
   }
 
   function waitlistRow(w) {
     const age = w.age_months != null ? Math.floor(w.age_months) + ' mo' : '—';
-    const wait = w.days_waiting != null ? w.days_waiting + ' days' : '—';
+    const wait = w.days_waiting != null ? formatWait(w.days_waiting) : '—';
     return `
       <div style="padding:14px 18px;border-bottom:1px solid #F3F4F6;display:grid;grid-template-columns:40px 1fr auto;gap:14px;align-items:center;">
         <div style="background:#1F6080;color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-weight:700;">${w.position}</div>
@@ -115,8 +173,9 @@
           ${w.notes ? `<div style="font-size:12px;color:#6B7280;margin-top:4px;font-style:italic;">${esc(w.notes)}</div>` : ''}
         </div>
         <div style="display:flex;gap:6px;">
-          <button class="kt-promote" data-cid="${w.id}" data-name="${esc(w.child_name)}" style="background:#16A34A;color:white;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">→ Enroll</button>
-          <button class="kt-decline" data-cid="${w.id}" data-name="${esc(w.child_name)}" style="background:#FEE2E2;color:#991B1B;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Decline</button>
+          <button class="kt-promote kt-act-icon kt-act-ok kt-icon-tip" data-cid="${w.id}" data-name="${esc(w.child_name)}" title="Enroll" data-kttip="Enroll" aria-label="Enroll">✅</button>
+          <button class="kt-decline kt-act-icon kt-act-danger kt-icon-tip" data-cid="${w.id}" data-name="${esc(w.child_name)}" title="Decline" data-kttip="Decline" aria-label="Decline">✖️</button>
+          <button class="kt-remind kt-act-icon kt-act-info kt-icon-tip" data-cid="${w.id}" data-name="${esc(w.child_name)}" data-email="${esc(w.family_email || '')}" title="Send waitlist reminder" data-kttip="Send waitlist reminder" aria-label="Send waitlist reminder">✉️</button>
         </div>
       </div>
     `;

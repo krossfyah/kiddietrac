@@ -50,7 +50,7 @@
 
     // Always: Chat nav (everyone except auditor)
     if (role !== 'auditor') {
-      extra.appendChild(makeNavBtn('chat', '💬 Messages', true));
+      extra.appendChild(makeNavBtn('chat', '💬 Messenger', true));
     }
 
     // Agency admin only: Agencies nav.

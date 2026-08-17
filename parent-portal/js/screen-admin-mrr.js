@@ -106,7 +106,7 @@
       const rows = data.agencies || [];
       if (rows.length === 0) { target.innerHTML = '<div style="color:#6B7280;font-size:13px;padding:12px;">No agencies match.</div>'; return; }
       target.innerHTML = `
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead><tr style="background:#F9FAFB;">
             <th style="${th()}">Agency</th>
             <th style="${th()}">Plan</th>
@@ -162,7 +162,7 @@
         <path d="${linePath}" stroke="#3BBBBE" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
         ${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#3BBBBE"/>`).join('')}
       </svg>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:#9CA3AF;margin-top:4px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748B;margin-top:4px;">
         ${history.map(h => `<span>${esc(h.month_label || h.month || '')}</span>`).join('')}
       </div>
     </div>`;
@@ -170,7 +170,7 @@
 
   function planBreakdownTable(rows, ccy) {
     if (rows.length === 0) return '<div style="color:#6B7280;font-size:13px;">No plan data.</div>';
-    return `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    return `<table data-kt-filtered="1" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#F9FAFB;">
         <th style="${th()}">Plan</th>
         <th style="${th()}">Count</th>
@@ -186,7 +186,7 @@
 
   function topAgenciesTable(rows, ccy) {
     if (rows.length === 0) return '<div style="color:#6B7280;font-size:13px;">No data yet.</div>';
-    return `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    return `<table data-kt-filtered="1" style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:#F9FAFB;">
         <th style="${th()}">Agency</th>
         <th style="${th()}">MRR</th>

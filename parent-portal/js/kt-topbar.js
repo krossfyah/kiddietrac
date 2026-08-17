@@ -384,7 +384,7 @@
     right.appendChild(languagePicker());
     right.appendChild(iconBtn('🏠', 'Home', openHome));
     if (effAdmin) right.appendChild(iconBtn('⚡', 'Quick add', openQuickAdd));
-    right.appendChild(iconBtn('💬', 'Messages', function () { go('#chat'); }, 'kt-tb-msg-badge'));
+    right.appendChild(iconBtn('💬', 'Messenger', function () { go('#chat'); }, 'kt-tb-msg-badge'));
     right.appendChild(iconBtn('📣', 'Announcements', function () { go('#announcements'); }));
     // Notification bell for EVERY bar role. Admins/directors get the agency
     // activity-feed dropdown; educators/home visitors get their OWN inbox (the

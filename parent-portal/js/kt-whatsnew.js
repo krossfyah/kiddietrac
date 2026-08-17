@@ -35,7 +35,7 @@
         return '<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #F1F5F9;">' +
           '<span style="font-size:22px;flex-shrink:0;line-height:1.2;">' + (e.icon || '✨') + '</span>' +
           '<div style="min-width:0;"><div style="font-weight:700;font-size:14px;color:#0D1B2A;">' + esc(e.title) +
-          (e.date ? '<span style="font-weight:600;font-size:11px;color:#94A3B8;margin-left:8px;">' + fmtDate(e.date) + '</span>' : '') + '</div>' +
+          (e.date ? '<span style="font-weight:600;font-size:11px;color:#64748B;margin-left:8px;">' + fmtDate(e.date) + '</span>' : '') + '</div>' +
           '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + esc(e.body || '') + '</div></div></div>';
       };
       var overlay = document.createElement('div');
@@ -49,7 +49,7 @@
         '<div style="padding:14px 22px 20px;">' +
           (news.length
             ? '<div style="font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#0E7C90;margin:2px 0 2px;">✨ Recently added</div>' + news.map(entry).join('')
-            : '<div style="color:#94A3B8;font-size:13px;padding:10px 0;">No new features in the last 3 months.</div>') +
+            : '<div style="color:#64748B;font-size:13px;padding:10px 0;">No new features in the last 3 months.</div>') +
           (up.length ? '<div style="font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#B45309;margin:20px 0 2px;">🔜 Coming soon</div>' + up.map(entry).join('') : '') +
           '<div style="font-size:11px;color:#B6C2CE;margin-top:16px;text-align:center;">New features stay listed here for 3 months.</div>' +
         '</div>';

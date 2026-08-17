@@ -65,7 +65,7 @@
       sweepCounters();
     }, 600);
   });
-  setInterval(sweepCounters, 1500);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweepCounters) : setInterval(sweepCounters, 4000);
   setTimeout(sweepCounters, 900);
 
   // ============================ Auto-tooltips from title attribute ============================
@@ -77,7 +77,7 @@
       el.removeAttribute('title'); // suppress native browser tooltip
     });
   }
-  setInterval(syncTooltips, 2000);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(syncTooltips) : setInterval(syncTooltips, 4000);
   setTimeout(syncTooltips, 1100);
 
   // ============================ Smooth scroll to top on hashchange ============================
@@ -120,7 +120,7 @@
       }
     });
   }
-  setInterval(polishEmpties, 1800);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(polishEmpties) : setInterval(polishEmpties, 4000);
   setTimeout(polishEmpties, 1000);
 
   // ============================ Form field group helper ============================
@@ -141,7 +141,7 @@
       lbl.dataset.ktField = '1';
     });
   }
-  setInterval(polishFields, 2200);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(polishFields) : setInterval(polishFields, 4000);
   setTimeout(polishFields, 1200);
 
   // Expose helpers

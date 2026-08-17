@@ -102,35 +102,37 @@
       const tiles = Dom.el('div', { class: 'director-stats' });
 
       tiles.appendChild(statTile({
-        label: 'Enrolled', value: stats.total_enrolled,
+        label: 'Enrolled', value: stats.total_enrolled, icon: '👶',
         detail: `${stats.utilization_pct}% of ${stats.capacity} capacity`,
         flavor: stats.utilization_pct > 90 ? 'warn' : 'good',
       }));
       tiles.appendChild(statTile({
-        label: 'Here right now', value: stats.present_now,
+        label: 'Here right now', value: stats.present_now, icon: '📍',
         detail: 'children checked in',
-        flavor: 'good',
+        accent: { c1: '#93C5FD', c2: '#2563EB', tint: '#EFF6FF', ink: '#1D4ED8' },
       }));
       tiles.appendChild(statTile({
-        label: 'Staff on floor', value: stats.staff_on_floor,
-        detail: 'educators clocked in',
-        flavor: stats.staff_on_floor === 0 ? 'warn' : 'good',
+        label: 'Staff on floor', value: stats.staff_on_floor, icon: '🧑‍🏫',
+        detail: stats.staff_on_floor === 0 ? 'no one clocked in' : 'educators clocked in',
+        flavor: stats.staff_on_floor === 0 ? 'bad' : 'warn',
       }));
       tiles.appendChild(statTile({
-        label: 'Receivables', value: Fmt.money(stats.receivables),
-        detail: 'outstanding invoices',
-        flavor: stats.receivables > 0 ? 'warn' : 'good',
+        label: 'Receivables', value: Fmt.money(stats.receivables), icon: '💳',
+        detail: stats.receivables > 0 ? 'outstanding invoices' : 'all collected',
+        accent: stats.receivables > 0
+          ? { c1: '#FCA5A5', c2: '#DC2626', tint: '#FEF2F2', ink: '#B91C1C' }
+          : { c1: '#C4B5FD', c2: '#7C3AED', tint: '#F5F3FF', ink: '#6D28D9' },
       }));
       if (stats.incidents_to_review > 0) {
         tiles.appendChild(statTile({
-          label: 'Needs review', value: stats.incidents_to_review,
+          label: 'Needs review', value: stats.incidents_to_review, icon: '⚠️',
           detail: 'incident' + (stats.incidents_to_review === 1 ? '' : 's'),
           flavor: 'bad',
         }));
       }
       if (stats.expiring_certifications > 0) {
         tiles.appendChild(statTile({
-          label: 'Cert expiring', value: stats.expiring_certifications,
+          label: 'Cert expiring', value: stats.expiring_certifications, icon: '📋',
           detail: 'within 60 days',
           flavor: 'warn',
         }));
@@ -156,12 +158,30 @@
     }
   }
 
-  function statTile({ label, value, detail, flavor }) {
-    return Dom.el('div', { class: 'stat-tile stat-' + (flavor || 'good') },
-      Dom.el('div', { class: 'stat-tile-label' }, label),
-      Dom.el('div', { class: 'stat-tile-value' }, String(value)),
-      Dom.el('div', { class: 'stat-tile-detail' }, detail),
-    );
+  // v23 (2026-07-20): themed to match the portal-wide card design — gradient
+  // circular icon badge, big accent number, tinted card, hover lift.
+  var _FLAVOR = {
+    good: { c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
+    warn: { c1: '#FCD34D', c2: '#D97706', tint: '#FFFBEB', ink: '#B45309' },
+    bad:  { c1: '#FCA5A5', c2: '#DC2626', tint: '#FEF2F2', ink: '#B91C1C' },
+  };
+  function _kpiHoverStyle() {
+    if (document.getElementById('kt-kpi-tile-hover')) return;
+    var s = document.createElement('style'); s.id = 'kt-kpi-tile-hover';
+    s.textContent = '.kt-kpi-tile{transition:transform .15s ease, box-shadow .15s ease;}.kt-kpi-tile:hover{transform:translateY(-3px);box-shadow:0 14px 24px -14px rgba(15,23,42,.28);}';
+    document.head.appendChild(s);
+  }
+  function statTile(opt) {
+    _kpiHoverStyle();
+    var C = opt.accent || _FLAVOR[opt.flavor || 'good'] || _FLAVOR.good;
+    var tile = Dom.el('div', { class: 'kt-kpi-tile', style: 'position:relative;overflow:hidden;background:' + C.tint + ';border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:16px 16px 14px;' });
+    if (opt.icon) {
+      tile.appendChild(Dom.el('div', { style: 'width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:11px;background:linear-gradient(135deg,' + C.c1 + ',' + C.c2 + ');box-shadow:0 6px 13px -6px ' + C.c2 + ';' }, opt.icon));
+    }
+    tile.appendChild(Dom.el('div', { style: 'font-size:30px;font-weight:900;line-height:1;color:' + C.ink + ';' }, String(opt.value)));
+    tile.appendChild(Dom.el('div', { style: 'font-size:10.5px;font-weight:800;letter-spacing:.6px;color:' + C.ink + ';opacity:.72;margin-top:9px;text-transform:uppercase;' }, opt.label));
+    tile.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748b;margin-top:2px;' }, opt.detail));
+    return tile;
   }
 
   function roomTile(room) {

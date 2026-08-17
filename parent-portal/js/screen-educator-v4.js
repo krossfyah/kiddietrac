@@ -95,6 +95,8 @@
   // ─── Batch check-in modal ───────────────────────────────────────
 
   function showBatchCheckInModal(roomId, roomName, children) {
+    // An educator must be clocked in before checking children in.
+    if (window.KT && KT.requireClockedIn && !KT.requireClockedIn()) return;
     const modal = new Modal(`Batch check-in — ${roomName}`);
 
     const intro = Dom.el('p', { style: 'color: var(--ink-600); margin: 0 0 16px;' },

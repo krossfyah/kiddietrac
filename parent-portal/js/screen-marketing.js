@@ -66,7 +66,7 @@
 
     var listWrap = Dom.el('div', { 'data-kt-list': '1', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
-    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     Api.get('/marketing/campaigns').then(function (data) {
       Dom.clear(listWrap);
@@ -75,6 +75,8 @@
         return;
       }
       data.campaigns.forEach(function (c) { listWrap.appendChild(renderRow(c, container)); });
+      // This list renders async (no hashchange), so nudge the kebab sweep directly.
+      if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
     }).catch(function (e) {
       Dom.clear(listWrap);
       listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
@@ -102,6 +104,23 @@
     row.appendChild(body);
 
     row.appendChild(statusPill(c.status));
+
+    // Trailing action bar (Edit / Delete) — kt-row-actions.js collapses it into the
+    // standard ⋮ kebab because the list is [data-kt-list] and this is the row's last
+    // child holding only action buttons. Row click still opens the composer.
+    var actionsBar = Dom.el('div', { style: 'display:flex;gap:6px;flex-shrink:0;' });
+    var editBtn = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-edit kt-icon-tip', 'data-kttip': 'Edit', 'aria-label': 'Edit' }, '✏️');
+    editBtn.addEventListener('click', function (e) { e.stopPropagation(); openComposer(c, container); });
+    var delBtn = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-danger kt-icon-tip', 'data-kttip': 'Delete', 'aria-label': 'Delete' }, '🗑️');
+    delBtn.addEventListener('click', async function (e) {
+      e.stopPropagation();
+      if (!await KT.confirm('Delete this campaign? This cannot be undone.')) return;
+      Api.delete('/marketing/campaigns/' + c.id).then(function () { render(container); });
+    });
+    actionsBar.appendChild(editBtn);
+    actionsBar.appendChild(delBtn);
+    row.appendChild(actionsBar);
+
     row.addEventListener('click', function () { openComposer(c, container); });
     return row;
   }
@@ -173,7 +192,7 @@
     // Hero image
     body.appendChild(labelEl('Hero image (optional)'));
     var heroWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:14px;' });
-    var heroPreview = Dom.el('div', { style: 'width:84px;height:60px;border-radius:8px;background:#F3F4F6;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:22px;flex-shrink:0;' });
+    var heroPreview = Dom.el('div', { style: 'width:84px;height:60px;border-radius:8px;background:#F3F4F6;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:22px;flex-shrink:0;' });
     if (existing && existing.hero_image_url) {
       heroPreview.style.backgroundImage = 'url(' + absUrl(existing.hero_image_url) + ')';
     } else {
@@ -230,8 +249,8 @@
     var leftBtns = Dom.el('div', { style: 'display:flex;gap:8px;' });
     if (existing) {
       var delBtn = Dom.el('button', { style: btnDanger() }, 'Delete');
-      delBtn.addEventListener('click', function () {
-        if (!confirm('Delete this campaign? This cannot be undone.')) return;
+      delBtn.addEventListener('click', async function () {
+        if (!await KT.confirm('Delete this campaign? This cannot be undone.')) return;
         Api.delete('/marketing/campaigns/' + existing.id).then(function () { overlay.remove(); render(container); });
       });
       leftBtns.appendChild(delBtn);
@@ -283,8 +302,8 @@
         .catch(function (e) { alert('Save failed: ' + e.message); saveBtn.disabled = false; saveBtn.textContent = 'Save draft'; });
     });
 
-    sendBtn.addEventListener('click', function () {
-      if (!confirm('Send this campaign now? This cannot be undone.')) return;
+    sendBtn.addEventListener('click', async function () {
+      if (!await KT.confirm('Send this campaign now? This cannot be undone.')) return;
       var payload = collect();
       if (!payload.title || !payload.body_html) { alert('Title and body are required before sending.'); return; }
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
@@ -487,7 +506,7 @@
       : '<div style="margin-top:6px;color:#B0B6BE;">Add privacy &amp; terms links under Settings → Branding</div>';
 
     var footerHtml =
-      '<div style="background:#F9FAFB;border-top:1px solid #EEF0F2;padding:18px 28px;text-align:center;font-size:11px;color:#9CA3AF;">' +
+      '<div style="background:#F9FAFB;border-top:1px solid #EEF0F2;padding:18px 28px;text-align:center;font-size:11px;color:#64748B;">' +
         '<div style="font-weight:700;color:#6B7280;">Powered by Kiddietrac</div>' +
         legalRow +
         '<div style="margin-top:8px;">You’re receiving this because you are part of ' + esc(name) + '.</div>' +

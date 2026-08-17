@@ -67,6 +67,23 @@
     return hit;
   }
 
+  // Deterministic colour per provider so its map pin + list row match.
+  var PM_PALETTE = ['#1F6FB2', '#0FA3B1', '#E0699A', '#7C3AED', '#F59E0B', '#10B981', '#EF6C4D', '#0891B2', '#DB2777', '#4F8A3D', '#B45309', '#6D28D9'];
+  function providerColor(c) {
+    var s = String((c && (c.id != null ? c.id : c.name)) || '');
+    var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return PM_PALETTE[h % PM_PALETTE.length];
+  }
+  // A colour-coded teardrop pin (Leaflet divIcon) instead of the identical blue default.
+  function coloredPin(L, color) {
+    return L.divIcon({
+      className: 'kt-pm-pin',
+      html: '<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:' + color + ';'
+        + 'transform:rotate(-45deg);border:2.5px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.45);"></div>',
+      iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20],
+    });
+  }
+
   // ── Render ─────────────────────────────────────────────────────────
   async function render(container) {
     container.innerHTML = '';
@@ -93,7 +110,20 @@
     // toolbar lands INSIDE this column rather than becoming a 3rd grid item
     // (which was pushing the map into the wrong cell).
     var listCol = document.createElement('div');
+    listCol.id = 'kt-pm-listcol';
     layout.appendChild(listCol);
+    // The globally-injected search/sort toolbar was cramped in this narrow (320px)
+    // column — the search box grabbed the whole first row and the Sort dropdown
+    // wrapped to a squished second row. Stack them as full-width, aligned rows.
+    if (!document.getElementById('kt-pm-ctrl-style')) {
+      var pmStyle = document.createElement('style');
+      pmStyle.id = 'kt-pm-ctrl-style';
+      pmStyle.textContent =
+        '#kt-pm-listcol .kt-list-controls{flex-direction:column !important;align-items:stretch !important;gap:8px !important;margin:0 0 12px !important;flex-wrap:nowrap !important;}'
+        + '#kt-pm-listcol .kt-list-controls > *{width:100% !important;box-sizing:border-box;}'
+        + '#kt-pm-listcol .kt-list-controls select{flex:1 1 auto !important;min-width:0;}';
+      document.head.appendChild(pmStyle);
+    }
     var listPanel = document.createElement('div');
     listPanel.style.cssText = 'background:white;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.05);max-height:640px;overflow:auto;';
     listPanel.setAttribute('data-kt-list', '1');
@@ -148,18 +178,27 @@
       statusBar.textContent = 'Locating providers… (' + (i + 1) + '/' + centres.length + ')';
 
       var rowId = 'kt-pm-row-' + c.id;
+      var pcolor = providerColor(c);
       listPanel.insertAdjacentHTML('beforeend',
-        '<div id="' + rowId + '" data-cid="' + c.id + '" style="padding:12px 14px;border-bottom:1px solid #F3F4F6;cursor:pointer;">' +
-          '<div style="font-weight:700;font-size:14px;color:#111827;">' + esc(c.name) + '</div>' +
+        '<div id="' + rowId + '" data-cid="' + c.id + '" style="padding:12px 14px 12px 12px;border-bottom:1px solid #F3F4F6;border-left:4px solid ' + pcolor + ';cursor:pointer;">' +
+          '<div style="display:flex;align-items:center;gap:7px;">' +
+            '<span style="width:10px;height:10px;border-radius:50%;background:' + pcolor + ';flex-shrink:0;"></span>' +
+            '<span style="font-weight:700;font-size:14px;color:#111827;">' + esc(c.name) + '</span>' +
+          '</div>' +
           '<div style="font-size:12px;color:#6B7280;margin-top:2px;">' + esc(addr || 'No address on file') + '</div>' +
-          '<div style="font-size:11px;color:#9CA3AF;margin-top:3px;" class="kt-pm-meta">…</div>' +
+          '<div style="font-size:11px;color:#64748B;margin-top:3px;" class="kt-pm-meta">…</div>' +
         '</div>');
 
       var coords = null;
-      if (addr) {
+      if (c.latitude != null && c.longitude != null) {
+        // Server-persisted coordinates → instant, no geocoding / no rate-limit wait.
+        coords = { lat: Number(c.latitude), lon: Number(c.longitude) };
+      } else if (addr) {
         var wasCached = !!readCache(addr);
         try { coords = await geocode(addr); } catch (e) { coords = null; }
         if (!wasCached) await sleep(1100); // be polite to Nominatim
+        // Persist so it's instant for EVERYONE next time (not just this browser).
+        if (coords) { try { Api.post('/admin/centres/' + c.id + '/coords', { latitude: coords.lat, longitude: coords.lon }); } catch (e) {} }
       }
 
       var rowEl = document.getElementById(rowId);
@@ -175,7 +214,7 @@
             (c.date_of_birth ? '<div style="font-size:12px;color:#6B7280;margin-top:3px;">🎂 Provider DOB: ' + esc(c.date_of_birth) + '</div>' : '') +
             (c.license_capacity ? '<div style="font-size:12px;color:#6B7280;margin-top:3px;">Capacity: ' + esc(c.license_capacity) + '</div>' : '') +
           '</div>';
-        var marker = L.marker([coords.lat, coords.lon]).addTo(map).bindPopup(popup);
+        var marker = L.marker([coords.lat, coords.lon], { icon: coloredPin(L, pcolor) }).addTo(map).bindPopup(popup);
         if (meta) meta.textContent = (c.license_capacity ? ('Capacity ' + c.license_capacity + ' · ') : '') + 'Located';
         (function (m, el) {
           if (el) el.addEventListener('click', function () { map.setView(m.getLatLng(), 14); m.openPopup(); });

@@ -304,7 +304,7 @@
       var scanBtn = btn('📷', 'Check in', function () { go('#scan'); }, null, 'scan');
       scanBtn.classList.add('scan');
       nav.appendChild(scanBtn);
-      nav.appendChild(btn('💬', 'Messages', function () { go('#messages'); }, 'kt-mnav-msg', 'messages'));
+      nav.appendChild(btn('💬', 'Messenger', function () { go('#messages'); }, 'kt-mnav-msg', 'messages'));
       nav.appendChild(btn('💳', 'Billing', function () { go('#billing'); }, 'kt-b-billing', 'billing'));
     } else {
       // No Menu button for anyone now. The dashboard carries the tile launcher
@@ -329,7 +329,7 @@
         qrBtn.classList.add('scan');
         nav.appendChild(qrBtn);
       }
-      nav.appendChild(btn('💬', 'Messages', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
+      nav.appendChild(btn('💬', 'Messenger', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
       // Alerts folded INTO the Inbox: an announcement already lands in the inbox
       // as a notification, so a separate Alerts tab showed the same thing twice.
       // (Composing an alert lives on the Home launcher, under Alerts.)

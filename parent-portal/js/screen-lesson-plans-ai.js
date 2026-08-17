@@ -74,7 +74,7 @@
       return;
     }
 
-    rows.forEach(function (p) {
+    function renderPlanCard(p) {
       const card = document.createElement('div');
       card.style.cssText = 'background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:18px; margin-bottom:12px;';
       const days = (p.plan_body && p.plan_body.days) || [];
@@ -99,8 +99,11 @@
               '</div>';
             }).join('') +
           '</div>' : '');
-      listEl.appendChild(card);
-    });
+      return card;
+    }
+    (window.KT && KT.cardPager)
+      ? KT.cardPager(listEl, rows, renderPlanCard, 10)
+      : rows.forEach(function (p) { listEl.appendChild(renderPlanCard(p)); });
   }
 
   /* ============================================================

@@ -105,7 +105,7 @@
       '</div>' +
       (m.reason ? '<div style="font-size:13px;color:#6B7280;margin-bottom:6px;"><b>Reason:</b> ' + esc(m.reason) + '</div>' : '') +
       (m.special_instructions ? '<div style="font-size:13px;color:#6B7280;margin-bottom:6px;"><b>Instructions:</b> ' + esc(m.special_instructions) + '</div>' : '') +
-      '<div style="font-size:12px;color:#9CA3AF;margin-top:6px;">' +
+      '<div style="font-size:12px;color:#64748B;margin-top:6px;">' +
         fmtDate(m.starts_on) + ' &rarr; ' + (m.expires_on ? fmtDate(m.expires_on) : 'no expiry') +
         ' &middot; ' + (m.dose_count || 0) + ' doses logged' +
         (m.last_dose_at ? ' &middot; last dose ' + fmtDateTime(m.last_dose_at) : '') +
@@ -403,7 +403,7 @@
       '<div style="font-weight:700;color:#111827;">' + esc(m.name) + (m.strength ? ' ' + esc(m.strength) : '') + ' ' + statusBadge(m.status) + '</div>' +
       '<div style="color:#6B7280;font-size:13px;margin-top:3px;">' + esc(m.dosage) + ' &middot; ' + esc(m.frequency) + '</div>' +
       (m.reason ? '<div style="color:#6B7280;font-size:13px;margin-top:2px;"><b>For:</b> ' + esc(m.reason) + '</div>' : '') +
-      '<div style="color:#9CA3AF;font-size:12px;margin-top:4px;">' + fmtDate(m.starts_on) + ' &rarr; ' + (m.expires_on ? fmtDate(m.expires_on) : 'no expiry') + ' &middot; ' + (m.dose_count || 0) + ' doses logged</div>' +
+      '<div style="color:#64748B;font-size:12px;margin-top:4px;">' + fmtDate(m.starts_on) + ' &rarr; ' + (m.expires_on ? fmtDate(m.expires_on) : 'no expiry') + ' &middot; ' + (m.dose_count || 0) + ' doses logged</div>' +
       '</div>';
   }
 

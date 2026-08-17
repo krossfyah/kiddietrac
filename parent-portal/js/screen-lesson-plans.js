@@ -34,12 +34,41 @@
     { v: 'outdoor',           l: '🌳 Outdoor',            c: '#86EFAC' },
   ];
 
+  // Each weekday gets its own accent so the week reads at a glance.
+  const DAY_COLORS = {
+    monday:    '#2563EB',
+    tuesday:   '#0D9488',
+    wednesday: '#7C3AED',
+    thursday:  '#EA580C',
+    friday:    '#16A34A',
+  };
+  // Fallback palette so an activity with NO HDLH domain (e.g. one added from a
+  // curriculum template) still gets a distinct colour instead of a wall of grey.
+  const ACTIVITY_PALETTE = ['#60A5FA', '#34D399', '#F472B6', '#FBBF24', '#A78BFA', '#22D3EE', '#FB923C', '#4ADE80'];
+
   function mondayOf(date) {
-    const d = new Date(date);
+    // Timezone-safe. `new Date("YYYY-MM-DD")` parses as UTC midnight, and
+    // `.toISOString()` formats back in UTC — so for anyone behind UTC (Eastern)
+    // this drifted the Monday into the PREVIOUS week. That mismatch is why a plan
+    // saved to week X (via screen-v22p57's local-based _mondayISO) opened the
+    // planner on week X-1 with an empty grid — the "Use template does nothing" bug.
+    // Parse a date-only string as LOCAL midnight and format with local parts so it
+    // agrees with _mondayISO exactly.
+    let d;
+    if (date instanceof Date) {
+      d = new Date(date.getTime());
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      const p = String(date).split('-');
+      d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    } else {
+      d = new Date(date);
+    }
     const day = d.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
-    return d.toISOString().split('T')[0];
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + mm + '-' + dd;
   }
 
   let activeRoomId = null;
@@ -141,7 +170,7 @@
             <button id="kt-prev-week" style="${navBtnStyle()}">‹</button>
             <input type="date" id="kt-week" value="${activeWeek}" style="${selectStyle()};width:160px;">
             <button id="kt-next-week" style="${navBtnStyle()}">›</button>
-            <button id="kt-save" style="background:#1F6080;color:white;border:none;padding:10px 22px;border-radius:8px;font-weight:700;cursor:pointer;">💾 Save</button>
+            <button id="kt-save" class="kt-icon-tip" title="Save" data-kttip="Save" aria-label="Save" style="height:36px;width:36px;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;">💾</button>
           </div>
         </div>
 
@@ -211,9 +240,10 @@
   }
 
   function dayColumn(day, activities) {
+    const dc = DAY_COLORS[day] || '#64748B';
     return `
-      <div style="background:white;border-radius:12px;padding:12px;min-height:240px;box-shadow:0 1px 3px rgba(0,0,0,.04);">
-        <div style="font-weight:700;font-size:14px;color:#111827;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">${DAY_LABELS[day]}</div>
+      <div style="background:white;border-radius:12px;padding:12px;min-height:240px;box-shadow:0 1px 3px rgba(0,0,0,.04);border-top:4px solid ${dc};">
+        <div style="font-weight:800;font-size:14px;color:${dc};margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">${DAY_LABELS[day]}</div>
         ${activities.map((a, i) => activityCard(day, i, a)).join('')}
         <button class="kt-add-activity" data-day="${day}" style="width:100%;background:#F3F4F6;color:#6B7280;border:1px dashed #D1D5DB;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:4px;">+ Add</button>
       </div>
@@ -222,13 +252,16 @@
 
   function activityCard(day, idx, a) {
     const domain = DOMAINS.find(d => d.v === a.domain);
-    const bg = domain ? domain.c + '40' : '#F3F4F6';
-    const border = domain ? domain.c : '#D1D5DB';
+    // Domain colour when set; otherwise a distinct palette colour by position so
+    // template-added (domain-less) activities are still easy to tell apart.
+    const colour = domain ? domain.c : ACTIVITY_PALETTE[idx % ACTIVITY_PALETTE.length];
+    const bg = colour + '33';
+    const border = colour;
     return `
       <div class="kt-activity" data-day="${day}" data-idx="${idx}" style="background:${bg};border-left:3px solid ${border};border-radius:6px;padding:8px;margin-bottom:6px;font-size:12px;">
         <div style="display:flex;gap:4px;margin-bottom:4px;">
           <input data-field="time" placeholder="9:00" value="${esc(a.time||'')}" style="width:60px;padding:3px 6px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;">
-          <button class="kt-del-activity" data-day="${day}" data-idx="${idx}" title="Delete" style="margin-left:auto;background:transparent;border:none;color:#9CA3AF;cursor:pointer;font-size:14px;line-height:1;">×</button>
+          <button class="kt-del-activity" data-day="${day}" data-idx="${idx}" title="Delete" style="margin-left:auto;background:transparent;border:none;color:#64748B;cursor:pointer;font-size:14px;line-height:1;">×</button>
         </div>
         <input data-field="title" placeholder="Activity name" value="${esc(a.title||'')}" style="width:100%;padding:4px;border:1px solid #D1D5DB;border-radius:4px;font-size:12px;margin-bottom:4px;font-weight:600;">
         <select data-field="domain" style="width:100%;padding:3px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;margin-bottom:4px;">
@@ -300,7 +333,7 @@
         </div>
         ${plan.theme ? `<div style="font-size:14px;color:#1F6080;margin-bottom:12px;"><em>Theme:</em> <strong>${esc(plan.theme)}</strong></div>` : ''}
         ${empty
-          ? '<div style="color:#9CA3AF;font-style:italic;">No plan posted yet for this week.</div>'
+          ? '<div style="color:#64748B;font-style:italic;">No plan posted yet for this week.</div>'
           : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
               ${DAYS.map(d => parentDayCard(d, days[d] || [])).join('')}
             </div>`
@@ -337,6 +370,19 @@
     else renderProvider(container);
   }
 
+  // Point the planner at a specific scope/target/week BEFORE navigating to it.
+  // "Use template" saves into one room-or-centre + week, then sends the user here;
+  // without this the planner opened on its remembered scope (default: room scope,
+  // first room, current week) and showed an empty grid — the plan looked "not
+  // saved" even though it was. Called by screen-v22p57.js right before the hash nav.
+  function focus(opts) {
+    opts = opts || {};
+    if (opts.scope === 'centre' || opts.scope === 'room') activeScope = opts.scope;
+    if (opts.roomId != null) activeRoomId = parseInt(opts.roomId, 10);
+    if (opts.centreId != null) activeCentreId = parseInt(opts.centreId, 10);
+    if (opts.week) activeWeek = mondayOf(opts.week);
+  }
+
   window.KT = window.KT || {};
-  window.KT.LessonPlans = { render };
+  window.KT.LessonPlans = { render, focus };
 })(window);

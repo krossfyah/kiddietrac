@@ -64,29 +64,35 @@
     cfg = cfg || {};
     return ensureLib().then(function () {
       var dataUrl = build(cfg.url || '').createDataURL(10, 4);
-      var w = window.open('', '_blank', 'width=720,height=920');
-      if (!w) { alert('Pop-up blocked — allow pop-ups for this site to print the QR poster.'); return; }
-      var d = w.document;
-      d.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(cfg.title || 'Check-in QR') + '</title>'
-        + '<style>'
-        + 'body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;text-align:center;padding:48px 32px;color:#111827;}'
-        + 'h1{font-size:32px;margin:0 0 6px;color:#1F6080;}'
-        + 'h2{font-size:18px;font-weight:500;color:#374151;margin:0 0 30px;}'
-        + 'img{width:340px;height:340px;image-rendering:pixelated;border:1px solid #E5E7EB;border-radius:14px;padding:12px;}'
-        + '.steps{margin:28px auto 0;max-width:430px;text-align:left;font-size:15px;color:#374151;line-height:1.7;}'
-        + '.url{margin-top:22px;font-size:12px;color:#9CA3AF;word-break:break-all;font-family:ui-monospace,monospace;}'
-        + '.foot{margin-top:14px;font-size:12px;color:#9CA3AF;}'
-        + '@media print{.noprint{display:none!important;}}'
-        + '</style></head><body>'
-        + '<h1>' + esc(cfg.title || '') + '</h1>'
-        + (cfg.subtitle ? '<h2>' + esc(cfg.subtitle) + '</h2>' : '')
-        + '<img src="' + dataUrl + '" alt="Check-in QR code">'
-        + (cfg.steps ? '<div class="steps">' + cfg.steps + '</div>' : '')
-        + (cfg.url ? '<div class="url">' + esc(cfg.url) + '</div>' : '')
-        + (cfg.footer ? '<div class="foot">' + esc(cfg.footer) + '</div>' : '')
-        + '<div class="noprint" style="margin-top:30px;"><button onclick="window.print()" style="background:#1F6080;color:#fff;border:0;padding:12px 30px;border-radius:8px;font-size:15px;cursor:pointer;">🖨️ Print</button></div>'
-        + '</body></html>');
-      d.close();
+      // In-app overlay, NOT window.open — the APK WebView returns a stub window
+      // that opened nothing yet trapped the user with no way back. This overlay
+      // always has an X to close, centers the QR, and prints via the WebView's
+      // own print (an injected @media print stylesheet isolates the poster).
+      var prev = document.getElementById('kt-qrposter'); if (prev) prev.remove();
+      var ov = document.createElement('div');
+      ov.id = 'kt-qrposter';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#fff;overflow-y:auto;color:#111827;';
+      ov.innerHTML =
+        '<div style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:56px 28px 40px;box-sizing:border-box;">'
+        + '<h1 style="font-size:30px;margin:0 0 6px;color:#1F6080;">' + esc(cfg.title || '') + '</h1>'
+        + (cfg.subtitle ? '<h2 style="font-size:17px;font-weight:500;color:#374151;margin:0 0 26px;">' + esc(cfg.subtitle) + '</h2>' : '')
+        + '<img src="' + dataUrl + '" alt="Check-in QR code" style="width:min(78vw,340px);height:min(78vw,340px);image-rendering:pixelated;border:1px solid #E5E7EB;border-radius:14px;padding:12px;box-sizing:border-box;">'
+        + (cfg.steps ? '<div style="margin:26px auto 0;max-width:430px;text-align:left;font-size:15px;color:#374151;line-height:1.7;">' + cfg.steps + '</div>' : '')
+        + (cfg.url ? '<div style="margin-top:20px;font-size:12px;color:#64748B;word-break:break-all;font-family:ui-monospace,monospace;">' + esc(cfg.url) + '</div>' : '')
+        + (cfg.footer ? '<div style="margin-top:12px;font-size:12px;color:#64748B;">' + esc(cfg.footer) + '</div>' : '')
+        + '</div>'
+        + '<div class="kt-qrposter-ctl" style="position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;display:flex;gap:10px;">'
+        +   '<button id="kt-qrposter-print" style="background:#1F6080;color:#fff;border:0;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;">🖨️ Print</button>'
+        +   '<button id="kt-qrposter-x" aria-label="Close" style="background:#fff;color:#111827;border:1px solid #E5E7EB;width:44px;height:44px;border-radius:50%;font-size:22px;line-height:1;cursor:pointer;">✕</button>'
+        + '</div>';
+      document.body.appendChild(ov);
+      var st = document.createElement('style'); st.id = 'kt-qrposter-print-css';
+      st.textContent = '@media print{body>*{display:none!important;}#kt-qrposter{display:block!important;position:static!important;background:#fff!important;}#kt-qrposter .kt-qrposter-ctl{display:none!important;}}';
+      document.head.appendChild(st);
+      var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); if (st.parentNode) st.parentNode.removeChild(st); };
+      ov.querySelector('#kt-qrposter-x').addEventListener('click', close);
+      ov.querySelector('#kt-qrposter-print').addEventListener('click', function () { try { window.print(); } catch (e) {} });
+      if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, close);
     });
   };
 })(window);

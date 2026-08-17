@@ -67,7 +67,80 @@
   function isEducator(role) { return role === 'educator'; }
   function isGuardian(role) { return role === 'guardian'; }
 
+  // Email the incident report to parent / director / agency admin (+ optional email).
+  function openEmailReportDialog(inc, base) {
+    var m = document.createElement('div');
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;';
+    m.innerHTML = '<div style="background:#fff;padding:24px;border-radius:14px;max-width:420px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);">'
+      + '<h3 style="margin:0 0 4px;font-size:18px;color:#0F172A;">📧 Email incident report</h3>'
+      + '<div style="font-size:13px;color:#64748B;margin-bottom:16px;">Send this report to:</div>'
+      + '<label style="display:flex;align-items:center;gap:9px;font-size:14px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" value="parent" checked style="width:16px;height:16px;"> Parent / guardian</label>'
+      + '<label style="display:flex;align-items:center;gap:9px;font-size:14px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" value="director" style="width:16px;height:16px;"> Centre director</label>'
+      + '<label style="display:flex;align-items:center;gap:9px;font-size:14px;margin-bottom:14px;cursor:pointer;"><input type="checkbox" value="admin" style="width:16px;height:16px;"> Agency admin</label>'
+      + '<label style="display:block;font-size:12.5px;font-weight:600;color:#475569;margin-bottom:4px;">Also send to (optional email)</label>'
+      + '<input id="ir-extra" type="email" placeholder="name@example.com" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">'
+      + '<div id="ir-msg" style="min-height:18px;font-size:12.5px;margin-top:10px;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">'
+      + '<button id="ir-cancel" style="padding:9px 16px;border:1px solid #D1D5DB;background:#fff;border-radius:8px;font-weight:600;cursor:pointer;">Cancel</button>'
+      + '<button id="ir-send" style="padding:9px 16px;border:none;background:#1F6080;color:#fff;border-radius:8px;font-weight:700;cursor:pointer;">Send</button>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click', function (e) { if (e.target === m) m.remove(); });
+    m.querySelector('#ir-cancel').onclick = function () { m.remove(); };
+    m.querySelector('#ir-send').onclick = async function () {
+      var to = Array.prototype.slice.call(m.querySelectorAll('input[type=checkbox]:checked')).map(function (c) { return c.value; });
+      var extra = m.querySelector('#ir-extra').value.trim();
+      var msg = m.querySelector('#ir-msg'); var btn = m.querySelector('#ir-send');
+      if (!to.length && !extra) { msg.style.color = '#DC2626'; msg.textContent = 'Pick at least one recipient.'; return; }
+      btn.disabled = true; msg.style.color = '#64748B'; msg.textContent = 'Sending…';
+      try {
+        var r = await Api.post(base + '/incidents/' + inc.id + '/email', { to: to, extra_email: extra || null });
+        msg.style.color = '#16A34A'; msg.textContent = '✓ Sent to ' + r.recipients + ' recipient' + (r.recipients === 1 ? '' : 's') + '.';
+        setTimeout(function () { m.remove(); }, 1200);
+      } catch (e) {
+        btn.disabled = false; msg.style.color = '#DC2626'; msg.textContent = (e && e.message) || 'Could not send.';
+      }
+    };
+  }
+
   /* ===== LIST ===== */
+  // The APK WebView can report a desktop-ish width, so gate mobile UI on the
+  // kt-native class too (added on the native app) — not width alone.
+  function isMobile() { return window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native'); }
+  function incAbsUrl(u) { if (!u) return u; if (/^https?:\/\//.test(u)) return u; var b = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; return b.replace(/\/api\/v1\/?$/, '') + (u.charAt(0) === '/' ? u : '/' + u); }
+  var INC_SEV_COLOR = { low: '#16A34A', medium: '#F59E0B', high: '#DC2626' };
+  // Phone/APK: a stacked card is far easier to read than a 7-column table.
+  function buildIncidentCard(inc) {
+    var childName = inc.child ? ((inc.child.first_name || '') + ' ' + (inc.child.last_name || '')).trim() : '';
+    if (!childName) childName = 'Incident';
+    var recorded = (inc.recorded_by && inc.recorded_by.name) || '-';
+    var sev = INC_SEV_COLOR[inc.severity] || '#64748B';
+    var photo = (inc.child && inc.child.photo_url) ? incAbsUrl(inc.child.photo_url) : null;
+    var avatarHtml = (window.KT && KT.avatar)
+      ? KT.avatar(childName, { size: 42, photoUrl: photo })
+      : '<span style="display:flex;width:42px;height:42px;border-radius:50%;background:' + sev + ';color:#fff;align-items:center;justify-content:center;font-weight:800;font-size:15px;">' + esc((childName[0] || '?').toUpperCase()) + '</span>';
+    var card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'kt-inc-card';
+    card.style.cssText = 'width:100%;text-align:left;display:block;background:#fff;border:1px solid #EDF1F6;border-left:5px solid ' + sev + ';border-radius:15px;padding:13px 14px;margin-bottom:11px;cursor:pointer;box-shadow:0 2px 8px -3px rgba(15,23,42,.12);font:inherit;';
+    card.innerHTML =
+      '<div style="display:flex;align-items:center;gap:11px;">' +
+        '<span style="flex:0 0 auto;">' + avatarHtml + '</span>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:800;font-size:15px;color:#0F172A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(childName) + '</div>' +
+          '<div style="font-size:12.5px;color:#475569;margin-top:1px;">' + esc(typeLabel(inc.incident_type)) + (inc.is_serious_occurrence ? ' <span class="tag tag-danger" style="font-size:9px;">SO</span>' : '') + '</div>' +
+        '</div>' +
+        '<span style="color:#CBD5E1;font-size:24px;line-height:1;flex-shrink:0;">›</span>' +
+      '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;">' +
+        severityBadge(inc.severity) + statusBadge(inc.status) +
+        '<span style="margin-left:auto;font-size:11.5px;color:#94A3B8;white-space:nowrap;">' + esc(fmt(inc.occurred_at)) + '</span>' +
+      '</div>' +
+      '<div style="font-size:11.5px;color:#94A3B8;margin-top:6px;">Recorded by ' + esc(recorded) + '</div>';
+    card.addEventListener('click', function () { window.location.hash = '#incident-detail?id=' + inc.id; });
+    return card;
+  }
+
   async function renderIncidentsList(main, ctx) {
     Dom.clear(main);
     const role = ctx && ctx.role;
@@ -121,7 +194,7 @@
     } catch (e) {
       const listEl = wrap.querySelector('#kt-incidents-list');
       Dom.clear(listEl);
-      listEl.appendChild(emptyState('!', 'Could not load', (e && e.message) || 'Server error'));
+      listEl.appendChild(emptyState('⚠️', 'Could not load', (e && e.message) || 'Server error'));
       return;
     }
 
@@ -130,11 +203,18 @@
     Dom.clear(listEl);
 
     if (!Array.isArray(rows) || rows.length === 0) {
-      listEl.appendChild(emptyState('-', 'No incident reports',
+      listEl.appendChild(emptyState('📋', 'No incident reports',
         (isEducator(role) || isDirector(role)) ? 'Click + New report to record one.' : 'Reports will appear here.'));
       return;
     }
 
+    if (isMobile()) {
+      const cards = document.createElement('div');
+      cards.setAttribute('data-kt-list', '1');
+      rows.forEach(function (inc) { cards.appendChild(buildIncidentCard(inc)); });
+      listEl.appendChild(cards);
+      return;
+    }
     const table = document.createElement('div');
     table.style.cssText = 'background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; overflow:hidden;';
     table.innerHTML =
@@ -158,10 +238,14 @@
         '<td>' + severityBadge(inc.severity) + '</td>' +
         '<td>' + statusBadge(inc.status) + '</td>' +
         '<td style="font-size:13px; color:var(--kt-text-muted);">' + esc(recorded) + '</td>' +
-        '<td style="text-align:right; color:var(--kt-text-faint);">&rarr;</td>';
+        // Real action control (not a bare arrow) so kt-row-actions.js collapses it
+        // into the standard ⋮ kebab, consistent with every other data table.
+        '<td style="text-align:right;"><button type="button" class="kt-inc-view kt-act-icon kt-act-info kt-icon-tip" data-id="' + inc.id + '" data-kttip="View" aria-label="View">👁️</button></td>';
       tr.addEventListener('click', function () {
         window.location.hash = '#incident-detail?id=' + inc.id;
       });
+      var _vb = tr.querySelector('.kt-inc-view');
+      if (_vb) _vb.addEventListener('click', function (e) { e.stopPropagation(); window.location.hash = '#incident-detail?id=' + inc.id; });
       tbody.appendChild(tr);
     });
     listEl.appendChild(table);
@@ -175,7 +259,7 @@
     const base = apiBase(role);
 
     if (!id) {
-      main.appendChild(emptyState('!', 'Missing incident ID', 'Add ?id=N to the URL.'));
+      main.appendChild(emptyState('⚠️', 'Missing incident ID', 'Add ?id=N to the URL.'));
       return;
     }
 
@@ -184,18 +268,24 @@
       const res = await Api.get(base + '/incidents/' + id);
       inc = (res && res.data) || res;
     } catch (e) {
-      main.appendChild(emptyState('!', 'Could not load', (e && e.message) || 'Server error'));
+      main.appendChild(emptyState('⚠️', 'Could not load', (e && e.message) || 'Server error'));
       return;
     }
     if (!inc) {
-      main.appendChild(emptyState('!', 'Not found', 'This incident may have been deleted.'));
+      main.appendChild(emptyState('🔍', 'Not found', 'This incident may have been deleted.'));
       return;
     }
 
     const childName = inc.child ? ((inc.child.first_name || '') + ' ' + (inc.child.last_name || '')).trim() : '-';
 
     const wrap = document.createElement('div');
+    wrap.className = 'kt-inc-detail';
     main.appendChild(wrap);
+    if (!document.getElementById('kt-inc-detail-css')) {
+      var _ds = document.createElement('style'); _ds.id = 'kt-inc-detail-css';
+      _ds.textContent = '@media(max-width:700px){#appMain .kt-inc-detail .page-header-v17{flex-direction:column;align-items:flex-start;gap:10px;}#appMain .kt-inc-detail .page-header-v17 .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;}#appMain .kt-inc-detail .page-header-v17 h1{font-size:19px;line-height:1.25;}#appMain .kt-inc-detail > div{padding:16px !important;}#appMain .kt-inc-detail h2{font-size:16px !important;}}';
+      document.head.appendChild(_ds);
+    }
 
     let acksHtml = '';
     if (Array.isArray(inc.acknowledgments) && inc.acknowledgments.length > 0) {
@@ -269,14 +359,101 @@
       '</div>' +
 
       acksHtml +
+      '<div id="kt-notes"></div>' +
       '<div id="kt-actions"></div>'
     );
 
+    renderNotes(wrap.querySelector('#kt-notes'), inc, role, base);
     renderActions(wrap.querySelector('#kt-actions'), inc, role, base);
+  }
+
+  /* ===== NOTES (staff-internal audit trail) ===== */
+  // Educators + directors/admins can append notes/details; each is stamped with
+  // who wrote it and when. Guardians never see this section (the API also strips
+  // notes from their payload).
+  function renderNotes(el, inc, role, base) {
+    Dom.clear(el);
+    if (isGuardian(role)) return;
+
+    const notes = Array.isArray(inc.notes) ? inc.notes : [];
+
+    function noteAuthor(n) {
+      if (n.author_name) return n.author_name;
+      if (n.user) return ((n.user.first_name || '') + ' ' + (n.user.last_name || '')).trim() || 'Staff';
+      return 'Staff';
+    }
+    function noteHtml(n) {
+      return '<div class="kt-note-item" style="padding:11px 0;border-bottom:1px solid var(--kt-border);">' +
+        '<div style="font-size:12.5px;color:var(--kt-text-muted);">' +
+          '<strong style="color:var(--kt-text);">' + esc(noteAuthor(n)) + '</strong>' +
+          '<span style="color:var(--kt-text-faint);"> &middot; ' + fmt(n.created_at) + '</span>' +
+        '</div>' +
+        '<div style="white-space:pre-wrap;line-height:1.55;margin-top:3px;font-size:14px;">' + esc(n.note) + '</div>' +
+      '</div>';
+    }
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:20px; margin-bottom:16px;';
+    card.innerHTML =
+      '<h2 style="font-family:var(--kt-font-display); font-size:16px; margin-bottom:4px;">Notes &amp; details</h2>' +
+      '<p style="font-size:12px; color:var(--kt-text-faint); margin:0 0 12px;">Staff-only. Every note records who added it and when.</p>' +
+      '<div id="kt-note-list">' +
+        (notes.length ? notes.map(noteHtml).join('') : '<div id="kt-note-empty" style="font-size:13px;color:var(--kt-text-muted);padding:4px 0 8px;">No notes yet.</div>') +
+      '</div>' +
+      '<div style="margin-top:14px;">' +
+        '<textarea id="kt-note-input" rows="3" placeholder="Add a note or extra detail…" style="width:100%; padding:10px; border:1.5px solid var(--kt-border); border-radius:8px; font-family:inherit; box-sizing:border-box; font-size:14px;"></textarea>' +
+        // Left-aligned directly under the textarea — was flex-end, which parked it at
+        // the far-right edge of a full-width card, easy to miss.
+        '<div style="display:flex; justify-content:flex-start; margin-top:8px;">' +
+          '<button class="btn btn-primary" id="kt-note-add">Add note</button>' +
+        '</div>' +
+      '</div>';
+    el.appendChild(card);
+
+    const input = card.querySelector('#kt-note-input');
+    const addBtnEl = card.querySelector('#kt-note-add');
+    const list = card.querySelector('#kt-note-list');
+
+    addBtnEl.addEventListener('click', async function () {
+      const text = (input.value || '').trim();
+      if (text.length < 1) { input.focus(); return; }
+      addBtnEl.disabled = true; addBtnEl.textContent = 'Saving…';
+      try {
+        const res = await Api.post(base + '/incidents/' + inc.id + '/notes', { note: text });
+        const n = (res && res.data) || res;
+        const empty = list.querySelector('#kt-note-empty');
+        if (empty) empty.remove();
+        list.insertAdjacentHTML('beforeend', noteHtml(n));
+        input.value = '';
+        Dom.toast('Note added', 'success');
+      } catch (e) {
+        Dom.toast((e && e.message) || 'Could not add note', 'error');
+      } finally {
+        addBtnEl.disabled = false; addBtnEl.textContent = 'Add note';
+      }
+    });
   }
 
   function renderActions(el, inc, role, base) {
     Dom.clear(el);
+
+    // Always offer a way back to the list — previously a director on an already
+    // reviewed/notified incident saw only "Close", with no way to leave without
+    // acting on it. Built via addBtn so it's byte-for-byte the same .btn.btn-secondary
+    // as Close. data-kt-iconized stops kt-icon-buttons.js from converting it into a
+    // 38px ⬅️ icon (it matches "back") — which is what made it a different size.
+    const back = document.createElement('button');
+    back.className = 'btn btn-secondary';
+    back.style.marginRight = '8px';
+    back.dataset.ktIconized = '1';
+    back.textContent = '← Back to incidents';
+    back.addEventListener('click', function () { window.location.hash = '#incidents'; });
+    el.appendChild(back);
+
+    // Staff: email the report to parent / director / agency admin.
+    if ((isDirector(role) || isEducator(role)) && inc.status !== 'draft') {
+      addBtn(el, '📧 Email report', 'btn-secondary', function () { openEmailReportDialog(inc, base); });
+    }
 
     if (isDirector(role)) {
       if (inc.status === 'submitted') {
@@ -288,14 +465,14 @@
       }
       if (inc.status === 'director_reviewed' || inc.status === 'submitted') {
         addBtn(el, 'Notify parent', 'btn-success', async () => {
-          if (!confirm('Send notification to the child\'s parents now?')) return;
+          if (!await KT.confirm('Send notification to the child\'s parents now?')) return;
           await Api.post(base + '/incidents/' + inc.id + '/notify-parent');
           window.location.reload();
         });
       }
       if (inc.status !== 'closed') {
         addBtn(el, 'Close', 'btn-secondary', async () => {
-          if (!confirm('Close this incident?')) return;
+          if (!await KT.confirm('Close this incident?')) return;
           await Api.post(base + '/incidents/' + inc.id + '/close');
           window.location.reload();
         });
@@ -304,7 +481,7 @@
 
     if (isEducator(role) && inc.status === 'draft') {
       addBtn(el, 'Submit for review', 'btn-primary', async () => {
-        if (!confirm('Submit this report to your director?')) return;
+        if (!await KT.confirm('Submit this report to your director?')) return;
         await Api.post(base + '/incidents/' + inc.id + '/submit');
         window.location.reload();
       });
@@ -324,6 +501,14 @@
           '<input type="text" id="kt-ack-name" placeholder="e.g. Jane Doe" autocomplete="off" style="padding:10px; border:1.5px solid var(--kt-border); border-radius:8px; width:100%;">' +
         '</div>' +
         '<div class="form-row" style="margin-top:12px;">' +
+          '<label>Sign here</label>' +
+          '<div style="border:1.5px solid var(--kt-border);border-radius:8px;background:#fff;position:relative;">' +
+            '<canvas id="kt-ack-sig" style="width:100%;height:140px;display:block;touch-action:none;border-radius:8px;cursor:crosshair;"></canvas>' +
+            '<button type="button" id="kt-ack-sig-clear" style="position:absolute;top:6px;right:6px;font-size:11px;padding:3px 8px;border:1px solid var(--kt-border);background:#fff;border-radius:6px;cursor:pointer;">Clear</button>' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--kt-text-faint);margin-top:4px;">Draw your signature with your mouse or finger. Dated <span id="kt-ack-date"></span>.</div>' +
+        '</div>' +
+        '<div class="form-row" style="margin-top:12px;">' +
           '<label>Optional comment for the centre</label>' +
           '<textarea id="kt-ack-comment" rows="3" placeholder="(optional)" style="font-family:inherit; padding:10px; border:1.5px solid var(--kt-border); border-radius:8px; width:100%;"></textarea>' +
         '</div>' +
@@ -335,6 +520,31 @@
         '</p>';
       el.appendChild(card);
 
+      // Signature pad (draw with mouse/finger). The drawn PNG is sent alongside
+      // the typed name so the acknowledgment has a real signature + date.
+      (function initSigPad() {
+        var cv = card.querySelector('#kt-ack-sig');
+        if (!cv) return;
+        var dpr = window.devicePixelRatio || 1, cx;
+        function resize() {
+          var r = cv.getBoundingClientRect();
+          if (!r.width) return;
+          cv.width = Math.round(r.width * dpr); cv.height = Math.round(140 * dpr);
+          cx = cv.getContext('2d'); cx.scale(dpr, dpr); cx.lineWidth = 2; cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = '#0F172A';
+        }
+        setTimeout(resize, 0);
+        var drawing = false, last = null;
+        function pt(e) { var r = cv.getBoundingClientRect(); var t = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
+        function down(e) { e.preventDefault(); if (!cx) resize(); drawing = true; last = pt(e); }
+        function move(e) { if (!drawing || !cx) return; e.preventDefault(); var p = pt(e); cx.beginPath(); cx.moveTo(last.x, last.y); cx.lineTo(p.x, p.y); cx.stroke(); last = p; cv._drawn = true; }
+        function up() { drawing = false; }
+        cv.addEventListener('mousedown', down); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+        cv.addEventListener('touchstart', down, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', up);
+        card.querySelector('#kt-ack-sig-clear').addEventListener('click', function () { if (cx) cx.clearRect(0, 0, cv.width, cv.height); cv._drawn = false; });
+        card._sig = cv;
+      })();
+      var _dt = card.querySelector('#kt-ack-date'); if (_dt) _dt.textContent = new Date().toLocaleDateString();
+
       card.querySelector('#kt-ack-submit').addEventListener('click', async function () {
         const name = card.querySelector('#kt-ack-name').value.trim();
         const comment = card.querySelector('#kt-ack-comment').value.trim();
@@ -342,11 +552,14 @@
           Dom.toast('Please type your full name', 'error');
           return;
         }
+        var sig = null;
+        try { var cv = card._sig; if (cv && cv._drawn) sig = cv.toDataURL('image/png'); } catch (e) {}
+        if (!sig) { Dom.toast('Please draw your signature above', 'error'); return; }
         const btn = card.querySelector('#kt-ack-submit');
         btn.disabled = true; btn.textContent = 'Saving...';
         try {
           await Api.post(base + '/incidents/' + inc.id + '/acknowledge', {
-            signed_name: name, comment: comment || null,
+            signed_name: name, comment: comment || null, signature_data: sig,
           });
           Dom.toast('Acknowledged. Thank you.', 'success');
           setTimeout(() => window.location.reload(), 800);
@@ -403,7 +616,15 @@
     }
 
     const wrap = document.createElement('div');
+    wrap.className = 'kt-inc-form';
     main.appendChild(wrap);
+    // Phone/APK: single-column form, tighter padding, 16px controls (no iOS zoom),
+    // and a stacked header — the 2-column grid was unusable on a narrow screen.
+    if (!document.getElementById('kt-inc-form-css')) {
+      var _fs = document.createElement('style'); _fs.id = 'kt-inc-form-css';
+      _fs.textContent = '@media(max-width:700px){#appMain .kt-inc-form .page-header-v17{flex-direction:column;align-items:flex-start;gap:8px;}#appMain .kt-inc-form .page-header-v17 h1{font-size:20px;line-height:1.25;}#appMain .kt-inc-form form{padding:16px !important;max-width:100% !important;}#appMain .kt-inc-form .form-grid{grid-template-columns:1fr !important;gap:12px !important;}#appMain .kt-inc-form label{display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:4px;}#appMain .kt-inc-form input,#appMain .kt-inc-form select,#appMain .kt-inc-form textarea{font-size:16px !important;}}';
+      document.head.appendChild(_fs);
+    }
 
     wrap.insertAdjacentHTML('beforeend',
       '<div class="page-header-v17">' +
@@ -470,10 +691,10 @@
             '<textarea name="follow_up_required" rows="2" style="padding:10px; border:1.5px solid var(--kt-border); border-radius:8px; font-family:inherit; width:100%;"></textarea>' +
           '</div>' +
         '</div>' +
-        '<div style="display:flex; gap:10px; margin-top:24px;">' +
-          '<button type="submit" class="btn btn-primary" data-submit="true">Save and submit</button>' +
-          '<button type="button" class="btn btn-secondary" data-submit="false">Save as draft</button>' +
-          '<button type="button" class="btn btn-ghost" id="kt-cancel">Cancel</button>' +
+        '<div class="kt-inc-actions" style="display:flex;gap:8px;margin-top:22px;flex-wrap:wrap;">' +
+          '<button type="submit" class="btn btn-primary" data-submit="true" style="padding:10px 18px;font-size:14px;font-weight:700;border-radius:10px;flex:0 0 auto;">Save &amp; submit</button>' +
+          '<button type="button" class="btn btn-secondary" data-submit="false" style="padding:10px 18px;font-size:14px;font-weight:700;border-radius:10px;flex:0 0 auto;">Save as draft</button>' +
+          '<button type="button" class="btn btn-ghost" id="kt-cancel" style="padding:10px 16px;font-size:14px;font-weight:700;border-radius:10px;flex:0 0 auto;">Cancel</button>' +
         '</div>' +
       '</form>'
     );

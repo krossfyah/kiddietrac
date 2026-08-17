@@ -69,7 +69,7 @@
   }
 
   function renderSetupTab(wrap) {
-    var loadingEl = Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…');
+    var loadingEl = Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…');
     wrap.appendChild(loadingEl);
 
     Api.get('/admin/billing-setup').then(function (res) {
@@ -163,7 +163,7 @@
   }
 
   function renderSettingsTab(wrap) {
-    var loadingEl = Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…');
+    var loadingEl = Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…');
     wrap.appendChild(loadingEl);
     Api.get('/admin/billing-config').then(function (res) {
       loadingEl.remove();
@@ -207,7 +207,7 @@
   }
 
   function renderRemindersTab(wrap) {
-    var loadingEl = Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…');
+    var loadingEl = Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…');
     wrap.appendChild(loadingEl);
     Api.get('/admin/billing-reminders').then(function (res) {
       loadingEl.remove();

@@ -94,7 +94,7 @@
             (d.required ? ' <span style="padding:2px 8px;background:#FEF3C7;color:#92400E;font-size:10px;border-radius:6px;font-weight:600;margin-left:6px;">REQUIRED</span>' : '') +
           '</div>' +
           (d.description ? '<div style="color:#6B7280;font-size:13px;margin-top:4px;">' + esc(d.description) + '</div>' : '') +
-          '<div style="color:#9CA3AF;font-size:12px;margin-top:8px;">' +
+          '<div style="color:#64748B;font-size:12px;margin-top:8px;">' +
             esc(d.original_filename) + ' &middot; ' + fmtSize(d.size_bytes) + ' &middot; uploaded ' + fmtDateTime(d.created_at) +
             (d.uploaded_by_name ? ' by ' + esc(d.uploaded_by_name) : '') +
           '</div>' +
@@ -114,6 +114,58 @@
     '</div>';
   }
 
+  // Open a fetched blob. Uses a programmatic <a download> click, NOT window.open:
+  // (1) window.open AFTER an `await` loses the user-gesture, so mobile browsers
+  //     popup-BLOCK it — which is why tapping a document "did nothing"; and
+  // (2) in the Capacitor APK WebView window.open returns a stub and opens nothing.
+  // An anchor click is exempt from the popup blocker and hands the file to the
+  // browser / WebView download handler.
+  function openBlob(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename || 'document.pdf'; a.rel = 'noopener'; a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { try { document.body.removeChild(a); } catch (e) {} URL.revokeObjectURL(url); }, 60000);
+  }
+  // Mobile-safe document open: the Android WebView can't handle blob: / <a download>,
+  // so fetch a short-lived SIGNED https url and open THAT plain link (renders inline
+  // where the WebView supports it, otherwise the system takes over). Works on desktop
+  // too (opens the PDF in a new tab).
+  async function openDocSigned(id) {
+    try {
+      var r = await api('GET', '/parent/edocuments/' + id + '/link');
+      var url = r && r.url;
+      if (!url) throw new Error('No link returned');
+      openExternalUrl(url);
+    } catch (e) {
+      alert('Could not open the document: ' + ((e && e.message) || e));
+    }
+  }
+  // Open an https URL so a PDF actually renders. The embedded Android WebView has
+  // NO PDF viewer, so on the APK we hand the URL to a Chrome Custom Tab / the system
+  // browser (real Chrome renders PDFs). Desktop + PWA fall back to a new tab.
+  function openExternalUrl(url) {
+    try {
+      var cap = window.Capacitor;
+      if (cap && cap.Plugins) {
+        if (cap.Plugins.Browser && typeof cap.Plugins.Browser.open === 'function') {
+          cap.Plugins.Browser.open({ url: url }); return;
+        }
+        if (cap.Plugins.App && typeof cap.Plugins.App.openUrl === 'function') {
+          cap.Plugins.App.openUrl({ url: url }); return;
+        }
+      }
+      // Cordova-style external target, harmless where unsupported.
+      if (window.cordova && window.cordova.InAppBrowser) {
+        window.cordova.InAppBrowser.open(url, '_system'); return;
+      }
+    } catch (e) { /* fall through to the anchor */ }
+    var a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { try { a.remove(); } catch (e) {} }, 300);
+  }
   async function downloadWithAuth(id, parent) {
     try {
       var res = await fetch(downloadUrl(id, parent), {
@@ -121,11 +173,12 @@
       });
       if (!res.ok) throw new Error('Download failed: HTTP ' + res.status);
       var blob = await res.blob();
-      var url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+      var cd = res.headers.get('Content-Disposition') || '';
+      var m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      var filename = (m && decodeURIComponent(m[1].replace(/"/g, ''))) || ('document-' + id + '.pdf');
+      openBlob(blob, filename);
     } catch (e) {
-      alert('Could not open PDF: ' + e.message);
+      alert('Could not open the document: ' + ((e && e.message) || e));
     }
   }
 
@@ -201,7 +254,7 @@
         : '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px;">' +
             '<thead><tr style="background:#F9FAFB;text-align:left;"><th style="padding:8px;">Family</th><th style="padding:8px;">Signed by</th><th style="padding:8px;">When</th></tr></thead><tbody>' +
             sigs.map(function (s) {
-              return '<tr style="border-top:1px solid #E5E7EB;"><td style="padding:8px;">' + esc(s.family_name) + '</td><td style="padding:8px;">' + esc(s.signed_by_name) + ' <span style="color:#9CA3AF;">(' + esc(s.signed_by_email || '') + ')</span></td><td style="padding:8px;color:#6B7280;">' + fmtDateTime(s.signed_at) + '</td></tr>';
+              return '<tr style="border-top:1px solid #E5E7EB;"><td style="padding:8px;">' + esc(s.family_name) + '</td><td style="padding:8px;">' + esc(s.signed_by_name) + ' <span style="color:#64748B;">(' + esc(s.signed_by_email || '') + ')</span></td><td style="padding:8px;color:#6B7280;">' + fmtDateTime(s.signed_at) + '</td></tr>';
             }).join('') +
             '</tbody></table>') +
       '<h3 style="margin:14px 0 10px;font-size:15px;color:#DC2626;">Not yet signed (' + missing.length + ')</h3>' +
@@ -276,7 +329,7 @@
     container.querySelectorAll('[data-parent-download]').forEach(function (a) {
       a.addEventListener('click', function (e) {
         e.preventDefault();
-        downloadWithAuth(parseInt(a.dataset.parentDownload, 10), true);
+        openDocSigned(parseInt(a.dataset.parentDownload, 10));
       });
     });
   }
@@ -318,7 +371,7 @@
       '</div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center;">' +
         '<button id="kt-sig-clear" type="button" style="padding:6px 12px;background:#E5E7EB;color:#374151;border:none;border-radius:6px;font-size:12px;cursor:pointer;">Clear</button>' +
-        '<span style="font-size:11px;color:#9CA3AF;">Use mouse or finger</span>' +
+        '<span style="font-size:11px;color:#64748B;">Use mouse or finger</span>' +
       '</div>' +
       '<div id="kt-msg" style="font-size:13px;min-height:20px;margin-top:10px;"></div>';
 

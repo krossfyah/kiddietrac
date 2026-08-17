@@ -25,13 +25,13 @@
     const items = isParent ? [
       { hash: 'today', icon: '✨', label: 'Today' },
       { hash: 'photos', icon: '📷', label: 'Photos' },
-      { hash: 'messages', icon: '💬', label: 'Messages' },
+      { hash: 'messages', icon: '💬', label: 'Messenger' },
       { hash: 'notifications', icon: '🔔', label: 'Inbox' },
       { hash: 'more', icon: '☰', label: 'More' },
     ] : [
       { hash: 'dashboard', icon: '🏠', label: 'Home' },
       { hash: 'children', icon: '🧒', label: 'Children' },
-      { hash: 'chat', icon: '💬', label: 'Messages' },
+      { hash: 'chat', icon: '💬', label: 'Messenger' },
       { hash: 'notifications', icon: '🔔', label: 'Inbox' },
       { hash: 'more', icon: '☰', label: 'More' },
     ];
@@ -97,7 +97,7 @@
       if (ctl) ctl.remove();
       body.appendChild(clone);
     } else {
-      body.innerHTML = '<div style="padding:24px;color:#94A3B8;">Menu unavailable.</div>';
+      body.innerHTML = '<div style="padding:24px;color:#64748B;">Menu unavailable.</div>';
     }
     panel.appendChild(body);
     overlay.appendChild(panel);
@@ -147,7 +147,7 @@
       t.dataset.ktMobLabeled = '1';
     });
   }
-  setInterval(decorateTableCells, 1800);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(decorateTableCells) : setInterval(decorateTableCells, 4000);
   setTimeout(decorateTableCells, 1300);
 
   // ============================ Card class auto-application ============================
@@ -165,6 +165,6 @@
       }
     });
   }
-  setInterval(applyCardClassToInlineStyled, 2200);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(applyCardClassToInlineStyled) : setInterval(applyCardClassToInlineStyled, 4000);
   setTimeout(applyCardClassToInlineStyled, 1500);
 })(window);

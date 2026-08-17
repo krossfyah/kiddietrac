@@ -84,6 +84,38 @@
     msgCard.appendChild(ta);
     wrap.appendChild(msgCard);
 
+    // ── Screenshots / images ──
+    var picked = [];
+    var imgCard = el('div', { style: card });
+    imgCard.appendChild(el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.4px;color:#475569;margin-bottom:9px;text-transform:uppercase;' }, ['Add screenshots (optional)']));
+    var fileInput = el('input', { type: 'file', accept: 'image/*', multiple: 'multiple', style: 'display:none;' });
+    var addBtn = el('button', { type: 'button', style: 'display:inline-flex;align-items:center;gap:8px;border:1.5px dashed #cbd5e1;background:#F8FAFC;color:#475569;border-radius:10px;padding:11px 18px;font-size:13px;font-weight:700;cursor:pointer;' }, ['📎  Attach images']);
+    var imgHint = el('div', { style: 'font-size:11.5px;color:#94A3B8;margin-top:7px;' }, ['Up to 5 images — a screenshot helps us help you faster.']);
+    var previews = el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;' });
+    function renderPreviews() {
+      Dom.clear(previews);
+      picked.forEach(function (f, idx) {
+        var thumb = el('div', { style: 'position:relative;width:66px;height:66px;border-radius:10px;overflow:hidden;border:1px solid #E2E8F0;' });
+        thumb.appendChild(el('img', { src: URL.createObjectURL(f), style: 'width:100%;height:100%;object-fit:cover;display:block;' }));
+        var x = el('button', { type: 'button', title: 'Remove', style: 'position:absolute;top:2px;right:2px;width:19px;height:19px;border:none;border-radius:50%;background:rgba(15,23,42,.78);color:#fff;font-size:12px;line-height:1;cursor:pointer;padding:0;' }, ['×']);
+        x.addEventListener('click', function () { picked.splice(idx, 1); renderPreviews(); });
+        thumb.appendChild(x);
+        previews.appendChild(thumb);
+      });
+      imgHint.textContent = picked.length ? (picked.length + ' image' + (picked.length === 1 ? '' : 's') + ' attached') : 'Up to 5 images — a screenshot helps us help you faster.';
+    }
+    addBtn.addEventListener('click', function () { fileInput.click(); });
+    fileInput.addEventListener('change', function () {
+      [].forEach.call(fileInput.files, function (f) { if (picked.length < 5 && /^image\//.test(f.type || '')) picked.push(f); });
+      fileInput.value = '';
+      renderPreviews();
+    });
+    imgCard.appendChild(addBtn);
+    imgCard.appendChild(fileInput);
+    imgCard.appendChild(imgHint);
+    imgCard.appendChild(previews);
+    wrap.appendChild(imgCard);
+
     // ── Submit ──
     var status = el('div', { style: 'font-size:13px;margin:2px 2px 10px;min-height:18px;' });
     wrap.appendChild(status);
@@ -98,23 +130,33 @@
       if (!state.rating) { status.style.color = '#b45309'; status.textContent = 'Please tap a star rating first.'; return; }
       if (!ta.value.trim()) { status.style.color = '#b45309'; status.textContent = 'Please describe the issue or feedback.'; ta.focus(); return; }
       submit.disabled = true; submit.textContent = 'Sending…';
-      Api.post('/feedback', { rating: state.rating, category: state.category, comment: ta.value.trim() })
-        .then(function () {
-          Dom.clear(main);
-          var ok = el('div', { style: 'text-align:center;padding:44px 24px;' }, [
-            el('div', { style: 'font-size:52px;line-height:1;margin-bottom:14px;' }, ['✅']),
-            el('div', { style: 'font-size:19px;font-weight:800;color:#0f172a;margin-bottom:6px;' }, ['Thank you!']),
-            el('div', { style: 'font-size:14px;color:#64748b;line-height:1.5;max-width:320px;margin:0 auto 22px;' }, ['Your feedback has been sent to your centre team. They’ll follow up if needed.']),
-          ]);
-          var back = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6FB2;font-weight:700;border-radius:12px;padding:12px 22px;cursor:pointer;font-size:14px;' }, ['Back to home']);
-          back.addEventListener('click', function () { location.hash = '#home'; });
-          ok.appendChild(back);
-          main.appendChild(ok);
-        })
-        .catch(function (e) {
-          submit.disabled = false; submit.textContent = 'Send to my centre';
-          status.style.color = '#b91c1c'; status.textContent = 'Could not send: ' + (e && e.message ? e.message : 'please try again.');
-        });
+      var onOk = function () {
+        Dom.clear(main);
+        var ok = el('div', { style: 'text-align:center;padding:44px 24px;' }, [
+          el('div', { style: 'font-size:52px;line-height:1;margin-bottom:14px;' }, ['✅']),
+          el('div', { style: 'font-size:19px;font-weight:800;color:#0f172a;margin-bottom:6px;' }, ['Thank you!']),
+          el('div', { style: 'font-size:14px;color:#64748b;line-height:1.5;max-width:320px;margin:0 auto 22px;' }, ['Your feedback has been sent to your centre team. They’ll follow up if needed.']),
+        ]);
+        var back = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6FB2;font-weight:700;border-radius:12px;padding:12px 22px;cursor:pointer;font-size:14px;' }, ['Back to home']);
+        back.addEventListener('click', function () { location.hash = '#home'; });
+        ok.appendChild(back);
+        main.appendChild(ok);
+      };
+      var onErr = function (e) {
+        submit.disabled = false; submit.textContent = 'Send to my centre';
+        status.style.color = '#b91c1c'; status.textContent = 'Could not send: ' + (e && e.message ? e.message : 'please try again.');
+      };
+      if (picked.length) {
+        // Multipart when screenshots are attached.
+        var fd = new FormData();
+        fd.append('rating', String(state.rating));
+        fd.append('category', state.category);
+        fd.append('comment', ta.value.trim());
+        picked.forEach(function (f) { fd.append('images[]', f); });
+        (Api.postForm ? Api.postForm('/feedback', fd) : Api.post('/feedback', fd)).then(onOk).catch(onErr);
+      } else {
+        Api.post('/feedback', { rating: state.rating, category: state.category, comment: ta.value.trim() }).then(onOk).catch(onErr);
+      }
     });
 
     // ── Past submissions ──
@@ -123,7 +165,7 @@
     Api.get('/feedback/mine').then(function (r) {
       var rows = (r && (r.data || r.feedback)) || [];
       if (!rows.length) return;
-      past.appendChild(el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.4px;color:#94a3b8;margin:0 2px 8px;text-transform:uppercase;' }, ['Your past messages']));
+      past.appendChild(el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.4px;color:#64748B;margin:0 2px 8px;text-transform:uppercase;' }, ['Your past messages']));
       rows.slice(0, 8).forEach(function (f) {
         var row = el('div', { style: 'background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(15,23,42,.05);padding:12px 14px;margin-bottom:8px;' });
         row.appendChild(el('div', { style: 'display:flex;justify-content:space-between;gap:10px;margin-bottom:3px;' }, [
@@ -131,11 +173,28 @@
           el('div', { style: 'font-size:12px;color:#f59e0b;' }, ['★'.repeat(f.rating || 0)]),
         ]));
         if (f.comment) row.appendChild(el('div', { style: 'font-size:13px;color:#64748b;line-height:1.4;' }, [f.comment]));
+        var atts = [];
+        try { atts = typeof f.attachments === 'string' ? (JSON.parse(f.attachments || '[]') || []) : (f.attachments || []); } catch (e) { atts = []; }
+        if (atts.length) {
+          var attRow = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;' });
+          atts.forEach(function (a) {
+            var im = el('img', { src: absUrl(a.url), title: a.name || 'screenshot', style: 'width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #E2E8F0;cursor:pointer;' });
+            im.addEventListener('click', function () { window.open(absUrl(a.url), '_blank'); });
+            attRow.appendChild(im);
+          });
+          row.appendChild(attRow);
+        }
         past.appendChild(row);
       });
     }).catch(function () {});
   }
 
+  function absUrl(u) {
+    if (!u) return u;
+    if (/^https?:\/\//.test(u)) return u;
+    var base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    return base.replace(/\/api\/v1\/?$/, '') + (u.charAt(0) === '/' ? u : '/' + u);
+  }
   function chipStyle(active) {
     return 'display:inline-flex;align-items:center;padding:9px 13px;border-radius:11px;font-size:13px;font-weight:600;cursor:pointer;'
       + (active

@@ -38,7 +38,7 @@
 
     var listWrap = Dom.el('div', { 'data-kt-list': '1', 'data-kt-sort': 'amount:Amount:num', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
-    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#9CA3AF;' }, 'Loading…'));
+    listWrap.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…'));
 
     Promise.all([
       Api.get('/admin/fee-plans'),
@@ -119,7 +119,7 @@
     body.appendChild(famHead);
 
     var famBox = Dom.el('div', { style: 'max-height:260px;overflow:auto;border:1px solid #E5E7EB;border-radius:8px;padding:6px;' });
-    famBox.appendChild(Dom.el('div', { style: 'padding:16px;text-align:center;color:#9CA3AF;font-size:13px;' }, 'Loading families…'));
+    famBox.appendChild(Dom.el('div', { style: 'padding:16px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading families…'));
     body.appendChild(famBox);
 
     var checks = [];
@@ -224,8 +224,8 @@
     if (existing) {
       actions.unshift({
         label: 'Delete', style: 'btn-secondary',
-        handler: function () {
-          if (!window.confirm('Delete the plan “' + existing.name + '”?')) return false;
+        handler: async function () {
+          if (!await KT.confirm('Delete the plan “' + existing.name + '”?')) return false;
           return Api.delete('/admin/fee-plans/' + existing.id).then(function () { if (Dom.toast) Dom.toast('Plan deleted', 'success'); render(container); }).catch(function (e) { if (Dom.toast) Dom.toast(e.message || 'Delete failed', 'error'); return false; });
         },
       });

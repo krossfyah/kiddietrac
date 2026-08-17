@@ -60,7 +60,11 @@
       '.kt-rw-value{font-size:21px;font-weight:900;line-height:1.1;letter-spacing:-0.3px;color:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 80%, #0f172a);font-feature-settings:"tnum";white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
       '.kt-rw-label{font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 80%, #0f172a);opacity:.72;margin-top:3px;}' +
       '.kt-rw-hint{font-size:11.5px;color:#64748B;margin-top:2px;line-height:1.35;}' +
-      '.kt-rw-link{display:block;text-decoration:none;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}' +
+      // NB: no display here — the card is ALSO .kt-rw-card{display:flex}. Setting
+      // display:block here (it comes later, equal specificity) beat the flex and
+      // stacked icon-over-text on desktop for clickable cards (mobile forced flex
+      // via !important, hiding the bug). Keep it flex so text stays BESIDE the icon.
+      '.kt-rw-link{text-decoration:none;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;}' +
       '.kt-rw-link:active{transform:scale(.985);}' +
       '.kt-rw-go{margin-top:8px;font-size:11.5px;font-weight:800;color:color-mix(in srgb, var(--kt-rw-accent,#1F6080) 80%, #0f172a);opacity:.9;}' +
       // Skeleton placeholder — reserves the strip's space on a cold cache.
@@ -159,6 +163,13 @@
 
   // ── DOM helpers ───────────────────────────────────────────────────────
   function appMain() { return document.getElementById('appMain'); }
+  // The educator roster screen (#today / #dashboard) renders its OWN "Today at a
+  // glance" brief, so the generic KPI strip is just a repeat of the Home stats.
+  // When that shell is on screen, suppress the strip entirely.
+  function hasSelfBriefDashboard() {
+    var m = appMain();
+    return !!(m && m.querySelector('.educator-shell'));
+  }
   function heroIn(root) { return root ? root.querySelector(HERO_SEL) : null; }
   // The element the strip lives in: the hero's parent (so it sits right after
   // the banner), else #appMain. Always recomputed against the LIVE DOM.
@@ -223,6 +234,7 @@
       if (settled) return; settled = true; clearTimeout(killer);
       fetching = false;
       if (!isDashboardHash()) return;                       // navigated away
+      if (hasSelfBriefDashboard()) { clearAllStrips(); return; }  // educator roster owns its brief
       var container = containerFor();
       if (!container || !heroIn(appMain())) return;          // home not up right now
       if (!data || !data.widgets || !data.widgets.length) {  // role has no cards
@@ -271,6 +283,7 @@
     if (!isDashboardHash()) return;
     var m = appMain();
     if (!m || !heroIn(m)) return;            // Home not rendered yet — wait
+    if (hasSelfBriefDashboard()) { clearAllStrips(); return; }  // educator roster owns its brief
     if (!currentStrip()) paint(containerFor(), {});
     revalidate({}, false);
   }

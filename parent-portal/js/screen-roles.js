@@ -235,8 +235,8 @@
         // Delete (custom only) + save handlers
         var footer = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid #E5E7EB;' });
         if (!role.is_system) {
-          footer.appendChild(btn('🗑 Delete role', danger(), function () {
-            if (!window.confirm('Delete the "' + role.name + '" role? Anyone currently assigned will need to be reassigned.')) return;
+          footer.appendChild(btn('🗑 Delete role', danger(), async function () {
+            if (!await KT.confirm('Delete the "' + role.name + '" role? Anyone currently assigned will need to be reassigned.')) return;
             Api.delete('/admin/roles/' + role.id).then(function () {
               if (Dom.toast) Dom.toast('Role archived', 'success');
               renderRoles(container);

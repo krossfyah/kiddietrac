@@ -10,6 +10,19 @@
   'use strict';
   var KT = w.KT || {};
 
+  // Icon export buttons: square, icon-sized, with a clean hover tooltip (in
+  // addition to the native title). Injected once.
+  function ensureExportIconStyle() {
+    if (document.getElementById('kt-export-icon-style')) return;
+    var st = document.createElement('style'); st.id = 'kt-export-icon-style';
+    st.textContent =
+      '.kt-export-btn.kt-export-icon{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:17px;line-height:1;border-radius:9px;position:relative;}' +
+      '.kt-export-btn.kt-export-icon.kt-export-import{background:#EDE9FE;border-color:#DDD6FE;}' +
+      '.kt-export-btn.kt-export-icon[data-kttip]:hover::after{content:attr(data-kttip);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:4px 9px;border-radius:6px;z-index:10001;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28);}' +
+      '.kt-export-btn.kt-export-icon[data-kttip]:hover::before{content:"";position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#0F172A;z-index:10001;pointer-events:none;}';
+    document.head.appendChild(st);
+  }
+
   function hash() { return (location.hash || '').replace('#', '').split('?')[0]; }
   function mapType() {
     try { return (KT.V22p54 && KT.V22p54.mapHashToExportType) ? KT.V22p54.mapHashToExportType(hash()) : null; } catch (e) { return null; }
@@ -153,6 +166,8 @@
 
   function addBar(table) {
     if (table.closest('#modalRoot')) return;
+    // data-kt-noexport (e.g. Messages): keep the record-count bar, just no export buttons.
+    var countOnly = table.hasAttribute('data-kt-noexport');
     // Report docs have their own branded export footer — no auto-bar, but do
     // move the record count to the bottom for consistency.
     if (table.closest('.kt-report-doc')) { relocateReportCount(table); return; }
@@ -166,46 +181,97 @@
 
     var barEl = document.createElement('div');
     barEl.className = 'kt-export-bar';
-    var btns = document.createElement('div');
-    btns.className = 'kt-export-btns';
-    var mk = function (label, fn, cls) {
-      var b = document.createElement('button'); b.className = 'kt-export-btn' + (cls ? ' ' + cls : '');
-      b.type = 'button'; b.textContent = label;
-      b.addEventListener('click', function () { fn(b); });
-      return b;
-    };
-    btns.appendChild(mk('⬇ Excel', function (b) { serverExport(table, 'xlsx', b); }));
-    btns.appendChild(mk('⬇ CSV', function () { csv(table); }));
-    btns.appendChild(mk('⬇ PDF', function (b) { serverExport(table, 'pdf', b); }));
-    var mt = mapType();
-    if (mt && mt.importType && KT.V22p54 && KT.V22p54.buildImportModal) {
-      btns.appendChild(mk('⬆ Import', function () {
-        KT.V22p54.buildImportModal(mt.importType, mt.label, function () { location.reload(); });
-      }, 'kt-export-import'));
+    if (!countOnly) {
+      var btns = document.createElement('div');
+      btns.className = 'kt-export-btns';
+      ensureExportIconStyle();
+      // Icon-only buttons (cleaner than "⬇ Excel" text) with a tooltip naming the
+      // format — the icon carries the meaning, the tooltip removes any doubt.
+      var mk = function (icon, tip, fn, cls) {
+        var b = document.createElement('button'); b.className = 'kt-export-btn kt-export-icon' + (cls ? ' ' + cls : '');
+        b.type = 'button'; b.textContent = icon;
+        b.title = tip; b.setAttribute('aria-label', tip); b.setAttribute('data-kttip', tip);
+        b.addEventListener('click', function () { fn(b); });
+        return b;
+      };
+      btns.appendChild(mk('📊', 'Export to Excel', function (b) { serverExport(table, 'xlsx', b); }, 'kt-exp-xlsx'));
+      btns.appendChild(mk('📄', 'Export to CSV', function () { csv(table); }, 'kt-exp-csv'));
+      btns.appendChild(mk('📕', 'Export to PDF', function (b) { serverExport(table, 'pdf', b); }, 'kt-exp-pdf'));
+      var mt = mapType();
+      if (mt && mt.importType && KT.V22p54 && KT.V22p54.buildImportModal) {
+        btns.appendChild(mk('⬆️', 'Import from a spreadsheet', function () {
+          KT.V22p54.buildImportModal(mt.importType, mt.label, function () { location.reload(); });
+        }, 'kt-export-import'));
+      }
+      barEl.appendChild(btns);
     }
     var count = document.createElement('div');
     count.className = 'kt-export-count';   // record-count slot (bottom-right)
-    barEl.appendChild(btns);
     barEl.appendChild(count);
     anchor.parentNode.insertBefore(barEl, anchor.nextSibling);
     relocateCount(table, barEl);
   }
 
-  // Remove legacy per-screen top CSV buttons (⤓ CSV / ⤓ Download CSV / ⤓ Export
-  // … CSV) now that the bottom bar covers CSV — but only once a bar exists on the
-  // screen, so CSV is never lost. Leaves Import buttons alone.
-  function removeLegacyCsv() {
+  // Card lists ([data-kt-list], e.g. Learning observations, Documents) get the SAME
+  // bottom "N records" status bar as tables — read the accurate total from their
+  // top .kt-list-controls .kt-list-count ("N / N"); fall back to counting rows.
+  function cardTotal(list) {
+    var tb = list.previousElementSibling, hop = 0;
+    while (tb && hop++ < 4) { if (tb.classList && tb.classList.contains('kt-list-controls')) break; tb = tb.previousElementSibling; }
+    if (tb && tb.classList && tb.classList.contains('kt-list-controls')) {
+      var c = tb.querySelector('.kt-list-count');
+      var m = c && (c.textContent || '').match(/(\d+)\s*(?:\/\s*(\d+))?/);
+      if (m) return parseInt(m[2] || m[1], 10);
+    }
+    var n = 0;
+    for (var i = 0; i < list.children.length; i++) { var ch = list.children[i]; if (ch.nodeType === 1 && !ch.classList.contains('kt-export-bar')) n++; }
+    return n;
+  }
+
+  function addCardBar(list) {
+    if (list.closest('#modalRoot')) return;
+    if (list.hasAttribute('data-kt-nocount')) return;
+    var total = cardTotal(list);
+    var label = total === 1 ? '1 record' : (total + ' records');
+    // Look a few siblings ahead for an existing card-count bar — cardPager may
+    // insert its pager between the list and our bar, so we can't rely on nextSibling.
+    var s = list.nextElementSibling, hop = 0, existing = null;
+    while (s && hop++ < 3) { if (s.classList && s.classList.contains('kt-cardcount')) { existing = s; break; } s = s.nextElementSibling; }
+    if (existing) { var ec = existing.querySelector('.kt-export-count'); if (ec) ec.textContent = label; return; }
+    var barEl = document.createElement('div');
+    barEl.className = 'kt-export-bar kt-cardcount';
+    var count = document.createElement('div');
+    count.className = 'kt-export-count';
+    count.textContent = label;
+    barEl.appendChild(count);
+    // Place after the cardPager bar if present, else right after the list.
+    var after = list, n = list.nextElementSibling;
+    if (n && n.classList && n.classList.contains('kt-card-pager')) after = n;
+    after.parentNode.insertBefore(barEl, after.nextSibling);
+  }
+
+  // Remove legacy per-screen top export buttons (⤓ CSV / ⤓ PDF / Export PDF /
+  // Download CSV …) now that the bottom bar covers CSV/Excel/PDF — but only once a
+  // bar exists on the screen, so export is never lost. Buttons flagged
+  // `.kt-legacy-export` are always stripped when a bar is present; otherwise only a
+  // button whose WHOLE label is a download glyph + a format word is removed (never
+  // a button that merely mentions a format inside a longer, meaningful label).
+  // Import buttons are always left alone.
+  function removeLegacyExport() {
     if (!document.querySelector('#appMain .kt-export-bar')) return;
     document.querySelectorAll('#appMain button').forEach(function (b) {
       if (b.closest('.kt-export-bar')) return;
+      if (b.classList && b.classList.contains('kt-legacy-export')) { b.remove(); return; }
       var t = (b.textContent || '').trim();
-      if (/csv/i.test(t) && !/import/i.test(t) && t.length < 30) b.remove();
+      if (/import/i.test(t)) return;
+      if (/^(?:[\s⤓⬇↓]|download|export|to)*\b(csv|pdf|excel|xlsx)\b$/i.test(t)) b.remove();
     });
   }
 
   function sweep() {
     document.querySelectorAll('#appMain table').forEach(addBar);   // addBar refreshes the count on tables that already have a bar
-    removeLegacyCsv();
+    document.querySelectorAll('#appMain [data-kt-list]').forEach(addCardBar); // card lists get the same bottom "N records" bar
+    removeLegacyExport();
   }
   // Let the shell run the sweep as part of a screen render. The 1.8s poll below meant
   // a table appeared first and its Excel/CSV/PDF bar dropped in a beat later — visible
@@ -215,5 +281,9 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sweep);
   else sweep();
-  setInterval(sweep, 250);   // was 1800ms — the table appeared, then its export bar dropped in a beat later
+  // Drive the bar off the shared DOM-settle bus so it renders WITH the table (~60–180ms
+  // after a screen paints) instead of waiting for a 2s poll tick — that lag was the
+  // "Excel/CSV/PDF icons pop in after the page loads" the user reported. Falls back to a
+  // poll if the bus isn't loaded.
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 2000);
 })(window);

@@ -30,6 +30,22 @@
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
   function apiBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
 
+  // Diagnostics → /diag/bio (shared sink). PIN had NO telemetry, so "the PIN
+  // keeps getting removed" was invisible. Every enrol/remove/unlock now logs,
+  // and remove() records its CALLER stack so we can see exactly what wiped it.
+  function callerStack() { try { return (new Error().stack || '').split('\n').slice(2, 6).join(' <- ').replace(/https?:\/\/[^\s)]*\//g, '').slice(0, 320); } catch (e) { return ''; } }
+  function pinDiag(step, extra) {
+    try {
+      var hs = false; try { hs = !!sessionStorage.getItem('kt_token'); } catch (e) {}
+      var payload = { step: 'pin:' + step, path: location.pathname, search: location.search || '', hasSession: hs, pinSet: isSet(), vault: !!get('kt_pin_vault'), tries: get('kt_pin_tries') || '0', extra: extra || null, ts: Date.now() };
+      var url = apiBase() + '/diag/bio', body = JSON.stringify({ data: JSON.stringify(payload) });
+      // sendBeacon survives the immediate location.replace() that some of these
+      // steps trigger (commit-401 → redirect), so the event isn't lost.
+      if (navigator.sendBeacon) { try { navigator.sendBeacon(url, new Blob([body], { type: 'application/json' })); return; } catch (e) {} }
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true }).catch(function () {});
+    } catch (e) {}
+  }
+
   function b64(buf) { var b = new Uint8Array(buf), s = ''; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
   function unb64(str) { var bin = atob(str), b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }
   function rand(n) { var a = new Uint8Array(n); (window.crypto || window.msCrypto).getRandomValues(a); return a; }
@@ -62,7 +78,7 @@
   }
 
   function isSet() { return get('kt_pin_enabled') === '1' && !!get('kt_pin_vault'); }
-  function remove() { del('kt_pin_vault'); del('kt_pin_enabled'); del('kt_pin_tries'); del('kt_pin_unlocked_at'); return Promise.resolve(true); }
+  function remove() { pinDiag('remove', { by: callerStack() }); del('kt_pin_vault'); del('kt_pin_enabled'); del('kt_pin_tries'); del('kt_pin_unlocked_at'); return Promise.resolve(true); }
 
   // Session snapshot — the same set of keys the biometric vault restores.
   function snapshot() {
@@ -86,9 +102,10 @@
     seal(pinInMemory, s).catch(function () {});
   }
   async function enroll(pin) {
-    var s = snapshot(); if (!s) return false;
-    await seal(pin, s);
+    var s = snapshot(); if (!s) { pinDiag('enroll-nosession'); return false; }
+    try { await seal(pin, s); } catch (e) { pinDiag('enroll-seal-fail', { err: String((e && (e.message || e.name)) || e) }); return false; }
     pinInMemory = pin;
+    pinDiag('enroll-ok', { vault: !!get('kt_pin_vault') });
     return true;
   }
   function restore(sess) {
@@ -107,14 +124,14 @@
   function showLock(onDash) {
     if (document.getElementById('kt-pin-lock')) return;
     var ov = document.createElement('div'); ov.id = 'kt-pin-lock';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:linear-gradient(160deg,#0E2A44,#081C41);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;color:#fff;font-family:system-ui,-apple-system,sans-serif;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.18) 0%, rgba(19,183,204,0) 55%), linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;color:#ffffff;font-family:system-ui,-apple-system,sans-serif;';
     ov.innerHTML =
       '<div style="font-size:52px;line-height:1;margin-bottom:10px;">🔢</div>'
       + '<div style="font-weight:800;font-size:20px;margin-bottom:6px;">Enter your PIN</div>'
-      + '<div id="kt-pin-msg" style="font-size:13.5px;opacity:.8;margin-bottom:20px;min-height:18px;">Quick unlock for KiddieTrac</div>'
+      + '<div id="kt-pin-msg" style="font-size:13.5px;color:#93a8c2;margin-bottom:20px;min-height:18px;">Quick unlock for KiddieTrac</div>'
       + '<div id="kt-pin-dots" style="display:flex;gap:12px;margin-bottom:26px;"></div>'
       + '<div id="kt-pin-pad" style="display:grid;grid-template-columns:repeat(3,72px);gap:14px;"></div>'
-      + '<button id="kt-pin-pw" style="background:transparent;color:rgba(255,255,255,.7);border:none;margin-top:22px;font-size:13px;font-weight:700;">Use password instead</button>';
+      + '<button id="kt-pin-pw" style="background:transparent;color:#9fb6cf;border:none;margin-top:22px;font-size:13px;font-weight:700;cursor:pointer;">Use password instead</button>';
     document.body.appendChild(ov);
 
     var entry = '';
@@ -125,7 +142,7 @@
       for (var i = 0; i < 6; i++) {
         var d = document.createElement('div');
         var filled = i < entry.length;
-        d.style.cssText = 'width:13px;height:13px;border-radius:50%;background:' + (filled ? '#fff' : 'rgba(255,255,255,.25)') + ';transition:background .12s;';
+        d.style.cssText = 'width:13px;height:13px;border-radius:50%;background:' + (filled ? '#22d3ee' : 'rgba(255,255,255,.18)') + ';box-shadow:' + (filled ? '0 0 10px rgba(34,211,238,.6)' : 'none') + ';transition:background .12s;';
         dots.appendChild(d);
       }
     };
@@ -137,7 +154,7 @@
       var b = document.createElement('button');
       b.type = 'button'; b.textContent = k;
       b.style.cssText = k
-        ? 'width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#fff;font-size:24px;font-weight:700;cursor:pointer;'
+        ? 'width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;font-size:24px;font-weight:700;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.28);-webkit-tap-highlight-color:transparent;'
         : 'width:72px;height:72px;visibility:hidden;';
       if (k) b.addEventListener('click', function () { press(k); });
       pad.appendChild(b);
@@ -210,6 +227,7 @@
       .then(function (r) {
         if (settled) return; settled = true; clearTimeout(timer);
         if (r.status === 401 || r.status === 419) {
+          pinDiag('commit-401', { status: r.status });
           remove();
           try { sessionStorage.removeItem('kt_token'); } catch (e) {}
           location.replace('/index.html?signed_out=pin_expired');
@@ -237,6 +255,7 @@
     var bioOwns = false;
     try { bioOwns = !!(window.KT && KT.biometric && KT.biometric.isEnabled && KT.biometric.isEnabled() && localStorage.getItem('kt_bio_token')); } catch (e) {}
 
+    pinDiag('boot', { onDash: onDash, unlockedThisSession: unlockedThisSession, recentlyUnlocked: recentlyUnlocked, bioOwns: bioOwns });
     if (isSet() && !hasSession && !unlockedThisSession && !recentlyUnlocked && !bioOwns) {
       showLock(onDash);
       return;

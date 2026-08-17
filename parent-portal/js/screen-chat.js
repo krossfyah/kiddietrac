@@ -130,8 +130,29 @@
 
     container.innerHTML = '<div class="kt-chat-loading" style="text-align:center;padding:32px;color:#6B7280;">Loading conversations…</div>';
     try {
-      const data = await api('GET', endpointBase());
-      const convs = data.conversations || [];
+      // Families and colleagues in one list. Staff threads are a separate endpoint with
+      // its own row shape, so they are normalised into the conversation shape the three
+      // render paths below already understand. A failed staff fetch must not empty the
+      // inbox — it degrades to families only.
+      const both = await Promise.all([
+        api('GET', endpointBase()),
+        myRole === 'guardian' ? Promise.resolve(null)
+          : api('GET', '/provider/team-threads').catch(function () { return null; }),
+      ]);
+      const data = both[0] || {};
+      const convs = (data.conversations || []).map(function (c) { c.kind = 'family'; return c; })
+        .concat(((both[1] && both[1].threads) || []).map(function (t) {
+          return {
+            kind: 'staff',
+            // Namespaced: conversation 7 and thread 7 are different things.
+            id: 'staff:' + t.id,
+            family_name: t.name,
+            centre_name: t.name,
+            preview: t.preview || '',
+            last_message_at: t.at,
+            unread_count: t.unread || 0,
+          };
+        }));
       const isProvider = myRole !== 'guardian';
       const newChatBtnHtml = isProvider
         ? `<button id="kt-new-chat-btn" style="background:#1F6080;color:white;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">+ New chat</button>`
@@ -141,13 +162,13 @@
       if (convs.length === 0) {
         container.innerHTML = `
           <div class="kt-chat-header" style="padding:16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;">
-            <h2 style="font-size:20px;margin:0;">💬 Messages</h2>
+            <h2 style="font-size:20px;margin:0;">💬 Messenger</h2>
             <div style="display:flex;gap:8px;align-items:center;">${notifBtnHtml}${newChatBtnHtml}</div>
           </div>
           <div style="text-align:center;padding:48px 16px;color:#6B7280;">
             <div style="font-size:48px;margin-bottom:12px;">💬</div>
             <p>No conversations yet.</p>
-            ${isProvider ? '<p style="font-size:14px;margin-top:8px;">Click <strong>+ New chat</strong> above to start a thread with a family.</p>' : '<p style="font-size:14px;margin-top:8px;">Your centre will reach out about your child\'s day.</p>'}
+            ${isProvider ? '<p style="font-size:14px;margin-top:8px;">Click <strong>+ New chat</strong> above to message a family or a colleague.</p>' : '<p style="font-size:14px;margin-top:8px;">Your centre will reach out about your child\'s day.</p>'}
           </div>`;
         var b = $('#kt-new-chat-btn', container);
         if (b) b.addEventListener('click', function () { openNewChatModal(container); });
@@ -167,7 +188,7 @@
         container.innerHTML = `
           <div style="padding:12px 12px 4px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
-              <h2 style="font-size:19px;font-weight:800;color:#0D1B2A;margin:0;">💬 Messages</h2>
+              <h2 style="font-size:19px;font-weight:800;color:#0D1B2A;margin:0;">💬 Messenger</h2>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${notifBtnHtml}${newChatBtnHtml}</div>
             </div>
             <input id="kt-msg-filter" type="search" placeholder="🔍 Search messages…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D1D5DB;border-radius:12px;font-size:14px;margin-bottom:10px;">
@@ -198,7 +219,7 @@
           if (q) listx = listx.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
           listx.sort((a, b) => sortValM(b) - sortValM(a));
           cardsWrap.innerHTML = listx.length ? listx.map(cardHtml).join('') : '<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">No matching conversations.</div>';
-          cardsWrap.querySelectorAll('.kt-msg-card').forEach(row => row.addEventListener('click', () => openThread(parseInt(row.dataset.cid, 10), container)));
+          cardsWrap.querySelectorAll('.kt-msg-card').forEach(row => row.addEventListener('click', () => openThread(row.dataset.cid, container)));
         };
         const fiM = $('#kt-msg-filter', container);
         if (fiM) fiM.addEventListener('input', () => { state.q = fiM.value || ''; paintM(); });
@@ -213,7 +234,7 @@
       container.innerHTML = `
         <div style="display:flex;flex-direction:column;">
           <div class="kt-chat-header" style="padding:14px 16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-            <h2 style="font-size:20px;margin:0;">💬 Messages</h2>
+            <h2 style="font-size:20px;margin:0;">💬 Messenger</h2>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <input id="kt-msg-filter" type="search" placeholder="🔍 Filter…" style="padding:8px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;min-width:180px;">
               ${notifBtnHtml}${newChatBtnHtml}
@@ -255,7 +276,7 @@
           </td>
           <td style="padding:10px 14px;text-align:right;color:#64748B;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatDateTime(c.last_message_at)}</td>
           <td style="padding:10px 6px;text-align:center;">
-            <button class="kt-conv-del" data-cid="${c.id}" type="button" title="Delete conversation" style="background:none;border:none;cursor:pointer;color:#C0453B;font-size:15px;line-height:1;padding:5px;border-radius:6px;">🗑</button>
+            ${c.kind === 'staff' ? '' : `<button class="kt-conv-del" data-cid="${c.id}" type="button" title="Delete conversation" style="background:none;border:none;cursor:pointer;color:#C0453B;font-size:15px;line-height:1;padding:5px;border-radius:6px;">🗑</button>`}
           </td>
         </tr>`;
       };
@@ -271,7 +292,7 @@
           row.dataset.base = base; row.style.background = base;
           row.addEventListener('mouseenter', () => { row.style.background = '#EEF4F7'; });
           row.addEventListener('mouseleave', () => { row.style.background = row.dataset.base; });
-          row.addEventListener('click', () => openThread(parseInt(row.dataset.cid, 10), container));
+          row.addEventListener('click', () => openThread(row.dataset.cid, container));
         });
         // Delete-conversation buttons (stop the row's open-thread click).
         tbody.querySelectorAll('.kt-conv-del').forEach(b => {
@@ -421,13 +442,15 @@
     // unreachable from Messages — the complaint that started this. Staff threads are a
     // different backend (keyed on a user, not a family), so both lists are loaded here and
     // the send routes to whichever the chosen row belongs to.
-    var families = [];
-    if (famPath) {
-      var fdata = await api('GET', famPath).catch(function () { return null; });
-      if (fdata) { families = fdata.data || fdata.families || []; }
-    }
+    var families = [], staff = [];
+    var loaded = await Promise.all([
+      famPath ? api('GET', famPath).catch(function () { return null; }) : Promise.resolve(null),
+      api('GET', '/provider/team-contacts').catch(function () { return null; }),
+    ]);
+    if (loaded[0]) { families = loaded[0].data || loaded[0].families || []; }
+    if (loaded[1]) { staff = loaded[1].contacts || []; }
 
-    if (! families.length) {
+    if (! families.length && ! staff.length) {
       modal.querySelector('#kt-new-chat-form-body').innerHTML = '<div style="color:#6B7280;">Nobody to message yet.</div>';
       return;
     }
@@ -436,6 +459,26 @@
       '<div style="margin-bottom:14px;">' +
         '<label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">To</label>' +
         '<select id="kt-nc-family" style="width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;background:white;">' +
+          // Colleagues first, grouped by role, each labelled — a flat list mixing parents
+          // and directors cannot be read at a glance. The value carries the KIND because
+          // the two halves post to different endpoints.
+          (function () {
+            var order = ['Admin', 'Director', 'Home visitor', 'Educator', 'Auditor', 'Parent', 'Staff'];
+            var byRole = {};
+            staff.forEach(function (p) {
+              var r = p.role || 'Staff';
+              (byRole[r] = byRole[r] || []).push(p);
+            });
+            var groups = order.filter(function (r) { return byRole[r] && byRole[r].length; })
+              .concat(Object.keys(byRole).filter(function (r) { return order.indexOf(r) === -1; }));
+            return groups.map(function (role) {
+              return '<optgroup label="' + escapeHtml(role === 'Admin' ? 'Admins' : role + 's') + '">' +
+                byRole[role].sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); })
+                  .map(function (p) {
+                    return '<option value="user:' + p.id + '">' + escapeHtml(p.name) + ' (' + escapeHtml(role) + ')</option>';
+                  }).join('') + '</optgroup>';
+            }).join('');
+          })() +
           (families.length
             ? '<optgroup label="Families">' + families.map(function (f) {
                 return '<option value="family:' + f.id + '">' + escapeHtml(f.family_name || ('Family #' + f.id)) + ' (Family)</option>';
@@ -462,7 +505,8 @@
       // Values are still prefixed "family:" so the picker can grow back to carrying
       // staff without the id meaning two different things.
       var picked = String(modal.querySelector('#kt-nc-family').value || '');
-      var fid = parseInt(picked.replace(/^family:/, ''), 10);
+      var toStaff = picked.indexOf('user:') === 0;
+      var fid = parseInt(picked.replace(/^(user|family):/, ''), 10);
       var subj = modal.querySelector('#kt-nc-subject').value.trim();
       var body = modal.querySelector('#kt-nc-body').value.trim();
       var errBox = modal.querySelector('#kt-nc-err');
@@ -471,9 +515,13 @@
       var sendBtn = modal.querySelector('#kt-nc-send');
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
       try {
-        var resp = await api('POST', '/provider/chats/start', { family_id: fid, subject: subj || null, body: body });
+        var resp = toStaff
+          ? await api('POST', '/provider/team-threads/start', { recipient_user_id: fid, body: body })
+          : await api('POST', '/provider/chats/start', { family_id: fid, subject: subj || null, body: body });
         overlay.remove();
-        if (resp && resp.conversation_id) {
+        if (toStaff && resp && (resp.thread_id || resp.id)) {
+          openThread('staff:' + (resp.thread_id || resp.id), container);
+        } else if (!toStaff && resp && resp.conversation_id) {
           openThread(resp.conversation_id, container);
         } else {
           renderList(container);
@@ -487,10 +535,113 @@
     setTimeout(function () { modal.querySelector('#kt-nc-body').focus(); }, 40);
   }
 
+  /* ─── Colleague thread ──────────────────────────────────────────
+     Deliberately thinner than the family thread below: /provider/team-threads has no
+     reactions, no attachments and no delete, so this offers none of them. An affordance
+     that 404s is worse than an absent one. */
+  var staffPoll = null;
+  function stopStaffPoll() { if (staffPoll) { clearInterval(staffPoll); staffPoll = null; } }
+
+  async function openStaffThread(tid, container) {
+    openThreadId = 'staff:' + tid;
+    threadListContainer = container;
+    threadDocked = !!(KT.ChatDock && KT.ChatDock.enabled());
+    var target = threadDocked ? KT.ChatDock.contentEl() : container;
+    target.innerHTML = '<div style="text-align:center;padding:32px;color:#6B7280;">Loading…</div>';
+    var cleanup = function () { stopStaffPoll(); closeThreadCleanup(); };
+    if (threadDocked) KT.ChatDock.show('Chat', cleanup);
+
+    var lastCount = -1;
+
+    function bubble(m) {
+      var mine = !!m.mine;
+      return '<div style="display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin-bottom:10px;">' +
+        '<div style="max-width:78%;">' +
+          (mine ? '' : '<div style="font-size:11px;color:#64748B;font-weight:700;margin:0 0 3px 4px;">' + escapeHtml(m.sender || '') + '</div>') +
+          '<div style="background:' + (mine ? '#1F6080' : '#FFFFFF') + ';color:' + (mine ? '#FFFFFF' : '#0D1B2A') + ';' +
+            'border:1px solid ' + (mine ? '#1F6080' : '#E7EBF0') + ';border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;">' +
+            escapeHtml(m.body || '') + '</div>' +
+          '<div style="font-size:10.5px;color:#94A3B8;margin:3px 4px 0;text-align:' + (mine ? 'right' : 'left') + ';">' + formatDateTime(m.at) + '</div>' +
+        '</div></div>';
+    }
+
+    async function paint(force) {
+      var data;
+      try { data = await api('GET', '/provider/team-threads/' + tid); }
+      catch (e) {
+        stopStaffPoll();
+        target.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load this conversation: ' + escapeHtml(e.message) + '</div>';
+        return;
+      }
+      var msgs = data.messages || [];
+      // Only repaint when something actually arrived — a blind repaint every few seconds
+      // would wipe whatever the person is part-way through typing.
+      if (!force && msgs.length === lastCount) { return; }
+      var draft = '';
+      var oldBox = target.querySelector('#kt-st-input');
+      if (oldBox) { draft = oldBox.value; }
+      lastCount = msgs.length;
+      if (threadDocked) KT.ChatDock.show(data.name || 'Chat', cleanup);
+
+      target.innerHTML =
+        '<div style="display:flex;flex-direction:column;height:100%;min-height:0;background:#F7F9FB;">' +
+          (threadDocked ? '' :
+            '<div class="kt-thread-header" style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fff;border-bottom:1px solid #E5E7EB;flex:0 0 auto;">' +
+              '<button id="kt-st-back" style="background:none;border:none;font-size:24px;color:#1F6080;cursor:pointer;padding:0 4px;line-height:1;">‹</button>' +
+              '<strong style="font-size:16px;color:#0D1B2A;">' + escapeHtml(data.name || 'Colleague') + '</strong>' +
+            '</div>') +
+          '<div id="kt-st-body" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px;">' +
+            (msgs.length ? msgs.map(bubble).join('')
+              : '<div style="text-align:center;color:#64748B;padding:26px;font-size:13px;">No messages yet. Say hello.</div>') +
+          '</div>' +
+          '<div style="flex:0 0 auto;display:flex;gap:8px;padding:10px;background:#fff;border-top:1px solid #E5E7EB;">' +
+            '<textarea id="kt-st-input" rows="1" placeholder="Type a message…" style="flex:1;min-width:0;padding:9px 11px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;font-family:inherit;resize:none;max-height:110px;box-sizing:border-box;"></textarea>' +
+            '<button id="kt-st-send" style="flex:0 0 auto;background:#1F6080;color:#fff;border:none;padding:0 16px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">Send</button>' +
+          '</div>' +
+        '</div>';
+
+      var body = target.querySelector('#kt-st-body');
+      if (body) { body.scrollTop = body.scrollHeight; }
+      var input = target.querySelector('#kt-st-input');
+      if (input) { input.value = draft; }
+
+      var back = target.querySelector('#kt-st-back');
+      if (back) { back.addEventListener('click', function () { stopStaffPoll(); closeThreadCleanup(); }); }
+
+      var sendBtn = target.querySelector('#kt-st-send');
+      async function doSend() {
+        var text = (input.value || '').trim();
+        if (!text) { return; }
+        sendBtn.disabled = true;
+        try {
+          await api('POST', '/provider/team-threads/' + tid + '/send', { body: text });
+          input.value = '';
+          lastCount = -1;          // force the next paint to show it
+          await paint(true);
+        } catch (e) {
+          sendBtn.disabled = false;
+          if (window.KT && KT.toast) { KT.toast('⚠️', 'Could not send', (e && e.message) || '', '#DC2626'); }
+        }
+      }
+      sendBtn.addEventListener('click', doSend);
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+      });
+    }
+
+    await paint(true);
+    stopStaffPoll();
+    staffPoll = setInterval(function () { paint(false); }, 6000);
+  }
+
   /* ─── Thread view ───────────────────────────────────────────── */
   let threadDocked = false;      // desktop: the open thread lives in the floating dock
   let threadListContainer = null; // the #appMain list container, for closing back to it
   async function openThread(cid, container) {
+    // "staff:12" goes to the colleague thread; anything else is a family conversation.
+    if (String(cid).indexOf('staff:') === 0) {
+      return openStaffThread(parseInt(String(cid).slice(6), 10), container);
+    }
     openThreadId = cid;
     threadListContainer = container;
     threadDocked = !!(KT.ChatDock && KT.ChatDock.enabled());

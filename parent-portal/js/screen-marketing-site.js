@@ -28,7 +28,7 @@
       + '<label style="display:block;font-size:13px;font-weight:700;color:#374151;margin-bottom:5px">' + esc(label) + '</label>'
       + '<input id="' + id + '" value="' + esc(val) + '" placeholder="' + esc(ph || '') + '" '
       + 'style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">'
-      + (hint ? '<div style="font-size:12px;color:#9CA3AF;margin-top:4px">' + esc(hint) + '</div>' : '')
+      + (hint ? '<div style="font-size:12px;color:#64748B;margin-top:4px">' + esc(hint) + '</div>' : '')
       + '</div>';
   }
   function card(title, inner) {
@@ -44,7 +44,7 @@
     return '<div style="flex:1;min-width:150px;background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:18px">'
       + '<div style="font-size:28px;font-weight:900;color:' + (color || '#0a1e2c') + ';line-height:1">' + esc(value) + '</div>'
       + '<div style="font-size:13px;font-weight:700;color:#374151;margin-top:6px">' + esc(label) + '</div>'
-      + (sub ? '<div style="font-size:12px;color:#9CA3AF;margin-top:2px">' + esc(sub) + '</div>' : '') + '</div>';
+      + (sub ? '<div style="font-size:12px;color:#64748B;margin-top:2px">' + esc(sub) + '</div>' : '') + '</div>';
   }
   function saveBar(idmsg, idbtn) {
     return '<div style="display:flex;gap:12px;align-items:center;margin-top:4px">'
@@ -98,11 +98,11 @@
       + '<span style="font-size:13px;color:#6b7280;font-weight:700"><span id="leadCount">' + leads.length + '</span> subscribers</span>'
       + '<button id="leadCsv" style="background:#fff;border:1px solid ' + TEAL + ';color:' + TEAL + ';border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer">⬇ Export CSV</button></div>';
     var rows = leads.length ? leads.map(leadRowHtml).join('')
-      : '<tr id="leadEmpty"><td colspan="6" style="padding:30px;text-align:center;color:#9CA3AF;font-size:14px">No subscribers yet. They appear here as visitors download the checklist or sign up — or add one above.</td></tr>';
+      : '<tr id="leadEmpty"><td colspan="6" style="padding:30px;text-align:center;color:#64748B;font-size:14px">No subscribers yet. They appear here as visitors download the checklist or sign up — or add one above.</td></tr>';
     return card('', addForm + head
-      + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+      + '<div style="overflow-x:auto"><table data-kt-filtered="1" style="width:100%;border-collapse:collapse">'
       + '<thead><tr style="text-align:left">'
-      + ['Date', 'Email', 'Name', 'Agency / centre', 'Source', ''].map(function (h) { return '<th style="padding:6px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#9CA3AF">' + h + '</th>'; }).join('')
+      + ['Date', 'Email', 'Name', 'Agency / centre', 'Source', ''].map(function (h) { return '<th style="padding:6px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748B">' + h + '</th>'; }).join('')
       + '</tr></thead><tbody id="leadBody">' + rows + '</tbody></table></div>');
   }
 
@@ -158,35 +158,35 @@
         var h = Math.round((d.views / max) * 100);
         return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">'
           + '<div title="' + d.views + ' views" style="width:100%;background:' + TEAL + ';border-radius:4px 4px 0 0;height:' + Math.max(h, 2) + '%;min-height:2px"></div>'
-          + '<div style="font-size:9px;color:#9CA3AF">' + esc(d.date.slice(5)) + '</div></div>';
+          + '<div style="font-size:9px;color:#64748B">' + esc(d.date.slice(5)) + '</div></div>';
       }).join('') + '</div>';
   }
   function tabAnalytics(c, a) {
     var topRows = (a && a.top_paths && a.top_paths.length)
       ? a.top_paths.map(function (p) { return '<tr><td style="padding:7px 10px;border-top:1px solid #F1F5F9;font-size:13px;font-weight:700;color:#0a1e2c">' + esc(p.path) + '</td><td style="padding:7px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#374151;text-align:right">' + p.views + '</td></tr>'; }).join('')
-      : '<tr><td colspan="2" style="padding:20px;text-align:center;color:#9CA3AF">No data yet.</td></tr>';
+      : '<tr><td colspan="2" style="padding:20px;text-align:center;color:#64748B">No data yet.</td></tr>';
     var srcRows = (a && a.lead_sources && Object.keys(a.lead_sources).length)
       ? Object.keys(a.lead_sources).map(function (k) { return '<tr><td style="padding:7px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#374151">' + esc(k) + '</td><td style="padding:7px 10px;border-top:1px solid #F1F5F9;font-size:13px;font-weight:700;text-align:right">' + a.lead_sources[k] + '</td></tr>'; }).join('')
-      : '<tr><td colspan="2" style="padding:16px;text-align:center;color:#9CA3AF">No leads yet.</td></tr>';
+      : '<tr><td colspan="2" style="padding:16px;text-align:center;color:#64748B">No leads yet.</td></tr>';
     var CC = { CA: '🇨🇦 Canada', US: '🇺🇸 United States', GB: '🇬🇧 United Kingdom', IE: '🇮🇪 Ireland', FR: '🇫🇷 France', DE: '🇩🇪 Germany', ES: '🇪🇸 Spain', IT: '🇮🇹 Italy', NL: '🇳🇱 Netherlands', SE: '🇸🇪 Sweden', AU: '🇦🇺 Australia', NZ: '🇳🇿 New Zealand', IN: '🇮🇳 India', AE: '🇦🇪 UAE', SG: '🇸🇬 Singapore', JP: '🇯🇵 Japan', PH: '🇵🇭 Philippines', MX: '🇲🇽 Mexico', BR: '🇧🇷 Brazil', Other: '🌍 Other', Unknown: '❔ Unknown' };
     var countryRows = (a && a.top_countries && a.top_countries.length)
       ? a.top_countries.map(function (x) { return '<tr><td style="padding:7px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#374151">' + esc(CC[x.country] || x.country) + '</td><td style="padding:7px 10px;border-top:1px solid #F1F5F9;font-size:13px;font-weight:700;text-align:right">' + x.views + '</td></tr>'; }).join('')
-      : '<tr><td colspan="2" style="padding:16px;text-align:center;color:#9CA3AF">No data yet.</td></tr>';
+      : '<tr><td colspan="2" style="padding:16px;text-align:center;color:#64748B">No data yet.</td></tr>';
     return '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px">'
         + stat('Pageviews (14 days)', a ? a.views_14d : 0, '', TEAL) + stat('Pageviews (all-time)', a ? a.total_views : 0, '', TEAL)
         + stat('Leads', a ? a.total_leads : 0, '', '#16a34a') + stat('Conversion', (a ? a.conversion : 0) + '%', '', '#16a34a') + '</div>'
       + card('Pageviews — last 14 days (first-party)', bars(a ? a.series_14d : []))
       + '<div style="display:flex;gap:18px;flex-wrap:wrap">'
-        + '<div style="flex:1;min-width:280px">' + card('Top pages', '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 10px;font-size:11px;color:#9CA3AF;text-transform:uppercase">Page</th><th style="text-align:right;padding:4px 10px;font-size:11px;color:#9CA3AF;text-transform:uppercase">Views</th></tr></thead><tbody>' + topRows + '</tbody></table>') + '</div>'
-        + '<div style="flex:1;min-width:240px">' + card('Leads by source', '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 10px;font-size:11px;color:#9CA3AF;text-transform:uppercase">Source</th><th style="text-align:right;padding:4px 10px;font-size:11px;color:#9CA3AF;text-transform:uppercase">Leads</th></tr></thead><tbody>' + srcRows + '</tbody></table>') + '</div></div>'
-      + card('Top countries (by visitor timezone)', '<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 10px;font-size:11px;color:#9CA3AF;text-transform:uppercase">Country</th><th style="text-align:right;padding:4px 10px;font-size:11px;color:#9CA3AF;text-transform:uppercase">Views</th></tr></thead><tbody>' + countryRows + '</tbody></table>')
+        + '<div style="flex:1;min-width:280px">' + card('Top pages', '<table data-kt-filtered="1" style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 10px;font-size:11px;color:#64748B;text-transform:uppercase">Page</th><th style="text-align:right;padding:4px 10px;font-size:11px;color:#64748B;text-transform:uppercase">Views</th></tr></thead><tbody>' + topRows + '</tbody></table>') + '</div>'
+        + '<div style="flex:1;min-width:240px">' + card('Leads by source', '<table data-kt-filtered="1" style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 10px;font-size:11px;color:#64748B;text-transform:uppercase">Source</th><th style="text-align:right;padding:4px 10px;font-size:11px;color:#64748B;text-transform:uppercase">Leads</th></tr></thead><tbody>' + srcRows + '</tbody></table>') + '</div></div>'
+      + card('Top countries (by visitor timezone)', '<table data-kt-filtered="1" style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:4px 10px;font-size:11px;color:#64748B;text-transform:uppercase">Country</th><th style="text-align:right;padding:4px 10px;font-size:11px;color:#64748B;text-transform:uppercase">Views</th></tr></thead><tbody>' + countryRows + '</tbody></table>')
       + card('Google Analytics 4', field('GA4 Measurement ID', 'ms_ga', c.ga_id, 'G-XXXXXXXXXX', 'Loads only after visitors accept cookies. The charts above are first-party and always on.')
         + saveBar('gaMsg', 'gaSave')
         + '<div style="margin-top:12px"><a href="https://analytics.google.com/" target="_blank" rel="noopener" style="font-size:13px;color:' + TEAL + ';font-weight:700;text-decoration:none">Open Google Analytics ↗</a></div>');
   }
 
   function tabChats(chats) {
-    if (!chats || !chats.length) return card('', '<div style="padding:24px;text-align:center;color:#9CA3AF;font-size:14px">No chats yet. Conversations from the website chat widget appear here with the visitor\'s name &amp; email.</div>');
+    if (!chats || !chats.length) return card('', '<div style="padding:24px;text-align:center;color:#64748B;font-size:14px">No chats yet. Conversations from the website chat widget appear here with the visitor\'s name &amp; email.</div>');
     return card('', '<div style="font-size:13px;color:#6b7280;font-weight:700;margin-bottom:14px">' + chats.length + ' conversation' + (chats.length === 1 ? '' : 's') + '</div>'
       + chats.map(function (s, i) {
         var when = (s.last || '').replace('T', ' ').slice(0, 16);
@@ -198,7 +198,7 @@
         return '<div style="border:1px solid #E5E7EB;border-radius:12px;margin-bottom:10px;overflow:hidden">'
           + '<button class="chatToggle" data-i="' + i + '" style="width:100%;text-align:left;background:#F9FAFB;border:none;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">'
           + '<span style="font-size:13.5px;font-weight:700;color:#0a1e2c">💬 ' + esc(who) + '</span>'
-          + '<span style="font-size:12px;color:#9CA3AF;white-space:nowrap">' + s.count + ' msgs · ' + esc(when) + '</span></button>'
+          + '<span style="font-size:12px;color:#64748B;white-space:nowrap">' + s.count + ' msgs · ' + esc(when) + '</span></button>'
           + '<div class="chatBody" data-i="' + i + '" style="display:none;padding:12px 16px;background:#fff">' + msgs + '</div></div>';
       }).join(''));
   }
@@ -301,8 +301,8 @@
       if (!row) return;
       var del = row.querySelector('.leadDel'), edt = row.querySelector('.leadEdit');
       var email = row.getAttribute('data-email'), at = row.getAttribute('data-at');
-      if (del) del.addEventListener('click', function () {
-        if (!window.confirm('Delete subscriber ' + email + '?')) return; del.disabled = true;
+      if (del) del.addEventListener('click', async function () {
+        if (!await KT.confirm('Delete subscriber ' + email + '?')) return; del.disabled = true;
         Api.post('/platform/marketing-site/leads/delete', { email: email, at: at }).then(function () {
           row.remove(); for (var i = 0; i < leads.length; i++) { if (leads[i].email === email && leads[i].at === at) { leads.splice(i, 1); break; } }
           setCount(leads.length);

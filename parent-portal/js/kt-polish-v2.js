@@ -177,7 +177,7 @@
         <button class="kt-pager-first" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">«</button>
         <button class="kt-pager-prev" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">‹ Prev</button>
         <input type="number" class="kt-pager-input" min="1" max="${totalPages}" value="1" style="width:64px;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;text-align:center;">
-        <span style="color:#94A3B8;">of ${totalPages}</span>
+        <span style="color:#64748B;">of ${totalPages}</span>
         <button class="kt-pager-next" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">Next ›</button>
         <button class="kt-pager-last" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">»</button>
       </div>`;
@@ -325,7 +325,7 @@
     });
   }
   window.addEventListener('hashchange', () => setTimeout(sweep, 450));
-  setInterval(sweep, 2400);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 4000);
   setTimeout(sweep, 1000);
   attachButtonSpinners();
 

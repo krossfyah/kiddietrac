@@ -57,8 +57,10 @@
       </div>
     `;
 
-    container.querySelectorAll('.kt-enable-autopay').forEach(b => b.addEventListener('click', () => openCardModal(container, parseInt(b.dataset.fid, 10), b.dataset.fname)));
-    container.querySelectorAll('.kt-disable-autopay').forEach(b => b.addEventListener('click', () => disable(container, parseInt(b.dataset.fid, 10), b.dataset.fname)));
+    container.querySelectorAll('.kt-ap-switch').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.on === '1') disable(container, parseInt(b.dataset.fid, 10), b.dataset.fname);
+      else openCardModal(container, parseInt(b.dataset.fid, 10), b.dataset.fname);
+    }));
   }
 
   function familyCard(f) {
@@ -72,17 +74,16 @@
               : '<div style="font-size:13px;color:#6B7280;margin-top:4px;">Autopay off · monthly invoice must be paid manually</div>'
             }
           </div>
-          ${f.autopay_enabled
-            ? `<button class="kt-disable-autopay" data-fid="${f.family_id}" data-fname="${esc(f.family_name)}" style="background:#FEE2E2;color:#991B1B;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer;">Turn off</button>`
-            : `<button class="kt-enable-autopay" data-fid="${f.family_id}" data-fname="${esc(f.family_name)}" style="background:#1F6080;color:white;border:none;padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer;">Enable autopay</button>`
-          }
+          <button class="kt-ap-switch" data-fid="${f.family_id}" data-fname="${esc(f.family_name)}" data-on="${f.autopay_enabled ? '1' : '0'}" role="switch" aria-checked="${f.autopay_enabled ? 'true' : 'false'}" aria-label="Autopay for ${esc(f.family_name)}" style="position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;box-sizing:border-box;border-radius:999px;border:none;background:${f.autopay_enabled ? '#159FB4' : '#CBD5E1'};cursor:pointer;padding:0;transition:background .18s ease;">
+            <span style="position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.28);transition:transform .18s ease;transform:${f.autopay_enabled ? 'translateX(20px)' : 'translateX(0)'};"></span>
+          </button>
         </div>
       </div>
     `;
   }
 
   async function disable(container, familyId, familyName) {
-    if (!confirm('Turn off autopay for ' + familyName + '? You\'ll go back to paying invoices manually.')) return;
+    if (!await KT.confirm('Turn off autopay for ' + familyName + '? You\'ll go back to paying invoices manually.')) return;
     try {
       await api('POST', '/parent/billing/disable-autopay', { family_id: familyId });
       render(container);
@@ -103,7 +104,7 @@
             <button type="button" id="kt-cancel" style="background:#F3F4F6;color:#374151;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer;">Cancel</button>
             <button type="button" id="kt-save-card" style="background:#1F6080;color:white;border:none;padding:10px 22px;border-radius:8px;font-weight:700;cursor:pointer;">Save card</button>
           </div>
-          <p style="font-size:12px;color:#9CA3AF;text-align:center;margin-top:16px;">🔒 Powered by Stripe · Your card details never touch our servers.</p>
+          <p style="font-size:12px;color:#64748B;text-align:center;margin-top:16px;">🔒 Powered by Stripe · Your card details never touch our servers.</p>
         </div>
       </div>
     `;
@@ -122,7 +123,7 @@
       $('#kt-status', mount).style.color = '#B45309';
       $('#kt-status', mount).innerHTML = 'Online card payments aren’t switched on for your centre yet. '
         + 'Please contact your centre — they can enable this in KiddieTrac. '
-        + '<span style="color:#9CA3AF;">(You can still pay your invoices by e-transfer or the method your centre uses.)</span>';
+        + '<span style="color:#64748B;">(You can still pay your invoices by e-transfer or the method your centre uses.)</span>';
       return;
     }
     $('#kt-status', mount).textContent = '';

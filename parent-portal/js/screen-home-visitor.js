@@ -101,7 +101,7 @@
       { hash: 'my-tasks',       icon: '✅', label: 'My tasks',         sub: 'Assigned to you' },
       { hash: 'inspection-forms', icon: '🗂️', label: 'Inspection forms', sub: 'Monthly & quarterly' },
       { hash: 'my-forms',       icon: '✍️', label: 'Forms to sign',   sub: 'Review & sign' },
-      { hash: 'chat',           icon: '💬', label: 'Messages',         sub: 'Chat with families & staff' },
+      { hash: 'chat',           icon: '💬', label: 'Messenger',         sub: 'Chat with families & staff' },
       { hash: 'announcements',  icon: '📢', label: 'Announcements',    sub: 'Agency news' },
       { hash: 'forms',          icon: '📝', label: 'Forms',            sub: 'Documents & agreements' },
       { hash: 'my-pay',         icon: '💵', label: 'My pay',           sub: 'Payslips & downloads' },

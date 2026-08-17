@@ -235,10 +235,10 @@
                 </thead>
                 <tbody>
                   ${data.rows.map(r => `<tr style="border-top:1px solid #F3F4F6;">
-                    <td style="${td()}">${esc(r.date)}</td>
+                    <td style="${td()}white-space:nowrap;">${esc(r.date_label || r.date || '—')}</td>
                     <td style="${td()}">${esc(r.staff_name)}</td>
-                    <td style="${td()}">${esc(r.clock_in)}</td>
-                    <td style="${td()}">${esc(r.clock_out)}</td>
+                    <td style="${td()}white-space:nowrap;">${esc(r.clock_in_label || r.clock_in)}</td>
+                    <td style="${td()}white-space:nowrap;">${esc(r.clock_out_label || r.clock_out)}</td>
                     <td style="${td()}">${r.break_min} min</td>
                     <td style="${td()}"><strong>${r.worked_hours}h</strong></td>
                   </tr>`).join('')}

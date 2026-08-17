@@ -39,10 +39,28 @@
     return (isNaN(n) || n <= 0) ? fallback : n;
   }
 
+  function currentRole() {
+    try {
+      var va = sessionStorage.getItem('kt_view_as');
+      if (va) return va;
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return u.primary_role || (u.roles && u.roles[0]) || '';
+    } catch (e) { return ''; }
+  }
+
   function getConfig() {
+    // Floor staff (educators / home visitors) use the app as an all-day tool — a
+    // 30-minute idle logout mid-shift is wrong for them (phone in a pocket during
+    // nap time shouldn't sign them out). Keep them in through the day; the absolute
+    // cap still ends the session overnight. Admins/directors keep the tighter
+    // compliance idle. A per-device override always wins.
+    var role = currentRole();
+    var floorStaff = role === 'educator' || role === 'home_visitor';
+    var idleDefault = floorStaff ? (16 * 60 * 60 * 1000) : DEFAULTS.idleMs;
+    var absDefault = floorStaff ? (16 * 60 * 60 * 1000) : DEFAULTS.absoluteMs;
     return {
-      idleMs: readOverride('kt_session_idle_ms', DEFAULTS.idleMs),
-      absoluteMs: readOverride('kt_session_abs_ms', DEFAULTS.absoluteMs),
+      idleMs: readOverride('kt_session_idle_ms', idleDefault),
+      absoluteMs: readOverride('kt_session_abs_ms', absDefault),
       warnMs: DEFAULTS.warnMs,
       checkIntervalMs: DEFAULTS.checkIntervalMs,
     };

@@ -38,7 +38,7 @@
       '  #appMain table.kt-mcards td{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;width:auto !important;',
       '    border:none !important;padding:4px 0 !important;text-align:left !important;white-space:normal !important;font-size:13.5px;}',
       // Column header, shown as a dim label beside the value.
-      '  #appMain table.kt-mcards td::before{content:attr(data-label);flex:0 0 auto;color:#94A3B8;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding-top:2px;}',
+      '  #appMain table.kt-mcards td::before{content:attr(data-label);flex:0 0 auto;color:#64748B;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding-top:2px;}',
       '  #appMain table.kt-mcards td[data-label=""]::before{display:none;}',
       // First cell reads as the card title: no label, bigger, full width.
       '  #appMain table.kt-mcards td.kt-mcard-title{display:block;font-size:15px;font-weight:800;color:#0F172A;padding:0 0 6px !important;}',

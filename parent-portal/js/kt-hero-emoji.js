@@ -22,6 +22,10 @@
       var m = sources[i].match(EMOJI_RE);
       if (m) return m[1];
     }
+    // Subject-appropriate default instead of a generic sparkle.
+    var _h = ((heading && heading.textContent) || '').toLowerCase();
+    if (/\bfamily\b/.test(_h)) return '👨‍👩‍👧‍👦';
+    if (/\bclassroom\b/.test(_h)) return '🧑‍🏫';
     return '✨';
   }
 

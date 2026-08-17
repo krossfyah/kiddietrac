@@ -172,7 +172,7 @@
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div style="flex:1;min-width:0;">
           <div style="font-weight:700;font-size:13px;color:#111827;">${esc(feature.name || feature.code)}</div>
-          <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">code: ${esc(feature.code)}${feature.plan_min ? ' · plan ≥ ' + esc(feature.plan_min) : ''}</div>
+          <div style="font-size:11px;color:#64748B;margin-top:2px;">code: ${esc(feature.code)}${feature.plan_min ? ' · plan ≥ ' + esc(feature.plan_min) : ''}</div>
         </div>
       </div>
       <select id="kt-flag-${esc(feature.code)}" style="width:100%;margin-top:8px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;background:white;">

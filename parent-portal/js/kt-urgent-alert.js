@@ -181,9 +181,23 @@
 
   KT.urgentAlert = {
     test: function (kind) { raise(kind || 'message', 'Test alert', 'This is what a new message looks like.', kind === 'alert' ? 'notifications' : 'chat'); },
+    // Show a real takeover on demand — used when the app is cold-launched by an
+    // urgent push's full-screen intent (the message wasn't "received" in-app).
+    show: function (title, body, link) { raise('message', title || 'New message', body || '', link || 'chat'); },
     isEnabled: enabled,
     setEnabled: function (on) { try { localStorage.setItem('kt_urgent_alerts', on ? '1' : '0'); } catch (e) {} },
   };
+
+  // Cold-launch from a full-screen-intent push: MainActivity stashes
+  // kt_pending_takeover; show the takeover once the module is ready.
+  try {
+    var pend = localStorage.getItem('kt_pending_takeover');
+    if (pend) {
+      localStorage.removeItem('kt_pending_takeover');
+      var info = {}; try { info = JSON.parse(pend); } catch (e) {}
+      setTimeout(function () { try { KT.urgentAlert.show(info.title, info.body, info.link); } catch (e) {} }, 1200);
+    }
+  } catch (e) {}
 
   setInterval(poll, POLL_MS);
   setTimeout(poll, 4000);       // establish the baseline shortly after boot

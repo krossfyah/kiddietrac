@@ -105,6 +105,28 @@
     menu.appendChild(customize);
 
     menu.style.display = 'block';
+    // On desktop, drop the menu from the top-bar Quick-add (⚡) button the user
+    // actually clicked — not the bottom-right FAB corner (which read as "too far
+    // right"). Right-align the panel to the button; fall back to the CSS default
+    // (FAB corner) on mobile or when the top-bar button is absent.
+    try {
+      // The top-bar Quick-add button was switched from a native title to a custom
+      // data-kttip tooltip — match either so the popup keeps anchoring to it.
+      var tbBtn = document.querySelector('#kt-topbar [data-kttip="Quick add"], #kt-topbar [title="Quick add"]');
+      if (tbBtn && window.matchMedia && window.matchMedia('(min-width:769px)').matches) {
+        var rct = tbBtn.getBoundingClientRect();
+        // setProperty w/ 'important' — kt-consistency-polish.css pins the menu to
+        // top:58px/right:16px !important (the viewport corner), which is what made
+        // the popup float far from the button. Override it to sit under the button.
+        menu.style.setProperty('top', Math.round(rct.bottom + 8) + 'px', 'important');
+        menu.style.setProperty('bottom', 'auto', 'important');
+        menu.style.setProperty('right', Math.max(8, Math.round(window.innerWidth - rct.right)) + 'px', 'important');
+        menu.style.setProperty('left', 'auto', 'important');
+      } else {
+        menu.style.removeProperty('top'); menu.style.removeProperty('bottom');
+        menu.style.removeProperty('right'); menu.style.removeProperty('left');
+      }
+    } catch (e) {}
     menuOpen = true;
     document.getElementById('kt-quickadd-fab').classList.add('is-open');
 
@@ -186,7 +208,7 @@
       '.kt-qa-item { display:flex; align-items:center; gap:12px; width:100%; background:transparent; border:none; padding:11px 12px; border-radius:9px; cursor:pointer; font-size:14px; color:#1F2937; text-align:left; font-family:inherit; transition:background .12s; }',
       '.kt-qa-item:hover { background:#F1F5F9; }',
       '.kt-qa-ic { font-size:18px; width:22px; text-align:center; }',
-      '.kt-qa-empty { padding:12px; color:#94A3B8; font-size:13px; }',
+      '.kt-qa-empty { padding:12px; color:#64748B; font-size:13px; }',
       '.kt-qa-customize { display:flex; align-items:center; gap:8px; width:100%; margin-top:6px; border-top:1px solid #F1F5F9; padding:11px 12px; background:transparent; border-left:none;border-right:none;border-bottom:none; cursor:pointer; font-size:13px; color:#1F6080; font-weight:600; font-family:inherit; }',
       '.kt-qa-customize:hover { background:#F8FAFC; }',
       '.kt-qa-overlay { position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:11000; display:flex; align-items:center; justify-content:center; padding:20px; }',

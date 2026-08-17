@@ -18,10 +18,13 @@
     apply(c);
   }
   function ensure() {
-    // Parents (guardians) navigate from the tile home, not the sidebar, so the
-    // collapse/expand arrows are just clutter for them — never show them.
-    var isParent = document.body.classList.contains('role-guardian') || document.body.classList.contains('kt-parentview');
-    if (isParent) {
+    // Only roles that ACTUALLY have the left sidebar get the collapse/expand
+    // arrows. The shell sets body.layout-sidebar for exactly those roles
+    // (agency_admin / centre_director, and super-admin who resolves to admin).
+    // Educators, parents, and home visitors navigate from a tile/mobile-style
+    // home with no sidebar, so the arrow near the logo was pure clutter for them.
+    var hasSidebar = document.body.classList.contains('layout-sidebar');
+    if (!hasSidebar) {
       var oc = document.getElementById('kt-sb-collapse'); if (oc) oc.remove();
       var ot = document.getElementById('kt-sb-toggle'); if (ot) ot.remove();
       document.body.classList.remove('kt-sidebar-collapsed');

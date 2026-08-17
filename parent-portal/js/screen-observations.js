@@ -54,6 +54,16 @@
           '<button class="btn btn-primary" id="kt-new-obs">+ New observation</button>' +
         '</div>' +
       '</div>' +
+      '<div id="kt-obs-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;">' +
+        '<label for="kt-obs-sort" style="font-size:13px;font-weight:600;color:var(--kt-text-muted);">Sort by</label>' +
+        '<select id="kt-obs-sort" style="height:30px;padding:0 8px;border:1px solid var(--kt-border);border-radius:8px;font-size:13px;background:var(--kt-surface);color:inherit;">' +
+          '<option value="date|desc">Newest first</option>' +
+          '<option value="date|asc">Oldest first</option>' +
+          '<option value="child|asc">Child (A-Z)</option>' +
+          '<option value="educator|asc">Educator (A-Z)</option>' +
+          '<option value="centre|asc">Provider / centre (A-Z)</option>' +
+        '</select>' +
+      '</div>' +
       '<div id="kt-obs-list"><div class="loading-state"><div class="spinner"></div></div></div>'
     );
 
@@ -61,28 +71,44 @@
       window.location.hash = '#observation-new';
     });
 
+    // Sorting is a server round-trip, not a client re-order — see the note at the top.
+    var obsSort = 'date', obsDir = 'desc';
+    var sortSel = wrap.querySelector('#kt-obs-sort');
+    sortSel.addEventListener('change', function () {
+      var parts = String(sortSel.value || 'date|desc').split('|');
+      obsSort = parts[0] || 'date';
+      obsDir = parts[1] || 'desc';
+      loadList();
+    });
+
+    async function loadList() {
+    const listEl = wrap.querySelector('#kt-obs-list');
+    listEl.innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
+
     let data;
     try {
-      data = await Api.get('/provider/observations?limit=30');
+      data = await Api.get('/provider/observations?limit=30&sort=' + encodeURIComponent(obsSort) + '&dir=' + encodeURIComponent(obsDir));
     } catch (e) {
-      const el = wrap.querySelector('#kt-obs-list');
-      Dom.clear(el);
-      el.appendChild(emptyState('!', 'Could not load', (e && e.message) || 'Server error'));
+      Dom.clear(listEl);
+      listEl.appendChild(emptyState('!', 'Could not load', (e && e.message) || 'Server error'));
       return;
     }
 
     const rows = (data && data.observations) || [];
-    const listEl = wrap.querySelector('#kt-obs-list');
-    listEl.setAttribute('data-kt-list', '1');
     Dom.clear(listEl);
 
     if (rows.length === 0) {
+      // Do NOT mark an empty list as [data-kt-list]: the bottom count bar counts
+      // the container's children, so the "No observations yet" placeholder itself
+      // was counted as "1 record" (shown a count, displayed nothing).
+      listEl.removeAttribute('data-kt-list');
       listEl.appendChild(emptyState('-', 'No observations yet',
         'Click "+ New observation" to capture your first one with AI structuring.'));
       return;
     }
+    listEl.setAttribute('data-kt-list', '1');
 
-    rows.forEach(function (o) {
+    function renderObsCard(o) {
       const card = document.createElement('div');
       card.style.cssText = 'background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:18px; margin-bottom:12px;';
       const milestones = Array.isArray(o.hdlh_milestones) ? o.hdlh_milestones : [];
@@ -95,6 +121,14 @@
           '</div>' +
           '<div>' + badges + (o.ai_generated ? ' <span style="background:#E0F2FE; color:#0369A1; padding:3px 9px; border-radius:10px; font-size:11px; font-weight:700;">AI</span>' : '') + (o.shared_with_family ? ' <span style="background:#DCFCE7; color:#166534; padding:3px 9px; border-radius:10px; font-size:11px; font-weight:700;">SHARED</span>' : '') + '</div>' +
         '</div>' +
+        // Who wrote it and where. On an agency-wide feed the child's name alone does not
+        // say which provider an observation came from. Blanks come back as an em dash
+        // from the API, which is not worth a separator of its own.
+        (function () {
+          var meta = [o.educator_name, o.room_name, o.centre_name]
+            .filter(function (v) { return v && v !== '\u2014'; }).map(esc).join(' \u00b7 ');
+          return meta ? '<div style="font-size:12px;color:var(--kt-text-muted);margin:-2px 0 10px;">' + meta + '</div>' : '';
+        })() +
         '<p style="margin:0; line-height:1.6;">' + esc(o.family_summary || o.body) + '</p>' +
         (milestones.length > 0 ?
           '<div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--kt-border);">' +
@@ -105,8 +139,14 @@
               }).join('') +
             '</ul>' +
           '</div>' : '');
-      listEl.appendChild(card);
-    });
+      return card;
+    }
+    (window.KT && KT.cardPager)
+      ? KT.cardPager(listEl, rows, renderObsCard, 10)
+      : rows.forEach(function (o) { listEl.appendChild(renderObsCard(o)); });
+    }
+
+    await loadList();
   }
 
   /* ============================================================

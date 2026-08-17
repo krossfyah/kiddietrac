@@ -137,7 +137,7 @@
       resultsEl.appendChild(summaryRow);
 
       // v22p26: branch on card/table view preference
-      var view = localStorage.getItem('kt_view_children') || 'cards';
+      var view = localStorage.getItem('kt_view_children') || localStorage.getItem('kt_view_pref') || 'cards';
       if (view === 'table') {
         resultsEl.appendChild(renderChildrenTable(children, centreSelect.value));
         return;
@@ -202,7 +202,7 @@
 
   // v22p26: small toggle widget — cards vs table, persisted in localStorage.
   function buildViewToggle(storageKey, onChange) {
-    var current = localStorage.getItem(storageKey) || 'cards';
+    var current = localStorage.getItem(storageKey) || localStorage.getItem('kt_view_pref') || 'cards';
     var wrap = Dom.el('div', { style: 'display:inline-flex;background:#F3F4F6;border-radius:8px;padding:2px;' });
     function btn(view, label, icon) {
       var b = Dom.el('button', {
@@ -212,6 +212,7 @@
       b.addEventListener('click', function () {
         if (current === view) return;
         localStorage.setItem(storageKey, view);
+        localStorage.setItem('kt_view_pref', view);
         if (onChange) onChange(view);
       });
       return b;

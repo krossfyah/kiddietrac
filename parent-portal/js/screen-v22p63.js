@@ -21,9 +21,11 @@
   async function renderWellness(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const childrenRes = await Api.get('/parent/children').catch(() => ({ data: [] }));
-    const children = childrenRes.data || childrenRes || [];
-    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;padding:40px;text-align:center;color:#94A3B8;">No children.</div>'; return; }
+    const childrenRes = await Api.get('/parent/children').catch(() => ({ children: [] }));
+    // /parent/children returns { children: [...] } — not { data: [...] } (that shape
+    // mismatch is why Wellness showed "No children" even for families with kids).
+    const children = childrenRes.children || childrenRes.data || (Array.isArray(childrenRes) ? childrenRes : []);
+    if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;padding:40px;text-align:center;color:#64748B;">No children.</div>'; return; }
     const today = (await Api.get(`/wellness/today/${children[0].id}`).catch(() => ({ data: null }))).data || {};
 
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
@@ -37,6 +39,7 @@
           ${children.map(c => `<option value="${c.id}">${esc(c.first_name)} ${esc(c.last_name)}</option>`).join('')}
         </select>
         <h4 style="margin-top:24px;color:#0F172A;">Any of these today?</h4>
+        <p style="margin:-6px 0 10px;color:#64748B;font-size:12.5px;">Select any that apply — you can pick more than one.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">
           ${[
             ['fever', 'Fever 🌡', '#EF4444'],
@@ -46,25 +49,40 @@
             ['diarrhea', 'Diarrhea 💩', '#EF4444'],
             ['rash', 'Rash 🟥', '#F59E0B'],
             ['exposure', 'Sick contact 🦠', '#EF4444'],
-          ].map(([k, lbl, c]) => `<label style="display:flex;align-items:center;gap:10px;padding:14px;background:#FAFCFE;border:2px solid #E2E8F0;border-radius:10px;cursor:pointer;" data-sym-wrap="${k}">
-            <input type="checkbox" data-sym="${k}" ${today[k] ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer;accent-color:${c};">
+          ].map(([k, lbl, c]) => `<label style="position:relative;display:flex;align-items:center;gap:11px;padding:13px 14px;background:#FAFCFE;border:2px solid #E2E8F0;border-radius:12px;cursor:pointer;transition:background .12s,border-color .12s;" data-sym-wrap="${k}">
+            <input type="checkbox" data-sym="${k}" data-color="${c}" ${today[k] ? 'checked' : ''} style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
+            <span class="ws-dot" style="flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:2px solid #CBD5E1;background:#fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;line-height:1;transition:background .12s,border-color .12s;"></span>
             <span style="font-weight:600;">${lbl}</span></label>`).join('')}
         </div>
         <label style="display:block;font-size:13px;font-weight:600;margin-top:18px;">Notes</label>
-        <textarea id="ws-notes" rows="3" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;">${esc(today.notes || '')}</textarea>
-        <button id="ws-submit" class="kt-btn kt-btn-primary" style="margin-top:16px;width:100%;padding:14px;">Submit screening</button>
+        <textarea id="ws-notes" rows="3" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;">${esc(today.notes || '')}</textarea>
+        <button id="ws-submit" style="display:block;width:fit-content;margin:18px 0 0 0;min-height:0;height:38px;padding:0 24px;font-size:14px;font-weight:700;line-height:38px;border:0;border-radius:9px;cursor:pointer;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;">Submit screening</button>
         <div id="ws-result" style="margin-top:14px;"></div>
       </div>
     </div>`;
 
-    // Visual feedback on symptom toggle
+    // Dot-style multi-select: clicking a symptom fills its circular dot (in the
+    // symptom's colour) and tints the row. Any number can be selected.
     main.querySelectorAll('input[data-sym]').forEach(cb => {
+      const colour = cb.dataset.color || '#EF4444';
+      const wrap = cb.closest('label');
+      const dot = wrap.querySelector('.ws-dot');
       const update = () => {
-        const wrap = cb.closest('label');
-        wrap.style.background = cb.checked ? '#FEE2E2' : '#FAFCFE';
-        wrap.style.borderColor = cb.checked ? '#EF4444' : '#E2E8F0';
+        wrap.style.background = cb.checked ? (colour + '14') : '#FAFCFE';
+        wrap.style.borderColor = cb.checked ? colour : '#E2E8F0';
+        if (dot) {
+          dot.style.background = cb.checked ? colour : '#fff';
+          dot.style.borderColor = cb.checked ? colour : '#CBD5E1';
+          dot.textContent = cb.checked ? '✓' : '';
+        }
       };
-      cb.addEventListener('change', update);
+      // The hidden checkbox is not clickable (opacity:0;pointer-events:none), so
+      // toggle it ourselves when the row is clicked, then reflect the new state.
+      wrap.addEventListener('click', (e) => {
+        e.preventDefault();
+        cb.checked = !cb.checked;
+        update();
+      });
       update();
     });
     document.getElementById('ws-submit').onclick = async () => {
@@ -87,7 +105,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
-    if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;padding:40px;text-align:center;color:#94A3B8;">No centres.</div>'; return; }
+    if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;padding:40px;text-align:center;color:#64748B;">No centres.</div>'; return; }
     const r = await Api.get(`/wellness/digest?centre_id=${centres[0].id}`);
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
@@ -112,7 +130,7 @@
               <td style="font-size:12.5px;color:#475569;">${esc(syms)}</td>
               <td style="font-size:12.5px;color:#475569;">${esc(row.notes || '')}</td>
             </tr>`;
-          }).join('') || '<tr><td colspan="4" style="text-align:center;padding:30px;color:#94A3B8;">No screenings submitted yet today.</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="4" style="text-align:center;padding:30px;color:#64748B;">No screenings submitted yet today.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -130,6 +148,7 @@
     let r;
     let families = [];
     let fid = 0;
+    let famErr = 0;
     if (isStaff) {
       try {
         const fr = await Api.get('/admin/families');
@@ -141,7 +160,7 @@
                  : (fr && Array.isArray(fr.data)) ? fr.data
                  : (fr && fr.data && Array.isArray(fr.data.data)) ? fr.data.data
                  : [];
-      } catch (e) { families = []; }
+      } catch (e) { families = []; famErr = (e && e.status) || 0; }
       const remembered = +(sessionStorage.getItem('kt_pp_family') || 0);
       if (remembered && families.some(f => +f.id === remembered)) fid = remembered;
       else if (families.length === 1) fid = +families[0].id;
@@ -156,7 +175,7 @@
           <option value="">Select a family…</option>
           ${families.map(f => `<option value="${f.id}"${+f.id === fid ? ' selected' : ''}>${familyName(f)}</option>`).join('')}
         </select>
-        ${families.length ? '' : '<span style="color:#94A3B8;font-size:13px;">No families found for this agency.</span>'}
+        ${families.length ? '' : '<span style="color:#64748B;font-size:13px;">' + (famErr === 403 ? 'Select an agency using the top-bar switcher to load its families.' : 'No families found for this agency.') + '</span>'}
       </div>` : '';
     const plans = r.data || [];
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
@@ -183,7 +202,7 @@
             <td><span class="kt-pill ${i.status === 'paid' ? 'kt-pill-success' : i.status === 'cancelled' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(i.status)}</span></td>
           </tr>`).join('')}</tbody>
         </table>
-      </div>`).join('') || `<div class="kt-card" style="text-align:center;padding:60px;color:#94A3B8;">${isStaff && !fid ? 'Select a family above to view their payment plans.' : 'No payment plans on file.'}</div>`}
+      </div>`).join('') || `<div class="kt-card" style="text-align:center;padding:60px;color:#64748B;">${isStaff && !fid ? 'Select a family above to view their payment plans.' : 'No payment plans on file.'}</div>`}
     </div>`;
     if (isStaff) {
       const sel = document.getElementById('pp-family');
@@ -247,7 +266,7 @@
             <td><span class="kt-pill ${w.status === 'complete' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(w.status)}</span></td>
             <td>${fmtDate(w.created_at)}</td>
             <td><button class="kt-btn kt-btn-primary" data-open-wf="${w.id}" style="font-size:12px;padding:6px 12px;">Open</button></td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#94A3B8;">No workflows yet.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No workflows yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -399,7 +418,7 @@
       input.value = '';
       feed.innerHTML += `<div style="background:#1F6080;color:#fff;padding:10px 14px;border-radius:14px 14px 4px 14px;max-width:80%;margin-left:auto;margin-bottom:10px;font-size:13.5px;">${esc(q)}</div>`;
       const pending = document.createElement('div');
-      pending.style.cssText = 'background:#fff;padding:12px 14px;border-radius:14px 14px 14px 4px;max-width:80%;margin-bottom:10px;font-size:13.5px;color:#94A3B8;box-shadow:0 1px 3px rgba(15,23,42,.06);';
+      pending.style.cssText = 'background:#fff;padding:12px 14px;border-radius:14px 14px 14px 4px;max-width:80%;margin-bottom:10px;font-size:13.5px;color:#64748B;box-shadow:0 1px 3px rgba(15,23,42,.06);';
       pending.textContent = 'Thinking…';
       feed.appendChild(pending);
       feed.scrollTop = feed.scrollHeight;

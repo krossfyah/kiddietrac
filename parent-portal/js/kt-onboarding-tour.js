@@ -182,6 +182,12 @@
     if (localStorage.getItem('kt_onboarded')) return;
     const user = JSON.parse(sessionStorage.getItem('kt_user') || 'null');
     if (!user) return;  // not logged in
+    // An EXISTING (already-onboarded) user must never see this first-run tour —
+    // not even on a new device, in incognito, or after clearing site data, where
+    // the client-only kt_onboarded flag is absent. `onboarded_at` is set server-side
+    // once a user has completed onboarding, so trust it: record the flag locally and
+    // skip. Only a genuinely new user (onboarded_at null/absent) sees the tour.
+    if (user.onboarded_at) { try { localStorage.setItem('kt_onboarded', '1'); } catch (e) {} return; }
     setTimeout(showTour, 800);  // small delay after page ready
   }
 

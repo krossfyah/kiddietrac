@@ -9,12 +9,35 @@
   'use strict';
 
   var GROUP_META = {
+    pages:    { icon: '🧭', label: 'Go to' },
     centres:  { icon: '🏢', label: 'Centres' },
     families: { icon: '👨‍👩‍👧', label: 'Families' },
     children: { icon: '👶', label: 'Children' },
     staff:    { icon: '👤', label: 'Staff' },
     rooms:    { icon: '🚪', label: 'Rooms' },
   };
+
+  // Client-side search over the LIVE nav — so every section the user can open is
+  // findable, and any newly-added feature is picked up automatically (it's in the
+  // nav). Independent of the backend record search below.
+  function searchNav(q) {
+    q = (q || '').toLowerCase().trim();
+    if (!q) return [];
+    var out = [], seen = {};
+    var links = document.querySelectorAll('a.nav-link[data-hash], #navLinks a[href^="#"]');
+    for (var i = 0; i < links.length && out.length < 8; i++) {
+      var a = links[i];
+      var hash = a.getAttribute('href');
+      if (!hash || hash.charAt(0) !== '#') hash = '#' + (a.getAttribute('data-hash') || '');
+      if (hash === '#' || hash.length < 2) continue;
+      var labelEl = a.querySelector('.nav-label');
+      var label = (labelEl ? labelEl.textContent : (a.textContent || '')).replace(/^[^A-Za-z0-9]+/, '').trim();
+      if (!label || label.toLowerCase().indexOf(q) === -1) continue;
+      if (seen[hash]) continue; seen[hash] = 1;
+      out.push({ label: label, sublabel: 'Open section', hash: hash });
+    }
+    return out;
+  }
 
   var MOUNT_ATTEMPTS = 0;
   var MAX_MOUNT_ATTEMPTS = 50; // ~5s at 100ms each
@@ -180,14 +203,19 @@
         'Accept': 'application/json',
       };
       if (activeAgencyId) headers['X-Active-Agency-Id'] = activeAgencyId;
+      // Nav/section matches are instant + client-side; merge them with the
+      // backend record results (and keep working if the backend search fails).
+      var pages = searchNav(q);
       fetch(apiBase + '/admin/search?q=' + encodeURIComponent(q), { headers: headers }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }).then(function (data) {
-        renderResults(dropdown, data.results, data.q || q);
-      }).catch(function (e) {
-        dropdown.innerHTML = '<div style="padding:14px;color:#DC2626;font-size:13px;">Search failed: ' + esc(e.message) + '</div>';
-        dropdown.style.display = 'block';
+        var results = data.results || {};
+        results.pages = pages;
+        renderResults(dropdown, results, data.q || q);
+      }).catch(function () {
+        // Backend record search failed — still show the section matches.
+        renderResults(dropdown, { pages: pages }, q);
       });
     }
 

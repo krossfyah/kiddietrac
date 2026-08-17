@@ -164,7 +164,7 @@
 
     if (isEdit) {
       $('#kt-delete', mount).addEventListener('click', async () => {
-        if (!confirm('Delete this shift?')) return;
+        if (!await KT.confirm('Delete this shift?')) return;
         try {
           await api('DELETE', '/director/schedule/shift/' + existing.id);
           close(); render(container);

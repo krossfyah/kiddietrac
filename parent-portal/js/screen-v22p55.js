@@ -49,14 +49,29 @@
         <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Dietary</div><div class="kt-kpi-value">${dietary}</div></div>
         <div class="kt-kpi"><div class="kt-kpi-label">Children affected</div><div class="kt-kpi-value">${list.length}</div></div>
       </div>
-      <div data-kt-list="1">${list.map(c => `<div class="kt-alert">
+      <div id="kt-allergy-list" data-kt-list="1">${list.length ? '' : '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No active alerts.</div>'}</div>
+    </div>`;
+    if (list.length) {
+      const renderAllergyCard = (c) => `<div class="kt-alert">
         <div class="kt-alert-title">${esc(c.first_name)} ${esc(c.last_name)}</div>
         <div class="kt-alert-body">${(c.tags || []).map(t => {
           const sevDot = t.severity === 'anaphylactic' ? '🚨 ' : t.severity === 'severe' ? '⚠ ' : '';
           return `<span class="kt-tag severity-${esc(t.severity || 'note')} kind-${esc(t.kind || '')}">${sevDot}<strong>${esc((t.kind || '').toUpperCase())}</strong>&nbsp;${esc(t.label || '')}</span>`;
-        }).join('')}</div></div>`).join('') || '<div class="kt-card" style="text-align:center;color:#9CA3AF;padding:40px;">No active alerts.</div>'}
-      </div>
-    </div>`;
+        }).join('')}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+          <button type="button" data-child-view="${c.id}" class="kt-act-icon kt-act-info kt-icon-tip" data-kttip="View child record" aria-label="View child record">👁️</button>
+        </div></div>`;
+      const listEl = main.querySelector('#kt-allergy-list');
+      (window.KT && KT.cardPager)
+        ? KT.cardPager(listEl, list, renderAllergyCard, 10)
+        : (listEl.innerHTML = list.map(renderAllergyCard).join(''));
+      // Each alert derives from a child's record — the kebab's action opens it.
+      listEl.addEventListener('click', function (e) {
+        const b = e.target.closest && e.target.closest('[data-child-view]');
+        if (b) window.location.hash = '#child-detail?id=' + b.getAttribute('data-child-view');
+      });
+      if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
+    }
   }
 
   // ============================ Enrollment forecast (SVG rewrite) ============================
@@ -245,7 +260,7 @@
             <div style="font-size:12.5px;color:#475569;">${fmtDate(p.taken_at)} · ${esc(p.uploader_name || '')}</div>
             <div style="font-size:13.5px;color:#0F172A;margin-top:6px;">${esc(p.caption || '')}</div>
             ${(p.child_names || []).length ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">${p.child_names.map(n => `<span class="kt-pill kt-pill-info">${esc(n)}</span>`).join('')}</div>` : ''}
-          </div></div>`).join('') || '<div class="kt-card" style="text-align:center;color:#9CA3AF;padding:60px;grid-column:1/-1;">No photos shared yet.</div>'}
+          </div></div>`).join('') || '<div class="kt-card" style="text-align:center;color:#64748B;padding:60px;grid-column:1/-1;">No photos shared yet.</div>'}
       </div>
     </div>`;
     document.getElementById('pf-upload').onclick = () => openPhotoUpload();
@@ -257,7 +272,7 @@
       <h3 style="margin:0 0 16px;color:#0F172A;">Share a photo</h3>
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;">Photo file</label>
       <input id="pf-file" type="file" accept="image/*,video/mp4,video/quicktime,video/webm,video/3gpp" capture style="width:100%;padding:9px;border:2px dashed #CBD5E1;border-radius:8px;background:#F8FAFC;">
-      <div style="font-size:11.5px;color:#94A3B8;margin-top:5px;">Photos, or a short video clip (up to about 30 seconds).</div>
+      <div style="font-size:11.5px;color:#64748B;margin-top:5px;">Photos, or a short video clip (up to about 30 seconds).</div>
       <label style="display:block;font-size:13px;font-weight:600;margin-top:14px;">Caption</label>
       <textarea id="pf-caption" rows="3" placeholder="What were they up to?" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
       <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:8px;">
@@ -323,7 +338,7 @@
             <td>${fmtDate(f.created_at)}</td>
             <td>${esc(f.family_name || 'Anonymous')}</td>
             <td>${'⭐'.repeat(f.rating || 0)}</td>
-            <td style="color:#475569;">${esc(f.comment || '')}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#94A3B8;">No feedback yet.</td></tr>'}</tbody>
+            <td style="color:#475569;">${esc(f.comment || '')}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#64748B;">No feedback yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -352,7 +367,7 @@
               <td style="font-size:12px;font-family:ui-monospace,monospace;color:#475569;">${esc(Object.entries(fields).slice(0, 3).map(([k, v]) => k + '=' + v).join(', '))}</td>
               <td>${e.status === 'extracted' ? `<button class="kt-btn kt-btn-primary" data-link-id="${e.id}">Auto-link</button>` : ''}</td>
             </tr>`;
-          }).join('') || '<tr><td colspan="5" style="text-align:center;padding:40px;color:#94A3B8;">No extractions yet. Use the AI Doc Extract screen.</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="5" style="text-align:center;padding:40px;color:#64748B;">No extractions yet. Use the AI Doc Extract screen.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
