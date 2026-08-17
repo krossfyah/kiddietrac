@@ -419,9 +419,13 @@ final class SchedulingController extends Controller
             ->where('ra.active', true)
             ->where('ra.role', '!=', 'guardian')
             ->whereNull('u.deleted_at')
-            ->where(function ($q) use ($centreIds, $agencyIds) {
+            // Agency-level roles (an admin has no centre_id) are only pulled in when the
+            // whole agency is being asked for. Naming ONE centre and still listing every
+            // agency-level person put the entire agency's staff on a single provider's
+            // sheet at 0h — noise that buries the people who actually work there.
+            ->where(function ($q) use ($centreIds, $agencyIds, $centreId) {
                 $q->whereIn('ra.centre_id', $centreIds);
-                if ($agencyIds) {
+                if ($agencyIds && ! $centreId) {
                     $q->orWhereIn('ra.agency_id', $agencyIds);
                 }
             })
