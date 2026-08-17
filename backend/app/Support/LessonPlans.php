@@ -69,6 +69,7 @@ final class LessonPlans
             if ($title === '') continue;   // a blank row is not an activity
             $clean[] = [
                 'time' => trim((string) ($i['time'] ?? '')) ?: null,
+                'time_label' => self::formatTime($i['time'] ?? null),
                 'title' => $title,
                 'domain' => trim((string) ($i['domain'] ?? '')) ?: null,
                 'notes' => trim((string) ($i['notes'] ?? '')) ?: null,
@@ -91,6 +92,81 @@ final class LessonPlans
                 $q->whereNull('end_date')->orWhereDate('end_date', '>=', now()->toDateString());
             })
             ->orderByDesc('id')->value('room_id');
+    }
+
+    /**
+     * The room an educator is assigned to. The join column on educator_rooms has been
+     * spelled more than one way across migrations, so it is resolved rather than assumed
+     * - guessing wrong here returns "no plan today", which is indistinguishable from an
+     * unplanned day and would be silently wrong.
+     */
+    public static function roomForEducator(int $userId): ?int
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('educator_rooms')) {
+            return null;
+        }
+        foreach (['user_id', 'educator_id', 'staff_id'] as $col) {
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('educator_rooms', $col)) {
+                continue;
+            }
+            $room = DB::table('educator_rooms')->where($col, $userId)->value('room_id');
+            if ($room) {
+                return (int) $room;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Planner times are free text, typed by whoever wrote the plan: "10am", "1030am",
+     * "10:00", "1:30 p.m." all appear in real plans. Rendering that raw gives "1030am",
+     * which is what was reported. Anything recognisable is normalised to "10:30 AM";
+     * anything that is not is returned exactly as typed rather than mangled or dropped -
+     * "after lunch" is a legitimate thing to have written in that box.
+     */
+    public static function formatTime(?string $raw): ?string
+    {
+        $t = strtolower(trim((string) $raw));
+        if ($t === '') {
+            return null;
+        }
+
+        $mer = null;
+        if (preg_match('/(a\.?m\.?|p\.?m\.?)\s*$/', $t, $m)) {
+            $mer = str_starts_with(trim($m[1]), 'a') ? 'AM' : 'PM';
+            $t = trim(preg_replace('/(a\.?m\.?|p\.?m\.?)\s*$/', '', $t));
+        }
+        $t = str_replace([' ', '.'], '', $t);
+
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $t, $m)) {
+            $h = (int) $m[1]; $min = (int) $m[2];
+        } elseif (preg_match('/^(\d{3,4})$/', $t, $m)) {
+            $h = (int) substr($m[1], 0, -2); $min = (int) substr($m[1], -2);
+        } elseif (preg_match('/^(\d{1,2})$/', $t, $m)) {
+            $h = (int) $m[1]; $min = 0;
+        } else {
+            return (string) $raw;
+        }
+
+        if ($h > 23 || $min > 59) {
+            return (string) $raw;
+        }
+
+        if ($mer === null) {
+            // No am/pm given. A childcare day runs roughly 7am–6pm, so 7–11 is morning,
+            // 12 is midday and 1–6 is the afternoon. 13+ is already a 24-hour clock.
+            if ($h >= 13) { $mer = 'PM'; $h -= 12; }
+            elseif ($h === 12) { $mer = 'PM'; }
+            elseif ($h >= 7) { $mer = 'AM'; }
+            else { $mer = 'PM'; }
+        } elseif ($h > 12) {
+            $h -= 12;
+        }
+        if ($h === 0) {
+            $h = 12;
+        }
+
+        return sprintf('%d:%02d %s', $h, $min, $mer);
     }
 
     private static function domainLabel(?string $d): string
@@ -129,7 +205,7 @@ final class LessonPlans
 
         $html .= '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 14px;">';
         foreach ($plan['items'] as $i) {
-            $meta = array_filter([$i['time'], self::domainLabel($i['domain'])]);
+            $meta = array_filter([self::formatTime($i['time']), self::domainLabel($i['domain'])]);
             $html .= '<div style="padding:6px 0;border-top:1px solid #EEF2F7;">'
                 . '<div style="font-size:14px;font-weight:700;color:#0F172A;">' . e($i['title']) . '</div>'
                 . ($meta ? '<div class="kt-muted" style="font-size:12px;color:#64748B;margin-top:1px;">' . e(implode(' · ', $meta)) . '</div>' : '')

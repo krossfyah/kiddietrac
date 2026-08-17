@@ -828,6 +828,21 @@ class EducatorDailySummaryCommand extends Command
             'With thanks,', 'Gratefully,', 'In appreciation,', 'With real thanks,',
             'Thank you, sincerely,', 'With admiration,', 'Very best,',
         ]);
+        // What the room was working towards today, as a recap. Same source as the
+        // parent summary and the planner, so all three agree.
+        try {
+            $body .= \App\Support\LessonPlans::emailBlock(
+                \App\Support\LessonPlans::forDate(
+                    \App\Support\LessonPlans::roomForEducator((int) ($ed->id ?? 0)),
+                    isset($ed->centre_id) ? (int) $ed->centre_id : null,
+                    $date->toDateString()
+                ),
+                'educator'
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Educator summary: lesson plan block failed', ['error' => $e->getMessage()]);
+        }
+
         $body .= '<p style="margin-top:20px;font-size:15px;">' . $close . '</p>'
             . '<p style="font-weight:800;color:#0F172A;">' . $signoff . '<br>'
             . 'The team at ' . e((string) (DB::table('agencies')->where('id', (int) $ed->agency_id)->value('name') ?: 'your team')) . '</p>';

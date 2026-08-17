@@ -220,6 +220,37 @@
 
     grid.querySelectorAll('.kt-add-activity').forEach(b => b.addEventListener('click', () => {
       const day = b.dataset.day;
+
+  /* Planner times were free text, so "10am", "1030am" and "10:00" all appear in real
+     plans. toHHMM feeds the native picker; fmtTime is what everything else displays.
+     Both mirror App\Support\LessonPlans on the server so the planner, the parent
+     summary and the educator recap never disagree about what a time says. */
+  function toHHMM(raw) {
+    var t = String(raw == null ? '' : raw).toLowerCase().trim();
+    if (!t) return '';
+    var mer = null, m = t.match(/(a\.?m\.?|p\.?m\.?)\s*$/);
+    if (m) { mer = m[1].charAt(0) === 'a' ? 'AM' : 'PM'; t = t.replace(/(a\.?m\.?|p\.?m\.?)\s*$/, '').trim(); }
+    t = t.replace(/[ .]/g, '');
+    var h, min;
+    if (/^\d{1,2}:\d{2}$/.test(t)) { var p = t.split(':'); h = +p[0]; min = +p[1]; }
+    else if (/^\d{3,4}$/.test(t)) { h = +t.slice(0, -2); min = +t.slice(-2); }
+    else if (/^\d{1,2}$/.test(t)) { h = +t; min = 0; }
+    else return '';                       // not a time — leave it to the text input
+    if (h > 23 || min > 59) return '';
+    if (mer === 'PM' && h < 12) h += 12;
+    if (mer === 'AM' && h === 12) h = 0;
+    if (mer === null && h < 7) h += 12;   // a childcare 1–6 means the afternoon
+    return (h < 10 ? '0' : '') + h + ':' + (min < 10 ? '0' : '') + min;
+  }
+
+  function fmtTime(raw) {
+    var hhmm = toHHMM(raw);
+    if (!hhmm) return String(raw == null ? '' : raw);   // "after lunch" stays as typed
+    var p = hhmm.split(':'), h = +p[0], mer = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + p[1] + ' ' + mer;
+  }
+
       currentPlan.days[day].push({ time: '', title: '', domain: null, notes: '' });
       renderGrid();
     }));
@@ -260,7 +291,15 @@
     return `
       <div class="kt-activity" data-day="${day}" data-idx="${idx}" style="background:${bg};border-left:3px solid ${border};border-radius:6px;padding:8px;margin-bottom:6px;font-size:12px;">
         <div style="display:flex;gap:4px;margin-bottom:4px;">
-          <input data-field="time" placeholder="9:00" value="${esc(a.time||'')}" style="width:60px;padding:3px 6px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;">
+          ${(function () {
+            // A picker when the value is a time (or blank), a text box when it is not,
+            // so an existing "after lunch" is not silently discarded by type="time".
+            var hhmm = toHHMM(a.time);
+            var isTime = hhmm !== '' || !(a.time || '').trim();
+            return isTime
+              ? `<input data-field="time" type="time" value="${esc(hhmm)}" style="width:104px;padding:3px 6px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;">`
+              : `<input data-field="time" type="text" placeholder="9:00" value="${esc(a.time || '')}" title="Not a clock time — clear it to use the time picker." style="width:104px;padding:3px 6px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;">`;
+          })()}
           <button class="kt-del-activity" data-day="${day}" data-idx="${idx}" title="Delete" style="margin-left:auto;background:transparent;border:none;color:#64748B;cursor:pointer;font-size:14px;line-height:1;">×</button>
         </div>
         <input data-field="title" placeholder="Activity name" value="${esc(a.title||'')}" style="width:100%;padding:4px;border:1px solid #D1D5DB;border-radius:4px;font-size:12px;margin-bottom:4px;font-weight:600;">
@@ -352,7 +391,7 @@
               const dom = DOMAINS.find(d => d.v === a.domain);
               const bg = dom ? dom.c + '40' : '#FFF';
               return `<div style="background:${bg};border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px;">
-                ${a.time ? `<span style="color:#6B7280;">${esc(a.time)}</span> ` : ''}
+                ${a.time ? `<span style="color:#6B7280;white-space:nowrap;">${esc(fmtTime(a.time))}</span> ` : ''}
                 <strong>${esc(a.title||'')}</strong>
               </div>`;
             }).join('')
