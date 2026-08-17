@@ -306,7 +306,73 @@
     wrap.appendChild(grid);
 
     var recentWrap = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
-    recentWrap.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Today\'s log'));
+
+    // Which day are we looking at? The agency's today, not the device's — a tablet left on
+    // the wrong timezone should not decide which day an educator sees.
+    function agencyToday() {
+      try { if (window.KT && KT.agencyToday) return KT.agencyToday(); } catch (e) {}
+      var d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    var VIEW_DATE = agencyToday();
+
+    var dayHead = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px;' });
+    var dayTitle = Dom.el('h3', { style: 'margin:0;flex:1;min-width:120px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Today\'s log');
+    var navBtn = function (label, title) {
+      var b = Dom.el('button', { type: 'button', title: title, style: 'width:32px;height:32px;border-radius:9px;border:1px solid #D1D5DB;background:#fff;cursor:pointer;font-size:14px;line-height:1;color:#374151;' }, label);
+      b.dataset.ktIconized = '1';
+      return b;
+    };
+    var prevDay = navBtn('‹', 'Previous day');
+    var nextDay = navBtn('›', 'Next day');
+    var dayInput = Dom.el('input', { type: 'date', value: VIEW_DATE, max: agencyToday(),
+      style: 'padding:7px 9px;border:1px solid #D1D5DB;border-radius:9px;font-size:13px;background:#fff;color:#374151;' });
+    var todayBtn = Dom.el('button', { type: 'button', style: 'padding:7px 12px;border-radius:9px;border:1px solid #D1D5DB;background:#fff;cursor:pointer;font-size:12.5px;font-weight:700;color:#374151;' }, 'Today');
+    todayBtn.dataset.ktIconized = '1';
+
+    dayHead.appendChild(dayTitle);
+    dayHead.appendChild(prevDay);
+    dayHead.appendChild(dayInput);
+    dayHead.appendChild(nextDay);
+    dayHead.appendChild(todayBtn);
+    recentWrap.appendChild(dayHead);
+
+    function shiftDate(iso, days) {
+      // Parsed as UTC and stepped in whole days, so it cannot land on the wrong date
+      // through a daylight-saving hour the way a local-midnight Date would.
+      var d = new Date(iso + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().slice(0, 10);
+    }
+    function prettyDay(iso) {
+      if (iso === agencyToday()) return 'Today\'s log';
+      if (iso === shiftDate(agencyToday(), -1)) return 'Yesterday\'s log';
+      try {
+        return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined,
+          { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) + ' — log';
+      } catch (e) { return iso + ' — log'; }
+    }
+    function setViewDate(iso) {
+      if (!iso) return;
+      if (iso > agencyToday()) iso = agencyToday();      // no logs from the future
+      VIEW_DATE = iso;
+      dayInput.value = iso;
+      dayTitle.textContent = prettyDay(iso);
+      nextDay.disabled = (iso === agencyToday());
+      nextDay.style.opacity = nextDay.disabled ? '.4' : '1';
+      nextDay.style.cursor = nextDay.disabled ? 'default' : 'pointer';
+      loadRecent();
+    }
+    prevDay.addEventListener('click', function () { setViewDate(shiftDate(VIEW_DATE, -1)); });
+    nextDay.addEventListener('click', function () { setViewDate(shiftDate(VIEW_DATE, 1)); });
+    todayBtn.addEventListener('click', function () { setViewDate(agencyToday()); });
+    dayInput.addEventListener('change', function () { setViewDate(dayInput.value); });
+    // The view opens on today, so "next day" starts disabled. Set directly rather than by
+    // calling setViewDate, which would fire a load before the child list has arrived.
+    nextDay.disabled = true;
+    nextDay.style.opacity = '.4';
+    nextDay.style.cursor = 'default';
+
     var recent = Dom.el('div'); recentWrap.appendChild(recent);
     wrap.appendChild(recentWrap);
 
@@ -345,7 +411,7 @@
       });
       CHILDREN = kids.slice();
       // "All children" filter — view every child's logs; pick one to filter down.
-      childSel.appendChild(Dom.el('option', { value: '__all__' }, 'All children (today)'));
+      childSel.appendChild(Dom.el('option', { value: '__all__' }, 'All children'));
       kids.forEach(function (c) {
         childSel.appendChild(Dom.el('option', { value: c.id },
           c.name + (c.at_centre ? ' · here now' : '') + (c.suffix ? ' · ' + c.suffix : '')));
@@ -425,7 +491,26 @@
     }
     childSel.addEventListener('change', loadRecent);
 
-    function todayStartTs() { return new Date(new Date().setHours(0, 0, 0, 0)); }
+    // Does this entry belong to the day being viewed? Compared as AGENCY dates — the
+    // date it fell on at the centre — so an evening entry stays on its own evening
+    // whatever zone the reader's device is in.
+    function onViewDate(l) {
+      var ts = l && l.occurred_at;
+      if (!ts) return false;
+      try {
+        if (window.KT && KT.agencyDateOf) return KT.agencyDateOf(ts) === VIEW_DATE;
+      } catch (e) {}
+      return String(ts).slice(0, 10) === VIEW_DATE;
+    }
+    // Fetch from the start of the day being viewed. The endpoint defaults to the last 7
+    // days, which silently hides anything older — so looking back a fortnight would have
+    // returned nothing and looked like an empty day.
+    function sinceParam() {
+      return '?since=' + encodeURIComponent(shiftDate(VIEW_DATE, -1) + ' 00:00:00');
+    }
+    function emptyDayText() {
+      return VIEW_DATE === agencyToday() ? 'Nothing logged today yet.' : 'Nothing was logged on this day.';
+    }
     function logRow(l, childName) {
       var tInfo = TYPES.find(function (t) { return t.type === l.log_type; }) || { icon: '•', color: '#6B7280' };
       var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #F3F4F6;' });
@@ -449,15 +534,14 @@
       var v = childSel.value;
       if (v === '__all__') return loadRecentAll();
       if (!v) return;
-      Api.get('/care/logs/child/' + v).then(function (data) {
+      Api.get('/care/logs/child/' + v + sinceParam()).then(function (data) {
         Dom.clear(recent);
-        var ts = todayStartTs();
-        var todayLogs = (data.logs || []).filter(function (l) { var dt = parseDt(l.occurred_at); return !dt || dt >= ts; });
-        if (!todayLogs.length) { recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'Nothing logged today yet.')); return; }
-        todayLogs.forEach(function (l) { recent.appendChild(logRow(l, null)); });
+        var dayLogs = (data.logs || []).filter(onViewDate);
+        if (!dayLogs.length) { recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, emptyDayText())); return; }
+        dayLogs.forEach(function (l) { recent.appendChild(logRow(l, null)); });
       }).catch(function (e) {
         Dom.clear(recent);
-        recent.appendChild(Dom.el('div', { style: 'padding:18px;color:#B91C1C;font-size:13px;text-align:center;' }, 'Could not load today’s log: ' + (e.message || 'error')));
+        recent.appendChild(Dom.el('div', { style: 'padding:18px;color:#B91C1C;font-size:13px;text-align:center;' }, 'Could not load the log: ' + (e.message || 'error')));
       });
     }
     // "All children" — aggregate today's logs across every child in scope, newest first.
@@ -467,13 +551,12 @@
       var kids = (CHILDREN || []).filter(function (c) { return c.id; });
       if (!kids.length) { Dom.clear(recent); recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'No children found.')); return; }
       Promise.all(kids.map(function (c) {
-        return Api.get('/care/logs/child/' + c.id).then(function (data) { return (data.logs || []).map(function (l) { l.__cn = c.name; return l; }); }).catch(function () { return []; });
+        return Api.get('/care/logs/child/' + c.id + sinceParam()).then(function (data) { return (data.logs || []).map(function (l) { l.__cn = c.name; return l; }); }).catch(function () { return []; });
       })).then(function (lists) {
-        var ts = todayStartTs();
-        var all = lists.reduce(function (a, b) { return a.concat(b); }, []).filter(function (l) { var dt = parseDt(l.occurred_at); return !dt || dt >= ts; });
+        var all = lists.reduce(function (a, b) { return a.concat(b); }, []).filter(onViewDate);
         all.sort(function (a, b) { var da = parseDt(a.occurred_at), db = parseDt(b.occurred_at); return (db ? db.getTime() : 0) - (da ? da.getTime() : 0); });
         Dom.clear(recent);
-        if (!all.length) { recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'Nothing logged today yet.')); return; }
+        if (!all.length) { recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, emptyDayText())); return; }
         all.forEach(function (l) { recent.appendChild(logRow(l, l.__cn)); });
       });
     }
