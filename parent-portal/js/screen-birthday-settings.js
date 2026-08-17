@@ -20,10 +20,12 @@
 
   var INP = 'box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;';
 
-  function card(title, sub, inner) {
-    return '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:20px 22px;margin-bottom:16px;">'
-      + '<div style="font-weight:800;font-size:15.5px;color:#0D1B2A;">' + esc(title) + '</div>'
-      + (sub ? '<div style="font-size:13px;color:#64748B;margin:3px 0 14px;">' + esc(sub) + '</div>' : '<div style="height:12px;"></div>')
+  // A group WITHIN the single card, not a card of its own. Every other section on this
+  // screen is one card; four stacked cards for one setting read as four unrelated ones.
+  function group(title, sub, inner) {
+    return '<div style="margin:16px 0 0;padding:14px 0 0;border-top:1px solid #EEF2F7;">'
+      + '<div style="font-weight:800;font-size:14px;color:#0D1B2A;">' + esc(title) + '</div>'
+      + (sub ? '<div style="font-size:12.5px;color:#64748B;margin:2px 0 6px;">' + esc(sub) + '</div>' : '')
       + inner + '</div>';
   }
 
@@ -36,12 +38,12 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:840px;"><div class="kt-page-hero"><h2>🎂 Birthday emails</h2><p>Loading…</p></div></div>';
+    main.innerHTML = '<div class="kt-card" style="max-width:680px;"><div class="kt-card-header"><h3 class="kt-card-title">🎂 Birthday emails</h3></div><p style="color:#64748B;font-size:12.5px;margin:0;">Loading…</p></div>';
 
     var data = await Api.get('/admin/birthday-settings').catch(function (e) { return { __err: (e && e.message) || 'error' }; });
     if (data.__err) {
-      main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>🎂 Birthday emails</h2></div>'
-        + '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:12px;padding:18px;max-width:640px;">This page is available to <b>agency administrators</b>.</div></div>';
+      main.innerHTML = '<div class="kt-card" style="max-width:680px;"><div class="kt-card-header"><h3 class="kt-card-title">🎂 Birthday emails</h3></div>'
+        + '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:10px;padding:14px;font-size:13px;">This section is available to <b>agency administrators</b>.</div></div>';
       return;
     }
 
@@ -59,33 +61,33 @@
         + esc(String(cov.children_with_dob || 0)) + ' children do have one.</div>';
     }
 
-    main.innerHTML = '<div style="padding:14px 24px;max-width:840px;">'
-      + '<div class="kt-page-hero"><h2>🎂 Birthday emails</h2><p>A warm note when a birthday is coming up at ' + esc(data.agency_name || 'your agency') + '. Each group below is switched separately, so you can remind your team without emailing families — or the other way round.</p></div>'
+    main.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">🎂 Birthday emails</h3></div>'
+      + '<p style="color:#64748B;font-size:12.5px;margin:0 0 12px;">A warm note when a birthday is coming up at ' + esc(data.agency_name || 'your agency') + '. Each group is switched separately, so you can remind your team without emailing families — or the other way round.</p>'
       + coverageNote
 
-      + card('Birthday emails', 'The master switch. With this off, nothing below sends.',
-          toggle('enabled', 'Send birthday emails', 'Runs each morning at 7am.', b.enabled)
-          + '<div style="display:flex;align-items:center;gap:12px;padding:12px 0 2px;">'
-          + '<label for="b_days_ahead" style="font-size:14px;color:#334155;font-weight:600;">Send</label>'
-          + '<select id="b_days_ahead" style="' + INP + 'width:auto;">'
-          + days.map(function (d) {
-              var label = d === 0 ? 'on the day' : d === 1 ? '1 day before' : d + ' days before';
-              return '<option value="' + d + '"' + (Number(b.days_ahead) === d ? ' selected' : '') + '>' + label + '</option>';
-            }).join('')
-          + '</select>'
-          + '<span style="font-size:12.5px;color:#64748B;">Sending a day or two ahead gives a room time to plan.</span></div>')
+      + toggle('enabled', 'Send birthday emails', 'The master switch — with this off, nothing below sends. Runs each morning at 7am.', b.enabled)
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0 2px;">'
+      + '<label for="b_days_ahead" style="font-size:14px;color:#334155;font-weight:600;">Send</label>'
+      + '<select id="b_days_ahead" style="' + INP + 'width:auto;">'
+      + days.map(function (d) {
+          var label = d === 0 ? 'on the day' : d === 1 ? '1 day before' : d + ' days before';
+          return '<option value="' + d + '"' + (Number(b.days_ahead) === d ? ' selected' : '') + '>' + label + '</option>';
+        }).join('')
+      + '</select>'
+      + '<span style="font-size:12.5px;color:#64748B;">A day or two ahead gives a room time to plan.</span></div>'
 
-      + card('Children’s birthdays', 'Who hears about a child’s birthday.',
+      + group('Children’s birthdays', 'Who hears about a child’s birthday.',
           toggle('children_notify_guardians', 'Email the child’s parents', 'A warm note naming the child and the age they are turning.', b.children_notify_guardians)
           + toggle('children_notify_educators', 'Email the educators and director at their centre', 'A short heads-up so the room can mark the day.', b.children_notify_educators))
 
-      + card('Staff birthdays', 'Who hears about a colleague’s birthday. Needs a date of birth on the person’s profile.',
+      + group('Staff birthdays', 'Needs a date of birth on the person’s profile.',
           toggle('staff_notify_person', 'Email the person a birthday wish', '', b.staff_notify_person)
           + toggle('staff_notify_leads', 'Email admins and directors a heads-up', 'So somebody can arrange a card. Off by default.', b.staff_notify_leads))
 
-      + '<div style="display:flex;align-items:center;gap:14px;justify-content:flex-end;">'
+      + '<div style="display:flex;align-items:center;gap:14px;justify-content:flex-end;margin-top:16px;">'
       + '<span id="b-status" style="font-size:13px;color:#1E8E60;"></span>'
-      + '<button id="b-save" style="font-size:14px;font-weight:700;padding:11px 22px;border:0;border-radius:10px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;cursor:pointer;">Save changes</button></div>'
+      + '<button id="b-save" style="font-size:14px;font-weight:700;padding:10px 20px;border:0;border-radius:10px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;cursor:pointer;">Save changes</button></div>'
       + '</div>';
 
     var btn = main.querySelector('#b-save');

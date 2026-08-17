@@ -799,6 +799,20 @@ class ParentDailySummaryCommand extends Command
             $body .= '<div style="margin-top:18px;font-size:15px;color:#334155;line-height:1.6;">' . $day['_signoff'] . '</div>';
         }
 
+        // What the room had PLANNED today, next to what actually happened. The rest of
+        // this email is a record of the day; without the plan a parent sees the events
+        // with none of the intent behind them. Renders nothing on a day with no plan.
+        try {
+            $lpRoom = isset($child->id) ? \App\Support\LessonPlans::roomForChild((int) $child->id) : null;
+            $body .= \App\Support\LessonPlans::emailBlock(
+                \App\Support\LessonPlans::forDate($lpRoom, (int) ($child->centre_id ?? 0), $day['date']->toDateString()),
+                'parent'
+            );
+        } catch (\Throwable $e) {
+            // A missing lesson plan must never cost a parent their daily summary.
+            \Illuminate\Support\Facades\Log::warning('Daily summary: lesson plan block failed', ['error' => $e->getMessage()]);
+        }
+
         // A warm daily inspirational quote (same for everyone that day, rotates daily).
         $body .= EmailTemplate::dailyQuote((int) $day['date']->format('Ymd'));
 
