@@ -85,6 +85,29 @@
   }
 
   var DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  /* What a status MEANS, as a colour. Matched on a normalised prefix so "Paid",
+     "paid", "Partially paid" and "Absence recorded (but signed in)" all land somewhere
+     sensible, and anything unrecognised stays neutral grey rather than picking a colour
+     at random and implying something.
+
+     Kept in step with cannedHtml() on the server, which tints the PDF and the emailed
+     report — a printout that disagrees with the screen about which invoices are overdue
+     is worse than no colour at all. */
+  var STATUS_TINT = [
+    [/^(paid|settled|complete|completed|approved|present|active|sent ok)/i, '#DCFCE7', '#15803D'],
+    [/^(overdue|failed|declined|rejected|denied|absent|expired|breach)/i,   '#FEE2E2', '#B91C1C'],
+    [/^(pending|awaiting|partial|partially|due|unpaid|draft|absence)/i,     '#FEF3C7', '#B45309'],
+    [/^(open|sent|issued|scheduled|in progress|processing|invited)/i,       '#E0F2FE', '#0369A1'],
+    [/^(void|cancelled|canceled|archived|closed|inactive|withdrawn)/i,      '#F1F5F9', '#64748B'],
+  ];
+  function statusTint(v) {
+    var t = String(v == null ? '' : v).trim();
+    for (var i = 0; i < STATUS_TINT.length; i++) {
+      if (STATUS_TINT[i][0].test(t)) { return { bg: STATUS_TINT[i][1], fg: STATUS_TINT[i][2] }; }
+    }
+    return { bg: '#EEF2F7', fg: '#334155' };
+  }
+
   function repToast(msg, kind) { if (window.KT && KT.Dom && KT.Dom.toast) KT.Dom.toast(msg, kind || 'info'); else if (window.KT && KT.toast) KT.toast('📅', 'Reports', msg, kind === 'error' ? '#B91C1C' : '#1F6080'); }
 
   async function loadSchedules() {
@@ -342,7 +365,11 @@
         var v = row[c]; var numeric = /amount|total|paid|balance|hours/i.test(c);
         var isStatus = /status/i.test(c);
         var cell = esc(v);
-        if (isStatus && v) cell = '<span style="display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;background:#EEF2F7;color:#334155;">' + esc(v) + '</span>';
+        if (isStatus && v) {
+          var tint = statusTint(v);
+          cell = '<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;' +
+            'background:' + tint.bg + ';color:' + tint.fg + ';white-space:nowrap;">' + esc(v) + '</span>';
+        }
         return '<td style="padding:8px 12px;font-size:12.5px;color:#1E293B;border-bottom:1px solid #E9EEF3;text-align:' + (numeric && i > 0 ? 'right' : 'left') + ';white-space:nowrap;">' + cell + '</td>';
       }).join('') + '</tr>';
     }).join('') : emptyRow(r, cols.length);

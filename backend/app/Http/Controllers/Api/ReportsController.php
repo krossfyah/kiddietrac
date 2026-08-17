@@ -943,6 +943,27 @@ final class ReportsController extends Controller
                 $logoHtml = '<img src="' . $e($src) . '" style="height:38px;vertical-align:middle;margin-right:8px;">';
             }
         }
+        // The same palette the Reports screen uses (statusTint in screen-reports.js), in
+        // the same order. A printed report that disagreed with the screen about which
+        // invoices are overdue would be worse than printing no colour at all.
+        $tint = function ($v) {
+            $t = trim((string) $v);
+            $map = [
+                ['/^(paid|settled|complete|completed|approved|present|active)/i', '#DCFCE7', '#15803D'],
+                ['/^(overdue|failed|declined|rejected|denied|absent|expired|breach)/i', '#FEE2E2', '#B91C1C'],
+                ['/^(pending|awaiting|partial|partially|due|unpaid|draft|absence)/i', '#FEF3C7', '#B45309'],
+                ['/^(open|sent|issued|scheduled|in progress|processing|invited)/i', '#E0F2FE', '#0369A1'],
+                ['/^(void|cancelled|canceled|archived|closed|inactive|withdrawn)/i', '#F1F5F9', '#64748B'],
+            ];
+            foreach ($map as [$re, $bg, $fg]) {
+                if (preg_match($re, $t)) {
+                    return [$bg, $fg];
+                }
+            }
+
+            return ['#EEF2F7', '#334155'];   // unrecognised stays neutral, implying nothing
+        };
+
         $th = '';
         foreach ($columns as $c) $th .= '<th>' . $e($c) . '</th>';
         $tr = '';
@@ -952,7 +973,18 @@ final class ReportsController extends Controller
                 $bg = ($i % 2) ? '#F5F8FB' : '#FFFFFF';
                 $i++;
                 $tds = '';
-                foreach ($columns as $c) $tds .= '<td>' . $e($row[$c] ?? '') . '</td>';
+                foreach ($columns as $c) {
+                    $v = $row[$c] ?? '';
+                    // Dompdf handles inline background on a span, so the pill survives
+                    // into the PDF rather than flattening to plain text.
+                    if ($v !== '' && preg_match('/status/i', (string) $c)) {
+                        [$bg, $fg] = $tint($v);
+                        $tds .= '<td><span style="display:inline-block;padding:1px 6px;border-radius:9px;'
+                            . 'font-weight:bold;background:' . $bg . ';color:' . $fg . ';">' . $e($v) . '</span></td>';
+                    } else {
+                        $tds .= '<td>' . $e($v) . '</td>';
+                    }
+                }
                 $tr .= '<tr style="background:' . $bg . ';">' . $tds . '</tr>';
             }
         } else {
