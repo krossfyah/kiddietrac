@@ -70,12 +70,42 @@
     box.innerHTML = '<h3 style="margin:0 0 4px;font-size:18px;">✏️ New message</h3>'
       + '<div style="color:#64748B;font-size:12.5px;margin-bottom:10px;">Pick a colleague to message.</div>'
       + '<input id="tc-search" placeholder="Search…" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:14px;margin-bottom:10px;">'
-      + '<div id="tc-clist" style="max-height:52vh;overflow:auto;">' + contacts.map(cRow).join('') + '</div>';
+      + '<div id="tc-clist" style="max-height:52vh;overflow:auto;">' + groupedRows(contacts) + '</div>';
+    /* Seniority first, then alphabetical. Sorted purely by name, the two or three people
+       somebody actually needs — the director, the admin — sat scattered among twenty
+       educators, so "I can't see the directors" was true in practice even though they were
+       all in the list. */
+    var ROLE_ORDER = { 'Admin': 0, 'Director': 1, 'Home visitor': 2, 'Educator': 3, 'Auditor': 4, 'Staff': 5 };
+    function groupedRows(list) {
+      var sorted = list.slice().sort(function (a, b) {
+        var ra = ROLE_ORDER[a.role] === undefined ? 9 : ROLE_ORDER[a.role];
+        var rb = ROLE_ORDER[b.role] === undefined ? 9 : ROLE_ORDER[b.role];
+        if (ra !== rb) { return ra - rb; }
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+      var out = '', lastRole = null;
+      sorted.forEach(function (c) {
+        var role = c.role || 'Staff';
+        if (role !== lastRole) {
+          // A heading per role, so the list reads as "who are the directors" rather than
+          // as one long column of names to scan.
+          out += '<div class="tc-h" style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;'
+            + 'color:#94A3B8;padding:10px 8px 4px;">' + esc(role === 'Admin' ? 'Admins' : role + 's') + '</div>';
+          lastRole = role;
+        }
+        out += cRow(c);
+      });
+      return out;
+    }
+
     function cRow(c) {
-      return '<div class="tc-c" data-id="' + c.id + '" data-name="' + esc(c.name) + '" style="display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:9px;cursor:pointer;">'
+      var role = c.role || 'Staff';
+      return '<div class="tc-c" data-id="' + c.id + '" data-name="' + esc(c.name) + '" data-role="' + esc(role) + '" style="display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:9px;cursor:pointer;">'
         + avatar(c.name, c.photo_url, 38)
-        + '<div style="flex:1;min-width:0;"><div style="font-weight:600;color:#0F172A;">' + esc(c.name) + '</div>'
-        + '<div style="font-size:12px;color:#94A3B8;">' + esc(c.role || 'Staff') + '</div></div></div>';
+        // The role in brackets beside the name, not only as a subtitle — at a glance you
+        // can tell who is who without reading a second line in grey.
+        + '<div style="flex:1;min-width:0;"><div style="font-weight:600;color:#0F172A;">' + esc(c.name)
+        + ' <span style="font-weight:500;color:#64748B;">(' + esc(role) + ')</span></div></div></div>';
     }
     box.querySelectorAll('.tc-c').forEach(function (el) {
       el.addEventListener('mouseover', function () { el.style.background = '#F1F5F9'; });
@@ -84,7 +114,18 @@
     });
     box.querySelector('#tc-search').addEventListener('input', function (e) {
       var q = e.target.value.toLowerCase();
-      box.querySelectorAll('.tc-c').forEach(function (el) { el.style.display = el.getAttribute('data-name').toLowerCase().indexOf(q) > -1 ? '' : 'none'; });
+      // Search the role too — "director" should find the directors, which is how somebody
+      // looks for a person whose name they do not remember.
+      box.querySelectorAll('.tc-c').forEach(function (el) {
+        var hay = (el.getAttribute('data-name') + ' ' + (el.getAttribute('data-role') || '')).toLowerCase();
+        el.style.display = hay.indexOf(q) > -1 ? '' : 'none';
+      });
+      // Hide a role heading whose people have all been filtered out.
+      box.querySelectorAll('.tc-h').forEach(function (h) {
+        var any = false, n = h.nextElementSibling;
+        while (n && n.classList.contains('tc-c')) { if (n.style.display !== 'none') { any = true; break; } n = n.nextElementSibling; }
+        h.style.display = any ? '' : 'none';
+      });
     });
   }
 
