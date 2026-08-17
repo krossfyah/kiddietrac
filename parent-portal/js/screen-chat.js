@@ -10,7 +10,7 @@
   'use strict';
 
   const POLL_INTERVAL_MS = 15000;
-  const THREAD_POLL_MS = 4000;     // faster poll while a thread is open (realtime feel)
+  const THREAD_POLL_MS = 10000;     // faster poll while a thread is open (realtime feel)
   let pollTimer = null;
   let threadPollTimer = null;
   let openThreadId = null;
@@ -56,6 +56,14 @@
   }
   function token() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
   function apiBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
+  // Make a photo path absolute against the API host (relative /storage/... paths
+  // don't resolve against the SPA origin). Absolute URLs pass through untouched.
+  function absPhotoUrl(u) {
+    if (!u) return '';
+    if (/^https?:\/\//i.test(u) || u.indexOf('data:') === 0) return u;
+    var origin = apiBase().replace(/\/api\/v1\/?$/, '');
+    return origin + (u.charAt(0) === '/' ? '' : '/') + u;
+  }
 
   async function api(method, path, body) {
     const opts = {
@@ -149,7 +157,59 @@
       const myId = getUser().id;
       const nameOf = (c) => (myRole === 'guardian' ? c.centre_name : c.family_name) || 'Conversation';
       const state = { sort: 'date', dir: -1, q: '' };
-      const th = (key, label, extra) => `<th data-sort="${key}" class="kt-msg-th" style="text-align:${extra && extra.right ? 'right' : 'left'};padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;cursor:pointer;user-select:none;${extra && extra.w ? 'width:' + extra.w + ';' : ''}">${label} <span class="kt-ar" style="color:#94A3B8;"></span></th>`;
+
+      // ── Mobile / APK: a card list matching the parent chat inbox ──────────
+      // The desktop <table> below stacks its From/Message/Date columns into an
+      // ugly label:value block on a phone; the parent inbox uses clean cards, so
+      // the two chats looked like different products. Render cards ≤600px wide.
+      if (window.innerWidth <= 600) {
+        const sortValM = (c) => new Date(String(c.last_message_at || '').replace(' ', 'T')).getTime() || 0;
+        container.innerHTML = `
+          <div style="padding:12px 12px 4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
+              <h2 style="font-size:19px;font-weight:800;color:#0D1B2A;margin:0;">💬 Messages</h2>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${notifBtnHtml}${newChatBtnHtml}</div>
+            </div>
+            <input id="kt-msg-filter" type="search" placeholder="🔍 Search messages…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D1D5DB;border-radius:12px;font-size:14px;margin-bottom:10px;">
+            <div id="kt-msg-cards"></div>
+          </div>`;
+        const cardsWrap = $('#kt-msg-cards', container);
+        const cardHtml = (c) => {
+          const nm = nameOf(c), unread = c.unread_count > 0;
+          const initial = escapeHtml((String(nm).charAt(0) || '?').toUpperCase());
+          const col = senderColor(nm);
+          return `<button class="kt-msg-card" data-cid="${c.id}" style="width:100%;text-align:left;display:flex;align-items:center;gap:12px;border:1px solid #E7EBF0;background:#fff;cursor:pointer;padding:12px 13px;margin-bottom:9px;border-radius:14px;box-shadow:0 1px 3px rgba(15,23,42,.06);">
+            <span style="width:44px;height:44px;border-radius:50%;background:${col};color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0;">${initial}</span>
+            <span style="flex:1;min-width:0;">
+              <span style="display:flex;align-items:center;gap:8px;">
+                <span style="font-weight:${unread ? '800' : '700'};font-size:14.5px;color:#0D1B2A;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}${c.child_name ? ` · <span style="color:#64748B;font-weight:600;">${escapeHtml(c.child_name)}</span>` : ''}</span>
+                <span style="font-size:11px;color:#64748B;flex-shrink:0;">${formatDateTime(c.last_message_at)}</span>
+              </span>
+              <span style="display:flex;align-items:center;gap:6px;margin-top:3px;">
+                <span style="flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${unread ? 'color:#0D1B2A;font-weight:600;' : 'color:#64748B;'}">${c.last_sender_id == myId ? '<span style="color:#64748B;">You: </span>' : ''}${escapeHtml(c.preview || '(no messages yet)')}</span>
+                ${unread ? `<span style="background:#8EC73C;color:#fff;font-size:11px;font-weight:800;min-width:20px;height:20px;padding:0 6px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${c.unread_count}</span>` : ''}
+              </span>
+            </span>
+          </button>`;
+        };
+        const paintM = () => {
+          const q = state.q.trim().toLowerCase();
+          let listx = convs.slice();
+          if (q) listx = listx.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
+          listx.sort((a, b) => sortValM(b) - sortValM(a));
+          cardsWrap.innerHTML = listx.length ? listx.map(cardHtml).join('') : '<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">No matching conversations.</div>';
+          cardsWrap.querySelectorAll('.kt-msg-card').forEach(row => row.addEventListener('click', () => openThread(parseInt(row.dataset.cid, 10), container)));
+        };
+        const fiM = $('#kt-msg-filter', container);
+        if (fiM) fiM.addEventListener('input', () => { state.q = fiM.value || ''; paintM(); });
+        paintM();
+        const nbM = $('#kt-new-chat-btn', container);
+        if (nbM) nbM.addEventListener('click', () => openNewChatModal(container));
+        wireNotifBtn(container);
+        return;
+      }
+
+      const th = (key, label, extra) => `<th data-sort="${key}" class="kt-msg-th" style="text-align:${extra && extra.right ? 'right' : 'left'};padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;cursor:pointer;user-select:none;${extra && extra.w ? 'width:' + extra.w + ';' : ''}">${label} <span class="kt-ar" style="color:#64748B;"></span></th>`;
       container.innerHTML = `
         <div style="display:flex;flex-direction:column;">
           <div class="kt-chat-header" style="padding:14px 16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -159,13 +219,14 @@
               ${notifBtnHtml}${newChatBtnHtml}
             </div>
           </div>
-          <div style="max-height:calc(100vh - 150px);overflow-y:auto;background:#fff;">
-            <table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
+          <div style="background:#fff;">
+            <table data-kt-filtered="1" data-kt-noexport="1" style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
               <thead>
                 <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
                   ${th('name', 'From', { w: '250px' })}
                   ${th('preview', 'Message')}
-                  ${th('date', 'Date', { w: '150px', right: true })}
+                  ${th('date', 'Date', { w: '140px', right: true })}
+                  <th style="width:46px;padding:10px 6px;"></th>
                 </tr>
               </thead>
               <tbody id="kt-msg-tbody"></tbody>
@@ -184,15 +245,18 @@
         return `<tr class="kt-msg-row" data-cid="${c.id}" style="border-top:1px solid #F1F3F5;cursor:pointer;">
           <td style="padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             <span style="display:inline-flex;align-items:center;gap:9px;max-width:100%;">
-              <span style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#1F6080,#8EC73C);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">${escapeHtml(nm.charAt(0))}</span>
-              <span style="font-weight:${unread ? '800' : '600'};color:#111827;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(nm)}${c.child_name ? ` <span style="color:#9CA3AF;font-weight:400;">· ${escapeHtml(c.child_name)}</span>` : ''}</span>
+              <span style="width:30px;height:30px;border-radius:50%;background:${senderColor(nm)};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">${escapeHtml(nm.charAt(0))}</span>
+              <span style="font-weight:${unread ? '800' : '600'};color:#111827;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(nm)}${c.child_name ? ` <span style="color:#64748B;font-weight:400;">· ${escapeHtml(c.child_name)}</span>` : ''}</span>
             </span>
           </td>
           <td style="padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6B7280;font-weight:${unread ? '600' : '400'};">
-            ${c.last_sender_id == myId ? '<span style="color:#9CA3AF;">You: </span>' : ''}${escapeHtml(c.preview || '(no messages yet)')}
+            ${c.last_sender_id == myId ? '<span style="color:#64748B;">You: </span>' : ''}${escapeHtml(c.preview || '(no messages yet)')}
             ${unread ? `<span style="background:#1F6080;color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;">${c.unread_count}</span>` : ''}
           </td>
-          <td style="padding:10px 14px;text-align:right;color:#9CA3AF;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatDateTime(c.last_message_at)}</td>
+          <td style="padding:10px 14px;text-align:right;color:#64748B;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatDateTime(c.last_message_at)}</td>
+          <td style="padding:10px 6px;text-align:center;">
+            <button class="kt-conv-del" data-cid="${c.id}" type="button" title="Delete conversation" style="background:none;border:none;cursor:pointer;color:#C0453B;font-size:15px;line-height:1;padding:5px;border-radius:6px;">🗑</button>
+          </td>
         </tr>`;
       };
       const paint = () => {
@@ -200,7 +264,7 @@
         let list = convs.slice();
         if (q) list = list.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
         list.sort((a, b) => { const va = sortVal(a), vb = sortVal(b); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
-        tbody.innerHTML = list.length ? list.map(rowHtml).join('') : '<tr><td colspan="3" style="padding:26px;text-align:center;color:#9CA3AF;">No matching conversations.</td></tr>';
+        tbody.innerHTML = list.length ? list.map(rowHtml).join('') : '<tr><td colspan="4" style="padding:26px;text-align:center;color:#64748B;">No matching conversations.</td></tr>';
         let z = 0;
         tbody.querySelectorAll('.kt-msg-row').forEach(row => {
           const base = (z++ % 2) ? '#F7F9FB' : '#FFFFFF';
@@ -208,6 +272,24 @@
           row.addEventListener('mouseenter', () => { row.style.background = '#EEF4F7'; });
           row.addEventListener('mouseleave', () => { row.style.background = row.dataset.base; });
           row.addEventListener('click', () => openThread(parseInt(row.dataset.cid, 10), container));
+        });
+        // Delete-conversation buttons (stop the row's open-thread click).
+        tbody.querySelectorAll('.kt-conv-del').forEach(b => {
+          b.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const cid = b.getAttribute('data-cid');
+            if (!await KT.confirm('Delete this entire conversation? It is removed for everyone and can\'t be undone from the app.')) return;
+            b.disabled = true;
+            api('DELETE', endpointBase() + '/' + cid).then(() => {
+              const idx = convs.findIndex(x => String(x.id) === String(cid));
+              if (idx >= 0) convs.splice(idx, 1);
+              paint();
+              if (window.KT && KT.toast) KT.toast('🗑', 'Conversation deleted');
+            }).catch(err => {
+              b.disabled = false;
+              if (window.KT && KT.toast) KT.toast('⚠️', 'Could not delete', (err && err.message) || '', '#DC2626'); else alert('Could not delete the conversation.');
+            });
+          });
         });
         container.querySelectorAll('.kt-msg-th').forEach(h => { const ar = h.querySelector('.kt-ar'); if (ar) ar.textContent = (h.getAttribute('data-sort') === state.sort) ? (state.dir < 0 ? '▾' : '▴') : ''; });
       };
@@ -289,7 +371,7 @@
         // If already subscribed, treat click as Disable
         var s = await KT.Push.status();
         if (s === 'subscribed') {
-          if (!window.confirm('Turn off browser notifications? You will only see new messages when the dashboard tab is open.')) return;
+          if (!await KT.confirm('Turn off browser notifications? You will only see new messages when the dashboard tab is open.')) return;
           btn.disabled = true; btn.textContent = '⏳ …';
           await KT.Push.unsubscribe();
           apply('unsubscribed');
@@ -329,36 +411,63 @@
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
 
-    // Pick the right families endpoint based on role.
-    var famPath = (myRole === 'agency_admin') ? '/admin/families'
-                : (myRole === 'centre_director' || myRole === 'educator') ? '/director/families'
+    // Pick the right families endpoint based on role. platform_admin was missing and
+    // fell through to "not available for your role".
+    var famPath = (myRole === 'agency_admin' || myRole === 'platform_admin') ? '/admin/families'
+                : (myRole === 'centre_director' || myRole === 'educator' || myRole === 'home_visitor') ? '/director/families'
                 : null;
-    if (! famPath) {
-      modal.querySelector('#kt-new-chat-form-body').innerHTML = '<div style="color:#DC2626;">Not available for your role.</div>';
-      return;
-    }
 
-    var families = [];
-    try {
-      var fdata = await api('GET', famPath);
-      // /admin/families uses 'data' key, /director/families uses 'data' or 'families'
-      families = fdata.data || fdata.families || [];
-    } catch (e) {
-      modal.querySelector('#kt-new-chat-form-body').innerHTML = '<div style="color:#DC2626;">Could not load families: ' + escapeHtml(e.message) + '</div>';
-      return;
-    }
-    if (! families.length) {
-      modal.querySelector('#kt-new-chat-form-body').innerHTML = '<div style="color:#6B7280;">No families on file yet. Once a family is enrolled, you can message them here.</div>';
+    // Colleagues too. This dialog only ever offered families, so a director or admin was
+    // unreachable from Messages — the complaint that started this. Staff threads are a
+    // different backend (keyed on a user, not a family), so both lists are loaded here and
+    // the send routes to whichever the chosen row belongs to.
+    var families = [], staff = [];
+    var results = await Promise.all([
+      famPath ? api('GET', famPath).catch(function () { return null; }) : Promise.resolve(null),
+      api('GET', '/provider/team-contacts').catch(function () { return null; }),
+    ]);
+    if (results[0]) { families = results[0].data || results[0].families || []; }
+    if (results[1]) { staff = results[1].contacts || []; }
+
+    if (! families.length && ! staff.length) {
+      modal.querySelector('#kt-new-chat-form-body').innerHTML = '<div style="color:#6B7280;">Nobody to message yet.</div>';
       return;
     }
 
     modal.querySelector('#kt-new-chat-form-body').innerHTML =
       '<div style="margin-bottom:14px;">' +
-        '<label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">Family</label>' +
+        '<label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">To</label>' +
         '<select id="kt-nc-family" style="width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;background:white;">' +
-          families.map(function (f) {
-            return '<option value="' + f.id + '">' + escapeHtml(f.family_name || ('Family #' + f.id)) + '</option>';
-          }).join('') +
+          // Staff first, grouped by role, each with the role in brackets — a flat list
+          // where some rows are parents and some are directors cannot be read at a glance.
+          // The value carries the KIND, because the two go to different endpoints.
+          (function () {
+            var order = ['Admin', 'Director', 'Home visitor', 'Educator', 'Auditor', 'Parent', 'Staff'];
+            var byRole = {};
+            staff.forEach(function (p) { (byRole[p.role || 'Staff'] = byRole[p.role || 'Staff'] || []).push(p); });
+            var html = '';
+            order.forEach(function (role) {
+              var list = byRole[role];
+              if (! list || ! list.length) { return; }
+              html += '<optgroup label="' + escapeHtml(role === 'Admin' ? 'Admins' : role + 's') + '">' +
+                list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }).map(function (p) {
+                  return '<option value="user:' + p.id + '">' + escapeHtml(p.name) + ' (' + escapeHtml(role) + ')</option>';
+                }).join('') + '</optgroup>';
+              delete byRole[role];
+            });
+            // Any role the list above does not know about still gets shown.
+            Object.keys(byRole).forEach(function (role) {
+              html += '<optgroup label="' + escapeHtml(role) + '">' + byRole[role].map(function (p) {
+                return '<option value="user:' + p.id + '">' + escapeHtml(p.name) + ' (' + escapeHtml(role) + ')</option>';
+              }).join('') + '</optgroup>';
+            });
+            return html;
+          })() +
+          (families.length
+            ? '<optgroup label="Families">' + families.map(function (f) {
+                return '<option value="family:' + f.id + '">' + escapeHtml(f.family_name || ('Family #' + f.id)) + ' (Family)</option>';
+              }).join('') + '</optgroup>'
+            : '') +
         '</select>' +
       '</div>' +
       '<div style="margin-bottom:14px;">' +
@@ -377,7 +486,12 @@
 
     modal.querySelector('#kt-nc-cancel').addEventListener('click', function () { overlay.remove(); });
     modal.querySelector('#kt-nc-send').addEventListener('click', async function () {
-      var fid = parseInt(modal.querySelector('#kt-nc-family').value, 10);
+      // "user:12" or "family:34" — the picker holds both kinds and they post to
+      // different endpoints, so the kind travels with the choice rather than being
+      // guessed from the id.
+      var picked = String(modal.querySelector('#kt-nc-family').value || '');
+      var isStaff = picked.indexOf('user:') === 0;
+      var fid = parseInt(picked.replace(/^(user|family):/, ''), 10);
       var subj = modal.querySelector('#kt-nc-subject').value.trim();
       var body = modal.querySelector('#kt-nc-body').value.trim();
       var errBox = modal.querySelector('#kt-nc-err');
@@ -386,6 +500,18 @@
       var sendBtn = modal.querySelector('#kt-nc-send');
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
       try {
+        // A staff thread and a family thread are different things on the server — one is
+        // keyed on a user, the other on a family — so the send follows the choice.
+        if (isStaff) {
+          await api('POST', '/provider/team-threads/start', { recipient_user_id: fid, body: body });
+          overlay.remove();
+          // Staff conversations live in Team chat, which is where the reply will arrive;
+          // sending from here and then showing a family list would look like it failed.
+          if (window.location.hash.indexOf('team') === -1) { window.location.hash = '#team-chat'; }
+          else { renderList(container); }
+          return;
+        }
+
         var resp = await api('POST', '/provider/chats/start', { family_id: fid, subject: subj || null, body: body });
         overlay.remove();
         if (resp && resp.conversation_id) {
@@ -403,17 +529,35 @@
   }
 
   /* ─── Thread view ───────────────────────────────────────────── */
+  let threadDocked = false;      // desktop: the open thread lives in the floating dock
+  let threadListContainer = null; // the #appMain list container, for closing back to it
   async function openThread(cid, container) {
     openThreadId = cid;
-    container.innerHTML = '<div style="text-align:center;padding:32px;color:#6B7280;">Loading…</div>';
+    threadListContainer = container;
+    threadDocked = !!(KT.ChatDock && KT.ChatDock.enabled());
+    var target = threadDocked ? KT.ChatDock.contentEl() : container;
+    target.innerHTML = '<div style="text-align:center;padding:32px;color:#6B7280;">Loading…</div>';
+    if (threadDocked) KT.ChatDock.show('Chat', closeThreadCleanup);
     try {
       const data = await api('GET', endpointBase() + '/' + cid);
-      renderThread(data, container);
+      renderThread(data, target);
+      if (threadDocked) {
+        var c0 = data.conversation || {};
+        KT.ChatDock.show((myRole === 'guardian' ? c0.centre_name : c0.family_name) || 'Chat', closeThreadCleanup);
+      }
       // Refresh badge after opening (now zero unread)
       if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge();
     } catch (e) {
-      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load thread: ' + escapeHtml(e.message) + '</div>';
+      target.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load thread: ' + escapeHtml(e.message) + '</div>';
     }
+  }
+
+  // Stop the open thread's poll + clear state. The dock's × runs this via onClose;
+  // it must NOT re-close the dock (the dock is already closing) to avoid recursion.
+  function closeThreadCleanup() {
+    openThreadId = null;
+    if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
+    threadDocked = false;
   }
 
   function renderThread(data, container) {
@@ -424,12 +568,14 @@
 
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;height:calc(100vh - 110px);max-height:calc(100vh - 110px);background:#F9FAFB;">
-        <div class="kt-thread-header" style="padding:14px 16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;align-items:center;gap:12px;flex-shrink:0;">
-          <button class="kt-back" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:#1F6080;padding:4px 8px;">←</button>
-          <div style="flex:1;">
-            <div style="font-weight:700;font-size:16px;">${escapeHtml(headerLabel)} ${escapeHtml(subLabel)}</div>
-            ${c.subject ? `<div style="font-size:13px;color:#6B7280;">${escapeHtml(c.subject)}</div>` : ''}
+        <div class="kt-thread-header" style="padding:14px 16px;border-bottom:1px solid rgba(31,96,128,.12);background:linear-gradient(135deg,#EAF3FB,#F3F0FF);display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          <button class="kt-back" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:#1F6080;padding:4px 4px;flex-shrink:0;">←</button>
+          ${(window.KT && KT.avatar && c.child_name) ? `<span style="flex-shrink:0;display:inline-flex;">${KT.avatar(c.child_name, { size: 38, photoUrl: c.child_photo_url || '' })}</span>` : ''}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(headerLabel)} ${escapeHtml(subLabel)}</div>
+            ${c.subject ? `<div style="font-size:13px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(c.subject)}</div>` : ''}
           </div>
+          ${myRole !== 'guardian' ? `<button class="kt-nudge" type="button" title="Nudge the family for a reply" style="background:rgba(31,96,128,.12);border:none;width:40px;height:40px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;line-height:1;">👋</button>` : ''}
         </div>
         <div class="kt-thread-body" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;">
           ${messages.map(m => bubble(m)).join('')}
@@ -444,12 +590,11 @@
           <input class="kt-attach-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display:none;" />
           <button class="kt-emoji-btn" type="button" title="Emoji" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">😊</button>
           <button class="kt-attach-btn" type="button" title="Attach a photo or video" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:22px;padding:4px 6px;">📷</button>
-          <input class="kt-compose-input" type="text" placeholder="Type a message…" style="flex:1;min-width:0;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;font-family:inherit;" />
-          <!-- One action button, exactly like the parent app: 🎤 while the box is
-               empty, ➤ as soon as you type. The old wide "Send" button sat there
-               permanently and pushed the text box down to nothing. -->
+          <!-- Mic sits with emoji + camera on the left (transparent, no teal); it's
+               shown while the box is empty and swaps to the send arrow when typing. -->
           <button class="kt-mic-btn" type="button" title="Record a voice note" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">🎤</button>
-          <button class="kt-send-btn" title="Send" style="display:none;background:#159FB4;color:white;border:none;width:44px;height:44px;border-radius:50%;font-weight:700;cursor:pointer;font-size:17px;line-height:1;">➤</button>
+          <input class="kt-compose-input" type="text" placeholder="Type a message…" style="flex:1;min-width:0;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;font-family:inherit;" />
+          <button class="kt-send-btn" title="Send" style="display:none;align-items:center;justify-content:center;background:#159FB4;color:white;border:none;width:44px;height:44px;border-radius:50%;font-weight:700;cursor:pointer;font-size:16px;line-height:1;padding-left:2px;">➤</button>
           <div class="kt-emoji-panel" style="display:none;position:absolute;bottom:58px;left:8px;background:white;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;width:280px;max-height:180px;overflow-y:auto;z-index:40;font-size:23px;line-height:1.5;"></div>
         </div>
       </div>
@@ -457,7 +602,75 @@
     const body = $('.kt-thread-body', container);
     body.scrollTop = body.scrollHeight;
 
+    // Delete own messages — delegated so it also catches poll-appended bubbles.
+    body.addEventListener('click', async function (e) {
+      var db = e.target && e.target.closest && e.target.closest('.kt-msg-del');
+      if (!db) return;
+      var mid = db.getAttribute('data-del-mid');
+      if (!mid || !await KT.confirm('Delete this message?')) return;
+      db.disabled = true;
+      api('DELETE', endpointBase() + '/' + c.id + '/messages/' + mid).then(function () {
+        var row = body.querySelector('[data-mid="' + mid + '"]');
+        if (row) row.outerHTML = '<div data-mid="' + mid + '" style="display:flex;justify-content:flex-end;gap:8px;align-items:flex-end;"><div style="max-width:78%;padding:9px 13px;border-radius:16px;background:#EEF1F5;color:#64748B;font-style:italic;font-size:13.5px;">🚫 Message deleted</div></div>';
+      }).catch(function (err) {
+        db.disabled = false;
+        if (window.KT && KT.toast) KT.toast('⚠️', 'Could not delete', (err && err.message) || '', '#DC2626'); else alert('Could not delete the message.');
+      });
+    });
+
+    // React to a message: tapping an existing chip toggles that reaction; 😊 opens
+    // a quick picker. Both POST to the react endpoint and re-render the chips.
+    var REACT_EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+    function applyReactions(mid, reactions) {
+      var row = body.querySelector('[data-mid="' + mid + '"]');
+      if (!row) return;
+      var html = (reactions && reactions.length) ? reactions.map(function (rx) {
+        return '<button type="button" class="kt-msg-react-chip" data-react-mid="' + mid + '" data-emoji="' + escapeHtml(rx.emoji) + '" style="border:1px solid ' + (rx.mine ? '#1F6080' : '#E2E8F0') + ';background:' + (rx.mine ? '#EFF6FF' : '#fff') + ';border-radius:12px;padding:1px 7px;font-size:12.5px;cursor:pointer;line-height:1.6;">' + escapeHtml(rx.emoji) + ' ' + rx.count + '</button>';
+      }).join('') : '';
+      var existing = row.querySelector('.kt-msg-reactions');
+      if (existing) { existing.innerHTML = html; existing.style.display = html ? 'flex' : 'none'; return; }
+      if (!html) return;
+      var bubble = row.querySelector('div[style*="border-radius:16px"]');
+      if (!bubble) return;
+      var wrap = document.createElement('div');
+      wrap.className = 'kt-msg-reactions';
+      wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;';
+      wrap.innerHTML = html;
+      bubble.appendChild(wrap);
+    }
+    function toggleReaction(mid, emoji) {
+      api('POST', endpointBase() + '/' + c.id + '/messages/' + mid + '/react', { emoji: emoji })
+        .then(function (r) { applyReactions(mid, r && r.reactions); })
+        .catch(function (err) { if (window.KT && KT.toast) KT.toast('⚠️', 'Could not react', (err && err.message) || '', '#DC2626'); });
+    }
+    body.addEventListener('click', function (e) {
+      if (!e.target || !e.target.closest) return;
+      var chip = e.target.closest('.kt-msg-react-chip');
+      if (chip) { toggleReaction(chip.getAttribute('data-react-mid'), chip.getAttribute('data-emoji')); return; }
+      var rb = e.target.closest('.kt-msg-react');
+      if (!rb) return;
+      var openPop = document.querySelector('.kt-msg-react-pop'); if (openPop) openPop.remove();
+      var mid = rb.getAttribute('data-react-mid');
+      var pop = document.createElement('div');
+      pop.className = 'kt-msg-react-pop';
+      pop.style.cssText = 'position:fixed;background:#fff;border:1px solid #E5E7EB;border-radius:20px;box-shadow:0 6px 20px rgba(0,0,0,.16);padding:4px 6px;display:flex;gap:2px;z-index:100000;';
+      pop.innerHTML = REACT_EMOJI.map(function (em) {
+        return '<button type="button" class="kt-react-pick" data-emoji="' + em + '" style="background:none;border:none;font-size:20px;cursor:pointer;padding:2px 5px;border-radius:8px;line-height:1;">' + em + '</button>';
+      }).join('');
+      var rect = rb.getBoundingClientRect();
+      pop.style.left = Math.max(6, Math.min(rect.left - 40, window.innerWidth - 230)) + 'px';
+      pop.style.top = Math.max(6, rect.top - 46) + 'px';
+      pop.querySelectorAll('.kt-react-pick').forEach(function (pb) {
+        pb.addEventListener('click', function () { toggleReaction(mid, pb.getAttribute('data-emoji')); pop.remove(); });
+      });
+      document.body.appendChild(pop);
+      setTimeout(function () {
+        document.addEventListener('click', function h(ev) { if (!pop.contains(ev.target) && ev.target !== rb) { pop.remove(); document.removeEventListener('click', h); } });
+      }, 0);
+    });
+
     function leaveThread() {
+      if (threadDocked && KT.ChatDock) { KT.ChatDock.close(); return; }  // close() → onClose → closeThreadCleanup
       openThreadId = null;
       if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
       renderList(container);
@@ -474,13 +687,38 @@
 
     $('.kt-back', container).addEventListener('click', leaveThread);
 
+    // Nudge — one-tap "please check your messages" ping to the family (the
+    // provider mirror of the parent's 👋 nudge). The family's guardians get an
+    // urgent full-screen takeover notification, same as any chat message.
+    const nudgeBtn = $('.kt-nudge', container);
+    if (nudgeBtn) {
+      nudgeBtn.addEventListener('click', async () => {
+        nudgeBtn.disabled = true;
+        try {
+          await api('POST', endpointBase() + '/' + c.id + '/nudge');
+          if (window.KT && KT.toast) KT.toast('👋', 'Nudge sent', 'The family will get a notification.', '#159FB4');
+          // Show it in the open thread immediately.
+          const bodyEl = $('.kt-thread-body', container);
+          if (bodyEl) { bodyEl.scrollTop = bodyEl.scrollHeight; }
+        } catch (e) {
+          if (window.KT && KT.toast) KT.toast('⚠️', 'Could not send the nudge', (e && e.message) || '', '#DC2626');
+          else alert('Could not send the nudge: ' + ((e && e.message) || ''));
+        } finally {
+          setTimeout(() => { nudgeBtn.disabled = false; }, 4000);
+        }
+      });
+    }
+
     const input = $('.kt-compose-input', container);
     const send = $('.kt-send-btn', container);
+    let pendingFile = null;   // staged image/voice attachment (declared early so paintAction can read it)
 
     // Mic when there's nothing to send, send arrow the moment there is.
     const micToggle = $('.kt-mic-btn', container);
     const paintAction = () => {
-      const typing = !!(input.value || '').trim();
+      // Show the send button when there's text OR a staged image/voice attachment
+      // (a pasted screenshot with no caption still needs a way to send).
+      const typing = !!(input.value || '').trim() || !!pendingFile;
       // setProperty with 'important': the mobile stylesheet sizes these buttons
       // with `display: inline-flex !important`, which out-ranks a plain inline
       // style — so a bare style.display = 'none' silently did nothing and both
@@ -490,12 +728,23 @@
     };
     input.addEventListener('input', paintAction);
     paintAction();
+
+    // Typing ping — tell the server we're typing, throttled to once / 2.5s so a
+    // burst of keystrokes is a single request. The other side sees it via the
+    // thread poll's typing_users.
+    let lastTypingPing = 0;
+    const pingTyping = () => {
+      const now = Date.now();
+      if ((now - lastTypingPing) < 2500) return;
+      lastTypingPing = now;
+      api('POST', endpointBase() + '/' + c.id + '/typing').catch(() => {});
+    };
+    input.addEventListener('input', () => { if ((input.value || '').trim()) pingTyping(); });
     const attachBtn = $('.kt-attach-btn', container);
     const attachInput = $('.kt-attach-input', container);
     const attachPreview = $('.kt-attach-preview', container);
     const attachName = $('.kt-attach-name', container);
     const attachRemove = $('.kt-attach-remove', container);
-    let pendingFile = null;
 
     function setPending(file) {
       pendingFile = file;
@@ -507,6 +756,7 @@
         attachName.textContent = '';
         attachInput.value = '';
       }
+      paintAction();   // reveal/hide the send button when an attachment is staged/cleared
     }
     attachBtn.addEventListener('click', () => attachInput.click());
     attachInput.addEventListener('change', () => {
@@ -515,6 +765,23 @@
       if (f.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB.'); attachInput.value = ''; return; }
       if (!/^image\/(jpeg|png|webp|gif)$/.test(f.type)) { alert('Only JPG, PNG, WEBP, or GIF.'); attachInput.value = ''; return; }
       setPending(f);
+    });
+    // Paste a screenshot / image straight into the compose box (Ctrl/⌘-V).
+    input.addEventListener('paste', (e) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file' && /^image\//.test(items[i].type)) {
+          const blob = items[i].getAsFile();
+          if (!blob) continue;
+          if (blob.size > 5 * 1024 * 1024) { alert('Pasted image must be under 5 MB.'); return; }
+          const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+          const file = new File([blob], 'pasted-' + Date.now() + '.' + ext, { type: blob.type });
+          setPending(file);
+          e.preventDefault();
+          if (window.KT && KT.toast) KT.toast('📎', 'Image pasted', 'Press send to share it.', '#159FB4');
+          return;
+        }
+      }
     });
     attachRemove.addEventListener('click', () => setPending(null));
 
@@ -634,11 +901,54 @@
           }
         });
         if (added) bodyEl.scrollTop = bodyEl.scrollHeight;
-        if (gotIncoming) { playPing(); if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge(); }
+        if (gotIncoming) {
+          playPing();
+          if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge();
+          if (KT.ChatDock) KT.ChatDock.flashIncoming();   // flash the dock if minimised
+        }
+        setTyping(bodyEl, (fresh && fresh.typing_users) || []);
       } catch (e) {}
     }, THREAD_POLL_MS);
 
     input.focus();
+  }
+
+  // Typing indicator — a violet "other person" bubble with three animated dots,
+  // pinned as the last row of the thread body. Matches the parent chat. names is
+  // the server's typing_users (others only; the server excludes the caller).
+  function setTyping(bodyEl, names) {
+    if (!bodyEl) return;
+    if (!document.getElementById('kt-chat-typing-style')) {
+      const st = document.createElement('style');
+      st.id = 'kt-chat-typing-style';
+      st.textContent = '@keyframes kt-typedot{0%,60%,100%{opacity:.25;transform:translateY(0);}30%{opacity:1;transform:translateY(-3px);}}';
+      document.head.appendChild(st);
+    }
+    let row = bodyEl.querySelector('.kt-typing-row');
+    if (!names || !names.length) { if (row) row.remove(); return; }
+    const label = names.length === 1 ? (names[0] + ' is typing') : 'Several people are typing';
+    const dot = 'display:inline-block;width:6px;height:6px;border-radius:50%;background:#7C6BB0;';
+    const inner =
+      '<div style="display:flex;justify-content:flex-start;">' +
+        '<div style="background:#EFEAFB;color:#1E1B34;border-radius:16px;border-bottom-left-radius:5px;padding:9px 13px;max-width:78%;">' +
+          '<div style="font-size:11px;font-weight:800;color:#7C6BB0;margin-bottom:3px;">' + escapeHtml(label) + '</div>' +
+          '<div style="display:flex;gap:4px;align-items:center;height:8px;">' +
+            '<span style="' + dot + 'animation:kt-typedot 1.2s infinite;"></span>' +
+            '<span style="' + dot + 'animation:kt-typedot 1.2s infinite .2s;"></span>' +
+            '<span style="' + dot + 'animation:kt-typedot 1.2s infinite .4s;"></span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'kt-typing-row';
+      row.style.margin = '4px 0';
+      bodyEl.appendChild(row);
+    } else {
+      bodyEl.appendChild(row); // keep it last, below any freshly-appended messages
+    }
+    row.innerHTML = inner;
+    bodyEl.scrollTop = bodyEl.scrollHeight;
   }
 
   // v22p74: read receipt — ✓ delivered, ✓✓ (blue) read
@@ -652,31 +962,87 @@
     const mine = m.is_me;
     const attachments = Array.isArray(m.attachments) ? m.attachments : [];
     const attachmentsHtml = attachments.map(a => {
-      if (a.mime && a.mime.indexOf('image/') === 0) {
-        // Image attachment — render inline as a click-to-zoom thumbnail
-        return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="display:block;"><img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name || 'image')}" style="max-width:100%;max-height:280px;border-radius:10px;display:block;background:rgba(0,0,0,.04);"></a></div>`;
-      }
-      if (a.mime && a.mime.indexOf('audio/') === 0) {
+      // Attachment URLs come back relative (/storage/...); resolve against the API
+      // host so images render and voice notes actually PLAY inline (a relative src
+      // 404s against the SPA origin, which is why voice notes didn't play here).
+      const url = absPhotoUrl(a.url);
+      // Detect the KIND by mime OR type OR file extension. Voice notes sent from the
+      // PARENT app store {type:'audio', url} with NO mime — the old mime-only check
+      // rendered them as a plain "📎 attachment" link instead of a playable audio
+      // element (that's why voice notes "stopped showing" in the staff chat).
+      var u = String(a.url || '');
+      var isAudio = (a.mime && a.mime.indexOf('audio/') === 0) || a.type === 'audio' || /\.(webm|mp3|m4a|ogg|wav|aac)$/i.test(u);
+      var isImage = (a.mime && a.mime.indexOf('image/') === 0) || a.type === 'image' || /\.(jpe?g|png|gif|webp|bmp|heic)$/i.test(u);
+      if (isAudio) {
         // Voice note — inline audio player.
-        return `<div style="margin:6px 0;">🎤 <audio controls preload="none" src="${escapeHtml(a.url)}" style="max-width:230px;height:38px;vertical-align:middle;"></audio></div>`;
+        return `<div style="margin:6px 0;">🎤 <audio controls preload="metadata" src="${escapeHtml(url)}" style="max-width:230px;height:38px;vertical-align:middle;"></audio></div>`;
+      }
+      if (isImage) {
+        // Image attachment — render inline as a click-to-zoom thumbnail
+        return `<div style="margin:6px 0;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:block;"><img src="${escapeHtml(url)}" alt="${escapeHtml(a.name || 'image')}" style="max-width:100%;max-height:280px;border-radius:10px;display:block;background:rgba(0,0,0,.04);"></a></div>`;
       }
       // Non-image fallback (future: pdf, etc.)
-      return `<div style="margin:6px 0;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:${mine ? '#0E7C90' : '#1F6080'};text-decoration:underline;font-size:13px;">📎 ${escapeHtml(a.name || 'attachment')}</a></div>`;
+      return `<div style="margin:6px 0;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:${mine ? '#0E7C90' : '#1F6080'};text-decoration:underline;font-size:13px;">📎 ${escapeHtml(a.name || 'attachment')}</a></div>`;
     }).join('');
     // Same bubbles as the parent app: a pale teal tint for your own messages with
     // dark text, not solid brand-blue with white text. The two chats sat side by
     // side looking like different products, and the solid fill also inherited the
     // agency's brand colour — which on one agency is neon lime.
+    // Per-sender colour + avatar so a multi-person thread is easy to follow.
+    const col = senderColor(m.sender_name);
+    const initial = escapeHtml((String(m.sender_name || '?').charAt(0) || '?').toUpperCase());
+    // A real photo when the thread carries one (matches the parent chat), else a
+    // coloured initial in the sender's colour.
+    let avatar = '';
+    if (!mine) {
+      // Relative photo paths (/storage/...) resolve against the API host, not the
+      // SPA host — the parent chat does the same via absUrl. Without this the photo
+      // 404s and every message fell back to a coloured initial.
+      const photo = absPhotoUrl(m.sender_photo_url);
+      if (photo && window.KT && KT.avatar) {
+        avatar = `<span style="flex-shrink:0;align-self:flex-end;display:inline-flex;">${KT.avatar(m.sender_name || '?', { size: 30, photoUrl: photo })}</span>`;
+      } else {
+        avatar = `<div style="width:30px;height:30px;border-radius:50%;background:${col};color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-end;">${initial}</div>`;
+      }
+    }
+    if (m.deleted) {
+      // A removed message leaves a tombstone (same as the parent chat).
+      return `
+      <div data-mid="${m.id}" style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};gap:8px;align-items:flex-end;">
+        ${avatar}
+        <div style="max-width:78%;padding:9px 13px;border-radius:16px;background:#EEF1F5;color:#64748B;font-style:italic;font-size:13.5px;">🚫 Message deleted</div>
+      </div>`;
+    }
+    // Own messages get a small delete control (wired via delegation on the thread body).
+    const delBtn = (mine && m.can_delete)
+      ? `<button type="button" class="kt-msg-del" data-del-mid="${m.id}" title="Delete message" style="background:none;border:none;cursor:pointer;color:rgba(13,27,42,.4);font-size:12.5px;line-height:1;padding:0 2px;margin-left:6px;">🗑</button>`
+      : '';
+    // Any message can be reacted to; 😊 opens a quick emoji picker.
+    const reactBtn = `<button type="button" class="kt-msg-react" data-react-mid="${m.id}" title="React" aria-label="React" style="background:none;border:none;cursor:pointer;color:rgba(13,27,42,.4);font-size:12.5px;line-height:1;padding:0 2px;margin-left:6px;">😊</button>`;
+    const reactionsHtml = (m.reactions && m.reactions.length)
+      ? `<div class="kt-msg-reactions" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">` + m.reactions.map(function (rx) {
+          return `<button type="button" class="kt-msg-react-chip" data-react-mid="${m.id}" data-emoji="${escapeHtml(rx.emoji)}" style="border:1px solid ${rx.mine ? '#1F6080' : '#E2E8F0'};background:${rx.mine ? '#EFF6FF' : '#fff'};border-radius:12px;padding:1px 7px;font-size:12.5px;cursor:pointer;line-height:1.6;">${escapeHtml(rx.emoji)} ${rx.count}</button>`;
+        }).join('') + `</div>`
+      : '';
     return `
-      <div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};">
-        <div style="max-width:78%;padding:10px 13px;border-radius:16px;background:${mine ? '#E1F3F6' : '#fff'};color:#0D1B2A;box-shadow:0 1px 2px rgba(15,23,42,.06);">
-          ${!mine ? `<div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
+      <div data-mid="${m.id}" style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};gap:8px;align-items:flex-end;">
+        ${avatar}
+        <div style="max-width:78%;padding:10px 13px;border-radius:16px;background:${mine ? '#DCF1F4' : '#EFEAFB'};color:${mine ? '#0D1B2A' : '#1E1B34'};${mine ? 'border-bottom-right-radius:5px;' : 'border-bottom-left-radius:5px;'}">
+          ${!mine ? `<div style="font-size:11px;font-weight:800;color:${col};margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
           ${attachmentsHtml}
           ${m.body ? `<div style="font-size:15px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(m.body)}</div>` : ''}
-          <div style="font-size:10.5px;color:rgba(13,27,42,.5);margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}</div>
+          <div style="font-size:10.5px;color:rgba(13,27,42,.5);margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}${reactBtn}${delBtn}</div>
+          ${reactionsHtml}
         </div>
       </div>
     `;
+  }
+  // Deterministic colour per participant name — same person, same colour.
+  function senderColor(s) {
+    var pal = ['#1F6FB2', '#0FA3B1', '#E0699A', '#7C3AED', '#F59E0B', '#10B981', '#EF6C4D', '#0891B2', '#DB2777', '#4F8A3D'];
+    s = String(s || ''); var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return pal[h % pal.length];
   }
 
   /* ─── Unread badge polling ─────────────────────────────────── */

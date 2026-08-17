@@ -50,6 +50,12 @@
   reg(directors, 'timesheets',     'KT.Timesheets');
   reg(directors, 'waitlist',       'KT.Waitlist');
 
+  // Team chat — staff-to-staff messaging. The screen has existed since it was built and
+  // was never registered anywhere: KT.TeamChatScreen was defined and referenced by nothing,
+  // so there was no route, no nav entry, and no way to open it. Messages only ever listed
+  // family conversations, which is why colleagues appeared unreachable.
+  reg(allStaff,  'team-chat',      'KT.TeamChatScreen');
+
   // Staff (educator + director + admin)
   reg(allStaff,  'announcements',  'KT.Announcements');
   reg(allStaff,  'lesson-plans',   'KT.LessonPlans');
@@ -142,6 +148,17 @@
     Shell.registerScreen(r + ':anomalies',       bridge('KT.V22p53', 'renderAnomalies'));
     Shell.registerScreen(r + ':renewals',        bridge('KT.V22p53', 'renderExpiryCalendar'));
   });
+  // Educators can view + edit their own centre's weekly menu (the backend scopes
+  // it via assertCentreAccess). The rest of operations stays director/admin-only.
+  Shell.registerScreen('educator:menu', bridge('KT.V22p53', 'renderMenu'));
+  // Parents get the read-only published menu for their child's centre.
+  Shell.registerScreen('guardian:menu', bridge('KT.V22p53', 'renderParentMenu'));
+
+  // Home visitor extras — chat, announcements, time-off (forms lives in
+  // screen-parent-forms.js). Same components as the other roles use.
+  Shell.registerScreen('home_visitor:chat', bridge('KT.Chat', 'mount'));
+  Shell.registerScreen('home_visitor:announcements', bridge('KT.Announcements', 'render'));
+  Shell.registerScreen('home_visitor:time-off', bridge('KT.V22p51', 'renderTimeOff'));
 
   // v22p55 — rewrite + new screens
   ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
@@ -179,6 +196,8 @@
     Shell.registerScreen(r + ':vacation-holds', bridge('KT.V22p56', 'renderVacationHolds'));
     Shell.registerScreen(r + ':signed-docs',    bridge('KT.V22p56', 'renderSignedDocs'));
   });
+  // Educators can log/see late pickups too (they're on the floor when a parent is late).
+  Shell.registerScreen('educator:late-pickups', bridge('KT.V22p56', 'renderLatePickup'));
 
 
   // v22p57 — combined features
