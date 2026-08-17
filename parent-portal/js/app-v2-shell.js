@@ -116,6 +116,7 @@
         { label: 'Staff', items: [
           { hash: 'tasks',              label: 'Tasks',              icon: '📋' },
           { hash: 'staff-calendar',     label: 'Calendar',           icon: '📅' },
+          { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🛡' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
@@ -261,6 +262,7 @@
         { label: 'Staff', items: [
           { hash: 'tasks',             label: 'Tasks',              icon: '📋' },
           { hash: 'staff-calendar',    label: 'Calendar',           icon: '📅' },
+          { hash: 'auto-signoff'   ,    label: 'Auto sign-off',           icon: '⏱️' },
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks', label: 'Background checks',  icon: '🛡' },
@@ -535,6 +537,7 @@
     'hdlh-gaps': 'Where your programme is light against How Does Learning Happen.',
     'schedule': 'Who is working, and where.',
     'staff-calendar': 'Shifts, leave and coverage across the team.',
+    'auto-signoff': 'Close shifts and days somebody forgot to close.',
     'tasks': 'Assign tasks to educators and track them to completion.',
     'my-tasks': 'Tasks assigned to you — mark them in progress or done.',
     'certifications': 'Staff qualifications and their expiry dates.',
