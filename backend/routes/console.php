@@ -110,6 +110,10 @@ Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');
 // Mail goes out half an hour before the in-app bells, so the email about a birthday
 // arrives before the notification about it. Toronto explicitly: a birthday greeting
 // timed by a UTC server lands in the middle of the night.
+// Hourly, not once a night: the job only closes what is already past its agency's
+// sign-off time, and running often means a forgotten punch is corrected while the day
+// it belongs to is still recent enough for somebody to query it.
+Schedule::command('kiddietrac:auto-signoff')->hourly()->withoutOverlapping();
 Schedule::command('kiddietrac:birthday-emails')->dailyAt('07:00')->timezone('America/Toronto');
 Schedule::command('birthdays:celebrate')->dailyAt('07:30');
 

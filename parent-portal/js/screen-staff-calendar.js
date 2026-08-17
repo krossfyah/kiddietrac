@@ -356,6 +356,10 @@
       cell.appendChild(hint);
       // Above the shifts: who is away is the thing you need before reading who is on.
       ((state.timeOff && state.timeOff[key]) || []).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
+      // Birthdays, absences, vacations and closures. These were added to the month view
+      // only on the first pass, and week is the default view — so the whole feature was
+      // invisible to anyone who had not switched to month.
+      overlaysFor(key).forEach(function (ev) { cell.appendChild(overlayChip(ev)); });
       dayShifts.forEach(function (s) { cell.appendChild(renderShiftPill(s, calRoot)); });
       body.appendChild(cell);
     }

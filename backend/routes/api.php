@@ -1242,6 +1242,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/admin/email-delivery',                [\App\Http\Controllers\Api\EmailDeliveryController::class, 'index']);
         Route::patch('/admin/email-delivery/centre/{centre}', [\App\Http\Controllers\Api\EmailDeliveryController::class, 'setCentre']);
         Route::patch('/admin/email-delivery/room/{room}',    [\App\Http\Controllers\Api\EmailDeliveryController::class, 'setRoom']);
+        Route::get  ('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'show']);
+        Route::post ('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
+        Route::patch('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
         Route::get  ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'show']);
         Route::patch('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
         Route::post ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
