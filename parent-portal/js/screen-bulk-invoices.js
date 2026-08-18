@@ -68,6 +68,99 @@
     wrap.appendChild(centresWrap);
     centresWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'Loading centres…'));
 
+    // ── Sections ────────────────────────────────────────────────────────
+    // Parents is billing OUT; educators and contractors are money going the other way.
+    // Keeping them in one undivided list is how somebody invoices a contractor by mistake.
+    var SECTIONS = [
+      { key: 'parents', label: '👪 Parents', hint: 'Raise fee invoices for families, by centre.' },
+      { key: 'educators', label: '🧑‍🏫 Educators', hint: 'Paid from recorded hours — run in Payroll.' },
+      { key: 'contractors', label: '🧾 Contractors & suppliers', hint: 'Bills you receive, handled in Expenses.' },
+    ];
+    var active = 'parents';
+
+    var tabs = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;' });
+    var pane = Dom.el('div', {});
+
+    function paintTabs() {
+      Dom.clear(tabs);
+      SECTIONS.forEach(function (sec) {
+        var on = active === sec.key;
+        var b = Dom.el('button', {
+          type: 'button',
+          style: 'background:none;border:0;border-bottom:2px solid ' + (on ? '#1F6FB2' : 'transparent')
+            + ';padding:9px 13px;font-size:13.5px;font-weight:700;color:' + (on ? '#0F172A' : '#64748B')
+            + ';cursor:pointer;border-radius:8px 8px 0 0;',
+        }, sec.label);
+        b.addEventListener('click', function () { active = sec.key; paintTabs(); paintPane(); });
+        tabs.appendChild(b);
+      });
+    }
+
+    function note(title, body, action, hash) {
+      var box = Dom.el('div', { style: 'background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:18px 20px;' });
+      box.appendChild(Dom.el('div', { style: 'font-size:15px;font-weight:800;color:#0F172A;margin-bottom:5px;' }, title));
+      box.appendChild(Dom.el('div', { style: 'font-size:13.5px;color:#475569;line-height:1.55;' }, body));
+      if (action) {
+        var a = Dom.el('button', {
+          style: 'margin-top:12px;background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;',
+        }, action);
+        a.addEventListener('click', function () { window.location.hash = hash; });
+        box.appendChild(a);
+      }
+      return box;
+    }
+
+    function paintPane() {
+      Dom.clear(pane);
+      if (active === 'parents') { pane.appendChild(centresWrap); return; }
+
+      if (active === 'educators') {
+        var wrap = Dom.el('div', {});
+        wrap.appendChild(note('Educators are paid from their recorded hours',
+          'There is no invoice run for educators — their pay comes from clock-ins and manual entries on the timesheet, '
+          + 'which Payroll turns into a payslip. Running it here would mean keying the same hours twice.',
+          'Open Payroll', '#payroll'));
+        var list = Dom.el('div', { style: 'margin-top:14px;background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+        list.appendChild(Dom.el('div', { style: 'padding:12px 18px;font-size:11.5px;font-weight:800;letter-spacing:.6px;color:#64748B;text-transform:uppercase;border-bottom:1px solid #F3F4F6;' }, 'Who would be paid'));
+        wrap.appendChild(list);
+        pane.appendChild(wrap);
+        Api.get('/provider/team-contacts').then(function (r) {
+          var people = ((r && r.contacts) || []).filter(function (p) {
+            return p.role === 'Educator' || p.role === 'Home visitor';
+          });
+          if (! people.length) {
+            list.appendChild(Dom.el('div', { style: 'padding:18px;color:#64748B;font-size:13px;' }, 'No educators on file yet.'));
+            return;
+          }
+          people.forEach(function (p) {
+            var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #F7F9FB;' });
+            var pic = p.photo_url || '';
+            if (pic && !/^https?:\/\//.test(pic)) {
+              pic = (((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, ''))
+                + (pic.charAt(0) === '/' ? pic : '/' + pic);
+            }
+            var av = Dom.el('span', { style: 'flex-shrink:0;display:inline-flex;' });
+            if (pic && window.KT && KT.avatar) { av.innerHTML = KT.avatar(p.name, { size: 34, photoUrl: pic }); }
+            else { av.innerHTML = '<span style="width:34px;height:34px;border-radius:50%;background:#1F6080;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;">' + String(p.name || '?').charAt(0).toUpperCase() + '</span>'; }
+            row.appendChild(av);
+            row.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:600;color:#0F172A;' }, p.name));
+            row.appendChild(Dom.el('div', { style: 'margin-left:auto;font-size:12.5px;color:#64748B;' }, p.role));
+            list.appendChild(row);
+          });
+        }).catch(function () {
+          list.appendChild(Dom.el('div', { style: 'padding:18px;color:#DC2626;font-size:13px;' }, 'Could not load the team list.'));
+        });
+        return;
+      }
+
+      // Contractors: the accounts-payable module exists but has nothing in it. Say that
+      // plainly rather than showing an empty table that looks broken.
+      pane.appendChild(note('No suppliers or contractors set up yet',
+        'Bills you receive — cleaners, food, maintenance, contracted staff — are handled in Expenses, where a supplier '
+        + 'is raised against a purchase order and paid. Nothing has been added yet, so there is nothing to run here.',
+        'Open Expenses', '#expenses'));
+    }
+
     Api.get('/admin/centres').then(function (r) {
       Dom.clear(centresWrap);
       var centres = r.centres || [];
@@ -76,6 +169,12 @@
         return;
       }
       centres.forEach(function (c) { centresWrap.appendChild(centreRow(c, monthSel, yearSel)); });
+      // The centre list is the Parents pane; the tabs decide which pane is on screen.
+      if (centresWrap.parentNode) { centresWrap.parentNode.removeChild(centresWrap); }
+      wrap.appendChild(tabs);
+      wrap.appendChild(pane);
+      paintTabs();
+      paintPane();
       // Collapse each row's action buttons into the app's standard ⋮ kebab now.
       try { if (KT.sweepRowActions) KT.sweepRowActions(); } catch (e) {}
     }).catch(function (e) {
