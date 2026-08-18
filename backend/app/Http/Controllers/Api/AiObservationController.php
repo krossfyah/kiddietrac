@@ -182,6 +182,7 @@ class AiObservationController extends Controller
             case 'educator': $q->orderBy('_educator', $dir === 'desc' ? 'desc' : 'asc')->orderByDesc('observations.observed_at'); break;
             case 'centre':
             case 'provider': $q->orderBy('_centre', $dir === 'desc' ? 'desc' : 'asc')->orderByDesc('observations.observed_at'); break;
+            case 'domain':   $q->orderBy('observations.domain', $dir === 'desc' ? 'desc' : 'asc')->orderByDesc('observations.observed_at'); break;
             default:         $q->orderBy('observations.observed_at', $dir); break;
         }
 
