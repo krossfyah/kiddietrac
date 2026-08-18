@@ -231,7 +231,19 @@ class SuppressAgencyMail
         try {
             if (Schema::hasTable('email_logs')) {
                 $supAgency = null;
-                try { if (Schema::hasColumn('email_logs', 'agency_id') && ! empty($hits[0])) $supAgency = \App\Support\AgencyMail::agencyOfEmail($hits[0]); } catch (\Throwable $e) {}
+                // Same ordering as the delivered-mail logger: the sending agency is
+                // authoritative and the recipient is a last resort. A suppressed message
+                // filed against the recipient's agency puts one tenant's rows in another's
+                // log just as surely as a delivered one does.
+                try {
+                    if (Schema::hasColumn('email_logs', 'agency_id')) {
+                        $supAgency = \App\Support\AgencyMail::agencyForMessage($event->message, null)
+                            ?: \App\Services\AgencyMailer::$lastAgencyId;
+                        if (! $supAgency && ! empty($hits[0])) {
+                            $supAgency = \App\Support\AgencyMail::agencyOfEmail($hits[0]);
+                        }
+                    }
+                } catch (\Throwable $e) {}
                 // Capture the HTML that WOULD have been sent so the email log's 👁
                 // preview works for suppressed rows too (previously stored no body).
                 $supBody = null;

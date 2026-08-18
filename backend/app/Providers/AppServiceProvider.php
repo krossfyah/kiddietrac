@@ -138,8 +138,16 @@ class AppServiceProvider extends ServiceProvider
                 $logAgency = null;
                 if (Schema::hasColumn('email_logs', 'agency_id')) {
                     try {
-                        $ft = collect($msg->getTo() ?: [])->map(fn ($a) => method_exists($a, 'getAddress') ? $a->getAddress() : null)->filter()->first();
-                        if ($ft) $logAgency = \App\Support\AgencyMail::agencyForMessage($msg, $ft);
+                        // Order matters, and it changed: the SENDING agency is
+                        // authoritative, the recipient is a last resort. Deriving from the
+                        // recipient filed one agency's children under another whenever a
+                        // person's address belonged elsewhere.
+                        $logAgency = \App\Support\AgencyMail::agencyForMessage($msg, null);
+                        if (! $logAgency) $logAgency = \App\Services\AgencyMailer::$lastAgencyId;
+                        if (! $logAgency) {
+                            $ft = collect($msg->getTo() ?: [])->map(fn ($a) => method_exists($a, 'getAddress') ? $a->getAddress() : null)->filter()->first();
+                            if ($ft) $logAgency = \App\Support\AgencyMail::agencyForMessage($msg, $ft);
+                        }
                         if (! $logAgency && auth()->id()) $logAgency = \App\Support\AuditScope::resolve((int) auth()->id());
                     } catch (\Throwable $e) {}
                 }

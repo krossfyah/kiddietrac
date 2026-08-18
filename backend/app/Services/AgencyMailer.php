@@ -31,6 +31,17 @@ final class AgencyMailer
 {
     private ?object $agency;
 
+    /**
+     * The agency the most recent send was made AS.
+     *
+     * The email log used to derive its agency from the RECIPIENT, which is wrong whenever
+     * a person belongs to a different agency than the thing being emailed about — a Test
+     * Agency child's daily summary sent to an address that belongs to an iLearn user was
+     * filed under iLearn, putting one agency's children in another's log. The sender
+     * knows the answer; it just never said so.
+     */
+    public static ?int $lastAgencyId = null;
+
     public function __construct(?object $agency)
     {
         $this->agency = $agency;
@@ -38,6 +49,9 @@ final class AgencyMailer
 
     public static function forAgency(?int $agencyId): self
     {
+        // Recorded even when the agency has no mail override of its own: attribution and
+        // delivery config are different questions, and the log needs the former regardless.
+        self::$lastAgencyId = $agencyId ?: null;
         $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
         return new self($agency);
     }

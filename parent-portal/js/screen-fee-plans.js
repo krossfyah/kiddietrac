@@ -65,7 +65,17 @@
     row.addEventListener('mouseleave', function () { row.style.background = 'white'; });
     row.addEventListener('click', function () { openEditor(p, container); });
 
-    row.appendChild(Dom.el('div', { style: 'width:46px;height:46px;border-radius:10px;background:#EAF3F6;color:#1F6080;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0;' }, money(p.amount).replace(/\.00$/, '')));
+    // The badge sizes to the amount instead of the amount being cut off by the badge.
+    // It was a fixed 46px square with flex-shrink:0, which is fine for "$95" and clips
+    // anything from "$1,250" upward — and a fee plan is exactly where the big numbers
+    // are. Long values step the type down rather than wrapping a currency figure.
+    var amtText = money(p.amount).replace(/\.00$/, '');
+    var amtSize = amtText.length > 9 ? '11.5px' : amtText.length > 7 ? '13px' : '15px';
+    row.appendChild(Dom.el('div', {
+      style: 'min-width:46px;height:46px;padding:0 10px;box-sizing:border-box;border-radius:10px;'
+        + 'background:#EAF3F6;color:#1F6080;display:flex;align-items:center;justify-content:center;'
+        + 'font-size:' + amtSize + ';font-weight:800;flex-shrink:0;white-space:nowrap;',
+    }, amtText));
 
     var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
     var titleRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
