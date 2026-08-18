@@ -116,13 +116,25 @@ final class OperationsController extends Controller
             'week_start' => 'required|date',
             'status' => 'required|in:draft,published,archived',
             'notes' => 'nullable|string|max:2000',
-            'items' => 'required|array',
+            // present, not required: Laravel's `required` rejects an EMPTY array, so
+            // starting a week and filling it in later failed with an error naming a field
+            // the person had not touched. Creating the shell of a menu week is a normal
+            // first step, not a mistake.
+            'items' => 'present|array',
             'items.*.day_of_week' => 'required|integer|between:1,7',
             'items.*.meal_type' => 'required|in:breakfast,morning_snack,lunch,afternoon_snack,dinner',
             'items.*.name' => 'required|string|max:255',
             'items.*.description' => 'nullable|string|max:1000',
             'items.*.allergens' => 'nullable|string|max:500',
         ]);
+
+        // An empty DRAFT is fine; an empty PUBLISHED menu is not — families would be shown
+        // a blank week, which is worse than an unfinished one they cannot see yet.
+        if ($data['status'] === 'published' && empty($data['items'])) {
+            return response()->json([
+                'message' => 'Add at least one meal before publishing — families would otherwise see an empty week.',
+            ], 422);
+        }
         $this->assertCentreAccess($request, (int) $data['centre_id']);
         $week = DB::table('menu_weeks')
             ->where('centre_id', $data['centre_id'])
