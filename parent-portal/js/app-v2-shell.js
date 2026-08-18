@@ -1256,10 +1256,15 @@
         img.onerror = () => { navAvatar.removeChild(img); navAvatar.textContent = Fmt.initials(user.name); };
         navAvatar.appendChild(img);
       } else {
-        navAvatar.textContent = Fmt.initials(user.name);
+        // Not user.name: the branch above tests `user && user.photo_url`, so reaching
+        // here with a null user is expected — a valid token whose cached user object is
+        // missing. Calling .name on it killed boot behind a blank shell.
+        navAvatar.textContent = Fmt.initials(user && user.name);
       }
     }
-    if (navName)   navName.textContent   = user.name?.split(' ').slice(0, 2).join(' ') || 'You';
+    // `user.name?.` guards a missing NAME, not a null USER — which is the case that
+    // actually occurs here.
+    if (navName)   navName.textContent   = ((user && user.name) || '').split(' ').slice(0, 2).join(' ') || 'You';
     if (navRole && role) {
       // Distinguish a platform_admin (primaryRoleOf resolves them to agency_admin)
       // from a genuine agency admin — a real agency admin was mislabelled "Platform
