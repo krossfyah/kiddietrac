@@ -84,7 +84,7 @@
 
     /* One dialog for all three kinds — the question is the same shape every time, and
        three near-identical dialogs drift apart the first time one gets fixed. */
-    function openGenerate(kind, payee, onDone) {
+    function openGenerate(kind, payee, onDone, prefill) {
       var ov = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;' });
       var m = Dom.el('div', { style: 'background:#fff;border-radius:14px;max-width:460px;width:100%;padding:20px 22px;max-height:90vh;overflow-y:auto;box-shadow:0 18px 48px rgba(0,0,0,.28);' });
       ov.appendChild(m);
@@ -141,6 +141,21 @@
         m.querySelector('#pi-hours-wrap').style.display = h ? 'block' : 'none';
         m.querySelector('#pi-amount-wrap').style.display = h ? 'none' : 'block';
       }
+      // Coming back from the review step: put everything back as it was typed.
+      if (prefill) {
+        basis.value = prefill.basis || 'amount';
+        if (prefill.amount) { m.querySelector('#pi-amount').value = prefill.amount; }
+        if (prefill.hours) { m.querySelector('#pi-hours').value = prefill.hours; }
+        if (prefill.rate) { m.querySelector('#pi-rate').value = prefill.rate; }
+        if (prefill.period_start) { m.querySelector('#pi-from').value = prefill.period_start; }
+        if (prefill.period_end) { m.querySelector('#pi-to').value = prefill.period_end; }
+        if (prefill.details) { m.querySelector('#pi-details').value = prefill.details; }
+        if (prefill.recurring) {
+          m.querySelector('#pi-rec').checked = true;
+          m.querySelector('#pi-freq').style.display = 'block';
+          if (prefill.frequency) { m.querySelector('#pi-freq').value = prefill.frequency; }
+        }
+      }
       basis.addEventListener('change', syncBasis); syncBasis();
 
       var rec = m.querySelector('#pi-rec');
@@ -192,17 +207,72 @@
           body.amount = parseFloat(m.querySelector('#pi-amount').value) || 0;
           if (!body.amount) { err.textContent = 'Enter an amount.'; return; }
         }
-        var btn = m.querySelector('#pi-save');
-        btn.disabled = true; btn.textContent = 'Generating…';
-        Api.post('/provider/payee-invoices', body).then(function (r) {
-          ov.remove();
-          toast('🧾', 'Invoice generated', body.payee_name + ' · ' + money(r.amount), '#16A34A');
-          if (onDone) onDone();
-        }).catch(function (e) {
-          btn.disabled = false; btn.textContent = 'Generate';
-          err.textContent = (e && e.message) || 'Could not generate.';
-        });
+        // Nothing is written yet. An invoice is a financial record with somebody's name
+        // on it, and the last thing between a typo and a wrong bill should be a person
+        // reading it back — not a validator agreeing the shape is plausible.
+        confirmStep(body);
       });
+
+      /* The review step. Deliberately a full redraw of the same window rather than a
+         second dialog on top: stacking one confirmation over another is how people click
+         through both without reading either. Back returns to the form with everything
+         still in it. */
+      function confirmStep(body) {
+        var line = function (label, value) {
+          return '<tr><td style="padding:6px 14px 6px 0;font-size:12.5px;color:#64748B;white-space:nowrap;vertical-align:top;">'
+            + esc(label) + '</td><td style="padding:6px 0;font-size:14px;color:#0F172A;font-weight:600;">' + esc(value) + '</td></tr>';
+        };
+        var total = body.basis === 'hours' ? (body.hours * body.rate) : body.amount;
+        var kindWord = body.kind === 'educator' ? 'Educator' : (body.kind === 'parent' ? 'Family' : 'Contractor');
+
+        m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">Check this before it is created</div>'
+          + '<div style="font-size:12.5px;color:#64748B;margin:0 0 14px;">Nothing has been written yet. This creates one invoice.</div>'
+          + '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:11px;padding:14px 16px;margin-bottom:8px;">'
+          +   '<table style="width:100%;border-collapse:collapse;">'
+          +     line(kindWord, body.payee_name)
+          +     (body.basis === 'hours'
+                  ? line('Hours', body.hours + ' h') + line('Rate', money(body.rate) + ' / hour')
+                  : line('Amount', money(body.amount)))
+          +     (body.period_start || body.period_end
+                  ? line('Period', (body.period_start || '…') + ' → ' + (body.period_end || '…')) : '')
+          +     (body.details ? line('Details', body.details) : '')
+          +     line('Repeats', body.recurring ? ('yes — ' + body.frequency) : 'no, one-off')
+          +   '</table>'
+          +   '<div style="border-top:1px solid #E2E8F0;margin-top:10px;padding-top:10px;display:flex;align-items:baseline;justify-content:space-between;">'
+          +     '<span style="font-size:13px;font-weight:700;color:#475569;">Total</span>'
+          +     '<span style="font-size:22px;font-weight:800;color:#0F172A;">' + esc(money(total)) + '</span>'
+          +   '</div>'
+          + '</div>'
+          + (body.basis === 'hours'
+              ? '<div style="font-size:12px;color:#64748B;margin:0 0 10px;">The total is recalculated on the server from the hours and rate above, so what is stored can always be checked back against the timesheet.</div>'
+              : '')
+          + (body.recurring
+              ? '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:9px;padding:10px 12px;font-size:12.5px;margin:0 0 10px;">This repeats ' + esc(body.frequency) + ' until you void it.</div>'
+              : '')
+          + '<div id="pi-cerr" style="color:#DC2626;font-size:12.5px;min-height:17px;"></div>'
+          + '<div style="display:flex;justify-content:space-between;gap:8px;">'
+          +   '<button id="pi-back" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">← Back to edit</button>'
+          +   '<button id="pi-confirm" style="background:#16A34A;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Create this invoice</button>'
+          + '</div>';
+
+        m.querySelector('#pi-back').addEventListener('click', function () {
+          ov.remove();
+          openGenerate(kind, payee, onDone, body);
+        });
+
+        m.querySelector('#pi-confirm').addEventListener('click', function () {
+          var b = m.querySelector('#pi-confirm');
+          b.disabled = true; b.textContent = 'Creating…';
+          Api.post('/provider/payee-invoices', body).then(function (r) {
+            ov.remove();
+            toast('🧾', 'Invoice created', body.payee_name + ' · ' + money(r.amount), '#16A34A');
+            if (onDone) onDone();
+          }).catch(function (e) {
+            b.disabled = false; b.textContent = 'Create this invoice';
+            m.querySelector('#pi-cerr').textContent = (e && e.message) || 'Could not create.';
+          });
+        });
+      }
     }
 
     /* The ledger under each section. Status is the first question anybody asks of an
