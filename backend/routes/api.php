@@ -1064,6 +1064,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/payee-invoices/{id}/status',  [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'setStatus'])->where('id', '[0-9]+');
         Route::get ('/payee-invoices/{id}',         [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'show'])->where('id', '[0-9]+');
         Route::post('/payee-invoices/{id}/send',    [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'send'])->where('id', '[0-9]+');
+        Route::get ('/payee-invoices/{id}/pdf',     [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'pdf'])->where('id', '[0-9]+');
         Route::get ('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'index']);
         Route::post('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'store']);
         Route::post('/late-events/{id}/decide', [\App\Http\Controllers\Api\LateEventController::class, 'decide'])->where('id', '[0-9]+');

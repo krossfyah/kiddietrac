@@ -531,36 +531,51 @@
       return box;
     }
 
-    /* Read-only. An invoice that can be quietly rewritten after it was sent is not a
-       record of anything. */
+    /* Shows the actual PDF, not a summary the screen assembles. Those were two
+       different artefacts, so "view the invoice" and "what did we send them" could
+       disagree without anyone noticing.
+
+       Fetched as a blob rather than pointed at with an iframe src: the endpoint needs a
+       bearer token and an iframe cannot send one. The object URL is revoked when the
+       window closes, or the browser holds the whole file until the tab is. */
     function viewInvoice(iv) {
       if (! iv) { return; }
-      var ov = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;' });
-      var m = Dom.el('div', { style: 'background:#fff;border-radius:14px;max-width:430px;width:100%;padding:20px 22px;box-shadow:0 18px 48px rgba(0,0,0,.28);' });
+      var ov = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;' });
+      var m = Dom.el('div', { style: 'background:#fff;border-radius:14px;max-width:820px;width:100%;height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 48px rgba(0,0,0,.32);' });
       ov.appendChild(m);
-      var line = function (l, v) {
-        return v ? '<tr><td style="padding:5px 14px 5px 0;font-size:12.5px;color:#64748B;white-space:nowrap;vertical-align:top;">' + esc(l)
-          + '</td><td style="padding:5px 0;font-size:14px;color:#0F172A;font-weight:600;">' + esc(v) + '</td></tr>' : '';
-      };
-      m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 2px;">Invoice ' + esc(iv.reference || ('#' + iv.id)) + '</div>'
-        + '<div style="font-size:12.5px;color:#64748B;margin:0 0 14px;">' + esc(iv.status) + '</div>'
-        + '<table style="width:100%;border-collapse:collapse;">'
-        +   line('Payee', iv.payee_name)
-        +   line('Record', iv.payee_family_id ? ('F-' + iv.payee_family_id) : (iv.payee_user_id ? ('U-' + iv.payee_user_id) : ''))
-        +   line('Issued', String(iv.created_at || '').slice(0, 10))
-        +   ((iv.basis === 'hours' && iv.hours) ? line('Hours', iv.hours + ' h at ' + money(iv.rate)) : '')
-        +   line('Period', iv.period_start ? (String(iv.period_start).slice(0, 10) + (iv.period_end ? ' to ' + String(iv.period_end).slice(0, 10) : '')) : '')
-        +   line('Details', iv.details)
-        +   line('Repeats', iv.recurring ? iv.frequency : '')
-        + '</table>'
-        + '<div style="border-top:1px solid #E2E8F0;margin-top:12px;padding-top:12px;display:flex;justify-content:space-between;align-items:baseline;">'
-        +   '<span style="font-size:13px;font-weight:700;color:#475569;">Total</span>'
-        +   '<span style="font-size:22px;font-weight:800;color:#0F172A;">' + esc(money(iv.amount)) + '</span></div>'
-        + '<div style="display:flex;justify-content:flex-end;margin-top:14px;">'
-        +   '<button id="iv-close" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Close</button></div>';
+      m.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #E2E8F0;flex:0 0 auto;">'
+        +   '<div style="font-size:15px;font-weight:800;color:#0D1B2A;">Invoice ' + esc(iv.reference || ('#' + iv.id)) + '</div>'
+        +   '<div style="font-size:12.5px;color:#64748B;">' + esc(iv.payee_name) + ' · ' + esc(money(iv.amount)) + '</div>'
+        +   '<button id="iv-dl" style="margin-left:auto;background:#fff;border:1px solid #D1D5DB;color:#374151;padding:7px 13px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;">Open in a new tab</button>'
+        +   '<button id="iv-close" style="background:#1F6080;color:#fff;border:0;padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;">Close</button>'
+        + '</div>'
+        + '<div id="iv-doc" style="flex:1 1 auto;min-height:0;background:#F1F5F9;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:13px;">Loading the invoice…</div>';
       document.body.appendChild(ov);
-      ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
-      m.querySelector('#iv-close').addEventListener('click', function () { ov.remove(); });
+
+      var objUrl = null;
+      function shut() {
+        if (objUrl) { try { URL.revokeObjectURL(objUrl); } catch (e) {} }
+        ov.remove();
+      }
+      ov.addEventListener('click', function (e) { if (e.target === ov) shut(); });
+      m.querySelector('#iv-close').addEventListener('click', shut);
+
+      var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      fetch(base + '/provider/payee-invoices/' + iv.id + '/pdf', { headers: { Authorization: 'Bearer ' + tok } })
+        .then(function (r) { if (! r.ok) { throw new Error('HTTP ' + r.status); } return r.blob(); })
+        .then(function (blob) {
+          objUrl = URL.createObjectURL(blob);
+          var host = m.querySelector('#iv-doc');
+          host.innerHTML = '';
+          host.style.display = 'block';
+          var frame = Dom.el('iframe', { src: objUrl, style: 'width:100%;height:100%;border:0;display:block;' });
+          host.appendChild(frame);
+          m.querySelector('#iv-dl').addEventListener('click', function () { window.open(objUrl, '_blank'); });
+        })
+        .catch(function (e) {
+          m.querySelector('#iv-doc').textContent = 'Could not load the invoice: ' + ((e && e.message) || 'error');
+        });
     }
 
     /* Sending tells somebody they owe money, so it asks first and shows where it is going.
