@@ -428,16 +428,41 @@
     // A wider window than the hours report: documents are looked up by name far more
     // often than by date, and a 30-day default hides almost the whole ledger.
     const to = (toEl && toEl.value) || '';
+    // Which build this page is actually running, read off this script's own URL. A
+    // cached bundle is the usual reason a screen behaves like an older version of itself,
+    // and it is invisible unless the page says so.
+    const buildOf = () => {
+      try {
+        const src = (document.currentScript && document.currentScript.src)
+          || Array.from(document.scripts).map(s => s.src).find(s => s && s.indexOf('screen-v22p51.js') !== -1)
+          || '';
+        const m = src.match(/[?&]v=([^&]+)/);
+        return m ? m[1] : 'unknown';
+      } catch (e) { return 'unknown'; }
+    };
+
     let res;
     try {
       res = await Api.get(`/provider/payroll-documents${to ? '?to=' + to : ''}`);
     } catch (e) {
-      host.innerHTML = `<div style="color:#B91C1C;padding:12px;">Could not load payroll documents: ${escapeHtml((e && e.message) || 'error')}</div>`;
+      const msg = (e && e.message) || 'error';
+      const stale = /404|not found/i.test(msg);
+      host.innerHTML = `<div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;border-radius:12px;padding:14px 16px;font-size:13.5px;">`
+        + `<strong>Could not load payroll documents.</strong><div style="margin-top:4px;">${escapeHtml(msg)}</div>`
+        + (stale
+            ? `<div style="margin-top:8px;color:#7F1D1D;">This page is running an out-of-date build (<code>${escapeHtml(buildOf())}</code>) that calls an endpoint which has since moved. Reload the page — hold Shift and press Reload — and it will pick up the current one.</div>`
+            : `<div style="margin-top:8px;color:#7F1D1D;">Build <code>${escapeHtml(buildOf())}</code>.</div>`)
+        + `</div>`;
       return;
     }
     const rows = (res && res.data) || [];
     if (!rows.length) {
-      host.innerHTML = '<div style="color:#64748B;padding:12px;">No payroll documents issued yet. They appear here as payslips and payroll invoices are raised.</div>';
+      // Say WHICH agency is empty. "No documents" while looking at the wrong agency is
+      // the same screen as "no documents exist", and they need different actions.
+      host.innerHTML = '<div style="color:#64748B;padding:14px;">'
+        + '<strong>No payroll documents for the agency you are viewing.</strong>'
+        + '<div style="margin-top:4px;">They appear here as payslips and payroll invoices are raised, or as they sync in from iLearn.</div>'
+        + '</div>';
       return;
     }
 
