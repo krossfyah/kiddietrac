@@ -1055,6 +1055,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Archiving is per person and covers both kinds of thread, so it lives on its
         // own endpoint rather than being duplicated into each chat controller.
         // Interface state that follows the person rather than the browser.
+        // Late arrivals and departures: educators record, directors and admins decide.
+        Route::get ('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'index']);
+        Route::post('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'store']);
+        Route::post('/late-events/{id}/decide', [\App\Http\Controllers\Api\LateEventController::class, 'decide'])->where('id', '[0-9]+');
         Route::get ('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'index']);
         Route::post('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'store']);
     });
