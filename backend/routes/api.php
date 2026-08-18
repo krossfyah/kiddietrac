@@ -437,6 +437,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         // v22p3.5: onboarding wizard submission
         Route::patch('/auth/me/onboarding', [AuthController::class, 'updateOnboarding']);
+    Route::get('/auth/me/payee-invoices', [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'mine']);
     Route::get('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'show']);
     Route::put('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'update']);
         Route::patch('/auth/me/provider-bio', [AuthController::class, 'updateProviderBio']);
@@ -1061,6 +1062,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/payee-invoices/hours',        [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'hours']);
         Route::post('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'store']);
         Route::post('/payee-invoices/{id}/status',  [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'setStatus'])->where('id', '[0-9]+');
+        Route::get ('/payee-invoices/{id}',         [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'show'])->where('id', '[0-9]+');
+        Route::post('/payee-invoices/{id}/send',    [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'send'])->where('id', '[0-9]+');
         Route::get ('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'index']);
         Route::post('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'store']);
         Route::post('/late-events/{id}/decide', [\App\Http\Controllers\Api\LateEventController::class, 'decide'])->where('id', '[0-9]+');

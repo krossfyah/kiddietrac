@@ -458,34 +458,67 @@
             rows.appendChild(Dom.el('div', { style: 'padding:22px 18px;color:#64748B;font-size:13px;' }, 'No invoices yet.'));
             return;
           }
-          list.forEach(function (iv) {
-            var tone = STATUS_TONE[iv.status] || STATUS_TONE.void;
-            var r = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #F7F9FB;' });
-            var left = Dom.el('div', { style: 'flex:1;min-width:0;' });
-            left.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:700;color:#0F172A;' }, iv.payee_name));
-            var meta = (iv.reference || '') + (iv.basis === 'hours' && iv.hours ? ' · ' + iv.hours + 'h × ' + money(iv.rate) : '')
-              + (iv.period_start ? ' · ' + String(iv.period_start).slice(0, 10) + (iv.period_end ? ' → ' + String(iv.period_end).slice(0, 10) : '') : '')
-              + (iv.recurring ? ' · repeats ' + iv.frequency : '');
-            left.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;' }, meta));
-            r.appendChild(left);
-            r.appendChild(Dom.el('div', { style: 'font-size:15px;font-weight:800;color:#0F172A;white-space:nowrap;' }, money(iv.amount)));
-            r.appendChild(Dom.el('span', { style: 'background:' + tone.bg + ';color:' + tone.fg + ';padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:800;white-space:nowrap;' }, iv.status));
-            // Plain buttons: kt-row-actions.js collapses a row's actions itself.
-            var acts = Dom.el('div', { style: 'display:flex;gap:4px;white-space:nowrap;' });
-            ['issued', 'paid', 'void'].forEach(function (st) {
-              if (iv.status === st) return;
-              var b = Dom.el('button', { type: 'button', title: 'Mark ' + st,
-                style: 'background:#fff;border:1px solid #E2E8F0;border-radius:7px;padding:5px 9px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;' },
-                'Mark ' + st);
-              b.addEventListener('click', function () {
-                b.disabled = true;
-                Api.post('/provider/payee-invoices/' + iv.id + '/status', { status: st }).then(load)
-                  .catch(function () { b.disabled = false; });
-              });
-              acts.appendChild(b);
+          // A table, not a stack of divs: kt-row-actions.js collapses the last cell of a
+          // table into the standard kebab, so this is what earns one.
+          var th = 'text-align:left;padding:9px 12px;font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;';
+          var td = 'padding:10px 12px;font-size:13.5px;color:#0F172A;border-top:1px solid #F4F7FA;vertical-align:middle;';
+          var tbl = Dom.el('div', { style: 'overflow-x:auto;' });
+
+          tbl.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+            + '<thead style="background:#FAFBFC;"><tr>'
+            +   '<th style="' + th + '">Invoice #</th>'
+            +   '<th style="' + th + '">Issued</th>'
+            +   '<th style="' + th + '">Name</th>'
+            +   '<th style="' + th + '">Rec ID</th>'
+            +   '<th style="' + th + '">Detail</th>'
+            +   '<th style="' + th + 'text-align:right;">Amount</th>'
+            +   '<th style="' + th + '">Status</th>'
+            +   '<th style="' + th + 'width:56px;"></th>'
+            + '</tr></thead><tbody>'
+            + list.map(function (iv) {
+                var tone = STATUS_TONE[iv.status] || STATUS_TONE.void;
+                var meta = [
+                  (iv.basis === 'hours' && iv.hours) ? (iv.hours + 'h \u00d7 ' + money(iv.rate)) : '',
+                  iv.period_start ? String(iv.period_start).slice(0, 10) : '',
+                  iv.recurring ? ('repeats ' + iv.frequency) : '',
+                ].filter(Boolean).join(' \u00b7 ') || '\u2014';
+                // The record id is the payee's own: a family number for a parent bill, a
+                // user number otherwise. "Which family is this?" is answered by the id
+                // somebody can search on, not by a name two families may share.
+                var recId = iv.payee_family_id ? ('F-' + iv.payee_family_id)
+                  : (iv.payee_user_id ? ('U-' + iv.payee_user_id) : '\u2014');
+                var issued = String(iv.created_at || iv.period_start || '').slice(0, 10) || '\u2014';
+                var live = iv.status !== 'void';
+                return '<tr>'
+                  + '<td style="' + td + 'font-weight:700;white-space:nowrap;">' + esc(iv.reference || ('#' + iv.id)) + '</td>'
+                  + '<td style="' + td + 'white-space:nowrap;">' + esc(issued) + '</td>'
+                  + '<td style="' + td + 'font-weight:700;">' + esc(iv.payee_name) + '</td>'
+                  + '<td style="' + td + 'color:#64748B;font-size:12.5px;white-space:nowrap;">' + esc(recId) + '</td>'
+                  + '<td style="' + td + 'color:#64748B;font-size:12.5px;">' + esc(meta) + '</td>'
+                  + '<td style="' + td + 'text-align:right;font-weight:800;white-space:nowrap;">' + esc(money(iv.amount)) + '</td>'
+                  + '<td style="' + td + '"><span style="background:' + tone.bg + ';color:' + tone.fg + ';padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:800;">' + esc(iv.status) + '</span></td>'
+                  + '<td style="' + td + 'text-align:right;white-space:nowrap;">'
+                  +   '<button class="iv-act" data-act="view" data-id="' + iv.id + '" type="button" title="View invoice">View</button>'
+                  +   (live ? '<button class="iv-act" data-act="send" data-id="' + iv.id + '" type="button" title="Email this invoice">Resend</button>' : '')
+                  +   (live && iv.status !== 'issued' ? '<button class="iv-act" data-act="issued" data-id="' + iv.id + '" type="button" title="Mark issued">Mark issued</button>' : '')
+                  +   (live && iv.status !== 'paid' ? '<button class="iv-act" data-act="paid" data-id="' + iv.id + '" type="button" title="Mark paid">Mark paid</button>' : '')
+                  +   (live ? '<button class="iv-act" data-act="void" data-id="' + iv.id + '" type="button" title="Void this invoice">Void</button>' : '')
+                  + '</td></tr>';
+              }).join('')
+            + '</tbody></table>';
+          rows.appendChild(tbl);
+
+          var byId = {};
+          list.forEach(function (iv) { byId[String(iv.id)] = iv; });
+          tbl.querySelectorAll('.iv-act').forEach(function (b) {
+            b.addEventListener('click', function () {
+              var id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+              if (act === 'view') { return viewInvoice(byId[id]); }
+              if (act === 'send') { return resendInvoice(byId[id], load); }
+              b.disabled = true;
+              Api.post('/provider/payee-invoices/' + id + '/status', { status: act })
+                .then(load).catch(function () { b.disabled = false; });
             });
-            r.appendChild(acts);
-            rows.appendChild(r);
           });
         }).catch(function (e) {
           Dom.clear(rows);
@@ -496,6 +529,72 @@
       load();
       box.kt_reload = load;
       return box;
+    }
+
+    /* Read-only. An invoice that can be quietly rewritten after it was sent is not a
+       record of anything. */
+    function viewInvoice(iv) {
+      if (! iv) { return; }
+      var ov = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;' });
+      var m = Dom.el('div', { style: 'background:#fff;border-radius:14px;max-width:430px;width:100%;padding:20px 22px;box-shadow:0 18px 48px rgba(0,0,0,.28);' });
+      ov.appendChild(m);
+      var line = function (l, v) {
+        return v ? '<tr><td style="padding:5px 14px 5px 0;font-size:12.5px;color:#64748B;white-space:nowrap;vertical-align:top;">' + esc(l)
+          + '</td><td style="padding:5px 0;font-size:14px;color:#0F172A;font-weight:600;">' + esc(v) + '</td></tr>' : '';
+      };
+      m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 2px;">Invoice ' + esc(iv.reference || ('#' + iv.id)) + '</div>'
+        + '<div style="font-size:12.5px;color:#64748B;margin:0 0 14px;">' + esc(iv.status) + '</div>'
+        + '<table style="width:100%;border-collapse:collapse;">'
+        +   line('Payee', iv.payee_name)
+        +   line('Record', iv.payee_family_id ? ('F-' + iv.payee_family_id) : (iv.payee_user_id ? ('U-' + iv.payee_user_id) : ''))
+        +   line('Issued', String(iv.created_at || '').slice(0, 10))
+        +   ((iv.basis === 'hours' && iv.hours) ? line('Hours', iv.hours + ' h at ' + money(iv.rate)) : '')
+        +   line('Period', iv.period_start ? (String(iv.period_start).slice(0, 10) + (iv.period_end ? ' to ' + String(iv.period_end).slice(0, 10) : '')) : '')
+        +   line('Details', iv.details)
+        +   line('Repeats', iv.recurring ? iv.frequency : '')
+        + '</table>'
+        + '<div style="border-top:1px solid #E2E8F0;margin-top:12px;padding-top:12px;display:flex;justify-content:space-between;align-items:baseline;">'
+        +   '<span style="font-size:13px;font-weight:700;color:#475569;">Total</span>'
+        +   '<span style="font-size:22px;font-weight:800;color:#0F172A;">' + esc(money(iv.amount)) + '</span></div>'
+        + '<div style="display:flex;justify-content:flex-end;margin-top:14px;">'
+        +   '<button id="iv-close" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Close</button></div>';
+      document.body.appendChild(ov);
+      ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+      m.querySelector('#iv-close').addEventListener('click', function () { ov.remove(); });
+    }
+
+    /* Sending tells somebody they owe money, so it asks first and shows where it is going.
+       The address can be overridden for a contractor with no account on the system. */
+    function resendInvoice(iv, onDone) {
+      if (! iv) { return; }
+      var ov = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;' });
+      var m = Dom.el('div', { style: 'background:#fff;border-radius:14px;max-width:400px;width:100%;padding:20px 22px;box-shadow:0 18px 48px rgba(0,0,0,.28);' });
+      ov.appendChild(m);
+      m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">Email this invoice</div>'
+        + '<div style="font-size:12.5px;color:#64748B;margin:0 0 12px;">' + esc(iv.payee_name) + ' \u00b7 ' + esc(money(iv.amount))
+        + '. Leave blank to use the address on file.</div>'
+        + '<input id="iv-email" type="email" placeholder="Send to a different address (optional)" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;">'
+        + (iv.status === 'upcoming' ? '<div style="font-size:12.5px;color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;border-radius:9px;padding:9px 11px;margin-top:10px;">Sending this marks it <strong>issued</strong>.</div>' : '')
+        + '<div id="iv-serr" style="color:#DC2626;font-size:12.5px;min-height:17px;margin-top:6px;"></div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;">'
+        +   '<button id="iv-cancel" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+        +   '<button id="iv-send" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Send</button></div>';
+      document.body.appendChild(ov);
+      ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+      m.querySelector('#iv-cancel').addEventListener('click', function () { ov.remove(); });
+      m.querySelector('#iv-send').addEventListener('click', function () {
+        var b = m.querySelector('#iv-send');
+        b.disabled = true; b.textContent = 'Sending\u2026';
+        var to = (m.querySelector('#iv-email').value || '').trim();
+        Api.post('/provider/payee-invoices/' + iv.id + '/send', to ? { email: to } : {}).then(function (r) {
+          ov.remove();
+          toast('\u2709\ufe0f', 'Invoice sent', 'To ' + (r.sent_to || 'the address on file'), '#16A34A');
+          if (onDone) { onDone(); }
+        }).catch(function (e) {
+          b.disabled = false; b.textContent = 'Send';
+          m.querySelector('#iv-serr').textContent = (e && e.message) || 'Could not send.';
+        });
+      });
     }
 
     function generateBar(kind, payee) {

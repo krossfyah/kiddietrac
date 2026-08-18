@@ -221,6 +221,111 @@ final class PayeeInvoiceController extends Controller
         return response()->json(['ok' => true, 'id' => $id, 'amount' => $amount], 201);
     }
 
+    /**
+     * GET /auth/me/payee-invoices — what the SIGNED-IN person owes or is owed.
+     *
+     * Deliberately not the admin list with a filter bolted on. This is scoped by who you
+     * are rather than by which agency you are looking at, so an educator sees their own
+     * payouts and a parent their own bills, and neither can widen it.
+     */
+    public function mine(Request $request): JsonResponse
+    {
+        $this->ensureTable();
+        $uid = (int) $request->user()->id;
+        $familyIds = DB::table('guardians')->where('user_id', $uid)->pluck('family_id');
+
+        $rows = DB::table('payee_invoices')
+            ->where(function ($q) use ($uid, $familyIds) {
+                $q->where('payee_user_id', $uid);
+                if ($familyIds->isNotEmpty()) {
+                    $q->orWhereIn('payee_family_id', $familyIds);
+                }
+            })
+            // A voided invoice is not something to show somebody as owing.
+            ->where('status', '!=', 'void')
+            ->orderByDesc('id')->limit(200)->get();
+
+        return response()->json(['invoices' => $rows]);
+    }
+
+    /** GET /provider/payee-invoices/{id} — one invoice, for the view dialog. */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $this->ensureTable();
+        $uid = (int) $request->user()->id;
+        $row = DB::table('payee_invoices')->where('id', $id)->first();
+        abort_unless($row, 404, 'Not found');
+
+        // Either you can bill for this agency, or the invoice is yours.
+        $isBiller = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])
+            ->where('agency_id', $row->agency_id)->exists();
+        $isMine = (int) $row->payee_user_id === $uid
+            || ($row->payee_family_id && DB::table('guardians')->where('user_id', $uid)
+                ->where('family_id', $row->payee_family_id)->exists());
+        abort_unless($isBiller || $isMine, 404, 'Not found');
+
+        return response()->json(['invoice' => $row]);
+    }
+
+    /** POST /provider/payee-invoices/{id}/send — email it to the payee. */
+    public function send(Request $request, int $id): JsonResponse
+    {
+        $this->assertBiller($request);
+        $this->ensureTable();
+        $agencyId = $this->agencyId($request);
+        $row = DB::table('payee_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
+        abort_unless($row, 404, 'Not found');
+        abort_if($row->status === 'void', 422, 'That invoice is void - sending it would tell somebody they owe a cancelled bill.');
+
+        // An override is allowed: a contractor may have no account at all.
+        $to = trim((string) $request->input('email', ''));
+        if ($to === '') {
+            if ($row->payee_user_id) {
+                $to = (string) DB::table('users')->where('id', $row->payee_user_id)->value('email');
+            } elseif ($row->payee_family_id) {
+                $to = (string) DB::table('families')->where('id', $row->payee_family_id)->value('primary_email');
+            }
+        }
+        abort_if($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL), 422, 'No email on file for this payee - add one, or type an address to send to.');
+
+        $fmt = fn ($n) => '$' . number_format((float) $n, 2);
+        $body = '<div style="font-size:15px;line-height:1.6;color:#334155;">Here are the details of invoice <strong>'
+            . e((string) $row->reference) . '</strong>.</div>'
+            . '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:11px;padding:14px 16px;margin:14px 0;">'
+            . '<table style="width:100%;border-collapse:collapse;font-size:14px;color:#0F172A;">'
+            . '<tr><td style="padding:4px 0;color:#64748B;">For</td><td style="padding:4px 0;font-weight:700;">' . e((string) $row->payee_name) . '</td></tr>'
+            . (($row->basis === 'hours' && $row->hours)
+                ? '<tr><td style="padding:4px 0;color:#64748B;">Hours</td><td style="padding:4px 0;">' . e((string) $row->hours) . ' x ' . e($fmt($row->rate)) . '</td></tr>' : '')
+            . ($row->period_start
+                ? '<tr><td style="padding:4px 0;color:#64748B;">Period</td><td style="padding:4px 0;">' . e(substr((string) $row->period_start, 0, 10)) . ' to ' . e(substr((string) ($row->period_end ?: $row->period_start), 0, 10)) . '</td></tr>' : '')
+            . ($row->details ? '<tr><td style="padding:4px 0;color:#64748B;">Details</td><td style="padding:4px 0;">' . e((string) $row->details) . '</td></tr>' : '')
+            . '<tr><td style="padding:10px 0 0;color:#64748B;font-weight:700;">Total</td><td style="padding:10px 0 0;font-size:20px;font-weight:800;">' . e($fmt($row->amount)) . '</td></tr>'
+            . '</table></div>';
+
+        $html = \App\Services\EmailTemplate::wrap((int) $agencyId, $body, [
+            'eyebrow' => 'INVOICE',
+            'title' => 'Invoice ' . $row->reference,
+            'preheader' => $row->payee_name . ' - ' . $fmt($row->amount),
+        ]);
+
+        try {
+            \App\Services\AgencyMailer::forAgency((int) $agencyId)->mailer()->html($html, function ($m) use ($to, $row) {
+                $m->to($to)->subject('Invoice ' . $row->reference . ' - ' . number_format((float) $row->amount, 2));
+            });
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Could not send: ' . $e->getMessage()], 502);
+        }
+
+        // Sending is what makes it issued: an invoice nobody has been told about is not
+        // outstanding, it is a draft.
+        if ($row->status === 'upcoming') {
+            DB::table('payee_invoices')->where('id', $id)->update(['status' => 'issued', 'updated_at' => now()]);
+        }
+
+        return response()->json(['ok' => true, 'sent_to' => $to]);
+    }
+
     /** POST /provider/payee-invoices/{id}/status */
     public function setStatus(Request $request, int $id): JsonResponse
     {
