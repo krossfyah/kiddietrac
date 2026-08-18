@@ -18,7 +18,7 @@ For **staff**: name, email, role, certifications (RECE, First Aid, etc.), shift 
 
 ## What we don't collect
 
-- Payment card details — Kiddietrac doesn't process credit cards; payments happen offline (e-transfer, cheque, etc.) and the director records them
+- Raw payment card / bank numbers — where your centre enables online payment or autopay, your card is handled by our secure payment processor (Stripe), which tokenizes it; Kiddietrac never sees or stores the full number. Offline payments (e-transfer, cheque) are recorded by your director
 - Browsing or location data outside of what's needed to operate the app
 - Data for advertising — we don't have ads and we don't sell data to advertisers
 

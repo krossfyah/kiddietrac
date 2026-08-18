@@ -32,6 +32,15 @@ Look at the toolbar above the list — there's a small segmented control with tw
 
 Click whichever you want. Your choice persists in your browser's storage and applies the next time you visit that list. Each list (Families, Children, etc.) tracks its own preference independently.
 
+## Row actions — the ⋮ menu
+
+Every list — table **and** cards — now uses the same **⋮ actions menu** at the end of each row instead of scattered buttons. Click the ⋮ to see the actions available for that row (View, Edit, Delete, and context-specific ones like Suspend a family or Send a permission slip). This keeps rows clean and consistent across the whole portal.
+
+Two more touches you'll see on every list:
+
+- A **record-count bar** at the bottom (e.g. "33 records") so you always know how much is in the list.
+- **Zebra striping** — alternating row shading — to make dense tables easier to read.
+
 ## Centres tab
 
 The Centres tab also has a toggle. The default is **Table** because each row carries a lot of comparable numbers (capacity %, enrolled count, family count, staff count). Switch to **Cards** when you want a more visual at-a-glance view — each card shows the centre logo, name, status badge, capacity bar coloured by how full the centre is (green / amber / red), and a 3-up stat panel along the bottom. Best on tablets, or when you only have a handful of centres.

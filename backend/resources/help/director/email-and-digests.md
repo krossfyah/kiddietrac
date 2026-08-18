@@ -2,6 +2,7 @@
 title: Email settings and digests
 category: Settings
 order: 65
+roles: agency_admin, platform_admin
 ---
 # Email settings and digests
 

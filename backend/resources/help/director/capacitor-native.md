@@ -2,6 +2,7 @@
 title: Native iOS / Android apps
 category: Mobile
 order: 90
+roles: agency_admin, platform_admin
 ---
 # Native iOS and Android apps
 

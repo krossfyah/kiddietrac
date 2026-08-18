@@ -2,6 +2,7 @@
 title: Setting up your centre
 category: Getting Started
 order: 1
+roles: agency_admin, centre_director
 ---
 
 # Setting up your centre — your first 30 minutes

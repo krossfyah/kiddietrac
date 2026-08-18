@@ -2,6 +2,7 @@
 title: Resetting a user's password
 category: Troubleshooting
 order: 2
+roles: agency_admin, centre_director
 ---
 
 # Resetting a user's password

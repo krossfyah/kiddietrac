@@ -298,9 +298,9 @@ Route::prefix('v1')->group(function () {
 Route::any('/login', function () { return response()->json(['message' => 'Unauthenticated. Please sign in via the app.'], 401); })->name('login');
 Route::get('/branding', [BrandingController::class, 'show']);
 Route::get('/marketing-site/config', [\App\Http\Controllers\Api\MarketingSiteController::class, 'publicConfig']);
-Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead']);
-Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit']);
-Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat']);
+Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead'])->middleware('throttle:5,1');
+Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit'])->middleware('throttle:60,1');
+Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat'])->middleware('throttle:20,1');
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 

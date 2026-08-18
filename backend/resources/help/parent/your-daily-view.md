@@ -70,6 +70,6 @@ If something seems missing:
 
 ## Notifications
 
-Right now, Kiddietrac doesn't send push notifications. Open the app to see updates. Push notifications are planned for a future release.
+Install the phone app and allow notifications, and Kiddietrac will send you a push alert for new photos, messages, invoices and important notices — even when the app is closed. See **Notifications and alerts** to set it up.
 
 If you want to know about something urgent, expect the educator to **message** you (Messages tab) or call you directly.

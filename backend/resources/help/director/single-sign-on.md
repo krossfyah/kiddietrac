@@ -1,7 +1,8 @@
 ---
 title: Single sign-on (Google & Microsoft)
-category: Settings & security
+category: Settings
 order: 40
+roles: agency_admin, platform_admin
 ---
 
 # Single sign-on (Google & Microsoft)

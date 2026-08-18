@@ -13,6 +13,8 @@
         "laravel/tinker": "^3.0",
         "minishlink/web-push": "^10.0",
         "phpoffice/phpspreadsheet": "^5.7",
+        "setasign/fpdf": "^1.9",
+        "setasign/fpdi": "^2.6",
         "socialiteproviders/microsoft": "^4.9",
         "stripe/stripe-php": "^20.1",
         "twilio/sdk": "^8.11"

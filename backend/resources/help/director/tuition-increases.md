@@ -2,6 +2,7 @@
 title: Tuition increase scheduling
 category: Billing
 order: 83
+roles: agency_admin, platform_admin
 ---
 # Tuition increases
 

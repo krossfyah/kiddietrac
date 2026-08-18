@@ -30,14 +30,13 @@ Your invoice shows the math: full tuition minus subsidy equals what you pay.
 
 ## Paying your invoice
 
-Kiddietrac doesn't process credit card payments. You pay your centre directly using their preferred method:
+How you pay depends on what your centre has switched on:
 
-- **E-transfer** — usually the easiest. Your centre will share their e-transfer email.
-- **Cheque** — old school but works.
-- **Bank transfer** — for larger amounts.
-- **Cash** — possible but less common.
+- **Online card or bank payment** — if your centre uses online payments, you'll see a **Pay** button inside the invoice, and you can save a method for **autopay**. See **Paying invoices and autopay** for the full walkthrough.
+- **E-transfer** — usually the easiest offline method. Your centre will share their e-transfer email.
+- **Cheque / bank transfer / cash** — accepted by many centres.
 
-When you pay, the centre director records the payment in Kiddietrac, and your invoice status updates.
+For offline methods, the centre director records the payment in Kiddietrac and your invoice status updates. Online card payments update automatically.
 
 ## What if I'm behind?
 
@@ -65,8 +64,7 @@ Most CCEYA centres have an "attendance fee" policy where you still pay even if y
 
 At year-end, your director can generate an annual receipt showing total fees paid. Useful for Canadian tax filing (claim under the Child Care Expense Deduction line). Ask your director in January or February.
 
-## Coming soon
+## Related
 
-- **Auto-pay** — link a bank account or credit card for automatic monthly payment
-- **Stripe integration** — pay directly through Kiddietrac
-- **Family payment splitting** — both parents can pay portions of one invoice
+- **Paying invoices and autopay** — online card/bank payment and automatic monthly payment, where your centre has enabled it
+- **Split billing** — both parents can be invoiced for portions of one family's fees (ask your director)

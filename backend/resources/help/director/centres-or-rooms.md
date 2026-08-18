@@ -1,7 +1,8 @@
 ---
 title: Centres or Rooms — naming your facilities
-category: Settings & security
+category: Settings
 order: 42
+roles: agency_admin, platform_admin
 ---
 
 # Centres or Rooms

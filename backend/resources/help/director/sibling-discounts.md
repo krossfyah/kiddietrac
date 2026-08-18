@@ -2,6 +2,7 @@
 title: Sibling discount tiers
 category: Billing
 order: 25
+roles: agency_admin, platform_admin
 ---
 # Sibling discount tiers
 

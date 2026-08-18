@@ -2,6 +2,7 @@
 title: Security alerts & monitoring
 category: Compliance
 order: 32
+roles: agency_admin, platform_admin
 ---
 
 # Security alerts & monitoring

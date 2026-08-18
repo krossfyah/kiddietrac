@@ -60,4 +60,12 @@ return [
         'redirect' => env('MICROSOFT_REDIRECT', env('APP_URL').'/api/v1/auth/social/microsoft/callback'),
         'tenant' => env('MICROSOFT_TENANT', 'common'),
     ],
+
+    // FCM push. Read via config() so it survives `php artisan config:cache`
+    // (env() returns null outside config files once config is cached — that
+    // silently broke "FCM not configured" push after a config:cache).
+    'fcm' => [
+        'credentials' => env('FCM_CREDENTIALS'),
+        'project_id'  => env('FCM_PROJECT_ID'),
+    ],
 ];

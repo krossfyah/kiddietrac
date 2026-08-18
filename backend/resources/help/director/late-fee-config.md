@@ -2,6 +2,7 @@
 title: Late-fee configuration
 category: Billing
 order: 74
+roles: agency_admin, platform_admin
 ---
 # Late-fee configuration
 

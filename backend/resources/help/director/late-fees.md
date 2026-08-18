@@ -2,6 +2,7 @@
 title: Late-fee automation
 category: Billing
 order: 72
+roles: agency_admin, platform_admin
 ---
 # Late-fee automation
 
