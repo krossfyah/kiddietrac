@@ -68,6 +68,222 @@
     wrap.appendChild(centresWrap);
     centresWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'Loading centres…'));
 
+
+    function money(n) {
+      var v = Number(n) || 0;
+      try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(v); }
+      catch (e) { return '$' + v.toFixed(2); }
+    }
+
+    var STATUS_TONE = {
+      upcoming: { bg: '#FEF3C7', fg: '#92400E' },
+      issued:   { bg: '#E0F2FE', fg: '#075985' },
+      paid:     { bg: '#DCFCE7', fg: '#166534' },
+      void:     { bg: '#F3F4F6', fg: '#475569' },
+    };
+
+    /* One dialog for all three kinds — the question is the same shape every time, and
+       three near-identical dialogs drift apart the first time one gets fixed. */
+    function openGenerate(kind, payee, onDone) {
+      var ov = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;' });
+      var m = Dom.el('div', { style: 'background:#fff;border-radius:14px;max-width:460px;width:100%;padding:20px 22px;max-height:90vh;overflow-y:auto;box-shadow:0 18px 48px rgba(0,0,0,.28);' });
+      ov.appendChild(m);
+      var label = kind === 'educator' ? 'educator' : (kind === 'parent' ? 'family' : 'contractor');
+      var fld = 'width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;';
+
+      m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">🧾 Generate an invoice</div>'
+        + '<div style="font-size:12.5px;color:#64748B;margin:0 0 14px;">For a ' + label + '. Nothing is sent — this records what is owed.</div>'
+        + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Who</label>'
+        + '<input id="pi-name" type="text" value="' + esc(payee && payee.name ? payee.name : '') + '" placeholder="Name" style="' + fld + 'margin-bottom:12px;">'
+        + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Based on</label>'
+        + '<select id="pi-basis" style="' + fld + 'background:#fff;margin-bottom:12px;">'
+        +   '<option value="amount">A set amount</option>'
+        +   '<option value="hours"' + (kind === 'educator' ? ' selected' : '') + '>Hours worked × a rate</option>'
+        + '</select>'
+        + '<div id="pi-amount-wrap"><label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Amount</label>'
+        +   '<input id="pi-amount" type="number" min="0" step="0.01" placeholder="0.00" style="' + fld + 'margin-bottom:12px;"></div>'
+        + '<div id="pi-hours-wrap" style="display:none;">'
+        +   '<div style="display:flex;gap:8px;margin-bottom:6px;">'
+        +     '<div style="flex:1;"><label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Hours</label>'
+        +       '<input id="pi-hours" type="number" min="0" step="0.25" placeholder="0" style="' + fld + '"></div>'
+        +     '<div style="flex:1;"><label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Rate / hour</label>'
+        +       '<input id="pi-rate" type="number" min="0" step="0.01" placeholder="0.00" style="' + fld + '"></div>'
+        +   '</div>'
+        +   (payee && payee.id ? '<button id="pi-fetch" type="button" style="background:#EAF3F6;color:#1F6080;border:1px solid #CFE3EB;padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:8px;">Use hours from the timesheet</button>' : '')
+        +   '<div id="pi-calc" style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:10px;"></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
+        +   '<div style="flex:1;"><label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Period from</label>'
+        +     '<input id="pi-from" type="date" style="' + fld + '"></div>'
+        +   '<div style="flex:1;"><label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">to</label>'
+        +     '<input id="pi-to" type="date" style="' + fld + '"></div>'
+        + '</div>'
+        + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Details</label>'
+        + '<textarea id="pi-details" rows="2" placeholder="What this covers" style="' + fld + 'font-family:inherit;resize:vertical;margin-bottom:12px;"></textarea>'
+        + '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px;">'
+        +   '<input id="pi-rec" type="checkbox" style="width:16px;height:16px;">'
+        +   '<span style="font-size:14px;font-weight:600;color:#334155;">Repeat this on a schedule</span></label>'
+        + '<select id="pi-freq" style="' + fld + 'background:#fff;display:none;margin-bottom:12px;">'
+        +   '<option value="weekly">Every week</option><option value="biweekly">Every two weeks</option>'
+        +   '<option value="monthly" selected>Every month</option></select>'
+        + '<div id="pi-err" style="color:#DC2626;font-size:12.5px;min-height:17px;"></div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;">'
+        +   '<button id="pi-cancel" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+        +   '<button id="pi-save" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Generate</button>'
+        + '</div>';
+      document.body.appendChild(ov);
+      ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+      m.querySelector('#pi-cancel').addEventListener('click', function () { ov.remove(); });
+
+      var basis = m.querySelector('#pi-basis');
+      function syncBasis() {
+        var h = basis.value === 'hours';
+        m.querySelector('#pi-hours-wrap').style.display = h ? 'block' : 'none';
+        m.querySelector('#pi-amount-wrap').style.display = h ? 'none' : 'block';
+      }
+      basis.addEventListener('change', syncBasis); syncBasis();
+
+      var rec = m.querySelector('#pi-rec');
+      rec.addEventListener('change', function () { m.querySelector('#pi-freq').style.display = rec.checked ? 'block' : 'none'; });
+
+      // A preview of the SERVER's arithmetic, not the input to it — hours and rate are
+      // what get sent, and the server multiplies them again.
+      function recalc() {
+        var h = parseFloat(m.querySelector('#pi-hours').value) || 0;
+        var r = parseFloat(m.querySelector('#pi-rate').value) || 0;
+        m.querySelector('#pi-calc').textContent = (h && r) ? (h + ' h × ' + money(r) + ' = ' + money(h * r)) : '';
+      }
+      ['#pi-hours', '#pi-rate'].forEach(function (sel) { m.querySelector(sel).addEventListener('input', recalc); });
+
+      var fetchBtn = m.querySelector('#pi-fetch');
+      if (fetchBtn) {
+        fetchBtn.addEventListener('click', function () {
+          var f = m.querySelector('#pi-from').value, t = m.querySelector('#pi-to').value;
+          if (!f || !t) { m.querySelector('#pi-err').textContent = 'Set the period first, then pull the hours.'; return; }
+          fetchBtn.disabled = true; fetchBtn.textContent = 'Reading timesheet…';
+          Api.get('/provider/payee-invoices/hours?user_id=' + payee.id + '&from=' + f + '&to=' + t).then(function (r) {
+            m.querySelector('#pi-hours').value = r.hours || 0;
+            recalc();
+            fetchBtn.disabled = false; fetchBtn.textContent = 'Use hours from the timesheet';
+            if (!r.hours) { m.querySelector('#pi-err').textContent = 'No completed shifts in that period.'; }
+          }).catch(function () { fetchBtn.disabled = false; fetchBtn.textContent = 'Use hours from the timesheet'; });
+        });
+      }
+
+      m.querySelector('#pi-save').addEventListener('click', function () {
+        var err = m.querySelector('#pi-err');
+        var body = {
+          kind: kind,
+          payee_name: (m.querySelector('#pi-name').value || '').trim(),
+          payee_user_id: (payee && payee.id) || null,
+          basis: basis.value,
+          period_start: m.querySelector('#pi-from').value || null,
+          period_end: m.querySelector('#pi-to').value || null,
+          details: (m.querySelector('#pi-details').value || '').trim() || null,
+          recurring: rec.checked,
+          frequency: rec.checked ? m.querySelector('#pi-freq').value : null,
+        };
+        if (!body.payee_name) { err.textContent = 'Who is this for?'; return; }
+        if (basis.value === 'hours') {
+          body.hours = parseFloat(m.querySelector('#pi-hours').value) || 0;
+          body.rate = parseFloat(m.querySelector('#pi-rate').value) || 0;
+          if (!body.hours || !body.rate) { err.textContent = 'Hours and a rate are both needed.'; return; }
+        } else {
+          body.amount = parseFloat(m.querySelector('#pi-amount').value) || 0;
+          if (!body.amount) { err.textContent = 'Enter an amount.'; return; }
+        }
+        var btn = m.querySelector('#pi-save');
+        btn.disabled = true; btn.textContent = 'Generating…';
+        Api.post('/provider/payee-invoices', body).then(function (r) {
+          ov.remove();
+          toast('🧾', 'Invoice generated', body.payee_name + ' · ' + money(r.amount), '#16A34A');
+          if (onDone) onDone();
+        }).catch(function (e) {
+          btn.disabled = false; btn.textContent = 'Generate';
+          err.textContent = (e && e.message) || 'Could not generate.';
+        });
+      });
+    }
+
+    /* The ledger under each section. Status is the first question anybody asks of an
+       invoice list, so it is the filter rather than a column to squint at. */
+    function invoiceTable(kind) {
+      var box = Dom.el('div', { style: 'margin-top:16px;background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+      var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid #F3F4F6;' });
+      head.appendChild(Dom.el('div', { style: 'font-size:11.5px;font-weight:800;letter-spacing:.6px;color:#64748B;text-transform:uppercase;' }, 'Invoices'));
+      var filter = Dom.el('select', { style: 'margin-left:auto;padding:6px 9px;border:1px solid #E2E8F0;border-radius:8px;font-size:12.5px;background:#fff;' });
+      ['all', 'upcoming', 'issued', 'paid', 'void'].forEach(function (v) {
+        filter.appendChild(Dom.el('option', { value: v }, v === 'all' ? 'All statuses' : v.charAt(0).toUpperCase() + v.slice(1)));
+      });
+      head.appendChild(filter);
+      box.appendChild(head);
+      var rows = Dom.el('div', {});
+      box.appendChild(rows);
+
+      function load() {
+        Dom.clear(rows);
+        rows.appendChild(Dom.el('div', { style: 'padding:18px;color:#64748B;font-size:13px;' }, 'Loading…'));
+        Api.get('/provider/payee-invoices?kind=' + kind + '&status=' + filter.value).then(function (d) {
+          Dom.clear(rows);
+          var list = d.invoices || [];
+          var t = d.totals || {};
+          var summary = Object.keys(t).map(function (k) { return k + ': ' + t[k].count + ' (' + money(t[k].total) + ')'; }).join('  ·  ');
+          if (summary) {
+            rows.appendChild(Dom.el('div', { style: 'padding:9px 18px;font-size:12.5px;color:#475569;background:#F8FAFC;border-bottom:1px solid #F3F4F6;' }, summary));
+          }
+          if (!list.length) {
+            rows.appendChild(Dom.el('div', { style: 'padding:22px 18px;color:#64748B;font-size:13px;' }, 'No invoices yet.'));
+            return;
+          }
+          list.forEach(function (iv) {
+            var tone = STATUS_TONE[iv.status] || STATUS_TONE.void;
+            var r = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #F7F9FB;' });
+            var left = Dom.el('div', { style: 'flex:1;min-width:0;' });
+            left.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:700;color:#0F172A;' }, iv.payee_name));
+            var meta = (iv.reference || '') + (iv.basis === 'hours' && iv.hours ? ' · ' + iv.hours + 'h × ' + money(iv.rate) : '')
+              + (iv.period_start ? ' · ' + String(iv.period_start).slice(0, 10) + (iv.period_end ? ' → ' + String(iv.period_end).slice(0, 10) : '') : '')
+              + (iv.recurring ? ' · repeats ' + iv.frequency : '');
+            left.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;' }, meta));
+            r.appendChild(left);
+            r.appendChild(Dom.el('div', { style: 'font-size:15px;font-weight:800;color:#0F172A;white-space:nowrap;' }, money(iv.amount)));
+            r.appendChild(Dom.el('span', { style: 'background:' + tone.bg + ';color:' + tone.fg + ';padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:800;white-space:nowrap;' }, iv.status));
+            // Plain buttons: kt-row-actions.js collapses a row's actions itself.
+            var acts = Dom.el('div', { style: 'display:flex;gap:4px;white-space:nowrap;' });
+            ['issued', 'paid', 'void'].forEach(function (st) {
+              if (iv.status === st) return;
+              var b = Dom.el('button', { type: 'button', title: 'Mark ' + st,
+                style: 'background:#fff;border:1px solid #E2E8F0;border-radius:7px;padding:5px 9px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;' },
+                'Mark ' + st);
+              b.addEventListener('click', function () {
+                b.disabled = true;
+                Api.post('/provider/payee-invoices/' + iv.id + '/status', { status: st }).then(load)
+                  .catch(function () { b.disabled = false; });
+              });
+              acts.appendChild(b);
+            });
+            r.appendChild(acts);
+            rows.appendChild(r);
+          });
+        }).catch(function (e) {
+          Dom.clear(rows);
+          rows.appendChild(Dom.el('div', { style: 'padding:18px;color:#DC2626;font-size:13px;' }, 'Could not load: ' + (e.message || 'error')));
+        });
+      }
+      filter.addEventListener('change', load);
+      load();
+      box.kt_reload = load;
+      return box;
+    }
+
+    function generateBar(kind, payee) {
+      var bar = Dom.el('div', { style: 'display:flex;justify-content:flex-end;margin-top:12px;' });
+      var b = Dom.el('button', {
+        style: 'background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;',
+      }, '🧾 Generate an invoice');
+      bar.appendChild(b);
+      return { bar: bar, button: b };
+    }
+
     // ── Sections ────────────────────────────────────────────────────────
     // Parents is billing OUT; educators and contractors are money going the other way.
     // Keeping them in one undivided list is how somebody invoices a contractor by mistake.
@@ -112,7 +328,17 @@
 
     function paintPane() {
       Dom.clear(pane);
-      if (active === 'parents') { pane.appendChild(centresWrap); return; }
+      if (active === 'parents') {
+        pane.appendChild(centresWrap);
+        var pTable = invoiceTable('parent');
+        var pGen = generateBar('parent', null);
+        pGen.button.addEventListener('click', function () {
+          openGenerate('parent', null, function () { pTable.kt_reload(); });
+        });
+        pane.appendChild(pGen.bar);
+        pane.appendChild(pTable);
+        return;
+      }
 
       if (active === 'educators') {
         var wrap = Dom.el('div', {});
@@ -120,9 +346,16 @@
           'There is no invoice run for educators — their pay comes from clock-ins and manual entries on the timesheet, '
           + 'which Payroll turns into a payslip. Running it here would mean keying the same hours twice.',
           'Open Payroll', '#payroll'));
+        var eTable = invoiceTable('educator');
+        var eGen = generateBar('educator', null);
+        eGen.button.addEventListener('click', function () {
+          openGenerate('educator', null, function () { eTable.kt_reload(); });
+        });
         var list = Dom.el('div', { style: 'margin-top:14px;background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
         list.appendChild(Dom.el('div', { style: 'padding:12px 18px;font-size:11.5px;font-weight:800;letter-spacing:.6px;color:#64748B;text-transform:uppercase;border-bottom:1px solid #F3F4F6;' }, 'Who would be paid'));
         wrap.appendChild(list);
+        wrap.appendChild(eGen.bar);
+        wrap.appendChild(eTable);
         pane.appendChild(wrap);
         Api.get('/provider/team-contacts').then(function (r) {
           var people = ((r && r.contacts) || []).filter(function (p) {
@@ -145,6 +378,14 @@
             row.appendChild(av);
             row.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:600;color:#0F172A;' }, p.name));
             row.appendChild(Dom.el('div', { style: 'margin-left:auto;font-size:12.5px;color:#64748B;' }, p.role));
+            // Per person, because "invoice this educator" is the actual job — a single
+            // button at the top would mean picking the name twice.
+            var gb = Dom.el('button', { type: 'button', title: 'Generate an invoice',
+              style: 'background:#fff;border:1px solid #CFE3EB;color:#1F6080;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;' }, 'Invoice');
+            gb.addEventListener('click', function () {
+              openGenerate('educator', { id: p.id, name: p.name }, function () { eTable.kt_reload(); });
+            });
+            row.appendChild(gb);
             list.appendChild(row);
           });
         }).catch(function () {
@@ -155,10 +396,17 @@
 
       // Contractors: the accounts-payable module exists but has nothing in it. Say that
       // plainly rather than showing an empty table that looks broken.
-      pane.appendChild(note('No suppliers or contractors set up yet',
-        'Bills you receive — cleaners, food, maintenance, contracted staff — are handled in Expenses, where a supplier '
-        + 'is raised against a purchase order and paid. Nothing has been added yet, so there is nothing to run here.',
+      pane.appendChild(note('Contractors and suppliers',
+        'Bills you receive — cleaners, food, maintenance, contracted staff — can be recorded here, or managed in full '
+        + 'in Expenses where a supplier is raised against a purchase order and paid.',
         'Open Expenses', '#expenses'));
+      var cTable = invoiceTable('contractor');
+      var cGen = generateBar('contractor', null);
+      cGen.button.addEventListener('click', function () {
+        openGenerate('contractor', null, function () { cTable.kt_reload(); });
+      });
+      pane.appendChild(cGen.bar);
+      pane.appendChild(cTable);
     }
 
     Api.get('/admin/centres').then(function (r) {
@@ -185,6 +433,14 @@
 
   function apiBase() { return (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
   function toast(icon, title, body, color) { if (window.KT && KT.toast) KT.toast(icon, title, body, color); }
+
+  // This file never had an esc(); the generate dialog interpolates a payee name into
+  // markup, so it needs one. A name is user-supplied text going into innerHTML.
+  function esc(v) {
+    return v == null ? '' : String(v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
   function period(monthSel, yearSel) {
     return { month: parseInt(monthSel.value, 10), year: parseInt(yearSel.value, 10), label: monthSel.options[monthSel.selectedIndex].text };
   }
