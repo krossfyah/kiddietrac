@@ -93,9 +93,25 @@
   function centreRow(centre, monthSel, yearSel) {
     var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #F3F4F6;' });
 
-    var swatch = Dom.el('div', {
-      style: 'width:44px;height:44px;border-radius:10px;background:' + (centre.brand_color || '#1F6080') + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0;',
-    }, (centre.name || '?').charAt(0).toUpperCase());
+    // The provider's own face where there is one. /admin/centres has returned
+    // provider_photo_url all along; this row just never asked for it, so an agency whose
+    // centres ARE its providers saw a wall of coloured initials. Relative paths are
+    // absolutised or they resolve against the SPA host and 404 into the fallback, which
+    // looks identical to "no photo on file" — see CONVENTIONS.md.
+    var pic = centre.provider_photo_url || centre.logo_url || '';
+    if (pic && !/^https?:\/\//.test(pic)) {
+      pic = (((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1')
+        .replace(/\/api\/v1\/?$/, '')) + (pic.charAt(0) === '/' ? pic : '/' + pic);
+    }
+    var swatch;
+    if (pic && window.KT && KT.avatar) {
+      swatch = Dom.el('span', { style: 'flex-shrink:0;display:inline-flex;' });
+      swatch.innerHTML = KT.avatar(centre.name || '?', { size: 44, photoUrl: pic });
+    } else {
+      swatch = Dom.el('div', {
+        style: 'width:44px;height:44px;border-radius:10px;background:' + (centre.brand_color || '#1F6080') + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0;',
+      }, (centre.name || '?').charAt(0).toUpperCase());
+    }
     row.appendChild(swatch);
 
     var info = Dom.el('div', { style: 'flex:1;min-width:0;' });
