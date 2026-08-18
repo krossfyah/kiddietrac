@@ -1395,6 +1395,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'closures']);
         Route::post  ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'addClosure']);
+        Route::patch ('/operations/closures/{id}',     [\App\Http\Controllers\Api\OperationsV2Controller::class, 'updateClosure']);
         Route::delete('/operations/closures/{id}',     [\App\Http\Controllers\Api\OperationsV2Controller::class, 'removeClosure']);
         });
         // Late pickups are also logged/viewed by EDUCATORS (on the floor when a parent runs late).

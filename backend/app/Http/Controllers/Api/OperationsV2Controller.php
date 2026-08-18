@@ -58,6 +58,9 @@ final class OperationsV2Controller extends Controller
             'updated_at' => now(),
         ]);
         $this->announceClosure((int) $id, (int) $data['centre_id']);
+        // announceClosure covers families and centre staff; agency admins and directors
+        // who hold no role AT the centre were never told a closure had been added.
+        $this->announceClosureChange((int) $id, (int) $data['centre_id'], 'added');
 
         return response()->json(['id' => $id], 201);
     }
@@ -148,13 +151,109 @@ final class OperationsV2Controller extends Controller
         });
     }
 
+    /**
+     * Correct a closure in place. Without this a wrong date could only be fixed by
+     * deleting and re-adding, which announces the same closure to every family twice.
+     */
+    public function updateClosure(Request $request, int $id): JsonResponse
+    {
+        $row = DB::table('centre_closures')->where('id', $id)->first();
+        abort_unless($row, 404);
+        $this->assertCentreAccess($request, (int) $row->centre_id);
+
+        $data = $request->validate([
+            'closure_date' => 'sometimes|required|date',
+            'end_date' => 'nullable|date|after_or_equal:closure_date',
+            'closure_type' => 'sometimes|required|in:holiday,pd_day,emergency,renovation,other',
+            'reason' => 'nullable|string|max:200',
+            'affects_billing' => 'nullable|boolean',
+        ]);
+        if (! $data) {
+            return response()->json(['status' => 'unchanged']);
+        }
+
+        $data['updated_at'] = now();
+        DB::table('centre_closures')->where('id', $id)->update($data);
+
+        // Announced as a change, not as a new closure: telling somebody a centre is
+        // closing when they already knew, and the only news is the date moved, is how
+        // people learn to ignore the notice.
+        $this->announceClosureChange((int) $id, (int) $row->centre_id, 'updated');
+
+        return response()->json(['status' => 'updated']);
+    }
+
     public function removeClosure(Request $request, int $id): JsonResponse
     {
         $row = DB::table('centre_closures')->where('id', $id)->first();
         abort_unless($row, 404);
         $this->assertCentreAccess($request, (int) $row->centre_id);
+
+        // Announce BEFORE deleting — the row is the only source of what it said.
+        $this->announceClosureChange($id, (int) $row->centre_id, 'removed');
+
         DB::table('centre_closures')->where('id', $id)->delete();
         return response()->json(['status' => 'removed']);
+    }
+
+    /**
+     * Tell the people accountable for a centre that a closure was changed or withdrawn.
+     *
+     * announceClosure() emails families and centre staff when one is created. Neither an
+     * edit nor a deletion said anything to anybody, and agency admins and directors were
+     * never told at all unless they happened to hold a role AT that centre — which most
+     * do not. This is the in-app feed only: a correction does not warrant another email
+     * to every family, but the people running the agency do need to see it happened.
+     */
+    private function announceClosureChange(int $closureId, int $centreId, string $verb): void
+    {
+        $row = DB::table('centre_closures')->where('id', $closureId)->first();
+        if (! $row) {
+            return;
+        }
+        $centre = DB::table('centres')->where('id', $centreId)->first(['name', 'agency_id']);
+        if (! $centre) {
+            return;
+        }
+
+        $actor = DB::table('users')->where('id', request()->user()->id ?? 0)->first(['first_name', 'last_name']);
+        $actorName = $actor ? trim(($actor->first_name ?? '') . ' ' . ($actor->last_name ?? '')) : '';
+        $dates = \App\Support\Closures::dateLabel($row);
+        $reason = \App\Support\Closures::reason($row);
+
+        foreach ($this->closureWatchers((int) $centre->agency_id, $centreId) as $uid) {
+            DB::table('notifications')->insert([
+                'user_id' => $uid,
+                'type' => 'closure',
+                'title' => ($verb === 'removed' ? 'Closure removed: '
+                        : ($verb === 'added' ? 'Closure added: ' : 'Closure updated: '))
+                    . ($centre->name ?? 'Centre') . ' — ' . $dates,
+                'body' => trim(($reason ? $reason . '. ' : '') . ($actorName !== '' ? 'By ' . $actorName . '.' : '')),
+                'data' => json_encode(['link' => '#closures', 'closure_id' => $closureId, 'action' => $verb]),
+                'created_at' => now(),
+            ]);
+        }
+    }
+
+    /**
+     * Who should hear about a closure changing: the agency's admins and its directors,
+     * plus anyone holding a role at the centre itself. Scoped to the agency that owns the
+     * centre — a director of another agency has no business seeing this.
+     */
+    private function closureWatchers(int $agencyId, int $centreId): array
+    {
+        $agencyWide = DB::table('role_assignments')
+            ->where('active', true)->where('agency_id', $agencyId)
+            ->whereIn('role', ['agency_admin', 'centre_director'])
+            ->pluck('user_id');
+
+        $atCentre = DB::table('role_assignments')
+            ->where('active', true)->where('centre_id', $centreId)
+            ->whereIn('role', ['agency_admin', 'centre_director'])
+            ->pluck('user_id');
+
+        return $agencyWide->merge($atCentre)
+            ->map(fn ($i) => (int) $i)->unique()->values()->all();
     }
 
     // =========================================================

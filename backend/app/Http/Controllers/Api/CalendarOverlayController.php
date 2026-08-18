@@ -229,19 +229,71 @@ final class CalendarOverlayController extends Controller
                     continue;
                 }
                 $reason = Closures::reason($row) ?: 'Closed';
+
+                // Everything the row already knew and the grid never showed. "Closed"
+                // alone cannot be read: it does not say which centre, why, for how long,
+                // whether fees still apply, or who decided it.
+                $meta = $this->closureMeta($row, (int) $cid);
+
                 $out[] = [
                     'date' => $date,
                     'kind' => 'closure',
                     'icon' => '🚫',
-                    'title' => 'Closed',
+                    // The title names the centre, so several closures on one day are
+                    // told apart at a glance.
+                    'title' => 'Closed — ' . $meta['centre_name'],
                     'detail' => (string) $reason,
                     'who' => 'centre',
                     'tone' => 'closed',
+                    'closure_id' => (int) $row->id,
+                    'centre_id' => (int) $cid,
+                    'centre_name' => $meta['centre_name'],
+                    'closure_type' => $row->closure_type,
+                    'type_label' => $meta['type_label'],
+                    'reason' => $row->reason,
+                    'starts_on' => $row->closure_date ? substr((string) $row->closure_date, 0, 10) : null,
+                    'ends_on' => $row->end_date ? substr((string) $row->end_date, 0, 10) : null,
+                    'date_label' => $meta['date_label'],
+                    'affects_billing' => (bool) $row->affects_billing,
+                    'added_by' => $meta['added_by'],
+                    'added_at' => $row->created_at,
                 ];
-                break;   // one "Closed" marker per day is enough for the grid
+                // No break: a second centre closing the same day is a separate fact, and
+                // collapsing them hid it entirely.
             }
         }
         return $out;
+    }
+
+    /** Centre name, readable type, range and who entered it — cached per closure row. */
+    private array $closureMetaCache = [];
+
+    private function closureMeta(object $row, int $centreId): array
+    {
+        $key = (int) $row->id;
+        if (isset($this->closureMetaCache[$key])) {
+            return $this->closureMetaCache[$key];
+        }
+
+        $labels = [
+            'holiday' => 'Holiday', 'pd_day' => 'PD day', 'emergency' => 'Emergency',
+            'renovation' => 'Renovation', 'other' => 'Closure',
+        ];
+
+        $addedBy = null;
+        if (! empty($row->created_by_id)) {
+            $u = DB::table('users')->where('id', $row->created_by_id)->first(['first_name', 'last_name']);
+            if ($u) {
+                $addedBy = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: null;
+            }
+        }
+
+        return $this->closureMetaCache[$key] = [
+            'centre_name' => (string) (DB::table('centres')->where('id', $centreId)->value('name') ?: 'Centre'),
+            'type_label' => $labels[$row->closure_type] ?? 'Closure',
+            'date_label' => \App\Support\Closures::dateLabel($row),
+            'added_by' => $addedBy,
+        ];
     }
 
     /** @return string[] the dates a range covers, clipped to the window being drawn. */

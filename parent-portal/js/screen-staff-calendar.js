@@ -222,6 +222,66 @@
     state.cursor = d;
   }
 
+  /* The supporting lines under an overlay's title. Closures carry the most: a bare
+     "Closed" cannot be read — it does not say for how long, whether fees still apply, or
+     who decided it. Returns [] for overlays that have nothing extra to add. */
+  function overlayExtraLines(ev) {
+    if (!ev || ev.kind !== 'closure') { return []; }
+    var out = [];
+
+    // How long it runs. A single day needs no range; a fortnight very much does.
+    if (ev.starts_on && ev.ends_on && ev.ends_on !== ev.starts_on) {
+      out.push(fmtRange(ev.starts_on, ev.ends_on));
+    }
+
+    var bits = [];
+    if (ev.type_label) { bits.push(ev.type_label); }
+    // Whether families are still charged is the question an admin actually has.
+    bits.push(ev.affects_billing ? 'Billing still applies' : 'Not billed');
+    out.push(bits.join(' · '));
+
+    if (ev.added_by || ev.added_at) {
+      out.push('Added' + (ev.added_by ? ' by ' + ev.added_by : '')
+        + (ev.added_at ? ' · ' + fmtStamp(ev.added_at) : ''));
+    }
+    return out;
+  }
+
+  var MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  /* Formatted from the string's own parts. Running a date-only value through Date()
+     made this browser read '2026-08-11T00:00:00' as UTC and render it in Toronto as
+     Aug 10 — a closure shown starting the day before it does. A plain calendar date
+     has no timezone to convert between, so none is applied. */
+  function fmtDayLabel(ymd) {
+    var p = String(ymd || '').slice(0, 10).split('-');
+    if (p.length !== 3) { return String(ymd || ''); }
+    var m = parseInt(p[1], 10);
+    return (MONTH_ABBR[m - 1] || p[1]) + ' ' + parseInt(p[2], 10);
+  }
+
+  function fmtRange(a, b) {
+    try {
+      var pa = String(a).slice(0, 10).split('-'), pb = String(b).slice(0, 10).split('-');
+      // Date.UTC on both ends: the offsets cancel, so the count is a true day difference.
+      var ua = Date.UTC(+pa[0], +pa[1] - 1, +pa[2]);
+      var ub = Date.UTC(+pb[0], +pb[1] - 1, +pb[2]);
+      var days = Math.round((ub - ua) / 86400000) + 1;
+      return fmtDayLabel(a) + ' – ' + fmtDayLabel(b)
+        + ' (' + days + ' day' + (days === 1 ? '' : 's') + ')';
+    } catch (e) { return a + ' – ' + b; }
+  }
+
+  function fmtStamp(ts) {
+    try {
+      // Agency timezone, like every other date on this screen.
+      var tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
+      return new Date(ts.replace(' ', 'T') + (/[Zz+]/.test(ts) ? '' : 'Z'))
+        .toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
+    } catch (e) { return String(ts).slice(0, 16); }
+  }
+
   function titleForCursor() {
     if (state.view === 'day') {
       return state.cursor.toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -452,7 +512,8 @@
   function overlayChip(ev) {
     var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
     return Dom.el('div', {
-      title: (ev.icon || '') + ' ' + (ev.title || '') + (ev.detail ? ' — ' + ev.detail : ''),
+      title: [(ev.icon || '') + ' ' + (ev.title || '') + (ev.detail ? ' — ' + ev.detail : '')]
+        .concat(overlayExtraLines(ev)).join('\n'),
       style: 'position:relative;z-index:1;background:' + t.bg + ';border-left:3px solid ' + t.bar + ';'
         + 'border-radius:5px;padding:3px 6px;margin-bottom:3px;font-size:11px;font-weight:700;'
         + 'color:' + t.fg + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
@@ -482,6 +543,11 @@
         var row = Dom.el('div', { style: 'background:' + t.bg + ';border-left:3px solid ' + t.bar + ';border-radius:8px;padding:7px 11px;min-width:190px;' });
         row.appendChild(Dom.el('div', { style: 'font-size:13px;font-weight:800;color:' + t.fg + ';' }, (ev.icon || '') + ' ' + (ev.title || '')));
         if (ev.detail) row.appendChild(Dom.el('div', { style: 'font-size:12px;color:' + t.fg + ';opacity:.85;margin-top:1px;' }, ev.detail));
+        overlayExtraLines(ev).forEach(function (line, i) {
+          row.appendChild(Dom.el('div', {
+            style: 'font-size:11.5px;color:' + t.fg + ';opacity:' + (i === 0 ? '.8' : '.65') + ';margin-top:1px;line-height:1.45;',
+          }, line));
+        });
         list.appendChild(row);
       });
       wrap.appendChild(list);
@@ -555,6 +621,11 @@
         if (ev.detail) {
           r.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:' + t.fg + ';opacity:.85;line-height:1.4;' }, ev.detail));
         }
+        overlayExtraLines(ev).forEach(function (line, i) {
+          r.appendChild(Dom.el('div', {
+            style: 'font-size:11px;color:' + t.fg + ';opacity:' + (i === 0 ? '.8' : '.65') + ';line-height:1.4;',
+          }, line));
+        });
         dayBox.appendChild(r);
       });
 
