@@ -828,6 +828,73 @@ class EducatorDailySummaryCommand extends Command
             'With thanks,', 'Gratefully,', 'In appreciation,', 'With real thanks,',
             'Thank you, sincerely,', 'With admiration,', 'Very best,',
         ]);
+        // Anything not set up for next week, said loudly enough to act on. Placed ABOVE
+        // the recap: the rest of this email is what already happened and cannot be
+        // changed, and this is the only part with something to do in it.
+        try {
+            $lpRoom = \App\Support\LessonPlans::roomForEducator((int) ($ed->id ?? 0));
+            $lpCentre = isset($ed->centre_id) ? (int) $ed->centre_id : null;
+            $nextMon = $date->copy()->addWeek()->startOfWeek(Carbon::MONDAY);
+            $gaps = [];
+
+            // Next week's lesson plan: their own room, then the centre-wide one, then any
+            // plan in the centre — the same order every other reader uses.
+            $planned = false;
+            foreach ([$nextMon, $nextMon->copy()->addDay(), $nextMon->copy()->addDays(2)] as $probe) {
+                $p = \App\Support\LessonPlans::forDate($lpRoom, $lpCentre, $probe->toDateString());
+                if (! $p['items'] && $lpCentre) {
+                    $p = \App\Support\LessonPlans::forDateInCentres([$lpCentre], $probe->toDateString());
+                }
+                if ($p['items']) { $planned = true; break; }
+            }
+            if (! $planned) {
+                $gaps[] = [
+                    'what' => 'No lesson plan for next week',
+                    'why' => 'Week beginning ' . $nextMon->format('j F') . ' has nothing in it yet.',
+                    'do' => 'Open Lesson plans and add a few activities — or draft the week with AI and edit it.',
+                ];
+            }
+
+            // Next week's menu, which is published per centre.
+            if ($lpCentre && \Illuminate\Support\Facades\Schema::hasTable('menu_weeks')) {
+                $menu = DB::table('menu_weeks')->where('centre_id', $lpCentre)
+                    ->whereDate('week_start', $nextMon->toDateString())->first(['id', 'status', 'published_at']);
+                $hasItems = $menu ? DB::table('menu_items')->where('menu_week_id', $menu->id)->exists() : false;
+                if (! $menu || ! $hasItems) {
+                    $gaps[] = [
+                        'what' => 'No menu for next week',
+                        'why' => 'Families check this before Monday, and allergies are listed against it.',
+                        'do' => 'Open Weekly menu to fill it in, or ask your director if they usually set it.',
+                    ];
+                } elseif (empty($menu->published_at) && $menu->status !== 'published') {
+                    $gaps[] = [
+                        'what' => 'Next week\'s menu is written but not published',
+                        'why' => 'Until it is published, families cannot see it.',
+                        'do' => 'Open Weekly menu and publish it.',
+                    ];
+                }
+            }
+
+            if ($gaps) {
+                $body .= '<div class="kt-panel" style="background:#FEF3C7;border:1px solid #FDE68A;border-left:4px solid #F59E0B;'
+                    . 'border-radius:0 12px 12px 0;padding:15px 17px;margin:18px 0 4px;">'
+                    . '<div style="font-size:15px;font-weight:800;color:#92400E;margin:0 0 8px;">⚠️ Needs setting up for next week</div>';
+                foreach ($gaps as $g) {
+                    $body .= '<div style="padding:7px 0;border-top:1px solid rgba(146,64,14,.15);">'
+                        . '<div style="font-size:14px;font-weight:800;color:#0F172A;">' . e($g['what']) . '</div>'
+                        . '<div style="font-size:13px;color:#78350F;line-height:1.5;margin-top:2px;">' . e($g['why']) . '</div>'
+                        . '<div style="font-size:13px;color:#0F172A;line-height:1.5;margin-top:3px;"><strong>' . e($g['do']) . '</strong></div>'
+                        . '</div>';
+                }
+                // Said plainly, because for most agencies here it is not their job — and a
+                // nudge that blames the wrong person gets the whole panel ignored.
+                $body .= '<div style="font-size:12px;color:#78350F;margin-top:9px;">'
+                    . 'If your director usually sets these, a quick message is all that is needed.</div></div>';
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Educator summary: setup gaps failed', ['error' => $e->getMessage()]);
+        }
+
         // What the room was working towards today, as a recap. Same source as the
         // parent summary and the planner, so all three agree.
         try {
