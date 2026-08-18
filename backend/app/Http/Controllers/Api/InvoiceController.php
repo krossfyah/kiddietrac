@@ -205,6 +205,27 @@ final class InvoiceController extends Controller
             ->whereIn('ei.family_id', $familyIds)
             ->where('ei.status', '!=', 'void');
 
+        // What a parent is being asked to deal with NOW: due this month, plus anything
+        // still owing from before. A family with three years of history does not want to
+        // scroll past 2024 to find this month's bill — but hiding an overdue one to keep
+        // the list tidy would be worse than the clutter it avoids.
+        //
+        // ?scope=all opts back into the full history for anyone who wants it.
+        if (strtolower((string) $request->query('scope', 'current')) !== 'all') {
+            $monthStart = \Illuminate\Support\Carbon::now()->startOfMonth()->toDateString();
+            $monthEnd = \Illuminate\Support\Carbon::now()->endOfMonth()->toDateString();
+            $base->where(function ($w) use ($monthStart, $monthEnd) {
+                $w->whereBetween('ei.due_at', [$monthStart, $monthEnd])
+                  ->orWhereBetween('ei.issued_at', [$monthStart, $monthEnd])
+                  // Still owed from an earlier month — the ones that matter most.
+                  ->orWhere(function ($late) use ($monthStart) {
+                      $late->where('ei.balance_due', '>', 0)
+                           ->whereNotNull('ei.due_at')
+                           ->whereDate('ei.due_at', '<', $monthStart);
+                  });
+            });
+        }
+
         // Search across number / description / status.
         if ($search = trim((string) $request->query('search', ''))) {
             $like = '%' . $search . '%';

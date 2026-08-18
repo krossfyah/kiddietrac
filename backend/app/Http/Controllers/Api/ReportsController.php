@@ -574,6 +574,15 @@ final class ReportsController extends Controller
                         ->orderByDesc('x.issued_at')->limit(5000)->get();
 
                     foreach ($ext as $r) {
+                        // The mirrored status is whatever the source last pushed, and it
+                        // goes stale the moment a due date passes without another sync.
+                        // Derived here so a bill that IS overdue reads as overdue.
+                        $status = (string) $r->status;
+                        if (! in_array(strtolower($status), ['paid', 'void'], true)
+                            && (float) $r->balance_due > 0
+                            && $r->due_at && substr((string) $r->due_at, 0, 10) < now()->toDateString()) {
+                            $status = 'overdue';
+                        }
                         $rows[] = [
                             'Invoice' => $r->number,
                             // A mirrored invoice can outlive the family link, so say so
@@ -585,7 +594,7 @@ final class ReportsController extends Controller
                             'Total' => '$' . number_format((float) $r->total, 2),
                             'Paid' => '$' . number_format((float) $r->amount_paid, 2),
                             'Balance' => '$' . number_format((float) $r->balance_due, 2),
-                            'Status' => ucfirst((string) $r->status),
+                            'Status' => ucfirst($status),
                             'Source' => $r->source_label ?: ucfirst((string) ($r->external_source ?: 'External')),
                         ];
                     }
