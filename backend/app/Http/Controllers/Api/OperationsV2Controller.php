@@ -26,11 +26,15 @@ final class OperationsV2Controller extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
+        // Who scheduled it, joined here rather than looked up per row on the screen.
+        // Both columns already existed; nothing ever read them.
         $rows = DB::table('centre_closures as cc')
             ->join('centres as c', 'c.id', '=', 'cc.centre_id')
+            ->leftJoin('users as u', 'u.id', '=', 'cc.created_by_id')
             ->whereIn('cc.centre_id', $centreIds)
             ->orderBy('cc.closure_date')
-            ->select('cc.*', 'c.name as centre_name')
+            ->select('cc.*', 'c.name as centre_name',
+                DB::raw("NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))),'') as added_by"))
             ->get();
         return response()->json(['data' => $rows]);
     }

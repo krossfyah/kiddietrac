@@ -12,7 +12,25 @@
   });
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
+  const MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  /* A date-only value is a calendar day, not an instant. `new Date('2026-07-27')` is
+     parsed as UTC midnight, and rendering that in a western timezone lands on the 26th —
+     every closure here was drawn a day early. Date-only is formatted from its own parts;
+     anything carrying a time still goes through the agency timezone. */
+  const fmtDate = (s) => {
+    if (!s) return '';
+    const str = String(s);
+    const dOnly = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dOnly && !/[T ]\d{2}:/.test(str)) {
+      return (MONTHS_ABBR[+dOnly[2] - 1] || dOnly[2]) + ' ' + (+dOnly[3]) + ', ' + dOnly[1];
+    }
+    try {
+      const tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
+      return new Date(str.replace(' ', 'T')).toLocaleDateString(undefined,
+        { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz });
+    } catch (e) { return str.slice(0, 10); }
+  };
   const fmtMoney = (n) => '$' + (Number(n) || 0).toFixed(2);
 
   // ============================ Closures =================================
@@ -28,31 +46,52 @@
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Date</th><th>Centre</th><th>Type</th><th>Reason</th><th>Billing</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Centre</th><th>Type</th><th>Reason</th><th>Billing</th><th>Added</th><th></th></tr></thead>
           <tbody>${(r.data || []).map(c => `<tr>
             <td><strong>${fmtDate(c.closure_date)}${c.end_date ? ' – ' + fmtDate(c.end_date) : ''}</strong></td>
             <td>${esc(c.centre_name)}</td>
             <td><span class="kt-pill kt-pill-info">${esc(c.closure_type)}</span></td>
             <td>${esc(c.reason || '—')}</td>
             <td>${c.affects_billing ? 'Paused' : 'No change'}</td>
-            <td><button class="kt-act-icon kt-act-danger kt-icon-tip" data-rm="${c.id}" title="Remove" aria-label="Remove" data-kttip="Remove">🗑️</button></td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No closures scheduled.</td></tr>'}</tbody>
+            <td style="font-size:12.5px;color:#64748B;">${esc(c.added_by || '—')}${c.created_at ? '<div style="font-size:11.5px;color:#94A3B8;">' + esc(fmtStamp(c.created_at)) + '</div>' : ''}</td>
+            <td><button class="kt-act-icon kt-icon-tip" data-ed="${c.id}" title="Edit" aria-label="Edit" data-kttip="Edit">✏️</button><button class="kt-act-icon kt-act-danger kt-icon-tip" data-rm="${c.id}" title="Remove" aria-label="Remove" data-kttip="Remove">🗑️</button></td>
+          </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No closures scheduled.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
     document.getElementById('cl-new').onclick = () => openClosureModal();
+    main.querySelectorAll('button[data-ed]').forEach(b => b.onclick = () => {
+      const row = (r.data || []).filter(c => String(c.id) === String(b.dataset.ed))[0];
+      if (row) { openClosureModal(row); }
+    });
     main.querySelectorAll('button[data-rm]').forEach(b => b.onclick = async () => {
       if (!await KT.confirm('Remove this closure?')) return;
       await Api.delete(`/operations/closures/${b.dataset.rm}`);
       renderClosures(main);
     });
   }
-  async function openClosureModal() {
+  /* A closure's created_at is stored UTC. Rendered in the agency's timezone, like
+     every other timestamp — never the device's. */
+  function fmtStamp(ts) {
+    if (!ts) { return ''; }
+    try {
+      var tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
+      var s = String(ts).replace(' ', 'T');
+      if (!/[Zz]|[+-]\d\d:?\d\d$/.test(s)) { s += 'Z'; }
+      return new Date(s).toLocaleString('en-CA',
+        { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
+    } catch (e) { return String(ts).slice(0, 16); }
+  }
+
+  /* One dialog for both jobs. `existing` turns it into an edit, which PATCHes rather than
+     creating a second closure — the previous way to fix a wrong date was to delete and
+     re-add, and that announces the same closure to every family twice. */
+  async function openClosureModal(existing) {
     const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
     m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:480px;width:92%;">
-      <h3 style="margin:0 0 16px;color:#0F172A;">New closure</h3>
+      <h3 style="margin:0 0 16px;color:#0F172A;">${existing ? 'Edit closure' : 'New closure'}</h3>
       <label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Centre</label>
       <select id="cl-centre" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">${centres.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
       <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Type</label>
@@ -73,15 +112,45 @@
       </div></div>`;
     document.body.appendChild(m);
     m.querySelector('#cl-cancel').onclick = () => m.remove();
+
+    // Prefill when editing. Dates are sliced, not parsed: running a date-only value
+    // through Date() shifts it a day in either direction depending on the engine.
+    if (existing) {
+      m.querySelector('#cl-centre').value = String(existing.centre_id);
+      m.querySelector('#cl-centre').disabled = true;   // moving a closure between centres is a new closure
+      m.querySelector('#cl-type').value = existing.closure_type || 'holiday';
+      m.querySelector('#cl-date').value = String(existing.closure_date || '').slice(0, 10);
+      m.querySelector('#cl-end').value = existing.end_date ? String(existing.end_date).slice(0, 10) : '';
+      m.querySelector('#cl-reason').value = existing.reason || '';
+      m.querySelector('#cl-bill').checked = !!existing.affects_billing;
+    }
+
     m.querySelector('#cl-save').onclick = async () => {
-      await Api.post('/operations/closures', {
-        centre_id: +m.querySelector('#cl-centre').value,
+      const btn = m.querySelector('#cl-save');
+      const body = {
         closure_date: m.querySelector('#cl-date').value,
         end_date: m.querySelector('#cl-end').value || null,
         closure_type: m.querySelector('#cl-type').value,
         reason: m.querySelector('#cl-reason').value,
         affects_billing: m.querySelector('#cl-bill').checked,
-      });
+      };
+      if (!body.closure_date) {
+        if (KT.Dom && KT.Dom.toast) { KT.Dom.toast('Pick a start date', 'error'); }
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        if (existing) {
+          await Api.patch(`/operations/closures/${existing.id}`, body);
+        } else {
+          body.centre_id = +m.querySelector('#cl-centre').value;
+          await Api.post('/operations/closures', body);
+        }
+      } catch (e) {
+        btn.disabled = false; btn.textContent = 'Save';
+        if (KT.Dom && KT.Dom.toast) { KT.Dom.toast((e && e.message) || 'Could not save', 'error'); }
+        return;
+      }
       m.remove();
       renderClosures(document.querySelector('main'));
     };

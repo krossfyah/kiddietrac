@@ -138,3 +138,14 @@ handler, but every `getElementById` on that screen now returns null — so
 Resolve the elements a handler needs at the TOP of the handler and bail if any are
 missing. Do not assume the screen that painted the control is still mounted when the
 control is used. This has now been the cause of two filed crash tickets.
+
+## A date is not a timestamp
+
+`new Date("2026-07-27")` parses a bare ISO date as **UTC midnight**. Rendered in any
+western timezone that is the 26th. This has now shipped as a visible off-by-one twice
+in one day: closure ranges on the calendar and on the closures screen.
+
+A value with no time in it denotes a calendar DAY and has no timezone to convert
+between — format it from its own `YYYY-MM-DD` parts. Only values carrying an actual
+time go through the agency timezone. Ten screens still build dates with
+`new Date(x + "T00:00:00")`; treat each as suspect.
