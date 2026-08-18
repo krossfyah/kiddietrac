@@ -307,7 +307,65 @@
     });
   }
 
-  async function runReport(type) {
+  /* ── Criteria for Invoices & balances ──────────────────────────────────
+     Only this report asks: it is the one where "everything" is rarely the question and
+     the row count makes the difference between a page and a ream. Anything else runs
+     straight off its button as before. */
+  function openInvoiceCriteria(type) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    var box = function (id, label, hint, on) {
+      return '<label style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;cursor:pointer;">'
+        + '<input id="' + id + '" type="checkbox" ' + (on ? 'checked' : '') + ' style="margin-top:3px;width:16px;height:16px;flex-shrink:0;">'
+        + '<span><span style="font-size:14px;color:#334155;font-weight:600;">' + esc(label) + '</span>'
+        + (hint ? '<span style="display:block;font-size:12px;color:#64748B;">' + esc(hint) + '</span>' : '') + '</span></label>';
+    };
+    overlay.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:20px 22px;box-shadow:0 18px 48px rgba(0,0,0,.28);">'
+      + '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">🧾 Invoices &amp; balances</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Choose what to include. The date range above still applies.</div>'
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:6px 0 2px;">Status</div>'
+      + box('ic-open', 'Open', '', true)
+      + box('ic-paid', 'Paid', '', true)
+      + box('ic-overdue', 'Overdue', '', true)
+      + box('ic-void', 'Voided', 'Raised, then cancelled — off by default.', false)
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:14px 0 4px;">Balance</div>'
+      + '<select id="ic-balance" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;background:#fff;">'
+      + '<option value="">Any balance</option>'
+      + '<option value="owing">Only invoices with money still owing</option>'
+      + '<option value="settled">Only invoices settled in full</option>'
+      + '</select>'
+      + '<div id="ic-err" style="color:#DC2626;font-size:12.5px;min-height:17px;margin-top:8px;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">'
+      + '<button id="ic-cancel" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+      + '<button id="ic-run" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Run report</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#ic-cancel').addEventListener('click', function () { overlay.remove(); });
+
+    overlay.querySelector('#ic-run').addEventListener('click', function () {
+      var picked = [];
+      ['open', 'paid', 'overdue', 'void'].forEach(function (k) {
+        var el = overlay.querySelector('#ic-' + k);
+        if (el && el.checked) picked.push(k);
+      });
+      // No status at all would return nothing and look like a broken report.
+      if (! picked.length) {
+        overlay.querySelector('#ic-err').textContent = 'Pick at least one status, or the report has nothing to show.';
+        return;
+      }
+      var balance = (overlay.querySelector('#ic-balance') || {}).value || '';
+      overlay.remove();
+      runReport(type, { status: picked.join(','), balance: balance });
+    });
+  }
+
+  var LAST_OPTS = {};
+
+  async function runReport(type, opts) {
+    // Ask first, run second — but only the first time, so the re-run after a sort or an
+    // export does not re-prompt for criteria already chosen.
+    if (type === 'invoices' && !opts) { return openInvoiceCriteria(type); }
     var out = document.getElementById('rep-out');
     if (!out) return;
     var centreId = (document.getElementById('rep-centre') || {}).value || '';
@@ -318,6 +376,11 @@
     if (centreId) qs += '&centre_id=' + encodeURIComponent(centreId);
     if (from) qs += '&from=' + encodeURIComponent(from);
     if (to) qs += '&to=' + encodeURIComponent(to);
+    if (opts && opts.status) qs += '&status=' + encodeURIComponent(opts.status);
+    if (opts && opts.balance) qs += '&balance=' + encodeURIComponent(opts.balance);
+    // Remembered so a re-render (sort, export, print) reuses the same criteria rather
+    // than silently widening the report back out to everything.
+    LAST_OPTS[type] = opts || null;
     var r;
     try { r = await Api.get('/reports/canned/run?' + qs); }
     catch (e) { out.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not run report: ' + esc(e.message || 'error') + '</div>'; return; }
@@ -385,7 +448,7 @@
         var f = document.getElementById('rep-from'), t = document.getElementById('rep-to');
         if (f) f.value = b.dataset.from;
         if (t) t.value = b.dataset.to;
-        runReport(type);
+        runReport(type, LAST_OPTS[type]);
       });
     }, 0);
 

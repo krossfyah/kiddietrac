@@ -302,7 +302,8 @@ final class ReportsController extends Controller
             $centreId = null;
         }
 
-        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to);
+        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
+            $request->query('status'), $request->query('balance'));
 
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
@@ -412,7 +413,7 @@ final class ReportsController extends Controller
         }
     }
 
-    private function cannedRows(string $type, int $agencyId, ?int $centreId, ?string $from, ?string $to): array
+    private function cannedRows(string $type, int $agencyId, ?int $centreId, ?string $from, ?string $to, ?string $statusCsv = null, ?string $balance = null): array
     {
         switch ($type) {
             case 'attendance':
@@ -529,6 +530,19 @@ final class ReportsController extends Controller
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->whereDate('i.issued_at', '>=', $from);
                 if ($to) $q->whereDate('i.issued_at', '<=', $to);
+
+                // Status and balance are asked separately because they answer different
+                // questions: "which invoices are voided" is not the same as "who owes us
+                // money", and an invoice can be Open with nothing outstanding. Applied to
+                // BOTH sources below, or the filter would quietly mean "native only".
+                $statuses = array_values(array_filter(array_map(
+                    fn ($x) => strtolower(trim($x)),
+                    explode(',', (string) $statusCsv)
+                )));
+                $balance = strtolower((string) $balance);
+                if ($statuses) $q->whereIn('i.status', $statuses);
+                if ($balance === 'owing') $q->where('i.balance_due', '>', 0);
+                if ($balance === 'settled') $q->where('i.balance_due', '<=', 0);
                 $data = $q->select('i.invoice_number', 'i.issued_at', 'i.due_at', 'i.total', 'i.amount_paid', 'i.balance_due', 'i.status', 'f.family_name', 'c.name as centre')
                     ->orderByDesc('i.issued_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
@@ -551,6 +565,9 @@ final class ReportsController extends Controller
                     if ($centreId) $eq->where('c.id', $centreId);
                     if ($from) $eq->whereDate('x.issued_at', '>=', $from);
                     if ($to) $eq->whereDate('x.issued_at', '<=', $to);
+                    if ($statuses) $eq->whereIn('x.status', $statuses);
+                    if ($balance === 'owing') $eq->where('x.balance_due', '>', 0);
+                    if ($balance === 'settled') $eq->where('x.balance_due', '<=', 0);
                     $ext = $eq->select('x.number', 'x.issued_at', 'x.due_at', 'x.total', 'x.amount_paid',
                             'x.balance_due', 'x.status', 'x.source_label', 'x.external_source',
                             'f.family_name', 'c.name as centre')
@@ -779,7 +796,8 @@ final class ReportsController extends Controller
         if ($centreId && ! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()) {
             $centreId = null;
         }
-        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to);
+        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
+            $request->query('status'), $request->query('balance'));
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
         $html = $this->cannedHtml($defs[$type], $columns, $rows, $agency, $centre, $from, $to, $this->producedBy($request));
@@ -806,7 +824,8 @@ final class ReportsController extends Controller
         if ($centreId && ! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()) {
             $centreId = null;
         }
-        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to);
+        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
+            $request->query('status'), $request->query('balance'));
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
 
         // Column headers double as row keys (cannedRows keys rows by display header).
@@ -878,7 +897,8 @@ final class ReportsController extends Controller
         if ($centreId && ! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()) {
             $centreId = null;
         }
-        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to);
+        [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
+            $request->query('status'), $request->query('balance'));
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
 
