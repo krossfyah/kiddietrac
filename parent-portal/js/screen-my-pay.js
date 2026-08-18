@@ -137,6 +137,8 @@
       return '<div class="kt-pay-card">'
         + '<div class="kt-pay-card-top"><div class="kt-pay-period">' + period + '</div>'
         + '<div class="kt-pay-gross">' + money(d.gross) + '</div></div>'
+        + (d.net != null && Number(d.net).toFixed(2) !== Number(d.gross).toFixed(2)
+            ? '<div style="font-size:12px;color:#64748B;margin-top:-4px;">net ' + money(d.net) + ' after deductions</div>' : '')
         + '<div class="kt-pay-meta">' + esc(d.kind === 'invoice' ? 'Payroll invoice' : 'Payslip')
         + (d.reference ? ' · ' + esc(d.reference) : '')
         + (Number(d.rate) > 0 ? ' · ' + esc(String(d.units)) + ' ' + esc(d.unit_label || '') : '')

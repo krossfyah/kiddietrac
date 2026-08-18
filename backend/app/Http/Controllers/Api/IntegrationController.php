@@ -469,6 +469,184 @@ class IntegrationController extends Controller
      * here (this endpoint only ingests the partner's own entries). Pass
      * deleted=true to soft-remove one that was cleared on the partner side.
      */
+    /**
+     * A payroll document issued to staff — a payslip or a payroll invoice.
+     *
+     * iLearn runs the payroll; KiddieTrac mirrors what was issued so staff can see their
+     * own history and admins can read the whole ledger in one place. Deductions come
+     * across as sent: iLearn pays net, and a mirror that kept only gross would disagree
+     * with the payslip the person actually received.
+     *
+     * The payee is matched by EMAIL, not name — iLearn's names are free text and already
+     * contain a typo across two rows of one person. A match additionally requires an
+     * active role in THIS agency: an email that resolves to somebody in another agency is
+     * left unlinked rather than filed across the boundary. The document is still stored,
+     * because the agency's payroll history has to be complete even where a payee has no
+     * KiddieTrac account.
+     */
+    public function upsertPayroll(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+
+        $data = $request->validate([
+            'external_id'      => 'required|string|max:120',
+            'kind'             => 'required|in:payslip,invoice',
+            'payee_name'       => 'nullable|string|max:120',
+            'payee_email'      => 'nullable|email|max:190',
+            'recipient_type'   => 'nullable|string|max:40',
+            'reference'        => 'nullable|string|max:64',
+            'period_start'     => 'nullable|date',
+            'period_end'       => 'nullable|date',
+            'pay_frequency'    => 'nullable|string|max:32',
+            'units'            => 'nullable|numeric',
+            'unit_label'       => 'nullable|string|max:16',
+            'rate'             => 'nullable|numeric',
+            'gross'            => 'nullable|numeric',
+            'cpp'              => 'nullable|numeric',
+            'ei'               => 'nullable|numeric',
+            'income_tax'       => 'nullable|numeric',
+            'other_deductions' => 'nullable|numeric',
+            'vacation_pay'     => 'nullable|numeric',
+            'net'              => 'nullable|numeric',
+            'benefits'         => 'nullable',
+            'status'           => 'nullable|string|max:40',
+            'issued_at'        => 'nullable|date',
+            'paid_at'          => 'nullable|date',
+            'notes'            => 'nullable|string',
+            'currency'         => 'nullable|string|max:8',
+            'deleted'          => 'nullable|boolean',
+        ]);
+        $source = $this->source($request);
+        $key = $source . ':' . $data['kind'] . ':' . $data['external_id'];
+
+        // A record deleted upstream is voided here rather than removed: it was really
+        // issued, and a payroll ledger that silently loses rows cannot be reconciled.
+        if (! empty($data['deleted'])) {
+            $n = DB::table('payroll_documents')->where('external_key', $key)
+                ->where('agency_id', $agencyId)
+                ->update(['status' => 'void', 'updated_at' => now()]);
+
+            return response()->json(['ok' => true, 'voided' => $n]);
+        }
+
+        // Match by email, and only to somebody who actually belongs to this agency.
+        $userId = null;
+        $roleLabel = null;
+        $group = null;
+        $matchedRole = null;
+        $candidate = null;
+
+        if (! empty($data['payee_email'])) {
+            $candidate = DB::table('users')->whereRaw('LOWER(email) = ?', [strtolower($data['payee_email'])])
+                ->first(['id']);
+        } elseif (! empty($data['payee_name'])) {
+            // No email on the record. Fall back to the name, but only when it resolves to
+            // exactly ONE active person in this agency — an ambiguous name links nobody,
+            // because putting one person's pay on another's record is the worst outcome here.
+            $named = DB::table('users as u')
+                ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                ->where('ra.active', 1)->where('ra.agency_id', $agencyId)
+                ->whereRaw("LOWER(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')))) = ?",
+                    [strtolower(trim((string) $data['payee_name']))])
+                ->distinct()->pluck('u.id');
+            if ($named->count() === 1) {
+                $candidate = (object) ['id' => $named->first()];
+            }
+        }
+
+        if ($candidate) {
+            $inAgency = DB::table('role_assignments')->where('user_id', $candidate->id)
+                ->where('active', 1)->where('agency_id', $agencyId)->exists();
+            if ($inAgency) {
+                $userId = (int) $candidate->id;
+                $matchedRole = \App\Support\Payroll::primaryRole($userId);
+                $roleLabel = \App\Support\Payroll::LABEL[$matchedRole] ?? 'Staff';
+                $group = \App\Support\Payroll::groupFor($matchedRole);
+            }
+        }
+
+        // Being a parent at the centre says nothing about how somebody is PAID. Where the
+        // only KiddieTrac role is guardian, what iLearn calls them on the payroll wins —
+        // otherwise a provider's payslip reads "Parent" and lands on the wrong payroll.
+        $rtRaw = strtolower((string) ($data['recipient_type'] ?? ''));
+        if ($matchedRole === 'guardian' && in_array($rtRaw, ['provider', 'employee', 'contractor', 'educator'], true)) {
+            $roleLabel = ucfirst($rtRaw);
+            $group = in_array($rtRaw, ['provider', 'employee', 'educator'], true) ? 'educators' : 'other';
+        }
+
+        // Unmatched, or matched but with no KiddieTrac role to read a group from: fall
+        // back to what iLearn calls them. A contractor is not on the educator payroll.
+        if ($group === null) {
+            $rt = strtolower((string) ($data['recipient_type'] ?? ''));
+            $group = in_array($rt, ['provider', 'employee', 'educator'], true) ? 'educators' : 'other';
+            $roleLabel = $roleLabel ?: ($rt !== '' ? ucfirst($rt) : 'Staff');
+        }
+
+        $status = strtolower((string) ($data['status'] ?? 'issued'));
+        if (in_array($status, ['paid', 'complete', 'completed'], true)) {
+            $status = 'paid';
+        } elseif (in_array($status, ['void', 'voided', 'cancelled', 'canceled'], true)) {
+            $status = 'void';
+        } else {
+            $status = 'issued';   // approved / draft / open all mean "issued, not yet paid"
+        }
+
+        $benefits = $data['benefits'] ?? null;
+        if (is_array($benefits)) {
+            $benefits = json_encode($benefits);
+        }
+
+        $row = [
+            'agency_id'        => $agencyId,
+            'user_id'          => $userId,
+            'staff_group'      => $group,
+            'role_label'       => $roleLabel,
+            'payee_name'       => $data['payee_name'] ?? null,
+            'payee_email'      => $data['payee_email'] ?? null,
+            'kind'             => $data['kind'],
+            'reference'        => $data['reference'] ?? null,
+            'period_start'     => $data['period_start'] ?? null,
+            'period_end'       => $data['period_end'] ?? null,
+            'pay_frequency'    => $data['pay_frequency'] ?? null,
+            'units'            => round((float) ($data['units'] ?? 0), 2),
+            'unit_label'       => $data['unit_label'] ?? 'hours',
+            'rate'             => round((float) ($data['rate'] ?? 0), 2),
+            'gross'            => round((float) ($data['gross'] ?? 0), 2),
+            'cpp'              => isset($data['cpp']) ? round((float) $data['cpp'], 2) : null,
+            'ei'               => isset($data['ei']) ? round((float) $data['ei'], 2) : null,
+            'income_tax'       => isset($data['income_tax']) ? round((float) $data['income_tax'], 2) : null,
+            'other_deductions' => isset($data['other_deductions']) ? round((float) $data['other_deductions'], 2) : null,
+            'vacation_pay'     => isset($data['vacation_pay']) ? round((float) $data['vacation_pay'], 2) : null,
+            'net'              => isset($data['net']) ? round((float) $data['net'], 2) : null,
+            'benefits'         => $benefits,
+            'currency'         => $data['currency'] ?? 'CAD',
+            'status'           => $status,
+            'source'           => $source,
+            'external_source'  => $source,
+            'external_id'      => $data['external_id'],
+            'external_key'     => $key,
+            'issued_at'        => $data['issued_at'] ?? null,
+            'paid_at'          => $data['paid_at'] ?? null,
+            'notes'            => $data['notes'] ?? null,
+            'updated_at'       => now(),
+        ];
+
+        $existing = DB::table('payroll_documents')->where('external_key', $key)->first(['id', 'agency_id']);
+        if ($existing) {
+            // Never let a re-push move a document between agencies.
+            abort_unless((int) $existing->agency_id === $agencyId, 422, 'That document belongs to another agency.');
+            DB::table('payroll_documents')->where('id', $existing->id)->update($row);
+
+            return response()->json(['ok' => true, 'created' => false, 'id' => $existing->id, 'linked' => $userId !== null]);
+        }
+
+        $row['created_at'] = now();
+        $id = DB::table('payroll_documents')->insertGetId($row);
+
+        return response()->json(['ok' => true, 'created' => true, 'id' => $id, 'linked' => $userId !== null]);
+    }
+
     public function upsertWaitlist(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);

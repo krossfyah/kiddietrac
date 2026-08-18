@@ -82,7 +82,7 @@ class PayrollDocumentController extends Controller
             ->get([
                 'pd.id', 'pd.user_id', 'pd.staff_group', 'pd.role_label', 'pd.payee_name',
                 'pd.kind', 'pd.reference', 'pd.period_start', 'pd.period_end',
-                'pd.units', 'pd.unit_label', 'pd.rate', 'pd.gross', 'pd.currency',
+                'pd.units', 'pd.unit_label', 'pd.rate', 'pd.gross', 'pd.net', 'pd.currency',
                 'pd.status', 'pd.source', 'pd.issued_at', 'pd.paid_at', 'c.name as centre_name',
             ]);
 
@@ -114,7 +114,7 @@ class PayrollDocumentController extends Controller
             ->limit(200)
             ->get([
                 'id', 'kind', 'reference', 'period_start', 'period_end', 'units', 'unit_label',
-                'rate', 'gross', 'currency', 'status', 'source', 'issued_at', 'paid_at', 'role_label',
+                'rate', 'gross', 'net', 'currency', 'status', 'source', 'issued_at', 'paid_at', 'role_label',
             ]);
 
         return response()->json([
@@ -202,9 +202,37 @@ class PayrollDocumentController extends Controller
             . '<tr><td>' . ($doc->unit_label === 'visits' ? 'Home visits completed' : ($doc->unit_label === 'hours' ? 'Hours worked' : 'Agreed amount'))
             . '</td><td class="r">' . e((string) (float) $doc->units) . '</td><td class="r">' . $fmt($doc->rate)
             . '</td><td class="r">' . $fmt($doc->gross) . '</td></tr>'
-            . '<tr><td colspan="3" class="r tot">Gross pay</td><td class="r tot">' . $fmt($doc->gross) . '</td></tr>'
+            . '<tr><td colspan="3" class="r"><strong>Gross pay</strong></td><td class="r"><strong>' . $fmt($doc->gross) . '</strong></td></tr>'
+            . (function () use ($doc, $fmt) {
+                // Only where a payroll was actually run. Reconstructed payslips carry no
+                // deduction data, and a column of zeros would imply one that never happened.
+                $lines = [
+                    'CPP' => $doc->cpp, 'EI' => $doc->ei, 'Income tax' => $doc->income_tax,
+                    'Other deductions' => $doc->other_deductions,
+                ];
+                $any = false;
+                foreach ($lines as $v) {
+                    if ($v !== null && (float) $v != 0.0) { $any = true; break; }
+                }
+                if (! $any) { return ''; }
+                $html = '';
+                foreach ($lines as $label => $v) {
+                    if ($v === null || (float) $v == 0.0) { continue; }
+                    $html .= '<tr><td colspan="3" class="r">' . e($label) . '</td><td class="r">-' . $fmt($v) . '</td></tr>';
+                }
+                if ($doc->vacation_pay !== null && (float) $doc->vacation_pay != 0.0) {
+                    $html .= '<tr><td colspan="3" class="r">Vacation pay</td><td class="r">' . $fmt($doc->vacation_pay) . '</td></tr>';
+                }
+                if ($doc->net !== null) {
+                    $html .= '<tr><td colspan="3" class="r tot">Net pay</td><td class="r tot">' . $fmt($doc->net) . '</td></tr>';
+                }
+                return $html;
+            })()
             . '</tbody></table>'
-            . '<p class="muted" style="margin-top:18px;">Gross pay only — deductions are not calculated here.'
+            . '<p class="muted" style="margin-top:18px;">'
+            . ($doc->net !== null && (float) $doc->net != (float) $doc->gross
+                ? 'Deductions as recorded by payroll.'
+                : 'Gross pay only — deductions are not calculated here.')
             . ($doc->status === 'paid' && $doc->paid_at ? ' Marked paid ' . Carbon::parse($doc->paid_at)->format('j M Y') . '.' : '')
             . '</p>'
             . ($note !== '' ? '<p class="muted">' . e($note) . '</p>' : '')

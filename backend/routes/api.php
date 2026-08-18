@@ -1692,6 +1692,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/children', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertChild']);
         Route::post('/children/deactivate', [\App\Http\Controllers\Api\IntegrationController::class, 'deactivateChild']);
         Route::post('/invoices', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertInvoice']);
+        Route::post('/payroll',  [\App\Http\Controllers\Api\IntegrationController::class, 'upsertPayroll']);
         Route::post('/waitlist', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertWaitlist']);
         Route::get ('/waitlist/pull', [\App\Http\Controllers\Api\IntegrationController::class, 'pullWaitlist']);
         Route::get ('/contacts/pull', [\App\Http\Controllers\Api\IntegrationController::class, 'pullContacts']);

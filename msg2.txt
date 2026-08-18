@@ -1,0 +1,36 @@
+iLearn payroll syncs into KiddieTrac, history and onward
+
+iLearn runs the payroll; KiddieTrac had none of it. 67 staff payroll documents worth
+$118,496.86 now sit in the ledger alongside the 62 reconstructed from punches, so an
+educator opens one place to see what they were paid and an admin reads one ledger.
+
+THE PAY PERIOD IS THE RECORD, not the invoice. iLearn raises a provider/contractor
+invoice for a pay period that already exists - 51 of 55 carry a record_no pointing
+straight at one, categorised "Provider Payroll". Importing both would have booked $213k
+against a real payroll of $112k. An invoice that resolves to a pay period contributes
+only its number to that payslip; only the four whose pay periods were later soft-deleted
+are stored in their own right.
+
+Deductions come across as recorded - CPP, EI, income tax, vacation - and the payslip PDF
+shows the breakdown and net where a payroll was actually run, staying gross-only for the
+reconstructed rows where no such calculation exists.
+
+Payees are matched on EMAIL, never name: iLearn's names are free text and already carry
+"Cassandra"/"Cassanda" for one person. A match also requires an active role in the
+receiving agency, so an email resolving to somebody in another agency is left unlinked
+rather than filed across the boundary. Where a record has no email at all, an exact and
+unique name match within the agency is accepted; an ambiguous name links nobody. 15
+documents stay unlinked because those payees have no KiddieTrac account - their history
+is still in the admin ledger, because the agency's payroll has to be complete.
+
+Being a parent says nothing about how somebody is paid: where the only KiddieTrac role is
+guardian, iLearn's payroll designation wins, so a provider's payslip no longer reads
+"Parent" on the wrong payroll.
+
+Ongoing sync is the established pattern: a PayPeriod observer pushes on save (deferred,
+best-effort, never blocking the payroll save), the invoice observer now routes staff
+invoices to payroll instead of dropping them at its parent_id check - which is precisely
+why nothing ever crossed - and kiddietrac:sync-payroll reconciles nightly at 02:40. Every
+push is an idempotent upsert on external_key.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

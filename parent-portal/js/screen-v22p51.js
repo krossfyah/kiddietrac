@@ -480,7 +480,9 @@
           <td style="${td('left')}">${escapeHtml(r.reference || '')}</td>
           <td style="${td('left')}">${escapeHtml(dt(r.period_start))}</td>
           <td style="${td('right')}">${Number(r.units) || 0} <span style="color:#94A3B8;font-size:11.5px;">${escapeHtml(r.unit_label || '')}</span></td>
-          <td style="${td('right', 'font-weight:600;')}">${money(r.gross)}</td>
+          <td style="${td('right', 'font-weight:600;')}">${money(r.gross)}${
+            r.net != null && Number(r.net).toFixed(2) !== Number(r.gross).toFixed(2)
+              ? `<div style="font-size:11.5px;color:#64748B;font-weight:400;">net ${money(r.net)}</div>` : ''}</td>
           <td style="${td('left')}">${chip(r.status || 'issued')}</td>
           <td style="${td('left')}"><button data-pd-view="${r.id}" style="background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;">View</button>
             ${r.status !== 'paid' ? `<button data-pd-paid="${r.id}" style="background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;">Mark paid</button>` : ''}</td>
