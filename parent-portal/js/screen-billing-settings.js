@@ -19,22 +19,76 @@
 
   var INP = 'box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;';
 
+  /* Tax, tuition plans and sibling discounts all answer "what do we charge and how".
+     Three sidebar entries meant remembering three places to set fees up; as tabs they
+     read as one job. The other two screens are HOSTED, not reimplemented — a second copy
+     of a fee-plan editor drifts from the first the moment either is fixed. */
+  var TABS = [
+    { key: 'tax', label: '🧾 Tax' },
+    { key: 'tuition', label: '💵 Tuition plans', global: 'FeePlans' },
+    { key: 'siblings', label: '👨‍👩‍👧 Sibling discounts', global: 'SiblingDiscountsScreen' },
+  ];
+
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:840px;"><div class="kt-page-hero"><h2>🧾 Billing settings</h2><p>Loading…</p></div></div>';
+    main.innerHTML = '<div style="padding:14px 24px;max-width:1000px;">'
+      + '<div class="kt-page-hero"><h2>🧾 Billing settings</h2><p>What you charge, and how it is worked out.</p></div>'
+      + '<div id="bs-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
+      + '<div id="bs-pane"></div></div>';
+
+    var tabBar = main.querySelector('#bs-tabs');
+    var pane = main.querySelector('#bs-pane');
+    var active = 'tax';
+
+    function paintTabs() {
+      tabBar.innerHTML = TABS.map(function (t) {
+        var on = active === t.key;
+        return '<button type="button" data-bs-tab="' + t.key + '" style="background:none;border:0;border-bottom:2px solid '
+          + (on ? '#1F6FB2' : 'transparent') + ';padding:9px 13px;font-size:13.5px;font-weight:700;color:'
+          + (on ? '#0F172A' : '#64748B') + ';cursor:pointer;border-radius:8px 8px 0 0;">' + t.label + '</button>';
+      }).join('');
+      tabBar.querySelectorAll('[data-bs-tab]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          active = b.getAttribute('data-bs-tab');
+          try { sessionStorage.setItem('kt_bs_tab', active); } catch (e) {}
+          paintTabs(); paintPane();
+        });
+      });
+    }
+
+    function paintPane() {
+      pane.innerHTML = '';
+      var tab = TABS.filter(function (t) { return t.key === active; })[0];
+      if (! tab.global) { return renderTax(pane); }
+      var mod = KT[tab.global];
+      if (mod && mod.render) {
+        // Hosted in this pane. Each screen renders into whatever container it is given.
+        try { mod.render(pane); } catch (e) {
+          pane.innerHTML = '<div class="kt-card" style="color:#DC2626;">Could not load this section.</div>';
+        }
+      } else {
+        pane.innerHTML = '<div class="kt-card" style="color:#64748B;">That section is not available for your role.</div>';
+      }
+    }
+
+    try { active = sessionStorage.getItem('kt_bs_tab') || 'tax'; } catch (e) {}
+    if (! TABS.some(function (t) { return t.key === active; })) { active = 'tax'; }
+    paintTabs();
+    paintPane();
+  }
+
+  async function renderTax(main) {
+    main.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Loading…</div>';
 
     var data = await Api.get('/admin/billing-settings').catch(function (e) { return { __err: (e && e.message) || 'error' }; });
     if (data.__err) {
-      main.innerHTML = '<div style="padding:14px 24px;max-width:840px;"><div class="kt-page-hero"><h2>🧾 Billing settings</h2></div>'
-        + '<div class="kt-card" style="max-width:680px;"><div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:10px;padding:14px;font-size:13px;">This page is available to <b>agency administrators</b>.</div></div></div>';
+      main.innerHTML = '<div class="kt-card" style="max-width:680px;"><div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:10px;padding:14px;font-size:13px;">This section is available to <b>agency administrators</b>.</div></div>';
       return;
     }
 
     var b = data.billing || {};
 
-    main.innerHTML = '<div style="padding:14px 24px;max-width:840px;">'
-      + '<div class="kt-page-hero"><h2>🧾 Billing settings</h2><p>Defaults used when raising invoices for ' + esc(data.agency_name || 'your agency') + '.</p></div>'
-      + '<div class="kt-card" style="max-width:680px;">'
+    main.innerHTML = '<div class="kt-card" style="max-width:680px;">'
       + '<div class="kt-card-header"><h3 class="kt-card-title">🧾 Tax</h3></div>'
       + '<p style="color:#64748B;font-size:12.5px;margin:0 0 12px;">Set once here and it fills in on every invoice, where it can still be changed or switched off for a payee who is not charged tax. Tax applies to the invoice subtotal — the base charge plus any line items.</p>'
 
@@ -58,7 +112,7 @@
       + '<div style="display:flex;align-items:center;gap:14px;justify-content:flex-end;margin-top:16px;">'
       + '<span id="b-status" style="font-size:13px;color:#1E8E60;"></span>'
       + '<button id="b-save" style="font-size:14px;font-weight:700;padding:10px 20px;border:0;border-radius:10px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;cursor:pointer;">Save changes</button></div>'
-      + '</div></div>';
+      + '</div>';
 
     // A worked example, because a percentage is easier to mistype than to misread.
     function preview() {

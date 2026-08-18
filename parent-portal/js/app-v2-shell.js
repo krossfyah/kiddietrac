@@ -149,7 +149,6 @@
           { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},
         { label: 'Finance', items: [
-          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
           { hash: 'late-events',      label: 'Late pick-ups',    icon: '⏰' },
           { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
           { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
@@ -198,11 +197,10 @@
           { hash: 'forms-manager',    label: 'Forms Manager',   icon: '🗂️' },
         ]},
         { label: 'Settings', items: [
+          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
           { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
-          { hash: 'sibling-discounts',  label: 'Sibling discounts',   icon: '👨‍👩‍👧' },
-          { hash: 'tuition-plans',      label: 'Tuition plans',       icon: '💵' },
           { hash: 'billing-setup',      label: 'Billing',             icon: '💳' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
           { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
@@ -288,7 +286,6 @@
           { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},
         { label: 'Finance', items: [
-          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
           { hash: 'late-events',      label: 'Late pick-ups',    icon: '⏰' },
           { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
           { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
@@ -298,6 +295,7 @@
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
         ]},
         { label: 'Settings', items: [
+          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
           { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'billing-setup', label: 'Billing reminders', icon: '💳' },
