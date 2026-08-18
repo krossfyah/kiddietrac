@@ -29,19 +29,9 @@ class PayController extends Controller
     /** Resolve a user's pay profile (rate + type, with a sensible default type). */
     private function profile(int $userId): array
     {
-        $u = DB::table('users')->where('id', $userId)->first(['first_name', 'last_name', 'email', 'phone', 'pay_rate', 'pay_type', 'profile_extras']);
-        $roles = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)->pluck('role')->all();
-        $isVisitor = in_array('home_visitor', $roles, true) && !array_intersect($roles, ['educator', 'centre_director', 'agency_admin']);
-        $type = $u && $u->pay_type ? $u->pay_type : ($isVisitor ? 'per_visit' : 'hourly');
-        $extras = [];
-        if ($u && $u->profile_extras) { $extras = json_decode($u->profile_extras, true) ?: []; }
-        return [
-            'user' => $u,
-            'rate' => (float) ($u->pay_rate ?? 0),
-            'type' => $type,
-            'unit_label' => $type === 'per_visit' ? 'visits' : ($type === 'salary' ? 'period' : 'hours'),
-            'extras' => $extras,
-        ];
+        // Delegated: the stored payroll ledger reads the same profile, and two
+        // copies of a pay rule is two answers to one question.
+        return \App\Support\Payroll::profile($userId);
     }
 
     /** Fetch an agency logo and inline it as a data: URI (avoids Dompdf remote
@@ -78,26 +68,7 @@ class PayController extends Controller
     /** Units worked in a [start,end] local-date window for a pay type. */
     private function units(int $userId, string $type, string $start, string $end): float
     {
-        // Salary / flat contractor payout — a fixed amount each pay period,
-        // regardless of hours or visits (directors, admins, retainer contractors).
-        if ($type === 'salary') {
-            return 1.0;
-        }
-        if ($type === 'per_visit') {
-            return (float) DB::table('home_visit_reports')
-                ->where('home_visitor_id', $userId)
-                ->whereNull('deleted_at')
-                ->whereBetween('visit_date', [$start, $end])
-                ->count();
-        }
-        $startUtc = Carbon::parse($start . ' 00:00:00', self::TZ)->utc();
-        $endUtc = Carbon::parse($end . ' 23:59:59', self::TZ)->utc();
-        $mins = (int) DB::table('time_punches')
-            ->where('user_id', $userId)
-            ->whereNotNull('punched_out_at')
-            ->whereBetween('punched_in_at', [$startUtc, $endUtc])
-            ->sum(DB::raw('TIMESTAMPDIFF(MINUTE, punched_in_at, punched_out_at)'));
-        return round($mins / 60, 2);
+        return \App\Support\Payroll::units($userId, $type, $start, $end);
     }
 
     /** GET /api/v1/me/payslips — the caller's own weekly payslips (last 12 weeks with activity). */

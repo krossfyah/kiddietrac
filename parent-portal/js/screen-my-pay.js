@@ -88,6 +88,7 @@
     if (!slips.length) {
       html += '<div class="kt-pay-empty">No pay activity in the last 12 weeks.</div></div>';
       container.innerHTML = html;
+      renderDocs(container);
       return;
     }
     html += '<div class="kt-pay-list">';
@@ -101,7 +102,76 @@
     });
     html += '</div></div>';
     container.innerHTML = html;
-    container.querySelectorAll('.kt-pay-dl').forEach(function (b) { b.addEventListener('click', function () { downloadPdf(b.getAttribute('data-start'), b); }); });
+    container.querySelectorAll('.kt-pay-dl[data-start]').forEach(function (b) { b.addEventListener('click', function () { downloadPdf(b.getAttribute('data-start'), b); }); });
+    renderDocs(container);
+  }
+
+  /* The documents that have actually been ISSUED, as opposed to the rolling 12-week
+     calculation above it. The two answer different questions — "what am I owed for the
+     work I have logged" and "what has the agency put on the record" — and a staff member
+     asking about their pay is usually asking the second one. Module scope, not nested
+     inside render(): a declaration inside another function body is invisible to its
+     siblings, which is the trap behind three crashes this month. */
+  async function renderDocs(container) {
+    var host = document.createElement('div');
+    host.style.cssText = 'max-width:860px;margin:22px auto 0;padding:0 14px;';
+    host.innerHTML = '<div style="color:#94A3B8;font-size:13px;">Loading issued documents…</div>';
+    container.appendChild(host);
+
+    var res;
+    try { res = await Api.get('/auth/me/payroll-documents'); } catch (e) { host.remove(); return; }
+    var rows = (res && res.data) || [];
+    if (!rows.length) { host.remove(); return; }
+
+    var head = '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px;">'
+      + '<h3 style="margin:0;font-size:16px;color:#0D1B2A;">🧾 Issued documents</h3>'
+      + '<span style="font-size:12.5px;color:#64748B;">' + rows.length + ' on record'
+      + (res.ytd_gross ? ' · <strong style="color:#0D1B2A;">' + money(res.ytd_gross) + '</strong> this year' : '')
+      + '</span></div>';
+
+    var cards = rows.map(function (d) {
+      var period = d.period_start
+        ? esc(fmt(d.period_start)) + ' – ' + esc(fmt(d.period_end || d.period_start))
+        : 'No period';
+      var tone = d.status === 'paid' ? ['#DCFCE7', '#166534'] : (d.status === 'void' ? ['#F1F5F9', '#64748B'] : ['#E0F2FE', '#075985']);
+      return '<div class="kt-pay-card">'
+        + '<div class="kt-pay-card-top"><div class="kt-pay-period">' + period + '</div>'
+        + '<div class="kt-pay-gross">' + money(d.gross) + '</div></div>'
+        + '<div class="kt-pay-meta">' + esc(d.kind === 'invoice' ? 'Payroll invoice' : 'Payslip')
+        + (d.reference ? ' · ' + esc(d.reference) : '')
+        + (Number(d.rate) > 0 ? ' · ' + esc(String(d.units)) + ' ' + esc(d.unit_label || '') : '')
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
+        + '<span style="font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;background:' + tone[0] + ';color:' + tone[1] + ';">'
+        + esc((d.status || 'issued').charAt(0).toUpperCase() + (d.status || 'issued').slice(1)) + '</span>'
+        + (Number(d.rate) > 0 ? '' : '<span style="font-size:11.5px;color:#9A3412;">No pay rate on file</span>')
+        + '<button data-doc="' + d.id + '" class="kt-pay-dl" style="margin-left:auto;">⬇ PDF</button>'
+        + '</div></div>';
+    }).join('');
+
+    host.innerHTML = head + '<div class="kt-pay-list">' + cards + '</div>';
+    host.querySelectorAll('[data-doc]').forEach(function (b) {
+      b.addEventListener('click', function () { openDoc(b.getAttribute('data-doc'), b); });
+    });
+  }
+
+  /* Fetched with the token rather than linked: the PDF route is authenticated and a
+     plain href cannot carry the header. */
+  async function openDoc(id, btn) {
+    var label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Opening…';
+    try {
+      var r = await fetch(apiBase() + '/payroll-documents/' + id + '/pdf', {
+        headers: { Authorization: 'Bearer ' + tok(), Accept: 'application/pdf' },
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var url = URL.createObjectURL(await r.blob());
+      window.open(url, '_blank');
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    } catch (e) {
+      if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open that document', 'error');
+    }
+    btn.disabled = false; btn.textContent = label;
   }
 
   KT.Shell.registerScreen('educator:my-hours', render);

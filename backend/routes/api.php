@@ -438,6 +438,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p3.5: onboarding wizard submission
         Route::patch('/auth/me/onboarding', [AuthController::class, 'updateOnboarding']);
     Route::get('/auth/me/payee-invoices', [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'mine']);
+    // Payroll documents: an educator or staff member sees their own; the PDF route is
+    // shared with admins and decides for itself whose document may be opened.
+    Route::get('/auth/me/payroll-documents', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'mine']);
+    Route::get('/payroll-documents/{id}/pdf', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'pdf'])->where('id', '[0-9]+');
     Route::get ('/auth/me/auto-signoff-notice',     [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'show']);
     Route::post('/auth/me/auto-signoff-notice/ack', [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'ack']);
     Route::get('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'show']);
@@ -1060,6 +1064,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Interface state that follows the person rather than the browser.
         // Late arrivals and departures: educators record, directors and admins decide.
         // Invoices raised against a payee: an educator contracting, a family, a supplier.
+        Route::get ('/payroll-documents',             [\App\Http\Controllers\Api\PayrollDocumentController::class, 'index']);
+        Route::post('/payroll-documents/backfill',    [\App\Http\Controllers\Api\PayrollDocumentController::class, 'backfill']);
+        Route::post('/payroll-documents/{id}/status', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'setStatus'])->where('id', '[0-9]+');
         Route::get ('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'index']);
         Route::get ('/payee-invoices/hours',        [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'hours']);
         Route::post('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'store']);

@@ -1,0 +1,28 @@
+Payroll documents become a record instead of a calculation
+
+A payslip was computed on demand from time punches and never written down, so there was
+no answer to "what did we issue this person, and when" - the one question a payroll
+record exists to answer. Worse, a recomputed payslip silently changes when a punch is
+later edited or a rate corrected, so last month's payslip stopped matching what the
+person was actually paid.
+
+payroll_documents stores the units, rate and gross AS ISSUED. Backfilled from the punch
+and visit history KiddieTrac already holds: 62 documents, verified against the live
+calculation with zero mismatches. Re-running the backfill is idempotent on external_key
+and leaves anything already marked paid alone, so it stays safe to re-run as more
+history arrives.
+
+It appears in two places: a Documents subsection under Payroll for admins, split into
+educators and other staff the same way the hours report is, with view and mark-paid; and
+on the staff pay screen, where an educator sees their own issued documents beside the
+rolling 12-week calculation. Both carry a PDF.
+
+PayController's profile() and units() move to App\Support\Payroll and the controller now
+delegates, so the stored ledger and the live payslip screen cannot drift into quoting
+different numbers for the same week.
+
+Isolation verified with two tokens: a single-agency admin forging X-Active-Agency-Id at
+another agency sees only their own documents, and a foreign PDF 404s. The self-view is
+pinned to the caller's user id and cannot be widened by a parameter.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

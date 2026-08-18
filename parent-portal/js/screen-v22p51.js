@@ -360,7 +360,8 @@
   async function renderPayroll(main) {
     main.innerHTML = `
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
-        <h2 style="margin:0 0 16px;color:#1F6080;">Payroll report</h2>
+        <h2 style="margin:0 0 12px;color:#1F6080;">Payroll</h2>
+        <div id="pr-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 16px;padding:0 0 2px;"></div>
         <div style="display:flex;gap:12px;margin-bottom:18px;align-items:end;">
           <label style="font-size:13px;color:#374151;">From <input id="pr-from" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
           <label style="font-size:13px;color:#374151;">To <input id="pr-to" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
@@ -368,8 +369,32 @@
           <button id="pr-csv" style="background:#059669;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">⤓ CSV</button>
         </div>
         <div id="pr-result"></div>
-
+        <div id="pr-docs" hidden></div>
       </div>`;
+
+    // Hours worked and documents issued are two different questions about the same
+    // payroll, and they were never both answerable: a payslip was computed on demand and
+    // never written down, so "what did we issue this person" had no record to read.
+    const PR_TABS = [{ key: 'hours', label: '⏱ Hours worked' }, { key: 'docs', label: '🧾 Documents issued' }];
+    let prTab = 'hours';
+    const paintPrTabs = () => {
+      const bar = document.getElementById('pr-tabs');
+      if (!bar) return;
+      bar.innerHTML = PR_TABS.map(t => `<button type="button" data-pr-tab="${t.key}" style="background:none;border:0;border-bottom:2px solid ${prTab === t.key ? '#1F6080' : 'transparent'};padding:9px 13px;font-size:13.5px;font-weight:700;color:${prTab === t.key ? '#0F172A' : '#64748B'};cursor:pointer;border-radius:8px 8px 0 0;">${t.label}</button>`).join('');
+      bar.querySelectorAll('[data-pr-tab]').forEach(b => {
+        b.onclick = () => {
+          prTab = b.getAttribute('data-pr-tab');
+          const hoursOn = prTab === 'hours';
+          document.getElementById('pr-result').hidden = !hoursOn;
+          document.getElementById('pr-csv').hidden = !hoursOn;
+          const docs = document.getElementById('pr-docs');
+          docs.hidden = hoursOn;
+          paintPrTabs();
+          if (!hoursOn) renderPayrollDocs();
+        };
+      });
+    };
+    paintPrTabs();
     // v22p98: default to a trailing 30-day window (was first-of-month → today,
     // a single empty day on the 1st, hiding the whole prior pay period).
     const today = new Date();
@@ -384,6 +409,108 @@
     runPayroll();
 
   }
+  /* The issued ledger, split the same way the hours report is. Module scope, not
+     nested in renderPayroll: a declaration inside another function body is invisible to
+     its siblings, which is the trap behind three crashes this month. */
+  async function renderPayrollDocs() {
+    const host = document.getElementById('pr-docs');
+    if (!host) return;
+    const fromEl = document.getElementById('pr-from'), toEl = document.getElementById('pr-to');
+    host.innerHTML = '<div style="color:#64748B;padding:12px;">Loading…</div>';
+
+    // A wider window than the hours report: documents are looked up by name far more
+    // often than by date, and a 30-day default hides almost the whole ledger.
+    const to = (toEl && toEl.value) || '';
+    let res;
+    try {
+      res = await Api.get(`/provider/payroll-documents${to ? '?to=' + to : ''}`);
+    } catch (e) {
+      host.innerHTML = `<div style="color:#B91C1C;padding:12px;">Could not load payroll documents: ${escapeHtml((e && e.message) || 'error')}</div>`;
+      return;
+    }
+    const rows = (res && res.data) || [];
+    if (!rows.length) {
+      host.innerHTML = '<div style="color:#64748B;padding:12px;">No payroll documents issued yet. They appear here as payslips and payroll invoices are raised.</div>';
+      return;
+    }
+
+    const money = (n) => '$' + (Number(n) || 0).toFixed(2);
+    const dt = (d) => { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d || ''; } };
+    const chip = (s) => {
+      const tone = s === 'paid' ? ['#DCFCE7', '#166534'] : (s === 'void' ? ['#F1F5F9', '#64748B'] : ['#E0F2FE', '#075985']);
+      return `<span style="font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;background:${tone[0]};color:${tone[1]};">${escapeHtml(s.charAt(0).toUpperCase() + s.slice(1))}</span>`;
+    };
+
+    // A rate of zero is not a rounding problem — nobody has set what that person is paid,
+    // and a payslip reading $0.00 with no explanation looks like a bug rather than a gap.
+    const noRate = rows.filter(r => Number(r.rate) === 0);
+    const banner = noRate.length
+      ? `<div style="background:#FFF7ED;border:1px solid #FED7AA;color:#9A3412;border-radius:12px;padding:12px 14px;font-size:13px;margin:0 0 14px;">
+           <strong>${noRate.length} document${noRate.length === 1 ? '' : 's'} show $0.00</strong> because no pay rate is set for
+           ${new Set(noRate.map(r => r.user_id)).size} staff member(s). The hours are right; set a rate on each staff record and these fill in.</div>`
+      : '';
+
+    const GROUPS = [{ key: 'educators', label: '🧑‍🏫 Educators' }, { key: 'other', label: '👥 Other staff' }];
+    const th = (a) => `text-align:${a};padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;`;
+    const td = (a, x) => `padding:9px 8px;border-bottom:1px solid #F3F4F6;text-align:${a};${x || ''}`;
+
+    host.innerHTML = banner + GROUPS.map(g => {
+      const list = rows.filter(r => (r.staff_group === 'educators' ? 'educators' : 'other') === g.key);
+      if (!list.length) return '';
+      const t = (res.totals && res.totals[g.key]) || {};
+      return `<div style="margin-bottom:22px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 6px;">
+          <h3 style="margin:0;font-size:15px;color:#1F6080;">${g.label}</h3>
+          <span style="font-size:12.5px;color:#64748B;">${list.length} document${list.length === 1 ? '' : 's'} · ${t.people || 0} people · <strong style="color:#0F172A;">${money(t.gross)}</strong> gross${t.unpaid ? ` · <span style="color:#9A3412;">${money(t.unpaid)} unpaid</span>` : ''}</span>
+        </div>
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:720px;"><thead><tr>
+          <th style="${th('left')}">Staff</th><th style="${th('left')}">Type</th><th style="${th('left')}">Reference</th>
+          <th style="${th('left')}">Period</th><th style="${th('right')}">Units</th><th style="${th('right')}">Gross</th>
+          <th style="${th('left')}">Status</th><th style="${th('left')}"></th>
+        </tr></thead><tbody>${list.map(r => `<tr>
+          <td style="${td('left')}">${escapeHtml(r.payee_name || '')}<div style="font-size:11.5px;color:#94A3B8;">${escapeHtml(r.role_label || '')}</div></td>
+          <td style="${td('left')}">${r.kind === 'invoice' ? 'Invoice' : 'Payslip'}</td>
+          <td style="${td('left')}">${escapeHtml(r.reference || '')}</td>
+          <td style="${td('left')}">${escapeHtml(dt(r.period_start))}</td>
+          <td style="${td('right')}">${Number(r.units) || 0} <span style="color:#94A3B8;font-size:11.5px;">${escapeHtml(r.unit_label || '')}</span></td>
+          <td style="${td('right', 'font-weight:600;')}">${money(r.gross)}</td>
+          <td style="${td('left')}">${chip(r.status || 'issued')}</td>
+          <td style="${td('left')}"><button data-pd-view="${r.id}" style="background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;">View</button>
+            ${r.status !== 'paid' ? `<button data-pd-paid="${r.id}" style="background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;">Mark paid</button>` : ''}</td>
+        </tr>`).join('')}</tbody></table></div></div>`;
+    }).join('');
+
+    host.querySelectorAll('[data-pd-view]').forEach(b => {
+      b.onclick = async () => {
+        const label = b.textContent;
+        b.disabled = true; b.textContent = 'Opening…';
+        try {
+          const r = await fetch(`${(KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'}/payroll-documents/${b.getAttribute('data-pd-view')}/pdf`,
+            { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token')), Accept: 'application/pdf' } });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const url = URL.createObjectURL(await r.blob());
+          window.open(url, '_blank');
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (e) {
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open that document', 'error');
+        }
+        b.disabled = false; b.textContent = label;
+      };
+    });
+    host.querySelectorAll('[data-pd-paid]').forEach(b => {
+      b.onclick = async () => {
+        b.disabled = true; b.textContent = 'Saving…';
+        try {
+          await Api.post(`/provider/payroll-documents/${b.getAttribute('data-pd-paid')}/status`, { status: 'paid' });
+          renderPayrollDocs();
+        } catch (e) {
+          b.disabled = false; b.textContent = 'Mark paid';
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not update that document', 'error');
+        }
+      };
+    });
+  }
+
   async function runPayroll() {
     // Guard against the user navigating away mid-fetch: the from/to inputs and the
     // result host all live on this screen, and firing this after leaving it threw
