@@ -94,7 +94,11 @@
       m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">🧾 Generate an invoice</div>'
         + '<div style="font-size:12.5px;color:#64748B;margin:0 0 14px;">For a ' + label + '. Nothing is sent — this records what is owed.</div>'
         + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Who</label>'
-        + '<input id="pi-name" type="text" value="' + esc(payee && payee.name ? payee.name : '') + '" placeholder="Name" style="' + fld + 'margin-bottom:12px;">'
+        + '<select id="pi-who" style="' + fld + 'background:#fff;margin-bottom:6px;"><option value="">Loading…</option></select>'
+        // Kept as a fallback: a contractor being paid for the first time is not on any
+        // list yet, and refusing to invoice them until somebody creates a supplier record
+        // would make this screen useless on the day it is most needed.
+        + '<input id="pi-name" type="text" value="' + esc(payee && payee.name ? payee.name : '') + '" placeholder="…or type a name" style="' + fld + 'margin-bottom:12px;">'
         + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Based on</label>'
         + '<select id="pi-basis" style="' + fld + 'background:#fff;margin-bottom:12px;">'
         +   '<option value="amount">A set amount</option>'
@@ -134,6 +138,42 @@
       document.body.appendChild(ov);
       ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
       m.querySelector('#pi-cancel').addEventListener('click', function () { ov.remove(); });
+
+      // Populate the selector from whichever list this section is about.
+      var whoSel = m.querySelector('#pi-who');
+      var whoMap = {};
+      (function loadPayees() {
+        var url = kind === 'educator' ? '/provider/team-contacts'
+          : (kind === 'parent' ? '/admin/families' : '/admin/suppliers');
+        Api.get(url).then(function (r) {
+          var list = [];
+          if (kind === 'educator') {
+            list = ((r && r.contacts) || []).filter(function (p) {
+              return p.role === 'Educator' || p.role === 'Home visitor' || p.role === 'Director';
+            }).map(function (p) { return { id: p.id, name: p.name }; });
+          } else if (kind === 'parent') {
+            list = ((r && (r.data || r.families)) || []).map(function (f) {
+              return { id: f.id, name: f.family_name || ('Family #' + f.id) };
+            });
+          } else {
+            list = ((r && (r.suppliers || r.data)) || []).map(function (x) { return { id: x.id, name: x.name }; });
+          }
+          whoSel.innerHTML = '<option value="">' + (list.length ? 'Choose…' : 'Nobody on file — type a name below') + '</option>'
+            + list.map(function (p) {
+                whoMap[String(p.id)] = p;
+                return '<option value="' + p.id + '">' + esc(p.name) + '</option>';
+              }).join('');
+          if (payee && payee.id) { whoSel.value = String(payee.id); }
+          else if (prefill && prefill.payee_pick) { whoSel.value = String(prefill.payee_pick); }
+        }).catch(function () {
+          whoSel.innerHTML = '<option value="">Could not load the list — type a name below</option>';
+        });
+      })();
+      // Choosing from the list fills the name box, so one field is the source of truth.
+      whoSel.addEventListener('change', function () {
+        var p = whoMap[whoSel.value];
+        if (p) { m.querySelector('#pi-name').value = p.name; }
+      });
 
       var basis = m.querySelector('#pi-basis');
       function syncBasis() {
@@ -190,7 +230,11 @@
         var body = {
           kind: kind,
           payee_name: (m.querySelector('#pi-name').value || '').trim(),
-          payee_user_id: (payee && payee.id) || null,
+          // The chosen row wins over anything typed: a picked person is a person, a typed
+          // name is a string.
+          payee_pick: whoSel.value || null,
+          payee_user_id: (kind === 'educator' && whoSel.value) ? parseInt(whoSel.value, 10) : ((payee && payee.id) || null),
+          payee_family_id: (kind === 'parent' && whoSel.value) ? parseInt(whoSel.value, 10) : null,
           basis: basis.value,
           period_start: m.querySelector('#pi-from').value || null,
           period_end: m.querySelector('#pi-to').value || null,
@@ -210,8 +254,117 @@
         // Nothing is written yet. An invoice is a financial record with somebody's name
         // on it, and the last thing between a typo and a wrong bill should be a person
         // reading it back — not a validator agreeing the shape is plausible.
-        confirmStep(body);
+        if (body.recurring) { scheduleStep(body); } else { confirmStep(body); }
       });
+
+      /* A schedule is N decisions taken in advance, not one. This lists the months it
+         would cover with the amount against each, editable, because the month that
+         differs is exactly the one somebody wanted to change — and each month becomes its
+         own invoice, so voiding March does not disturb April. */
+      function scheduleStep(body) {
+        var per = body.basis === 'hours' ? (body.hours * body.rate) : body.amount;
+        var step = body.frequency === 'weekly' ? 7 : (body.frequency === 'biweekly' ? 14 : 0);
+        var start = body.period_start ? new Date(body.period_start + 'T00:00:00') : new Date();
+        var occurrences = body.frequency === 'monthly' ? 12 : (body.frequency === 'biweekly' ? 13 : 12);
+
+        var rows = [];
+        for (var i = 0; i < occurrences; i++) {
+          var d = new Date(start.getTime());
+          if (step) { d.setDate(d.getDate() + step * i); } else { d.setMonth(d.getMonth() + i); }
+          rows.push({
+            date: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2),
+            label: d.toLocaleDateString('en-CA', { month: 'long', year: 'numeric' })
+                 + (step ? ' · ' + d.toLocaleDateString('en-CA', { day: 'numeric', month: 'short' }) : ''),
+            amount: per,
+            on: i < (body.frequency === 'monthly' ? 12 : occurrences),
+          });
+        }
+
+        m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">Confirm each period</div>'
+          + '<div style="font-size:12.5px;color:#64748B;margin:0 0 12px;">' + esc(body.payee_name)
+          + ' · repeats ' + esc(body.frequency) + '. Change any amount that differs, or untick a period to skip it. '
+          + 'Each one becomes its own invoice.</div>'
+          + '<div style="max-height:44vh;overflow-y:auto;border:1px solid #E2E8F0;border-radius:11px;">'
+          +   '<table style="width:100%;border-collapse:collapse;">'
+          +   rows.map(function (r, i) {
+                return '<tr style="border-bottom:1px solid #F1F5F9;">'
+                  + '<td style="padding:8px 10px;width:28px;"><input type="checkbox" class="pi-on" data-i="' + i + '" checked style="width:16px;height:16px;"></td>'
+                  + '<td style="padding:8px 4px;font-size:13.5px;color:#0F172A;">' + esc(r.label) + '</td>'
+                  + '<td style="padding:8px 10px;text-align:right;"><input type="number" class="pi-amt" data-i="' + i + '" min="0" step="0.01" value="' + r.amount.toFixed(2) + '" style="width:110px;box-sizing:border-box;padding:6px 8px;border:1px solid #D6DEE7;border-radius:7px;font-size:13px;text-align:right;"></td>'
+                  + '</tr>';
+              }).join('')
+          +   '</table></div>'
+          + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:10px 2px 0;">'
+          +   '<span style="font-size:13px;font-weight:700;color:#475569;">Total across the schedule</span>'
+          +   '<span id="pi-stotal" style="font-size:20px;font-weight:800;color:#0F172A;"></span></div>'
+          + '<div id="pi-serr" style="color:#DC2626;font-size:12.5px;min-height:17px;margin-top:6px;"></div>'
+          + '<div style="display:flex;justify-content:space-between;gap:8px;">'
+          +   '<button id="pi-sback" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">← Back to edit</button>'
+          +   '<button id="pi-screate" style="background:#16A34A;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Create these invoices</button>'
+          + '</div>';
+
+        function chosen() {
+          var out = [];
+          m.querySelectorAll('.pi-on').forEach(function (cb) {
+            if (! cb.checked) return;
+            var i = cb.getAttribute('data-i');
+            var amt = parseFloat(m.querySelector('.pi-amt[data-i="' + i + '"]').value) || 0;
+            if (amt > 0) { out.push({ date: rows[i].date, label: rows[i].label, amount: amt }); }
+          });
+          return out;
+        }
+        function retotal() {
+          var list = chosen();
+          var sum = list.reduce(function (a, b) { return a + b.amount; }, 0);
+          m.querySelector('#pi-stotal').textContent = money(sum) + '  (' + list.length + ')';
+        }
+        m.querySelectorAll('.pi-on, .pi-amt').forEach(function (el) {
+          el.addEventListener('change', retotal); el.addEventListener('input', retotal);
+        });
+        retotal();
+
+        m.querySelector('#pi-sback').addEventListener('click', function () {
+          ov.remove();
+          openGenerate(kind, payee, onDone, body);
+        });
+
+        m.querySelector('#pi-screate').addEventListener('click', function () {
+          var list = chosen();
+          var err = m.querySelector('#pi-serr');
+          if (! list.length) { err.textContent = 'Nothing ticked — there is nothing to create.'; return; }
+          var b = m.querySelector('#pi-screate');
+          b.disabled = true;
+          var made = 0, failed = 0;
+
+          // One at a time, and each one flat: the per-period amount was agreed on the
+          // screen above, so re-deriving it from hours here could disagree with what was
+          // confirmed. Recurrence is NOT set on the rows — the whole schedule has already
+          // been written out, and leaving it on would generate the same months again.
+          function next(i) {
+            if (i >= list.length) {
+              ov.remove();
+              toast('🧾', 'Schedule created', made + ' invoice' + (made === 1 ? '' : 's')
+                + (failed ? ', ' + failed + ' failed' : '') + ' for ' + body.payee_name, failed ? '#F59E0B' : '#16A34A');
+              if (onDone) onDone();
+              return;
+            }
+            b.textContent = 'Creating ' + (i + 1) + ' of ' + list.length + '…';
+            var one = {
+              kind: body.kind, payee_name: body.payee_name,
+              payee_user_id: body.payee_user_id || null, payee_family_id: body.payee_family_id || null,
+              basis: 'amount', amount: list[i].amount,
+              period_start: list[i].date, period_end: list[i].date,
+              details: (body.details ? body.details + ' — ' : '') + list[i].label,
+              recurring: false,
+            };
+            Api.post('/provider/payee-invoices', one)
+              .then(function () { made++; })
+              .catch(function () { failed++; })
+              .then(function () { next(i + 1); });
+          }
+          next(0);
+        });
+      }
 
       /* The review step. Deliberately a full redraw of the same window rather than a
          second dialog on top: stacking one confirmation over another is how people click
