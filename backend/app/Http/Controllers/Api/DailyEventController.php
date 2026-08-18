@@ -28,7 +28,7 @@ final class DailyEventController extends Controller
         $data = $request->validate([
             'child_id' => ['required', 'integer'],
             'room_id' => ['required', 'integer'],
-            'event_type' => ['required', 'in:meal,snack,nap_start,nap_end,diaper,bathroom,activity,mood,note,milestone,bottle,medication_given'],
+            'event_type' => ['required', 'in:meal,snack,nap_start,nap_end,diaper,bathroom,activity,mood,note,milestone,bottle,medication_given,outdoor'],
             'payload' => ['nullable', 'array'],
             'occurred_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -84,7 +84,7 @@ final class DailyEventController extends Controller
         abort_unless($this->canAccessChildId($request->user(), (int) $event->child_id), 403);
 
         $data = $request->validate([
-            'event_type' => ['in:meal,snack,nap_start,nap_end,diaper,bathroom,activity,mood,note,milestone,bottle,medication_given'],
+            'event_type' => ['in:meal,snack,nap_start,nap_end,diaper,bathroom,activity,mood,note,milestone,bottle,medication_given,outdoor'],
             'payload' => ['nullable', 'array'],
             'occurred_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],

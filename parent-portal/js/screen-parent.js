@@ -2358,7 +2358,7 @@
     }
     return ({
       'meal': '🍽️', 'snack': '🍎', 'nap_start': '😴', 'nap_end': '🌅',
-      'diaper': '👶', 'bathroom': '🚽', 'activity': '✨', 'mood': '😊',
+      'diaper': '👶', 'bathroom': '🚽', 'activity': '✨', 'mood': '😊', 'outdoor': '🌳',
       'note': '📝', 'milestone': '🌟', 'bottle': '🍼',
       'check_in': '✅', 'check_out': '👋',
     })[type] || '•';

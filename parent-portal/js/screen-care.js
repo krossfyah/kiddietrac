@@ -278,6 +278,7 @@
       { type: 'meal',      icon: '🍽️', label: 'Meal',      color: '#16A34A' },
       { type: 'snack',     icon: '🍎', label: 'Snack',     color: '#F59E0B' },
       { type: 'bottle',    icon: '🍼', label: 'Bottle',    color: '#8EC73C' },
+      { type: 'outdoor',   icon: '🌳', label: 'Outdoor play', color: '#2E7D32' },
       { type: 'sunscreen', icon: '☀️', label: 'Sunscreen', color: '#F59E0B' },
       { type: 'mood',      icon: '🙂', label: 'Mood',      color: '#7C3AED' },
       // Media tiles. These are NOT care logs — `daily_care_logs.log_type` is a
@@ -584,6 +585,9 @@
       meal:      ['Ate all', 'Ate most', 'Ate some', 'Refused'],
       snack:     ['Ate all', 'Ate most', 'Ate some', 'Refused'],
       bottle:    ['Finished', 'Most of it', 'A few sips', 'Refused'],
+      // Weather first: it is what a parent asks about, and what a licensing
+      // inspector looks for when checking daily outdoor time was provided.
+      outdoor:   ['Played outside', 'Nature walk', 'Water play', 'Too cold — indoor gross motor', 'Too wet — indoor gross motor'],
       sunscreen: ['Applied', 'Reapplied'],
       mood:      ['Happy', 'Calm', 'Playful', 'Tired', 'Fussy', 'Upset', 'Unwell'],
     };

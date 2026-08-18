@@ -331,7 +331,7 @@ final class DayBriefController extends Controller
                     'detail' => $e->notes ?? '',
                 ];
             }
-            $ICON = ['meal' => '🍽️', 'snack' => '🍎', 'nap_start' => '😴', 'nap_end' => '🌅', 'diaper' => '🧷', 'bathroom' => '🚽', 'activity' => '✨', 'mood' => '🙂', 'note' => '📝', 'bottle' => '🍼'];
+            $ICON = ['meal' => '🍽️', 'snack' => '🍎', 'nap_start' => '😴', 'nap_end' => '🌅', 'diaper' => '🧷', 'bathroom' => '🚽', 'activity' => '✨', 'mood' => '🙂', 'note' => '📝', 'bottle' => '🍼', 'outdoor' => '🌳'];
             foreach (DB::table('daily_events')->whereIn('child_id', $childIds)
                 ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('id')
                 ->get(['id', 'child_id', 'event_type', 'occurred_at', 'created_at', 'payload', 'notes']) as $e) {
@@ -367,7 +367,7 @@ final class DayBriefController extends Controller
             // ALSO the "Log a moment" entries — these write to daily_care_logs, a
             // SEPARATE table from the roster quick-log's daily_events. Reading only
             // daily_events meant a provider's logged moments never showed here.
-            $CICON = ['diaper' => '🧷', 'bathroom' => '🚽', 'nap' => '😴', 'meal' => '🍽️', 'snack' => '🍎', 'bottle' => '🍼', 'sunscreen' => '☀️', 'mood' => '🙂'];
+            $CICON = ['diaper' => '🧷', 'bathroom' => '🚽', 'nap' => '😴', 'meal' => '🍽️', 'snack' => '🍎', 'bottle' => '🍼', 'sunscreen' => '☀️', 'mood' => '🙂', 'outdoor' => '🌳'];
             foreach (DB::table('daily_care_logs')->whereIn('child_id', $childIds)
                 ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('id')
                 ->get(['id', 'child_id', 'log_type', 'occurred_at', 'created_at', 'details', 'notes']) as $e) {

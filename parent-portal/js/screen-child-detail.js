@@ -614,7 +614,7 @@
     recentBtn.addEventListener('click', function () { state.mode = 'recent'; load(); });
 
     var ICON = { meal: '🍽️', snack: '🍎', nap: '😴', nap_start: '😴', nap_end: '🌅', diaper: '🧷',
-      bathroom: '🚽', activity: '✨', mood: '🙂', note: '📝', bottle: '🍼', sunscreen: '☀️',
+      bathroom: '🚽', activity: '✨', mood: '🙂', note: '📝', bottle: '🍼', sunscreen: '☀️', outdoor: '🌳',
       check_in: '✅', check_out: '👋' };
 
     function load() {

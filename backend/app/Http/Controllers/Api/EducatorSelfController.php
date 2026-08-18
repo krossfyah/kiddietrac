@@ -243,7 +243,7 @@ class EducatorSelfController extends Controller
             ->leftJoin('users as u', 'u.id', '=', 'd.recorded_by_id')
             ->where('d.child_id', $child)
             ->whereNull('d.deleted_at')
-            ->whereIn('d.event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood'])
+            ->whereIn('d.event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood', 'outdoor'])
             ->orderByDesc('d.occurred_at')
             ->limit(120)
             ->get([

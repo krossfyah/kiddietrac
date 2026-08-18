@@ -358,7 +358,7 @@
     // when" has to be answerable from the child's record.
     var hist = d.history || [];
     var ICONS = {
-      check_in: '✅', check_out: '👋', diaper: '🧷', bathroom: '🚽', nap: '😴',
+      check_in: '✅', check_out: '👋', diaper: '🧷', bathroom: '🚽', nap: '😴', outdoor: '🌳',
       meal: '🍽️', snack: '🍎', bottle: '🍼', sunscreen: '☀️', mood: '🙂',
     };
     var LABELS = { check_in: 'Signed in', check_out: 'Signed out' };

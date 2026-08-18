@@ -43,7 +43,7 @@ final class CareController extends Controller
     {
         $data = $request->validate([
             'child_id' => ['required', 'integer'],
-            'log_type' => ['required', 'in:diaper,bathroom,nap,meal,snack,bottle,sunscreen,mood'],
+            'log_type' => ['required', 'in:diaper,bathroom,nap,meal,snack,bottle,sunscreen,mood,outdoor'],
             'occurred_at' => ['nullable', 'date'],
             'ended_at' => ['nullable', 'date'],
             'details' => ['nullable', 'string', 'max:160'],
@@ -105,7 +105,7 @@ final class CareController extends Controller
             ->where('e.child_id', $child)
             ->whereNull('e.deleted_at')
             ->where('e.occurred_at', '>=', $since)
-            ->whereIn('e.event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood'])
+            ->whereIn('e.event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood', 'outdoor'])
             ->orderByDesc('e.occurred_at')
             ->limit(300)
             ->get([
@@ -156,7 +156,7 @@ final class CareController extends Controller
         $today = \Carbon\Carbon::now($tz)->startOfDay()->timezone(config('app.timezone', 'UTC'));
 
         $summary = [];
-        foreach (['diaper','bathroom','nap','meal','snack','bottle','sunscreen','mood'] as $t) {
+        foreach (['diaper','bathroom','nap','meal','snack','bottle','sunscreen','mood','outdoor'] as $t) {
             $summary[$t] = $rows
                 ->filter(fn ($r) => $r->log_type === $t && \Carbon\Carbon::parse($r->occurred_at)->gte($today))
                 ->count();

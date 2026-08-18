@@ -87,7 +87,8 @@ final class ReportCardController extends Controller
             ->selectRaw('event_type, COUNT(*) as c')->groupBy('event_type')->pluck('c', 'event_type')->toArray();
         if (\Illuminate\Support\Facades\Schema::hasTable('daily_care_logs')) {
             $CARE_MAP = ['meal' => 'meal', 'snack' => 'snack', 'bottle' => 'meal', 'nap' => 'nap',
-                'diaper' => 'diaper', 'bathroom' => 'diaper', 'mood' => 'mood', 'sunscreen' => 'activity'];
+                'diaper' => 'diaper', 'bathroom' => 'diaper', 'mood' => 'mood', 'sunscreen' => 'activity',
+                'outdoor' => 'activity'];
             $careCounts = DB::table('daily_care_logs')->where('child_id', $child->id)
                 ->selectRaw('log_type, COUNT(*) as c')->groupBy('log_type')->pluck('c', 'log_type');
             foreach ($careCounts as $type => $n) {
