@@ -437,6 +437,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         // v22p3.5: onboarding wizard submission
         Route::patch('/auth/me/onboarding', [AuthController::class, 'updateOnboarding']);
+    Route::get('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'show']);
+    Route::put('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'update']);
         Route::patch('/auth/me/provider-bio', [AuthController::class, 'updateProviderBio']);
 
         // v22p3.2: self-service avatar upload (any authenticated user)
@@ -1052,6 +1054,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/team-threads/{thread}/send', [\App\Http\Controllers\Api\TeamChatController::class, 'send'])->where('thread', '[0-9]+');
         // Archiving is per person and covers both kinds of thread, so it lives on its
         // own endpoint rather than being duplicated into each chat controller.
+        // Interface state that follows the person rather than the browser.
         Route::get ('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'index']);
         Route::post('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'store']);
     });

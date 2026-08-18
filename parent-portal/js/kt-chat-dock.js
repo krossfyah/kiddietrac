@@ -88,11 +88,61 @@
   var session = { open: false, minimized: false, key: null, title: '' };
   var opener = null;
 
+  /* The account-level copy. localStorage stays the fast path — it is read synchronously
+     so the dock appears where you left it with no flicker — and the server copy is what
+     makes that position follow you to another machine. Writes are debounced because
+     dragging fires continuously and a PUT per pixel is absurd. */
+  function apiBase() { return (w.KT && w.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
+  function token() {
+    try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; }
+  }
+
+  var pushTimer = null;
+  function pushRemote() {
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function () {
+      var tok = token();
+      if (!tok) { return; }
+      var pos = null;
+      try { pos = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch (e) {}
+      // A closed dock sends null, which the server treats as "forget this".
+      var payload = session.open ? { pos: pos, session: session } : null;
+      try {
+        fetch(apiBase() + '/auth/me/ui-prefs', {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_dock: payload }),
+        }).catch(function () {});
+      } catch (e) {}
+    }, 700);
+  }
+
+  /** Pull the account copy and adopt it when this browser has nothing of its own. */
+  function pullRemote(done) {
+    var tok = token();
+    if (!tok) { done && done(); return; }
+    fetch(apiBase() + '/auth/me/ui-prefs', {
+      headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' },
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      var d = j && j.prefs && j.prefs.chat_dock;
+      if (d) {
+        // This browser wins if it already has an opinion — you moved it here, on this
+        // screen, most recently. The account copy is for a machine that has none.
+        try {
+          if (d.pos && !localStorage.getItem(POS_KEY)) { localStorage.setItem(POS_KEY, JSON.stringify(d.pos)); }
+          if (d.session && !localStorage.getItem(SES_KEY)) { localStorage.setItem(SES_KEY, JSON.stringify(d.session)); }
+        } catch (e) {}
+      }
+      done && done();
+    }).catch(function () { done && done(); });
+  }
+
   function saveSession() {
     try {
       if (session.open) { localStorage.setItem(SES_KEY, JSON.stringify(session)); }
       else { localStorage.removeItem(SES_KEY); }
     } catch (e) {}
+    pushRemote();
   }
 
   /** Screens call this so the dock knows what to re-open. */
@@ -121,6 +171,13 @@
       if (restoreSession._tries++ < 20) { setTimeout(restoreSession, 400); }
       return;
     }
+    if (!restoreSession._pulled) {
+      // Once per load, and only after a token exists: adopt the account copy first so a
+      // machine that has never seen this dock still opens it where the person left it.
+      restoreSession._pulled = true;
+      pullRemote(function () { restoreSession(); });
+      return;
+    }
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(SES_KEY) || 'null'); } catch (e) {}
     if (!saved || !saved.open || !saved.key) { return; }
@@ -146,6 +203,7 @@
         y: Math.min(1, Math.max(0, r.top / vh)),
       }));
     } catch (e) {}
+    pushRemote();
   }
 
   function applyPos() {
