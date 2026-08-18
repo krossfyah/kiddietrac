@@ -160,10 +160,18 @@ class ClosureReminderCommand extends Command
             : 'A reminder that <strong>' . $e($centreName) . '</strong> is closed ' . $e($when) . ', so you are not expected in.';
 
         // What each reader actually needs to do about it.
+        //
+        // Deliberately not a promise about the invoice. affects_billing records the
+        // intention behind the closure; no invoicing code reads it, so stating a definite
+        // outcome here would claim something the system does not do. Both variants say the
+        // same true thing — an adjustment is made where it applies, on the terms already
+        // agreed — and differ only in which way they lean.
         $note = $isParent
             ? ($affectsBilling
-                ? 'Fees are unchanged for these days — the closure does not alter your invoice.'
-                : 'You are not charged for these days; billing is paused for the closure.')
+                ? 'Fees for these days are adjusted where applicable, in line with the agreement between your '
+                    . 'family and us. Anything owing or credited will appear on your next invoice.'
+                : 'Your usual fees continue to apply for these days. Where an adjustment is due under the '
+                    . 'agreement between your family and us, it will appear on your next invoice.')
             : 'Sign-in and clock-in are switched off for these days, so they will not appear as missing hours on your timesheet.';
 
         $close = $isParent

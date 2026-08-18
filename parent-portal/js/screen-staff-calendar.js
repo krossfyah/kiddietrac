@@ -237,7 +237,10 @@
     var bits = [];
     if (ev.type_label) { bits.push(ev.type_label); }
     // Whether families are still charged is the question an admin actually has.
-    bits.push(ev.affects_billing ? 'Billing still applies' : 'Not billed');
+    // affects_billing TRUE means billing is paused — the checkbox that sets it reads
+    // "Pause billing on these days", and the closures table has always shown it as
+    // "Paused". This line said the opposite when it was added.
+    bits.push(ev.affects_billing ? 'Billing paused' : 'Billing unchanged');
     out.push(bits.join(' · '));
 
     if (ev.added_by || ev.added_at) {
