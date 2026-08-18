@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\Log;
 class ClosureReminderCommand extends Command
 {
     protected $signature = 'closures:remind
-        {--days=7,1 : lead times to remind at, in days before the closure}
+        {--days= : override the configured lead times for this run, e.g. 5,3,1}
         {--test-to= : send one of each role variant to this address and write nothing}
         {--dry-run : list what would be sent}';
 
@@ -44,10 +44,14 @@ class ClosureReminderCommand extends Command
             return $this->sendSamples($testTo);
         }
 
-        $leads = array_values(array_filter(array_map(
-            fn ($d) => (int) trim($d),
-            explode(',', (string) $this->option('days'))
-        ), fn ($d) => $d > 0));
+        // --days is an override for a manual run; normally each agency's own setting
+        // decides, so one agency reminding at 5/3/1 and another at 14/2 both work.
+        $override = $this->option('days') !== null && $this->option('days') !== ''
+            ? array_values(array_filter(array_map(
+                fn ($d) => (int) trim($d),
+                explode(',', (string) $this->option('days'))
+            ), fn ($d) => $d > 0))
+            : [];
 
         $dry = (bool) $this->option('dry-run');
         $sent = 0;
@@ -64,6 +68,11 @@ class ClosureReminderCommand extends Command
             $start = Carbon::parse(substr((string) $row->closure_date, 0, 10), $tz)->startOfDay();
             $away = (int) $today->diffInDays($start, false);
 
+            $cfg = $this->agencySettings((int) $row->agency_id);
+            if (! $cfg['enabled']) {
+                continue;   // this agency has closure reminders switched off
+            }
+            $leads = $override ?: $cfg['days'];
             if (! in_array($away, $leads, true)) {
                 continue;
             }
@@ -86,6 +95,32 @@ class ClosureReminderCommand extends Command
         $this->info(($dry ? 'Dry run: ' : '') . "Closure reminders sent: {$sent}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The agency's closure-reminder settings, defaulted the same way the settings screen
+     * shows them. An agency that has never touched the screen reminds at 5, 3 and 1 days.
+     *
+     * @return array{enabled:bool,days:int[]}
+     */
+    private function agencySettings(int $agencyId): array
+    {
+        static $cache = [];
+        if (isset($cache[$agencyId])) {
+            return $cache[$agencyId];
+        }
+        $raw = DB::table('agencies')->where('id', $agencyId)->value('settings');
+        $s = $raw ? (json_decode($raw, true) ?: []) : [];
+
+        $days = array_values(array_filter(array_map(
+            fn ($d) => (int) trim((string) $d),
+            explode(',', (string) ($s['closure_reminder_days'] ?? '5,3,1'))
+        ), fn ($d) => $d > 0));
+
+        return $cache[$agencyId] = [
+            'enabled' => ($s['closure_reminders_enabled'] ?? true) !== false,
+            'days' => $days ?: [5, 3, 1],
+        ];
     }
 
     /** @return int how many messages went out */

@@ -61,7 +61,15 @@ final class OperationsV2Controller extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        $this->announceClosure((int) $id, (int) $data['centre_id']);
+        // Telling everyone the moment a closure is entered is a choice, not a given:
+        // an agency drafting next year's calendar does not want every family emailed as
+        // each date is keyed in. The in-app notice to admins always goes out.
+        $centreAgency = (int) DB::table('centres')->where('id', $data['centre_id'])->value('agency_id');
+        $aSettings = json_decode((string) DB::table('agencies')->where('id', $centreAgency)->value('settings'), true) ?: [];
+        $remindersOn = ($aSettings['closure_reminders_enabled'] ?? true) !== false;
+        if ($remindersOn && ($aSettings['closure_reminder_immediate'] ?? true) !== false) {
+            $this->announceClosure((int) $id, (int) $data['centre_id']);
+        }
         // announceClosure covers families and centre staff; agency admins and directors
         // who hold no role AT the centre were never told a closure had been added.
         $this->announceClosureChange((int) $id, (int) $data['centre_id'], 'added');

@@ -182,6 +182,39 @@
       + '<input type="checkbox" id="es-qrnudge" data-kt-switch="1"' + (s.manual_checkin_reminders_enabled !== false ? ' checked' : '') + '></label>'
       + '<div id="es-qrnudge-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
       + '</div>'
+      // ── Closure notices: the immediate one, and the countdown ──
+      + '<div class="kt-card" id="es-closures" style="max-width:680px;margin-bottom:18px;">'
+      + '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0;">'
+      + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">🗓 Closure reminders</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">Emails to <strong>parents and educators</strong> about an upcoming closure or holiday, with admins and directors BCC’d. Turn this off and no closure email of any kind is sent.</span></span>'
+      + '<input type="checkbox" id="es-closerem" data-kt-switch="1"' + (s.closure_reminders_enabled !== false ? ' checked' : '') + '></label>'
+
+      + '<div id="es-close-body" style="margin-top:14px;padding-top:14px;border-top:1px solid #E2E8F0;">'
+      + '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0 0 12px;">'
+      + '<span><span style="display:block;font-size:13.5px;font-weight:700;color:#0F172A;">Send as soon as it is added</span>'
+      + '<span style="display:block;font-size:12px;color:#64748B;margin-top:2px;">Announces the closure the moment it is entered on the calendar. Leave off if you draft a year of dates at once and would rather only the countdown went out.</span></span>'
+      + '<input type="checkbox" id="es-closenow" data-kt-switch="1"' + (s.closure_reminder_immediate !== false ? ' checked' : '') + '></label>'
+
+      + '<div style="font-size:13px;font-weight:700;color:#0F172A;margin:14px 0 2px;">Then remind again</div>'
+      + '<div style="font-size:12px;color:#64748B;margin-bottom:8px;">Counted in whole days before the first day of the closure, in your agency’s timezone. Each one is sent once.</div>'
+      + '<div id="es-closedays" style="display:flex;gap:8px;flex-wrap:wrap;">'
+      + (function () {
+          var picked = String(s.closure_reminder_days == null ? '5,3,1' : s.closure_reminder_days)
+            .split(',').map(function (d) { return parseInt(d, 10); });
+          return [14, 7, 5, 3, 2, 1].map(function (d) {
+            var on = picked.indexOf(d) !== -1;
+            return '<label style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid '
+              + (on ? '#1F6080' : '#E2E8F0') + ';background:' + (on ? '#EFF6FF' : '#fff')
+              + ';border-radius:999px;padding:6px 13px;font-size:13px;font-weight:600;color:'
+              + (on ? '#1F6080' : '#475569') + ';cursor:pointer;">'
+              + '<input type="checkbox" data-close-day="' + d + '"' + (on ? ' checked' : '')
+              + ' style="margin:0;">' + (d === 1 ? 'Day before' : d + ' days') + '</label>';
+          }).join('');
+        })()
+      + '</div>'
+      + '<div id="es-closerem-out" style="font-size:12px;margin-top:10px;min-height:14px;"></div>'
+      + '</div></div>'
+
       // ── Per-centre / per-room delivery control (pre-boarding switchboard) ──
       + '<div id="es-delivery" style="max-width:680px;margin-bottom:18px;"></div>'
       + '<div class="kt-card" style="max-width:680px;">'
@@ -294,6 +327,9 @@
     };
 
     // QR check-in nudge toggle — saves immediately.
+    // Closure reminders live on their own tab but are wired here with the rest.
+    try { wireClosureReminders(document, patch); } catch (e) { /* card absent for this role */ }
+
     var qrNudge = document.getElementById('es-qrnudge');
     var qrOut = document.getElementById('es-qrnudge-out');
     if (qrNudge) qrNudge.onchange = async function () {
@@ -421,8 +457,75 @@
     { key: 'outbound',  label: 'Outbound',  icon: '📤', match: /outbound email|smtp/i },
     { key: 'mailbox',   label: 'Mailbox',   icon: '📥', match: /mailbox|microsoft 365/i },
     { key: 'delivery',  label: 'Delivery',  icon: '🎛️', id: 'es-delivery' },
+    { key: 'closures',  label: 'Closures',  icon: '🗓', id: 'es-closures' },
     { key: 'birthdays', label: 'Birthdays', icon: '🎂', birthdays: true }
   ];
+
+  /* Closure reminders. Saved on change rather than behind a Save button, like the other
+     switches on this screen — and the day pills re-render their own state so the ring
+     matches what was actually stored. */
+  function wireClosureReminders(root, patch) {
+    var master = root.querySelector('#es-closerem');
+    var now = root.querySelector('#es-closenow');
+    var body = root.querySelector('#es-close-body');
+    var out = root.querySelector('#es-closerem-out');
+    if (!master || !body) { return; }
+
+    function say(msg, bad) {
+      if (!out) { return; }
+      out.style.color = bad ? '#BE4038' : '#1E8E60';
+      out.textContent = msg;
+      setTimeout(function () { if (out.textContent === msg) { out.textContent = ''; } }, 2600);
+    }
+    function syncEnabled() {
+      // The countdown cannot mean anything while the whole feature is off.
+      body.style.opacity = master.checked ? '1' : '.45';
+      body.style.pointerEvents = master.checked ? '' : 'none';
+    }
+    syncEnabled();
+
+    function days() {
+      return Array.prototype.slice.call(root.querySelectorAll('[data-close-day]'))
+        .filter(function (c) { return c.checked; })
+        .map(function (c) { return parseInt(c.getAttribute('data-close-day'), 10); })
+        .sort(function (a, b) { return b - a; });
+    }
+    function paintPills() {
+      root.querySelectorAll('[data-close-day]').forEach(function (c) {
+        var on = c.checked, l = c.parentElement;
+        l.style.borderColor = on ? '#1F6080' : '#E2E8F0';
+        l.style.background = on ? '#EFF6FF' : '#fff';
+        l.style.color = on ? '#1F6080' : '#475569';
+      });
+    }
+
+    master.addEventListener('change', function () {
+      syncEnabled();
+      patch('/admin/email-settings', { closure_reminders_enabled: master.checked })
+        .then(function () { say(master.checked ? '\u2713 Closure reminders on.' : '\u2713 Closure reminders off.'); })
+        .catch(function (e) { say((e && e.message) || 'Could not save', true); });
+    });
+
+    if (now) {
+      now.addEventListener('change', function () {
+        patch('/admin/email-settings', { closure_reminder_immediate: now.checked })
+          .then(function () { say(now.checked ? '\u2713 Will send when added.' : '\u2713 Countdown only.'); })
+          .catch(function (e) { say((e && e.message) || 'Could not save', true); });
+      });
+    }
+
+    root.querySelectorAll('[data-close-day]').forEach(function (c) {
+      c.addEventListener('change', function () {
+        paintPills();
+        var d = days();
+        patch('/admin/email-settings', { closure_reminder_days: d.join(',') })
+          .then(function () {
+            say(d.length ? '\u2713 Reminding at ' + d.join(', ') + ' days.' : '\u2713 No countdown reminders.');
+          })
+          .catch(function (e) { say((e && e.message) || 'Could not save', true); });
+      });
+    });
+  }
 
   function applyEmailTabs(main) {
     var root = main.firstElementChild;

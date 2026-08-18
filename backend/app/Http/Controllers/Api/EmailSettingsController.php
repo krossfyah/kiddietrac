@@ -88,6 +88,11 @@ final class EmailSettingsController extends Controller
             'onboarding_reminder_hour'     => (int) ($settingsTop['onboarding_reminder_hour'] ?? 7),
             // Weekly nudge to parents over-using MANUAL (staff) check-in vs the QR.
             'manual_checkin_reminders_enabled' => ($settingsTop['manual_checkin_reminders_enabled'] ?? true) !== false,
+
+            // Closure notices. Read by closures:remind and by the immediate announcement.
+            'closure_reminders_enabled'  => ($settingsTop['closure_reminders_enabled'] ?? true) !== false,
+            'closure_reminder_immediate' => ($settingsTop['closure_reminder_immediate'] ?? true) !== false,
+            'closure_reminder_days'      => (string) ($settingsTop['closure_reminder_days'] ?? '5,3,1'),
             'email_from_name'       => $row->email_from_name,
             'email_from_address'    => $row->email_from_address,
             'email_smtp_encryption' => $row->email_smtp_encryption ?: 'tls',
@@ -129,6 +134,11 @@ final class EmailSettingsController extends Controller
             'onboarding_reminders_enabled' => ['sometimes', 'boolean'],
             'onboarding_reminder_hour'     => ['sometimes', 'integer', 'min:0', 'max:23'],
             'manual_checkin_reminders_enabled' => ['sometimes', 'boolean'],
+            'closure_reminders_enabled'  => ['sometimes', 'boolean'],
+            'closure_reminder_immediate' => ['sometimes', 'boolean'],
+            // Free text like "5,3,1" — validated loosely and normalised on save, so a
+            // stray space or a duplicate cannot leave the nightly pass never matching.
+            'closure_reminder_days'      => ['sometimes', 'string', 'max:40'],
         ]);
 
         // Legacy "from" columns
@@ -179,6 +189,30 @@ final class EmailSettingsController extends Controller
             $settings5 = ($row5 && $row5->settings) ? (json_decode($row5->settings, true) ?: []) : [];
             $settings5['manual_checkin_reminders_enabled'] = (bool) $data['manual_checkin_reminders_enabled'];
             DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings5), 'updated_at' => now()]);
+        }
+
+        // Closure notices (top-level, read by closures:remind and announceClosure).
+        $closureKeys = ['closure_reminders_enabled', 'closure_reminder_immediate', 'closure_reminder_days'];
+        if (array_intersect($closureKeys, array_keys($data))) {
+            $row6 = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
+            $settings6 = ($row6 && $row6->settings) ? (json_decode($row6->settings, true) ?: []) : [];
+
+            foreach (['closure_reminders_enabled', 'closure_reminder_immediate'] as $k) {
+                if (array_key_exists($k, $data)) {
+                    $settings6[$k] = (bool) $data[$k];
+                }
+            }
+            if (array_key_exists('closure_reminder_days', $data)) {
+                // Whole positive days, de-duplicated, furthest out first. Storing the raw
+                // text would leave the nightly pass comparing against "3 " or "0".
+                $days = collect(explode(',', (string) $data['closure_reminder_days']))
+                    ->map(fn ($d) => (int) trim($d))
+                    ->filter(fn ($d) => $d > 0 && $d <= 120)
+                    ->unique()->sortDesc()->values()->all();
+                $settings6['closure_reminder_days'] = implode(',', $days);
+            }
+            DB::table('agencies')->where('id', $agencyId)
+                ->update(['settings' => json_encode($settings6), 'updated_at' => now()]);
         }
 
         return response()->json(['ok' => true]);
