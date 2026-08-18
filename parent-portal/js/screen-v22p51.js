@@ -395,6 +395,58 @@
     const host = document.getElementById('pr-result');
     if (!host) return;
     if (!res.data || !res.data.length) { host.innerHTML = '<div style="color:#64748B;padding:12px;">No punches in range.</div>'; return; }
+    // Two payrolls, not one list: educators and everyone else are paid on different
+    // terms and signed off by different people, so each carries its own subtotal.
+    // staff_group comes from the API; if it is ever absent everybody falls into one
+    // group and this renders exactly as it used to.
+    const GROUPS = [
+      { key: 'educators', label: '🧑‍🏫 Educators' },
+      { key: 'other', label: '👥 Other staff' },
+    ];
+    const byGroup = {};
+    res.data.forEach(r => {
+      const g = r.staff_group === 'educators' ? 'educators' : 'other';
+      (byGroup[g] = byGroup[g] || []).push(r);
+    });
+
+    const th = (align) => `text-align:${align};padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;`;
+    const td = (align, extra) => `padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:${align};${extra || ''}`;
+    let grand = 0;
+
+    const section = (g) => {
+      const rows = byGroup[g.key] || [];
+      if (!rows.length) return '';
+      let sub = 0;
+      const body = rows.map(r => {
+        sub += parseFloat(r.total_hours || 0);
+        return `<tr><td style="${td('left')}">${escapeHtml(r.user_name)}</td>`
+          + `<td style="${td('left')}"><span style="font-size:11.5px;font-weight:700;color:#475569;background:#F1F5F9;border-radius:999px;padding:2px 9px;">${escapeHtml(r.role || 'Staff')}</span></td>`
+          + `<td style="${td('left')}">${escapeHtml(r.centre_name || '')}</td>`
+          + `<td style="${td('right')}">${r.punch_count}</td>`
+          + `<td style="${td('right', 'font-weight:600;')}">${r.total_hours}</td></tr>`;
+      }).join('');
+      grand += sub;
+      return `<div style="margin-bottom:22px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 6px;">
+          <h3 style="margin:0;font-size:15px;color:#1F6080;">${g.label}</h3>
+          <span style="font-size:12.5px;color:#64748B;">${rows.length} ${rows.length === 1 ? 'person' : 'people'} · <strong style="color:#0F172A;">${sub.toFixed(2)} h</strong></span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;"><thead><tr>
+          <th style="${th('left')}">Staff</th><th style="${th('left')}">Role</th><th style="${th('left')}">Centre</th>
+          <th style="${th('right')}">Punches</th><th style="${th('right')}">Hours</th>
+        </tr></thead><tbody>${body}
+        <tr><td colspan="4" style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${escapeHtml(g.label.replace(/^\S+\s/, ''))} subtotal</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${sub.toFixed(2)}</td></tr>
+        </tbody></table></div>`;
+    };
+
+    host.innerHTML = GROUPS.map(section).join('')
+      + `<div style="display:flex;justify-content:flex-end;gap:14px;align-items:baseline;border-top:2px solid #1F6080;padding:12px 8px 0;">
+          <span style="font-size:14px;font-weight:700;color:#0F172A;">Total hours</span>
+          <span style="font-size:18px;font-weight:800;color:#1F6080;">${grand.toFixed(2)}</span></div>`;
+    return;
+
+    // eslint-disable-next-line no-unreachable
     let tot = 0;
     host.innerHTML = `<table style="width:100%;border-collapse:collapse;"><thead><tr>
       <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Staff</th>

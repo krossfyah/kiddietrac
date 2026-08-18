@@ -117,7 +117,6 @@
           { hash: 'staff-calendar',     label: 'Calendar',           icon: '📅' },
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🛡' },
-          { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🔄' },
         ]},
         // Home Visitors — own section (moved out of Compliance for clarity).
@@ -157,6 +156,7 @@
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
+          { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Administration', items: [
           { hash: 'admin-users',      label: 'User management',  icon: '👥' },
@@ -264,7 +264,6 @@
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks', label: 'Background checks',  icon: '🛡' },
-          { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
           { hash: 'substitutes',       label: 'Substitutes',        icon: '🔄' },
         ]},
         { label: 'Programs', items: [
@@ -293,6 +292,7 @@
           { hash: 'refunds',          label: 'Refunds',          icon: '↩' },
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
+          { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
           { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },

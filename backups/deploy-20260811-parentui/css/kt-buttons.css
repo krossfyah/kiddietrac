@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — button interaction consistency (2026-07-24).
+
+   The app has ~400 hand-styled inline buttons that bypass the .btn / .kt-btn
+   component, so their COLOURS, PADDING and RADIUS vary screen-to-screen. Those
+   are set inline and can't be safely unified from a stylesheet without visual QA
+   per button (icon buttons use border-radius:50%, some are intentional pills),
+   so that pixel-level pass is deliberately left for a per-screen verified effort.
+
+   What CAN be unified safely — and is — is how every button BEHAVES: cursor,
+   font inheritance, the disabled treatment, and a subtle press/transition for
+   the hand-styled ones that currently have none. These are additive (they never
+   override a button's bespoke background/padding/radius), so they can't regress
+   any existing button — they just make interaction feel consistent everywhere.
+   Focus-visible rings are already handled globally in kt-polish-v22.css.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Universal hygiene — safe on every button, component or hand-styled. */
+#appMain button,
+.kt-modal button,
+.modal button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* One consistent disabled treatment everywhere (many inline buttons set none,
+   so a disabled button looked fully active). */
+#appMain button:disabled,
+.kt-modal button:disabled,
+.modal button:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+/* Consistent press feedback + transition ONLY for hand-styled buttons (those
+   WITHOUT a .btn/.kt-btn class) — the component already has its own nicer
+   :active/transition, so we don't touch it. Respects reduced-motion. */
+#appMain button:not([class*="btn"]) {
+  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #appMain button:not([class*="btn"]):active:not(:disabled) {
+    transform: translateY(0.5px);
+  }
+}

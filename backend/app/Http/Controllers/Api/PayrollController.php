@@ -47,7 +47,35 @@ final class PayrollController extends Controller
         });
 
         if ($request->query('format') === 'csv') return $this->csv($rows, $from, $to);
-        return response()->json([
+                // Whose payroll line this is. The summary is grouped by person and centre and
+        // carried no role, so payroll could not be separated into educators and everyone
+        // else — which is the first cut anybody makes when reading it. Lowest rank wins,
+        // so somebody who is both an educator and a director shows as a director.
+        $__rank = ['agency_admin' => 0, 'platform_admin' => 0, 'centre_director' => 1,
+            'home_visitor' => 2, 'educator' => 3, 'auditor' => 4, 'guardian' => 5];
+        $__label = ['agency_admin' => 'Admin', 'platform_admin' => 'Admin', 'centre_director' => 'Director',
+            'educator' => 'Educator', 'home_visitor' => 'Home visitor', 'auditor' => 'Auditor', 'guardian' => 'Parent'];
+        $__ids = $rows->pluck('user_id')->filter()->unique()->all();
+        $__roleBy = [];
+        if ($__ids) {
+            foreach (DB::table('role_assignments')->whereIn('user_id', $__ids)->where('active', 1)
+                ->get(['user_id', 'role']) as $__ra) {
+                $__cur = $__roleBy[$__ra->user_id] ?? null;
+                if ($__cur === null || ($__rank[$__ra->role] ?? 9) < ($__rank[$__cur] ?? 9)) {
+                    $__roleBy[$__ra->user_id] = $__ra->role;
+                }
+            }
+        }
+        // Mutated in place: these rows stay objects in a Collection, because the total
+        // below sums the collection and the CSV branch reads them with ->.
+        $rows->each(function ($r) use ($__roleBy, $__label) {
+            $raw = $__roleBy[(int) ($r->user_id ?? 0)] ?? null;
+            $r->role = $__label[$raw] ?? 'Staff';
+            // The split the payroll screen actually needs.
+            $r->staff_group = in_array($raw, ['educator', 'home_visitor'], true) ? 'educators' : 'other';
+        });
+
+return response()->json([
             'data' => $rows,
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),

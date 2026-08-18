@@ -1,0 +1,956 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — true mobile-app experience (2026-07-09). Phones & APK ≤768px (the APK WebView reports an inflated ~601-768 width).
+   Applies to EVERY section and role (it styles the shared shell + common
+   patterns): tighter density, single-column content, big tap targets, no iOS
+   zoom-on-focus, app-style sheets, and scrollable tables. Loaded LAST so it
+   wins. Desktop (>600px) is completely untouched.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── The desktop top bar is redundant on a phone (the bottom bar + Menu cover
+        it) AND it overflowed horizontally (its icon cluster + super-admin
+        selectors are wider than the screen). Hide it; the view-as + agency
+        switcher fall back into the sidebar (Menu) on phones. Kills the horizontal
+        scroll and reclaims a whole row of vertical space. ── */
+  #kt-topbar { display: none !important; }
+
+  /* Nothing may push the page sideways. */
+  html, body { max-width: 100% !important; overflow-x: hidden !important; }
+  #appMain, .app-main { overflow-x: hidden !important; }
+
+  /* ── SINGLE SCROLL CONTAINER via FLEX (fixes the "home renders at the bottom,
+        then jumps to the top" on navigation) ──
+     The phone WebView's LAYOUT viewport is taller than the VISIBLE viewport, so a
+     document-level scroll shows the wrong slice of a tall screen for a frame after
+     navigating. Make the whole shell a 100dvh (= visible height) flex column: the
+     top header (#appSidebar's logo+user) takes its natural height, and #appMain
+     FILLS the rest and is the ONE scroller. No layout/visual mismatch, no clip, and
+     resetting #appMain.scrollTop = 0 lands every screen at the top instantly. */
+  html, body { height: 100dvh !important; max-height: 100dvh !important; overflow-y: hidden !important; overscroll-behavior: none; }
+  /* The role selectors (body.role-guardian #appShell{display:block!important} in
+     kt-topnav-fix.css) out-specify a bare #appShell, so match that specificity. */
+  #appShell, .app-shell, .app-shell--sidebar,
+  body.role-guardian #appShell, body.role-educator #appShell, body.role-auditor #appShell,
+  body.role-agency_admin #appShell, body.role-centre_director #appShell, body.kt-parentview #appShell {
+    height: 100dvh !important; max-height: 100dvh !important; min-height: 0 !important;
+    display: flex !important; flex-direction: column !important; grid-template-columns: none !important;
+  }
+  #appShell > #appSidebar { flex: 0 0 auto !important; }
+  #appShell > #appMain, #appMain, .app-main { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  /* When the slide-in menu is open the sidebar becomes a fixed overlay (out of the
+     flex flow) — let #appMain take the full height behind it. */
+  body.kt-mnav-open #appSidebar { flex: 0 0 auto; }
+
+  /* Kill the legacy 88px body/main bottom padding (kt-design-v22p66) — it
+     double-counted with the bar clearance and left dead space at the bottom of
+     every section. #appMain's 62px is the only clearance the fixed bar needs. */
+  body { padding-bottom: 0 !important; }
+
+  /* Parent screens ship their own headers, so drop the generic auto-hero
+     ("dashboard"/"today"/…) the shell prepends — it's pure clutter for them. */
+  body.kt-parentview #appMain > .kt-hero-auto { display: none !important; }
+
+  /* ── Shell density — reclaim the wasted outer padding ── */
+  .app-shell--sidebar .app-main,
+  .app-main { padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 74px) !important; }
+  #appMain > div[style*="max-width"] { max-width: 100% !important; }
+  #appMain > div[style*="padding:24px"],
+  #appMain > div[style*="padding: 24px"] { padding: 4px 2px !important; }
+
+  /* ── Section headings: clear hierarchy, less air ── */
+  #appMain h1 { font-size: 20px !important; line-height: 1.2 !important; }
+  #appMain h2 { font-size: 18px !important; margin: 6px 2px 6px !important; }
+  #appMain h3 { font-size: 15px !important; }
+  #appMain p { line-height: 1.4 !important; }
+
+  /* ── Section HERO banners: on a phone these big banners are the #1 space-waster.
+        Collapse them to a slim title bar — small title, tiny eyebrow, no art. ── */
+  #appMain .kt-hero, #appMain .kt-page-hero, #appMain .page-header-v17 {
+    min-height: 0 !important; padding: 9px 14px !important; margin-bottom: 8px !important;
+  }
+  #appMain .kt-hero h1, #appMain .kt-page-hero h1, #appMain .kt-page-hero h2, #appMain .page-header-v17 h1 {
+    font-size: 16px !important; margin: 0 !important; line-height: 1.15 !important;
+  }
+  #appMain .kt-hero-greet { font-size: 9px !important; letter-spacing: .8px !important; margin-bottom: 1px !important; opacity: .85; }
+  #appMain .kt-hero .kt-hero-sub, #appMain .kt-page-hero .kt-hero-sub { font-size: 11.5px !important; margin-top: 1px !important; }
+  #appMain .kt-hero-svg { display: none !important; }
+  /* Parents asked for the moving banner picture on phones — keep it (smaller). */
+  #appMain .kt-banner-art, #appMain .kt-hero-emoji, #appMain .kt-banner-fx .kt-hero-emoji { display: block !important; font-size: 30px !important; right: 12px !important; opacity: 0.22 !important; }
+
+  /* Tighter cards + list rows */
+  #appMain .kt-card, #appMain .centre-card-v17, #appMain .kt-chat-row { padding: 12px !important; margin-bottom: 9px !important; }
+  #appMain .kt-chat-header { padding: 8px 12px !important; }
+
+  /* ── Cards: one consistent, tight, tappable style ── */
+  #appMain .kt-card,
+  #appMain .centre-card-v17,
+  #appMain .kt-widget,
+  #appMain [class*="widget-card"] {
+    border-radius: 14px !important;
+    padding: 13px !important;
+    margin-bottom: 11px !important;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, .06) !important;
+  }
+
+  /* ── Parent icon-tile launcher (#home): compact 3-across grid so the whole
+        thing fits with far less scrolling; the big 76px icon wells + 138px tiles
+        were the scroll culprit. ── */
+  #appMain .kt-tile-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 9px !important; }
+  #appMain .kt-tile { min-height: 0 !important; padding: 13px 6px !important; gap: 7px !important; border-radius: 15px !important; }
+  #appMain .kt-tile-icon { width: 50px !important; height: 50px !important; font-size: 23px !important; border-radius: 50% !important; }
+  #appMain .kt-tile-label { font-size: 11.5px !important; font-weight: 700 !important; line-height: 1.15 !important; text-align: center !important; }
+  #appMain .kt-tile-sub { display: none !important; }
+  #appMain .kt-tile-more { margin-top: 14px !important; }
+  #appMain .kt-tile-more-label { font-size: 11px !important; margin-bottom: 8px !important; }
+  #appMain .kt-tilehome { padding-bottom: 2px !important; }
+
+  /* ── Content grids → single column (dashboards / insights / widgets) ── */
+  #kt-widgets-grid,
+  #appMain [id*="widgets-grid"],
+  #appMain [class*="insights-grid"] { grid-template-columns: 1fr !important; gap: 11px !important; }
+
+  /* Dense metric grids (3–5 across) collapse to 2 across, never overflow. */
+  #appMain [style*="grid-template-columns:repeat(3"],
+  #appMain [style*="grid-template-columns: repeat(3"],
+  #appMain [style*="grid-template-columns:repeat(4"],
+  #appMain [style*="grid-template-columns: repeat(4"],
+  #appMain [style*="grid-template-columns:repeat(5"],
+  #appMain [style*="grid-template-columns: repeat(5"] { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+
+  /* ── Stat chips (.item/.stats) stay compact + readable ── */
+  #appMain .stats { gap: 6px !important; }
+  #appMain .item { padding: 7px 8px !important; }
+
+  /* ── Forms: 16px controls stop iOS auto-zoom; comfy hit areas ── */
+  #appMain input:not([type=checkbox]):not([type=radio]),
+  #appMain select,
+  #appMain textarea { font-size: 16px !important; padding: 11px 12px !important; border-radius: 10px !important; }
+  #appMain button, .kt-modal button, .kt-modal-actions button { min-height: 42px; }
+  #appMain form button[type="submit"] { width: 100% !important; }
+
+  /* ── Modals behave like app bottom-sheets ── */
+  .kt-modal-card, .kt-modal > div:not(.kt-modal-backdrop) {
+    max-width: 100% !important; width: 100% !important;
+    max-height: 92vh !important; border-radius: 18px 18px 0 0 !important;
+  }
+
+  /* ── Wide tables scroll horizontally instead of breaking the page ── */
+  #appMain table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Drop desktop-only chrome on phones ── */
+  #kt-search-widget { display: none !important; }
+
+  /* ── CHAT: a real full-screen thread (like a native messaging app). When a
+        conversation is open (.kt-thread-compose exists), #appMain becomes a
+        full-height flex column — header + scrolling messages + a composer pinned
+        at the very bottom — and the tab bar hides so nothing overlaps it. ── */
+  body:has(.kt-thread-compose) #appMain > div:has(> .kt-thread-compose) {
+    position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    height: 100dvh !important; max-height: 100dvh !important; width: 100% !important;
+    z-index: 9400 !important; background: #fff !important;
+    display: flex !important; flex-direction: column !important;
+  }
+  body:has(.kt-thread-compose) #kt-mobilenav { display: none !important; }
+  .kt-thread-header { flex: 0 0 auto !important; padding-top: calc(env(safe-area-inset-top, 0px) + 10px) !important; }
+  .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  .kt-thread-compose { flex-shrink: 0 !important; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px) !important; }
+  .kt-compose-input { font-size: 16px !important; }  /* no iOS zoom while typing */
+
+  /* ── Native-feeling screen transitions: on navigation, kt-mobilenav.js tags the
+        freshly-rendered top-level nodes with .kt-screen-in so they slide up + fade
+        (only on real nav — not on in-place data refreshes, which would flicker). ── */
+  /* !important + the id/class specificity beats kt-consistency-polish.css's
+     `#appMain > * { animation: kt-fade-in … !important }` so real navigations get
+     the horizontal swipe; in-place re-renders (no .kt-screen-in) keep the quick fade. */
+  #appMain > .kt-screen-in { animation: kt-screen-in .3s cubic-bezier(.33, 1, .68, 1) both !important; }
+
+  /* ── EMAIL client: on phones, drop the fixed-height 3-pane box (it overflowed
+        far under the nav) and let the active pane flow as a normal scrolling
+        list/page. ── */
+  #appMain .ec-root { height: auto !important; min-height: 50vh !important; }
+  #appMain .ec-list, #appMain .ec-folders { max-height: none !important; }
+  #appMain .ec-list-scroll, #appMain .ec-body { max-height: none !important; overflow: visible !important; }
+}
+
+@keyframes kt-screen-in {
+  from { opacity: 0; transform: translateX(34px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* Respect users who ask the OS to minimise motion. */
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  #appMain > .kt-screen-in { animation: none !important; }
+}
+
+/* ── Parents + educators never export data — hide ALL PDF/CSV/Excel export UI
+      (applies at every width, not just phones). ── */
+body.role-guardian .kt-export-bar,
+body.role-educator .kt-export-bar,
+body.kt-parentview .kt-export-bar,
+body.role-guardian .kt-export-btns,
+body.role-educator .kt-export-btns,
+body.kt-parentview .kt-export-btns,
+body.role-guardian [data-export],
+body.role-educator [data-export],
+body.kt-parentview [data-export] { display: none !important; }
+
+/* ── Educator topbar: rooms ran off the right edge (2026-07-13) ──────────
+   .educator-topbar is a row with the room pills (flex-wrap:nowrap) and the
+   ratio indicator pushed right by margin-left:auto. On a 412px phone the pill
+   strip is 433px wide, so the last room ("Explorers Kindergarten") sat at
+   x=347–467 — past the viewport, and since the document doesn't scroll
+   sideways it was clipped and untappable. Stack the bar and let the pills wrap
+   so every room is reachable. ── */
+@media (max-width: 768px) {
+  #appMain .educator-topbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  #appMain .educator-topbar h2 {
+    font-size: 17px !important;
+    margin: 0 !important;
+  }
+  #appMain .room-selector {
+    display: flex !important;
+    flex-wrap: wrap !important;      /* 4+ rooms drop onto a second line */
+    gap: 7px !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+  #appMain .room-selector .room-pill {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 12.5px !important;
+    padding: 7px 12px !important;
+    white-space: normal !important;  /* long room names can break rather than overflow */
+  }
+  /* The ratio pill was pinned right by margin-left:auto — full width once stacked. */
+  #appMain .educator-topbar #ratioIndicator {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  #appMain .educator-topbar #ratioIndicator > div {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+  }
+}
+
+/* ── Educator home: kill the dead space (2026-07-13) ─────────────────────
+   .educator-shell carries `min-height: calc(100vh - 64px)` (app-v2.css) — a
+   desktop rule that forces the roster block to be a full screen tall no matter
+   how few children are in the room. On a phone that left ~460px of nothing
+   between the roster and the tiles below it. The screen is a scrolling column
+   on mobile, so it should be exactly as tall as its content.
+   The topbar/roster padding is also desktop-sized (16–24px) on top of #appMain's
+   own padding, which double-pads every edge. ── */
+@media (max-width: 768px) {
+  #appMain .educator-shell { min-height: 0 !important; }
+  #appMain .educator-topbar { padding: 4px 0 10px !important; gap: 8px !important; }
+  #appMain .educator-roster { padding: 0 !important; gap: 8px !important; margin: 0 !important; }
+  #appMain #kt-edu-launcher { margin-top: 12px !important; }
+  /* The roster's own empty-state block is sized for a desktop column too. */
+  #appMain .educator-shell .empty-state { padding: 18px 12px !important; }
+}
+
+/* ── Full-screen safe-area clearance. The APK now hides the Android status bar
+   at the THEME level (android:windowFullscreen, styles.xml) and draws edge-to-edge
+   into the camera cutout (windowLayoutInDisplayCutoutMode=shortEdges), so the top
+   bar / gear must be pushed below the physical notch. These are keyed off
+   env(safe-area-inset-*) rather than a JS-added class, so they apply the moment
+   the CSS loads — no dependency on any native script having run. On a plain mobile
+   browser (no cutout inset) env() resolves to 0, so `+8px`/`+4px` is harmless and
+   these rules leave browser chrome untouched. ── */
+@media (max-width: 768px) {
+  /* Full-screen safe-area offsets reverted — they added a visible top gap and the
+     edge-to-edge mode they were built for broke the nav anchoring. Re-scoped to the
+     (now-unused) .kt-native-fullscreen class so they stay inert unless a proper
+     edge-to-edge layout is reintroduced. Normal windows need no extra top padding. */
+  html.kt-native-fullscreen #appMain { padding-top: calc(env(safe-area-inset-top, 0px) + 4px) !important; }
+  html.kt-native-fullscreen #kt-gear { top: calc(env(safe-area-inset-top, 0px) + 8px) !important; }
+  html.kt-native-fullscreen #kt-topbar { top: env(safe-area-inset-top, 0px) !important; }
+}
+
+/* ── Stat cards: 2-up and compact on phones (2026-07-13) ─────────────────
+   .kt-rw-strip is `repeat(auto-fit, minmax(230px, 1fr))`, so on a ~392px phone
+   every card takes a full row — four desktop-sized cards ≈ 800px of scrolling
+   before you reach anything else. Two per row at phone proportions. ── */
+@media (max-width: 768px) {
+  #appMain .kt-rw-strip {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    margin: 4px 0 12px !important;
+  }
+  #appMain .kt-rw-card { padding: 7px 9px 6px !important; border-radius: 12px !important;
+    overflow: visible !important; min-width: 0 !important; }   /* was overflow:hidden → clipped a long value/label ("Enrolled"/balance) in the narrow 2-up card */
+  #appMain .kt-rw-head { margin-bottom: 4px !important; }
+  #appMain .kt-rw-label { font-size: 9px !important; letter-spacing: .4px !important; line-height: 1.2 !important;
+    overflow-wrap: anywhere !important; word-break: break-word !important; white-space: normal !important; }
+  #appMain .kt-rw-icon { width: 20px !important; height: 20px !important; font-size: 11px !important; border-radius: 8px !important; }
+  #appMain .kt-rw-value { font-size: 15.5px !important; overflow-wrap: anywhere !important; word-break: break-word !important; line-height: 1.1 !important; }
+  #appMain .kt-rw-hint { font-size: 10px !important; margin-top: 2px !important; overflow-wrap: anywhere !important; }
+  #appMain .kt-rw-go { margin-top: 4px !important; font-size: 10px !important; }
+  #appMain .kt-rw-card::after { display: none !important; }   /* decorative blob, wasted paint */
+
+  /* Condense the admin/dashboard KPI + stat tiles on phones too (were desktop-sized). */
+  #appMain .kt-kpi, #appMain .stat-tile, #appMain .kt-kpi-tile { padding: 11px 12px 10px !important; border-radius: 13px !important; min-width: 0 !important; }
+  #appMain .kt-kpi-value, #appMain .stat-value, #appMain .kt-kpi .value { font-size: 22px !important; line-height: 1.05 !important; overflow-wrap: anywhere !important; }
+  #appMain .kt-kpi-label, #appMain .stat-label, #appMain .kt-kpi .label { font-size: 9.5px !important; letter-spacing: .3px !important; overflow-wrap: anywhere !important; white-space: normal !important; }
+}
+
+/* ── Floating "← Back" clearance (2026-07-13) ────────────────────────────
+   #kt-role-back is fixed at bottom:84px / left:14px (above the bottom bar). At
+   the end of a scroll it landed ON TOP of the last launcher tile. The button is
+   now hidden on the educator home entirely (that IS home — nothing to go back
+   to), and any tile grid keeps clearance so it can never cover a tile. ── */
+@media (max-width: 768px) {
+  /* Clearance ONLY where the back button is actually shown. It is hidden on the
+     home screens (home IS the destination), so padding there was just dead space
+     under the last tile. #appMain already reserves 62px for the bottom bar. */
+  #appMain .kt-tile-grid:last-child { padding-bottom: 0 !important; }
+  #appMain #kt-edu-launcher { padding-bottom: 0 !important; }
+}
+
+/* ── Chat compose bar (2026-07-13) ───────────────────────────────────────
+   The 📎 😊 🎤 buttons were 66px wide EACH (22px glyph + 12px/18px padding) and
+   sit before the input, so on a 412px screen the text box got 105px — you could
+   see about two words of what you were typing. Shrink the icons to 38px taps,
+   give the input everything that's left. ── */
+@media (max-width: 768px) {
+  #appMain .kt-thread-compose {
+    gap: 6px !important;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    align-items: center !important;
+  }
+  #appMain .kt-thread-compose .kt-attach-btn,
+  #appMain .kt-thread-compose .kt-emoji-btn,
+  #appMain .kt-thread-compose .kt-mic-btn {
+    flex: 0 0 auto !important;
+    width: 38px !important; height: 38px !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    font-size: 18px !important;
+    line-height: 1 !important;
+    border-radius: 10px !important;
+    display: inline-flex !important;
+    align-items: center !important; justify-content: center !important;
+  }
+  #appMain .kt-thread-compose .kt-compose-input {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    height: 42px !important;
+    font-size: 16px !important;          /* 16px = no iOS zoom-on-focus */
+    padding: 10px 14px !important;
+    border-radius: 21px !important;
+  }
+  #appMain .kt-thread-compose .kt-send-btn {
+    flex: 0 0 auto !important;
+    height: 38px !important;
+    padding: 0 14px !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+  }
+}
+
+/* ── Breadcrumbs: barely legible at 12px / 85%-white on the hero ── */
+@media (max-width: 768px) {
+  #appMain .crumbs {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    color: #fff !important;
+    background: rgba(0, 0, 0, .22) !important;
+    border-radius: 999px !important;
+    padding: 5px 12px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .25) !important;
+  }
+  #appMain .crumbs a { color: #fff !important; text-decoration: underline !important; text-underline-offset: 2px; }
+}
+
+/* ── Bottom-bar clearance (2026-07-13) ───────────────────────────────────
+   The bar is ~87px tall (the raised QR button makes it taller than a normal
+   nav), but #appMain only reserved 74px — so the Sign out button at the end of
+   the home screen sat UNDER the bar and couldn't be tapped. ── */
+@media (max-width: 768px) {
+  .app-shell--sidebar .app-main,
+  .app-main,
+  #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 100px) !important; }
+}
+
+/* ── Sign out: make it findable, not a grey whisper ── */
+@media (max-width: 768px) {
+  #appMain #kt-edu-signout,
+  #appMain #kt-home-signout {
+    display: block !important;
+    width: 100% !important;
+    max-width: 280px !important;
+    margin: 18px auto 6px !important;
+    background: #DC2626 !important;
+    border: 1.5px solid #DC2626 !important;
+    color: #fff !important;
+    border-radius: 12px !important;
+    padding: 13px !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, .06) !important;
+  }
+}
+
+/* ── Notifications control row: the select and the buttons had different
+      paddings and heights, so "Mark all read" sat out of line and the row
+      wrapped to two lines on a phone. One height, one radius, one baseline. ── */
+@media (max-width: 768px) {
+  #appMain .kt-notif-bar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 7px !important;
+    margin: 10px 0 12px !important;
+  }
+  #appMain .kt-notif-bar .kt-notif-filter {
+    flex: 1 1 auto !important;
+    min-height: 40px !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+    border-radius: 10px !important;
+    line-height: 40px !important;
+  }
+  #appMain .kt-notif-btns { flex: 0 0 auto !important; gap: 6px !important; align-items: stretch !important; }
+  #appMain .kt-notif-bar .kt-notif-btn {
+    height: 40px !important;
+    min-height: 40px !important;   /* a generic #appMain button{min-height:44px} was winning */
+    padding: 0 12px !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    border-radius: 10px !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+}
+
+/* ── Table-cards: stack the label ABOVE the value ────────────────────────
+   Label-left / value-right works for "Date: Today" but crushes a long
+   announcement into a narrow right-hand column — which is why Alerts still
+   read like a table. Stacked, each card reads as a title and a few short
+   labelled lines. ── */
+@media (max-width: 768px) {
+  #appMain table.kt-mcards tr { padding: 13px 14px !important; }
+  #appMain table.kt-mcards td {
+    display: block !important;
+    padding: 5px 0 !important;
+    text-align: left !important;
+  }
+  #appMain table.kt-mcards td::before {
+    display: block !important;
+    margin-bottom: 2px !important;
+    font-size: 10px !important;
+    letter-spacing: .6px !important;
+    color: #94A3B8 !important;
+  }
+  #appMain table.kt-mcards td.kt-mcard-title {
+    font-size: 15.5px !important;
+    font-weight: 800 !important;
+    color: #0F172A !important;
+    padding: 0 0 6px !important;
+    line-height: 1.3 !important;
+  }
+  /* The announcement body itself is the point of the card — let it breathe. */
+  #appMain table.kt-mcards td { font-size: 13.5px !important; line-height: 1.45 !important; color: #334155 !important; }
+}
+
+/* ── Filters: no room, no need on a phone (2026-07-13) ───────────────────
+   The Messages list carries a desktop "🔍 Filter…" box; on a phone it eats a
+   whole row above a list you can already see in full. (The Alerts screen gets a
+   purpose-built mobile view with no filter at all.) ── */
+@media (max-width: 768px) {
+  #appMain #kt-msg-filter,
+  #appMain #kt-ann-filter { display: none !important; }
+}
+
+/* ── Empty room: "No children enrolled" (2026-07-14) ─────────────────────
+   The roster is a 2-column grid, and the empty state was being dropped into a
+   SINGLE 192px column with 80px of vertical padding — so the message sat
+   squashed in the left half of the screen, 382px tall. Span the whole grid,
+   centre it, and cut the padding to something a phone can afford. ── */
+@media (max-width: 768px) {
+  #appMain .educator-roster .empty-large,
+  #appMain .educator-roster .empty-state,
+  #appMain .educator-shell .empty-large {
+    grid-column: 1 / -1 !important;
+    padding: 22px 16px !important;
+    text-align: center !important;
+    margin: 0 !important;
+  }
+  #appMain .educator-roster .empty-large > *:first-child { font-size: 34px !important; }
+  #appMain .educator-roster .empty-large h3,
+  #appMain .educator-roster .empty-large > div:nth-child(2) { font-size: 15px !important; margin-top: 6px !important; }
+  #appMain .educator-roster .empty-large p { font-size: 13px !important; margin-top: 4px !important; }
+}
+
+/* ── Page banners: one size, everywhere (2026-07-14) ─────────────────────
+   Most sections use .kt-hero, which the mobile rules already collapse to a slim
+   ~36px title bar. Observations (and a few others) use .page-header-v17, which
+   was NOT being collapsed the same way — 160px of banner, four times the height
+   of every other section, which is why it looked out of place. Same treatment. ── */
+@media (max-width: 768px) {
+  #appMain .page-header-v17,
+  #appMain .kt-banner-fx {
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 9px 14px !important;
+    margin-bottom: 8px !important;
+    border-radius: 12px !important;
+  }
+  #appMain .page-header-v17 h1,
+  #appMain .page-header-v17 h2 { font-size: 16px !important; margin: 0 !important; line-height: 1.15 !important; }
+  #appMain .page-header-v17 p,
+  #appMain .page-header-v17 .kt-hero-sub { font-size: 11.5px !important; margin: 1px 0 0 !important; line-height: 1.35 !important; }
+  /* Decorative art/illustration inside a banner is pure height on a phone. */
+  #appMain .page-header-v17 svg,
+  #appMain .page-header-v17 img,
+  #appMain .page-header-v17 .kt-hero-emoji,
+  #appMain .page-header-v17 [class*="illustration"] { display: none !important; }
+  /* The breadcrumb sits above it — don't let the two stack into a tower. */
+  #appMain .page-header-v17 + * { margin-top: 8px !important; }
+}
+
+/* The .page-header-v17 banner is tall because of what's INSIDE it, not the box:
+   a 30px breadcrumb chip, the title, a subtitle, and a 45px full-width button —
+   161px against every other section's 36px. Shrink the parts. */
+@media (max-width: 768px) {
+  #appMain .page-header-v17 { padding: 8px 12px !important; }
+  #appMain .page-header-v17 .crumbs {
+    font-size: 11px !important;
+    padding: 3px 9px !important;
+    margin-bottom: 4px !important;
+  }
+  #appMain .page-header-v17 .sub {
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+    display: -webkit-box !important;      /* one line; the screen explains itself */
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden !important;
+  }
+  #appMain .page-header-v17 .actions { margin-top: 7px !important; }
+  #appMain .page-header-v17 .actions button,
+  #appMain .page-header-v17 .actions a {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 14px !important;
+    font-size: 12.5px !important;
+    border-radius: 9px !important;
+  }
+}
+
+/* Final pass: bring .page-header-v17 in line with the ~36px .kt-hero used
+   everywhere else, and stop table-cards from running to 340px. */
+@media (max-width: 768px) {
+  /* The subtitle is a desktop nicety — the screen title already says what this is. */
+  #appMain .page-header-v17 .sub { display: none !important; }
+  #appMain .page-header-v17 .crumbs { display: none !important; }   /* the ← Back button covers this */
+  #appMain .page-header-v17 { padding: 7px 12px !important; }
+
+  /* Card rows: tighter lines, so a 6-field record isn't a 340px card. */
+  #appMain table.kt-mcards tr { padding: 11px 13px !important; margin-bottom: 8px !important; }
+  #appMain table.kt-mcards td { padding: 3px 0 !important; font-size: 13px !important; line-height: 1.35 !important; }
+  #appMain table.kt-mcards td::before { font-size: 9.5px !important; margin-bottom: 1px !important; }
+  #appMain table.kt-mcards td.kt-mcard-title { font-size: 15px !important; padding: 0 0 4px !important; }
+}
+
+/* ── The banner's action button, lifted out of the banner (2026-07-14) ───
+   kt-mobile-tables.js moves .page-header-v17 > .actions to just below the
+   banner on phones, so the banner collapses to a plain title bar like every
+   other section. Style it where it now lives: full width, thumb-height. ── */
+@media (max-width: 768px) {
+  #appMain .kt-lifted-actions {
+    display: flex !important;
+    gap: 8px !important;
+    margin: 0 0 10px !important;
+    padding: 0 !important;
+  }
+  #appMain .kt-lifted-actions button,
+  #appMain .kt-lifted-actions a {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 14px !important;
+    font-size: 13.5px !important;
+    font-weight: 800 !important;
+    border-radius: 11px !important;
+  }
+  /* With the button gone, the banner is just a title. */
+  #appMain .page-header-v17 { padding: 8px 12px !important; }
+}
+
+
+/* ── Desktop parent chat (2026-07-14): the parent Messages tab now reuses the mobile
+      thread (emoji picker, photo, voice notes). On desktop present it as a centred
+      floating panel over a dimmed backdrop instead of a full-screen takeover. ── */
+/* Applies to guardian AND educator/home-visitor so the chat pops out as the SAME
+   centred floating card in every role (educator/home-visitor use screen-chat.js,
+   whose thread is also a direct #appMain > div containing .kt-thread-compose).
+   height/max-height are !important so the educator thread's inline height (which
+   guardian's wrapper doesn't set) can't override the card sizing. */
+@media (min-width: 601px) {
+  body.role-guardian:has(.kt-thread-compose) #appMain > div:has(> .kt-thread-compose),
+  body.role-educator:has(.kt-thread-compose) #appMain > div:has(> .kt-thread-compose),
+  body.role-home-visitor:has(.kt-thread-compose) #appMain > div:has(> .kt-thread-compose) {
+    position: fixed !important; top: 116px; left: 50%; transform: translateX(-50%);
+    width: min(720px, 94vw); height: calc(100vh - 150px) !important; max-height: 780px !important;
+    z-index: 9400 !important; background: #fff !important;
+    border: 1px solid #E5E7EB; border-radius: 18px; overflow: hidden;
+    box-shadow: 0 24px 70px rgba(8,20,36,.35) !important;
+    display: flex !important; flex-direction: column !important;
+  }
+  body.role-guardian:has(.kt-thread-compose)::after,
+  body.role-educator:has(.kt-thread-compose)::after,
+  body.role-home-visitor:has(.kt-thread-compose)::after {
+    content: ''; position: fixed; left: 0; right: 0; top: 108px; bottom: 0;
+    background: rgba(8,20,36,.42); z-index: 9399;
+  }
+  body.role-guardian .kt-thread-header, body.role-educator .kt-thread-header, body.role-home-visitor .kt-thread-header { flex: 0 0 auto !important; }
+  body.role-guardian .kt-thread-body, body.role-educator .kt-thread-body, body.role-home-visitor .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; }
+  body.role-guardian .kt-thread-compose, body.role-guardian .kt-voice-preview,
+  body.role-educator .kt-thread-compose, body.role-home-visitor .kt-thread-compose { flex: 0 0 auto !important; }
+}
+
+/* Chat close ✕ — visible only on the desktop floating chat panel. */
+.kt-thread-close-desk { display: none; }
+@media (min-width: 601px) { body.role-guardian .kt-thread-close-desk { display: inline-flex !important; align-items: center; justify-content: center; } }
+
+
+/* ── Parent/educator mobile top header (2026-07-14): the parent name + its greeting
+      sit right next to the KiddieTrac logo on ONE slim row, to maximise space. ── */
+@media (max-width: 768px) {
+  body.role-guardian #appSidebar, body.role-educator #appSidebar { flex-wrap: nowrap !important; padding: 8px 12px !important; }
+  body.role-guardian #appSidebar #navBrand, body.role-educator #appSidebar #navBrand { flex-shrink: 0 !important; }
+  body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img { height: 34px !important; }
+  body.role-guardian #appSidebar #navUser, body.role-educator #appSidebar #navUser { margin-left: 10px !important; flex: 1 1 0 !important; min-width: 0 !important; overflow: hidden !important; }
+  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { min-width: 0 !important; overflow: hidden !important; }
+  /* Role now shown as a pill (styled by kt-parent-chrome) — no longer hidden. */
+  body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name { font-size: 13px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet { font-size: 9.5px !important; letter-spacing: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The top bar already greets the parent — drop the repetitive greeting line on the home banner. */
+  body.role-guardian #appMain .kt-tilehome .kt-hero-greet, body.role-educator #appMain .kt-tilehome .kt-hero-greet { display: none !important; }
+  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { flex: 1 1 0 !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   B733 — COLOURFUL MOBILE CARDS
+   The shared card accent bar (kt-cards-v22p72.css) is HOVER-ONLY, so on the
+   phone (no hover) every card rendered as flat white = bland. Here we give
+   every card an always-on coloured top bar + a soft tint, and cycle a
+   cheerful, childcare-friendly palette across the KPI / stat tiles so the
+   dashboard actually pops on mobile. Mobile only (<=600px).
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* 1) Always-on, bolder top accent bar on EVERY card (was opacity:0 til hover) */
+  #appMain .card::before, #appMain .kt-card::before, #appMain .kt-kpi::before,
+  #appMain .stat-tile::before, #appMain .dash-card::before, #appMain .widget::before,
+  #appMain .centre-card-v17::before {
+    content: '' !important; opacity: 1 !important; height: 5px !important;
+    position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important;
+    background: linear-gradient(90deg,#2D7BA8 0%,#4A90B8 40%,#F97316 100%) !important;
+    border-top-left-radius: inherit !important; border-top-right-radius: inherit !important;
+  }
+  #appMain .card, #appMain .kt-card, #appMain .dash-card, #appMain .widget,
+  #appMain .centre-card-v17, #appMain .kt-kpi, #appMain .stat-tile {
+    position: relative !important; overflow: hidden !important;
+  }
+  /* 2) Soft surface tint so cards aren't stark white */
+  #appMain .card, #appMain .kt-card, #appMain .dash-card, #appMain .widget {
+    background: linear-gradient(180deg,#FBFDFF 0%,#FFFFFF 55%) !important;
+    border-color: #DCE8F1 !important;
+  }
+
+  /* 3) KPI / stat tiles — a cheerful cycling palette (bar + wash + bold value).
+        Each tile gets its own colour so the KPI row reads as lively, not grey. */
+  /* orange */
+  #appMain .kt-kpi:nth-of-type(6n+1), #appMain .stat-tile:nth-of-type(6n+1) { background:linear-gradient(180deg,#FFF3EA,#FFFFFF) !important; }
+  #appMain .kt-kpi:nth-of-type(6n+1)::before, #appMain .stat-tile:nth-of-type(6n+1)::before { background:#F97316 !important; }
+  #appMain .kt-kpi:nth-of-type(6n+1) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n+1) .stat-value, #appMain .stat-tile:nth-of-type(6n+1) .value { color:#EA6A0C !important; }
+  /* blue */
+  #appMain .kt-kpi:nth-of-type(6n+2), #appMain .stat-tile:nth-of-type(6n+2) { background:linear-gradient(180deg,#EAF3FB,#FFFFFF) !important; }
+  #appMain .kt-kpi:nth-of-type(6n+2)::before, #appMain .stat-tile:nth-of-type(6n+2)::before { background:#2D7BA8 !important; }
+  #appMain .kt-kpi:nth-of-type(6n+2) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n+2) .stat-value, #appMain .stat-tile:nth-of-type(6n+2) .value { color:#236A94 !important; }
+  /* emerald */
+  #appMain .kt-kpi:nth-of-type(6n+3), #appMain .stat-tile:nth-of-type(6n+3) { background:linear-gradient(180deg,#E9FBF3,#FFFFFF) !important; }
+  #appMain .kt-kpi:nth-of-type(6n+3)::before, #appMain .stat-tile:nth-of-type(6n+3)::before { background:#10B981 !important; }
+  #appMain .kt-kpi:nth-of-type(6n+3) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n+3) .stat-value, #appMain .stat-tile:nth-of-type(6n+3) .value { color:#0E9E70 !important; }
+  /* violet */
+  #appMain .kt-kpi:nth-of-type(6n+4), #appMain .stat-tile:nth-of-type(6n+4) { background:linear-gradient(180deg,#F1ECFE,#FFFFFF) !important; }
+  #appMain .kt-kpi:nth-of-type(6n+4)::before, #appMain .stat-tile:nth-of-type(6n+4)::before { background:#8B5CF6 !important; }
+  #appMain .kt-kpi:nth-of-type(6n+4) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n+4) .stat-value, #appMain .stat-tile:nth-of-type(6n+4) .value { color:#7C3AED !important; }
+  /* pink */
+  #appMain .kt-kpi:nth-of-type(6n+5), #appMain .stat-tile:nth-of-type(6n+5) { background:linear-gradient(180deg,#FDECF5,#FFFFFF) !important; }
+  #appMain .kt-kpi:nth-of-type(6n+5)::before, #appMain .stat-tile:nth-of-type(6n+5)::before { background:#EC4899 !important; }
+  #appMain .kt-kpi:nth-of-type(6n+5) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n+5) .stat-value, #appMain .stat-tile:nth-of-type(6n+5) .value { color:#DB2777 !important; }
+  /* cyan */
+  #appMain .kt-kpi:nth-of-type(6n), #appMain .stat-tile:nth-of-type(6n) { background:linear-gradient(180deg,#E7FAFD,#FFFFFF) !important; }
+  #appMain .kt-kpi:nth-of-type(6n)::before, #appMain .stat-tile:nth-of-type(6n)::before { background:#06B6D4 !important; }
+  #appMain .kt-kpi:nth-of-type(6n) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n) .stat-value, #appMain .stat-tile:nth-of-type(6n) .value { color:#0891B2 !important; }
+
+  /* 4) Centre cards — a friendly teal identity + tint */
+  #appMain .centre-card-v17 { background: linear-gradient(180deg,#EAF6FA,#FFFFFF) !important; border-color:#CFE6EE !important; }
+  #appMain .centre-card-v17::before { background: linear-gradient(90deg,#159FB4,#2D7BA8) !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   B734 — COLOURFUL tile launcher buttons (mobile / APK home)
+   The .kt-tile grid was a wall of white boxes with plain emoji icons.
+   Give each tile a coloured icon chip, a soft matching wash, and a
+   coloured bottom accent — cycling an 8-colour palette so the launcher
+   reads like a real, lively app instead of grey boxes.
+   Scoped to the mobile home only. !important beats the base .kt-tile
+   rule and kt-cards (loaded last) regardless of file order.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .kt-tile-grid .kt-tile { position:relative; overflow:hidden; border:1px solid #E8EEF4 !important; }
+  .kt-tile-grid .kt-tile .kt-tile-icon {
+    display:flex !important; align-items:center; justify-content:center;
+    width:48px; height:48px; border-radius:15px; font-size:23px; line-height:1;
+    margin:0 auto 9px; box-shadow:0 5px 12px -4px rgba(16,40,64,.4);
+  }
+  .kt-tile-grid .kt-tile::after { content:''; position:absolute; left:0; right:0; bottom:0; height:4px; }
+
+  /* orange */
+  .kt-tile-grid .kt-tile:nth-child(8n+1) { background:linear-gradient(180deg,#FFFFFF,#FFF4EC) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+1) .kt-tile-icon { background:linear-gradient(135deg,#FB8C3B,#F97316) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+1)::after { background:#F97316; }
+  /* blue */
+  .kt-tile-grid .kt-tile:nth-child(8n+2) { background:linear-gradient(180deg,#FFFFFF,#EEF6FB) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+2) .kt-tile-icon { background:linear-gradient(135deg,#4A90B8,#2D7BA8) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+2)::after { background:#2D7BA8; }
+  /* emerald */
+  .kt-tile-grid .kt-tile:nth-child(8n+3) { background:linear-gradient(180deg,#FFFFFF,#ECFBF5) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+3) .kt-tile-icon { background:linear-gradient(135deg,#34D399,#10B981) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+3)::after { background:#10B981; }
+  /* violet */
+  .kt-tile-grid .kt-tile:nth-child(8n+4) { background:linear-gradient(180deg,#FFFFFF,#F5F1FE) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+4) .kt-tile-icon { background:linear-gradient(135deg,#A78BFA,#8B5CF6) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+4)::after { background:#8B5CF6; }
+  /* pink */
+  .kt-tile-grid .kt-tile:nth-child(8n+5) { background:linear-gradient(180deg,#FFFFFF,#FEF0F7) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+5) .kt-tile-icon { background:linear-gradient(135deg,#F472B6,#EC4899) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+5)::after { background:#EC4899; }
+  /* cyan */
+  .kt-tile-grid .kt-tile:nth-child(8n+6) { background:linear-gradient(180deg,#FFFFFF,#ECFBFE) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+6) .kt-tile-icon { background:linear-gradient(135deg,#22D3EE,#06B6D4) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+6)::after { background:#06B6D4; }
+  /* amber */
+  .kt-tile-grid .kt-tile:nth-child(8n+7) { background:linear-gradient(180deg,#FFFFFF,#FEF7E8) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+7) .kt-tile-icon { background:linear-gradient(135deg,#FBBF24,#F59E0B) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n+7)::after { background:#F59E0B; }
+  /* red */
+  .kt-tile-grid .kt-tile:nth-child(8n) { background:linear-gradient(180deg,#FFFFFF,#FEF0F0) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n) .kt-tile-icon { background:linear-gradient(135deg,#F87171,#EF4444) !important; }
+  .kt-tile-grid .kt-tile:nth-child(8n)::after { background:#EF4444; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   B735 — Circular icon chips + colourful launcher tiles on ALL viewports.
+   Supersedes B734's rounded-square chips with ROUND ones, and lifts the
+   colour palette out of the mobile-only media query so the DESKTOP home
+   launcher is just as lively as mobile. Universal — no media gate.
+   ═══════════════════════════════════════════════════════════════════ */
+.kt-tile-grid .kt-tile { position:relative; overflow:hidden; }
+/* #appMain-prefixed so this out-specifies `#appMain .kt-tile-icon` (an ID rule
+   that otherwise wins over plain classes even with !important) — that ID rule
+   was forcing the chips back to a rounded square (border-radius:13px). */
+#appMain .kt-tile-grid .kt-tile .kt-tile-icon,
+.kt-tile-grid .kt-tile .kt-tile-icon {
+  display:flex !important; align-items:center; justify-content:center;
+  width:52px !important; height:52px !important; border-radius:50% !important;
+  font-size:24px !important; line-height:1 !important; margin:0 auto 10px !important;
+  box-shadow:0 6px 14px -4px rgba(16,40,64,.42) !important;
+}
+.kt-tile-grid .kt-tile::after { content:''; position:absolute; left:0; right:0; bottom:0; height:4px; }
+/* orange */
+.kt-tile-grid .kt-tile:nth-child(8n+1) { background:linear-gradient(180deg,#FFFFFF,#FFF4EC) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+1) .kt-tile-icon { background:linear-gradient(135deg,#FB8C3B,#F97316) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+1)::after { background:#F97316; }
+/* blue */
+.kt-tile-grid .kt-tile:nth-child(8n+2) { background:linear-gradient(180deg,#FFFFFF,#EEF6FB) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+2) .kt-tile-icon { background:linear-gradient(135deg,#4A90B8,#2D7BA8) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+2)::after { background:#2D7BA8; }
+/* emerald */
+.kt-tile-grid .kt-tile:nth-child(8n+3) { background:linear-gradient(180deg,#FFFFFF,#ECFBF5) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+3) .kt-tile-icon { background:linear-gradient(135deg,#34D399,#10B981) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+3)::after { background:#10B981; }
+/* violet */
+.kt-tile-grid .kt-tile:nth-child(8n+4) { background:linear-gradient(180deg,#FFFFFF,#F5F1FE) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+4) .kt-tile-icon { background:linear-gradient(135deg,#A78BFA,#8B5CF6) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+4)::after { background:#8B5CF6; }
+/* pink */
+.kt-tile-grid .kt-tile:nth-child(8n+5) { background:linear-gradient(180deg,#FFFFFF,#FEF0F7) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+5) .kt-tile-icon { background:linear-gradient(135deg,#F472B6,#EC4899) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+5)::after { background:#EC4899; }
+/* cyan */
+.kt-tile-grid .kt-tile:nth-child(8n+6) { background:linear-gradient(180deg,#FFFFFF,#ECFBFE) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+6) .kt-tile-icon { background:linear-gradient(135deg,#22D3EE,#06B6D4) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+6)::after { background:#06B6D4; }
+/* amber */
+.kt-tile-grid .kt-tile:nth-child(8n+7) { background:linear-gradient(180deg,#FFFFFF,#FEF7E8) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+7) .kt-tile-icon { background:linear-gradient(135deg,#FBBF24,#F59E0B) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n+7)::after { background:#F59E0B; }
+/* red */
+.kt-tile-grid .kt-tile:nth-child(8n) { background:linear-gradient(180deg,#FFFFFF,#FEF0F0) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n) .kt-tile-icon { background:linear-gradient(135deg,#F87171,#EF4444) !important; }
+.kt-tile-grid .kt-tile:nth-child(8n)::after { background:#EF4444; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   B736 — the launcher item's FRAME should BE the coloured circle, not a
+   square card around it. Strip the white rounded-square tile card (its
+   background wash, border, shadow and bottom accent bar) so each tile is
+   just the circular colour icon disc + its label underneath (classic app
+   launcher look). ID-scoped to beat the earlier per-tile colour washes.
+   ═══════════════════════════════════════════════════════════════════ */
+#appMain .kt-tile-grid .kt-tile,
+#appMain .kt-tile-grid .kt-tile:nth-child(8n+1),
+#appMain .kt-tile-grid .kt-tile:nth-child(8n+2),
+#appMain .kt-tile-grid .kt-tile:nth-child(8n+3),
+#appMain .kt-tile-grid .kt-tile:nth-child(8n+4),
+#appMain .kt-tile-grid .kt-tile:nth-child(8n+5),
+#appMain .kt-tile-grid .kt-tile:nth-child(8n+6),
+#appMain .kt-tile-grid .kt-tile:nth-child(8n+7),
+#appMain .kt-tile-grid .kt-tile:nth-child(8n) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+#appMain .kt-tile-grid .kt-tile::after { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   B737 — put a CIRCULAR frame back around each icon. B736 removed the old
+   square card frame entirely; instead each icon now sits in a framed circle:
+   the coloured disc keeps its fill, plus a white ring + a soft outer hairline
+   and shadow so it reads as a distinct circular frame around the icon. The
+   tile stays card-free (no square) — just the framed circle + label below.
+   ═══════════════════════════════════════════════════════════════════ */
+#appMain .kt-tile-grid .kt-tile .kt-tile-icon,
+.kt-tile-grid .kt-tile .kt-tile-icon {
+  border: 3px solid #FFFFFF !important;
+  box-shadow: 0 5px 14px -4px rgba(16,40,64,.45), 0 0 0 1.5px rgba(16,40,64,.08) !important;
+  background-clip: padding-box !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   B738 — align the icon circles across a row. The base .kt-tile uses
+   justify-content:center, so a 2-line label (e.g. "Check in / out")
+   vertically re-centres its content and pushes that tile's circle up/down
+   out of line with its neighbours. Top-align the content so every circle
+   sits at the same height regardless of label length; the label area gets
+   a min-height so 1- and 2-line labels don't jitter the row.
+   ═══════════════════════════════════════════════════════════════════ */
+#appMain .kt-tile-grid .kt-tile {
+  justify-content: flex-start !important;
+  align-items: center !important;
+}
+#appMain .kt-tile-grid .kt-tile .kt-tile-label {
+  min-height: 2.4em !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  text-align: center !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   B739 — bigger icon circles. Earlier rules shrank the disc to ~52px,
+   which left a lot of white space inside the large desktop tiles. Scale
+   it up responsively: fill the desktop tile, and a touch bigger on phones.
+   High-specificity + placed last so it wins over B735/line-100.
+   ═══════════════════════════════════════════════════════════════════ */
+#appMain .kt-tile-grid .kt-tile .kt-tile-icon {
+  width: 58px !important; height: 58px !important; font-size: 28px !important;  /* mobile / APK */
+}
+@media (min-width: 601px) {
+  #appMain .kt-tile-grid .kt-tile .kt-tile-icon {
+    width: 96px !important; height: 96px !important; font-size: 48px !important; /* desktop — fills the tile */
+    border-width: 4px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   B740 — tighten the launcher's vertical rhythm (less white space between
+   icon rows), desktop + mobile. The tall fixed tile height (156px desktop)
+   + heavy padding + row gap + the 2.4em label reserve left big empty gaps
+   between rows. Size tiles to content (min-height:0), top-align the grid so
+   there's no stretched empty space, and shrink the row gap + padding.
+   ═══════════════════════════════════════════════════════════════════ */
+#appMain .kt-tile-grid { align-items: start !important; }
+#appMain .kt-tile-grid .kt-tile .kt-tile-label { min-height: 0 !important; }
+@media (min-width: 601px) {
+  #appMain .kt-tile-grid { gap: 12px !important; row-gap: 10px !important; }
+  #appMain .kt-tile-grid .kt-tile { min-height: 0 !important; padding: 14px 12px !important; gap: 10px !important; }
+}
+@media (max-width: 768px) {
+  #appMain .kt-tile-grid { gap: 8px !important; row-gap: 6px !important; }
+  #appMain .kt-tile-grid .kt-tile { min-height: 0 !important; padding: 8px 6px !important; gap: 6px !important; }
+}
+
+/* ── Native APK width-independence (2026-07-27) ──────────────────────────
+   The Capacitor WebView can report a CSS layout width ABOVE 768px, which would
+   skip every `@media(max-width:768px)` block above → desktop top bar shows and
+   the stat cards stay desktop-sized on the phone. kt-mobilenav.js adds
+   `html.kt-native` on the real app; re-apply the phone essentials keyed on that
+   class so the APK always gets the mobile treatment no matter what width it
+   reports. (Browsers never get this class, so desktop web is untouched.) */
+html.kt-native #kt-topbar { display: none !important; }
+html.kt-native #appMain .kt-rw-strip { grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin: 4px 0 12px !important; }
+html.kt-native #appMain .kt-rw-card { padding: 7px 9px 6px !important; border-radius: 12px !important; overflow: visible !important; min-width: 0 !important; }
+html.kt-native #appMain .kt-rw-card::after { display: none !important; }
+html.kt-native #appMain .kt-rw-head { margin-bottom: 4px !important; }
+html.kt-native #appMain .kt-rw-value { font-size: 15.5px !important; line-height: 1.1 !important; overflow-wrap: anywhere !important; word-break: break-word !important; }
+html.kt-native #appMain .kt-rw-label { font-size: 9px !important; letter-spacing: .4px !important; line-height: 1.2 !important; white-space: normal !important; }
+html.kt-native #appMain .kt-rw-icon { width: 20px !important; height: 20px !important; font-size: 11px !important; border-radius: 8px !important; }
+html.kt-native #appMain .kt-rw-hint { font-size: 10px !important; margin-top: 2px !important; }
+html.kt-native #appMain .kt-rw-go { margin-top: 4px !important; font-size: 10px !important; }
+
+/* ── Native top-bar / camera-cutout clearance (2026-07-27) ───────────────
+   On Android 15+ the WebView draws edge-to-edge (under the status bar + camera
+   cutout) even without windowFullscreen, so the top header text + floating gear
+   collided with the OS clock/battery/notch. Push them down by the safe-area inset.
+   env() resolves to 0 where content already sits below the status bar (older
+   Android), so this adds nothing there — no wasted gap. Keyed on html.kt-native so
+   only the APK gets it. */
+html.kt-native #appSidebar { padding-top: env(safe-area-inset-top, 0px) !important; }
+html.kt-native #kt-topbar  { top: env(safe-area-inset-top, 0px) !important; }
+html.kt-native #kt-gear    { top: calc(env(safe-area-inset-top, 0px) + 6px) !important; }
+
+/* ── Stat cards: denser, no dead space (2026-07-27, redesign) ────────────
+   The role-widget cards had (a) a secondary "hint" line + a redundant "View ›"
+   chevron (the whole card is already a tappable link) and (b) stretched to match
+   the tallest card in each row — both of which created visible empty/white space.
+   Now: cards size to their OWN content (align-items:start), the hint + chevron are
+   dropped, the icon sits inline top-left, and the number/label are tight. Applied
+   to BOTH the ≤768 and html.kt-native paths so it wins over the earlier condense
+   rules on every mobile/APK width. */
+@media (max-width: 768px) {
+  #appMain .kt-rw-strip { align-items: start !important; grid-auto-rows: min-content !important; }
+  /* Force the HORIZONTAL layout in STATIC css so it never depends on the JS-injected
+     .kt-rw-card{display:flex} being present — without it the card falls back to block
+     and the icon/value stack vertically. Icon left, value + label to its right. */
+  #appMain .kt-rw-card { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 10px !important; text-align: left !important; padding: 9px 11px 10px !important; min-height: 0 !important; }
+  #appMain .kt-rw-body { flex: 1 1 auto !important; min-width: 0 !important; text-align: left !important; }
+  #appMain .kt-rw-hint, #appMain .kt-rw-go { display: none !important; }
+  #appMain .kt-rw-head { margin-bottom: 3px !important; }
+  #appMain .kt-rw-icon { flex: 0 0 auto !important; margin: 0 !important; align-self: center !important; width: 30px !important; height: 30px !important; font-size: 15px !important; }
+  #appMain .kt-rw-value { font-size: 19px !important; line-height: 1.1 !important; margin: 0 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; word-break: normal !important; overflow-wrap: normal !important; }
+  #appMain .kt-rw-label { font-size: 9px !important; letter-spacing: .4px !important; margin: 2px 0 0 !important; line-height: 1.2 !important; white-space: normal !important; }
+}
+html.kt-native #appMain .kt-rw-strip { align-items: start !important; grid-auto-rows: min-content !important; }
+html.kt-native #appMain .kt-rw-card { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 10px !important; text-align: left !important; padding: 9px 11px 10px !important; min-height: 0 !important; }
+html.kt-native #appMain .kt-rw-body { flex: 1 1 auto !important; min-width: 0 !important; text-align: left !important; }
+html.kt-native #appMain .kt-rw-hint, html.kt-native #appMain .kt-rw-go { display: none !important; }
+html.kt-native #appMain .kt-rw-head { margin-bottom: 3px !important; }
+html.kt-native #appMain .kt-rw-icon { flex: 0 0 auto !important; margin: 0 !important; align-self: center !important; width: 30px !important; height: 30px !important; font-size: 15px !important; }
+html.kt-native #appMain .kt-rw-value { font-size: 19px !important; line-height: 1.1 !important; margin: 0 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; word-break: normal !important; overflow-wrap: normal !important; }
+html.kt-native #appMain .kt-rw-label { font-size: 9px !important; letter-spacing: .4px !important; margin: 2px 0 0 !important; line-height: 1.2 !important; }

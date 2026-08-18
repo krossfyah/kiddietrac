@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <script>window.KT_VERSION='4.2';</script>
+  <title>Sign in · Kiddietrac</title>
+  <meta name="description" content="Sign in to your Kiddietrac parent account">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <!-- Preload the login hero art so it's ready the instant the splash lifts —
+       the screen then appears all at once (logo + fields together). -->
+  <link rel="preload" as="image" href="/logo-wordmark-large.png">
+  <link rel="preload" as="image" href="/login-wordmark.png">
+  <link rel="preload" as="image" href="/login-tagline.png">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#081C41">
+  <!-- Light-only document: stops the Android WebView treating this page as
+       dark-capable on a phone in dark mode, which painted native <select>
+       popups and date pickers with white-on-white text. -->
+  <meta name="color-scheme" content="light only">
+  <link rel="stylesheet" href="/css/kt-select-fix.css?v=20260811scheme">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kiddietrac">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/kt-brand-v16.css">
+  <link rel="stylesheet" href="/css/kt-login-v22.css">
+  <link rel="stylesheet" href="/css/kt-login-pop.css">
+  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260729logo">
+  <!-- Mark the native APK on <html> as early as possible so the bold navy mobile
+       login applies even if the WebView reports a desktop-ish width. -->
+  <script>try{var C=window.Capacitor;if(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)))document.documentElement.classList.add('kt-native');}catch(e){}</script>
+  <!-- Bold navy mobile/APK login (layered over the redesign above). -->
+  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260809logotag">
+</head>
+<body class="auth-body">
+<!-- Launch splash REMOVED (2026-08-11): opening the app must land on the login
+     form immediately. The boot animation now belongs AFTER sign-in, where there is
+     actually a portal being loaded to wait for. -->
+<style>
+/* No #kt-splash on the login page: the boot splash lives in dashboard.html and
+   runs AFTER sign-in. The rules that used to sit here styled an element nothing
+   created. The login hero's own write-on animation is .ktl-anim, below. */
+@keyframes kt-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes kt-spin{to{transform:rotate(360deg)}}
+
+/* ── KiddieTrac logo "write-on" animation (login + splash) ──────────────
+   The wordmark writes itself on left→right (Kiddie→Trac, then the swish),
+   an ink-pen glow rides the reveal edge, a sheen sweeps across the shape,
+   and a sparkle burst pops at the ticks. Super cool, works mobile+desktop. */
+.ktl-anim{position:relative;display:inline-block;line-height:0;}
+.ktl-anim > img{opacity:1 !important;transition:none !important;transform-origin:50% 60%;
+  animation:ktl-writeon 1.35s cubic-bezier(.62,.02,.34,1) .18s both;}
+@keyframes ktl-writeon{
+  0%{clip-path:inset(0 100% 0 0);transform:scale(.982);}
+  85%{transform:scale(1.018);}
+  100%{clip-path:inset(0 0 0 0);transform:scale(1);}
+}
+/* the glowing ink pen that rides the writing edge */
+.ktl-anim .ktl-pen{position:absolute;top:12%;bottom:24%;width:5px;left:0;border-radius:6px;
+  background:linear-gradient(180deg,#13B7CC,#8EC73C);opacity:0;pointer-events:none;z-index:2;
+  box-shadow:0 0 16px 5px rgba(19,183,204,.60),0 0 34px 10px rgba(142,199,60,.32);
+  animation:ktl-pen 1.35s cubic-bezier(.62,.02,.34,1) .18s both;}
+@keyframes ktl-pen{0%{left:0;opacity:0;}9%{opacity:1;}88%{opacity:1;}100%{left:100%;opacity:0;}}
+/* a light sheen sweeps across, masked to the logo shape */
+.ktl-anim .ktl-sheen{position:absolute;inset:0;pointer-events:none;z-index:3;opacity:0;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.7) 50%,transparent 58%);
+  background-size:250% 100%;background-position:170% 0;
+  -webkit-mask:url(/logo-wordmark-large.png) center/contain no-repeat;
+  mask:url(/logo-wordmark-large.png) center/contain no-repeat;
+  animation:ktl-sheen 1s ease 1.5s both;}
+@keyframes ktl-sheen{0%{background-position:170% 0;opacity:0;}25%{opacity:1;}100%{background-position:-70% 0;opacity:0;}}
+/* sparkle burst from the ticks (top-centre) — magic, not duplicate marks */
+.ktl-anim .ktl-spk{position:absolute;top:4%;left:47%;width:0;height:0;pointer-events:none;z-index:4;}
+.ktl-anim .ktl-spk b{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,#fff 0%,#8EC73C 42%,rgba(142,199,60,0) 72%);}
+.ktl-anim .ktl-spk b:nth-child(1){--tx:-26px;--ty:-20px;animation:ktl-spk .75s ease 1.32s both;}
+.ktl-anim .ktl-spk b:nth-child(2){--tx:2px;--ty:-30px;animation:ktl-spk .8s ease 1.42s both;}
+.ktl-anim .ktl-spk b:nth-child(3){--tx:26px;--ty:-18px;animation:ktl-spk .75s ease 1.5s both;}
+@keyframes ktl-spk{0%{transform:translate(0,0) scale(.2);opacity:0;}35%{opacity:1;}100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0;}}
+/* Calm, instant login: the write-on flourish (pen glow + sparkle burst) read as a
+   distracting artifact and made the page feel like it loaded in stages. Show the
+   logo instantly with no pen/sheen/sparkle so the whole screen appears at once. */
+.ktl-anim > img{animation:none !important;clip-path:none !important;transform:none !important;opacity:1 !important;}
+.ktl-anim .ktl-pen,.ktl-anim .ktl-sheen,.ktl-anim .ktl-spk{display:none !important;}
+@media(prefers-reduced-motion:reduce){
+  .ktl-anim > img{animation:none;clip-path:none;}
+  .ktl-anim .ktl-pen,.ktl-anim .ktl-sheen,.ktl-anim .ktl-spk{display:none !important;}
+}
+</style>
+<script>
+(function(){
+/* Hand the NATIVE (Capacitor) splash off to this web splash immediately so the
+   APK shows ONE continuous logo boot instead of native-splash → web-splash →
+   login-page-logo (the "triple logo" flash). */
+try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.SplashScreen.hide();}catch(e){}
+})();
+</script>
+<script>
+/* SSO handoff from the marketing site (www.kiddietrac.com): #kt_sso=<token>, and ?email= prefill */
+(function () {
+  var API = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+  var m = (location.hash || '').match(/kt_sso=([^&]+)/);
+  if (m) {
+    var tok = decodeURIComponent(m[1]);
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (u) {
+        sessionStorage.setItem('kt_token', tok);
+        sessionStorage.setItem('kt_user', JSON.stringify(u));
+        var now = String(Date.now());
+        sessionStorage.setItem('kt_login_at', now);
+        sessionStorage.setItem('kt_last_activity', now);
+        location.replace('/dashboard.html');
+      }).catch(function () { /* invalid/expired token — stay on the login form */ });
+    return;
+  }
+  var q = (location.search || '').match(/[?&]email=([^&]+)/);
+  if (q) {
+    document.addEventListener('DOMContentLoaded', function () {
+      var e = document.getElementById('email'); if (e) e.value = decodeURIComponent(q[1]);
+      var pw = document.getElementById('password'); if (pw) pw.focus();
+    });
+  }
+})();
+</script>
+  <div class="ktl-wrap">
+    <!-- ── Sign-in ── -->
+    <section class="ktl-form-side">
+      <div class="ktl-mobile-hero" aria-hidden="true">
+        <div class="ktl-mhero-card"><span class="ktl-anim"><img src="/logo-wordmark-large.png" alt="KiddieTrac" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span></div>
+        <p class="ktl-mhero-tag">Every moment, beautifully captured.</p>
+      </div>
+      <div class="ktl-form-inner">
+        <div class="auth-logo">
+          <span class="ktl-anim">
+            <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" class="ktl-logo" onerror="this.style.display='none'">
+            <span class="ktl-pen" aria-hidden="true"></span>
+            <span class="ktl-sheen" aria-hidden="true"></span>
+            <span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span>
+          </span>
+        </div>
+        <!-- kt-v16-auth-logo-swapped -->
+
+        <h1 class="ktl-title auth-title">Welcome back</h1>
+        <p class="ktl-sub auth-sub">Sign in to see how your little one's day is going.</p>
+
+        <div id="signedOutBanner" hidden style="background:#FEF3C7;color:#92400E;border:1px solid #FBBF24;border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.4;margin-bottom:14px;"></div>
+
+        <form id="loginForm" class="auth-form" novalidate>
+          <div class="form-row">
+            <label for="email">Email or username</label>
+            <input type="text" id="email" name="email" autocomplete="username" placeholder="you@example.com" required autofocus>
+          </div>
+
+          <!-- Shown only when an email is shared by more than one account (needs_username). -->
+          <div class="form-row" id="usernameRow" hidden>
+            <label for="loginUsername">Username</label>
+            <input type="text" id="loginUsername" name="loginUsername" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="your username" pattern="[A-Za-z0-9._\-]+">
+          </div>
+
+          <div class="form-row">
+            <div class="pw-label-row">
+              <label for="password">Password</label>
+              <a href="/forgot-password.html" class="forgot-link" tabindex="-1">Forgot?</a>
+            </div>
+            <div class="kt-pw-wrap" style="position:relative;">
+              <input type="password" id="password" name="password" autocomplete="current-password" placeholder="••••••••••" minlength="10" required style="padding-right:46px;">
+              <button type="button" id="kt-pw-toggle" tabindex="-1" aria-label="Show password" title="Show password" style="position:absolute;top:0;right:0;height:100%;width:44px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;font-size:17px;color:#64748B;line-height:1;">👁</button>
+            </div>
+          </div>
+          <script>
+          (function(){
+            var b=document.getElementById('kt-pw-toggle'), p=document.getElementById('password');
+            if(b&&p) b.addEventListener('click',function(){
+              var show=p.type==='password';
+              p.type=show?'text':'password';
+              b.textContent=show?'🙈':'👁';
+              b.setAttribute('aria-label',show?'Hide password':'Show password');
+              b.title=show?'Hide password':'Show password';
+              p.focus();
+            });
+          })();
+          </script>
+
+          <div id="errorMsg" class="form-error" hidden></div>
+
+          <!-- v22p7.2: MFA code row, shown only after the backend responds mfa_required -->
+          <div id="mfaRow" class="form-row" hidden>
+            <label for="mfaCode">Authenticator code
+              <span style="font-weight:400;font-size:12px;color:#94A3B8;">(6 digits, or a 10-char recovery code)</span>
+            </label>
+            <input type="text" id="mfaCode" name="code" autocomplete="one-time-code"
+                   inputmode="numeric" maxlength="14" pattern="[0-9A-Z\-]+" placeholder="123 456">
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+            Log in
+          </button>
+
+          <p class="ktl-foot">
+            No account yet? Your childcare centre will send you an invitation email.
+            <a href="https://www.kiddietrac.com/contact">Contact us</a> if you need help.
+          </p>
+        </form>
+      </div>
+      <div class="ktl-legal">
+        <span class="ktl-legal-links"><a href="https://www.kiddietrac.com/terms">Terms of Service</a> · <a href="https://www.kiddietrac.com/privacy">Privacy Policy</a></span><br>
+        © 2021–2026 KiddieTrac. All rights reserved. · <span id="ktl-ver"></span>
+      </div>
+      <script>(function(){var v=document.getElementById('ktl-ver');if(v)v.textContent='v'+(window.KT_VERSION||'');})();</script>
+    </section>
+
+    <!-- ── Brand showcase ── -->
+    <aside class="ktl-brand-side" aria-hidden="true">
+      <span class="ktl-blob ktl-blob-1"></span>
+      <span class="ktl-blob ktl-blob-2"></span>
+      <span class="ktl-blob ktl-blob-3"></span>
+      <div class="ktl-brand-content">
+        <div class="ktl-badge">✦ AI-AUGMENTED · CANADA-FIRST</div>
+        <h2 class="ktl-headline">Every moment,<br>every milestone —<br><span class="ktl-hl">beautifully captured.</span></h2>
+        <p class="ktl-lede">From morning check-in to your AI-summarized day at 6&nbsp;pm, KiddieTrac brings your child's day to you with the warmth and clarity you deserve.</p>
+
+        <div class="ktl-features">
+          <div class="ktl-feat"><span class="ic">📸</span><div><h3>Real-time photos &amp; updates</h3><p>See what your child is doing, eating, and learning — as it happens.</p></div></div>
+          <div class="ktl-feat"><span class="ic">💬</span><div><h3>Direct line to educators</h3><p>Message your child's room teacher anytime. Replies usually within an hour.</p></div></div>
+          <div class="ktl-feat"><span class="ic">💳</span><div><h3>Simple billing with CWELCC</h3><p>Your $10/day fee, applied automatically. Tax receipts every January.</p></div></div>
+        </div>
+
+        <div class="ktl-trust"><span>CCEYA Compliant</span><span>HDLH Aligned</span><span>AI Augmented</span></div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // Minimal auth flow — production-ready
+    const API_BASE = window.KT_CONFIG?.apiBase || 'https://api.kiddietrac.com/api/v1';
+
+    const form = document.getElementById('loginForm');
+    const errorMsg = document.getElementById('errorMsg');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // v22p31: surface why the user was bounced here when session-timeout
+    // (or 401 elsewhere) appended ?signed_out=… to the URL.
+    (function () {
+      var reason = new URLSearchParams(window.location.search).get('signed_out');
+      if (!reason) return;
+      var banner = document.getElementById('signedOutBanner');
+      var msg = {
+        idle: 'You were signed out after a period of inactivity. Sign in again to continue.',
+        absolute: 'For security, sessions are capped at 12 hours. Please sign in again.',
+        'signed out': 'You signed out. See you next time!',
+      }[reason] || 'Your session ended. Please sign in again.';
+      if (banner) { banner.textContent = msg; banner.hidden = false; }
+    })();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorMsg.hidden = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in…';
+
+      const data = {
+        email: document.getElementById('email').value.trim().toLowerCase(),
+        password: document.getElementById('password').value,
+        device_name: navigator.userAgent.substring(0, 100),
+        device_platform: 'web',
+      };
+
+      // If the username row is showing (shared email), send the username too.
+      const unameEl = document.getElementById('loginUsername');
+      if (unameEl && !document.getElementById('usernameRow').hidden && unameEl.value.trim()) {
+        data.username = unameEl.value.trim();
+      }
+
+      // v22p7.2: include MFA code on the second-stage submit
+      const mfaInput = document.getElementById('mfaCode');
+      if (mfaInput && !document.getElementById('mfaRow').hidden && mfaInput.value.trim()) {
+        data.code = mfaInput.value.trim().toUpperCase();
+      }
+
+      try {
+        const res = await fetch(API_BASE + '/auth/login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: JSON.stringify(data),
+        });
+
+        if (res.status === 429) {
+          throw new Error('Too many attempts. Please wait a few minutes.');
+        }
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.errors?.email?.[0] || body.message || 'Invalid email or password.');
+        }
+
+        const body = await res.json();
+
+        // v22p7.2: server returned 200 + mfa_required but no token — show the
+        // code row, lock the email/password values, relabel the submit button.
+        if (body.mfa_required) {
+          document.getElementById('mfaRow').hidden = false;
+          document.getElementById('email').readOnly = true;
+          document.getElementById('password').readOnly = true;
+          errorMsg.textContent = body.message || 'Enter your 6-digit authenticator code to complete sign-in.';
+          errorMsg.style.color = '#1F6080';
+          errorMsg.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Verify code';
+          setTimeout(function () { mfaInput.focus(); }, 50);
+          return;
+        }
+
+        // Shared email: the server can't tell which account — reveal the username
+        // field and ask them to sign in with it.
+        if (body.needs_username) {
+          document.getElementById('usernameRow').hidden = false;
+          // Wipe any browser-autofilled value so a stale saved username (e.g. from
+          // another account on the same email) can't silently sign you into the
+          // wrong account. The user must type the username for THIS account.
+          var uEl = document.getElementById('loginUsername');
+          if (uEl) { uEl.value = ''; }
+          errorMsg.textContent = body.message || 'More than one account uses this email — enter your username.';
+          errorMsg.style.color = '#1F6080';
+          errorMsg.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign in';
+          setTimeout(function () { if (uEl) { uEl.value = ''; uEl.focus(); } }, 50);
+          return;
+        }
+
+        // Store securely — use httpOnly cookies in production; for SPA we use sessionStorage + short-lived token
+        sessionStorage.setItem('kt_token', body.token);
+        sessionStorage.setItem('kt_user', JSON.stringify(body.user));
+
+        // Language follows the USER: apply their server-saved locale (chosen at
+        // onboarding or in Settings) authoritatively on every sign-in. So a changed
+        // default takes effect after sign-out/in, and a stale device value (or a
+        // previous user on this device) never overrides the account's own language.
+        try {
+          var _loc = body.user && body.user.locale;
+          if (_loc && ['en', 'fr', 'es', 'hi'].indexOf(_loc) !== -1) localStorage.setItem('kt_locale', _loc);
+          else localStorage.removeItem('kt_locale');   // not a supported code → default English
+        } catch (e) {}
+
+        // v22p31: stamp session start so idle+absolute timers kick in
+        if (window.KT && window.KT.SessionTimeout) window.KT.SessionTimeout.stampLogin();
+        else {
+          var nowMs = String(Date.now());
+          sessionStorage.setItem('kt_login_at', nowMs);
+          sessionStorage.setItem('kt_last_activity', nowMs);
+        }
+
+        // Redirect based on role
+        if (body.user.roles.includes('guardian')) {
+          window.location.href = '/dashboard.html';
+        } else if (body.user.roles.includes('centre_director')) {
+          window.location.href = '/dashboard.html';
+        } else if (body.user.roles.includes('agency_admin')) {
+          window.location.href = '/dashboard.html';
+        } else {
+          window.location.href = '/dashboard.html';
+        }
+
+      } catch (err) {
+        errorMsg.textContent = err.message;
+        errorMsg.hidden = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign in';
+      }
+    });
+  </script>
+  <script src="/js/login-v7.js" defer></script>
+  <script src="/js/session-timeout.js?v=20260714e" defer></script>
+  <script src="/js/branding-loader.js" defer></script>
+  <script src="/js/api-helpers-v10.js" defer></script>
+  <script src="/js/mobile-helper-v11.js" defer></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/service-worker.js').catch(function (e) { console.warn('SW reg failed:', e); });
+    });
+  }
+</script>
+  <script src="/js/screen-chat.js" defer></script>
+  <script src="/js/nav-additions-v12.js" defer></script>
+  <script src="/js/screen-waitlist.js" defer></script>
+  <script src="/js/screen-announcements.js" defer></script>
+  <script src="/js/screen-autopay.js" defer></script>
+  <script src="/js/nav-additions-v13.js" defer></script>
+  <script src="/js/screen-lesson-plans.js" defer></script>
+  <script src="/js/screen-schedule.js" defer></script>
+  <script src="/js/screen-certifications.js" defer></script>
+  <script src="/js/push-client.js" defer></script>
+  <script src="/js/nav-additions-v14.js" defer></script>
+  <script src="/js/screen-admin-mrr.js" defer></script>
+  <script src="/js/screen-admin-features.js" defer></script>
+  <script src="/js/screen-admin-branding.js" defer></script>
+  <script src="/js/screen-marketing-site.js" defer></script>
+  <script src="/js/nav-additions-v15.js" defer></script>
+  <script src="/js/kt-social-login.js?v=20260721icons"></script>
+  <script src="/js/kt-pin.js?v=20260809navy" defer></script>
+  <script src="/js/kt-biometric.js?v=20260809navy" defer></script>
+  <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
+  <script src="/js/kt-i18n.js?v=20260808i24" defer></script>
+</body>
+</html>
