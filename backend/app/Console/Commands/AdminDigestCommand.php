@@ -56,6 +56,9 @@ class AdminDigestCommand extends Command
                 ? 'this week at ' . $agency->name
                 : 'today at ' . $agency->name;
             $body = AdminDigestHtml::render($sections, $periodLabel);
+            // The same rotating quote the parent and educator summaries carry, so the
+            // three emails feel like they come from one product rather than three.
+            $body .= EmailTemplate::dailyQuote((int) $to->format('Ymd'));
 
             $subject = ($weekly ? '📊 Weekly summary — ' : '📋 Daily summary — ') . $agency->name
                 . ' · ' . $to->format('D j M');

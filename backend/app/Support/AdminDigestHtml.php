@@ -32,7 +32,8 @@ final class AdminDigestHtml
         }
 
         $html = '<p style="font-size:15px;line-height:1.6;color:#334155;margin:0 0 6px;">'
-            . 'Here is what needs a decision or a nudge ' . e($periodLabel) . '.</p>';
+            . 'Here is what needs a decision or a nudge ' . e($periodLabel) . '.</p>'
+            . self::plan($s);
 
         // The overview bar is the whole digest in one glance: if a director reads only
         // this, they still know where the pressure is today.
@@ -108,6 +109,73 @@ final class AdminDigestHtml
         }
 
         return $html;
+    }
+
+    /**
+     * "Where to start" in plain words.
+     *
+     * A list of eleven sections tells a director everything and suggests nothing. This
+     * puts the same information in the order a day is actually worked: the things that
+     * block somebody else first, the things with a deadline next, the rest after. It is
+     * written from the counts already gathered — no second pass over the database, and
+     * nothing asserted that the sections below do not also show.
+     */
+    private static function plan(array $s): string
+    {
+        $steps = [];
+
+        // People are waiting on these. Everything else can move; a person cannot.
+        if (! empty($s['late']['count'])) {
+            $n = (int) $s['late']['count'];
+            $steps[] = 'Clear the ' . $n . ' late pick-up' . ($n === 1 ? '' : 's') . ' first — a family cannot be billed, '
+                . 'and an educator cannot close their day, until you decide. It is usually a two-minute job.';
+        }
+        if (! empty($s['timeoff']['count'])) {
+            $n = (int) $s['timeoff']['count'];
+            $steps[] = 'Then the ' . $n . ' time-off request' . ($n === 1 ? '' : 's') . '. Approving early gives you the room '
+                . 'to arrange cover; approving late gives you a gap.';
+        }
+        // Deadlines that arrive whether or not anyone looks at them.
+        if (! empty($s['reportCards']['count'])) {
+            $steps[] = 'Write the report cards for the children leaving this month — once they have gone, it is a favour '
+                . 'nobody can do properly from memory.';
+        }
+        if (! empty($s['invoicing']['unbilled_families'])) {
+            $n = (int) $s['invoicing']['unbilled_families'];
+            $steps[] = 'Run the bulk invoices before the cycle closes: ' . $n . ' famil' . ($n === 1 ? 'y has' : 'ies have')
+                . ' had nothing raised this period.';
+        }
+        if (! empty($s['welcome']['count'])) {
+            $n = (int) $s['welcome']['count'];
+            $steps[] = 'Invite the ' . $n . ' famil' . ($n === 1 ? 'y' : 'ies') . ' with no account yet — until they have one, '
+                . 'everything your educators post about their child is invisible to them.';
+        }
+        if (! empty($s['immunisations']['count'])) {
+            $steps[] = 'Chase the missing immunisation records when you have a quiet moment. It is not urgent today and it is '
+                . 'the first thing asked for in an inspection.';
+        }
+        if (! empty($s['tickets']['count'])) {
+            $steps[] = 'Close off the open support tickets, or reply so somebody knows they were heard.';
+        }
+        if (! empty($s['educators']['rows'])) {
+            $first = $s['educators']['rows'][0];
+            $steps[] = 'If you have five minutes for one person today, make it ' . e($first['who'])
+                . ' — there is a specific suggestion further down.';
+        }
+
+        if (! $steps) { return ''; }
+
+        $list = '';
+        foreach (array_slice($steps, 0, 5) as $i => $step) {
+            $list .= '<tr>'
+                . '<td style="padding:5px 10px 5px 0;font-size:14px;font-weight:800;color:#1F6FB2;vertical-align:top;">' . ($i + 1) . '.</td>'
+                . '<td style="padding:5px 0;font-size:14px;line-height:1.55;color:#334155;">' . $step . '</td></tr>';
+        }
+
+        return '<div class="kt-panel" style="background:#F1F7FB;border:1px solid #CFE3EB;border-radius:11px;padding:14px 16px;margin:14px 0 0;">'
+            . '<div style="font-size:14.5px;font-weight:800;color:#0F172A;margin:0 0 6px;">🧭 Where to start</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">'
+            . $list . '</table></div>';
     }
 
     // ── Building blocks ─────────────────────────────────────────────────────
