@@ -315,6 +315,28 @@
     body.innerHTML =
       provHeader
       + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:11px;margin-bottom:18px;">' + cards + '</div>'
+      + (function () {
+          // Above the record of the day, because "what were they meant to be doing" is
+          // the question a director is holding while reading everything below it.
+          var lp = d.lesson_plan;
+          if (!lp || !(lp.items || []).length) { return ''; }
+          var DOMAIN = {
+            social_emotional: 'Social & emotional', physical: 'Physical',
+            language_literacy: 'Language & literacy', cognitive: 'Cognitive',
+            creative_arts: 'Creative arts', self_care: 'Self-care', outdoor: 'Outdoor',
+          };
+          var rows = lp.items.map(function (a) {
+            var meta = [a.time_label || a.time || '', DOMAIN[a.domain] || ''].filter(Boolean).join(' · ');
+            return '<div style="padding:7px 0;border-top:1px solid #F1F5F9;">'
+              + '<div style="font-size:14px;font-weight:700;color:#0F172A;">' + esc(a.title) + '</div>'
+              + (meta ? '<div style="font-size:12px;color:#64748B;margin-top:1px;">' + esc(meta) + '</div>' : '')
+              + (a.notes ? '<div style="font-size:13px;color:#475569;margin-top:3px;line-height:1.5;">' + esc(a.notes) + '</div>' : '')
+              + '</div>';
+          }).join('');
+          var head = (lp.theme ? '<div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px;">' + esc(lp.theme) + '</div>' : '')
+            + (lp.room_name ? '<div style="font-size:12px;color:#64748B;margin-bottom:4px;">' + esc(lp.room_name) + '</div>' : '');
+          return '<div style="margin-bottom:16px;">' + card('📚 Planned for this day', head + rows) + '</div>';
+        })()
       + '<div style="margin-bottom:16px;">' + card('🚶 Walks &amp; outings', walksHtml) + '</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">'
       +   card('📊 Provider performance', perfMetrics + pie(an.breakdown || {}))

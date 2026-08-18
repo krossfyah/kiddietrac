@@ -664,6 +664,20 @@ final class DayBriefController extends Controller
             ],
             'roster' => $roster,
             'qr_vs_manual' => ['qr' => $qr, 'manual' => $manual],
+            // What was PLANNED for that day, beside the record of what happened. Read
+            // through the same helper as the day brief and both summary emails, so a
+            // director and an educator never see different plans for the same room.
+            'lesson_plan' => (function () use ($centreId, $date) {
+                try {
+                    $p = \App\Support\LessonPlans::forDateInCentres([(int) $centreId], $date);
+                    if (! $p['items']) {
+                        $p = \App\Support\LessonPlans::forDate(null, (int) $centreId, $date);
+                    }
+                    return $p['items'] ? $p : null;
+                } catch (\Throwable $e) {
+                    return null;
+                }
+            })(),
             'staff' => $staff,
             'menu' => $menu,
             'photos' => $photos,
