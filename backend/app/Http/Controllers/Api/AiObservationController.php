@@ -121,6 +121,9 @@ class AiObservationController extends Controller
             'structured.domain'              => 'required|string|max:60',
             'structured.hdlh_milestones'     => 'nullable|array',
             'structured.parent_summary'      => 'required|string|max:2000',
+            // Defaults to NOT shared when absent: publishing to a family by accident is
+            // the worse mistake. The observation screen ticks its box by default and
+            // always sends this explicitly, so the two only differ for other callers.
             'shared_with_family'             => 'nullable|boolean',
             'ai_generated'                   => 'nullable|boolean',
             'ai_model_used'                  => 'nullable|string|max:80',

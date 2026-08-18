@@ -838,9 +838,21 @@ class IntegrationController extends Controller
 
     private function resolveAgencyId(Request $request): int
     {
+        $user = $request->user();
         $activeId = (int) $request->header('X-Active-Agency-Id');
+
+        // The header is user-controlled. Honour it only for a platform_admin, or for
+        // someone holding an active role in the agency named. Callers here also run
+        // assertAgencyAdmin(), which catches this today -- but the rule holds in every
+        // other resolver on the platform and should not be false in this one.
         if ($activeId) {
-            return $activeId;
+            $isPlatform = $user && DB::table('role_assignments')->where('user_id', $user->id)
+                ->where('role', 'platform_admin')->where('active', true)->exists();
+            $belongs = $user && DB::table('role_assignments')->where('user_id', $user->id)
+                ->where('active', true)->where('agency_id', $activeId)->exists();
+            if ($isPlatform || $belongs) {
+                return $activeId;
+            }
         }
         $first = DB::table('role_assignments')->where('user_id', $request->user()->id)
             ->where('active', true)->value('agency_id');
