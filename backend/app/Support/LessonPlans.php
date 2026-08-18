@@ -79,6 +79,40 @@ final class LessonPlans
         return ['theme' => trim((string) ($plan->theme ?? '')) ?: null, 'items' => $clean, 'inherited' => $inherited];
     }
 
+    /**
+     * Any plan written for a room in these centres, for this date.
+     *
+     * The fallback of last resort: a plan exists and somebody wrote it for today, but the
+     * person looking is not assigned to that room — often because nobody is. Withholding
+     * it on that technicality helps nobody; the room it belongs to is named so the reader
+     * can see whose it is.
+     *
+     * @return array{theme:?string, items:array, inherited:bool, room_name:?string}
+     */
+    public static function forDateInCentres(array $centreIds, string $date): array
+    {
+        $empty = ['theme' => null, 'items' => [], 'inherited' => false, 'room_name' => null];
+        if (! $centreIds) {
+            return $empty;
+        }
+
+        $roomIds = DB::table('rooms')->whereIn('centre_id', $centreIds)->pluck('id')->all();
+        if (! $roomIds) {
+            return $empty;
+        }
+
+        $week = Carbon::parse($date)->startOfWeek(Carbon::MONDAY)->toDateString();
+        $plan = DB::table('lesson_plans')->where('week_starting', $week)
+            ->whereIn('room_id', $roomIds)->orderByDesc('id')->first();
+        if (! $plan) {
+            return $empty;
+        }
+
+        $out = self::forDate((int) $plan->room_id, null, $date);
+        $out['room_name'] = DB::table('rooms')->where('id', $plan->room_id)->value('name');
+        return $out;
+    }
+
     /** The room a child sits in today, for callers that only know the child. */
     public static function roomForChild(int $childId): ?int
     {

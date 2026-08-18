@@ -55,13 +55,20 @@ final class DayBriefController extends Controller
             if (! $plan['items'] && $lpCentre) {
                 $plan = \App\Support\LessonPlans::forDate(null, $lpCentre, $todayStr);
             }
+            // Still nothing: a plan may exist for a room this person is not assigned to —
+            // often because nobody is assigned to it at all. Showing it, named, beats
+            // showing nothing and looking like the feature was never built.
+            if (! $plan['items']) {
+                $plan = \App\Support\LessonPlans::forDateInCentres($lpCentres, $todayStr);
+            }
 
             if ($plan['items']) {
                 $n = count($plan['items']);
                 $first = $plan['items'][0];
                 $add(
                     'lesson-plan', '📘', 'Today’s plan',
-                    $plan['theme'] ?: ($n . ' activit' . ($n === 1 ? 'y' : 'ies')),
+                    ($plan['theme'] ?: ($n . ' activit' . ($n === 1 ? 'y' : 'ies')))
+                        . (! empty($plan['room_name']) ? ' · ' . $plan['room_name'] : ''),
                     trim(($first['time_label'] ? $first['time_label'] . ' · ' : '') . $first['title'])
                         . ($n > 1 ? ' +' . ($n - 1) . ' more' : ''),
                     'info', '#lesson-plans'
