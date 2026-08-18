@@ -151,7 +151,9 @@ class AutoSignOffCommand extends Command
                     'room_id' => $e->room_id,
                     'event_type' => 'check_out',
                     'occurred_at' => $cutoff->clone()->utc(),
-                    'kiosk_source' => 'auto',
+                    // kiosk_source is a tinyint(1), not a label: writing 'auto' there
+                    // would have recorded "this came from a kiosk", which is false. The
+                    // note is what marks it, and it is the thing a human reads anyway.
                     'notes' => 'Auto sign-off — no check-out was recorded.',
                     'created_at' => now(),
                 ]);

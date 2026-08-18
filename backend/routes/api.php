@@ -438,6 +438,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p3.5: onboarding wizard submission
         Route::patch('/auth/me/onboarding', [AuthController::class, 'updateOnboarding']);
     Route::get('/auth/me/payee-invoices', [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'mine']);
+    Route::get ('/auth/me/auto-signoff-notice',     [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'show']);
+    Route::post('/auth/me/auto-signoff-notice/ack', [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'ack']);
     Route::get('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'show']);
     Route::put('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'update']);
         Route::patch('/auth/me/provider-bio', [AuthController::class, 'updateProviderBio']);
