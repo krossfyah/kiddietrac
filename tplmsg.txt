@@ -1,0 +1,33 @@
+Document templates: a safe renderer plus a Blade importer
+
+Printable documents (payslips, invoices) get a template store, so a layout can be brought
+in from elsewhere rather than living hard-coded in a controller.
+
+THE RENDERER EXECUTES NOTHING. It understands values, if/else and each, and no more. A
+Blade file is PHP: rendering an uploaded one would hand anyone who reaches the import
+screen code execution on the server. The importer TRANSLATES Blade into the safe subset
+and reports what it could not translate, rather than passing anything through to an
+evaluator.
+
+Getting that translation right took four passes against iLearn's real payslip, and each
+failure is worth recording:
+
+  * Replacing a field inside a formatting call left nested braces and orphan fragments all
+    through the output. Expressions are now taken WHOLE and their wrappers peeled, instead
+    of substrings being swapped.
+  * Arithmetic a template cannot perform - hours times rate, gross plus vacation - resolves
+    to the named total we already supply. That is why regular_amount, ot_amount and
+    gross_with_vacation exist on the payslip kind.
+  * The fallback rule demanded ?? and so never matched a plain ?:, silently dropping the
+    recipient, type and status lines.
+  * A Blade condition holds raw PHP and nothing had rewritten it, so fragments of it stayed
+    visible; and trimming parenthesis CHARACTERS mangled a cast into nonsense.
+
+iLearn's payslip now converts with three notes - all of them things that genuinely cannot
+carry over - and renders every field, including the overtime line KiddieTrac was missing.
+
+An agency template beats the platform default; activating a default forks a copy, so one
+agency's choice never changes another's. The active template cannot be deleted, because a
+payslip already issued has to stay reproducible.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

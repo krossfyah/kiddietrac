@@ -1064,6 +1064,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Interface state that follows the person rather than the browser.
         // Late arrivals and departures: educators record, directors and admins decide.
         // Invoices raised against a payee: an educator contracting, a family, a supplier.
+        // Printable document templates (payslips, invoices). Bodies are stored in a
+        // restricted syntax and never evaluated - see App\Support\DocumentTemplate.
+        Route::get   ('/document-templates',              [\App\Http\Controllers\Api\DocumentTemplateController::class, 'index']);
+        Route::post  ('/document-templates',              [\App\Http\Controllers\Api\DocumentTemplateController::class, 'store']);
+        Route::post  ('/document-templates/preview',      [\App\Http\Controllers\Api\DocumentTemplateController::class, 'preview']);
+        Route::post  ('/document-templates/import',       [\App\Http\Controllers\Api\DocumentTemplateController::class, 'import']);
+        Route::get   ('/document-templates/{id}',         [\App\Http\Controllers\Api\DocumentTemplateController::class, 'show'])->where('id', '[0-9]+');
+        Route::post  ('/document-templates/{id}/activate',[\App\Http\Controllers\Api\DocumentTemplateController::class, 'activate'])->where('id', '[0-9]+');
+        Route::delete('/document-templates/{id}',         [\App\Http\Controllers\Api\DocumentTemplateController::class, 'destroy'])->where('id', '[0-9]+');
         Route::get ('/payroll-documents',             [\App\Http\Controllers\Api\PayrollDocumentController::class, 'index']);
         Route::post('/payroll-documents/backfill',    [\App\Http\Controllers\Api\PayrollDocumentController::class, 'backfill']);
         Route::post('/payroll-documents/{id}/status', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'setStatus'])->where('id', '[0-9]+');
