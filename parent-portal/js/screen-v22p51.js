@@ -386,15 +386,20 @@
           // The screen can be torn down between the click and this handler running: an
           // idle sign-out redirects to the login page while this bar is still painted,
           // and every lookup below then returns null. Same guard runPayroll() carries.
+          //
+          // Only the two PANES are required. The CSV button is NOT: kt-table-export
+          // removes legacy per-screen export buttons ("⤓ CSV") once its own bar is up,
+          // so demanding it here made the guard fire on every click and the tab do
+          // nothing at all.
           const result = document.getElementById('pr-result');
-          const csv = document.getElementById('pr-csv');
           const docs = document.getElementById('pr-docs');
-          if (!result || !csv || !docs) return;
+          if (!result || !docs) return;
+          const csv = document.getElementById('pr-csv');
 
           prTab = b.getAttribute('data-pr-tab');
           const hoursOn = prTab === 'hours';
           result.hidden = !hoursOn;
-          csv.hidden = !hoursOn;
+          if (csv) { csv.hidden = !hoursOn; }
           docs.hidden = hoursOn;
           paintPrTabs();
           if (!hoursOn) renderPayrollDocs();
@@ -409,7 +414,9 @@
     document.getElementById('pr-from').valueAsDate = startWin;
     document.getElementById('pr-to').valueAsDate = today;
     document.getElementById('pr-run').onclick = () => runPayroll();
-    document.getElementById('pr-csv').onclick = () => {
+    // Same reason: by the time this runs the export module may already have removed it.
+    const csvBtn = document.getElementById('pr-csv');
+    if (csvBtn) csvBtn.onclick = () => {
       const f = document.getElementById('pr-from').value, t = document.getElementById('pr-to').value;
       downloadAuthed(`/admin/payroll?from=${f}&to=${t}&format=csv`, `payroll-${f}-to-${t}.csv`);
     };
