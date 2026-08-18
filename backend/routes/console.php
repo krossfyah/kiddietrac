@@ -23,6 +23,10 @@ Artisan::command('inspire', function () {
 // the AI story of the day, photos, sign-in/out, every care log, the day's
 // messages, and any announcements. Each child is bucketed in its own agency's
 // timezone inside the command, so this schedule only picks the wall-clock hour.
+// Closures: announced once when entered, which for a holiday added months ahead is
+// long forgotten by the time it matters. Reminds a week out and the day before.
+Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
+
 Schedule::command("kiddietrac:educator-summary")->dailyAt("19:00")->timezone("America/Toronto");
 Schedule::command('kiddietrac:parent-summary')
     ->dailyAt('18:30')
