@@ -13,6 +13,8 @@
   <script>window.KT_VERSION='4.64';</script>
   <!-- Sales demo SSO: open Test Agency (#6) demo from a minted token (#__demo=). Runs before deferred app boot. -->
   <script>(function(){try{var m=(location.hash||'').match(/__demo=([^&]+)/);if(!m)return;var tk=decodeURIComponent(m[1]);var x=new XMLHttpRequest();x.open('GET','https://api.kiddietrac.com/api/v1/auth/me',false);x.setRequestHeader('Authorization','Bearer '+tk);x.setRequestHeader('X-Active-Agency-Id','6');try{x.send(null);}catch(e){}if(x.status===200){var u;try{u=JSON.parse(x.responseText);u=u.user||u;}catch(e){u=null;}if(u){sessionStorage.setItem('kt_token',tk);sessionStorage.setItem('kt_user',JSON.stringify(u));sessionStorage.setItem('kt_active_agency_id','6');try{localStorage.setItem('kt_token',tk);/* NOT localStorage: the active agency belongs to the SESSION, not the device. */localStorage.removeItem('kt_active_agency_id');}catch(e){}}}try{history.replaceState(null,'',location.pathname);}catch(e){}}catch(e){}})();</script>
+  <script>/* kt_active_agency_id belongs to the session, not the device. An older build persisted it (as '6', the demo agency) to localStorage, where it outlived the session and was sent by whoever signed in next on that device — every write by six real staff went out scoped to the wrong agency. Runs unconditionally on every boot. */
+  (function(){try{localStorage.removeItem('kt_active_agency_id');}catch(e){}})();</script>
   <!-- Mark the native Capacitor APK on <html> as EARLY as possible and from the
        document itself (never a cached JS file), so the very first paint already has
        the right chrome. kt-app = the app at any size (safe-area insets and anything
@@ -228,9 +230,6 @@ html.kt-gating .loading-state{visibility:hidden!important;}
   var t=localStorage.getItem('kt_bio_token');if(!t)return;
   sessionStorage.setItem('kt_token',t);
   var u=localStorage.getItem('kt_bio_user');if(u)sessionStorage.setItem('kt_user',u);
-  /* An older build persisted the demo agency to localStorage, where it outlived
-     the session and applied to whoever signed in next on that device. */
-  try{localStorage.removeItem('kt_active_agency_id');}catch(e){}
   var a=localStorage.getItem('kt_bio_agency');if(a)sessionStorage.setItem('kt_active_agency_id',a);
   var v=localStorage.getItem('kt_bio_view');if(v)sessionStorage.setItem('kt_view_as',v);
   var n=String(Date.now());sessionStorage.setItem('kt_login_at',n);sessionStorage.setItem('kt_last_activity',n);
@@ -344,7 +343,7 @@ function showReloadGate(){
   <script src="/js/kt-parent-chrome.js?v=20260811greet" defer></script>
   <script src="/js/session-timeout.js?v=20260714e" defer></script>
   <script src="/js/kt-illustrations.js?v=20260811greet" defer></script>
-  <script src="/js/app-v2-shell.js?v=kt-v516-2026081801" defer></script>
+  <script src="/js/app-v2-shell.js?v=kt-v525-2026081801" defer></script>
   <script src="/js/kt-auto-refresh.js?v=20260811ar1" defer></script>
   <script src="/js/screen-parent.js?v=20260817msg" defer></script>
   <script src="/js/kt-checkin-scan.js?v=20260729edu" defer></script>
@@ -426,7 +425,7 @@ function showReloadGate(){
   <script src="/js/screen-admin-features.js?v=20260724a11y" defer></script>
   <script src="/js/screen-admin-branding.js?v=20260813country" defer></script>
   <script src="/js/screen-lesson-plans-ai.js?v=20260728f" defer></script>
-  <script src="/js/screen-observations.js?v=kt-v523-2026081801" defer></script>
+  <script src="/js/screen-observations.js?v=kt-v524-2026081801" defer></script>
   <script src="/js/screen-incidents.js?v=20260806ir1" defer></script>
   <script src="/js/screen-awards.js?v=20260805aw5" defer></script>
   <script src="/js/screen-child-detail.js?v=20260814daily" defer></script>

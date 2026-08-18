@@ -152,6 +152,56 @@
   /* ============================================================
      NEW OBSERVATION (educator: type -> structure -> edit -> save)
      ============================================================ */
+  /* An unsaved observation survives leaving the screen. Module scope, not nested in a
+     render function: a declaration inside another function body is invisible to its
+     siblings (see CONVENTIONS.md). */
+  function draftUserId() {
+    try {
+      var raw = sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}';
+      var u = JSON.parse(raw);
+      if (u && u.user) { u = u.user; }
+      return (u && u.id) ? String(u.id) : '';
+    } catch (e) { return ''; }
+  }
+
+  function draftKey() {
+    var uid = draftUserId();
+    // No identifiable user means no draft. Better to lose a draft than to hand one
+    // person's words to whoever signs in next on a shared tablet.
+    return uid ? ('kt_obs_draft_u' + uid) : '';
+  }
+
+  function saveDraft(childId, rawText) {
+    var k = draftKey();
+    if (!k) { return; }
+    try {
+      if (!rawText || !rawText.trim()) { localStorage.removeItem(k); return; }
+      localStorage.setItem(k, JSON.stringify({
+        uid: draftUserId(), child_id: childId || '', raw_text: rawText, ts: Date.now(),
+      }));
+    } catch (e) {}
+  }
+
+  function loadDraft() {
+    var k = draftKey();
+    if (!k) { return null; }
+    try {
+      var d = JSON.parse(localStorage.getItem(k) || 'null');
+      if (!d || !d.raw_text) { return null; }
+      // Re-check ownership on READ as well as write: a stale key from an older build,
+      // or a device that changed hands, must not surface somebody else's words.
+      if (String(d.uid || '') !== draftUserId()) { localStorage.removeItem(k); return null; }
+      // A fortnight is long enough to come back to; older than that it is clutter.
+      if (d.ts && (Date.now() - d.ts) > 14 * 24 * 3600 * 1000) { localStorage.removeItem(k); return null; }
+      return d;
+    } catch (e) { return null; }
+  }
+
+  function clearDraft() {
+    var k = draftKey();
+    if (k) { try { localStorage.removeItem(k); } catch (e) {} }
+  }
+
   async function renderObservationNew(main, ctx) {
     Dom.clear(main);
 
@@ -253,6 +303,44 @@
 
       '<div id="kt-step-2" style="display:none; margin-top:14px;"></div>'
     );
+
+    // Persist as they type. Cheap, and the only thing standing between a written
+    // observation and losing it to an idle sign-out.
+    var rawEl = wrap.querySelector('#kt-raw');
+    var childEl = wrap.querySelector('#kt-child');
+    if (rawEl) {
+      rawEl.addEventListener('input', function () {
+        saveDraft(childEl ? childEl.value : '', rawEl.value);
+      });
+    }
+    if (childEl) {
+      childEl.addEventListener('change', function () {
+        if (rawEl && rawEl.value.trim()) { saveDraft(childEl.value, rawEl.value); }
+      });
+    }
+
+    // Offer back anything left unfinished.
+    (function () {
+      var d = loadDraft();
+      if (!d || !rawEl || rawEl.value.trim()) { return; }
+      var note = document.createElement('div');
+      note.style.cssText = 'background:#EFF6FF; border:1px solid #BFDBFE; color:#1E40AF; border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:12px;';
+      note.innerHTML = '<strong>You have an unfinished observation.</strong> '
+        + '<span style="opacity:.85;">Started ' + esc(new Date(d.ts).toLocaleString()) + '.</span> '
+        + '<button type="button" id="kt-draft-restore" style="margin-left:8px; background:#1E40AF; color:#fff; border:0; border-radius:7px; padding:5px 11px; font-size:12.5px; cursor:pointer;">Restore it</button> '
+        + '<button type="button" id="kt-draft-discard" style="margin-left:4px; background:none; border:0; color:#1E40AF; text-decoration:underline; font-size:12.5px; cursor:pointer;">Discard</button>';
+      rawEl.parentNode.insertBefore(note, rawEl);
+      note.querySelector('#kt-draft-restore').addEventListener('click', function () {
+        rawEl.value = d.raw_text;
+        if (childEl && d.child_id) { childEl.value = d.child_id; }
+        note.remove();
+        rawEl.focus();
+      });
+      note.querySelector('#kt-draft-discard').addEventListener('click', function () {
+        clearDraft();
+        note.remove();
+      });
+    })();
 
     wrap.querySelector('#kt-cancel').addEventListener('click', function () {
       window.location.hash = '#observations';
@@ -422,6 +510,7 @@
           ai_model_used: meta.model,
           ai_tokens_used: meta.tokens_used,
         });
+        clearDraft();   // it is a record now, not an unfinished note
         Dom.toast('Observation saved', 'success');
         setTimeout(function () { window.location.hash = '#observations'; }, 500);
       } catch (e) {

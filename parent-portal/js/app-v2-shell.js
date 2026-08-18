@@ -1213,12 +1213,29 @@
     const isSidebarRole = (role === 'agency_admin' || role === 'centre_director');
     const shell = Dom.$('#appShell');
     const sidebarEl = Dom.$('#appSidebar');
-    if (isSidebarRole) {
-      document.body.classList.add('layout-sidebar', 'role-' + role.replace('_', '-'));
+
+    // No resolvable role is a real state — a deactivated role_assignment, or an
+    // /auth/me that answered before its roles were attached. Calling .replace() on it
+    // threw during boot and left a blank shell with nothing to act on. Boot without the
+    // role class instead, and say what is wrong.
+    const roleClass = role ? ('role-' + role.replace('_', '-')) : null;
+    if (isSidebarRole && roleClass) {
+      document.body.classList.add('layout-sidebar', roleClass);
     } else {
       if (shell)     shell.classList.remove('app-shell--sidebar');
       if (sidebarEl) sidebarEl.classList.remove('app-sidebar');
-      document.body.classList.add('role-' + role.replace('_', '-'));
+      if (roleClass) { document.body.classList.add(roleClass); }
+    }
+    if (!role) {
+      console.warn('[shell] no role resolved for this account — booting without a role scope');
+      try {
+        var _rw = document.createElement('div');
+        _rw.style.cssText = 'background:#FEF3C7;border-bottom:1px solid #FDE68A;color:#92400E;'
+          + 'padding:10px 14px;font-size:13.5px;text-align:center;';
+        _rw.textContent = 'Your account does not have a role assigned yet, so parts of the app are unavailable. '
+          + 'Please ask your administrator to assign one.';
+        document.body.insertBefore(_rw, document.body.firstChild);
+      } catch (e) {}
     }
 
     // Set up nav user pill
