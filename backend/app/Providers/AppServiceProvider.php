@@ -92,7 +92,13 @@ class AppServiceProvider extends ServiceProvider
                     $emailAgency = null;
                     try {
                         $firstTo = collect($msg->getTo() ?: [])->map(fn ($a) => method_exists($a, 'getAddress') ? $a->getAddress() : null)->filter()->first();
-                        if ($firstTo) {
+                        // Same order as the email log, and for the same reason: the
+                        // SENDING agency is authoritative, the recipient is a last resort.
+                        // These audit rows are the twin of the email_logs rows, so they had
+                        // the twin of the bug — 979 of them carried no agency at all.
+                        $emailAgency = \App\Support\AgencyMail::agencyForMessage($msg, null)
+                            ?: \App\Services\AgencyMailer::$lastAgencyId;
+                        if (! $emailAgency && $firstTo) {
                             $emailAgency = \App\Support\AgencyMail::agencyForMessage($msg, $firstTo);
                         }
                         if (! $emailAgency && auth()->id()) {

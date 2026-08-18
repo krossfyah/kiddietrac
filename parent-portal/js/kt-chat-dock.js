@@ -38,7 +38,7 @@
       '@media (max-height:560px){#kt-chat-dock{min-height:0;height:calc(100dvh - 60px);top:52px;bottom:0;}}',
       '@keyframes kt-cd-rise{from{transform:translateY(24px);opacity:0;}to{transform:none;opacity:1;}}',
       // Expanded control strip (minimise / close)
-      '#kt-chat-dock .kt-cd-ctrl{flex:0 0 auto;display:flex;align-items:center;gap:6px;justify-content:flex-end;',
+      '#kt-chat-dock .kt-cd-ctrl{cursor:grab;flex:0 0 auto;display:flex;align-items:center;gap:6px;justify-content:flex-end;',
       '  padding:6px 8px;background:linear-gradient(135deg,#EAF3FB,#F3F0FF);border-bottom:1px solid rgba(31,96,128,.10);}',
       '#kt-chat-dock .kt-cd-ctrl .kt-cd-ct-title{flex:1;min-width:0;font-weight:800;font-size:13px;color:#0F172A;',
       '  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:4px;}',
@@ -73,6 +73,137 @@
     document.head.appendChild(s);
   }
 
+  /* ── Position: draggable, and remembered ───────────────────────────────
+     Saved as a fraction of the viewport rather than pixels, so a position chosen on a
+     large monitor lands somewhere sensible on a small one instead of off-screen. Every
+     restore is clamped to the current window regardless — a dock whose close button sits
+     past the edge cannot be dismissed. */
+  var POS_KEY = 'kt_chat_dock_pos';
+  var SES_KEY = 'kt_chat_dock_session';
+
+  /* The dock remembers that it is open and which thread it holds, so minimising survives
+     a screen change, a reload and a sign-out. Only the intent is stored — the thread is
+     re-opened for real on restore, so nobody comes back to a frozen copy of a
+     conversation that has moved on. */
+  var session = { open: false, minimized: false, key: null, title: '' };
+  var opener = null;
+
+  function saveSession() {
+    try {
+      if (session.open) { localStorage.setItem(SES_KEY, JSON.stringify(session)); }
+      else { localStorage.removeItem(SES_KEY); }
+    } catch (e) {}
+  }
+
+  /** Screens call this so the dock knows what to re-open. */
+  function setOpener(fn) {
+    opener = fn;
+    restoreSession();
+  }
+
+  /** Called by a screen as it opens a thread into the dock. */
+  function rememberThread(key, title) {
+    session.open = true;
+    session.key = key == null ? null : String(key);
+    session.title = title || session.title || '';
+    saveSession();
+  }
+
+  function restoreSession() {
+    if (!opener || !isDesktop()) { return; }
+    // Not before the app can actually fetch: this runs at script load, when the token may
+    // not be in place yet. Re-opening too early puts an auth error in the dock instead of
+    // the conversation, which is worse than restoring a moment later.
+    var tok = null;
+    try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+    if (!tok) {
+      if (restoreSession._tries == null) { restoreSession._tries = 0; }
+      if (restoreSession._tries++ < 20) { setTimeout(restoreSession, 400); }
+      return;
+    }
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(SES_KEY) || 'null'); } catch (e) {}
+    if (!saved || !saved.open || !saved.key) { return; }
+    // Re-opening is the screen's job; it knows how to fetch and render the thread.
+    try {
+      var p = opener(saved.key, saved.title);
+      var settle = function () {
+        if (saved.minimized) { minimize(); }
+      };
+      if (p && typeof p.then === 'function') { p.then(settle).catch(function () {}); }
+      else { setTimeout(settle, 0); }
+    } catch (e) {}
+  }
+
+  function savePos() {
+    if (!dock) return;
+    try {
+      var r = dock.getBoundingClientRect();
+      var vw = Math.max(1, w.innerWidth - r.width);
+      var vh = Math.max(1, w.innerHeight - r.height);
+      localStorage.setItem(POS_KEY, JSON.stringify({
+        x: Math.min(1, Math.max(0, r.left / vw)),
+        y: Math.min(1, Math.max(0, r.top / vh)),
+      }));
+    } catch (e) {}
+  }
+
+  function applyPos() {
+    if (!dock) return;
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch (e) {}
+    if (!saved || typeof saved.x !== 'number' || typeof saved.y !== 'number') { return; }
+    // Measured after the dock is visible, or the rect is zero and everything clamps to 0.
+    var r = dock.getBoundingClientRect();
+    var maxL = Math.max(0, w.innerWidth - r.width);
+    var maxT = Math.max(0, w.innerHeight - r.height);
+    dock.style.left = Math.round(Math.min(maxL, Math.max(0, saved.x * maxL))) + 'px';
+    dock.style.top = Math.round(Math.min(maxT, Math.max(0, saved.y * maxT))) + 'px';
+    dock.style.right = 'auto';
+    dock.style.bottom = 'auto';
+  }
+
+  function installDrag() {
+    var bar = dock.querySelector('.kt-cd-ctrl');
+    var mini = dock.querySelector('.kt-cd-min');
+    [bar, mini].forEach(function (handle) {
+      if (!handle) return;
+      handle.addEventListener('pointerdown', function (e) {
+        // Buttons on the bar keep doing their own job.
+        if (e.target.closest('button')) { return; }
+        e.preventDefault();
+        var r = dock.getBoundingClientRect();
+        var dx = e.clientX - r.left;
+        var dy = e.clientY - r.top;
+        dock.style.right = 'auto';
+        dock.style.bottom = 'auto';
+        handle.style.cursor = 'grabbing';
+
+        function move(ev) {
+          var maxL = Math.max(0, w.innerWidth - dock.offsetWidth);
+          var maxT = Math.max(0, w.innerHeight - dock.offsetHeight);
+          dock.style.left = Math.round(Math.min(maxL, Math.max(0, ev.clientX - dx))) + 'px';
+          dock.style.top = Math.round(Math.min(maxT, Math.max(0, ev.clientY - dy))) + 'px';
+        }
+        function up() {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          handle.style.cursor = 'grab';
+          savePos();
+        }
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+      });
+    });
+
+    // A window that shrinks must not strand the dock outside it.
+    w.addEventListener('resize', function () {
+      if (!dock || dock.style.display === 'none') { return; }
+      if (dock.style.left === '' || dock.style.left === 'auto') { return; }
+      applyPos();
+    });
+  }
+
   function ensure() {
     if (dock) return dock;
     injectStyle();
@@ -97,6 +228,7 @@
     dock.querySelector('.kt-cd-x2').addEventListener('click', function (e) { e.stopPropagation(); close(); });
     dock.querySelector('.kt-cd-min').addEventListener('click', function () { restore(); });
     dock.querySelector('.kt-cd-restore').addEventListener('click', function (e) { e.stopPropagation(); restore(); });
+    installDrag();
     return dock;
   }
 
@@ -109,15 +241,38 @@
     var t = title || 'Chat';
     if (titleEl) titleEl.textContent = t;
     if (minTitleEl) minTitleEl.textContent = t;
+    session.open = true;
+    session.title = t || session.title || '';
+    saveSession();
     minimized = false;
     dock.classList.remove('kt-cd-mini', 'kt-cd-flash');
     dock.style.display = '';
+    // After display, never before: a hidden element measures as zero and every
+    // clamp below would collapse the restored position to the top-left corner.
+    applyPos();
   }
 
-  function minimize() { if (!dock) return; minimized = true; dock.classList.add('kt-cd-mini'); }
-  function restore() { if (!dock) return; minimized = false; dock.classList.remove('kt-cd-mini', 'kt-cd-flash'); }
+  function minimize() {
+    if (!dock) return;
+    minimized = true;
+    dock.classList.add('kt-cd-mini');
+    session.minimized = true;
+    saveSession();
+  }
+
+  function restore() {
+    if (!dock) return;
+    minimized = false;
+    dock.classList.remove('kt-cd-mini', 'kt-cd-flash');
+    session.minimized = false;
+    saveSession();
+  }
 
   function close() {
+    // Closing is the only thing that clears the remembered session — that is the whole
+    // distinction between closing and minimising.
+    session = { open: false, minimized: false, key: null, title: '' };
+    saveSession();
     var cb = onClose; onClose = null;
     if (dock) { dock.classList.remove('kt-cd-mini', 'kt-cd-flash'); dock.style.display = 'none'; if (bodyEl) bodyEl.innerHTML = ''; }
     minimized = false;
@@ -140,5 +295,7 @@
     flashIncoming: flashIncoming,
     isActive: isActive,
     isMinimized: isMinimized,
+    setOpener: setOpener,
+    rememberThread: rememberThread,
   };
 })(window);

@@ -657,7 +657,10 @@
     var target = threadDocked ? KT.ChatDock.contentEl() : container;
     target.innerHTML = '<div style="text-align:center;padding:32px;color:#6B7280;">Loading…</div>';
     var cleanup = function () { stopStaffPoll(); closeThreadCleanup(); };
-    if (threadDocked) KT.ChatDock.show('Chat', cleanup);
+    if (threadDocked) {
+      KT.ChatDock.show('Chat', cleanup);
+      if (KT.ChatDock.rememberThread) { KT.ChatDock.rememberThread('staff:' + tid, 'Chat'); }
+    }
 
     var lastCount = -1;
 
@@ -867,6 +870,17 @@
   /* ─── Thread view ───────────────────────────────────────────── */
   let threadDocked = false;      // desktop: the open thread lives in the floating dock
   let threadListContainer = null; // the #appMain list container, for closing back to it
+  /* Re-opening after a reload: the dock remembers WHICH thread was open, and asks this
+     screen to open it again for real. A detached container is passed because the dock is
+     the render target on desktop — the container is only used by the non-docked path. */
+  (function registerDockOpener() {
+    if (!(window.KT && KT.ChatDock && KT.ChatDock.setOpener)) { return; }
+    KT.ChatDock.setOpener(function (key) {
+      var host = document.getElementById('appMain') || document.createElement('div');
+      return openThread(key, host);
+    });
+  })();
+
   async function openThread(cid, container) {
     // "staff:12" goes to the colleague thread; anything else is a family conversation.
     if (String(cid).indexOf('staff:') === 0) {
@@ -877,7 +891,10 @@
     threadDocked = !!(KT.ChatDock && KT.ChatDock.enabled());
     var target = threadDocked ? KT.ChatDock.contentEl() : container;
     target.innerHTML = '<div style="text-align:center;padding:32px;color:#6B7280;">Loading…</div>';
-    if (threadDocked) KT.ChatDock.show('Chat', closeThreadCleanup);
+    if (threadDocked) {
+      KT.ChatDock.show('Chat', closeThreadCleanup);
+      if (KT.ChatDock.rememberThread) { KT.ChatDock.rememberThread(cid, 'Chat'); }
+    }
     try {
       const data = await api('GET', endpointBase() + '/' + cid);
       renderThread(data, target);
