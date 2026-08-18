@@ -122,6 +122,10 @@ final class MediaController extends Controller
         }
         $observations = DB::table('observations')
             ->where('child_id', $childId)
+            // Honour the educator's choice. "Share with family right away" is a real
+            // decision on the save screen; returning unshared observations here would
+            // publish a note that was deliberately kept internal.
+            ->where('shared_with_family', 1)
             ->orderByDesc('observed_at')
             ->limit(20)
             ->get();

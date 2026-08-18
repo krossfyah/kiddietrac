@@ -267,7 +267,7 @@
       if (!childId) { status.innerHTML = '<span style="color:#DC2626;">Please select a child.</span>'; return; }
       if (rawText.length < 10) { status.innerHTML = '<span style="color:#DC2626;">Need at least 10 characters.</span>'; return; }
       renderStep2(wrap, {
-        structured: { domain: 'cognitive', hdlh_milestones: [], parent_summary: rawText },
+        structured: { domain: 'social_emotional', hdlh_milestones: [], parent_summary: rawText },
         meta: { model: 'manual (no AI)' }
       }, childId, rawText);
     });
@@ -332,8 +332,16 @@
         '<div class="form-row">' +
           '<label>Domain</label>' +
           '<select id="kt-domain" style="padding:10px; border:1.5px solid var(--kt-border); border-radius:8px; width:100%;">' +
-            ['cognitive','social_emotional','physical','language','creative_expression'].map(function (d) {
-              return '<option value="' + d + '"' + (d === structured.domain ? ' selected' : '') + '>' + esc(d.replace(/_/g, ' ')) + '</option>';
+            /* The vocabulary the rest of the platform stores and groups by — lesson
+               plans, reports and 439 of 446 existing observations. `language` and
+               `creative_expression` were offered here and exist nowhere else, so
+               choosing either filed the observation outside every other screen. */
+            [['social_emotional','Social & emotional'],
+             ['physical','Physical'],
+             ['language_literacy','Language & literacy'],
+             ['cognitive','Cognitive'],
+             ['creative_arts','Creative arts']].map(function (d) {
+              return '<option value="' + d[0] + '"' + (d[0] === structured.domain ? ' selected' : '') + '>' + esc(d[1]) + '</option>';
             }).join('') +
           '</select>' +
         '</div>' +

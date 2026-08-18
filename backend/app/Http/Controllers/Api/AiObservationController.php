@@ -83,13 +83,17 @@ class AiObservationController extends Controller
             $summary .= '.';
         }
         $lc = mb_strtolower($raw);
+        // Keyed by the HDLH foundation the words suggest — that is the pedagogy — but
+        // the VALUE is the domain the rest of the platform stores and groups by. Emitting
+        // "Belonging" here put 7 observations outside every other screen's vocabulary.
         $map = [
-            'Well-Being' => ['nap', 'sleep', 'ate', 'eat', 'food', 'rest', 'wash', 'clean', 'hurt', 'sick', 'tired', 'diaper', 'toilet', 'potty', 'run', 'climb', 'jump', 'physical'],
-            'Engagement' => ['built', 'build', 'puzzle', 'block', 'explore', 'curious', 'experiment', 'count', 'sort', 'discover', 'figure', 'problem', 'focus', 'concentrat'],
-            'Expression' => ['said', 'say', 'sang', 'sing', 'drew', 'draw', 'paint', 'story', 'talk', 'word', 'danc', 'music', 'pretend', 'role', 'craft', 'colour', 'color'],
-            'Belonging'  => ['friend', 'share', 'help', 'together', 'group', 'kind', 'care', 'comfort', 'hug', 'turn', 'gentle', 'include'],
+            'physical'          => ['nap', 'sleep', 'ate', 'eat', 'food', 'rest', 'wash', 'clean', 'hurt', 'sick', 'tired', 'diaper', 'toilet', 'potty', 'run', 'climb', 'jump', 'physical'],
+            'cognitive'         => ['built', 'build', 'puzzle', 'block', 'explore', 'curious', 'experiment', 'count', 'sort', 'discover', 'figure', 'problem', 'focus', 'concentrat'],
+            'language_literacy' => ['said', 'say', 'story', 'talk', 'word', 'book', 'read', 'name', 'ask', 'answer', 'question'],
+            'creative_arts'     => ['sang', 'sing', 'drew', 'draw', 'paint', 'danc', 'music', 'pretend', 'role', 'craft', 'colour', 'color'],
+            'social_emotional'  => ['friend', 'share', 'help', 'together', 'group', 'kind', 'care', 'comfort', 'hug', 'turn', 'gentle', 'include'],
         ];
-        $domain = 'Belonging';
+        $domain = 'social_emotional';
         foreach ($map as $d => $kw) {
             foreach ($kw as $k) {
                 if (str_contains($lc, $k)) { $domain = $d; break 2; }
