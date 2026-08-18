@@ -124,6 +124,16 @@
         + '</div>'
         + '<label style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Details</label>'
         + '<textarea id="pi-details" rows="2" placeholder="What this covers" style="' + fld + 'font-family:inherit;resize:vertical;margin-bottom:12px;"></textarea>'
+        + '<div style="font-size:12px;font-weight:800;letter-spacing:.6px;color:#64748B;text-transform:uppercase;margin:4px 0 6px;">Extra line items</div>'
+        + '<div id="pi-lines"></div>'
+        + '<button id="pi-addline" type="button" style="background:#EAF3F6;color:#1F6080;border:1px solid #CFE3EB;padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:12px;">+ Add a line</button>'
+        + '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:6px;">'
+        +   '<input id="pi-tax" type="checkbox" style="width:16px;height:16px;">'
+        +   '<span style="font-size:14px;font-weight:600;color:#334155;">Apply tax</span></label>'
+        + '<div id="pi-tax-wrap" style="display:none;gap:8px;margin-bottom:12px;">'
+        +   '<input id="pi-taxrate" type="number" min="0" max="100" step="0.01" placeholder="agency default" style="' + fld + 'flex:1;min-width:0;">'
+        +   '<input id="pi-taxlabel" type="text" placeholder="HST" style="' + fld + 'flex:0 0 90px;">'
+        + '</div>'
         + '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px;">'
         +   '<input id="pi-rec" type="checkbox" style="width:16px;height:16px;">'
         +   '<span style="font-size:14px;font-weight:600;color:#334155;">Repeat this on a schedule</span></label>'
@@ -190,6 +200,13 @@
         if (prefill.period_start) { m.querySelector('#pi-from').value = prefill.period_start; }
         if (prefill.period_end) { m.querySelector('#pi-to').value = prefill.period_end; }
         if (prefill.details) { m.querySelector('#pi-details').value = prefill.details; }
+        if (prefill.tax_applied) {
+          taxOn.checked = true;
+          m.querySelector('#pi-tax-wrap').style.display = 'flex';
+          if (prefill.tax_rate != null) { m.querySelector('#pi-taxrate').value = prefill.tax_rate; }
+          if (prefill.tax_label) { m.querySelector('#pi-taxlabel').value = prefill.tax_label; }
+        }
+        (prefill.lines || []).forEach(function (l) { addLineRow(l); });
         if (prefill.recurring) {
           m.querySelector('#pi-rec').checked = true;
           m.querySelector('#pi-freq').style.display = 'block';
@@ -197,6 +214,50 @@
         }
       }
       basis.addEventListener('change', syncBasis); syncBasis();
+
+      // Line items. A repeater rather than one free-text box, because "MISC $12.50
+      // parking" typed into a notes field is not something anybody can total later.
+      var LINE_CATS = ['misc', 'expense', 'mileage', 'supplies', 'adjustment'];
+      var linesWrap = m.querySelector('#pi-lines');
+      function addLineRow(seed) {
+        var row = Dom.el('div', { style: 'display:flex;gap:6px;margin-bottom:6px;' });
+        row.innerHTML = '<select class="pl-cat" style="' + fld + 'flex:0 0 110px;background:#fff;">'
+          +   LINE_CATS.map(function (c) { return '<option value="' + c + '">' + c.charAt(0).toUpperCase() + c.slice(1) + '</option>'; }).join('')
+          + '</select>'
+          + '<input class="pl-desc" type="text" placeholder="What it is for" style="' + fld + 'flex:1;min-width:0;">'
+          + '<input class="pl-amt" type="number" step="0.01" placeholder="0.00" style="' + fld + 'flex:0 0 92px;text-align:right;">'
+          + '<button type="button" class="pl-del" title="Remove" style="flex:0 0 auto;background:#fff;border:1px solid #E2E8F0;color:#C0453B;border-radius:8px;padding:0 10px;font-size:15px;cursor:pointer;">×</button>';
+        linesWrap.appendChild(row);
+        if (seed) {
+          row.querySelector('.pl-cat').value = seed.category || 'misc';
+          row.querySelector('.pl-desc').value = seed.description || '';
+          row.querySelector('.pl-amt').value = seed.amount;
+        }
+        row.querySelector('.pl-del').addEventListener('click', function () { row.remove(); });
+      }
+      m.querySelector('#pi-addline').addEventListener('click', function () { addLineRow(); });
+
+      function collectLines() {
+        var out = [];
+        linesWrap.querySelectorAll('.pl-amt').forEach(function (a, i) {
+          var amt = parseFloat(a.value);
+          var desc = (linesWrap.querySelectorAll('.pl-desc')[i].value || '').trim();
+          // A line with no amount is an empty row somebody added and abandoned, not a
+          // zero-value charge — skipped rather than rejected.
+          if (! isFinite(amt) || amt === 0 || ! desc) { return; }
+          out.push({
+            category: linesWrap.querySelectorAll('.pl-cat')[i].value,
+            description: desc,
+            amount: amt,
+          });
+        });
+        return out;
+      }
+
+      var taxOn = m.querySelector('#pi-tax');
+      taxOn.addEventListener('change', function () {
+        m.querySelector('#pi-tax-wrap').style.display = taxOn.checked ? 'flex' : 'none';
+      });
 
       var rec = m.querySelector('#pi-rec');
       rec.addEventListener('change', function () { m.querySelector('#pi-freq').style.display = rec.checked ? 'block' : 'none'; });
@@ -241,6 +302,14 @@
           details: (m.querySelector('#pi-details').value || '').trim() || null,
           recurring: rec.checked,
           frequency: rec.checked ? m.querySelector('#pi-freq').value : null,
+          lines: collectLines(),
+          tax_applied: taxOn.checked,
+          // Blank means "use the agency default" — the server fills it in, which is the
+          // whole point of having a default.
+          tax_rate: (taxOn.checked && m.querySelector('#pi-taxrate').value !== '')
+            ? parseFloat(m.querySelector('#pi-taxrate').value) : null,
+          tax_label: (taxOn.checked && (m.querySelector('#pi-taxlabel').value || '').trim())
+            ? m.querySelector('#pi-taxlabel').value.trim() : null,
         };
         if (!body.payee_name) { err.textContent = 'Who is this for?'; return; }
         if (basis.value === 'hours') {
@@ -375,7 +444,15 @@
           return '<tr><td style="padding:6px 14px 6px 0;font-size:12.5px;color:#64748B;white-space:nowrap;vertical-align:top;">'
             + esc(label) + '</td><td style="padding:6px 0;font-size:14px;color:#0F172A;font-weight:600;">' + esc(value) + '</td></tr>';
         };
-        var total = body.basis === 'hours' ? (body.hours * body.rate) : body.amount;
+        var core = body.basis === 'hours' ? (body.hours * body.rate) : body.amount;
+        var lineSum = (body.lines || []).reduce(function (a, l) { return a + l.amount; }, 0);
+        var subtotal = core + lineSum;
+        // Only previewable when a rate was actually typed. With the agency default the
+        // server decides, and inventing a number here that it might not agree with is
+        // worse than saying so.
+        var knownRate = body.tax_applied && body.tax_rate != null;
+        var taxPreview = knownRate ? Math.round(subtotal * (body.tax_rate / 100) * 100) / 100 : null;
+        var total = subtotal + (taxPreview || 0);
         var kindWord = body.kind === 'educator' ? 'Educator' : (body.kind === 'parent' ? 'Family' : 'Contractor');
 
         m.innerHTML = '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">Check this before it is created</div>'
@@ -391,9 +468,25 @@
           +     (body.details ? line('Details', body.details) : '')
           +     line('Repeats', body.recurring ? ('yes — ' + body.frequency) : 'no, one-off')
           +   '</table>'
+          +   ((body.lines && body.lines.length)
+                ? '<div style="border-top:1px solid #E2E8F0;margin-top:10px;padding-top:8px;">'
+                  + body.lines.map(function (l) {
+                      return '<div style="display:flex;justify-content:space-between;font-size:13px;color:#334155;padding:2px 0;">'
+                        + '<span>' + esc(l.category) + ' — ' + esc(l.description) + '</span>'
+                        + '<span style="font-weight:700;">' + esc(money(l.amount)) + '</span></div>';
+                    }).join('')
+                  + '</div>' : '')
+          +   '<div style="border-top:1px solid #E2E8F0;margin-top:10px;padding-top:8px;display:flex;justify-content:space-between;font-size:13px;color:#475569;">'
+          +     '<span>Subtotal</span><span style="font-weight:700;">' + esc(money(subtotal)) + '</span></div>'
+          +   (body.tax_applied
+                ? '<div style="display:flex;justify-content:space-between;font-size:13px;color:#475569;padding-top:3px;">'
+                  + '<span>' + esc(body.tax_label || 'Tax') + (knownRate ? ' ' + body.tax_rate + '%' : ' (agency default)') + '</span>'
+                  + '<span style="font-weight:700;">' + (knownRate ? esc(money(taxPreview)) : 'calculated on save') + '</span></div>'
+                : '<div style="font-size:12.5px;color:#64748B;padding-top:3px;">No tax applied.</div>')
           +   '<div style="border-top:1px solid #E2E8F0;margin-top:10px;padding-top:10px;display:flex;align-items:baseline;justify-content:space-between;">'
           +     '<span style="font-size:13px;font-weight:700;color:#475569;">Total</span>'
-          +     '<span style="font-size:22px;font-weight:800;color:#0F172A;">' + esc(money(total)) + '</span>'
+          +     '<span style="font-size:22px;font-weight:800;color:#0F172A;">'
+          +       (body.tax_applied && ! knownRate ? esc(money(subtotal)) + ' + tax' : esc(money(total))) + '</span>'
           +   '</div>'
           + '</div>'
           + (body.basis === 'hours'
