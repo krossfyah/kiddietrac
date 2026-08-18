@@ -1262,6 +1262,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/admin/email-delivery',                [\App\Http\Controllers\Api\EmailDeliveryController::class, 'index']);
         Route::patch('/admin/email-delivery/centre/{centre}', [\App\Http\Controllers\Api\EmailDeliveryController::class, 'setCentre']);
         Route::patch('/admin/email-delivery/room/{room}',    [\App\Http\Controllers\Api\EmailDeliveryController::class, 'setRoom']);
+        Route::get  ('/admin/billing-settings', [\App\Http\Controllers\Api\BillingSettingsController::class, 'show']);
+        Route::post ('/admin/billing-settings', [\App\Http\Controllers\Api\BillingSettingsController::class, 'update']);
+        Route::patch('/admin/billing-settings', [\App\Http\Controllers\Api\BillingSettingsController::class, 'update']);
         Route::get  ('/admin/calendar-settings', [\App\Http\Controllers\Api\CalendarSettingsController::class, 'show']);
         Route::post ('/admin/calendar-settings', [\App\Http\Controllers\Api\CalendarSettingsController::class, 'update']);
         Route::patch('/admin/calendar-settings', [\App\Http\Controllers\Api\CalendarSettingsController::class, 'update']);

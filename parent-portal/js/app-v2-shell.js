@@ -149,6 +149,7 @@
           { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},
         { label: 'Finance', items: [
+          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
           { hash: 'late-events',      label: 'Late pick-ups',    icon: '⏰' },
           { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
           { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
@@ -287,6 +288,7 @@
           { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},
         { label: 'Finance', items: [
+          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
           { hash: 'late-events',      label: 'Late pick-ups',    icon: '⏰' },
           { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
           { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
@@ -545,6 +547,7 @@
     'staff-calendar': 'Shifts, leave and coverage across the team.',
     'auto-signoff': 'Close shifts and days somebody forgot to close.',
     'late-events': 'Late arrivals and pick-ups awaiting a decision.',
+    'billing-settings': 'Tax rate and other invoicing defaults.',
     'calendar-settings': 'Choose which layers the calendar draws.',
     'tasks': 'Assign tasks to educators and track them to completion.',
     'my-tasks': 'Tasks assigned to you — mark them in progress or done.',
