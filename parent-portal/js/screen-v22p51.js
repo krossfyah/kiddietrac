@@ -383,11 +383,18 @@
       bar.innerHTML = PR_TABS.map(t => `<button type="button" data-pr-tab="${t.key}" style="background:none;border:0;border-bottom:2px solid ${prTab === t.key ? '#1F6080' : 'transparent'};padding:9px 13px;font-size:13.5px;font-weight:700;color:${prTab === t.key ? '#0F172A' : '#64748B'};cursor:pointer;border-radius:8px 8px 0 0;">${t.label}</button>`).join('');
       bar.querySelectorAll('[data-pr-tab]').forEach(b => {
         b.onclick = () => {
+          // The screen can be torn down between the click and this handler running: an
+          // idle sign-out redirects to the login page while this bar is still painted,
+          // and every lookup below then returns null. Same guard runPayroll() carries.
+          const result = document.getElementById('pr-result');
+          const csv = document.getElementById('pr-csv');
+          const docs = document.getElementById('pr-docs');
+          if (!result || !csv || !docs) return;
+
           prTab = b.getAttribute('data-pr-tab');
           const hoursOn = prTab === 'hours';
-          document.getElementById('pr-result').hidden = !hoursOn;
-          document.getElementById('pr-csv').hidden = !hoursOn;
-          const docs = document.getElementById('pr-docs');
+          result.hidden = !hoursOn;
+          csv.hidden = !hoursOn;
           docs.hidden = hoursOn;
           paintPrTabs();
           if (!hoursOn) renderPayrollDocs();

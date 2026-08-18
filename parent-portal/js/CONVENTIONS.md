@@ -128,3 +128,13 @@ Bump the `CACHE` constant in `service-worker.js` on **every** deploy, and the `?
 each changed file in `dashboard.src.html`, then `cp dashboard.src.html dashboard.html`.
 Skipping it is the single most common cause of "you didn't fix it" — the client is still
 running the old file.
+
+## A handler can outlive its screen
+
+An idle sign-out redirects to the login page. A click already in flight still runs its
+handler, but every `getElementById` on that screen now returns null — so
+`el.hidden = x` throws "Cannot set properties of null".
+
+Resolve the elements a handler needs at the TOP of the handler and bail if any are
+missing. Do not assume the screen that painted the control is still mounted when the
+control is used. This has now been the cause of two filed crash tickets.
