@@ -53,20 +53,26 @@ Schedule::command('kiddietrac:checkin-reminders --window=evening')
 // Daily morning digest — 07:00 in the agency's timezone (Toronto default).
 Schedule::command('kiddietrac:apply-withdrawals')->dailyAt('01:00');
 
-Schedule::command('kiddietrac:digest-daily')
-    ->dailyAt('07:00')
-    ->timezone('America/Toronto')
-    ->withoutOverlapping(60)        // skip if a prior run is still going
-    ->runInBackground()
-    ->onOneServer();                // safe even on a single host
+// RETIRED 18 Aug 2026 — replaced by kiddietrac:admin-digest below, which covers the
+// same audience (agency admins and centre directors) with the decisions-to-make
+// format. Left runnable by hand rather than deleted.
+// Schedule::command('kiddietrac:digest-daily')
+//     ->dailyAt('07:00')
+//     ->timezone('America/Toronto')
+//     ->withoutOverlapping(60)        // skip if a prior run is still going
+//     ->runInBackground()
+//     ->onOneServer();                // safe even on a single host
 
 // Weekly Monday digest — 07:05 so it never collides with the daily run.
-Schedule::command('kiddietrac:digest-weekly')
-    ->weeklyOn(1, '07:05')          // 1 = Monday
-    ->timezone('America/Toronto')
-    ->withoutOverlapping(60)
-    ->runInBackground()
-    ->onOneServer();
+// RETIRED 18 Aug 2026 — replaced by kiddietrac:admin-digest below, which covers the
+// same audience (agency admins and centre directors) with the decisions-to-make
+// format. Left runnable by hand rather than deleted.
+// Schedule::command('kiddietrac:digest-weekly')
+//     ->weeklyOn(1, '07:05')          // 1 = Monday
+//     ->timezone('America/Toronto')
+//     ->withoutOverlapping(60)
+//     ->runInBackground()
+//     ->onOneServer();
 
 // v22p38: marketing-campaign email sender — every 5 min so scheduled
 // campaigns are delivered within ~5 min of their scheduled_for. In-portal
@@ -165,3 +171,10 @@ Schedule::command("mail:reconcile-logs --days=3 --backfill")->dailyAt("06:15")->
 // so hourly dispatch is the intended cadence rather than hourly mail. This was never
 // registered anywhere - in practice NOBODY was being reminded.
 Schedule::command("kiddietrac:onboarding-reminders")->hourly();
+
+
+// The director / admin digest: what needs a decision today, and a wider view on Monday.
+// 07:00 and 07:10 Toronto — before the day starts, and far enough apart that a slow
+// weekly run cannot delay the daily one.
+Schedule::command('kiddietrac:admin-digest')->dailyAt('07:00')->timezone('America/Toronto')->withoutOverlapping();
+Schedule::command('kiddietrac:admin-digest --weekly')->weeklyOn(1, '07:10')->timezone('America/Toronto')->withoutOverlapping();
