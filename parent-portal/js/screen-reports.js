@@ -328,6 +328,21 @@
       + box('ic-paid', 'Paid', '', true)
       + box('ic-overdue', 'Overdue', '', true)
       + box('ic-void', 'Voided', 'Raised, then cancelled — off by default.', false)
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:14px 0 4px;">Period</div>'
+      + '<select id="ic-period" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;background:#fff;">'
+      + '<option value="">The date range on the screen</option>'
+      + '<option value="month">A whole month</option>'
+      + '<option value="range">Specific dates</option>'
+      + '<option value="all">Every invoice, all dates</option>'
+      + '</select>'
+      + '<div id="ic-month-wrap" style="display:none;margin-top:8px;">'
+      +   '<input id="ic-month" type="month" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;">'
+      + '</div>'
+      + '<div id="ic-range-wrap" style="display:none;gap:8px;margin-top:8px;">'
+      +   '<input id="ic-from" type="date" style="flex:1;min-width:0;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;">'
+      +   '<span style="align-self:center;color:#64748B;font-size:13px;">to</span>'
+      +   '<input id="ic-to" type="date" style="flex:1;min-width:0;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;">'
+      + '</div>'
       + '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:14px 0 4px;">Balance</div>'
       + '<select id="ic-balance" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;background:#fff;">'
       + '<option value="">Any balance</option>'
@@ -343,6 +358,23 @@
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
     overlay.querySelector('#ic-cancel').addEventListener('click', function () { overlay.remove(); });
 
+    // Only the chosen kind of period is on screen — three date controls at once invites
+    // filling in the wrong pair.
+    var periodSel = overlay.querySelector('#ic-period');
+    var monthWrap = overlay.querySelector('#ic-month-wrap');
+    var rangeWrap = overlay.querySelector('#ic-range-wrap');
+    periodSel.addEventListener('change', function () {
+      monthWrap.style.display = periodSel.value === 'month' ? 'block' : 'none';
+      rangeWrap.style.display = periodSel.value === 'range' ? 'flex' : 'none';
+    });
+    // Default the month box to the one just gone: a month-to-date figure is rarely what
+    // somebody opening a billing report wants.
+    try {
+      var d = new Date();
+      d.setDate(1); d.setMonth(d.getMonth() - 1);
+      overlay.querySelector('#ic-month').value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    } catch (e) {}
+
     overlay.querySelector('#ic-run').addEventListener('click', function () {
       var picked = [];
       ['open', 'paid', 'overdue', 'void'].forEach(function (k) {
@@ -355,8 +387,38 @@
         return;
       }
       var balance = (overlay.querySelector('#ic-balance') || {}).value || '';
+
+      // Whatever the period control says wins over the boxes on the screen behind it.
+      var period = periodSel.value;
+      var from = null, to = null, allDates = false;
+      if (period === 'month') {
+        var m = (overlay.querySelector('#ic-month') || {}).value || '';
+        if (! /^\d{4}-\d{2}$/.test(m)) {
+          overlay.querySelector('#ic-err').textContent = 'Pick a month.';
+          return;
+        }
+        var y = +m.slice(0, 4), mo = +m.slice(5, 7);
+        from = m + '-01';
+        // Day 0 of the NEXT month is the last day of this one — no leap-year table needed.
+        var last = new Date(y, mo, 0);
+        to = m + '-' + ('0' + last.getDate()).slice(-2);
+      } else if (period === 'range') {
+        from = (overlay.querySelector('#ic-from') || {}).value || '';
+        to = (overlay.querySelector('#ic-to') || {}).value || '';
+        if (! from && ! to) {
+          overlay.querySelector('#ic-err').textContent = 'Give at least one date, or choose another period.';
+          return;
+        }
+        if (from && to && from > to) {
+          overlay.querySelector('#ic-err').textContent = 'The start date is after the end date.';
+          return;
+        }
+      } else if (period === 'all') {
+        allDates = true;
+      }
+
       overlay.remove();
-      runReport(type, { status: picked.join(','), balance: balance });
+      runReport(type, { status: picked.join(','), balance: balance, from: from, to: to, allDates: allDates });
     });
   }
 
@@ -372,6 +434,11 @@
     var from = (document.getElementById('rep-from') || {}).value || '';
     var to = (document.getElementById('rep-to') || {}).value || '';
     out.innerHTML = '<div style="padding:24px;color:#64748B;">Generating report…</div>';
+    // A period chosen in the criteria window overrides the boxes on the screen; "all
+    // dates" clears them outright rather than quietly keeping yesterday's range.
+    if (opts && opts.allDates) { from = ''; to = ''; }
+    else if (opts && (opts.from || opts.to)) { from = opts.from || ''; to = opts.to || ''; }
+
     var qs = 'type=' + encodeURIComponent(type);
     if (centreId) qs += '&centre_id=' + encodeURIComponent(centreId);
     if (from) qs += '&from=' + encodeURIComponent(from);

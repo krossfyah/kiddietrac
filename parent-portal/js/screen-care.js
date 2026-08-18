@@ -287,6 +287,8 @@
       // the whole point: one upload, visible everywhere.
       { type: 'photo',     icon: '📸', label: 'Photo',     color: '#0E7C90', media: 'image' },
       { type: 'video',     icon: '🎬', label: 'Video',     color: '#7C3AED', media: 'video' },
+      // Not a care log: this one goes to late_events and to a director for a decision.
+      { type: 'late',      icon: '⏰', label: 'Late',      color: '#DC2626', late: true },
     ];
     TYPES.forEach(function (t) {
       var btn = Dom.el('button', {
@@ -298,7 +300,8 @@
       btn.addEventListener('mouseleave', function () { btn.style.borderColor = '#E5E7EB'; btn.style.background = 'white'; });
       btn.addEventListener('click', function () {
         if (!childSel.value || childSel.value === '__all__') { alert('Pick a child to log for.'); return; }
-        if (t.media) openMediaModal(t, parseInt(childSel.value, 10));
+        if (t.late) openLateModal(t, parseInt(childSel.value, 10));
+        else if (t.media) openMediaModal(t, parseInt(childSel.value, 10));
         else openDetailsModal(t, parseInt(childSel.value, 10));
       });
       grid.appendChild(btn);
@@ -584,6 +587,97 @@
       sunscreen: ['Applied', 'Reapplied'],
       mood:      ['Happy', 'Calm', 'Playful', 'Tired', 'Fussy', 'Upset', 'Unwell'],
     };
+
+    /* ── Late arrival / late departure ────────────────────────────────────
+       Records what happened and stops there. There is deliberately no fee field: the
+       educator is reporting a fact, and whether it costs the family anything is a
+       decision for a director, made later, with their name against it. */
+    function openLateModal(t, childId) {
+      var kid = (CHILDREN || []).filter(function (c) { return String(c.id) === String(childId); })[0];
+      var kidName = kid ? kid.name : 'this child';
+
+      var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px;' });
+      var modal = Dom.el('div', { style: 'background:white;border-radius:16px;max-width:420px;width:100%;padding:20px;max-height:88vh;overflow-y:auto;' });
+      overlay.appendChild(modal);
+
+      // Common durations first: most late collections are minutes, not hours, and typing
+      // a number one-handed at the door is the thing this is meant to avoid.
+      var PRESETS = [5, 10, 15, 20, 30, 45, 60, 90];
+      modal.innerHTML = '<h2 style="margin:0 0 4px;font-size:18px;">⏰ Log a late event</h2>'
+        + '<p style="margin:0 0 14px;font-size:13px;color:#64748B;line-height:1.45;">For ' + esc(kidName)
+        + '. Your director reviews this — you are recording what happened, not charging anything.</p>'
+        + '<div style="font-size:12px;font-weight:800;letter-spacing:.6px;color:#64748B;text-transform:uppercase;margin:0 0 5px;">What was late</div>'
+        + '<div style="display:flex;gap:8px;margin-bottom:14px;">'
+        +   '<button type="button" data-kind="departure" class="lt-kind" style="flex:1;padding:11px;border:2px solid #DC2626;background:#FEF2F2;color:#991B1B;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;">Late pick-up</button>'
+        +   '<button type="button" data-kind="arrival" class="lt-kind" style="flex:1;padding:11px;border:2px solid #E5E7EB;background:#fff;color:#334155;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;">Late arrival</button>'
+        + '</div>'
+        + '<div style="font-size:12px;font-weight:800;letter-spacing:.6px;color:#64748B;text-transform:uppercase;margin:0 0 5px;">How late</div>'
+        + '<div id="lt-presets" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">'
+        +   PRESETS.map(function (m) {
+              return '<button type="button" data-min="' + m + '" class="lt-min" style="padding:8px 12px;border:1px solid #D1D5DB;background:#fff;border-radius:9px;font-size:13px;font-weight:700;color:#334155;cursor:pointer;">'
+                + (m >= 60 ? (m / 60) + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : '') : m + 'm') + '</button>';
+            }).join('')
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">'
+        +   '<input id="lt-min" type="number" min="1" max="1440" placeholder="or type minutes" style="flex:1;min-width:0;padding:10px;border:1px solid #D1D5DB;border-radius:9px;font-size:14px;box-sizing:border-box;">'
+        +   '<span style="font-size:13px;color:#64748B;">minutes</span>'
+        + '</div>'
+        + '<textarea id="lt-note" rows="2" placeholder="What happened? (optional)" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #D1D5DB;border-radius:9px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>'
+        + '<div id="lt-err" style="color:#DC2626;font-size:12.5px;min-height:17px;margin-top:6px;"></div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">'
+        +   '<button id="lt-cancel" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:10px 16px;border-radius:9px;font-size:13.5px;font-weight:700;cursor:pointer;">Cancel</button>'
+        +   '<button id="lt-save" style="background:#DC2626;color:#fff;border:0;padding:10px 18px;border-radius:9px;font-size:13.5px;font-weight:700;cursor:pointer;">Log it</button>'
+        + '</div>';
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+      modal.querySelector('#lt-cancel').addEventListener('click', function () { overlay.remove(); });
+
+      var kind = 'departure';
+      modal.querySelectorAll('.lt-kind').forEach(function (b) {
+        b.addEventListener('click', function () {
+          kind = b.getAttribute('data-kind');
+          modal.querySelectorAll('.lt-kind').forEach(function (x) {
+            var on = x === b;
+            x.style.borderColor = on ? '#DC2626' : '#E5E7EB';
+            x.style.background = on ? '#FEF2F2' : '#fff';
+            x.style.color = on ? '#991B1B' : '#334155';
+          });
+        });
+      });
+
+      var minsEl = modal.querySelector('#lt-min');
+      modal.querySelectorAll('.lt-min').forEach(function (b) {
+        b.addEventListener('click', function () {
+          minsEl.value = b.getAttribute('data-min');
+          modal.querySelectorAll('.lt-min').forEach(function (x) {
+            var on = x === b;
+            x.style.borderColor = on ? '#DC2626' : '#D1D5DB';
+            x.style.background = on ? '#FEF2F2' : '#fff';
+          });
+        });
+      });
+
+      modal.querySelector('#lt-save').addEventListener('click', function () {
+        var mins = parseInt(minsEl.value, 10);
+        var err = modal.querySelector('#lt-err');
+        if (! mins || mins < 1) { err.textContent = 'How many minutes late?'; return; }
+        if (! childId) { err.textContent = 'Pick a child first.'; return; }
+        var btn = modal.querySelector('#lt-save');
+        btn.disabled = true; btn.textContent = 'Saving…';
+        Api.post('/provider/late-events', {
+          child_id: childId, kind: kind, minutes: mins,
+          note: (modal.querySelector('#lt-note').value || '').trim() || null,
+        }).then(function () {
+          overlay.remove();
+          if (window.KT && KT.toast) {
+            KT.toast('⏰', 'Logged', (kind === 'departure' ? 'Late pick-up' : 'Late arrival') + ' — your director will review it.');
+          }
+        }).catch(function (e) {
+          btn.disabled = false; btn.textContent = 'Log it';
+          err.textContent = (e && e.message) || 'Could not save.';
+        });
+      });
+    }
 
     // ── Photo / Video tiles ──────────────────────────────────────────────
     // Media-first sibling of openDetailsModal. One upload lands in the parent's
