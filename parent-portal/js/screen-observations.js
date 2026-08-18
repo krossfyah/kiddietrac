@@ -307,6 +307,7 @@
   function renderStep2(wrap, res, childId, rawText) {
     const step1 = wrap.querySelector('#kt-step-1');
     const step2 = wrap.querySelector('#kt-step-2');
+    if (!step1 || !step2) { return; }
     step1.style.opacity = '0.6';
     step1.style.pointerEvents = 'none';
 
@@ -317,7 +318,13 @@
     step2.style.display = 'block';
     step2.innerHTML =
       '<div style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:24px; max-width:760px;">' +
-        '<h2 style="font-family:var(--kt-font-display); font-size:18px; margin-bottom:6px;">Step 2: Review and edit</h2>' +
+        '<h2 style="font-family:var(--kt-font-display); font-size:18px; margin-bottom:6px;">Step 2: Review and save</h2>' +
+        // Said in the affirmative, because the previous step dims itself and reads as
+        // finished. An observation was structured and then lost this way: the educator
+        // never saw this panel on a phone, and assumed it had saved.
+        '<div style="background:#FEF3C7; border:1px solid #FDE68A; color:#92400E; border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:12px;">' +
+          '<strong>Not saved yet.</strong> Check it over and press <em>Save observation</em> at the bottom.' +
+        '</div>' +
         '<div style="font-size:12px; color:var(--kt-text-faint); margin-bottom:14px;">' +
           'Powered by ' + esc(meta.model || 'Claude') + (meta.tokens_used ? ' &middot; ' + meta.tokens_used + ' tokens' : '') +
         '</div>' +
@@ -365,6 +372,14 @@
 
         '<div id="kt-save-status" style="margin-top:12px; font-size:13px;"></div>' +
       '</div>';
+
+    // Bring it on screen. Step 2 renders below step 1, which is off the bottom of a
+    // phone — the button existed but was never seen.
+    try {
+      step2.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      try { step2.scrollIntoView(); } catch (_) {}
+    }
 
     step2.querySelector('#kt-redo').addEventListener('click', function () {
       step1.style.opacity = '1';

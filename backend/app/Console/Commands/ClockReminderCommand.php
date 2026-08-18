@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\AgencyMailer;
+use App\Support\AgencyTime;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -74,15 +75,24 @@ final class ClockReminderCommand extends Command
             // Nudge once they are past their OWN usual day, not a flat six hours: an
             // afternoon shift that started at 12:30 is not overdue at 18:30, and
             // someone whose day normally ends at 15:00 should hear from us sooner.
-            $in = Carbon::parse($e->punched_in_at);
+            // punched_in_at is stored UTC. Formatting it raw printed a 9:17 AM
+            // Eastern start as 1:17 PM, and decided "today" on a UTC boundary so an
+            // evening shift was reported as an older one. Everything below is in the
+            // AGENCY's timezone, resolved from the centre the punch belongs to.
+            $tz = AgencyTime::tzForCentre($e->centre_id !== null ? (int) $e->centre_id : null);
+            $in = Carbon::parse($e->punched_in_at)->setTimezone($tz);
+            $nowLocal = Carbon::now($tz);
+            $todayLocal = Carbon::today($tz);
+
             $usual = $this->usualShiftHours((int) $e->user_id, $today);
             $threshold = $usual === null ? 6.0 : max(5.0, $usual + 1.0);
-            if ($in->floatDiffInHours(Carbon::now()) < $threshold) continue;
+            // Elapsed time is the same number in any zone; only the labels moved.
+            if ($in->floatDiffInHours($nowLocal) < $threshold) continue;
 
             $inAt = $in->format('g:i A');
 
-            if ($in->isSameDay($today)) {
-                $howLong = number_format($in->floatDiffInHours(Carbon::now()), 1);
+            if ($in->isSameDay($todayLocal)) {
+                $howLong = number_format($in->floatDiffInHours($nowLocal), 1);
                 $usualLine = $usual === null
                     ? ''
                     : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.';
@@ -92,7 +102,7 @@ final class ClockReminderCommand extends Command
                 // An older shift. Quoting the elapsed hours here would produce
                 // "on the clock for 732.0 hours", which reads as a broken system
                 // rather than a request. Give the date and ask for the out time.
-                $days = (int) $in->copy()->startOfDay()->diffInDays($today->copy()->startOfDay());
+                $days = (int) $in->copy()->startOfDay()->diffInDays($todayLocal->copy()->startOfDay());
                 $when = $in->format('l j F') . ' at ' . $inAt;
                 $subject = 'Your shift on ' . $in->format('j F') . ' was never clocked out';
                 $bodyText = "You clocked in on {$when} and no clock-out was recorded, so that day's hours are still incomplete "

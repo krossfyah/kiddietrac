@@ -32,11 +32,22 @@ final class BillingRemindersController extends Controller
 
     private function resolveAgencyId(Request $request): int
     {
-        $header = $request->header('X-Active-Agency-Id');
-        if ($header) {
-            return (int) $header;
-        }
         $u = $request->user();
+        $header = (int) $request->header('X-Active-Agency-Id');
+
+        // The header is a request, not a fact. Honour it only for a platform_admin (who
+        // may target any agency) or someone who actually holds an active role in the
+        // agency named. Otherwise fall back to their own — never trust it blindly.
+        $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)
+            ->where('role', 'platform_admin')->where('active', 1)->exists();
+        if ($header && $isPlatform) {
+            return $header;
+        }
+        if ($header && DB::table('role_assignments')->where('user_id', $u->id)
+            ->where('active', 1)->where('agency_id', $header)->exists()) {
+            return $header;
+        }
+
         return (int) DB::table('role_assignments')
             ->where('user_id', $u->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])
