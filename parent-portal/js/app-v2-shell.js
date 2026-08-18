@@ -398,7 +398,6 @@
         { hash: 'messages',           label: 'Messenger',   icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
         { hash: 'checkin',            label: 'Check-in',   icon: '☀' },
-        { hash: 'parent-forms',       label: 'Forms',      icon: '📝' },
         { hash: 'billing',            label: 'Billing',    icon: '💳' },
         { hash: 'attendance-pattern', label: 'Attendance', icon: '📅' },
         { hash: 'medications',        label: 'Health',     icon: '💊' },

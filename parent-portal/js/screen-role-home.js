@@ -97,7 +97,6 @@
         { hash: 'menu',               icon: '🍽️', label: 'Menu' },
         { hash: 'notifications',      icon: '🔔', label: 'Inbox' },
         { hash: 'scan',               icon: '📷', label: 'Check in / out', sub: 'Scan the QR' },
-        { hash: 'parent-forms',       icon: '📝', label: 'Forms' },
         { hash: 'billing',            icon: '💳', label: 'Billing' },
         { hash: 'attendance-pattern', icon: '📅', label: 'Attendance' },
         { hash: 'medications',        icon: '💊', label: 'Health' },
@@ -106,7 +105,6 @@
         { hash: 'help',               icon: '📖', label: 'Help' },
       ],
       more: [
-        { hash: 'videos',         icon: '🎬', label: 'Videos' },
         { hash: 'directory',      icon: '👪', label: 'Family directory' },
         { hash: 'conferences',    icon: '🗣', label: 'Conferences' },
         { hash: 'signed-docs',    icon: '✍️', label: 'Documents' },
