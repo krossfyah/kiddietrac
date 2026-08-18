@@ -1056,6 +1056,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // own endpoint rather than being duplicated into each chat controller.
         // Interface state that follows the person rather than the browser.
         // Late arrivals and departures: educators record, directors and admins decide.
+        // Invoices raised against a payee: an educator contracting, a family, a supplier.
+        Route::get ('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'index']);
+        Route::get ('/payee-invoices/hours',        [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'hours']);
+        Route::post('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'store']);
+        Route::post('/payee-invoices/{id}/status',  [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'setStatus'])->where('id', '[0-9]+');
         Route::get ('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'index']);
         Route::post('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'store']);
         Route::post('/late-events/{id}/decide', [\App\Http\Controllers\Api\LateEventController::class, 'decide'])->where('id', '[0-9]+');
