@@ -149,3 +149,15 @@ A value with no time in it denotes a calendar DAY and has no timezone to convert
 between — format it from its own `YYYY-MM-DD` parts. Only values carrying an actual
 time go through the agency timezone. Ten screens still build dates with
 `new Date(x + "T00:00:00")`; treat each as suspect.
+
+## A hosted screen must not bring its own page furniture
+
+A screen written as a standalone page renders a hero banner, and often its own tab bar.
+Host that screen inside a tab and the page shows two banners and two rows of tabs.
+
+Host the PANES, not the page: expose each pane as its own render function and let the host
+place them as siblings of its existing tabs. The host in screen-billing-settings.js also
+strips `.kt-hero` / `.kt-page-hero` from anything it renders, which caught a second
+instance (screen-fee-plans) nobody had reported.
+
+Check afterwards that the hero did not carry the screen only action button.
