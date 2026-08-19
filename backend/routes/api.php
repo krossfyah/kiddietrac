@@ -1371,6 +1371,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Parents see the PUBLISHED menu for their child's centre (read-only).
     Route::middleware('role:guardian')->group(function () {
         Route::get('/parent/menu', [\App\Http\Controllers\Api\OperationsController::class, 'parentMenu']);
+
+        // What a parent tells us about their own child at onboarding: a photo, what
+        // they are allergic to, and their immunisations. Every handler proves the
+        // child belongs to the signed-in guardian before reading or writing.
+        Route::get ('/parent/onboarding/children', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'index']);
+        Route::post('/parent/onboarding/children/{child}', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'save']);
+        Route::post('/parent/onboarding/children/{child}/photo', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'photo']);
     });
 
     // Operations: meals, allergies, field trips, substitutes, inspection
