@@ -39,6 +39,7 @@ final class AdminDigest
             'tours' => 'tours', 'incidents' => 'incidents', 'immunisations' => 'immunisations',
             'tickets' => 'tickets', 'invoicing' => 'invoicing', 'welcome' => 'welcome',
             'week' => 'weekAhead', 'reportCards' => 'reportCards', 'forms' => 'forms',
+            'openDays' => 'openDays', 'scorecard' => 'scorecard',
             'educators' => 'educators',
         ] as $key => $method) {
             try {
@@ -324,6 +325,209 @@ final class AdminDigest
     }
 
     /** Educators scoring low, with something actionable rather than just a number. */
+    /**
+     * Days nobody closed: children still signed in, and staff never clocked out.
+     *
+     * The most perishable item in the digest. An hour after the fact somebody remembers
+     * when the child left; a day later it is a guess, and by then the automatic sign-off
+     * has stamped a time no one witnessed and the attendance record is fiction.
+     */
+    private static function openDays(array $c): ?array
+    {
+        $rows = [];
+
+        // Children whose LAST event in the window was a check-in. The last event decides
+        // it — a child who left and came back has both, and counting check-outs alone
+        // would call them absent.
+        $events = DB::table('check_events as e')
+            ->join('children as ch', 'ch.id', '=', 'e.child_id')
+            ->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->whereIn('f.centre_id', $c['centres'])
+            ->whereDate('e.occurred_at', '>=', $c['from'])
+            ->whereDate('e.occurred_at', '<=', $c['to'])
+            ->whereNull('ch.deleted_at')
+            ->orderBy('e.occurred_at')
+            ->get(['e.child_id', 'e.event_type', 'e.occurred_at', 'ch.first_name', 'ch.last_name', 'ce.name as centre']);
+
+        $last = [];
+        foreach ($events as $ev) {
+            $last[$ev->child_id] = $ev;
+        }
+        $stillIn = array_filter($last, fn ($e) => $e->event_type === 'check_in');
+
+        foreach (array_slice($stillIn, 0, 8) as $e) {
+            $rows[] = [
+                'who' => trim($e->first_name . ' ' . ($e->last_name ?? '')),
+                'what' => 'signed in but never signed out',
+                'detail' => $e->centre,
+            ];
+        }
+
+        // Staff whose punch was closed for them, or is still open.
+        $punches = DB::table('time_punches as p')
+            ->join('users as u', 'u.id', '=', 'p.user_id')
+            ->whereIn('p.centre_id', $c['centres'])
+            ->whereDate('p.punched_in_at', '>=', $c['from'])
+            ->whereDate('p.punched_in_at', '<=', $c['to'])
+            ->where(function ($q) {
+                $q->whereNull('p.punched_out_at')->orWhere('p.source', 'auto');
+            })
+            ->limit(8)
+            ->get(['u.first_name', 'u.last_name', 'p.punched_out_at', 'p.source']);
+
+        foreach ($punches as $p) {
+            $rows[] = [
+                'who' => trim($p->first_name . ' ' . ($p->last_name ?? '')),
+                'what' => $p->punched_out_at ? 'was clocked out automatically' : 'is still clocked in',
+                'detail' => $p->punched_out_at ? 'hours may be wrong' : 'no clock-out yet',
+            ];
+        }
+
+        if (! $rows) {
+            return null;
+        }
+
+        return ['rows' => $rows, 'count' => count($stillIn) + $punches->count()];
+    }
+
+    /**
+     * How each educator is doing, from what they actually did.
+     *
+     * Three parts, each shown in the email, because a director has to be able to say why
+     * somebody scored what they did:
+     *   recording (60) — observations and care moments, relative to the busiest educator
+     *   clock-outs (20) — punches they closed themselves rather than the system closing
+     *   sign-outs  (20) — children at their centre whose day was closed properly
+     *
+     * Relative rather than absolute: a fair target depends on room size and age group,
+     * and the useful question is who is furthest from what this agency manages in practice.
+     */
+    private static function scorecard(array $c): ?array
+    {
+        $educators = DB::table('role_assignments as ra')
+            ->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', true)->where('ra.agency_id', $c['agency'])
+            ->whereIn('ra.role', ['educator', 'home_visitor'])
+            ->whereNull('u.deleted_at')
+            ->distinct()
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'ra.centre_id']);
+        if ($educators->isEmpty()) {
+            return null;
+        }
+
+        $from = $c['from'];
+        $to = $c['to'];
+        $stats = [];
+
+        foreach ($educators as $u) {
+            $obs = DB::table('observations')->where('recorded_by_id', $u->id)
+                ->whereDate('observed_at', '>=', $from)->whereDate('observed_at', '<=', $to)->count();
+
+            $care = 0;
+            if (Schema::hasTable('daily_care_logs')) {
+                $care += DB::table('daily_care_logs')->where('recorded_by_id', $u->id)
+                    ->whereDate('occurred_at', '>=', $from)->whereDate('occurred_at', '<=', $to)->count();
+            }
+            $care += DB::table('daily_events')->where('recorded_by_id', $u->id)
+                ->whereDate('occurred_at', '>=', $from)->whereDate('occurred_at', '<=', $to)->count();
+
+            $punches = DB::table('time_punches')->where('user_id', $u->id)
+                ->whereDate('punched_in_at', '>=', $from)->whereDate('punched_in_at', '<=', $to)->count();
+            $clean = DB::table('time_punches')->where('user_id', $u->id)
+                ->whereDate('punched_in_at', '>=', $from)->whereDate('punched_in_at', '<=', $to)
+                ->whereNotNull('punched_out_at')->where(fn ($q) => $q->where('source', '!=', 'auto')->orWhereNull('source'))
+                ->count();
+
+            $stats[$u->id] = [
+                'who' => trim($u->first_name . ' ' . ($u->last_name ?? '')),
+                'activity' => $obs + $care,
+                'obs' => $obs,
+                'care' => $care,
+                'punches' => $punches,
+                'clean' => $clean,
+                'centre' => $u->centre_id,
+            ];
+        }
+
+        // Nobody recorded anything and nobody clocked in: there is no signal, and inventing
+        // a league table out of zeroes would be worse than saying nothing.
+        $best = max(array_map(fn ($s) => $s['activity'], $stats)) ?: 0;
+        if ($best === 0) {
+            return null;
+        }
+
+        // Sign-out completion per centre: days a PERSON closed, against every day opened.
+        // Shared by everyone at that centre, which is why the email calls it a centre
+        // figure rather than presenting it as one educator's own.
+        $signOut = [];
+        foreach (array_unique(array_filter(array_column($stats, 'centre'))) as $centreId) {
+            $opened = DB::table('check_events as e')
+                ->join('children as ch', 'ch.id', '=', 'e.child_id')
+                ->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->where('f.centre_id', $centreId)->where('e.event_type', 'check_in')
+                ->whereDate('e.occurred_at', '>=', $from)->whereDate('e.occurred_at', '<=', $to)
+                ->count();
+            $byHand = DB::table('check_events as e')
+                ->join('children as ch', 'ch.id', '=', 'e.child_id')
+                ->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->where('f.centre_id', $centreId)->where('e.event_type', 'check_out')
+                ->whereDate('e.occurred_at', '>=', $from)->whereDate('e.occurred_at', '<=', $to)
+                ->where(function ($q) {
+                    $q->whereNull('e.notes')->orWhere('e.notes', 'not like', '%Auto sign-off%');
+                })
+                ->count();
+            // Nothing opened is not a failure — a centre closed for the period scores full.
+            $signOut[$centreId] = $opened > 0 ? min(1, $byHand / $opened) : 1.0;
+        }
+
+        $rows = [];
+        foreach ($stats as $s) {
+            $recording = (int) round(min(1, $s['activity'] / $best) * 60);
+            $clocking = $s['punches'] > 0 ? (int) round($s['clean'] / $s['punches'] * 20) : 20;
+            // No punches at all is not a failing — a home visitor may never clock in — so
+            // the clock-out share is treated as met rather than zero.
+            $signRate = $signOut[$s['centre']] ?? 1.0;
+            $signing = (int) round($signRate * 20);
+            $score = $recording + $clocking + $signing;
+
+            $rows[] = [
+                'who' => $s['who'],
+                'score' => min(100, $score),
+                'detail' => $s['obs'] . ' obs, ' . $s['care'] . ' logs'
+                    . ($s['punches'] ? ', ' . $s['clean'] . '/' . $s['punches'] . ' clock-outs' : '')
+                    . ', ' . round($signRate * 100) . '% signed out',
+                'tip' => self::scoreTip($score, $s + ['sign_rate' => $signRate]),
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => $a['score'] <=> $b['score']);
+
+        return ['rows' => $rows, 'count' => count($rows)];
+    }
+
+    /** Advice matched to what is actually low, not the same paragraph under every name. */
+    private static function scoreTip(int $score, array $s): string
+    {
+        if ($s['punches'] > 0 && $s['clean'] / $s['punches'] < 0.7) {
+            return 'Mostly a clock-out habit — hours are being closed by the system, which makes timesheets unreliable.';
+        }
+        if (($s['sign_rate'] ?? 1) < 0.7) {
+            return 'Children at this centre are often left signed in — attendance and ratio records are built from those times.';
+        }
+        if ($score >= 85) {
+            return 'Doing well. Worth saying so at the next check-in.';
+        }
+        if ($s['obs'] === 0) {
+            return 'No observations this period. One per child per week is the single biggest lift, and families notice them.';
+        }
+        if ($score < 55) {
+            return 'Little of the day is being recorded. Care logs take seconds at the time and minutes at the end.';
+        }
+
+        return 'Close to the mark — a short note on each care log turns a tick into something a parent can read.';
+    }
+
     private static function educators(array $c): ?array
     {
         if (! Schema::hasTable('engagement_scores')) return null;

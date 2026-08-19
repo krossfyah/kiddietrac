@@ -19,6 +19,7 @@ namespace App\Support;
 final class AdminDigestHtml
 {
     private const ACCENTS = [
+        'openDays' => '#DC2626',
         'late' => '#DC2626', 'timeoff' => '#F59E0B', 'tasks' => '#7C3AED', 'tours' => '#0EA5E9',
         'incidents' => '#DC2626', 'immunisations' => '#F59E0B', 'tickets' => '#64748B',
         'welcome' => '#16A34A', 'week' => '#1F6FB2', 'reportCards' => '#7C3AED',
@@ -48,6 +49,14 @@ final class AdminDigestHtml
         if ($counts) {
             $html .= self::barChart('Where things stand', $counts, '#1F6FB2');
         }
+
+        // First, because it is the only thing here that goes stale within a day.
+        $html .= self::section('🚸 Days nobody closed', $s['openDays'] ?? null, 'openDays',
+            'Children still showing as signed in, and staff whose hours were closed by the system. '
+            . 'Please remind educators to sign children out at pickup and to clock out — attendance, '
+            . 'ratio and payroll are all built from these times.');
+
+        $html .= self::scorecard($s['scorecard'] ?? null);
 
         $html .= self::section('⏰ Late pick-ups awaiting your decision', $s['late'] ?? null, 'late',
             'Approve with a fee, waive, or decline — nothing is charged until you do.');
@@ -179,6 +188,46 @@ final class AdminDigestHtml
     }
 
     // ── Building blocks ─────────────────────────────────────────────────────
+
+    /**
+     * How each educator is doing. A bar for the shape of it, then the numbers behind each
+     * score and one piece of advice — a league table without a reason is just a ranking.
+     */
+    private static function scorecard(?array $data): string
+    {
+        if (! $data || empty($data['rows'])) { return ''; }
+
+        $bars = [];
+        foreach ($data['rows'] as $r) { $bars[$r['who']] = (int) $r['score']; }
+        $inner = '<div class="kt-muted" style="font-size:12.5px;color:#64748B;margin:0 0 8px;">'
+            . 'Out of 100, from what was recorded this period: observations and care logs (60), '
+            . 'clock-outs closed by the educator rather than the system (20), and children at their '
+            . 'centre signed out by a person rather than automatically (20). '
+            . 'Measured against the busiest educator here, not a fixed target.</div>'
+            . self::barChart('', $bars, '#0E7C90');
+
+        $inner .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">';
+        foreach ($data['rows'] as $r) {
+            $score = (int) $r['score'];
+            $colour = $score >= 85 ? '#166534' : ($score >= 60 ? '#92400E' : '#991B1B');
+            $inner .= '<tr>'
+                . '<td style="padding:7px 8px 7px 0;font-size:13.5px;font-weight:700;color:#0F172A;white-space:nowrap;vertical-align:top;">'
+                . e((string) $r['who'])
+                . ' <span style="background:' . $colour . ';color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;">' . $score . '</span></td>'
+                . '<td style="padding:7px 0;font-size:12.5px;color:#334155;vertical-align:top;">'
+                . '<div class="kt-muted" style="color:#64748B;">' . e((string) $r['detail']) . '</div>'
+                . '<div style="margin-top:2px;">' . e((string) $r['tip']) . '</div></td>'
+                . '</tr>';
+        }
+        $inner .= '</table>';
+
+        return '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:4px solid #0E7C90;'
+            . 'border-radius:0 11px 11px 0;padding:14px 16px;margin:16px 0 0;">'
+            . '<div style="font-size:14.5px;font-weight:800;color:#0F172A;margin:0 0 8px;">📊 How your educators are doing'
+            . ' <span style="background:#0E7C90;color:#fff;border-radius:999px;font-size:11.5px;padding:1px 8px;margin-left:4px;">'
+            . (int) $data['count'] . '</span></div>'
+            . $inner . '</div>';
+    }
 
     private static function wrap(string $title, string $inner): string
     {

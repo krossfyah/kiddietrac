@@ -1,0 +1,33 @@
+Director digest: days nobody closed, and a real educator scorecard
+
+TWO SECTIONS.
+
+"Days nobody closed" lists children still showing as signed in and staff whose hours the
+system closed for them, with the reminder that attendance, ratio and payroll are all built
+from those times. It is placed first because it is the only item in the digest that goes
+stale within a day: an hour later somebody remembers when the child left, tomorrow it is a
+guess.
+
+The scorecard replaces an educators() section that has never once rendered. It reads
+engagement_scores looking for user_id or educator_id; that table only has family_id, so the
+lookup fails, returns null, and the section silently disappears. It is now built from what
+educators actually do.
+
+The score is deliberately explainable, because a director has to be able to say WHY somebody
+scored what they did: recording (60, observations and care logs measured against the busiest
+educator here rather than an invented target), clock-outs closed by the person rather than
+the system (20), and children at their centre signed out by a person rather than
+automatically (20). Each part is printed beside the name along with advice matched to
+whichever part is low.
+
+One correction to my own work before it shipped: the first version awarded that last 20
+unconditionally while the email told directors sign-outs were measured. A score claiming a
+component it does not calculate is worse than a score with fewer components. It is computed
+now, per centre, and labelled as a centre figure because it is shared by everyone working
+there rather than being one educator's own number.
+
+The resulting numbers are low - most educators between 0 and 58 - and that is the finding,
+not a bug: sign-out rates really are poor and hours really are being closed automatically,
+which is the behaviour the reminders elsewhere in this change are meant to correct.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
