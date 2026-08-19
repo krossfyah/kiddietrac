@@ -86,14 +86,17 @@ html { scroll-behavior: smooth; }
   font-size: 13px !important;
 }
 
-[data-kt-pretty] input:hover,
+/* :not(checkbox|radio) for the same reason the base rule above lists its types
+   explicitly — a checkbox carries its state in `background`, so repainting it on hover
+   turns every toggle in the portal white. */
+[data-kt-pretty] input:not([type="checkbox"]):not([type="radio"]):hover,
 [data-kt-pretty] select:hover,
 [data-kt-pretty] textarea:hover {
   border-color: var(--kt-input-border-hover) !important;
   background: var(--kt-input-bg-focus) !important;
 }
 
-[data-kt-pretty] input:focus,
+[data-kt-pretty] input:not([type="checkbox"]):not([type="radio"]):focus,
 [data-kt-pretty] select:focus,
 [data-kt-pretty] textarea:focus {
   border-color: var(--kt-input-border-focus) !important;
@@ -116,7 +119,7 @@ html { scroll-behavior: smooth; }
   opacity: 1;
 }
 
-[data-kt-pretty] input[type="checkbox"],
+[data-kt-pretty] input[type="checkbox"]:not(.kt-switchified):not([role="switch"]),
 [data-kt-pretty] input[type="radio"] {
   width: 20px !important;
   height: 20px !important;

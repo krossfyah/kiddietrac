@@ -459,3 +459,21 @@ input.kt-switchified.kt-switchified {
     -webkit-column-break-inside: avoid;
   }
 }
+
+/* ── A switch keeps its colour, whatever else is on the page ──────────────
+   .kt-switchified is applied by kt-switches.js and carries its state in
+   `background`. Generic form rules elsewhere repaint inputs on hover and focus
+   with !important, which turned every toggle in the portal white under the
+   pointer. The sibling .kt-switch rules only survive that by being later in
+   their own file, which is luck rather than intent. These say it outright. */
+input.kt-switchified {
+  width: 48px !important; height: 28px !important; min-width: 48px !important;
+  padding: 0 !important; border: none !important; border-radius: 999px !important;
+  background: #CBD5E1 !important;
+}
+input.kt-switchified:hover,
+input.kt-switchified:focus { background: #CBD5E1 !important; }
+input.kt-switchified:checked,
+input.kt-switchified:checked:hover,
+input.kt-switchified:checked:focus { background: #159FB4 !important; }
+input.kt-switchified:disabled { opacity: .5 !important; }
