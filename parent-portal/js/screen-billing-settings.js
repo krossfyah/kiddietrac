@@ -38,7 +38,7 @@
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:14px 24px;max-width:1000px;">'
-      + '<div class="kt-page-hero"><h2>🧾 Billing settings</h2><p>What you charge, and how it is worked out.</p></div>'
+      + '<div class="kt-page-hero"><h2>🧾 Billing</h2><p>What you charge, how it is worked out, and how families are reminded.</p></div>'
       + '<div id="bs-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
       + '<div id="bs-pane"></div></div>';
 
@@ -105,14 +105,23 @@
       + '<div class="kt-card-header"><h3 class="kt-card-title">🧾 Tax</h3></div>'
       + '<p style="color:#64748B;font-size:12.5px;margin:0 0 12px;">Set once here and it fills in on every invoice, where it can still be changed or switched off for a payee who is not charged tax. Tax applies to the invoice subtotal — the base charge plus any line items.</p>'
 
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
-      +   '<div style="flex:1;min-width:120px;"><label for="b_rate" style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Rate</label>'
-      +     '<div style="display:flex;align-items:center;gap:6px;">'
-      +       '<input id="b_rate" type="number" min="0" max="100" step="0.01" value="' + esc(String(b.tax_rate != null ? b.tax_rate : 0)) + '" style="' + INP + 'width:100%;text-align:right;">'
-      +       '<span style="font-size:14px;color:#64748B;">%</span></div></div>'
-      +   '<div style="flex:1;min-width:120px;"><label for="b_label" style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Called</label>'
+      // A GRID aligned to the start, not a flex aligned to the end. The two columns are
+      // different heights — only one carries a hint — and bottom-aligning them put the
+      // inputs 21px out of line with each other.
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:start;">'
+
+      +   '<div><label for="b_rate" style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Rate</label>'
+      // The % sits INSIDE the field rather than beside it, so the suffix cannot steal
+      // width from one input and leave the other wider.
+      +     '<div style="position:relative;">'
+      +       '<input id="b_rate" type="number" min="0" max="100" step="0.01" value="' + esc(String(b.tax_rate != null ? b.tax_rate : 0)) + '" style="' + INP + 'width:100%;text-align:right;padding-right:30px;">'
+      +       '<span style="position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:13px;color:#94A3B8;pointer-events:none;">%</span>'
+      +     '</div>'
+      +     '<div style="font-size:11.5px;color:#94A3B8;margin-top:4px;min-height:15px;">Percentage of the invoice subtotal.</div></div>'
+
+      +   '<div><label for="b_label" style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Called</label>'
       +     '<input id="b_label" type="text" value="' + esc(b.tax_label || 'Tax') + '" placeholder="HST" style="' + INP + 'width:100%;">'
-      +     '<div style="font-size:11.5px;color:#94A3B8;margin-top:3px;">Appears on the invoice, e.g. HST or GST.</div></div>'
+      +     '<div style="font-size:11.5px;color:#94A3B8;margin-top:4px;min-height:15px;">Appears on the invoice, e.g. HST or GST.</div></div>'
       + '</div>'
 
       + '<label style="display:flex;align-items:flex-start;gap:12px;padding:14px 0 4px;cursor:pointer;">'
