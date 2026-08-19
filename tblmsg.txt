@@ -1,0 +1,18 @@
+Subscriber table gets column proportions
+
+The Website screen is written for a 900px measure, but a global rule stretches #appMain
+children to the full window - so the table ran to 1598px and the browser distributed that
+by content: 408px for an email address, 399px for an agency name, 358px for a date. Wide,
+ragged, and the two tabs did not line up with each other because each held different
+content.
+
+A colgroup fixes the proportions so both tabs share one geometry whatever is in them, and
+the table is capped at 1080px because an email address stretched across a 1600px monitor is
+harder to read, not easier. Cells clip with an ellipsis and keep the full value in a
+tooltip, since table-layout:fixed truncates rather than wrapping.
+
+Widths then rebalanced once measured: the date was clipping at 151px, and a truncated
+timestamp on the screen whose entire purpose is showing when somebody subscribed or left is
+the wrong thing to trim. Width moved from Agency to the date.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

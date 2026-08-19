@@ -266,18 +266,33 @@
             : 'No subscribers yet. Sign-ups from www.kiddietrac.com appear here.')
         + '</div>';
     }
+    // Proportional widths, so the columns hold their shape at any window size and the two
+    // tabs line up with each other. Without these the browser sized by content and gave an
+    // email address 408px on a wide screen.
+    var cols = '<colgroup>'
+      + '<col style="width:26%"><col style="width:15%"><col style="width:19%">'
+      + '<col style="width:13%"><col style="width:23%"><col style="width:4%">'
+      + '</colgroup>';
+
     var head = mode === 'unsubscribed'
       ? '<tr><th>Email</th><th>Name</th><th>Agency</th><th>Unsubscribed</th><th>By</th><th></th></tr>'
       : '<tr><th>Email</th><th>Name</th><th>Agency</th><th>Source</th><th>Subscribed</th><th></th></tr>';
 
+    // table-layout:fixed clips instead of wrapping, so a long value needs an ellipsis and
+    // the full text kept reachable in a tooltip.
+    var cell = function (v, strong) {
+      var t = esc(v == null || v === '' ? '—' : String(v));
+      return '<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + t + '">'
+        + (strong ? '<strong>' + t + '</strong>' : t) + '</td>';
+    };
+
     var body = rows.map(function (r) {
       var cells = mode === 'unsubscribed'
-        ? '<td><strong>' + esc(r.email) + '</strong></td><td>' + esc(r.name || '—') + '</td>'
-          + '<td>' + esc(r.agency_name || '—') + '</td><td>' + esc(fmtStamp(r.unsubscribed_at)) + '</td>'
-          + '<td>' + esc(r.unsubscribed_by === 'self' ? 'Themselves' : (r.unsubscribed_by ? 'Administrator' : '—')) + '</td>'
-        : '<td><strong>' + esc(r.email) + '</strong></td><td>' + esc(r.name || '—') + '</td>'
-          + '<td>' + esc(r.agency_name || '—') + '</td><td>' + esc(r.source || '—') + '</td>'
-          + '<td>' + esc(fmtStamp(r.subscribed_at)) + '</td>';
+        ? cell(r.email, true) + cell(r.name) + cell(r.agency_name)
+          + cell(fmtStamp(r.unsubscribed_at))
+          + cell(r.unsubscribed_by === 'self' ? 'Themselves' : (r.unsubscribed_by ? 'Administrator' : ''))
+        : cell(r.email, true) + cell(r.name) + cell(r.agency_name)
+          + cell(r.source) + cell(fmtStamp(r.subscribed_at));
 
       // Plain buttons: kt-row-actions folds the last cell into a ⋮ on its own.
       var actions = mode === 'unsubscribed'
@@ -288,7 +303,9 @@
       return '<tr>' + cells + '<td>' + actions + '</td></tr>';
     }).join('');
 
-    return '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+    return '<div style="max-width:1080px;overflow-x:auto;">'
+      + '<table style="width:100%;table-layout:fixed;">' + cols
+      + '<thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
   }
 
   function loadSubs(container) {
