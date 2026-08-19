@@ -126,7 +126,7 @@
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1F6080 0%,#7C3AED 60%,#16637A 100%);' });
-    hero.innerHTML = '<div class="kt-hero-greet">📅 STAFF</div><h1>Calendar</h1><div class="kt-hero-sub">Schedule shifts for your educators. Click a day to add a shift, click a shift to edit or delete it.</div>';
+    hero.innerHTML = '<div class="kt-hero-greet">📅 AGENCY</div><h1>Calendar</h1><div class="kt-hero-sub">Click a day to add a shift, or any event to open it. Use + Add for closures, vacation holds, trips and conferences.</div>';
     wrap.appendChild(hero);
 
     var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:18px 0 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;' });
@@ -208,9 +208,12 @@
     rsel.addEventListener('change', function () { state.roleFilter = rsel.value; reload(calRoot); });
     toolbar.appendChild(rsel);
 
-    // + add shift
-    var add = Dom.el('button', { style: 'background:#1F6080;color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, '+ Add shift');
-    add.addEventListener('click', function () { openShiftModal(null, calRoot); });
+    // + Add — a menu now, because a shift is only one of the things that lands on a day.
+    var add = Dom.el('button', {
+      type: 'button', 'aria-haspopup': 'menu',
+      style: 'background:#1F6080;color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;',
+    }, '+ Add \u25be');
+    add.addEventListener('click', function (e) { e.stopPropagation(); openAddMenu(add, calRoot); });
     toolbar.appendChild(add);
   }
 
@@ -762,6 +765,108 @@
     return fmtDayLabel(d);
   }
 
+  /* ── The add menu ───────────────────────────────────────────────────────
+     Everything drawn on this calendar except a shift belongs to another screen. Each
+     entry sends you there with ?add=1 so that screen opens its own dialog, carrying
+     the day you were looking at (kt-addfrom.js does the opening).
+
+     `nav` is the hash the entry needs the user to actually have. A director who
+     cannot reach Conferences should not be offered a shortcut into a screen that
+     will turn them away, so entries whose screen is missing from the sidebar are not
+     drawn at all. */
+  var ADD_ITEMS = [
+    { icon: '🧑‍🏫', label: 'Shift',            sub: 'On this calendar',   shift: true },
+    { icon: '🚫',         label: 'Closure',          sub: 'Closures',           nav: 'closures' },
+    { icon: '🏖',         label: 'Vacation hold',    sub: 'Vacation holds',     nav: 'vacation-holds' },
+    { icon: '🚐',         label: 'Field trip',       sub: 'Field trips',        nav: 'field-trips' },
+    { icon: '🗣',         label: 'Conference slots', sub: 'Conferences',        nav: 'conferences' },
+    { icon: '🧒',         label: 'Child start date', sub: 'Children',           nav: ['children', 'admin-children', 'admin-families'], noDialog: true },
+  ];
+
+  /* The date a shortcut carries: the day the calendar is actually showing. In day view
+     that is the cursor. In week or month it is today when today is on screen, and the
+     first day shown otherwise — somebody who has paged forward to November and adds a
+     closure does not mean today. */
+  function addMenuDate() {
+    var today = ymd(new Date());
+    if (state.view === 'day') { return ymd(state.cursor); }
+    var start, end;
+    if (state.view === 'week') { start = startOfWeek(state.cursor); end = addDays(start, 6); }
+    else { start = startOfMonth(state.cursor); end = endOfMonth(state.cursor); }
+    var a = ymd(start), b = ymd(end);
+    return (today >= a && today <= b) ? today : a;
+  }
+
+  // Returns the first candidate the user actually has, or null. Takes a string or a
+  // list, because the same screen is reached by different hashes depending on role.
+  function hasScreen(hash) {
+    var list = (typeof hash === 'string') ? [hash] : (hash || []);
+    for (var i = 0; i < list.length; i++) {
+      if (document.querySelector('.app-sidebar a[href="#' + list[i] + '"], .sidebar-nav a[href="#' + list[i] + '"]')) {
+        return list[i];
+      }
+    }
+    return null;
+  }
+
+  function openAddMenu(anchor, calRoot) {
+    var existing = document.getElementById('kt-cal-addmenu');
+    if (existing) { existing.remove(); return; }        // second click closes it
+
+    var menu = Dom.el('div', {
+      id: 'kt-cal-addmenu',
+      style: 'position:fixed;z-index:1200;background:#fff;border:1px solid #E2E8F0;border-radius:12px;'
+        + 'box-shadow:0 12px 30px rgba(15,23,42,.16);padding:6px;min-width:236px;',
+    });
+
+    var when = addMenuDate();
+
+    ADD_ITEMS.forEach(function (it) {
+      var dest = it.nav ? hasScreen(it.nav) : null;
+      if (it.nav && !dest) { return; }
+      var row = Dom.el('button', {
+        type: 'button',
+        style: 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;'
+          + 'padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:#0D1B2A;',
+      });
+      row.addEventListener('mouseenter', function () { row.style.background = '#F1F5F9'; });
+      row.addEventListener('mouseleave', function () { row.style.background = 'none'; });
+      row.appendChild(Dom.el('span', { style: 'font-size:16px;width:22px;text-align:center;flex-shrink:0;' }, it.icon));
+      var col = Dom.el('div', { style: 'min-width:0;' });
+      col.appendChild(Dom.el('div', { style: 'font-weight:700;line-height:1.25;' }, it.label));
+      col.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;' }, it.sub));
+      row.appendChild(col);
+      row.addEventListener('click', function () {
+        menu.remove();
+        if (it.shift) { openShiftModal(null, calRoot); return; }
+        // noDialog: a start date is edited on a child's own record, so there is no add
+        // dialog to open — this is a way through to the right screen, nothing more.
+        window.location.hash = '#' + dest + (it.noDialog ? '' : '?add=1&date=' + when);
+      });
+      menu.appendChild(row);
+    });
+
+    document.body.appendChild(menu);
+
+    var r = anchor.getBoundingClientRect();
+    var mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8)) + 'px';
+    menu.style.top = (r.bottom + mh + 8 > window.innerHeight ? r.top - mh - 6 : r.bottom + 6) + 'px';
+
+    setTimeout(function () {
+      function away(e) {
+        if (menu.contains(e.target) || anchor.contains(e.target)) { return; }
+        menu.remove(); document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc2);
+      }
+      function esc2(e) {
+        if (e.key !== 'Escape') { return; }
+        menu.remove(); document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc2);
+      }
+      document.addEventListener('mousedown', away);
+      document.addEventListener('keydown', esc2);
+    }, 0);
+  }
+
   function openEventModal(ev, calRoot) {
     var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
     var canEdit = ev.kind === 'closure' && ev.closure_id;
@@ -1108,8 +1213,12 @@
 
   // ─── Shell registration ────────────────────────────────────────────
   if (Shell && Shell.registerScreen) {
-    Shell.registerScreen('agency_admin:staff-calendar',   render);
-    Shell.registerScreen('centre_director:staff-calendar', render);
+    // Both names. staff-calendar is in bookmarks, the quick-add menu and the search
+    // palette and must keep working; `calendar` is what this screen actually is now.
+    ['agency_admin', 'centre_director'].forEach(function (r) {
+      Shell.registerScreen(r + ':staff-calendar', render);
+      Shell.registerScreen(r + ':calendar', render);
+    });
   }
   KT.StaffCalendar = { render: render };
 })(window);

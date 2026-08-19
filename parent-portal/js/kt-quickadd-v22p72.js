@@ -22,7 +22,7 @@
     { id: 'field-trips',     label: 'Plan field trip',   icon: '🚐', hash: 'field-trips' },
     { id: 'lesson-plans',    label: 'Lesson plan',       icon: '📚', hash: 'lesson-plans' },
     { id: 'tickets',         label: 'Raise ticket',      icon: '🎫', hash: 'tickets' },
-    { id: 'staff-calendar',  label: 'Staff calendar',    icon: '📅', hash: 'staff-calendar' },
+    { id: 'staff-calendar',  label: 'Calendar',          icon: '📅', hash: 'staff-calendar' },
     { id: 'photos',          label: 'Upload photo',      icon: '📷', hash: 'photos' },
     { id: 'reports',         label: 'Reports',           icon: '📋', hash: 'reports' }
   ];

@@ -84,6 +84,7 @@
         { label: 'Overview', items: overviewItems },
         { label: 'Operations', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messenger',         icon: '💬', badgeKey: 'chat_unread' },
@@ -115,7 +116,6 @@
         ]},
         { label: 'Staff', items: [
           { hash: 'tasks',              label: 'Tasks',              icon: '📋' },
-          { hash: 'staff-calendar',     label: 'Calendar',           icon: '📅' },
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🛡' },
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🔄' },
@@ -232,6 +232,7 @@
         ]},
         { label: 'Operations', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'today',          label: 'Today',            icon: '✨' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
@@ -262,7 +263,6 @@
         ]},
         { label: 'Staff', items: [
           { hash: 'tasks',             label: 'Tasks',              icon: '📋' },
-          { hash: 'staff-calendar',    label: 'Calendar',           icon: '📅' },
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks', label: 'Background checks',  icon: '🛡' },
@@ -542,7 +542,8 @@
     'curriculum': 'Curriculum framework and coverage.',
     'hdlh-gaps': 'Where your programme is light against How Does Learning Happen.',
     'schedule': 'Who is working, and where.',
-    'staff-calendar': 'Shifts, leave and coverage across the team.',
+    'staff-calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',
+    'calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',
     'auto-signoff': 'Close shifts and days somebody forgot to close.',
     'late-events': 'Late arrivals and pick-ups awaiting a decision.',
     'billing-settings': 'Tax rate and other invoicing defaults.',

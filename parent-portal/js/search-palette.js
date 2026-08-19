@@ -29,7 +29,7 @@
   var SHORTCUTS = [
     { label: 'Dashboard',     icon: '🏠', hash: '#dashboard',          kbd: 'D' },
     { label: 'Marketing',     icon: '📣', hash: '#marketing-campaigns', kbd: 'M' },
-    { label: 'Staff calendar', icon: '📅', hash: '#staff-calendar',     kbd: 'C' },
+    { label: 'Calendar', icon: '📅', hash: '#staff-calendar',     kbd: 'C' },
     { label: 'Children',      icon: '🧒', hash: '#admin-children',     kbd: null },
     { label: 'Families',      icon: '👪', hash: '#admin-families',     kbd: null },
     { label: 'Centres',       icon: '🏫', hash: '#admin-centres',      kbd: null },
