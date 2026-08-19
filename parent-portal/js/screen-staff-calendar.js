@@ -402,9 +402,15 @@
     for (var i = 0; i < 7; i++) {
       var d = addDays(start, i);
       var isToday = ymd(d) === ymd(new Date());
-      var col = Dom.el('div', { style: 'padding:10px;text-align:center;border-left:1px solid #F3F4F6;' + (isToday ? 'background:#EFF6FF;' : '') });
+      var col = Dom.el('div', { style: 'padding:10px;text-align:center;border-left:1px solid #F3F4F6;'
+        + (isToday ? 'background:#EFF6FF;box-shadow:inset 0 2px 0 #1F6080;' : '') });
       col.appendChild(Dom.el('div', { style: 'font-size:10px;font-weight:700;letter-spacing:0.5px;color:#6B7280;text-transform:uppercase;' }, d.toLocaleDateString('en-CA', { weekday: 'short' })));
-      col.appendChild(Dom.el('div', { style: 'font-size:18px;font-weight:800;color:' + (isToday ? '#1F6080' : '#111827') + ';' }, String(d.getDate())));
+      col.appendChild(Dom.el('div', {
+        style: 'font-size:18px;font-weight:800;line-height:1.5;'
+          + (isToday
+              ? 'color:#fff;background:#1F6080;border-radius:999px;width:30px;height:30px;margin:0 auto;'
+              : 'color:#111827;'),
+      }, String(d.getDate())));
       header.appendChild(col);
     }
     grid.appendChild(header);
@@ -465,13 +471,27 @@
       var isToday = key === ymd(new Date());
       var dayShifts = (state.days[key] && state.days[key].shifts) || [];
       if (state.roleFilter) dayShifts = dayShifts.filter(function (s) { return s.role === state.roleFilter; });
-      var cell = Dom.el('div', { style: 'border:1px solid #F3F4F6;padding:6px;min-height:96px;cursor:pointer;background:' + (inMonth ? 'white' : '#FAFBFC') + ';position:relative;', 'data-date': key });
+      // Today is an accent, the way a calendar is read: a tinted cell and a ring, so the
+      // eye lands on it without reading a single date. A pill on the number alone is easy
+      // to miss in a grid of forty-two of them.
+      var cell = Dom.el('div', {
+        style: 'border:1px solid ' + (isToday ? '#93C5FD' : '#F3F4F6') + ';padding:6px;min-height:96px;cursor:pointer;'
+          + 'background:' + (isToday ? '#F5FAFF' : (inMonth ? 'white' : '#FAFBFC')) + ';position:relative;'
+          + (isToday ? 'box-shadow:inset 0 2px 0 #1F6080;' : ''),
+        'data-date': key,
+      });
       cell.addEventListener('click', function (e) {
         if (e.target === e.currentTarget || e.target.dataset.cellBg) {
           openShiftModal({ date: e.currentTarget.dataset.date }, calRoot);
         }
       });
-      cell.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:700;color:' + (isToday ? '#1F6080' : (inMonth ? '#374151' : '#9CA3AF')) + ';margin-bottom:4px;display:inline-block;padding:2px 6px;border-radius:6px;background:' + (isToday ? '#DBEAFE' : 'transparent') + ';' }, String(cursor.getDate())));
+      cell.appendChild(Dom.el('div', {
+        style: 'font-size:12px;font-weight:' + (isToday ? '800' : '700') + ';margin-bottom:4px;display:inline-block;'
+          + 'min-width:20px;text-align:center;padding:2px 6px;border-radius:999px;'
+          + (isToday
+              ? 'color:#fff;background:#1F6080;'
+              : 'color:' + (inMonth ? '#374151' : '#9CA3AF') + ';background:transparent;'),
+      }, String(cursor.getDate())));
       var hint = Dom.el('div', { 'data-cell-bg': '1', style: 'position:absolute;inset:0;' });
       cell.appendChild(hint);
       ((state.timeOff && state.timeOff[key]) || []).slice(0, 2).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
@@ -616,10 +636,20 @@
       anything = true;
 
       var isToday = key === todayKey;
-      var dayBox = Dom.el('div', { style: 'margin:0 0 12px;' });
+      // Days that have already happened are still worth having — you look up what was
+      // meant to happen yesterday — but they should not compete with what is still to
+      // come. So they recede rather than disappear, and today gets an accent rail.
+      var isPast = key < todayKey;
+      var dayBox = Dom.el('div', {
+        style: 'margin:0 0 12px;'
+          + (isToday ? 'border-left:3px solid #1F6080;padding-left:9px;margin-left:-12px;' : '')
+          + (isPast ? 'opacity:.5;' : ''),
+      });
       dayBox.appendChild(Dom.el('div', {
-        style: 'font-size:12.5px;font-weight:800;color:' + (isToday ? '#1F6080' : '#0D1B2A') + ';margin:0 0 5px;'
-          + (isToday ? 'background:#DBEAFE;display:inline-block;padding:1px 8px;border-radius:6px;' : ''),
+        style: 'font-size:12.5px;font-weight:800;margin:0 0 5px;'
+          + (isToday
+              ? 'color:#fff;background:#1F6080;display:inline-block;padding:2px 9px;border-radius:999px;'
+              : 'color:' + (isPast ? '#94A3B8' : '#0D1B2A') + ';'),
       }, d.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' }) + (isToday ? ' · today' : '')));
 
       evs.forEach(function (ev) {
