@@ -104,6 +104,11 @@ class AutoSignOffCommand extends Command
                     'source' => 'auto',
                     'notes' => trim((string) ($p->notes ?? '') . ' [auto sign-off: no clock-out recorded]'),
                 ]);
+
+                // Deliberately NOT written to daily_events: that table is keyed on a
+                // child (child_id is NOT NULL), and filing an educator's clock-out against
+                // some arbitrary child would put a false entry on a real child's day. The
+                // punch carries the marker, and the admin digest reports it.
             }
             $n++;
         }
@@ -157,10 +162,62 @@ class AutoSignOffCommand extends Command
                     'notes' => 'Auto sign-off — no check-out was recorded.',
                     'created_at' => now(),
                 ]);
+
+                // And on the day's log, where people actually look. Without this an
+                // automatically closed day is indistinguishable from a properly closed one
+                // to everyone except whoever opens the timesheet.
+                $this->logToDay(
+                    (int) $childId,
+                    $e->room_id ? (int) $e->room_id : null,
+                    $cutoff->clone()->utc(),
+                    'Signed out automatically at ' . $cutoff->format('g:i A')
+                        . ' — no sign-out was recorded. Please sign children out at pickup so the day is accurate.'
+                );
             }
             $n++;
         }
         return $n;
+    }
+
+    /**
+     * A line on a child's day. daily_events.event_type is an ENUM, so 'note' is used
+     * rather than inventing a value the column would reject outright.
+     */
+    private function logToDay(int $childId, ?int $roomId, Carbon $occurredAtUtc, string $text): void
+    {
+        try {
+            // room_id and recorded_by_id are NOT NULL. The entry is attributed to whoever
+            // checked this child IN — the person who should have signed them out, and the
+            // one a director needs to see against it. Without a room or a user there is
+            // nothing honest to write, so nothing is written.
+            $lastIn = DB::table('check_events')->where('child_id', $childId)
+                ->where('event_type', 'check_in')->orderByDesc('occurred_at')
+                ->first(['room_id', 'by_user_id', 'recorded_by_id']);
+            $roomId = $roomId ?: ($lastIn->room_id ?? null);
+            $by = $lastIn->recorded_by_id ?? $lastIn->by_user_id ?? null;
+            if (! $roomId || ! $by) {
+                return;
+            }
+
+            DB::table('daily_events')->insert([
+                'child_id' => $childId,
+                'room_id' => $roomId,
+                'recorded_by_id' => $by,
+                'event_type' => 'note',
+                'occurred_at' => $occurredAtUtc,
+                // NOT NULL, and worth carrying properly: a reader can then tell an
+                // automatic closure from a typed note without parsing the sentence.
+                'payload' => json_encode(['auto_sign_off' => true, 'reason' => 'no_sign_out_recorded']),
+                'notes' => $text,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // A log line is not worth failing the sign-off it describes.
+            \Illuminate\Support\Facades\Log::warning('Auto sign-off day-log failed', [
+                'child' => $childId, 'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /** The configured HH:MM on the date the punch or check-in started, in agency time. */

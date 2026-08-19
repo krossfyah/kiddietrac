@@ -145,6 +145,61 @@ class EducatorDailySummaryCommand extends Command
      * and inventing an alarm from an absence of data is how a safeguarding signal
      * becomes noise people learn to ignore.
      */
+    /**
+     * Children in this educator's rooms whose last event today was a check-IN.
+     *
+     * The last event decides it, not the presence of a check-out: a child who left and
+     * came back has both, and counting check-outs would call them absent.
+     *
+     * @return string[] child names
+     */
+    private function childrenStillSignedIn(int $educatorId, string $tz, Carbon $date): array
+    {
+        $start = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc();
+        $end = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
+
+        // Rooms first where they are assigned — but educator_rooms is empty across this
+        // deployment, so a query resting on it alone reports nothing for everyone. The
+        // centre on role_assignments is the fallback the rest of this command already
+        // relies on, and it is what actually resolves.
+        $roomIds = DB::table('educator_rooms')->where('user_id', $educatorId)->pluck('room_id')->all();
+
+        $q = DB::table('check_events as e')
+            ->join('children as ch', 'ch.id', '=', 'e.child_id')
+            ->whereBetween('e.occurred_at', [$start, $end])
+            ->whereNull('ch.deleted_at');
+
+        if ($roomIds) {
+            $q->whereIn('e.room_id', $roomIds);
+        } else {
+            $centreIds = DB::table('role_assignments')->where('user_id', $educatorId)
+                ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
+            if (! $centreIds) {
+                return [];
+            }
+            // Through the family, the same join the narrative uses.
+            $q->join('families as f', 'f.id', '=', 'ch.family_id')->whereIn('f.centre_id', $centreIds);
+        }
+
+        $events = $q->orderBy('e.occurred_at')
+            ->get(['e.child_id', 'e.event_type', 'ch.first_name', 'ch.last_name']);
+
+        $last = [];
+        foreach ($events as $ev) {
+            $last[$ev->child_id] = $ev;
+        }
+
+        $out = [];
+        foreach ($last as $ev) {
+            if ($ev->event_type === 'check_in') {
+                $out[] = trim($ev->first_name . ' ' . ($ev->last_name ?? ''));
+            }
+        }
+        sort($out);
+
+        return $out;
+    }
+
     private function awayToday(int $educatorId, string $tz, Carbon $date): array
     {
         $out = ['expected_absent' => [], 'reported' => []];
@@ -828,6 +883,30 @@ class EducatorDailySummaryCommand extends Command
             'With thanks,', 'Gratefully,', 'In appreciation,', 'With real thanks,',
             'Thank you, sincerely,', 'With admiration,', 'Very best,',
         ]);
+        // Children who never got signed out. This email lands in the evening, which is
+        // the last moment the person who was there can still put it right from memory —
+        // by tomorrow it is a guess, and an auto sign-off will already have stamped a
+        // time that nobody witnessed.
+        try {
+            $stillIn = $this->childrenStillSignedIn((int) ($ed->id ?? 0), $tz, $date);
+            if ($stillIn) {
+                $names = implode(', ', array_map(fn ($c) => e($c), array_slice($stillIn, 0, 12)));
+                $more = count($stillIn) > 12 ? ' and ' . (count($stillIn) - 12) . ' more' : '';
+                $body .= '<div class="kt-panel" style="background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;'
+                    . 'border-radius:0 12px 12px 0;padding:15px 17px;margin:18px 0 4px;">'
+                    . '<div style="font-size:15px;font-weight:800;color:#991B1B;margin:0 0 6px;">'
+                    . '🚸 ' . count($stillIn) . ' ' . (count($stillIn) === 1 ? 'child is' : 'children are')
+                    . ' still signed in</div>'
+                    . '<div style="font-size:13.5px;color:#7F1D1D;line-height:1.55;">' . $names . $more . '</div>'
+                    . '<div style="font-size:13px;color:#0F172A;line-height:1.55;margin-top:7px;">'
+                    . '<strong>Please sign them out now if they have gone home.</strong> '
+                    . 'Attendance and ratio records are built from these times, and a day left open '
+                    . 'is closed automatically later with a time nobody witnessed.</div></div>';
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Educator summary: still-signed-in check failed', ['error' => $e->getMessage()]);
+        }
+
         // Anything not set up for next week, said loudly enough to act on. Placed ABOVE
         // the recap: the rest of this email is what already happened and cannot be
         // changed, and this is the only part with something to do in it.

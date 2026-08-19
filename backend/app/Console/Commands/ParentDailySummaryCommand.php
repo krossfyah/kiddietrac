@@ -616,6 +616,19 @@ class ParentDailySummaryCommand extends Command
                 EmailTemplate::statTile('Signed in', $in, $inBy ? 'by ' . $inBy : '', '#16A34A'),
                 EmailTemplate::statTile('Signed out', $out, $outBy ? 'by ' . $outBy : '', '#1F6080')
             );
+
+            // "Still at the centre" on an evening email is not a status, it is a missed
+            // sign-out — and a parent reading it at home knows that better than anyone.
+            // Saying so, and saying who fixes it, turns a confusing line into an action.
+            if ($day['check_in'] && ! $day['check_out']) {
+                $body .= '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-left:4px solid #F59E0B;'
+                    . 'border-radius:0 12px 12px 0;padding:13px 15px;margin:4px 0 16px;">'
+                    . '<div style="font-size:14px;font-weight:800;color:#92400E;">No sign-out was recorded today</div>'
+                    . '<div style="font-size:13px;color:#78350F;line-height:1.55;margin-top:3px;">'
+                    . 'This is almost always a missed tap at pickup rather than anything to worry about. '
+                    . 'Your centre has been told and will correct the record — mention it to them if it keeps happening.'
+                    . '</div></div>';
+            }
         }
 
         // Late pickup — a factual, non-scolding note. Shows minutes over and the fee

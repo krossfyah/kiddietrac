@@ -1,0 +1,39 @@
+A child left signed in is said plainly, and an automatic sign-off leaves a trace
+
+Three related gaps around a day that was never closed properly.
+
+THE EDUCATOR is now told, in the evening summary, which children are still showing as
+signed in - by name. That email lands at the one moment the person who was there can still
+correct it from memory; by tomorrow it is a guess, and an automatic sign-off will already
+have stamped a time nobody witnessed.
+
+THE PARENT email said "Still at the centre", which reads as a status rather than a
+mistake - a parent who collected their child at four knows it is wrong but not what to do.
+It now names it as a missed sign-out, says the centre has been told, and asks them to
+mention it if it recurs.
+
+THE DAILY LOG records an automatic sign-off, which it never did. The closure was already
+marked on the punch and on the check-out event, but neither surfaces in the log that
+educators, parents and directors actually read - so a day closed by the system looked
+exactly like one closed properly.
+
+Three things had to be got right for that last part, and each would have failed silently:
+
+  * daily_events has child_id, room_id, recorded_by_id AND payload all NOT NULL. The first
+    version supplied none of the last three, so every insert would have thrown into its own
+    try/catch and logged nothing - the guard meant to stop a log line failing a sign-off
+    would instead have hidden that the feature never worked. Proved with a real insert
+    before shipping.
+  * The entry is attributed to whoever checked that child IN: the person who should have
+    signed them out, and the one a director needs to see against it.
+  * The educator equivalent is NOT written. daily_events is keyed on a child, and filing a
+    staff clock-out against an arbitrary child would put a false entry on a real child day.
+
+The still-signed-in query originally rested on educator_rooms, which is EMPTY for every
+educator here - so it would have reported nothing for everyone while appearing to work. It
+falls back to the centre on role_assignments, the same path the rest of the command uses.
+
+Verified end to end: the educator at a centre with three outstanding children gets them by
+name; the educator at a centre with none gets no panel.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
