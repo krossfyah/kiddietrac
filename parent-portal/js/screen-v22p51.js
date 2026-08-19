@@ -719,6 +719,12 @@
   }
 
   // ============================ SMS ============================
+  // The agency's own word for a facility — Centre, Provider or Room. KT.term() does
+  // not exist; kt-term exposes centreWord(plural, lower).
+  function _cw(plural, lower) {
+    return (window.KT && KT.centreWord) ? KT.centreWord(plural, lower) : (plural ? 'Centres' : 'Centre');
+  }
+
   async function renderSms(main) {
     // The fields used to be stacked full-width labels of differing widths, which made
     // the form look ragged. One card, one column of aligned rows: label left, control
@@ -728,8 +734,17 @@
         <div style="display:grid;grid-template-columns:120px 1fr;gap:12px 14px;align-items:center;">
           <label for="sms-aud" style="font-size:13px;font-weight:600;color:#334155;">Audience</label>
           <select id="sms-aud" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;">
-            <option value="role">By role</option><option value="centre">By centre</option><option value="agency">Whole agency</option>
+            <option value="role">By role</option>
+            <option value="centre">By ${_cw(false, true)}</option>
+            <option value="room">By room</option>
+            <option value="agency">Whole agency</option>
           </select>
+
+          <label for="sms-centre" id="sms-centre-l" style="font-size:13px;font-weight:600;color:#334155;">${_cw()}</label>
+          <select id="sms-centre" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;"></select>
+
+          <label for="sms-room" id="sms-room-l" style="font-size:13px;font-weight:600;color:#334155;">Room</label>
+          <select id="sms-room" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;"></select>
 
           <label for="sms-role" id="sms-role-l" style="font-size:13px;font-weight:600;color:#334155;">Role</label>
           <select id="sms-role" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;">
@@ -764,17 +779,66 @@
     const aud = document.getElementById('sms-aud');
     const roleRow = document.getElementById('sms-role-l');
     const roleSel = document.getElementById('sms-role');
+    const centreRow = document.getElementById('sms-centre-l');
+    const centreSel = document.getElementById('sms-centre');
+    const roomRow = document.getElementById('sms-room-l');
+    const roomSel = document.getElementById('sms-room');
+
+    // Only the picker the chosen audience needs is on screen. Showing all three invites
+    // somebody to set a room and then send to the whole agency anyway.
     const syncRole = () => {
-      const show = aud.value === 'role';
-      roleRow.style.display = show ? '' : 'none';
-      roleSel.style.display = show ? '' : 'none';
+      const show = (el, on) => { el.style.display = on ? '' : 'none'; };
+      show(roleRow, aud.value === 'role');   show(roleSel, aud.value === 'role');
+      show(centreRow, aud.value === 'centre' || aud.value === 'room');
+      show(centreSel, aud.value === 'centre' || aud.value === 'room');
+      show(roomRow, aud.value === 'room');   show(roomSel, aud.value === 'room');
     };
     aud.addEventListener('change', syncRole);
     syncRole();
 
+    // Centres, then the rooms of whichever centre is selected.
+    let centres = [];
+    try {
+      const cr = await Api.get('/director/centres');
+      centres = cr.centres || cr.data || (Array.isArray(cr) ? cr : []);
+    } catch (e) { centres = []; }
+    centreSel.innerHTML = centres.length
+      ? centres.map(c => `<option value="${c.id}">${(c.name || ('#' + c.id))}</option>`).join('')
+      : '<option value="">None available</option>';
+
+    // Every room in the agency, each carrying its centre_id, fetched once. NOT
+    // /director/rooms — that one resolves the centre from the signed-in user and ignores
+    // the centre_id you ask for, so picking a second centre would offer the first
+    // centre's rooms.
+    let allRooms = [];
+    try {
+      const rr = await Api.get('/provider/educator-rooms');
+      allRooms = rr.rooms || [];
+    } catch (e) { allRooms = []; }
+
+    function loadRooms() {
+      const mine = allRooms.filter(r => String(r.centre_id) === String(centreSel.value));
+      roomSel.innerHTML = mine.length
+        ? mine.map(r => `<option value="${r.id}">${(r.name || ('#' + r.id))}</option>`).join('')
+        : '<option value="">No rooms here</option>';
+    }
+    centreSel.addEventListener('change', loadRooms);
+    loadRooms();
+
     document.getElementById('sms-send').onclick = async () => {
       const payload = { audience: aud.value, body: body.value, category: 'broadcast' };
       if (aud.value === 'role') payload.role = roleSel.value;
+      // Send the id the audience needs. Without this, "by centre" reached everybody.
+      if (aud.value === 'centre') payload.centre_id = parseInt(centreSel.value, 10) || null;
+      if (aud.value === 'room') {
+        payload.centre_id = parseInt(centreSel.value, 10) || null;
+        payload.room_id = parseInt(roomSel.value, 10) || null;
+      }
+      if ((aud.value === 'centre' && !payload.centre_id) || (aud.value === 'room' && !payload.room_id)) {
+        document.getElementById('sms-msg').innerHTML =
+          '<span style="color:#B91C1C;">Choose which one to send to first.</span>';
+        return;
+      }
       try {
         const r = await Api.post('/admin/sms/broadcast', payload);
         document.getElementById('sms-msg').innerHTML = `<span style="color:#047857;">Sent ${r.sent} · skipped ${r.skipped} · total ${r.total}</span>`;

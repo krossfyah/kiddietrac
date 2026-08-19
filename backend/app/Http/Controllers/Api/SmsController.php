@@ -30,13 +30,35 @@ final class SmsController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $this->assertAgencyAccess($request, $agencyId);
         $data = $request->validate([
-            'audience' => 'required|string|in:centre,agency,family,role',
+            'audience' => 'required|string|in:centre,room,agency,family,role',
             'centre_id' => 'nullable|integer',
+            'room_id'  => 'nullable|integer',
             'family_id' => 'nullable|integer',
             'role'     => 'nullable|string',
             'body'     => 'required|string|max:300',
             'category' => 'nullable|string|max:40',
         ]);
+        // A narrowing audience without the thing to narrow BY used to fall through to
+        // "everyone in the agency". On a paid channel that turns a message for one room
+        // into a message for every family the agency has. Refuse it instead.
+        $needs = ['centre' => 'centre_id', 'room' => 'room_id', 'family' => 'family_id'];
+        if (isset($needs[$data['audience']]) && empty($data[$needs[$data['audience']]])) {
+            return response()->json([
+                'message' => 'Choose which one to send to before sending.',
+                'errors' => [$needs[$data['audience']] => ['Required for this audience.']],
+            ], 422);
+        }
+
+        // The centre or room must belong to THIS agency — the ids arrive from the client.
+        if (! empty($data['centre_id'])) {
+            abort_unless(DB::table('centres')->where('id', $data['centre_id'])
+                ->where('agency_id', $agencyId)->exists(), 403, 'Unknown centre.');
+        }
+        if (! empty($data['room_id'])) {
+            abort_unless(DB::table('rooms as r')->join('centres as c', 'c.id', '=', 'r.centre_id')
+                ->where('r.id', $data['room_id'])->where('c.agency_id', $agencyId)->exists(), 403, 'Unknown room.');
+        }
+
         $recipients = $this->resolveRecipients($agencyId, $data);
         $sent = 0; $skipped = 0;
         foreach ($recipients as $r) {
@@ -75,10 +97,32 @@ final class SmsController extends Controller
         if ($data['audience'] === 'centre' && !empty($data['centre_id'])) {
             $q->where('ra.centre_id', $data['centre_id']);
         }
+        // `guardians` is the family-to-user link. This joined `family_users`, which does
+        // not exist on this database, so every family broadcast was a 500.
         if ($data['audience'] === 'family' && !empty($data['family_id'])) {
-            $q->join('family_users as fu', 'fu.user_id', '=', 'u.id')
-              ->where('fu.family_id', $data['family_id']);
+            $q->join('guardians as g', 'g.user_id', '=', 'u.id')
+              ->where('g.family_id', $data['family_id']);
         }
+
+        // A room means the people in it: the educators assigned to it, and the guardians
+        // of the children enrolled in it. Anything less is not who you meant.
+        if ($data['audience'] === 'room' && !empty($data['room_id'])) {
+            $roomId = (int) $data['room_id'];
+
+            $educators = DB::table('educator_rooms')->where('room_id', $roomId)->pluck('user_id');
+            $guardians = DB::table('enrollments as e')
+                ->join('children as ch', 'ch.id', '=', 'e.child_id')
+                ->join('guardians as g', 'g.family_id', '=', 'ch.family_id')
+                ->where('e.room_id', $roomId)
+                ->whereNull('ch.deleted_at')
+                ->where(function ($w) {
+                    $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', now()->toDateString());
+                })
+                ->pluck('g.user_id');
+
+            $q->whereIn('u.id', $educators->merge($guardians)->unique()->values()->all() ?: [0]);
+        }
+
         return $q->get();
     }
 

@@ -58,7 +58,7 @@
       return c.name || '';
     };
     // "Centre" is called something else in some agencies — providers here.
-    const centreWord = (window.KT && KT.term) ? KT.term('centre') : 'Centre';
+    const centreWord = (window.KT && KT.centreWord) ? KT.centreWord() : 'Centre';
     const meals = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'];
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const thisMonday = _mondayOf(new Date());
