@@ -433,7 +433,7 @@
       // Birthdays, absences, vacations and closures. These were added to the month view
       // only on the first pass, and week is the default view — so the whole feature was
       // invisible to anyone who had not switched to month.
-      overlaysFor(key).forEach(function (ev) { cell.appendChild(overlayChip(ev)); });
+      overlaysFor(key).forEach(function (ev) { cell.appendChild(overlayChip(ev, calRoot)); });
       dayShifts.forEach(function (s) { cell.appendChild(renderShiftPill(s, calRoot)); });
       body.appendChild(cell);
     }
@@ -471,7 +471,7 @@
       cell.appendChild(hint);
       ((state.timeOff && state.timeOff[key]) || []).slice(0, 2).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
       // Closures first — a closed day changes what every other chip on it means.
-      overlaysFor(key).slice(0, 3).forEach(function (ev) { cell.appendChild(overlayChip(ev)); });
+      overlaysFor(key).slice(0, 3).forEach(function (ev) { cell.appendChild(overlayChip(ev, calRoot)); });
       if (overlaysFor(key).length > 3) {
         cell.appendChild(Dom.el('div', { style: 'font-size:10px;color:#64748B;position:relative;z-index:1;' }, '+ ' + (overlaysFor(key).length - 3) + ' more'));
       }
@@ -512,15 +512,15 @@
 
   function overlaysFor(key) { return (state.overlays && state.overlays[key]) || []; }
 
-  function overlayChip(ev) {
+  function overlayChip(ev, calRoot) {
     var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
-    return Dom.el('div', {
+    return attachEventClick(Dom.el('div', {
       title: [(ev.icon || '') + ' ' + (ev.title || '') + (ev.detail ? ' — ' + ev.detail : '')]
         .concat(overlayExtraLines(ev)).join('\n'),
-      style: 'position:relative;z-index:1;background:' + t.bg + ';border-left:3px solid ' + t.bar + ';'
+      style: 'position:relative;z-index:2;background:' + t.bg + ';border-left:3px solid ' + t.bar + ';'
         + 'border-radius:5px;padding:3px 6px;margin-bottom:3px;font-size:11px;font-weight:700;'
         + 'color:' + t.fg + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
-    }, (ev.icon || '') + ' ' + (ev.title || ''));
+    }, (ev.icon || '') + ' ' + (ev.title || '')), ev, calRoot);
   }
 
   /* ── Day view ──────────────────────────────────────────────────────────
@@ -551,7 +551,7 @@
             style: 'font-size:11.5px;color:' + t.fg + ';opacity:' + (i === 0 ? '.8' : '.65') + ';margin-top:1px;line-height:1.45;',
           }, line));
         });
-        list.appendChild(row);
+        list.appendChild(attachEventClick(row, ev, calRoot));
       });
       wrap.appendChild(list);
     }
@@ -629,7 +629,7 @@
             style: 'font-size:11px;color:' + t.fg + ';opacity:' + (i === 0 ? '.8' : '.65') + ';line-height:1.4;',
           }, line));
         });
-        dayBox.appendChild(r);
+        dayBox.appendChild(attachEventClick(r, ev, calRoot));
       });
 
       offs.forEach(function (o) { dayBox.appendChild(timeOffChip(o)); });
@@ -672,6 +672,241 @@
   }
 
   // ─── Shift modal (create/edit) ─────────────────────────────────────
+  /* ── Event pop-out ──────────────────────────────────────────────────────
+     A calendar is expected to open what you click. These chips could only be
+     hovered for a tooltip, which is no use on a touch screen and hides the detail
+     the row already knows from everybody else.
+
+     Closures are the only overlay this screen owns, so they are the only kind that
+     edits here. The others link to the screen that owns them — a second editor for
+     time off or vacation holds would only drift from the real one. */
+  var EVENT_HOME = {
+    closure:  { hash: 'closures',           label: 'Closures' },
+    timeoff:  { hash: 'time-off',           label: 'Time off requests' },
+    vacation: { hash: 'vacation-holds',     label: 'Vacation holds' },
+    absence:  { hash: 'attendance-pattern', label: 'Attendance' },
+    birthday: { hash: 'children',           label: 'Children' },
+  };
+
+  var CLOSURE_TYPES = [
+    ['holiday', 'Holiday'], ['pd_day', 'PD day'], ['emergency', 'Emergency'],
+    ['renovation', 'Renovation'], ['other', 'Other'],
+  ];
+
+  var KIND_LABEL = {
+    closure: 'Closure', timeoff: 'Staff time off', vacation: 'Family vacation',
+    absence: 'Child absence', birthday: 'Birthday',
+  };
+
+  function attachEventClick(el, ev, calRoot) {
+    el.style.cursor = 'pointer';
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    // The cell underneath opens the new-shift form, and the month grid drag-selects
+    // from mousedown — both have to be held off or clicking an event does two things.
+    el.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openEventModal(ev, calRoot);
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault(); e.stopPropagation();
+        openEventModal(ev, calRoot);
+      }
+    });
+    return el;
+  }
+
+  function clearNode(el) { while (el.firstChild) { el.removeChild(el.firstChild); } }
+
+  function fullDayLabel(d) {
+    // Date-only, formatted from its own parts — see KT.dayLabel. Parsed, it lands on
+    // the day before anywhere west of UTC.
+    if (window.KT && KT.dayLabel) { return KT.dayLabel(d); }
+    return fmtDayLabel(d);
+  }
+
+  function openEventModal(ev, calRoot) {
+    var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
+    var canEdit = ev.kind === 'closure' && ev.closure_id;
+
+    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;' });
+    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;max-width:480px;width:100%;box-shadow:0 12px 36px rgba(0,0,0,.25);max-height:calc(100vh - 48px);overflow-y:auto;' });
+    overlay.appendChild(modal);
+
+    function close() {
+      document.removeEventListener('keydown', onEsc);
+      overlay.remove();
+    }
+    function onEsc(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onEsc);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+
+    function header(titleText, subText) {
+      var head = Dom.el('div', { style: 'background:' + t.bg + ';border-left:5px solid ' + t.bar + ';border-radius:14px 14px 0 0;padding:18px 20px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;' });
+      var col = Dom.el('div', { style: 'min-width:0;' });
+      col.appendChild(Dom.el('div', { style: 'font-size:17px;font-weight:800;color:' + t.fg + ';line-height:1.25;' }, titleText));
+      if (subText) {
+        col.appendChild(Dom.el('div', { style: 'font-size:13px;color:' + t.fg + ';opacity:.85;margin-top:3px;line-height:1.4;' }, subText));
+      }
+      head.appendChild(col);
+      var x = Dom.el('button', { type: 'button', 'aria-label': 'Close', style: 'background:transparent;border:none;font-size:22px;line-height:1;color:' + t.fg + ';opacity:.6;cursor:pointer;padding:0 2px;flex-shrink:0;' }, '×');
+      x.addEventListener('click', close);
+      head.appendChild(x);
+      return head;
+    }
+
+    function showDetails() {
+      clearNode(modal);
+      modal.appendChild(header((ev.icon || '') + ' ' + (ev.title || 'Event'), ev.detail || ''));
+
+      var body = Dom.el('div', { style: 'padding:14px 20px 4px;' });
+      var fact = function (label, value) {
+        if (value == null || value === '') { return; }
+        var r = Dom.el('div', { style: 'display:flex;gap:12px;padding:7px 0;border-bottom:1px solid #F1F5F9;' });
+        r.appendChild(Dom.el('div', { style: 'flex:0 0 104px;font-size:12px;font-weight:700;color:#64748B;' }, label));
+        r.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;font-size:13px;color:#0D1B2A;line-height:1.45;' }, String(value)));
+        body.appendChild(r);
+      };
+
+      // A multi-day event says so; a single day needs no range spelled out.
+      var when = (ev.starts_on && ev.ends_on && ev.ends_on !== ev.starts_on)
+        ? fmtRange(ev.starts_on, ev.ends_on)
+        : fullDayLabel(ev.starts_on || ev.date);
+      fact('When', when);
+      fact('Kind', ev.type_label || KIND_LABEL[ev.kind] || ev.kind);
+      fact('Centre', ev.centre_name);
+      if (ev.kind === 'closure') {
+        // affects_billing TRUE means billing is paused — the checkbox that sets it
+        // reads "Pause billing on these days".
+        fact('Billing', ev.affects_billing
+          ? 'Paused for these days'
+          : 'Unchanged — adjusted if the agreement with the family calls for it');
+      }
+      if (ev.added_by || ev.added_at) {
+        fact('Added', (ev.added_by || 'Unknown')
+          + (ev.added_at ? ' · ' + fmtStamp(ev.added_at) : ''));
+      }
+      modal.appendChild(body);
+
+      var foot = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px 18px;margin-top:8px;border-top:1px solid #E5E7EB;' });
+      var left = Dom.el('div', { style: 'display:flex;gap:8px;' });
+      var right = Dom.el('div', { style: 'display:flex;gap:8px;' });
+
+      if (canEdit) {
+        var del = Dom.el('button', { type: 'button', style: 'background:white;color:#DC2626;border:1px solid #DC2626;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Delete');
+        del.addEventListener('click', async function () {
+          var ok = await KT.confirm('Delete this closure? Everyone who was told about it will be told it has been removed.');
+          if (!ok) { return; }
+          del.disabled = true; del.textContent = 'Deleting…';
+          Api.delete('/operations/closures/' + ev.closure_id).then(function () {
+            close(); reload(calRoot);
+          }).catch(function (e) {
+            del.disabled = false; del.textContent = 'Delete';
+            if (KT.toast) KT.toast('⚠️', 'Could not delete', (e && e.message) || 'Please try again.', '#B91C1C');
+          });
+        });
+        left.appendChild(del);
+      }
+
+      // Where this kind of event actually lives, for anything this screen does not own.
+      var home = EVENT_HOME[ev.kind];
+      if (home && !canEdit) {
+        var go = Dom.el('button', { type: 'button', style: 'background:white;color:#1F6080;border:1px solid #CBD5E1;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Open ' + home.label);
+        go.addEventListener('click', function () { close(); window.location.hash = '#' + home.hash; });
+        right.appendChild(go);
+      }
+      if (canEdit) {
+        var edit = Dom.el('button', { type: 'button', style: 'background:white;color:#1F6080;border:1px solid #CBD5E1;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Edit');
+        edit.addEventListener('click', showEdit);
+        right.appendChild(edit);
+      }
+      var closeBtn = Dom.el('button', { type: 'button', style: 'background:#1F6080;color:white;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Close');
+      closeBtn.addEventListener('click', close);
+      right.appendChild(closeBtn);
+
+      foot.appendChild(left);
+      foot.appendChild(right);
+      modal.appendChild(foot);
+    }
+
+    function showEdit() {
+      clearNode(modal);
+      modal.appendChild(header('✏️ Edit closure', ev.centre_name || ''));
+
+      var body = Dom.el('div', { style: 'padding:16px 20px 0;' });
+
+      var typeSel = Dom.el('select', { style: inputStyle() });
+      CLOSURE_TYPES.forEach(function (p) {
+        var o = Dom.el('option', { value: p[0] }, p[1]);
+        if (p[0] === ev.closure_type) { o.selected = true; }
+        typeSel.appendChild(o);
+      });
+      body.appendChild(labelEl('Type'));
+      body.appendChild(typeSel);
+
+      var startIn = Dom.el('input', { type: 'date', value: ev.starts_on || ev.date || '', style: inputStyle() });
+      body.appendChild(labelEl('First day closed'));
+      body.appendChild(startIn);
+
+      var endIn = Dom.el('input', { type: 'date', value: ev.ends_on || '', style: inputStyle() });
+      body.appendChild(labelEl('Last day closed (leave empty for a single day)'));
+      body.appendChild(endIn);
+
+      var reasonIn = Dom.el('input', { type: 'text', maxlength: '200', value: ev.reason || '', placeholder: 'e.g. Civic Holiday', style: inputStyle() });
+      body.appendChild(labelEl('Reason'));
+      body.appendChild(reasonIn);
+
+      var billLbl = Dom.el('label', { style: 'display:flex;align-items:center;gap:9px;font-size:13px;color:#374151;font-weight:600;margin:2px 0 4px;cursor:pointer;' });
+      var bill = Dom.el('input', { type: 'checkbox', style: 'width:16px;height:16px;accent-color:#1F6080;margin:0;' });
+      bill.checked = !!ev.affects_billing;
+      billLbl.appendChild(bill);
+      billLbl.appendChild(Dom.el('span', {}, 'Pause billing on these days'));
+      body.appendChild(billLbl);
+
+      var msg = Dom.el('div', { style: 'font-size:12.5px;color:#B91C1C;font-weight:600;min-height:17px;margin-top:8px;' });
+      body.appendChild(msg);
+      modal.appendChild(body);
+
+      var foot = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px 18px;border-top:1px solid #E5E7EB;margin-top:10px;' });
+      var cancel = Dom.el('button', { type: 'button', style: 'background:white;color:#374151;border:1px solid #CBD5E1;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Cancel');
+      cancel.addEventListener('click', showDetails);
+      var save = Dom.el('button', { type: 'button', style: 'background:#1F6080;color:white;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save changes');
+      save.addEventListener('click', function () {
+        msg.textContent = '';
+        if (!startIn.value) { msg.textContent = 'Pick the first day closed.'; return; }
+        // Checked here as well as on the server: a range that ends before it starts is
+        // worth saying plainly rather than coming back as a validation error.
+        if (endIn.value && endIn.value < startIn.value) {
+          msg.textContent = 'The last day cannot be before the first day.';
+          return;
+        }
+        save.disabled = true; save.textContent = 'Saving…';
+        Api.patch('/operations/closures/' + ev.closure_id, {
+          closure_type: typeSel.value,
+          closure_date: startIn.value,
+          end_date: (endIn.value && endIn.value !== startIn.value) ? endIn.value : null,
+          reason: reasonIn.value.trim() || null,
+          affects_billing: bill.checked,
+        }).then(function () {
+          close();
+          reload(calRoot);
+          if (KT.toast) { KT.toast('✅', 'Closure updated', 'Everyone affected has been told it changed.', '#1E8E60'); }
+        }).catch(function (e) {
+          save.disabled = false; save.textContent = 'Save changes';
+          msg.textContent = (e && e.message) || 'Could not save. Please try again.';
+        });
+      });
+      foot.appendChild(cancel);
+      foot.appendChild(save);
+      modal.appendChild(foot);
+    }
+
+    showDetails();
+    document.body.appendChild(overlay);
+  }
+
   function openShiftModal(prefill, calRoot) {
     var isEdit = prefill && prefill.id;
     var hasRange = prefill && prefill.dateRange && prefill.dateRange.start && prefill.dateRange.end;
