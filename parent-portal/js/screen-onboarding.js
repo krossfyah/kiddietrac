@@ -215,6 +215,13 @@
     container = overlay;
 
     var steps = COMMON_STEPS.slice();
+    if (r === 'guardian') {
+      steps.push({
+        id: 'children',
+        title: 'About your children',
+        subtitle: 'A photo so staff recognise them, and what the room needs to know to keep them safe.',
+      });
+    }
     if (r === 'agency_admin') {
       steps.push({ id: 'team', title: 'Invite your team', subtitle: 'Add directors and educators (optional — you can do this anytime).' });
       if (whiteLabel) steps.push({ id: 'whitelabel', title: 'Make it yours', subtitle: 'Your plan includes white-label branding — add your logo and colours.' });
@@ -313,6 +320,7 @@
       if (id === 'profile') body.appendChild(renderProfileStep(state, container));
       else if (id === 'address') body.appendChild(renderAddressStep(state));
       else if (id === 'role') body.appendChild(renderRoleStep(state, roleStep));
+      else if (id === 'children') body.appendChild(renderChildrenStep(state));
       else if (id === 'team') body.appendChild(renderTeamStep(state));
       else if (id === 'whitelabel') body.appendChild(renderWhiteLabelStep(state, container));
 
@@ -749,6 +757,7 @@
       if (bioEl) state.data.provider_bio = bioEl.value;
     }
     if (id === 'team') collectTeam(state, body);
+    if (id === 'children') collectChildren(state, body);
     if (id === 'address') {
       var extras = [];
       body.querySelectorAll('.kt-ec-row').forEach(function (row) {
@@ -780,6 +789,184 @@
 
   // Validate the CURRENT step's required fields; highlight + message if any are
   // missing. Returns true when the step is complete enough to advance.
+
+  /* ── Children (guardian) ─────────────────────────────────────────────
+     One card per child: a photo, what they are allergic to, and which of the
+     agency's expected immunisations they have had. Saved per child when the step
+     is left, so a parent who gets three children in never loses the first two.
+
+     The vaccines offered come from the agency's own schedule rather than a free
+     text box, so what a parent enters is something the immunisation report can
+     measure rather than prose somebody has to read. */
+  function renderChildrenStep(state) {
+    var wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">Loading your children…</div>';
+
+    state.kids = state.kids || { list: [], schedule: [] };
+
+    api('GET', '/parent/onboarding/children').then(function (res) {
+      state.kids.list = (res && res.children) || [];
+      state.kids.schedule = (res && res.schedule) || [];
+      paint();
+    }).catch(function () {
+      wrap.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">'
+        + 'We could not load your children just now. You can add these details later '
+        + 'from your child\'s profile.</div>';
+    });
+
+    function paint() {
+      if (!state.kids.list.length) {
+        wrap.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">'
+          + 'No children are linked to your family yet. Your centre will add them, '
+          + 'and you can fill this in from their profile afterwards.</div>';
+        return;
+      }
+      wrap.innerHTML = '';
+      state.kids.list.forEach(function (kid, i) { wrap.appendChild(card(kid, i)); });
+    }
+
+    function card(kid, idx) {
+      var box = document.createElement('div');
+      box.style.cssText = 'border:1px solid #E2E8F0;border-radius:14px;padding:14px;margin-bottom:14px;background:#fff;';
+
+      var photo = kid.photo_url
+        ? '<img src="' + kid.photo_url + '" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">'
+        : '<div style="width:64px;height:64px;border-radius:50%;background:#F1F5F9;display:flex;align-items:center;'
+          + 'justify-content:center;font-size:26px;color:#94A3B8;">🧒</div>';
+
+      box.innerHTML =
+        '<div style="display:flex;gap:14px;align-items:center;">'
+        +   '<div data-kid-photo>' + photo + '</div>'
+        +   '<div style="min-width:0;flex:1;">'
+        +     '<div style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(kid.name) + '</div>'
+        +     '<button type="button" data-kid-upload style="margin-top:6px;background:#1F6080;color:#fff;border:0;'
+        +       'border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">'
+        +       (kid.photo_url ? 'Change photo' : 'Add photo') + '</button>'
+        +     '<input type="file" data-kid-file accept="image/png,image/jpeg,image/webp" style="display:none;">'
+        +     '<div data-kid-msg style="font-size:11.5px;margin-top:5px;color:'
+        +       (kid.photo_url ? '#1E8E60' : '#DC2626') + ';">'
+        +       (kid.photo_url ? 'Photo added' : 'Required — staff use this to recognise them') + '</div>'
+        +   '</div>'
+        + '</div>'
+        + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:14px 0 4px;">Allergies</label>'
+        + '<input data-kid-allergies value="' + esc((kid.allergies || []).join(', ')) + '"'
+        +   ' placeholder="e.g. Peanuts, Dairy — separate with commas"'
+        +   ' style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13px;">'
+        + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:12px 0 4px;">Dietary needs</label>'
+        + '<input data-kid-diet value="' + esc((kid.dietary_restrictions || []).join(', ')) + '"'
+        +   ' placeholder="e.g. Vegetarian, No pork"'
+        +   ' style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13px;">'
+        + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:12px 0 4px;">Anything else the room should know</label>'
+        + '<textarea data-kid-notes rows="2" placeholder="Medication, a condition to watch for, how they settle…"'
+        +   ' style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13px;">'
+        +   esc(kid.medical_notes || '') + '</textarea>'
+        + shotsHtml(kid);
+
+      // Photo upload, straight away — so a parent who abandons the wizard has still
+      // given the room a face to match to the child.
+      var btn = box.querySelector('[data-kid-upload]');
+      var file = box.querySelector('[data-kid-file]');
+      var note = box.querySelector('[data-kid-msg]');
+      btn.addEventListener('click', function () { file.click(); });
+      file.addEventListener('change', function () {
+        var f = file.files && file.files[0];
+        if (!f) { return; }
+        note.style.color = '#64748B';
+        note.textContent = 'Uploading…';
+        var fd = new FormData();
+        fd.append('photo', f, f.name || 'photo.jpg');
+        fetch(apiBase() + '/parent/onboarding/children/' + kid.id + '/photo', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token() },
+          body: fd,
+        }).then(function (r) { return r.ok ? r.json() : r.json().then(function (j) { throw new Error(j.message || 'Upload failed'); }); })
+          .then(function (j) {
+            kid.photo_url = j.photo_url;
+            state.kids.list[idx] = kid;
+            note.style.color = '#1E8E60';
+            note.textContent = 'Photo added';
+            var holder = box.querySelector('[data-kid-photo]');
+            if (holder) {
+              holder.innerHTML = '<img src="' + kid.photo_url + '" alt="" style="width:64px;height:64px;'
+                + 'border-radius:50%;object-fit:cover;">';
+            }
+            btn.textContent = 'Change photo';
+          })
+          .catch(function (e) {
+            note.style.color = '#DC2626';
+            note.textContent = (e && e.message) || 'Could not upload that photo';
+          });
+      });
+
+      return box;
+    }
+
+    function shotsHtml(kid) {
+      var sched = state.kids.schedule || [];
+      if (!sched.length) { return ''; }
+      var had = {};
+      (kid.immunizations || []).forEach(function (s) {
+        had[(s.vaccine || '') + '|' + (s.dose_label || '')] = s.administered_on || '';
+      });
+      var rows = sched.map(function (v, i) {
+        var key = (v.vaccine || '') + '|' + (v.dose_label || '');
+        var on = had[key] || '';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;">'
+          + '<div style="flex:1;min-width:0;font-size:12.5px;color:#334155;">' + esc(v.vaccine)
+          +   (v.dose_label ? ' <span style="color:#94A3B8;">' + esc(v.dose_label) + '</span>' : '') + '</div>'
+          + '<input type="date" data-shot="' + esc(key) + '" value="' + esc(on) + '"'
+          +   ' style="padding:5px 8px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;">'
+          + '</div>';
+      }).join('');
+      return '<div style="margin-top:14px;border-top:1px solid #F1F5F9;padding-top:10px;">'
+        + '<div style="font-size:12.5px;font-weight:700;color:#334155;">Immunisations</div>'
+        + '<div style="font-size:11.5px;color:#64748B;margin-bottom:6px;">'
+        + 'Add the date for any your child has had. Leave the rest blank — you can fill them in later.</div>'
+        + rows + '</div>';
+    }
+
+    return wrap;
+  }
+
+  /* Save every child card. Called when the children step is left. */
+  function collectChildren(state, body) {
+    var kids = (state.kids && state.kids.list) || [];
+    var cards = body.querySelectorAll('[data-kid-allergies]');
+    var list = [];
+
+    cards.forEach(function (allergyEl, i) {
+      var kid = kids[i];
+      if (!kid) { return; }
+      var card = allergyEl.closest('div');
+      while (card && !card.querySelector('[data-kid-upload]')) { card = card.parentElement; }
+      if (!card) { return; }
+
+      var split = function (v) {
+        return String(v || '').split(',').map(function (x) { return x.trim(); })
+          .filter(function (x) { return x !== ''; });
+      };
+      var shots = [];
+      card.querySelectorAll('[data-shot]').forEach(function (d) {
+        if (!d.value) { return; }
+        var parts = d.getAttribute('data-shot').split('|');
+        shots.push({ vaccine: parts[0], dose_label: parts[1] || null, administered_on: d.value });
+      });
+
+      list.push({
+        id: kid.id,
+        allergies: split(allergyEl.value),
+        dietary_restrictions: split((card.querySelector('[data-kid-diet]') || {}).value),
+        medical_notes: ((card.querySelector('[data-kid-notes]') || {}).value || '').trim() || null,
+        immunizations: shots,
+      });
+    });
+
+    // Saved per child rather than in one request: a parent with three children who
+    // loses connection halfway keeps the two that got through.
+    list.forEach(function (payload) {
+      api('POST', '/parent/onboarding/children/' + payload.id, payload).catch(function () {});
+    });
+  }
   function validateStep(state, container) {
     var msg = container.querySelector('#kt-step-msg');
     var body = container.querySelector('#kt-step-body');
@@ -793,6 +980,20 @@
       if (!v) { missing.push(label); el.style.borderColor = '#DC2626'; if (!firstBad) firstBad = el; }
       else { el.style.borderColor = '#E2E8F0'; }
     });
+    // Every child needs a photo before this step will advance. Same rule as the
+    // adult's own profile photo above, and for the same reason: a roster of grey
+    // silhouettes helps nobody recognise a child at the door.
+    if (id === 'children') {
+      var kids = (state.kids && state.kids.list) || [];
+      var noPhoto = kids.filter(function (k) { return !k.photo_url; });
+      if (noPhoto.length) {
+        msg.style.color = '#DC2626';
+        msg.textContent = noPhoto.length === 1
+          ? 'Please add a photo of ' + noPhoto[0].name + '.'
+          : 'Please add a photo of each child: ' + noPhoto.map(function (k) { return k.name; }).join(', ') + '.';
+        return false;
+      }
+    }
     if (id === 'profile' && !state.data.photo_url) {
       missing.push('Profile photo');
       var avMsg = body.querySelector('#kt-av-msg');
