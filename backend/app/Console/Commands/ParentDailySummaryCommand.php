@@ -199,7 +199,10 @@ class ParentDailySummaryCommand extends Command
             ->where('child_id', $child->id)
             ->whereNull('deleted_at')
             ->whereBetween('occurred_at', [$start, $end])
-            ->whereIn('event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood'])
+            // 'outdoor' was missing, so outdoor-play moments never reached a parent at
+            // all. 'walk' is deliberately absent: it has its own section with a map, and
+            // listing it here as well would show every walk twice.
+            ->whereIn('event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood', 'outdoor'])
             ->get(['event_type', 'occurred_at', 'payload', 'notes'])
             ->map(function ($r) {
                 $detail = null;
@@ -341,8 +344,25 @@ class ParentDailySummaryCommand extends Command
             $digest = $this->writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, $tz);
         }
 
+        // Walks the child was taken on today, with the route map if there is one.
+        $walks = DB::table('daily_events')
+            ->where('child_id', $child->id)
+            ->where('event_type', 'walk')
+            ->whereNull('deleted_at')
+            ->whereBetween('occurred_at', [$start, $end])
+            ->orderBy('occurred_at')
+            ->get(['payload', 'notes', 'occurred_at'])
+            ->map(function ($w) {
+                $p = json_decode((string) $w->payload, true) ?: [];
+                $p['map_url'] = ! empty($p['trip_id']) ? \App\Support\WalkMap::urlFor((int) $p['trip_id']) : null;
+
+                return $p;
+            })
+            ->values();
+
         return [
             'date' => $date,
+            'walks' => $walks,
             'check_in' => $checkIn,
             'check_out' => $checkOut,
             'logs' => $logs,
@@ -655,6 +675,34 @@ class ParentDailySummaryCommand extends Command
                 . '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:#a3d977;margin-bottom:7px;">✨ TODAY\'S STORY</div>'
                 . '<div style="font-size:14.5px;line-height:1.6;">' . nl2br(e($day['digest'])) . '</div>'
                 . '</div>';
+        }
+
+        // Where they went. A walk is the part of the day a parent most wants to picture,
+        // so it gets the map rather than a line of text in among the nappy changes.
+        if (! empty($day['walks']) && count($day['walks'])) {
+            $body .= $this->section('🚶 ' . $name . ' went out today');
+            foreach ($day['walks'] as $w) {
+                $where = trim((string) ($w['destination'] ?? '')) ?: 'A walk';
+                $when = trim((string) ($w['started_at'] ?? '') . ' – ' . (string) ($w['ended_at'] ?? ''), ' –');
+                $bits = [];
+                if ($when !== '') { $bits[] = $when; }
+                if (! empty($w['minutes'])) { $bits[] = (int) $w['minutes'] . ' min'; }
+                if (! empty($w['distance_km'])) { $bits[] = rtrim(rtrim(number_format((float) $w['distance_km'], 2), '0'), '.') . ' km'; }
+
+                $body .= '<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
+                    . '<div style="font-size:15px;font-weight:800;color:#0C4A6E;">' . e($where) . '</div>'
+                    . ($bits ? '<div style="font-size:13px;color:#0369A1;margin-top:3px;">' . e(implode(' · ', $bits)) . '</div>' : '');
+
+                // Raster, absolute URL, and a width — SVG and CID attachments render as
+                // broken images in several mail clients.
+                if (! empty($w['map_url'])) {
+                    $body .= '<img src="' . e($w['map_url']) . '" width="560" alt="Map of the walk"'
+                        . ' style="display:block;width:100%;max-width:560px;height:auto;border:0;'
+                        . 'border-radius:10px;margin-top:10px;">';
+                }
+
+                $body .= '</div>';
+            }
         }
 
         // Awards earned today — a celebratory highlight. A gold card per award with
