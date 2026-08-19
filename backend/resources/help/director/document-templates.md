@@ -9,6 +9,20 @@ order: 40
 **Settings → Document templates.** Control what a payslip, invoice or receipt actually
 looks like, without waiting on a release.
 
+
+## Quick steps
+
+1. Go to **Settings → Document templates**.
+2. Pick the document type — payslip, invoice or receipt.
+3. Either start from the built-in layout, or press **Import** and choose a Blade file to
+   convert (this is how iLearn's own designs were brought across).
+4. Edit the HTML, using `{{ name }}` for a value and `{{#each rows}}` to repeat a row.
+5. **Preview** — it renders against a real record.
+6. **Activate** when it looks right. One template per type is active at a time.
+
+If no template is active, documents render with the built-in layout, so activating one
+is always reversible.
+
 ## How a template works
 
 A template is HTML with placeholders:

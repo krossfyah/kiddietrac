@@ -9,6 +9,18 @@ order: 60
 **Accounting → Payroll → Documents issued.** Every payslip and payroll document ever
 issued, as a record rather than a calculation.
 
+
+## Quick steps
+
+1. Go to **Accounting → Payroll → Documents issued**.
+2. Use the date range and payee filters to find what you need.
+3. Open a row to see the period, units, rate, overtime and total.
+4. Press the PDF action to download it — rendered through your active payslip template.
+5. Use **Backfill** to build documents from work already recorded; anyone who already
+   has one for that period is skipped.
+
+Educators see their own under **My pay**, and never anybody else's.
+
 ## Why it is a record
 
 A payslip used to be worked out afresh each time it was opened, so a change to a rate

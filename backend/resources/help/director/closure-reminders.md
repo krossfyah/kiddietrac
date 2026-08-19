@@ -8,6 +8,18 @@ order: 35
 Families and educators are told when a closure is **added**, and again as it
 approaches, so nobody arrives at a locked door.
 
+
+## Quick steps
+
+1. Go to **Settings → Email settings → Reminders**.
+2. Switch on the lead times you want: straight away, and 5, 3 or 1 days before.
+3. Save. The switches are per agency.
+4. Add a closure as usual — everyone affected is told immediately, then again at each
+   lead time you chose.
+
+Editing or deleting a closure sends a **change** notice rather than a fresh closure
+notice, so nobody is told a centre is closing when the only news is that a date moved.
+
 ## Turning them on
 
 **Settings → Email settings → Reminders.** Choose which lead times to send:

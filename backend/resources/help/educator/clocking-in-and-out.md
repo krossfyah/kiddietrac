@@ -8,6 +8,17 @@ order: 2
 
 Your time clock is how your hours are recorded and how the centre keeps ratios honest. It takes one tap.
 
+
+## Quick steps
+
+1. Open your **Home / Today** screen.
+2. Tap the **time clock strip** across the top. It flips to **Clocked in** and starts counting.
+3. Care for your room as normal — check-ins and care logs work once you are clocked in.
+4. At the end of your shift, tap the strip again and **confirm**.
+5. Check **My hours** if you want to see the week's running total.
+
+If a check-in does nothing, you are almost certainly not clocked in yet — start at step 2.
+
 ## Clocking in
 
 At the start of your shift, tap the **time clock strip** at the top of your Home/Today screen. It flips instantly to **"Clocked in"** and starts counting your shift.

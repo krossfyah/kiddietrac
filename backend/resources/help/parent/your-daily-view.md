@@ -8,6 +8,18 @@ order: 1
 
 When you open Kiddietrac, the first thing you see is **Today with [Your Child]** — a live look at what your child is doing right now.
 
+
+## Quick steps
+
+1. Open Kiddietrac. You land on **Today with [your child]**.
+2. Read the coloured header for where they are right now — **AT CENTRE** or **AT HOME**.
+3. Scroll to **Your Daily Digest** for the day written out in a few paragraphs.
+4. Keep scrolling for photos, meals, naps and nappy changes as they are logged.
+5. Tap any photo to see it full size.
+
+The digest fills in through the day and settles around 6 PM, so it is normal for it to
+be short in the morning.
+
 ## What's on the screen
 
 **At the top:**
