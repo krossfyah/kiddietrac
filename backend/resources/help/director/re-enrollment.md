@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Re-enrollment campaigns
 category: Enrollment
 order: 60

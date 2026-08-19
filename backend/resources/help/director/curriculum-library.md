@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Curriculum library + starter pack
 category: Programs
 order: 60

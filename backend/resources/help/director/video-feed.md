@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Video sharing feed
 category: Family Engagement
 order: 22

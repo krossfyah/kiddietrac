@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Multi-day attendance pattern
 category: Enrollment
 order: 36

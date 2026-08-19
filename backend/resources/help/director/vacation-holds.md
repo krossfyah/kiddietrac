@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Vacation hold credits
 category: Billing
 order: 84

@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Compliance dashboard
 category: Administration
 order: 56

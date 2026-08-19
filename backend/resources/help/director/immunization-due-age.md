@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Immunization "Due At Age" schedule
 category: Compliance
 order: 32

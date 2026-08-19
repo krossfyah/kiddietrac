@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Compliance and reporting
 category: Compliance
 order: 1

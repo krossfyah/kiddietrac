@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Multi-step document workflows
 category: Administration
 order: 65

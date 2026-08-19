@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Field-trip live GPS tracker
 category: Daily Operations
 order: 45

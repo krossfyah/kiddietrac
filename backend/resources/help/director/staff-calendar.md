@@ -1,40 +1,58 @@
 ---
-title: Staff calendar
+title: The agency calendar
 category: Daily Operations
-order: 75
+order: 20
 ---
-# Staff calendar
+# The agency calendar
 
-Open the full calendar from **Staff → Calendar** in the sidebar. Directors and agency admins can see and edit every shift across their centres.
+**Operations → Calendar.** It began as a shift rota and is now the calendar for the
+whole agency: shifts, closures, family vacations, field trips, conferences, child
+absences and birthdays all land on the same grid.
 
-## Two views
+## Views
 
-- **Week** — Monday–Sunday with one column per day. Today's column is tinted blue. Shifts appear as colour-banded pills with time, staff name, room, and role.
-- **Month** — 5-row calendar grid. Leading and trailing days from neighbouring months are greyed. Each cell shows up to three compact chips; if more shifts exist that day, a small "+ N more" indicator appears.
+- **Day** — an agenda for one day: what is happening, who is away, then the shifts.
+- **Week** — Monday to Sunday, one column per day.
+- **Month** — the full month, with up to three chips per day and "+ N more" beyond that.
 
-Toggle between them with the segmented control at the top of the toolbar. Your preference is remembered in the browser (localStorage `kt_cal_view`).
+Your choice is remembered between visits. **Today** jumps back to the current day.
+
+Today is tinted with an accent rail and its date sits in a filled circle, so you can
+find it without reading any numbers. In the **This week** panel down the right-hand
+side, days that have already happened fade back — still there when you need to look up
+what was meant to happen yesterday, but no longer competing with what is still to come.
+
+## Opening anything on the calendar
+
+Click any event — a closure, a birthday, someone's time off, a family holiday — and it
+opens with everything the record holds: the dates, which centre, the reason, whether
+billing is paused, and who added it and when.
+
+Closures can be **edited or deleted** right there, because the calendar owns them.
+Everything else shows an **Open …** button through to the screen that does own it,
+rather than a second half-working editor that would drift from the real one.
+
+## Adding things
+
+- **Click an empty part of a day** to add a shift on that day.
+- **Drag across several days** in the week or month grid to create a shift on each of
+  them in one go.
+- **+ Add** opens a menu: Shift, Closure, Vacation hold, Field trip, Conference slots,
+  Child start date.
+
+Everything except a shift belongs to another screen, so those entries take you there
+and open that screen's own form with the date already filled in — the day you were
+looking at. You are never retyping a date you just clicked on.
+
+The menu only lists what you can actually reach: if your role has no Conferences
+screen, there is no Conferences entry.
 
 ## Filtering
 
-Two dropdowns sit beside the view toggle:
+- **Centre** — agency admins see every centre. If you run one centre, this is hidden.
+- **Role** — narrow to Lead, Support, Floater or Volunteer shifts.
 
-- **Centre** — agency admins see every centre in their agency. Directors with one centre don't see this dropdown.
-- **Role** — show only Lead / Support / Floater / Volunteer shifts. Default is *All roles*.
-
-## Adding a shift
-
-- Click any empty area in a day cell — opens the **New shift** modal with the date pre-filled.
-- Or click **+ Add shift** in the toolbar to open the modal blank.
-
-The modal collects staff member, room, date, start time, end time, and role. **Save** to commit.
-
-## Editing or deleting
-
-Click any shift pill or chip. The **Edit shift** modal opens with the same fields. A red **Delete** button appears at the bottom-left of the modal when editing.
-
-Both actions take effect immediately when you save / confirm.
-
-## Role colours
+## Shift colours
 
 | Role | Colour |
 |---|---|
@@ -43,11 +61,9 @@ Both actions take effect immediately when you save / confirm.
 | Floater | amber |
 | Volunteer | green |
 
-The colour appears as a left-edge band on each shift pill and a tinted background.
+## Worth knowing
 
-## Tips
-
-- Drag-to-create across multiple days is not yet supported — click each day cell individually.
-- Shifts that span midnight count as belonging to the day they START on (their `starts_at` date).
-- The calendar caps at 100 days of data per request so very long ranges paginate naturally.
-- Use the **Today** button in the toolbar to jump back to the current day at any time.
+- A shift that runs past midnight belongs to the day it **starts**.
+- Deleting or editing a closure tells the families and educators it affects that it
+  changed — they are not left with the old notice.
+- The old `#staff-calendar` address still works; `#calendar` reaches the same screen.

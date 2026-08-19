@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Bus routes + transportation
 category: Daily Operations
 order: 52

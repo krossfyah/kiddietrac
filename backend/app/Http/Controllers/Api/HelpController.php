@@ -208,6 +208,11 @@ PROMPT;
 
         return match (true) {
             in_array('agency_admin', $roles, true) => 'agency_admin',
+            // A platform admin holding no agency role fell through every arm to the
+            // guardian default, and was served the PARENT library. They have the
+            // superset of an agency admin, so that is the library they get -- which
+            // also makes the `roles: agency_admin, platform_admin` tags meaningful.
+            in_array('platform_admin', $roles, true) => 'agency_admin',
             in_array('centre_director', $roles, true) => 'centre_director',
             in_array('educator', $roles, true) => 'educator',
             in_array('home_visitor', $roles, true) => 'home_visitor',

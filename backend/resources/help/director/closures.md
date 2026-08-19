@@ -1,4 +1,5 @@
 ---
+roles: agency_admin, platform_admin
 title: Closure / holiday calendar
 category: Daily Operations
 order: 40
@@ -9,7 +10,8 @@ Holidays, PD days, emergency closures. Pause billing on closures (or not), and n
 
 ## Adding a closure (admin / director)
 
-1. Sidebar → **Closures**.
+1. Sidebar → **Closures** — or **+ Add → Closure** on the agency
+   calendar, which brings you here with the day you clicked already filled in.
 2. Tap **+ New closure**.
 3. Pick the centre + start date (+ end date for multi-day).
 4. Pick type: Holiday / PD day / Emergency / Renovation / Other.
