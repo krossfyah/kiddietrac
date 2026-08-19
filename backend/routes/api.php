@@ -1079,6 +1079,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/document-templates/{id}',         [\App\Http\Controllers\Api\DocumentTemplateController::class, 'show'])->where('id', '[0-9]+');
         Route::post  ('/document-templates/{id}/activate',[\App\Http\Controllers\Api\DocumentTemplateController::class, 'activate'])->where('id', '[0-9]+');
         Route::delete('/document-templates/{id}',         [\App\Http\Controllers\Api\DocumentTemplateController::class, 'destroy'])->where('id', '[0-9]+');
+        // Who works in which room. Empty across the platform until now, which is why
+        // room-scoped screens fall back to the centre.
+        Route::get ('/educator-rooms', [\App\Http\Controllers\Api\EducatorRoomController::class, 'index']);
+        Route::post('/educator-rooms', [\App\Http\Controllers\Api\EducatorRoomController::class, 'save']);
         Route::get ('/payroll-documents',             [\App\Http\Controllers\Api\PayrollDocumentController::class, 'index']);
         Route::post('/payroll-documents/backfill',    [\App\Http\Controllers\Api\PayrollDocumentController::class, 'backfill']);
         Route::post('/payroll-documents/{id}/status', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'setStatus'])->where('id', '[0-9]+');

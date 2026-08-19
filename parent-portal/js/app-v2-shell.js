@@ -200,6 +200,7 @@
         { label: 'Settings', items: [
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
+          { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
@@ -298,6 +299,7 @@
         { label: 'Settings', items: [
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
+          { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
 
 

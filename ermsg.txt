@@ -1,0 +1,22 @@
+Room assignments: a screen for the table nobody could fill in
+
+educator_rooms decides who sees which children on several screens, and it held ONE row for
+the entire platform. Everything keyed on it silently returned nothing, which is why the
+educator daily summary had to fall back to the centre and why the scorecard reports
+sign-outs per centre rather than per person. It was a data job nobody could do, because
+there was no screen for it.
+
+Everyone on one page, saved in one go. Each educator is offered only the rooms at their own
+centre - offering every room in the agency is how somebody ends up attached to a room three
+sites away by a mis-click - and a banner says how many still have none.
+
+Saving REPLACES a person's assignments rather than adding to them, because the screen shows
+the complete set and what it submits is therefore the complete answer; adding would leave a
+room silently attached after somebody unticked it. Only the people actually changed are
+sent, so untouched rows keep who assigned them and when. Saving the same thing twice is a
+no-op rather than a delete-and-reinsert.
+
+Verified end to end, including the case that matters: assigning works, repeating changes
+nothing, and a room belonging to another agency is refused rather than stored.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
