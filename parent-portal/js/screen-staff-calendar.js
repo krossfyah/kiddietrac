@@ -397,7 +397,7 @@
   function renderWeek(start, end, calRoot) {
     var grid = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     // Header row
-    var header = Dom.el('div', { style: 'display:grid;grid-template-columns:64px repeat(7,1fr);border-bottom:1px solid #E5E7EB;background:#FAFBFC;' });
+    var header = Dom.el('div', { style: 'display:grid;grid-template-columns:64px repeat(7,minmax(0,1fr));border-bottom:1px solid #E5E7EB;background:#FAFBFC;' });
     header.appendChild(Dom.el('div', { style: 'padding:10px;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase;' }, ''));
     for (var i = 0; i < 7; i++) {
       var d = addDays(start, i);
@@ -410,7 +410,7 @@
     grid.appendChild(header);
 
     // Body — single day-cell per column with shifts stacked
-    var body = Dom.el('div', { style: 'display:grid;grid-template-columns:64px repeat(7,1fr);min-height:480px;' });
+    var body = Dom.el('div', { style: 'display:grid;grid-template-columns:64px repeat(7,minmax(0,1fr));min-height:480px;' });
     body.appendChild(Dom.el('div', { style: 'border-right:1px solid #F3F4F6;background:#FAFBFC;font-size:10px;color:#64748B;padding:6px;text-align:right;line-height:1.4;' }, ' '));
     installDragSelect(body, calRoot);
     for (var j = 0; j < 7; j++) {
@@ -445,13 +445,18 @@
   function renderMonth(start, end, calRoot) {
     var monthMid = state.cursor.getMonth();
     var grid = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
-    var header = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid #E5E7EB;background:#FAFBFC;' });
+    /* minmax(0,...) rather than a bare 1fr on every track here. A grid ITEM defaults to
+       min-width:auto, so 1fr is floored at the widest cell's min-content and the row
+       grows past its card instead of dividing the space: the month grid measured 1372px
+       inside a 1279px card, and the card clips, so Sunday was cut in half. The chips
+       already ellipsis, so there is nothing to lose by letting the columns shrink. */
+    var header = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid #E5E7EB;background:#FAFBFC;' });
     ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function (n) {
       header.appendChild(Dom.el('div', { style: 'padding:10px;text-align:center;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, n));
     });
     grid.appendChild(header);
 
-    var body = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);' });
+    var body = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(7,minmax(0,1fr));' });
     installDragSelect(body, calRoot);
     var cursor = new Date(start);
     while (cursor <= end) {
@@ -947,7 +952,7 @@
       modal.appendChild(rangeBanner);
     }
 
-    var dateRow = Dom.el('div', { style: 'display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin-bottom:14px;' });
+    var dateRow = Dom.el('div', { style: 'display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:14px;' });
     var dIn = Dom.el('input', { type: 'date', value: defaultDate, style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;' });
     var sIn = Dom.el('input', { type: 'time', value: defaultStart, style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;' });
     var eIn = Dom.el('input', { type: 'time', value: defaultEnd, style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;' });

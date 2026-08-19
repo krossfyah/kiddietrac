@@ -26,11 +26,18 @@
       + (sub ? '<div style="font-size:13px;color:#64748B;margin:3px 0 14px;">' + esc(sub) + '</div>' : '<div style="height:12px;"></div>')
       + inner + '</div>';
   }
-  function numField(key, label, unit, val) {
+  // The unit span is a fixed width so the number inputs line up down the column. That
+  // only holds while every unit is a short word, so anything needing explanation ("0
+  // means never") belongs in a hint under the label rather than stuffed into the unit
+  // and clipped, which is what "months (0 = never)" was doing.
+  function numField(key, label, unit, val, hint, min) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid #F1F5F9;">'
+      + '<div style="min-width:0;">'
       + '<label for="c_' + key + '" style="font-size:14px;color:#334155;font-weight:600;">' + esc(label) + '</label>'
-      + '<div style="display:flex;align-items:center;gap:8px;white-space:nowrap;">'
-      + '<input id="c_' + key + '" type="number" min="1" value="' + esc(val) + '" style="' + INP + 'width:90px;text-align:right;">'
+      + (hint ? '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + esc(hint) + '</div>' : '')
+      + '</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;white-space:nowrap;flex-shrink:0;">'
+      + '<input id="c_' + key + '" type="number" min="' + (min == null ? 1 : min) + '" value="' + esc(val) + '" style="' + INP + 'width:90px;text-align:right;">'
       + '<span style="font-size:13px;color:#64748B;width:56px;">' + esc(unit) + '</span></div></div>';
   }
   function toggle(key, label, hint, on) {
@@ -60,7 +67,7 @@
           + numField('daily_log_months', 'Attendance & daily logs', 'months', c.daily_log_months)
           + numField('message_months', 'Parent–educator messages (chat)', 'months', c.message_months)
           + numField('announcement_months', 'Announcements & news', 'months', c.announcement_months)
-          + numField('suspended_family_months', 'Suspended families', 'months (0 = never)', c.suspended_family_months)
+          + numField('suspended_family_months', 'Suspended families', 'months', c.suspended_family_months, 'Set to 0 to keep suspended families indefinitely.', 0)
           + numField('audit_log_months', 'Security & audit trail', 'months', c.audit_log_months))
 
       + card('Automatic enforcement', 'Off by default. When on, records past their retention period are handled automatically by a nightly review. Deletion is permanent — anonymising keeps aggregate stats while removing identifying details.',
