@@ -204,6 +204,7 @@
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
           { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
+          { hash: 'document-templates', label: 'Document templates', icon: '📄' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
 
 

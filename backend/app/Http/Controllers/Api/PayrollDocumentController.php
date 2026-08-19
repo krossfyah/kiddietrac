@@ -156,6 +156,62 @@ class PayrollDocumentController extends Controller
     }
 
     /**
+     * The values a template can refer to, named as the payslip kind advertises them.
+     *
+     * Formatted here rather than in the template, because the renderer deliberately does no
+     * arithmetic and no formatting — that is what keeps it unable to execute anything.
+     */
+    private static function templateData(object $doc, ?object $agency, array $settings): array
+    {
+        $money = fn ($v) => number_format((float) $v, 2);
+        $day = function ($d) {
+            // Date-only: formatted from its parts, never through a timezone conversion.
+            $p = explode('-', substr((string) $d, 0, 10));
+
+            return count($p) === 3
+                ? \Illuminate\Support\Carbon::createFromDate((int) $p[0], (int) $p[1], (int) $p[2])->format('M j, Y')
+                : (string) $d;
+        };
+
+        $hours = (float) ($doc->units ?? 0);
+        $rate = (float) ($doc->rate ?? 0);
+        $gross = (float) ($doc->gross ?? 0);
+        $vacation = (float) ($doc->vacation_pay ?? 0);
+
+        return [
+            'agency_name' => $agency->name ?? '',
+            'agency_logo' => $agency->logo_url ?? '',
+            'doc_title' => $doc->kind === 'invoice' ? 'Payroll invoice' : 'Payslip',
+            'doc_number' => $doc->reference ?? '',
+            'payee_name' => $doc->payee_name ?? '',
+            'payee_role' => $doc->role_label ?? '',
+            'recipient_type' => $doc->role_label ?? '',
+            'status' => ucfirst((string) ($doc->status ?? '')),
+            'period' => $doc->period_start
+                ? $day($doc->period_start) . ' – ' . $day($doc->period_end ?: $doc->period_start)
+                : '',
+            'period_start' => $doc->period_start ? $day($doc->period_start) : '',
+            'period_end' => $doc->period_end ? $day($doc->period_end) : '',
+            'hours' => $money($hours),
+            'rate' => $money($rate),
+            'regular_amount' => $money($hours > 0 ? $hours * $rate : $gross),
+            // Overtime is not modelled on this document yet; the fields exist so an
+            // imported template referring to them renders blank rather than breaking.
+            'ot_hours' => '', 'ot_mult' => '', 'ot_amount' => '',
+            'vacation' => $vacation ? $money($vacation) : '',
+            'gross' => $money($gross),
+            'gross_with_vacation' => $money($gross + $vacation),
+            'cpp' => $doc->cpp !== null ? $money($doc->cpp) : '',
+            'ei' => $doc->ei !== null ? $money($doc->ei) : '',
+            'income_tax' => $doc->income_tax !== null ? $money($doc->income_tax) : '',
+            'other_deductions' => $doc->other_deductions !== null ? $money($doc->other_deductions) : '',
+            'net' => $doc->net !== null ? $money($doc->net) : $money($gross),
+            'notes' => $doc->notes ?? ($settings['payslip_note'] ?? ''),
+            'generated_at' => now()->format('M j, Y g:i A'),
+        ];
+    }
+
+    /**
      * The document itself. An admin may open anybody's in their agency; everybody else
      * may open only their own.
      */
@@ -178,6 +234,53 @@ class PayrollDocumentController extends Controller
         $note = trim((string) ($settings['payslip_note'] ?? ''));
 
         $fmt = function ($v) { return '$' . number_format((float) $v, 2); };
+
+        // An agency template wins, when one is active. The built-in layout below stays as
+        // the fallback — an agency that has never opened the template screen must still get
+        // a working payslip, and a template that throws must not take the document with it.
+        $tpl = \App\Support\DocumentTemplate::active(
+            (int) $doc->agency_id,
+            $doc->kind === 'invoice' ? 'invoice' : 'payslip'
+        );
+        if ($tpl) {
+            try {
+                $rendered = \App\Support\DocumentTemplate::render(
+                    (string) $tpl->body,
+                    self::templateData($doc, $agency, $settings)
+                );
+                $html = '<html><head><meta charset="utf-8"><style>'
+                    . 'body{font-family:DejaVu Sans,sans-serif;color:#0F172A;font-size:12px;}'
+                    . 'h1{font-size:20px;margin:0 0 2px;color:#1F6080;}'
+                    . '.muted{color:#64748B;font-size:11px;} .meta div{margin:2px 0;} .k{color:#64748B;}'
+                    . 'table{width:100%;border-collapse:collapse;margin-top:14px;}'
+                    . 'th{text-align:left;font-size:10px;color:#64748B;text-transform:uppercase;border-bottom:1px solid #CBD5E1;padding:6px 4px;}'
+                    . 'td{padding:7px 4px;border-bottom:1px solid #F1F5F9;} .num,.r{text-align:right;}'
+                    . '.totals .row{display:flex;justify-content:space-between;padding:3px 0;}'
+                    . '.totals .grand{font-weight:bold;font-size:15px;color:#1F6080;border-top:1px solid #CBD5E1;margin-top:4px;padding-top:6px;}'
+                    . ((string) ($tpl->styles ?? ''))
+                    . '</style></head><body>'
+                    . '<h1>' . e($agency->name ?? 'Payroll') . '</h1>'
+                    . $rendered . '</body></html>';
+
+                $pdf = new Dompdf();
+                $pdf->loadHtml($html);
+                $pdf->setPaper('letter');
+                $pdf->render();
+                $name = ($doc->kind === 'invoice' ? 'payroll-invoice-' : 'payslip-')
+                    . ($doc->period_start ?: $doc->id) . '.pdf';
+
+                return response($pdf->output(), 200, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . $name . '"',
+                ]);
+            } catch (\Throwable $e) {
+                // Fall through to the built-in layout rather than handing back an error
+                // page: somebody wanting their payslip should still get one.
+                \Illuminate\Support\Facades\Log::warning('Document template render failed', [
+                    'template' => $tpl->id, 'document' => $doc->id, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
         $period = $doc->period_start
             ? Carbon::parse($doc->period_start)->format('j M Y') . ' – ' . Carbon::parse($doc->period_end ?: $doc->period_start)->format('j M Y')
             : '—';
