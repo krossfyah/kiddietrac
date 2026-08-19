@@ -1,0 +1,23 @@
+Waitlist and Payments received read the mirror as well as the native tables
+
+Neither report was broken; both were reading only half the data. For an agency that bills
+and recruits on another platform, that half is empty - so the one agency with real money
+and a real waiting list got a blank page from both.
+
+Payments received read only KiddieTrac's payments table. iLearn's money arrives as
+external_invoices: 188 of them carry a payment, $33,273.69 in total, and none of it was
+reportable. A mirrored invoice records the amount PAID rather than each payment against it,
+so a settled invoice becomes one row, dated on when it settled and falling back to the issue
+date - a payment with no date at all would otherwise drop out of every range.
+
+The waitlist read children.enrollment_status = waitlist. But a WAITING child has no children
+row yet, which is rather the point: the enquiry sits in external_waitlist, where all nine of
+iLearn's are. Sorted oldest first across both sources, because the order people joined is the
+only thing a waiting list is for.
+
+Both now carry a Source column so the two systems stay reconcilable instead of silently
+blended, and an enquiry with no child name shows the parent rather than an empty cell.
+
+Verified: agency 2 went 0 to 8 waitlist and 0 to 188 payments; agency 6 unchanged at 8 and 4.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

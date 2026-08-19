@@ -520,8 +520,58 @@ final class ReportsController extends Controller
                 $rows = array_map(fn ($r) => [
                     'Date' => $r->paid_at ? substr((string) $r->paid_at, 0, 10) : '—', 'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Amount' => '$' . number_format((float) $r->amount, 2), 'Method' => ucfirst((string) $r->method), 'Reference' => $r->reference_number ?: '—',
+                    'Source' => 'KiddieTrac',
                 ], $data->all());
-                return [['Date', 'Family', 'Centre', 'Amount', 'Method', 'Reference'], $rows];
+
+                // Payments taken on the platform the agency actually bills on. iLearn's
+                // are all of this kind — 188 invoices carrying $33k — and reading only the
+                // native table is why this report came back empty for the one agency with
+                // real money in it. Same fault as "Invoices & balances", same fix.
+                //
+                // A mirrored invoice records the amount PAID, not each payment against it,
+                // so a settled invoice is one row. The Source column keeps the two
+                // reconcilable rather than quietly blending them.
+                if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+                    $xq = DB::table('external_invoices as x')
+                        ->leftJoin('families as f', 'f.id', '=', 'x.family_id')
+                        ->leftJoin('centres as c', 'c.id', '=', 'f.centre_id')
+                        ->where('x.agency_id', $agencyId)
+                        ->where('x.amount_paid', '>', 0);
+                    if ($centreId) {
+                        $xq->where('c.id', $centreId);
+                    }
+                    // Dated on when it was settled where that is known, and on the issue
+                    // date otherwise — a payment with no date at all would drop out of
+                    // every range and never be reported.
+                    if ($from) {
+                        $xq->whereDate(DB::raw('COALESCE(x.external_updated_at, x.issued_at)'), '>=', $from);
+                    }
+                    if ($to) {
+                        $xq->whereDate(DB::raw('COALESCE(x.external_updated_at, x.issued_at)'), '<=', $to);
+                    }
+                    $ext = $xq->select('x.number', 'x.amount_paid', 'x.issued_at', 'x.external_updated_at',
+                        'x.source_label', 'x.external_source', 'f.family_name', 'c.name as centre')
+                        ->orderByDesc(DB::raw('COALESCE(x.external_updated_at, x.issued_at)'))
+                        ->limit(5000)->get();
+
+                    foreach ($ext as $r) {
+                        $when = $r->external_updated_at ?: $r->issued_at;
+                        $rows[] = [
+                            'Date' => $when ? substr((string) $when, 0, 10) : '—',
+                            'Family' => $r->family_name ?: '—',
+                            'Centre' => $r->centre ?: '—',
+                            'Amount' => '$' . number_format((float) $r->amount_paid, 2),
+                            'Method' => 'Invoice settled',
+                            'Reference' => $r->number ?: '—',
+                            'Source' => $r->source_label ?: ucfirst((string) ($r->external_source ?: 'External')),
+                        ];
+                    }
+
+                    // Newest first across both sources, not one list appended to another.
+                    usort($rows, fn ($a, $b) => strcmp((string) $b['Date'], (string) $a['Date']));
+                }
+
+                return [['Date', 'Family', 'Centre', 'Amount', 'Method', 'Reference', 'Source'], $rows];
 
             case 'invoices':
                 // Invoices raised IN KiddieTrac.
@@ -736,8 +786,43 @@ final class ReportsController extends Controller
                     'Child' => trim($r->first_name . ' ' . ($r->last_name ?? '')), 'DOB' => $r->date_of_birth ?: '—',
                     'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Applied' => $r->applied_at ?: '—', 'Preferred start' => $r->expected_start_date ?: '—',
+                    'Status' => 'Waiting', 'Source' => 'KiddieTrac',
                 ], $data->all());
-                return [['Child', 'DOB', 'Family', 'Centre', 'Applied', 'Preferred start'], $rows];
+
+                // Enquiries taken on the platform the agency actually recruits on. A
+                // WAITING child has no `children` row yet — that is the point of waiting —
+                // so reading enrollment_status alone returned nothing for the one agency
+                // with a real waiting list. All nine of iLearn's live here.
+                if (\Illuminate\Support\Facades\Schema::hasTable('external_waitlist')) {
+                    $ext = DB::table('external_waitlist')
+                        ->where('agency_id', $agencyId)
+                        ->whereNull('deleted_at')
+                        ->orderByRaw('COALESCE(desired_start, created_at)')
+                        ->limit(5000)
+                        ->get(['child_name', 'child_dob', 'parent_name', 'area_of_interest', 'age_group',
+                               'desired_start', 'status', 'source', 'external_source', 'created_at']);
+
+                    foreach ($ext as $r) {
+                        $rows[] = [
+                            // A name is not guaranteed on an enquiry; showing the parent is
+                            // more use than an empty cell nobody can act on.
+                            'Child' => $r->child_name ?: ($r->parent_name ? $r->parent_name . "'s child" : '—'),
+                            'DOB' => $r->child_dob ? substr((string) $r->child_dob, 0, 10) : '—',
+                            'Family' => $r->parent_name ?: '—',
+                            'Centre' => $r->area_of_interest ?: ($r->age_group ?: '—'),
+                            'Applied' => $r->created_at ? substr((string) $r->created_at, 0, 10) : '—',
+                            'Preferred start' => $r->desired_start ? substr((string) $r->desired_start, 0, 10) : '—',
+                            'Status' => ucfirst((string) ($r->status ?: 'waiting')),
+                            'Source' => self::sourceLabel($r->external_source ?: $r->source),
+                        ];
+                    }
+
+                    // Oldest enquiry first across both sources — the whole point of a
+                    // waiting list is the order people joined it.
+                    usort($rows, fn ($a, $b) => strcmp((string) $a['Applied'], (string) $b['Applied']));
+                }
+
+                return [['Child', 'DOB', 'Family', 'Centre', 'Applied', 'Preferred start', 'Status', 'Source'], $rows];
 
             case 'incidents':
                 $q = DB::table('incidents as inc')->join('children as ch', 'ch.id', '=', 'inc.child_id')
@@ -1065,5 +1150,14 @@ final class ReportsController extends Controller
             ->value('agency_id');
         abort_unless($first, 400);
         return (int) $first;
+    }
+
+    /** A source is a product name, so it keeps its own capitalisation. */
+    private static function sourceLabel(?string $raw): string
+    {
+        $key = strtolower(trim((string) $raw));
+        $known = ['ilearn' => 'iLearn', 'kiddietrac' => 'KiddieTrac'];
+
+        return $known[$key] ?? ($key === '' ? 'External' : ucfirst($key));
     }
 }
