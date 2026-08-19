@@ -2521,6 +2521,27 @@
   }
 
   // v22p26: families table view.
+
+  /* When a family joined, split into date and time so the column stays narrow.
+
+     Rendered in the AGENCY timezone, not the device one. The stored value has no
+     zone marker, so it is pinned to UTC before conversion — read as local it lands
+     hours out, and near midnight on the wrong day entirely. */
+  function _famEnrolled(ts) {
+    if (!ts) { return { date: '—', time: '' }; }
+    try {
+      var tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
+      var iso = String(ts).replace(' ', 'T');
+      var d = new Date(iso + (/[Zz]|[+-]\d\d:?\d\d$/.test(iso) ? '' : 'Z'));
+      if (isNaN(d.getTime())) { return { date: String(ts).slice(0, 10), time: '' }; }
+      return {
+        date: d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz }),
+        time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: tz }),
+      };
+    } catch (e) {
+      return { date: String(ts).slice(0, 10), time: '' };
+    }
+  }
   function renderFamiliesTable(families, centres, content) {
     // v22p46: bulk delete via multi-select. Same UX as the Users tab.
     var wrap = Dom.el('div');
@@ -2570,7 +2591,7 @@
     headCheck.appendChild(selectAll);
     headRow.appendChild(headCheck);
 
-    ['Family', 'Centre', 'Children', 'Guardians', 'Outstanding', ''].forEach(function (h) {
+    ['Family', 'Centre', 'Children', 'Guardians', 'Outstanding', 'Enrolled', ''].forEach(function (h) {
       headRow.appendChild(Dom.el('th', {
         style: 'text-align:left;padding:11px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;',
       }, h));
@@ -2610,6 +2631,15 @@
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' }, '👤 ' + f.guardian_count));
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' + (f.outstanding_balance > 0 ? 'color:#DC2626;font-weight:600;' : 'color:#6B7280;') },
         f.outstanding_balance > 0 ? ('$' + f.outstanding_balance.toFixed(2)) : '—'));
+
+      // When the family joined, date and time, in the agency's timezone.
+      var enrolledTd = Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#334155;white-space:nowrap;' });
+      var stamp = _famEnrolled(f.created_at);
+      enrolledTd.appendChild(Dom.el('div', {}, stamp.date));
+      if (stamp.time) {
+        enrolledTd.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#94A3B8;' }, stamp.time));
+      }
+      tr.appendChild(enrolledTd);
 
       var actionsTd = Dom.el('td', { style: 'padding:11px 14px;text-align:right;white-space:nowrap;' });
       actionsTd.appendChild(familyActions(f, centres, content));

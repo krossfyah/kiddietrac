@@ -26,14 +26,75 @@ use Illuminate\Support\Facades\Log;
  */
 final class ClockReminderCommand extends Command
 {
-    protected $signature = 'staff:clock-reminders {--mode=all : clock_in | clock_out | all} {--dry-run : list who would be reminded without sending}';
+    protected $signature = 'staff:clock-reminders
+        {--mode=all : clock_in | clock_out | all}
+        {--scheduled : only remind agencies whose configured hour is now (for the hourly cron)}
+        {--dry-run : list who would be reminded without sending}';
     protected $description = 'Email educators/directors who forgot to clock in or out (compliance, payroll, reporting).';
 
     private bool $dryRun = false;
 
+
+    /** @var bool Only remind agencies whose configured hour is the current one. */
+    private bool $scheduled = false;
+
+    /** @var array<int,int|null> centre id => agency id */
+    private array $agencyOfCentre = [];
+
+    /** @var array<int,array> agency id => clock reminder settings */
+    private array $cfgOfAgency = [];
+
+    /**
+     * Should this agency be reminded right now, for this kind of reminder?
+     *
+     * Run by hand (no --scheduled) the answer is yes as long as the reminder is
+     * switched on, so a test send does not depend on the hour. On the cron it also
+     * has to be the agency's configured HOUR, in the agency's own timezone.
+     *
+     * @param  string  $which  in|out
+     */
+    private function agencyWants(?int $centreId, string $which): bool
+    {
+        if (! $centreId) {
+            return false;
+        }
+
+        if (! array_key_exists($centreId, $this->agencyOfCentre)) {
+            $this->agencyOfCentre[$centreId] = DB::table('centres')->where('id', $centreId)->value('agency_id');
+        }
+        $agencyId = $this->agencyOfCentre[$centreId];
+        if (! $agencyId) {
+            return false;
+        }
+
+        if (! isset($this->cfgOfAgency[$agencyId])) {
+            $this->cfgOfAgency[$agencyId] =
+                \App\Http\Controllers\Api\ClockRemindersController::read((int) $agencyId);
+        }
+        $cfg = $this->cfgOfAgency[$agencyId];
+
+        if (empty($cfg[$which === 'in' ? 'in_enabled' : 'out_enabled'])) {
+            return false;
+        }
+        if (! $this->scheduled) {
+            return true;
+        }
+
+        $tz = \App\Support\AgencyTime::tz((int) $agencyId) ?: config('app.timezone');
+        $now = Carbon::now($tz);
+        if (! empty($cfg['weekdays_only']) && $now->isWeekend()) {
+            return false;
+        }
+
+        $at = (string) ($cfg[$which === 'in' ? 'in_at' : 'out_at'] ?? '');
+        $hour = (int) substr($at, 0, 2);
+
+        return $now->hour === $hour;
+    }
     public function handle(): int
     {
         $this->dryRun = (bool) $this->option('dry-run');
+        $this->scheduled = (bool) $this->option('scheduled');
         $mode = (string) $this->option('mode');
         $today = Carbon::today();
         $sent = 0;
@@ -68,6 +129,9 @@ final class ClockReminderCommand extends Command
 
         $n = 0;
         foreach ($open as $e) {
+            if (! $this->agencyWants($e->centre_id ? (int) $e->centre_id : null, 'out')) {
+                continue;
+            }
             // Approved time off can start mid-day (leaving sick at noon), so an open
             // punch on such a day is expected, not a lapse.
             if ($this->isOnApprovedTimeOff((int) $e->user_id, $today)) continue;
@@ -140,6 +204,9 @@ final class ClockReminderCommand extends Command
 
         $n = 0;
         foreach ($staff as $s) {
+            if (! $this->agencyWants($s->centre_id ? (int) $s->centre_id : null, 'in')) {
+                continue;
+            }
             $clockedToday = DB::table('time_punches')
                 ->where('user_id', $s->user_id)->whereDate('punched_in_at', $today)->exists();
             if ($clockedToday) continue;

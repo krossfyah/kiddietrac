@@ -128,8 +128,11 @@ Schedule::command('kiddietrac:birthday-emails')->dailyAt('07:00')->timezone('Ame
 Schedule::command('birthdays:celebrate')->dailyAt('07:30');
 
 // v22p98 — staff time-clock reminders (compliance/payroll/reporting)
-Schedule::command('staff:clock-reminders --mode=clock_in')->weekdays()->dailyAt('10:00');
-Schedule::command('staff:clock-reminders --mode=clock_out')->weekdays()->dailyAt('18:30');
+// Hourly, not two fixed times: each agency sets its own reminder hours in Settings ->
+// Clock settings, and the command skips any agency whose hour is not the current one in
+// ITS timezone. A centre opening at 06:00 was previously nudged at 10:00 like everybody
+// else. Weekend skipping is per agency now too, so the schedule no longer assumes it.
+Schedule::command('staff:clock-reminders --mode=all --scheduled')->hourly()->withoutOverlapping();
 
 // Weekly portal tips — a rotating "did you know?" push to parents + educators
 // (APK notification + in-app bell). Wednesday mid-morning for good engagement.

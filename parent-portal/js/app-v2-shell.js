@@ -199,7 +199,7 @@
         ]},
         { label: 'Settings', items: [
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
-          { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
+          { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -302,7 +302,7 @@
         ]},
         { label: 'Settings', items: [
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
-          { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
+          { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
 
@@ -549,6 +549,7 @@
     'staff-calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',
     'calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',
     'auto-signoff': 'Close shifts and days somebody forgot to close.',
+    'clock-settings': 'Reminders about the time clock, and closing what somebody forgot.',
     'late-events': 'Late arrivals and pick-ups awaiting a decision.',
     'billing-settings': 'Tax rate and other invoicing defaults.',
     'calendar-settings': 'Choose which layers the calendar draws.',

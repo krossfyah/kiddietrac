@@ -1299,6 +1299,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch('/admin/calendar-settings', [\App\Http\Controllers\Api\CalendarSettingsController::class, 'update']);
         Route::get  ('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'show']);
         Route::post ('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
+        // Clock reminders sit beside auto sign-off, on the same screen.
+        Route::get  ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'show']);
+        Route::post ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'update']);
         Route::patch('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
         Route::get  ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'show']);
         Route::patch('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
