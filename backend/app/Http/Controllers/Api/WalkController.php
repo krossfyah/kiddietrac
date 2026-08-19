@@ -264,15 +264,143 @@ final class WalkController extends Controller
             $trip->staff_lead_id === $u->id || $this->userBelongsToAgency($u->id, (int) $trip->agency_id),
             403
         );
+        $km = self::trailKm($id);
+
         DB::table('field_trips')->where('id', $id)->update([
             'status' => 'completed',
             'return_time' => \Illuminate\Support\Carbon::now($this->staffTz($u->id))->format('H:i:s'),
+            'distance_km' => $km,
             'updated_at' => now(),
         ]);
 
-        return response()->json(['status' => 'completed']);
+        // The walk belongs in each child's day, not only on a map nobody opens.
+        $this->logWalkToDay($id, $u->id);
+
+        return response()->json(['status' => 'completed', 'distance_km' => $km]);
     }
 
+
+    /**
+     * How far the walk actually went, in km, from its GPS trail.
+     *
+     * Stored once when the walk ends rather than recomputed on every read: pings can
+     * be pruned later, and the distance a parent was told should not drift afterwards.
+     *
+     * Two filters, both about GPS rather than about walking. A fix accurate to worse
+     * than 100 m contributes noise, and a jump over 500 m between consecutive fixes is
+     * the receiver relocating itself, not a toddler sprinting.
+     */
+    private static function trailKm(int $tripId): float
+    {
+        $pings = DB::table('field_trip_pings')->where('field_trip_id', $tripId)
+            ->orderBy('recorded_at')->orderBy('id')
+            ->get(['lat', 'lon', 'accuracy_m']);
+
+        $km = 0.0;
+        $prev = null;
+        foreach ($pings as $p) {
+            $lat = (float) $p->lat;
+            $lon = (float) $p->lon;
+            if ($lat === 0.0 && $lon === 0.0) { continue; }
+            if ($p->accuracy_m !== null && (float) $p->accuracy_m > 100) { continue; }
+            if ($prev !== null) {
+                $d = self::haversineKm($prev[0], $prev[1], $lat, $lon);
+                if ($d <= 0.5) { $km += $d; }
+            }
+            $prev = [$lat, $lon];
+        }
+
+        return round($km, 2);
+    }
+
+    private static function haversineKm(float $aLat, float $aLon, float $bLat, float $bLon): float
+    {
+        $r = 6371.0088;
+        $dLat = deg2rad($bLat - $aLat);
+        $dLon = deg2rad($bLon - $aLon);
+        $h = sin($dLat / 2) ** 2
+            + cos(deg2rad($aLat)) * cos(deg2rad($bLat)) * sin($dLon / 2) ** 2;
+
+        return 2 * $r * asin(min(1.0, sqrt($h)));
+    }
+
+    /**
+     * Write the finished walk into every attached child's daily log.
+     *
+     * Wrapped so a logging failure can never fail the walk itself — the educator has
+     * already brought the children back, and a 500 at that point helps nobody.
+     */
+    private function logWalkToDay(int $tripId, int $byUserId): void
+    {
+        try {
+            $trip = DB::table('field_trips')->where('id', $tripId)->first();
+            if (! $trip) { return; }
+
+            $childIds = DB::table('field_trip_permissions')->where('field_trip_id', $tripId)
+                ->pluck('child_id')->map(fn ($v) => (int) $v)->unique()->all();
+            if (! $childIds) { return; }
+
+            $tz = $this->staffTz($byUserId);
+            $date = substr((string) $trip->trip_date, 0, 10);
+            $start = $trip->depart_time
+                ? \Illuminate\Support\Carbon::parse($date.' '.$trip->depart_time, $tz)
+                : \Illuminate\Support\Carbon::now($tz);
+            $end = $trip->return_time
+                ? \Illuminate\Support\Carbon::parse($date.' '.$trip->return_time, $tz)
+                : \Illuminate\Support\Carbon::now($tz);
+            $minutes = max(0, $start->diffInMinutes($end));
+
+            $payload = [
+                'trip_id' => $tripId,
+                'destination' => (string) ($trip->destination ?? ''),
+                'title' => (string) ($trip->title ?? 'Walk / outing'),
+                'started_at' => $start->format('H:i'),
+                'ended_at' => $end->format('H:i'),
+                'minutes' => $minutes,
+                'distance_km' => $trip->distance_km !== null ? (float) $trip->distance_km : null,
+            ];
+
+            foreach ($childIds as $cid) {
+                // The room the child is actually enrolled in; the centre's first room
+                // only as a fallback, because daily_events.room_id is NOT NULL.
+                $roomId = DB::table('enrollments')->where('child_id', $cid)
+                    ->whereNotNull('room_id')
+                    ->where(function ($q) use ($date) {
+                        $q->whereNull('end_date')->orWhere('end_date', '>=', $date);
+                    })
+                    ->orderByDesc('start_date')->value('room_id');
+                if (! $roomId) {
+                    $roomId = DB::table('rooms')->where('centre_id', $trip->centre_id)->value('id');
+                }
+                if (! $roomId) { continue; }
+
+                // Ending the same walk twice must not log it twice.
+                $already = DB::table('daily_events')->where('child_id', $cid)
+                    ->where('event_type', 'walk')
+                    ->where('payload', 'like', '%"trip_id":'.$tripId.'%')
+                    ->exists();
+                if ($already) { continue; }
+
+                DB::table('daily_events')->insert([
+                    'child_id' => $cid,
+                    'room_id' => (int) $roomId,
+                    'event_type' => 'walk',
+                    'occurred_at' => $start->clone()->utc(),
+                    'payload' => json_encode($payload),
+                    'notes' => trim(($payload['destination'] !== '' ? $payload['destination'] : 'Walk')
+                        .' · '.$payload['started_at'].'-'.$payload['ended_at']
+                        .($payload['distance_km'] ? ' · '.$payload['distance_km'].' km' : '')),
+                    'recorded_by_id' => $byUserId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('walk day-log failed', [
+                'trip_id' => $tripId, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
     /** GET /parent/walks — all recent walks (live + past 30 days) my children were on. */
     public function parentWalks(Request $request): JsonResponse
     {
