@@ -266,6 +266,7 @@ final class ReportsController extends Controller
             'families'    => ['title' => 'Family directory',      'icon' => '👪', 'desc' => 'Families with contact and billing details.',        'dated' => false],
             'staff_hours' => ['title' => 'Staff hours',           'icon' => '⏱️', 'desc' => 'Educator clock-in / clock-out hours worked.',       'dated' => true],
             'waitlist'    => ['title' => 'Waitlist',              'icon' => '📝', 'desc' => 'Children waiting for a spot, oldest first.',         'dated' => false],
+            'immunizations' => ['title' => 'Immunisations',       'icon' => '💉', 'desc' => 'What each child has on file and what is due.',    'dated' => false],
             'incidents'   => ['title' => 'Incidents & injuries',  'icon' => '🩹', 'desc' => 'Logged incidents / injuries in the period.',        'dated' => true],
             'observations'=> ['title' => 'Observations',          'icon' => '🔭', 'desc' => 'Learning-story observations recorded.',            'dated' => true],
             'tours'       => ['title' => 'Tour bookings',         'icon' => '🚪', 'desc' => 'Prospective-family tour requests.',                 'dated' => true],
@@ -824,6 +825,98 @@ final class ReportsController extends Controller
 
                 return [['Child', 'DOB', 'Family', 'Centre', 'Applied', 'Preferred start', 'Status', 'Source'], $rows];
 
+            case 'immunizations':
+                $q = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+                    ->join('centres as c', 'c.id', '=', 'f.centre_id')->where('c.agency_id', $agencyId)
+                    ->where('ch.enrollment_status', 'enrolled')->whereNull('ch.deleted_at');
+                if ($centreId) {
+                    $q->where('c.id', $centreId);
+                }
+                $kids = $q->orderBy('ch.first_name')->limit(5000)
+                    ->get(['ch.id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth', 'c.name as centre']);
+
+                // The agency's own schedule. Required items only: an optional vaccine is
+                // not something to chase a family about.
+                $schedule = \Illuminate\Support\Facades\Schema::hasTable('immunization_schedule')
+                    ? DB::table('immunization_schedule')->where('agency_id', $agencyId)
+                        ->where('active', 1)->where('is_required', 1)
+                        ->orderBy('due_at_age_months')->get()
+                    : collect();
+
+                $shots = DB::table('immunizations')
+                    ->whereIn('child_id', $kids->pluck('id'))
+                    ->get(['child_id', 'vaccine', 'dose_label', 'administered_on', 'next_due_on', 'exempt', 'exemption_reason']);
+                $byChild = $shots->groupBy('child_id');
+
+                $today = now();
+                $rows = [];
+                foreach ($kids as $k) {
+                    $mine = $byChild->get($k->id, collect());
+                    $exempt = $mine->firstWhere('exempt', 1);
+
+                    $ageMonths = $k->date_of_birth
+                        ? (int) \Illuminate\Support\Carbon::parse($k->date_of_birth)->diffInMonths($today)
+                        : null;
+
+                    // A dose counts as held when the same vaccine and the same dose NUMBER
+                    // appear with a date. Matching on vaccine alone would mark a whole
+                    // course complete after one shot; matching the raw labels fails,
+                    // because the schedule writes "4th dose (booster)" where a record
+                    // writes "4th dose" and "1 dose" where a record writes "1st".
+                    $held = $mine->filter(fn ($s) => $s->administered_on)
+                        ->map(fn ($s) => self::doseKey($s->vaccine, $s->dose_label))
+                        ->all();
+
+                    $overdue = [];
+                    $upcoming = [];
+                    if ($ageMonths !== null) {
+                        foreach ($schedule as $item) {
+                            $key = self::doseKey($item->vaccine, $item->dose_label);
+                            if (in_array($key, $held, true)) {
+                                continue;
+                            }
+                            $label = trim($item->vaccine . ' ' . ($item->dose_label ?? ''));
+                            if ($ageMonths >= (int) $item->due_at_age_months) {
+                                $overdue[] = $label;
+                            } elseif ((int) $item->due_at_age_months - $ageMonths <= 3) {
+                                // Within three months is near enough to tell a family about.
+                                $upcoming[] = $label;
+                            }
+                        }
+                    }
+
+                    // A recorded next_due_on beats anything inferred: somebody entered it
+                    // from the actual record.
+                    $nextRecorded = $mine->filter(fn ($s) => $s->next_due_on)
+                        ->sortBy('next_due_on')->first();
+
+                    $status = $exempt ? 'Exempt'
+                        : ($mine->isEmpty() ? 'Nothing on file'
+                        : ($overdue ? 'Overdue' : ($upcoming ? 'Due soon' : 'Up to date')));
+
+                    $rows[] = [
+                        'Child' => trim($k->first_name . ' ' . ($k->last_name ?? '')),
+                        'Centre' => $k->centre,
+                        'Age' => $ageMonths === null ? '—' : $ageMonths . ' mo',
+                        'Status' => $status,
+                        'On file' => (string) $mine->filter(fn ($s) => $s->administered_on)->count(),
+                        'Last dose' => optional($mine->filter(fn ($s) => $s->administered_on)
+                            ->sortByDesc('administered_on')->first())->administered_on ?: '—',
+                        'Overdue' => $overdue ? implode(', ', array_slice($overdue, 0, 4))
+                            . (count($overdue) > 4 ? ' +' . (count($overdue) - 4) : '') : '—',
+                        'Due soon' => $upcoming ? implode(', ', array_slice($upcoming, 0, 3)) : '—',
+                        'Next due' => $nextRecorded ? substr((string) $nextRecorded->next_due_on, 0, 10) : '—',
+                        'Exemption' => $exempt ? ($exempt->exemption_reason ?: 'On record') : '—',
+                    ];
+                }
+
+                // Worst first: a report read top-down should start with the children
+                // somebody has to do something about.
+                $rank = ['Overdue' => 0, 'Nothing on file' => 1, 'Due soon' => 2, 'Up to date' => 3, 'Exempt' => 4];
+                usort($rows, fn ($a, $b) => [$rank[$a['Status']] ?? 9, $a['Child']] <=> [$rank[$b['Status']] ?? 9, $b['Child']]);
+
+                return [['Child', 'Centre', 'Age', 'Status', 'On file', 'Last dose', 'Overdue', 'Due soon', 'Next due', 'Exemption'], $rows];
+
             case 'incidents':
                 $q = DB::table('incidents as inc')->join('children as ch', 'ch.id', '=', 'inc.child_id')
                     ->join('families as f', 'f.id', '=', 'ch.family_id')->join('centres as c', 'c.id', '=', 'f.centre_id')
@@ -1159,5 +1252,27 @@ final class ReportsController extends Controller
         $known = ['ilearn' => 'iLearn', 'kiddietrac' => 'KiddieTrac'];
 
         return $known[$key] ?? ($key === '' ? 'External' : ucfirst($key));
+    }
+
+    /**
+     * Vaccine + dose reduced to something both sides can agree on.
+     *
+     * The schedule and the records are written by different people at different times:
+     * "4th dose (booster)" against "4th dose", "1 dose" against "1st". Comparing raw
+     * strings matched almost nothing, which reported children as overdue for doses they
+     * had already had.
+     */
+    private static function doseKey(?string $vaccine, ?string $dose): string
+    {
+        $v = strtolower(trim((string) $vaccine));
+        $v = preg_replace('/\s+/', ' ', $v);
+
+        $d = strtolower(trim((string) $dose));
+        $d = preg_replace('/\(.*?\)/', '', $d);      // "(booster)" is a description, not an identity
+        $d = str_replace(['doses', 'dose'], '', $d);
+        $d = preg_replace('/(\d+)\s*(st|nd|rd|th)/', '$1', $d);   // 4th -> 4
+        $d = preg_replace('/[^a-z0-9]/', '', $d);
+
+        return $v . '|' . $d;
     }
 }
