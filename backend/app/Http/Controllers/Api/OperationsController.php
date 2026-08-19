@@ -87,10 +87,26 @@ final class OperationsController extends Controller
             ->where('week_start', $weekStart)
             ->first();
         $openDays = $this->centreOpenDays($centreId);
-        if (!$week) return response()->json(['data' => null, 'week_start' => $weekStart, 'open_days' => $openDays]);
+
+        // Serving times carry forward. A week that has not set its own inherits the most
+        // recent week that did, so a centre types its timetable once rather than every
+        // Monday.
+        $mealTimes = $week && $week->meal_times !== null
+            ? $week->meal_times
+            : DB::table('menu_weeks')->where('centre_id', $centreId)
+                ->where('week_start', '<', $weekStart)->whereNotNull('meal_times')
+                ->orderByDesc('week_start')->value('meal_times');
+        $mealTimes = $mealTimes ? (json_decode($mealTimes, true) ?: []) : [];
+
+        if (!$week) {
+            return response()->json(['data' => null, 'week_start' => $weekStart,
+                'open_days' => $openDays, 'meal_times' => $mealTimes]);
+        }
         $items = DB::table('menu_items')->where('menu_week_id', $week->id)
             ->orderBy('day_of_week')->orderBy('meal_type')->get();
-        return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart, 'open_days' => $openDays]);
+
+        return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart,
+            'open_days' => $openDays, 'meal_times' => $mealTimes]);
     }
 
     /**
@@ -109,6 +125,18 @@ final class OperationsController extends Controller
         return [1, 2, 3, 4, 5];
     }
 
+    /** Only the five known meals, only times, and null rather than an empty blob. */
+    private static function encodeMealTimes(?array $times): ?string
+    {
+        $allowed = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'];
+        $clean = [];
+        foreach ($allowed as $meal) {
+            $v = $times[$meal] ?? null;
+            if (is_string($v) && $v !== '') { $clean[$meal] = substr($v, 0, 5); }
+        }
+
+        return $clean ? json_encode($clean) : null;
+    }
     public function saveMenuWeek(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -116,6 +144,10 @@ final class OperationsController extends Controller
             'week_start' => 'required|date',
             'status' => 'required|in:draft,published,archived',
             'notes' => 'nullable|string|max:2000',
+            // meal_type => "HH:MM". Keys are checked against the same five meals the items
+            // use, so nothing else can be written into the blob.
+            'meal_times' => 'nullable|array',
+            'meal_times.*' => 'nullable|date_format:H:i',
             // present, not required: Laravel's `required` rejects an EMPTY array, so
             // starting a week and filling it in later failed with an error naming a field
             // the person had not touched. Creating the shell of a menu week is a normal
@@ -145,6 +177,7 @@ final class OperationsController extends Controller
             'week_start' => $data['week_start'],
             'status' => $data['status'],
             'notes' => $data['notes'] ?? null,
+            'meal_times' => self::encodeMealTimes($data['meal_times'] ?? null),
             'created_by_id' => $request->user()->id,
             'published_at' => $data['status'] === 'published' ? now() : null,
             'updated_at' => now(),
@@ -718,7 +751,16 @@ final class OperationsController extends Controller
         }
         $items = DB::table('menu_items')->where('menu_week_id', $week->id)
             ->orderBy('day_of_week')->orderBy('meal_type')->get();
-        return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart, 'centre' => $centre, 'open_days' => $openDays]);
+
+        // Families asked what time meals are served, so the published week carries its
+        // serving times too, inherited from the last week that set them.
+        $mealTimes = $week->meal_times ?? DB::table('menu_weeks')->where('centre_id', $centreId)
+            ->where('week_start', '<', $weekStart)->whereNotNull('meal_times')
+            ->orderByDesc('week_start')->value('meal_times');
+
+        return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart,
+            'centre' => $centre, 'open_days' => $openDays,
+            'meal_times' => $mealTimes ? (json_decode($mealTimes, true) ?: []) : []]);
     }
 
     private function assertCentreAccess(Request $request, int $centreId): void

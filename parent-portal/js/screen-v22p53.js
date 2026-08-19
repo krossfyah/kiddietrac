@@ -46,16 +46,31 @@
     if (!centreList.length) { try { const r1 = await Api.get('/director/centres'); centreList = r1.centres || r1.data || (Array.isArray(r1) ? r1 : []); } catch (e) {} }
     if (!centreList.length) { try { const r2 = await Api.get('/admin/centres'); centreList = r2.centres || r2.data || (Array.isArray(r2) ? r2 : []); } catch (e) {} }
     if (!centreList.length) { main.innerHTML = '<div style="padding:24px;color:#64748B;">No centre is assigned to your account yet — ask an administrator to add you to a centre.</div>'; return; }
-    const cid = centreList[0].id, centreName = centreList[0].name || '';
+    // Which one you were last editing. With nine providers, always landing on the
+    // alphabetically first one means everybody else is a hunt.
+    const CENTRE_KEY = 'kt_menu_centre';
+    let cid = (function () {
+      const saved = parseInt(localStorage.getItem(CENTRE_KEY) || '', 10);
+      return centreList.some(c => +c.id === saved) ? saved : centreList[0].id;
+    })();
+    const centreNameOf = (id) => {
+      const c = centreList.filter(x => +x.id === +id)[0] || centreList[0];
+      return c.name || '';
+    };
+    // "Centre" is called something else in some agencies — providers here.
+    const centreWord = (window.KT && KT.term) ? KT.term('centre') : 'Centre';
     const meals = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'];
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const thisMonday = _mondayOf(new Date());
     let cur = _mondayOf(new Date());   // the week currently being edited
 
-    // Friendly allergy/dietary reminder — fetched once (independent of the week).
-    let allergyHtml = '';
-    try {
-      const ar = await Api.get(`/operations/allergy-alerts?centre_id=${cid}`);
+    // Allergy/dietary reminders for whichever centre is on screen. Fetched per load
+    // rather than once: fixed to the first centre, it showed one provider's warnings
+    // while you edited another provider's menu, which is the worst possible version.
+    async function allergyPanel(forCid) {
+      let allergyHtml = '';
+      try {
+        const ar = await Api.get(`/operations/allergy-alerts?centre_id=${forCid}`);
       const kids = (ar && ar.data) || [];
       if (kids.length) {
         const chip = (t) => { const hot = t.severity === 'severe' || t.severity === 'high'; return `<span style="display:inline-block;background:${hot ? '#FEE2E2' : '#FEF3C7'};color:${hot ? '#991B1B' : '#92400E'};padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;margin:1px 4px 1px 0;">${esc(t.label)}</span>`; };
@@ -66,13 +81,21 @@
           </div>
         </div>`;
       }
-    } catch (e) {}
+      } catch (e) {}
+      return allergyHtml;
+    }
 
     async function load() {
       const weekStartStr = _ymd(cur);
       main.innerHTML = '<div style="padding:24px;">Loading menu…</div>';
-      const r = await Api.get(`/operations/menu?centre_id=${cid}&week_start=${weekStartStr}`).catch(() => ({}));
+      const [r, allergyHtml] = await Promise.all([
+        Api.get(`/operations/menu?centre_id=${cid}&week_start=${weekStartStr}`).catch(() => ({})),
+        allergyPanel(cid),
+      ]);
       const week = r.data || { status: 'draft', notes: '' };
+      // Times live on the week, and a week that has not set its own inherits the last
+      // week that did — a centre types its timetable once, not every Monday.
+      const mealTimes = r.meal_times || {};
       // Only render the days the centre is open (configured per centre; Mon–Fri default).
       const openDays = (r && Array.isArray(r.open_days) && r.open_days.length) ? r.open_days.slice() : [1, 2, 3, 4, 5];
       const cols = openDays.map(dow => ({ dow, label: dayLabels[dow - 1] || ('D' + dow) }));
@@ -81,15 +104,37 @@
 
       // The grid scrolls horizontally inside its own box on mobile; the Meal
       // column stays pinned so you never lose which row you're editing.
-      let table = `<table style="min-width:${120 + cols.length * 116}px;width:100%;border-collapse:collapse;margin-top:12px;">
-        <thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;position:sticky;left:0;background:#fff;">Meal</th>`;
-      cols.forEach(c => table += `<th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${c.label}</th>`);
+      // A menu is planned against real dates, so each day carries its own, and today is
+      // tinted — five identical columns of input boxes are otherwise impossible to place.
+      const todayStr = _ymd(new Date());
+      const dateOf = (dow) => { const d = new Date(cur); d.setDate(d.getDate() + (dow - 1)); return d; };
+      const HEAD = 'padding:9px 8px;border-bottom:2px solid #E2E8F0;font-size:12px;color:#475569;';
+
+      let table = `<table data-kt-no-bulk data-kt-no-filter style="min-width:${150 + cols.length * 116}px;width:100%;border-collapse:collapse;margin-top:12px;border:1px solid #E7EDF3;border-radius:12px;overflow:hidden;">
+        <thead><tr style="background:#F1F5F9;"><th style="text-align:left;${HEAD}position:sticky;left:0;background:#F1F5F9;z-index:1;">Meal</th>`;
+      cols.forEach(c => {
+        const dt = dateOf(c.dow);
+        const isToday = _ymd(dt) === todayStr;
+        table += `<th style="text-align:left;${HEAD}${isToday ? 'background:#E0F2FE;box-shadow:inset 0 3px 0 #1F6080;' : ''}">
+          <div style="font-weight:800;color:${isToday ? '#1F6080' : '#0D1B2A'};">${c.label}${isToday ? ' · today' : ''}</div>
+          <div style="font-size:11px;font-weight:600;color:#64748B;">${dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
+        </th>`;
+      });
       table += `</tr></thead><tbody>`;
-      meals.forEach(m => {
-        table += `<tr><td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-weight:600;text-transform:capitalize;font-size:12px;position:sticky;left:0;background:#fff;">${m.replace('_', ' ')}</td>`;
+      // Banded rows. Five meals of identical boxes read as one grey field otherwise, and
+      // losing your place mid-row is how Tuesday's lunch ends up under Wednesday.
+      meals.forEach((m, mi) => {
+        const band = mi % 2 ? '#FFFFFF' : '#FAFCFE';
+        table += `<tr style="background:${band};">
+          <td style="padding:8px;border-bottom:1px solid #EDF2F7;font-size:12px;position:sticky;left:0;background:${band};z-index:1;">
+            <div style="font-weight:700;text-transform:capitalize;color:#0D1B2A;">${m.replace('_', ' ')}</div>
+            <input data-meal-time="${m}" type="time" value="${esc(mealTimes[m] || '')}" aria-label="${m.replace('_', ' ')} serving time"
+                   style="margin-top:4px;width:104px;box-sizing:border-box;padding:3px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11.5px;color:#475569;background:#fff;">
+          </td>`;
         cols.forEach(c => {
           const it = itemsByDayMeal[`${c.dow}-${m}`] || {};
-          table += `<td style="padding:6px 4px;border-bottom:1px solid #F3F4F6;min-width:112px;">
+          const isToday = _ymd(dateOf(c.dow)) === todayStr;
+          table += `<td style="padding:6px 4px;border-bottom:1px solid #EDF2F7;min-width:112px;${isToday ? 'background:rgba(224,242,254,.45);' : ''}">
             <input data-d="${c.dow}" data-m="${m}" data-f="name" placeholder="—" value="${esc(it.name || '')}" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid #E5E7EB;border-radius:4px;font-size:12px;">
             <input data-d="${c.dow}" data-m="${m}" data-f="allergens" placeholder="allergens" value="${esc(it.allergens || '')}" style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #FEF3C7;border-radius:4px;font-size:11px;margin-top:3px;color:#92400E;">
           </td>`;
@@ -102,7 +147,12 @@
       const navBtn = 'width:30px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:14px;color:#1F6080;';
       main.innerHTML = `<div style="padding:16px;max-width:1200px;margin:0 auto;">
         <h2 style="margin:0 0 2px;color:#1F6080;font-size:19px;">Weekly menu</h2>
-        <div style="color:#6B7280;font-size:12.5px;">${esc(centreName)}</div>
+        ${centreList.length > 1
+          ? `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#374151;font-weight:600;margin:4px 0 2px;">${esc(centreWord)}
+               <select id="mp-centre" style="height:32px;padding:0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;max-width:280px;">
+                 ${centreList.map(c => `<option value="${c.id}" ${+c.id === +cid ? 'selected' : ''}>${esc(c.name || ('#' + c.id))}</option>`).join('')}
+               </select></label>`
+          : `<div style="color:#6B7280;font-size:12.5px;">${esc(centreNameOf(cid))}</div>`}
         ${allergyHtml}
         <div style="display:flex;align-items:center;gap:2px;background:#F3F4F6;border-radius:10px;padding:2px;width:fit-content;margin-top:6px;">
           <button id="mp-prev" title="Previous week" style="${navBtn}">◀</button>
@@ -132,6 +182,15 @@
       document.getElementById('mp-next').onclick = () => go(7);
       const todayBtn = document.getElementById('mp-today'); if (todayBtn) todayBtn.onclick = () => { cur = _mondayOf(new Date()); load(); };
 
+      const centreSel = document.getElementById('mp-centre');
+      if (centreSel) {
+        centreSel.onchange = () => {
+          cid = parseInt(centreSel.value, 10);
+          try { localStorage.setItem(CENTRE_KEY, String(cid)); } catch (e) {}
+          load();
+        };
+      }
+
       document.getElementById('mp-save').onclick = async () => {
         const items = [];
         main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach(inp => {
@@ -143,7 +202,11 @@
         const msg = document.getElementById('mp-msg');
         msg.textContent = 'Saving…'; msg.style.color = '#6B7280';
         try {
-          await Api.post('/operations/menu', { centre_id: cid, week_start: weekStartStr, status, notes: document.getElementById('mp-notes').value, items });
+          const meal_times = {};
+          main.querySelectorAll('input[data-meal-time]').forEach(t => {
+            if (t.value) { meal_times[t.getAttribute('data-meal-time')] = t.value; }
+          });
+          await Api.post('/operations/menu', { centre_id: cid, week_start: weekStartStr, status, notes: document.getElementById('mp-notes').value, items, meal_times });
           msg.textContent = status === 'published' ? 'Published — families notified.' : 'Saved.'; msg.style.color = '#047857';
         } catch (e) { msg.textContent = 'Save failed.'; msg.style.color = '#B91C1C'; }
       };
@@ -165,6 +228,7 @@
       const weekStartStr = _ymd(cur);
       const r = await Api.get(`/parent/menu?week_start=${weekStartStr}`).catch(() => ({}));
       const centre = r && r.centre; const items = (r && r.items) || [];
+      const mealTimes = (r && r.meal_times) || {};
       const openDays = (r && Array.isArray(r.open_days) && r.open_days.length) ? r.open_days : [1, 2, 3, 4, 5];
       const byDay = {}; items.forEach(it => { if (openDays.indexOf(it.day_of_week) === -1) return; (byDay[it.day_of_week] = byDay[it.day_of_week] || []).push(it); });
       const isThisWeek = _ymd(cur) === _ymd(thisMonday);
@@ -205,7 +269,7 @@
             html += `<div style="display:flex;gap:10px;padding:7px 0;border-top:1px solid #F3F4F6;">
               <span style="font-size:17px;flex-shrink:0;width:22px;text-align:center;">${meta[0]}</span>
               <div style="min-width:0;flex:1;">
-                <div style="font-size:10.5px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${meta[1]}</div>
+                <div style="font-size:10.5px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${meta[1]}${mealTimes[mt] ? ` · ${esc(mealTimes[mt])}` : ''}</div>
                 <div style="font-size:14px;color:#0D1B2A;">${esc(it.name)}</div>
                 ${it.allergens ? `<div style="margin-top:3px;"><span style="display:inline-block;background:#FEF3C7;color:#92400E;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:8px;">⚠ ${esc(it.allergens)}</span></div>` : ''}
               </div>

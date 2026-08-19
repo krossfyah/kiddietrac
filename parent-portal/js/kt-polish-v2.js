@@ -29,6 +29,10 @@
 
   // ============================ Bulk select on tables ============================
   function attachBulkSelect(table) {
+    // Opt-out, matching the data-kt-no-* family the other primitives use. Some tables
+    // are a layout rather than a list of records — the weekly menu grid is five meals
+    // by five days of inputs, and there is no bulk action for "breakfast and lunch".
+    if (table.hasAttribute('data-kt-no-bulk')) return;
     if (table.dataset.ktBulk) return;
     table.dataset.ktBulk = '1';
     const tbody = table.querySelector('tbody');
