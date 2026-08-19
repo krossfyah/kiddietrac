@@ -16,7 +16,8 @@
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function money(n) { return '$' + (Number(n) || 0).toFixed(2); }
-  function fmt(d) { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return d; } }
+  // Date-only: formatted from its parts. Parsed, it renders a day early (see KT.dayLabel).
+  function fmt(d) { return (window.KT && KT.dayLabel) ? KT.dayLabel(d, { year: false }) : d; }
   function tok() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
   function apiBase() { return (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
 

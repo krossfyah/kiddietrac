@@ -474,7 +474,8 @@
     }
 
     const money = (n) => '$' + (Number(n) || 0).toFixed(2);
-    const dt = (d) => { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d || ''; } };
+    // Date-only: see KT.dayLabel — this was showing payroll periods a day early.
+    const dt = (d) => (window.KT && KT.dayLabel) ? KT.dayLabel(d) : (d || '');
     const chip = (s) => {
       const tone = s === 'paid' ? ['#DCFCE7', '#166534'] : (s === 'void' ? ['#F1F5F9', '#64748B'] : ['#E0F2FE', '#075985']);
       return `<span style="font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;background:${tone[0]};color:${tone[1]};">${escapeHtml(s.charAt(0).toUpperCase() + s.slice(1))}</span>`;

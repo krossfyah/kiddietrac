@@ -38,7 +38,8 @@
   function activeAgency() { return sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id') || ''; }
   function today() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
   function qp(name) { var m = (location.hash.split('?')[1] || '').match(new RegExp('(?:^|&)' + name + '=([^&]*)')); return m ? decodeURIComponent(m[1]) : ''; }
-  function fmtDate(d) { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return d || ''; } }
+  // Date-only: formatted from its parts. Parsed, it renders a day early west of UTC.
+  function fmtDate(d) { return (window.KT && KT.dayLabel) ? KT.dayLabel(d) : (d || ''); }
 
   // Wrap wide content so it scrolls horizontally on mobile/APK instead of overflowing the page.
   function scrollWrap(node, minWidth) {

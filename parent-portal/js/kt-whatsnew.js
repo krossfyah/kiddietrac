@@ -16,7 +16,8 @@
   function isAdmin() { var r = (user().roles) || []; return ADMIN.some(function (x) { return r.indexOf(x) !== -1; }); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function within3mo(d) { if (!d) return false; var t = new Date(d + 'T00:00:00'); if (isNaN(t)) return false; return (Date.now() - t.getTime()) <= 92 * 86400000; }
-  function fmtDate(s) { try { return new Date(s + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return s; } }
+  // Date-only: see KT.dayLabel.
+  function fmtDate(s) { return (window.KT && KT.dayLabel) ? KT.dayLabel(s) : s; }
   function newest(d) { var ns = (d.entries || []).filter(function (e) { return e.type === 'new' && e.date; }).map(function (e) { return e.date; }).sort(); return ns.length ? ns[ns.length - 1] : ''; }
   function seenDate() { try { return localStorage.getItem('kt_whatsnew_seen') || ''; } catch (e) { return ''; } }
 

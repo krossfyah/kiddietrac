@@ -75,7 +75,12 @@
   function toast(i, t, m, c) { try { KT.toast && KT.toast(i, t, m || '', c || ACCENT); } catch (e) {} }
   function go(hash) { window.location.hash = '#' + hash; }
   function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
-  function fmtDate(s) { if (!s) return ''; try { return new Date(s + (s.length <= 10 ? 'T00:00:00' : '')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return s; } }
+  function fmtDate(s) {
+    if (!s) return '';
+    // A date-only value never goes through Date(): it renders a day early. Anything
+    // carrying a time still does, because that IS an instant.
+    if (String(s).length <= 10 && window.KT && KT.dayLabel) { return KT.dayLabel(s); }
+    try { return new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return s; } }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
   function fmtTime(s) { if (!s) return ''; try { var d = new Date(s.replace(' ', 'T')); return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return s; } }
   function me() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }

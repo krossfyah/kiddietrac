@@ -1,0 +1,27 @@
+Date-only values stop rendering a day early across the portal
+
+Measured in the browser rather than assumed: new Date("2026-08-11T00:00:00"),
+new Date("2026-08-11") and the explicit-Z form ALL parse to UTC midnight in this engine, and
+rendering any of them in America/Toronto gives "Aug 10". Every screen formatting a date-only
+value that way has been showing it a day early to everyone west of UTC.
+
+Fixed at seven display sites through one shared helper, KT.dayLabel, which formats from the
+string's own parts. A value with no time in it denotes a calendar DAY and has nothing to
+convert between timezones, so nothing is converted and nothing can shift:
+
+  payslip periods (my pay)          home-visit dates, short and long forms
+  HCC inspection form dates         payroll document periods
+  sales follow-up dates             what's-new dates
+
+screen-care.js was deliberately LEFT ALONE. It appends Z and also passes timeZone:"UTC", so
+UTC midnight is rendered in UTC and the day is already right. It matches the pattern and is
+not the bug - which is exactly why each site was read before being changed.
+
+Arithmetic sites are also untouched. They parse and format consistently within themselves,
+and rewriting date maths is a different job with different risks.
+
+This is the third and fourth time this shipped today - closure ranges on the calendar, then
+the closures list - so the rule is already in CONVENTIONS.md. The helper now makes following
+it easier than not.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

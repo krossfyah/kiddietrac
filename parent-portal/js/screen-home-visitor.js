@@ -398,7 +398,8 @@
       if (edited) return el('span', { style: 'font-size:10.5px;font-weight:700;color:#1D4ED8;background:#DBEAFE;border-radius:20px;padding:2px 8px;', title: r.history.length + ' edit(s)' }, ['Edited']);
       return el('span', { style: 'font-size:10.5px;font-weight:700;color:#047857;background:#D1FAE5;border-radius:20px;padding:2px 8px;' }, ['Submitted']);
     }
-    function fmtDate(d) { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return d || ''; } }
+    // Date-only: see KT.dayLabel.
+    function fmtDate(d) { return (window.KT && KT.dayLabel) ? KT.dayLabel(d) : (d || ''); }
     function filtered() {
       var out = all.filter(function (r) {
         if (!state.q) return true;
@@ -471,7 +472,8 @@
     wrap.appendChild(el('div', { style: 'text-align:center;color:#64748B;padding:24px;font-size:13px;' }, ['Loading report…']));
     container.appendChild(wrap);
     var typeLabel = {}; VISIT_TYPES.forEach(function (t) { typeLabel[t[0]] = t[1]; });
-    var fmtDate = function (d) { if (!d) return '—'; try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }); } catch (e) { return d; } };
+    // Date-only: see KT.dayLabel.
+    var fmtDate = function (d) { return d ? ((window.KT && KT.dayLabel) ? KT.dayLabel(d) : d) : '—'; };
 
     Api.get('/home-visits/' + id).then(function (d) {
       var r = (d && d.report) || d || {};

@@ -84,6 +84,22 @@
   KT.tz = tz;
   KT.parseTs = parse;
   KT.fmtTime = fmtTime;
+  /* A DATE-ONLY value ("2026-08-11") is a calendar day, not an instant. Every form
+     of new Date() parses it as UTC midnight in this engine, so rendering it in any
+     western timezone lands on the day before — which is what shipped across the
+     portal until this existed. Formatted from the string parts, so nothing is
+     converted and nothing can shift. */
+  var _MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function dayLabel(ymd, opts) {
+    var p = String(ymd == null ? '' : ymd).slice(0, 10).split('-');
+    if (p.length !== 3 || !p[0]) { return ymd == null ? '' : String(ymd); }
+    var out = (_MON[parseInt(p[1], 10) - 1] || p[1]) + ' ' + parseInt(p[2], 10);
+    if (!opts || opts.year !== false) { out += ', ' + p[0]; }
+    return out;
+  }
+  KT.dayLabel = dayLabel;
+
   KT.fmtDate = fmtDate;
   KT.fmtDateTime = fmtDateTime;
   KT.agencyToday = agencyToday;
