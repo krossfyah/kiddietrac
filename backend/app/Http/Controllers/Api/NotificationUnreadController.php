@@ -101,6 +101,30 @@ final class NotificationUnreadController extends Controller
     }
 
     /** Delete a single notification from the caller's own inbox. */
+    /**
+     * Put one notification back to unread.
+     *
+     * Read was a one-way door: tapping a row marked it read on the way to wherever it
+     * pointed, and nothing could undo that — so an item opened by accident dropped out
+     * of the unread filter and the bell count for good.
+     *
+     * Existence is checked separately from the update because an already-unread row
+     * updates zero rows, and treating that as "not found" would 404 on a notification
+     * that is right there. Scoped to the caller's own rows, like everything else here.
+     */
+    public function markUnread(Request $request, int $id): JsonResponse
+    {
+        $q = DB::table('notifications')
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id);
+
+        if (! $q->exists()) return response()->json(['message' => 'Not found'], 404);
+
+        $q->update(['read_at' => null]);
+
+        return response()->json(['ok' => true]);
+    }
+
     public function destroy(Request $request, int $id): JsonResponse
     {
         $deleted = DB::table('notifications')

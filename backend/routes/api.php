@@ -1200,6 +1200,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Inbox housekeeping — always scoped to the caller's own notifications.
     Route::post('/notifications/delete',      [NotificationUnreadController::class, 'destroyMany']);
     Route::delete('/notifications/{id}',      [NotificationUnreadController::class, 'destroy']);
+    Route::patch('/notifications/{id}/unread', [NotificationUnreadController::class, 'markUnread']);
 
     // ───────── v15 ROUTES — Reseller features ─────────
     // These routes are spliced INTO the auth:sanctum group by deploy.sh.

@@ -177,9 +177,17 @@
       if (_npage < 1) _npage = 1;
       var start = (_npage - 1) * N_PER, end = Math.min(start + N_PER, total);
       // A bounded, internally-scrolling window — like a Gmail message list.
-      var scroller = Dom.el('div', { style: 'max-height:calc(100vh - 330px);min-height:140px;overflow-y:auto;' });
+      // data-kt-list marks these rows for the kebab sweep. no-controls because the screen
+      // already has its own filter + "Mark all read" bar and does not want a second one.
+      var scroller = Dom.el('div', {
+        'data-kt-list': '1', 'data-kt-no-controls': '1',
+        style: 'max-height:calc(100vh - 330px);min-height:140px;overflow-y:auto;',
+      });
       rows.slice(start, end).forEach(function (n) { scroller.appendChild(renderRow(n)); });
       listWrap.appendChild(scroller);
+      // Rows were just rebuilt, so their kebabs went with them. The sweeper is on a
+      // 4s interval; nudge it or the actions sit there as raw buttons until it fires.
+      if (KT.sweepRowActions) KT.sweepRowActions();
       // Page through them so the list never grows without bound.
       if (pages > 1) {
         var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-top:1px solid #F3F4F6;background:#FCFCFD;' });
@@ -226,31 +234,57 @@
       body.appendChild(meta);
       row.appendChild(body);
 
+      // Row actions go in a bar that is the row's LAST element child and holds nothing
+      // but buttons. That exact shape is what kt-row-actions looks for before collapsing
+      // them into the house ⋮ kebab (see cardActionCell/isActionsBar) — the same treatment
+      // every other list gets. Never hand-roll a kebab; shape the markup and let it happen.
+      var acts = Dom.el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;align-self:flex-start;' });
+
+      // Read is a toggle, not a one-way door. Tapping a row marks it read on the way to
+      // wherever it points, so an item opened by mistake needs a way back.
+      var readBtn = Dom.el('button', {
+        type: 'button', 'data-act': n.read_at ? 'mark-unread' : 'mark-read',
+        style: 'background:none;border:none;color:#64748B;font-size:12px;font-weight:600;cursor:pointer;padding:4px 6px;white-space:nowrap;',
+      }, n.read_at ? '📩 Mark unread' : '📖 Mark read');
+      readBtn.addEventListener('click', function (e) {
+        e.stopPropagation();          // the row itself navigates — an action must not
+        var prev = n.read_at;
+        n.read_at = prev ? null : new Date().toISOString();      // optimistic
+        paint();
+        Api.patch('/notifications/' + n.id + (prev ? '/unread' : '/read'), {})
+          .catch(function () {
+            n.read_at = prev;                                     // put it back
+            paint();
+            if (KT.toast) KT.toast('⚠️', 'Could not update', 'Please try again.', '#B91C1C');
+          });
+      });
+      acts.appendChild(readBtn);
+
       // Per-row delete — the common case is binning one notification, and making
-      // someone enter select-mode for that is a tax.
+      // someone enter select-mode for that is a tax. Labelled, not a bare glyph:
+      // inside the kebab the text IS the menu item.
       var del = Dom.el('button', {
         type: 'button', 'aria-label': 'Delete notification',
-        style: 'background:none;border:none;color:#CBD5E1;font-size:16px;cursor:pointer;padding:6px 2px;flex-shrink:0;align-self:flex-start;',
-      }, '🗑');
-      del.addEventListener('mouseenter', function () { del.style.color = '#DC2626'; });
-      del.addEventListener('mouseleave', function () { del.style.color = '#CBD5E1'; });
+        style: 'background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:4px 6px;white-space:nowrap;',
+      }, '🗑 Delete');
       del.addEventListener('click', function (e) {
         e.stopPropagation();
-        // Deleting is not undoable — ask first. A stray tap on a 16px bin icon
-        // shouldn't silently destroy something.
+        // Deleting is not undoable — ask first.
         var go = function () {
-          var prev = cache.slice();
+          var prevRows = cache.slice();
           cache = cache.filter(function (r) { return r.id !== n.id; });   // optimistic
           paint();
           Api.delete('/notifications/' + n.id).catch(function () {
-            cache = prev;                                                  // put it back
+            cache = prevRows;                                             // put it back
             paint();
             if (KT.toast) KT.toast('⚠️', 'Could not delete', 'Please try again.', '#B91C1C');
           });
         };
         ktConfirmThen('Delete this notification? This cannot be undone.', go);
       });
-      row.appendChild(del);
+      acts.appendChild(del);
+
+      row.appendChild(acts);
 
       row.addEventListener('click', function () {
         if (selecting) {
