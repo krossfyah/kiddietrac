@@ -420,6 +420,14 @@ final class MarketingSiteController extends Controller
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Unsubscribe stamp failed', ['email' => $email, 'error' => $e->getMessage()]);
             }
+
+            // A receipt for what they just did. Guarded: a failed confirmation must never
+            // undo the unsubscribe, which is the part that actually matters.
+            try {
+                Mail::to($email)->send(new \App\Mail\SubscriberUnsubscribed($email, '', 'self'));
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Unsubscribe confirmation failed', ['email' => $email, 'error' => $e->getMessage()]);
+            }
         }
         $inner = $valid
             ? '<div class="ico">✓</div><h1>You&rsquo;re unsubscribed</h1><p><strong>' . e($email) . '</strong> will no longer receive KiddieTrac marketing emails. You can re-subscribe any time at kiddietrac.com.</p>'

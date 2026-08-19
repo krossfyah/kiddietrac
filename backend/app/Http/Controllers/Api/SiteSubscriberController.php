@@ -84,6 +84,20 @@ class SiteSubscriberController extends Controller
         // The mail layer reads the file list, so it has to agree with the table.
         MarketingSiteController::suppressEmail((string) $row->email);
 
+        // This is the case that most needs a confirmation: somebody who asked by phone or
+        // email never saw the web page, so without this they have nothing showing it was
+        // done. Guarded — a failed receipt must not undo the removal.
+        try {
+            \Illuminate\Support\Facades\Mail::to($row->email)
+                ->send(new \App\Mail\SubscriberUnsubscribed(
+                    (string) $row->email, (string) ($row->name ?? ''), 'admin'
+                ));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Unsubscribe confirmation failed', [
+                'email' => $row->email, 'error' => $e->getMessage(),
+            ]);
+        }
+
         return response()->json(['ok' => true]);
     }
 

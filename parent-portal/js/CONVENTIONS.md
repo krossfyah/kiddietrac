@@ -161,3 +161,18 @@ strips `.kt-hero` / `.kt-page-hero` from anything it renders, which caught a sec
 instance (screen-fee-plans) nobody had reported.
 
 Check afterwards that the hero did not carry the screen only action button.
+
+## Tables: use the house pattern, do not rebuild it
+
+A table looks like the rest of the portal when it is:
+
+  main.setAttribute("data-kt-pretty", "1")      // 27 screens do this
+  <div class="kt-card"><table>…</table></div>   // 25 screens do this
+  a PLAIN <table> — no inline width, no table-layout, no colgroup
+
+That gets you the card, sortable headers, the filter box, the export bar and the row count
+for free, because kt-list-controls / kt-table-export / kt-row-actions all key off them.
+
+Hand-tuning column widths to "match" the others is the wrong instinct and was done twice on
+the subscribers table before the pattern was checked. If a table looks out of place, the
+question is which of the three lines above is missing.

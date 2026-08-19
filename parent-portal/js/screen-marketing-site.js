@@ -260,30 +260,21 @@
 
   function subsTable(rows, mode) {
     if (!rows.length) {
-      return '<div style="color:#6b7280;padding:22px;text-align:center;">'
+      return '<div class="kt-card" style="color:#6b7280;padding:22px;text-align:center;">'
         + (mode === 'unsubscribed'
             ? 'Nobody has unsubscribed. Anyone who does will appear here with the date and time.'
             : 'No subscribers yet. Sign-ups from www.kiddietrac.com appear here.')
         + '</div>';
     }
-    // Proportional widths, so the columns hold their shape at any window size and the two
-    // tabs line up with each other. Without these the browser sized by content and gave an
-    // email address 408px on a wide screen.
-    var cols = '<colgroup>'
-      + '<col style="width:26%"><col style="width:15%"><col style="width:19%">'
-      + '<col style="width:13%"><col style="width:23%"><col style="width:4%">'
-      + '</colgroup>';
-
     var head = mode === 'unsubscribed'
       ? '<tr><th>Email</th><th>Name</th><th>Agency</th><th>Unsubscribed</th><th>By</th><th></th></tr>'
       : '<tr><th>Email</th><th>Name</th><th>Agency</th><th>Source</th><th>Subscribed</th><th></th></tr>';
 
-    // table-layout:fixed clips instead of wrapping, so a long value needs an ellipsis and
-    // the full text kept reachable in a tooltip.
+    // Plain cells. The portal stylesheet already sizes and truncates table content; the
+    // title keeps the full value reachable where a column is narrow.
     var cell = function (v, strong) {
       var t = esc(v == null || v === '' ? '—' : String(v));
-      return '<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + t + '">'
-        + (strong ? '<strong>' + t + '</strong>' : t) + '</td>';
+      return '<td title="' + t + '">' + (strong ? '<strong>' + t + '</strong>' : t) + '</td>';
     };
 
     var body = rows.map(function (r) {
@@ -303,9 +294,8 @@
       return '<tr>' + cells + '<td>' + actions + '</td></tr>';
     }).join('');
 
-    return '<div style="max-width:1080px;overflow-x:auto;">'
-      + '<table style="width:100%;table-layout:fixed;">' + cols
-      + '<thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
+    return '<div class="kt-card">'
+      + '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
   }
 
   function loadSubs(container) {
@@ -483,6 +473,9 @@
   }
 
   function render(container) {
+    // 27 other screens set this; the shared table, card and spacing rules key off it.
+    // Without it this screen was styled entirely on its own and looked like it.
+    try { container.setAttribute('data-kt-pretty', '1'); } catch (e) {}
     if (!isPlatformAdmin()) {
       container.innerHTML = '<div style="max-width:560px;margin:60px auto;text-align:center;color:#6b7280">'
         + '<div style="font-size:40px;margin-bottom:10px">🔒</div>'

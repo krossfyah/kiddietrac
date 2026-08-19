@@ -1,0 +1,28 @@
+Subscriber table adopts the house pattern, and an unsubscribe is confirmed by email
+
+THE TABLE. I hand-tuned this one twice - a colgroup, fixed layout, a max-width, per-cell
+clipping - trying to make it look like the others. The sweep settles what the others
+actually do: 27 screens set data-kt-pretty, 25 wrap the table in .kt-card, and the reference
+tables carry NO inline width or table-layout at all, because the shared stylesheet does it.
+screen-marketing-site followed none of them, being an older screen styled entirely on its
+own, and each of my fixes made it more bespoke rather than less.
+
+All of it is removed. The table is a plain <table> inside a .kt-card on a data-kt-pretty
+screen, and it now gets the card, the sortable headers, the filter box, the export bar and
+the row count from the same place every other table does. Consistency comes from using the
+house pattern, not from hand-tuning something to resemble it.
+
+THE EMAIL. Unsubscribing sent nothing at all - neither the public link nor the admin action.
+The admin case needed it most: somebody who asked by phone or email never saw the
+confirmation page, so they had nothing showing the request was carried out.
+
+It is transactional, so it carries no product pitch and deliberately no unsubscribe link -
+there is nothing left to unsubscribe from, and offering one would imply the request had not
+been honoured. It does say how to re-join, because unsubscribing by mistake is the commonest
+reason people write in afterwards, and it makes clear that account email - invoices, a
+child's day, security notices - is separate and keeps arriving.
+
+Sending is guarded on both paths. A failed receipt must never undo the removal, which is
+the part that actually matters.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
