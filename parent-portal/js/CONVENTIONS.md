@@ -200,3 +200,39 @@ chip that only stops `click` still fires two things at once.
 Edit the record where the screen owns it. The calendar owns closures, so it edits them
 in place; time off, vacation holds and absences get an "Open <screen>" button instead.
 A second editor for someone else's record only drifts from the real one.
+
+## A grid item never shrinks below its content unless you say so
+
+`min-width` defaults to `auto` on a grid (and flex) item, which means "never narrower
+than my content". So a `1fr` track does not resolve to the space available — it resolves
+to whatever the widest thing inside needs. One wide screen then widens the whole page.
+
+This is what made the entire portal scroll sideways: `.app-shell` is `232px 1fr`, and on
+the calendar the second track resolved to 1788px inside a 1905px viewport, giving a
+2020px document. The same fault sat one level down in the calendar's own
+`repeat(7, 1fr)`, which measured 1372px inside a 1279px card and got clipped.
+
+Two rules, and you generally want both:
+
+- `min-width: 0` on the grid/flex item
+- `minmax(0, 1fr)` instead of a bare `1fr` on the track
+
+Then content that is genuinely too wide has to handle its own overflow — which is where
+a scrollbar belongs, on the table, not on the page.
+
+To find it: compare `document.documentElement.scrollWidth` with `clientWidth`, then walk
+`#appMain` for elements whose `scrollWidth` exceeds `clientWidth` with no scrollable
+ancestor. Two false positives to expect — `.kt-card::after` is a decorative blob pinned
+at `right:-120px` and clipped by the card, so every card reads as a 120px overshoot; and
+map tiles are meant to exceed their container.
+
+## Not every table is a list of records
+
+The global helpers attach to any `<table>` on a screen: a filter box, sortable headers, a
+bulk-select checkbox column. Some tables are a **layout** — the weekly menu is five meals
+by five days of inputs. There is no bulk action for "breakfast and lunch", and filtering
+a fixed list of five can only hide something you wanted.
+
+Opt out with `data-kt-no-filter` and `data-kt-no-bulk`. Note that a `data-kt-*` guard set
+by a primitive on itself (`dataset.ktBulk`) is an idempotency marker, not an opt-out —
+don't set those by hand; add a named `data-kt-no-*` instead.
