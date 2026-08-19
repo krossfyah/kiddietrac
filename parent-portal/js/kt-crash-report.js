@@ -64,6 +64,11 @@
       try {
         var t = e.target;
         if (!t || t.nodeType !== 1) return;
+        // Never record a click inside the crash dialog itself. The report body is built
+        // when "Send report" is pressed, so without this the breadcrumb was overwritten
+        // with the Send button a moment before being read — every report ever filed said
+        // the last action was button#kt-crash-send, which is the one thing it cannot be.
+        if (t.closest && t.closest('#kt-crash-ov')) return;
         var id = t.id ? '#' + t.id : '';
         var cls = (typeof t.className === 'string' && t.className) ? '.' + t.className.trim().split(/\s+/)[0] : '';
         var txt = (t.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);

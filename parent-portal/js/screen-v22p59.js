@@ -13,6 +13,15 @@
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
+  // A timestamp, in the AGENCY's timezone — the standing rule for every date shown in
+  // this portal. A support queue is read by time of day: two tickets raised eight hours
+  // apart looked identical when only the date was shown, and one raised late evening
+  // showed the wrong day to anyone reading from further west.
+  const fmtStamp = (s) => {
+    if (!s) return '';
+    if (window.KT && KT.fmtDateTime) { return KT.fmtDateTime(s); }
+    return fmtDate(s);
+  };
   const fmtTime = (s) => { if (!s) return ''; const d = new Date(s); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
 
   // ============================ Family directory ============================
@@ -699,7 +708,7 @@
             <td><span class="kt-pill ${t.priority === 'urgent' ? 'kt-pill-danger' : t.priority === 'high' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.priority)}</span></td>
             <td><span class="kt-pill ${t.status === 'resolved' || t.status === 'closed' ? 'kt-pill-success' : t.status === 'awaiting_user' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.status)}</span></td>
             <td>${esc(t.raised_by_name)}</td>
-            <td>${fmtDate(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No tickets yet.</td></tr>'}</tbody>
+            <td>${fmtStamp(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No tickets yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -759,7 +768,7 @@
       <div style="background:#F8FAFC;padding:14px;border-radius:8px;font-size:14px;">${esc(t.body || '')}</div>
       <h4 style="margin:18px 0 10px;color:#0F172A;font-size:14px;">Replies</h4>
       <div style="max-height:240px;overflow:auto;">${msgs.map(msg => `<div style="padding:10px;background:#FAFCFE;border-radius:8px;margin-bottom:8px;">
-        <div style="font-size:12px;color:#64748B;font-weight:600;">${esc(msg.author_name)} · ${fmtDate(msg.created_at)}</div>
+        <div style="font-size:12px;color:#64748B;font-weight:600;">${esc(msg.author_name)} · ${fmtStamp(msg.created_at)}</div>
         <div style="margin-top:4px;font-size:14px;">${esc(msg.body)}</div></div>`).join('') || '<div style="color:#64748B;font-size:13px;">No replies yet.</div>'}
       </div>
       <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Reply</label>
