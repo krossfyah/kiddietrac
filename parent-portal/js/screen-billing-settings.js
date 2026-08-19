@@ -27,9 +27,12 @@
     { key: 'tax', label: '🧾 Tax' },
     { key: 'tuition', label: '💵 Tuition plans', global: 'FeePlans' },
     { key: 'siblings', label: '👨‍👩‍👧 Sibling discounts', global: 'SiblingDiscountsScreen' },
-    // Hosted, not reimplemented — Settings previously carried a second, separate "Billing"
-    // entry for this, which is two doors into one subject with no way to tell them apart.
-    { key: 'reminders', label: '🔔 Reminders & fees', global: 'BillingSetup' },
+    // Hosted PANES, not the whole screen. Hosting the page put a second "Billing" banner
+    // and a second row of tabs inside this one; its three panes belong beside these tabs,
+    // not nested under one of them.
+    { key: 'defaults', label: '⚙️ Defaults & fees', global: 'BillingSetup', fn: 'renderSetup' },
+    { key: 'comms', label: '🛠 Billing comms', global: 'BillingSetup', fn: 'renderSettings' },
+    { key: 'reminders', label: '🔔 Reminders', global: 'BillingSetup', fn: 'renderReminders' },
   ];
 
   async function render(main) {
@@ -64,9 +67,16 @@
       var tab = TABS.filter(function (t) { return t.key === active; })[0];
       if (! tab.global) { return renderTax(pane); }
       var mod = KT[tab.global];
-      if (mod && mod.render) {
+      var fn = mod && (tab.fn ? mod[tab.fn] : mod.render);
+      if (typeof fn === 'function') {
         // Hosted in this pane. Each screen renders into whatever container it is given.
-        try { mod.render(pane); } catch (e) {
+        try {
+          fn(pane);
+          // A screen written to stand alone brings its own banner. This page already has
+          // one, and two of them is what made this look broken. Stripped generically so
+          // any screen can be hosted without being rewritten first.
+          pane.querySelectorAll('.kt-hero, .kt-page-hero').forEach(function (h) { h.remove(); });
+        } catch (e) {
           pane.innerHTML = '<div class="kt-card" style="color:#DC2626;">Could not load this section.</div>';
         }
       } else {

@@ -1,0 +1,26 @@
+A hosted screen no longer brings its own page furniture
+
+Billing hosted the billing-setup screen inside a tab, and that screen renders its own hero
+banner and its own tab bar - so the page showed two "Billing" banners and two rows of tabs,
+one nested inside the other. Neither screen was wrong on its own. The fault was that
+"standalone page" and "hosted in a tab" were the same code path.
+
+Fixed twice over, specific and general.
+
+Specifically: billing-setup now exposes its three panes individually, so Billing hosts the
+PANES rather than the page. Its Setup, Settings and Reminders become siblings of the tabs
+already there - Tax, Tuition plans, Sibling discounts, Defaults and fees, Billing comms,
+Reminders - instead of a page inside a page. The standalone render() is untouched, so
+#billing-setup still works as its own page.
+
+Generally: the host strips any hero a hosted screen renders, for every tab it hosts. That
+matters because the sweep found a second instance - screen-fee-plans carries the same
+markup, so "Tuition plans" had the identical double banner and nobody had reported it. The
+generic strip fixed that one without it being touched.
+
+Checked afterwards that stripping a hero does not take actions with it: Tuition plans keeps
+its "+ New plan" and "Generate invoices" buttons.
+
+Verified across all six tabs: one hero on the page, none inside any pane, no nested tab bars.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

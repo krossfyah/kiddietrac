@@ -290,5 +290,22 @@
       KT.Shell.registerScreen(role + ':billing-setup', render);
     });
   }
-  KT.BillingSetup = { render: render };
+  /* The three panes on their own, for a host that already provides the page and the
+     tab bar. Each takes a container and fills it — no hero, no tabs of its own. The
+     standalone render() is unchanged, so #billing-setup still works as a page. */
+  function paneOnly(fn) {
+    return function (container) {
+      Dom.clear(container);
+      var wrap = Dom.el('div', { style: 'max-width:1100px;' });
+      container.appendChild(wrap);
+      fn(wrap);
+    };
+  }
+
+  KT.BillingSetup = {
+    render: render,
+    renderSetup: paneOnly(renderSetupTab),
+    renderSettings: paneOnly(renderSettingsTab),
+    renderReminders: paneOnly(renderRemindersTab),
+  };
 })(window);
