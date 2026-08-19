@@ -233,6 +233,7 @@
         { label: 'Operations', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
+          { hash: 'closures',       label: 'Closures',         icon: '🗓' },
           { hash: 'today',          label: 'Today',            icon: '✨' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
@@ -271,9 +272,11 @@
         { label: 'Programs', items: [
           { hash: 'menu',              label: 'Weekly menu',     icon: '🍽' },
           { hash: 'field-trips',       label: 'Field trips',     icon: '🚐' },
+          { hash: 'conferences',       label: 'Conferences',     icon: '🗣' },
           { hash: 'allergy-alerts',    label: 'Allergy alerts',  icon: '⚠' },
         ]},
         { label: 'Compliance', items: [
+          { hash: 'compliance',        label: 'Compliance',           icon: '✅' },
           { hash: 'inspection',        label: 'Inspection checklist', icon: '✅' },
           { hash: 'renewals',          label: 'Renewals calendar',    icon: '📅' },
           { hash: 'cwelcc',            label: 'CWELCC subsidies',  icon: '💵' },
@@ -283,6 +286,7 @@
         ]},
         { label: 'Enrollment', items: [
           { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
+          { hash: 'vacation-holds',   label: 'Vacation holds',   icon: '🏖' },
           { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
           { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},

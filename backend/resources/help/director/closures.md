@@ -1,5 +1,4 @@
 ---
-roles: agency_admin, platform_admin
 title: Closure / holiday calendar
 category: Daily Operations
 order: 40
