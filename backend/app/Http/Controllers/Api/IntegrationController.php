@@ -500,6 +500,9 @@ class IntegrationController extends Controller
             'period_end'       => 'nullable|date',
             'pay_frequency'    => 'nullable|string|max:32',
             'units'            => 'nullable|numeric',
+            'ot_hours'         => 'nullable|numeric',
+            'ot_mult'          => 'nullable|numeric',
+            'ot_amount'        => 'nullable|numeric',
             'unit_label'       => 'nullable|string|max:16',
             'rate'             => 'nullable|numeric',
             'gross'            => 'nullable|numeric',
@@ -610,6 +613,11 @@ class IntegrationController extends Controller
             'period_end'       => $data['period_end'] ?? null,
             'pay_frequency'    => $data['pay_frequency'] ?? null,
             'units'            => round((float) ($data['units'] ?? 0), 2),
+            // Nullable, not zero-defaulted: "no overtime recorded" and "zero overtime
+            // hours" are different statements, and a payslip should not assert the second.
+            'ot_hours'         => isset($data['ot_hours']) ? round((float) $data['ot_hours'], 2) : null,
+            'ot_mult'          => isset($data['ot_mult']) ? round((float) $data['ot_mult'], 2) : null,
+            'ot_amount'        => isset($data['ot_amount']) ? round((float) $data['ot_amount'], 2) : null,
             'unit_label'       => $data['unit_label'] ?? 'hours',
             'rate'             => round((float) ($data['rate'] ?? 0), 2),
             'gross'            => round((float) ($data['gross'] ?? 0), 2),

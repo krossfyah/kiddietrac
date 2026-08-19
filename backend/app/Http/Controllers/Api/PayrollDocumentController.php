@@ -195,9 +195,11 @@ class PayrollDocumentController extends Controller
             'hours' => $money($hours),
             'rate' => $money($rate),
             'regular_amount' => $money($hours > 0 ? $hours * $rate : $gross),
-            // Overtime is not modelled on this document yet; the fields exist so an
-            // imported template referring to them renders blank rather than breaking.
-            'ot_hours' => '', 'ot_mult' => '', 'ot_amount' => '',
+            // Blank rather than zero when nothing was recorded, so a template using
+            // {{#if ot_hours}} hides the row instead of printing "0.00 hours at x0".
+            'ot_hours' => $doc->ot_hours ? $money($doc->ot_hours) : '',
+            'ot_mult' => $doc->ot_mult ? rtrim(rtrim(number_format((float) $doc->ot_mult, 2), '0'), '.') : '',
+            'ot_amount' => $doc->ot_amount ? $money($doc->ot_amount) : '',
             'vacation' => $vacation ? $money($vacation) : '',
             'gross' => $money($gross),
             'gross_with_vacation' => $money($gross + $vacation),
