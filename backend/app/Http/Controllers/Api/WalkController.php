@@ -94,11 +94,16 @@ final class WalkController extends Controller
     {
         $pings = DB::table('field_trip_pings')->where('field_trip_id', $tripId)
             ->orderBy('recorded_at')->orderBy('id')
-            ->select('lat', 'lon', 'recorded_at')->get();
+            ->select('lat', 'lon', 'recorded_at', 'accuracy_m')->get();
 
         $dist = 0.0;
         $prev = null;
         foreach ($pings as $p) {
+            // A fix accurate to worse than 100 m contributes noise, not distance. Skipped
+            // BEFORE it becomes the previous point, so a bad fix cannot anchor a segment.
+            if ($p->accuracy_m !== null && (float) $p->accuracy_m > 100) {
+                continue;
+            }
             if ($prev) {
                 $seg = self::haversine((float) $prev->lat, (float) $prev->lon, (float) $p->lat, (float) $p->lon);
                 // Ignore GPS jitter (<3 m standing still) and implausible teleports.
@@ -107,6 +112,14 @@ final class WalkController extends Controller
                 }
             }
             $prev = $p;
+        }
+
+        // Once a walk has ended its distance is settled. Returning the stored value keeps
+        // the number identical everywhere it is shown, and stops it drifting if pings are
+        // ever pruned — a parent was emailed this figure.
+        $stored = DB::table('field_trips')->where('id', $tripId)->value('distance_km');
+        if ($stored !== null) {
+            $dist = (float) $stored * 1000;
         }
         $durMin = 0;
         if ($pings->count() >= 2) {
@@ -264,7 +277,9 @@ final class WalkController extends Controller
             $trip->staff_lead_id === $u->id || $this->userBelongsToAgency($u->id, (int) $trip->agency_id),
             403
         );
-        $km = self::trailKm($id);
+        // Measured through walkSummary so the Daily Overview, the daily log and the
+        // parent's email can never disagree about the same walk.
+        $km = round(self::walkSummary($id)['distance_m'] / 1000, 2);
 
         DB::table('field_trips')->where('id', $id)->update([
             'status' => 'completed',
@@ -279,50 +294,6 @@ final class WalkController extends Controller
         return response()->json(['status' => 'completed', 'distance_km' => $km]);
     }
 
-
-    /**
-     * How far the walk actually went, in km, from its GPS trail.
-     *
-     * Stored once when the walk ends rather than recomputed on every read: pings can
-     * be pruned later, and the distance a parent was told should not drift afterwards.
-     *
-     * Two filters, both about GPS rather than about walking. A fix accurate to worse
-     * than 100 m contributes noise, and a jump over 500 m between consecutive fixes is
-     * the receiver relocating itself, not a toddler sprinting.
-     */
-    private static function trailKm(int $tripId): float
-    {
-        $pings = DB::table('field_trip_pings')->where('field_trip_id', $tripId)
-            ->orderBy('recorded_at')->orderBy('id')
-            ->get(['lat', 'lon', 'accuracy_m']);
-
-        $km = 0.0;
-        $prev = null;
-        foreach ($pings as $p) {
-            $lat = (float) $p->lat;
-            $lon = (float) $p->lon;
-            if ($lat === 0.0 && $lon === 0.0) { continue; }
-            if ($p->accuracy_m !== null && (float) $p->accuracy_m > 100) { continue; }
-            if ($prev !== null) {
-                $d = self::haversineKm($prev[0], $prev[1], $lat, $lon);
-                if ($d <= 0.5) { $km += $d; }
-            }
-            $prev = [$lat, $lon];
-        }
-
-        return round($km, 2);
-    }
-
-    private static function haversineKm(float $aLat, float $aLon, float $bLat, float $bLon): float
-    {
-        $r = 6371.0088;
-        $dLat = deg2rad($bLat - $aLat);
-        $dLon = deg2rad($bLon - $aLon);
-        $h = sin($dLat / 2) ** 2
-            + cos(deg2rad($aLat)) * cos(deg2rad($bLat)) * sin($dLon / 2) ** 2;
-
-        return 2 * $r * asin(min(1.0, sqrt($h)));
-    }
 
     /**
      * Write the finished walk into every attached child's daily log.

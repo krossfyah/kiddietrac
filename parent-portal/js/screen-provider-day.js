@@ -137,6 +137,8 @@
       ['✨', 'Activities', s.activities, '#DB2777'],
       ['⚠️', 'Incidents', s.incidents, s.incidents > 0 ? '#DC2626' : '#94A3B8'],
       ['📋', 'Moments', s.moments, '#0F172A'],
+      ['🚶', 'Walked', (s.walk_km ? s.walk_km + ' km' : '—')
+        + (s.walk_count ? ' · ' + s.walk_count : ''), '#0284C7'],
     ].map(function (c) {
       return '<div style="background:#fff;border:1px solid #E7EBF0;border-left:4px solid ' + c[3] + ';border-radius:12px;padding:11px 13px;box-shadow:0 1px 3px rgba(15,23,42,.04);">'
         + '<div style="font-size:18px;line-height:1;">' + c[0] + '</div>'
@@ -300,6 +302,9 @@
             +   (w.has_location ? '<button class="kt-walk-map-btn" data-id="' + w.id + '" data-t="' + esc(w.title || 'Walk') + '" style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:10px;padding:9px 13px;font-weight:800;font-size:12.5px;cursor:pointer;white-space:nowrap;">📍 ' + (live ? 'Live map' : 'View map') + '</button>' : '<span style="font-size:11.5px;color:#94A3B8;align-self:center;">No location shared</span>')
             + '</div>'
             + (live && w.has_location ? '<div class="kt-walk-inline" data-id="' + w.id + '" style="height:240px;margin-top:10px;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0;background:#EAF2F8;"></div>' : '')
+            // Finished: keep the route visible. The same rendered PNG the parent is
+            // emailed, so staff and families are looking at exactly the same picture.
+            + (!live && w.map_url ? '<img src="' + esc(w.map_url) + '" alt="Route walked" loading="lazy" style="display:block;width:100%;max-width:600px;height:auto;margin-top:10px;border-radius:12px;border:1px solid #E2E8F0;">' : '')
             + '</div>';
         }).join('<div style="height:10px;"></div>')
       : '<div style="color:#94A3B8;font-size:12.5px;padding:8px 0;">No walks or outings logged on this day.</div>';

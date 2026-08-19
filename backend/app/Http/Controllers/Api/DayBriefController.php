@@ -626,9 +626,18 @@ final class DayBriefController extends Controller
             $pings = DB::table('field_trip_pings')->where('field_trip_id', $w->id)->count();
             $kids = DB::table('field_trip_permissions')->where('field_trip_id', $w->id)->count();
             $sum = \App\Http\Controllers\Api\WalkController::walkSummary((int) $w->id);
+            // The route map is kept after the walk ends — that is when an educator
+            // writes the day up and wants to see where they actually went. Rendered only
+            // for finished walks: a live one is still moving, and the live map already
+            // shows it.
+            $mapUrl = ($w->status === 'completed' && $pings > 1)
+                ? \App\Support\WalkMap::urlFor((int) $w->id)
+                : null;
+
             $walks[] = [
                 'id' => $w->id, 'title' => $w->title, 'destination' => $w->destination,
                 'status' => $w->status, 'lead' => trim((string) $w->lead) ?: '—',
+                'map_url' => $mapUrl,
                 'children' => $kids, 'pings' => $pings, 'has_location' => $pings > 0,
                 'distance_m' => $sum['distance_m'], 'steps_est' => $sum['steps_est'], 'duration_min' => $sum['duration_min'],
                 // depart_time/return_time are stored as agency-LOCAL wall-clock (H:i:s),
@@ -661,6 +670,11 @@ final class DayBriefController extends Controller
                 'went_home' => $out,
                 'meals' => $meals, 'naps' => $naps, 'activities' => $activities, 'incidents' => $incidents,
                 'moments' => count($events),
+                // Distance covered on foot today, across every walk from this centre.
+                'walk_km' => round(array_sum(array_map(
+                    fn ($w) => ($w['distance_m'] ?? 0) / 1000, $walks
+                )), 2),
+                'walk_count' => count($walks),
             ],
             'roster' => $roster,
             'qr_vs_manual' => ['qr' => $qr, 'manual' => $manual],
