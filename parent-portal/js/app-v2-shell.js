@@ -83,6 +83,7 @@
       return [
         { label: 'Overview', items: overviewItems },
         { label: 'Operations', items: [
+          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messenger',         icon: '💬', badgeKey: 'chat_unread' },
@@ -197,16 +198,14 @@
           { hash: 'forms-manager',    label: 'Forms Manager',   icon: '🗂️' },
         ]},
         { label: 'Settings', items: [
-          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
+          { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
-          { hash: 'billing-setup',      label: 'Billing',             icon: '💳' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
           { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
 
-          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
 
           { hash: 'data-retention',     label: 'Data retention & compliance', icon: '🗄️' },
@@ -230,6 +229,7 @@
           { hash: 'hcc-forms',          label: 'Inspection forms',   icon: '🏡' },
         ]},
         { label: 'Operations', items: [
+          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'today',          label: 'Today',            icon: '✨' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
@@ -295,12 +295,10 @@
           { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
-          { hash: 'billing-settings',  label: 'Billing settings', icon: '🧾' },
+          { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'auto-signoff'   ,     label: 'Auto sign-off',           icon: '⏱️' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
-          { hash: 'billing-setup', label: 'Billing reminders', icon: '💳' },
 
-          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
 
 
           { hash: 'mfa',              label: 'Two-factor (MFA)', icon: '🔐' },

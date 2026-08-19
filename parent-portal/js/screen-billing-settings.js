@@ -27,6 +27,9 @@
     { key: 'tax', label: '🧾 Tax' },
     { key: 'tuition', label: '💵 Tuition plans', global: 'FeePlans' },
     { key: 'siblings', label: '👨‍👩‍👧 Sibling discounts', global: 'SiblingDiscountsScreen' },
+    // Hosted, not reimplemented — Settings previously carried a second, separate "Billing"
+    // entry for this, which is two doors into one subject with no way to tell them apart.
+    { key: 'reminders', label: '🔔 Reminders & fees', global: 'BillingSetup' },
   ];
 
   async function render(main) {
