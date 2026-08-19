@@ -173,6 +173,30 @@ final class MarketingSiteController extends Controller
             'source' => $source,
             'ip'     => substr((string) $request->ip(), 0, 45),
         ]);
+
+        // And as a subscriber, so the list can be managed and a date exists to show.
+        // Someone re-submitting the form after unsubscribing is opting back in.
+        try {
+            DB::table('site_subscribers')->updateOrInsert(
+                ['email' => $email],
+                [
+                    'name' => $name ?: null,
+                    'agency_name' => $agency ?: null,
+                    'source' => $source ?: 'marketing-site',
+                    'ip' => substr((string) $request->ip(), 0, 45),
+                    'subscribed_at' => now(),
+                    'unsubscribed_at' => null,
+                    'unsubscribed_by' => null,
+                    'unsubscribe_note' => null,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            self::unsuppressEmail($email);
+        } catch (\Throwable $e) {
+            // A signup must not fail because the subscriber list did.
+            \Illuminate\Support\Facades\Log::warning('Subscriber upsert failed', ['email' => $email, 'error' => $e->getMessage()]);
+        }
         // Capture into the sales CRM pipeline (dedupe by email while open). Guarded.
         try {
             if (! \App\Models\SalesLead::where('email', $email)->where('status', 'open')->exists()) {
@@ -375,6 +399,27 @@ final class MarketingSiteController extends Controller
         $valid = $email !== '' && hash_equals($expected, $sig);
         if ($valid) {
             $this->addSuppression($email);
+
+            // Stamped, so "when did they unsubscribe" has an answer. A person who was
+            // never on the list still gets a row: the request itself is the record.
+            try {
+                $existing = DB::table('site_subscribers')->where('email', $email)->first();
+                if ($existing) {
+                    if (! $existing->unsubscribed_at) {
+                        DB::table('site_subscribers')->where('id', $existing->id)->update([
+                            'unsubscribed_at' => now(), 'unsubscribed_by' => 'self', 'updated_at' => now(),
+                        ]);
+                    }
+                } else {
+                    DB::table('site_subscribers')->insert([
+                        'email' => $email, 'source' => 'unsubscribe-link',
+                        'unsubscribed_at' => now(), 'unsubscribed_by' => 'self',
+                        'created_at' => now(), 'updated_at' => now(),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Unsubscribe stamp failed', ['email' => $email, 'error' => $e->getMessage()]);
+            }
         }
         $inner = $valid
             ? '<div class="ico">✓</div><h1>You&rsquo;re unsubscribed</h1><p><strong>' . e($email) . '</strong> will no longer receive KiddieTrac marketing emails. You can re-subscribe any time at kiddietrac.com.</p>'
@@ -409,6 +454,25 @@ final class MarketingSiteController extends Controller
                 json_encode(array_values(array_unique($list)), JSON_UNESCAPED_SLASHES)
             );
         } catch (\Throwable $e) {
+        }
+    }
+
+    /** Add to the file list the mail layer reads. Public so the subscriber screen agrees with it. */
+    public static function suppressEmail(string $email): void
+    {
+        $c = new self();
+        $c->addSuppression(strtolower(trim($email)));
+    }
+
+    /** Remove from that list, for a genuine re-subscribe. */
+    public static function unsuppressEmail(string $email): void
+    {
+        $email = strtolower(trim($email));
+        $c = new self();
+        $list = $c->loadSuppressions();
+        $next = array_values(array_filter($list, fn ($e) => strtolower(trim((string) $e)) !== $email));
+        if (count($next) !== count($list)) {
+            $c->saveSuppressions($next);
         }
     }
 

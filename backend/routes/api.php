@@ -370,6 +370,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/marketing-site', [\App\Http\Controllers\Api\MarketingSiteController::class, 'get']);
             Route::put('/marketing-site', [\App\Http\Controllers\Api\MarketingSiteController::class, 'save']);
             Route::get('/marketing-site/leads', [\App\Http\Controllers\Api\MarketingSiteController::class, 'leads']);
+            // Website subscribers. Platform-level, like the site itself.
+            Route::get   ('/site-subscribers',                  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'index']);
+            Route::post  ('/site-subscribers',                  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'store']);
+            Route::post  ('/site-subscribers/{id}/unsubscribe',  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'unsubscribe'])->where('id','[0-9]+');
+            Route::post  ('/site-subscribers/{id}/resubscribe',  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'resubscribe'])->where('id','[0-9]+');
+            Route::delete('/site-subscribers/{id}',              [\App\Http\Controllers\Api\SiteSubscriberController::class, 'destroy'])->where('id','[0-9]+');
             Route::post('/marketing-site/leads/delete', [\App\Http\Controllers\Api\MarketingSiteController::class, 'deleteLead']);
             Route::post('/marketing-site/leads/update', [\App\Http\Controllers\Api\MarketingSiteController::class, 'updateLead']);
             Route::post('/marketing-site/leads', [\App\Http\Controllers\Api\MarketingSiteController::class, 'addLead']);

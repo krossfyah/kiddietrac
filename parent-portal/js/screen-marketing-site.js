@@ -205,6 +205,7 @@
 
   var TABS = [
     { id: 'overview', label: 'Overview' }, { id: 'subscribers', label: 'Subscribers' },
+    { id: 'unsubscribed', label: 'Unsubscribed' },
     { id: 'chat', label: 'Chat' }, { id: 'content', label: 'Content' }, { id: 'seo', label: 'SEO' },
     { id: 'announce', label: 'Announcement' }, { id: 'analytics', label: 'Analytics' }
   ];
@@ -214,7 +215,8 @@
       return '<button class="wsTab" data-tab="' + t.id + '" style="background:none;border:none;border-bottom:3px solid ' + (i === 0 ? TEAL : 'transparent') + ';color:' + (i === 0 ? TEAL : '#6b7280') + ';font-weight:700;font-size:14px;padding:10px 14px;cursor:pointer;white-space:nowrap">' + t.label + '</button>';
     }).join('');
     var panels = '<div class="wsPanel" data-panel="overview">' + tabOverview(c, a) + '</div>'
-      + '<div class="wsPanel" data-panel="subscribers" style="display:none">' + tabSubscribers(leads) + '</div>'
+      + '<div class="wsPanel" data-panel="subscribers" style="display:none"><div id="ws-subs">Loading…</div></div>'
+      + '<div class="wsPanel" data-panel="unsubscribed" style="display:none"><div id="ws-unsub">Loading…</div></div>'
       + '<div class="wsPanel" data-panel="chat" style="display:none">' + tabChats(chats) + '</div>'
       + '<div class="wsPanel" data-panel="content" style="display:none">' + tabContent(c) + '</div>'
       + '<div class="wsPanel" data-panel="seo" style="display:none">' + tabSeo(c) + '</div>'
@@ -225,7 +227,134 @@
       + '<div style="display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:20px;overflow-x:auto">' + tabBtns + '</div>' + panels + '</div>';
   }
 
+  /* The managed subscriber list. Rendered from site_subscribers rather than the signup
+     file: the file is append-only, so it cannot say who has since unsubscribed and has no
+     id to act on. */
+  function subsApi(path, opts) {
+    var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+    return fetch(base + path, Object.assign({
+      headers: {
+        Authorization: 'Bearer ' + tok,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Active-Agency-Id': sessionStorage.getItem('kt_active_agency_id') || '',
+      },
+    }, opts || {})).then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.json();
+    });
+  }
+
+  function fmtStamp(ts) {
+    if (!ts) { return '—'; }
+    try {
+      var tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
+      var s = String(ts).replace(' ', 'T');
+      if (!/[Zz]|[+-]\d\d:?\d\d$/.test(s)) { s += 'Z'; }
+      // Date AND time: "when did they unsubscribe" is the whole point of this screen.
+      return new Date(s).toLocaleString('en-CA',
+        { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
+    } catch (e) { return String(ts).slice(0, 16); }
+  }
+
+  function subsTable(rows, mode) {
+    if (!rows.length) {
+      return '<div style="color:#6b7280;padding:22px;text-align:center;">'
+        + (mode === 'unsubscribed'
+            ? 'Nobody has unsubscribed. Anyone who does will appear here with the date and time.'
+            : 'No subscribers yet. Sign-ups from www.kiddietrac.com appear here.')
+        + '</div>';
+    }
+    var head = mode === 'unsubscribed'
+      ? '<tr><th>Email</th><th>Name</th><th>Agency</th><th>Unsubscribed</th><th>By</th><th></th></tr>'
+      : '<tr><th>Email</th><th>Name</th><th>Agency</th><th>Source</th><th>Subscribed</th><th></th></tr>';
+
+    var body = rows.map(function (r) {
+      var cells = mode === 'unsubscribed'
+        ? '<td><strong>' + esc(r.email) + '</strong></td><td>' + esc(r.name || '—') + '</td>'
+          + '<td>' + esc(r.agency_name || '—') + '</td><td>' + esc(fmtStamp(r.unsubscribed_at)) + '</td>'
+          + '<td>' + esc(r.unsubscribed_by === 'self' ? 'Themselves' : (r.unsubscribed_by ? 'Administrator' : '—')) + '</td>'
+        : '<td><strong>' + esc(r.email) + '</strong></td><td>' + esc(r.name || '—') + '</td>'
+          + '<td>' + esc(r.agency_name || '—') + '</td><td>' + esc(r.source || '—') + '</td>'
+          + '<td>' + esc(fmtStamp(r.subscribed_at)) + '</td>';
+
+      // Plain buttons: kt-row-actions folds the last cell into a ⋮ on its own.
+      var actions = mode === 'unsubscribed'
+        ? '<button class="kt-act-icon kt-icon-tip" data-sub-resub="' + r.id + '" title="Re-subscribe" data-kttip="Re-subscribe">↩️</button>'
+        : '<button class="kt-act-icon kt-icon-tip" data-sub-unsub="' + r.id + '" title="Unsubscribe" data-kttip="Unsubscribe">🚫</button>';
+      actions += '<button class="kt-act-icon kt-act-danger kt-icon-tip" data-sub-del="' + r.id + '" title="Delete" data-kttip="Delete">🗑️</button>';
+
+      return '<tr>' + cells + '<td>' + actions + '</td></tr>';
+    }).join('');
+
+    return '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+  }
+
+  function loadSubs(container) {
+    ['active', 'unsubscribed'].forEach(function (mode) {
+      var host = container.querySelector(mode === 'active' ? '#ws-subs' : '#ws-unsub');
+      if (!host) { return; }
+      subsApi('/platform/site-subscribers?status=' + mode)
+        .then(function (j) {
+          var rows = j.data || [];
+          var head = mode === 'active'
+            ? '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px;">'
+              + '<div style="font-size:13px;color:#6b7280;">People who signed up on the public site. '
+              + 'Unsubscribing keeps the record and stamps the time — it never deletes the person.</div>'
+              + '<button id="ws-sub-add" class="kt-btn kt-btn-ghost" style="white-space:nowrap;">+ Add subscriber</button></div>'
+            : '<div style="font-size:13px;color:#6b7280;margin:0 0 10px;">Everyone who has opted out, and when. '
+              + 'They stay suppressed from marketing email until re-subscribed.</div>';
+          host.innerHTML = head + subsTable(rows, mode);
+          wireSubActions(container, host);
+        })
+        .catch(function (e) {
+          host.innerHTML = '<div style="color:#b91c1c;padding:14px;">Could not load subscribers: ' + esc(e.message || 'error') + '</div>';
+        });
+    });
+  }
+
+  function wireSubActions(container, host) {
+    function act(sel, run, confirmMsg) {
+      host.querySelectorAll(sel).forEach(function (b) {
+        b.addEventListener('click', async function () {
+          if (confirmMsg && window.KT && KT.confirm && !(await KT.confirm(confirmMsg))) { return; }
+          b.disabled = true;
+          try { await run(b); loadSubs(container); }
+          catch (e) {
+            b.disabled = false;
+            if (window.KT && KT.Dom && KT.Dom.toast) { KT.Dom.toast(e.message || 'Could not do that', 'error'); }
+          }
+        });
+      });
+    }
+    act('[data-sub-unsub]', function (b) {
+      return subsApi('/platform/site-subscribers/' + b.getAttribute('data-sub-unsub') + '/unsubscribe', { method: 'POST', body: '{}' });
+    }, 'Unsubscribe this person? They stay on the list with the date recorded.');
+    act('[data-sub-resub]', function (b) {
+      return subsApi('/platform/site-subscribers/' + b.getAttribute('data-sub-resub') + '/resubscribe', { method: 'POST', body: '{}' });
+    }, 'Re-subscribe this person? Only do this if they have asked to come back.');
+    act('[data-sub-del]', function (b) {
+      return subsApi('/platform/site-subscribers/' + b.getAttribute('data-sub-del'), { method: 'DELETE' });
+    }, 'Delete this record entirely? Unsubscribing is usually what you want — deleting loses the proof they opted out.');
+
+    var add = host.querySelector('#ws-sub-add');
+    if (add) {
+      add.addEventListener('click', async function () {
+        var email = window.prompt('Email address to add:');
+        if (!email) { return; }
+        try {
+          await subsApi('/platform/site-subscribers', { method: 'POST', body: JSON.stringify({ email: email.trim() }) });
+          loadSubs(container);
+        } catch (e) {
+          if (window.KT && KT.Dom && KT.Dom.toast) { KT.Dom.toast(e.message || 'Could not add', 'error'); }
+        }
+      });
+    }
+  }
+
   function wire(container, leads) {
+    loadSubs(container);
     container.querySelectorAll('.wsTab').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var id = btn.getAttribute('data-tab');
