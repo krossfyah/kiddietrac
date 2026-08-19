@@ -450,6 +450,49 @@ class EducatorDailySummaryCommand extends Command
     }
 
     /** A section heading with a hairline under it, used to break the email into parts. */
+
+    /**
+     * Walks this educator led on the day, with the route map for finished ones.
+     *
+     * Led BY them, not merely at their centre: a summary that says "where you took
+     * them" should not list somebody else's outing.
+     */
+    private function walksLed(int $educatorId, Carbon $date, string $tz): array
+    {
+        try {
+            $rows = DB::table('field_trips')
+                ->where('staff_lead_id', $educatorId)
+                ->whereDate('trip_date', $date->toDateString())
+                ->orderBy('depart_time')
+                ->get(['id', 'title', 'destination', 'status', 'depart_time', 'return_time', 'distance_km']);
+
+            $out = [];
+            foreach ($rows as $r) {
+                $sum = \App\Http\Controllers\Api\WalkController::walkSummary((int) $r->id);
+                $kids = DB::table('field_trip_permissions')->where('field_trip_id', $r->id)->count();
+
+                // depart_time/return_time are agency-LOCAL wall clock, not UTC.
+                $when = trim(($r->depart_time ? Carbon::parse($r->depart_time)->format('g:i A') : '')
+                    .($r->return_time ? ' – '.Carbon::parse($r->return_time)->format('g:i A') : ''), ' –');
+
+                $out[] = [
+                    'where' => trim((string) ($r->destination ?: $r->title)) ?: 'A walk',
+                    'when' => $when,
+                    'minutes' => (int) ($sum['duration_min'] ?? 0),
+                    'km' => round(($sum['distance_m'] ?? 0) / 1000, 2),
+                    'children' => (int) $kids,
+                    'map_url' => $r->status === 'completed'
+                        ? \App\Support\WalkMap::urlFor((int) $r->id)
+                        : null,
+                ];
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            // A summary that arrives without its walks beats one that does not arrive.
+            return [];
+        }
+    }
     private function sectionHead(string $icon, string $text): string
     {
         return '<div style="margin:26px 0 12px;">'
@@ -725,6 +768,41 @@ class EducatorDailySummaryCommand extends Command
             if ($i === 2) { $body .= '</tr><tr>'; }
         }
         $body .= '</tr></table>';
+
+        // ── Where you took them ────────────────────────────────────────────
+        $walks = $this->walksLed((int) $ed->id, $date, $tz);
+        if ($walks) {
+            $totalKm = round(array_sum(array_map(fn ($w) => $w['km'], $walks)), 2);
+            $body .= $this->sectionHead("\u{1F6B6}", 'Where you took them'
+                . ($totalKm > 0 ? ' — ' . rtrim(rtrim(number_format($totalKm, 2), '0'), '.') . ' km' : ''));
+
+            foreach ($walks as $w) {
+                $bits = array_filter([
+                    $w['when'],
+                    $w['minutes'] ? $w['minutes'] . ' min' : null,
+                    $w['km'] > 0 ? rtrim(rtrim(number_format($w['km'], 2), '0'), '.') . ' km' : null,
+                    $w['children'] . ' child' . ($w['children'] === 1 ? '' : 'ren'),
+                ]);
+
+                $body .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                    . 'style="border-collapse:separate;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:14px;margin-bottom:10px;">'
+                    . '<tr><td style="padding:13px 15px;">'
+                    . '<div style="font-size:15px;font-weight:800;color:#0C4A6E;">'
+                    . htmlspecialchars($w['where']) . '</div>'
+                    . ($bits ? '<div style="font-size:13px;color:#0369A1;margin-top:3px;">'
+                        . htmlspecialchars(implode(' · ', $bits)) . '</div>' : '');
+
+                // Same rendered PNG the parents are sent, so everybody is looking at the
+                // same picture of the same walk.
+                if ($w['map_url']) {
+                    $body .= '<img src="' . htmlspecialchars($w['map_url']) . '" width="540" alt="Route walked"'
+                        . ' style="display:block;width:100%;max-width:540px;height:auto;border:0;'
+                        . 'border-radius:10px;margin-top:10px;">';
+                }
+
+                $body .= '</td></tr></table>';
+            }
+        }
 
         // ── What made up today's score ─────────────────────────────────────
         // One number says "63" without saying why. These are the four parts it is

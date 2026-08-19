@@ -255,6 +255,9 @@ final class WalkController extends Controller
             $attached++;
         }
 
+        // Now tell their parents, while it is still happening.
+        $this->notifyGuardiansWalkStarted($tripId, $selected, (int) $u->id);
+
         $names = DB::table('children')->whereIn('id', $selected)
             ->selectRaw("TRIM(CONCAT(first_name, ' ', last_name)) as name")
             ->pluck('name')->all();
@@ -368,6 +371,65 @@ final class WalkController extends Controller
             }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('walk day-log failed', [
+                'trip_id' => $tripId, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Push each attached child's guardians that their child has gone out.
+     *
+     * The walk already gives parents permission to watch the live map; without this
+     * nothing tells them there is anything to watch, so it is only ever found by
+     * somebody who happens to open the app mid-walk.
+     *
+     * Deep-links to #walks, the guardian live-map screen. Tapping the notification
+     * opens the app there — signing in first if the session has lapsed, which is the
+     * shell's normal behaviour for any deep link.
+     *
+     * Wrapped whole: a push failure must never stop an educator starting a walk. They
+     * are standing at the door with their coats on.
+     */
+    private function notifyGuardiansWalkStarted(int $tripId, array $childIds, int $byUserId): void
+    {
+        try {
+            if (! $childIds) { return; }
+
+            $trip = DB::table('field_trips')->where('id', $tripId)->first();
+            if (! $trip) { return; }
+
+            $tz = $this->staffTz($byUserId);
+            $started = \Illuminate\Support\Carbon::now($tz)->format('g:i A');
+            $where = trim((string) ($trip->destination ?? '')) ?: 'a walk';
+            $lead = DB::table('users')->where('id', $byUserId)->value('first_name');
+
+            $fcm = app(\App\Services\FcmService::class);
+
+            $children = DB::table('children')->whereIn('id', $childIds)
+                ->whereNull('deleted_at')
+                ->get(['id', 'first_name', 'preferred_name', 'family_id']);
+
+            foreach ($children as $child) {
+                $name = trim((string) ($child->preferred_name ?: $child->first_name));
+
+                $guardians = DB::table('guardians as g')
+                    ->join('users as u', 'u.id', '=', 'g.user_id')
+                    ->where('g.family_id', $child->family_id)
+                    ->whereNull('u.deleted_at')
+                    ->pluck('g.user_id')->filter()->unique();
+
+                foreach ($guardians as $uid) {
+                    $fcm->sendToUser(
+                        (int) $uid,
+                        '🚶 '.$name.' is out on a walk',
+                        'Off to '.$where.($lead ? ' with '.$lead : '').', from '.$started
+                            .'. Tap to follow along on the map.',
+                        '#walks'
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('walk start push failed', [
                 'trip_id' => $tripId, 'error' => $e->getMessage(),
             ]);
         }
