@@ -8,6 +8,17 @@ order: 2
 
 The **Photos** tab is a gallery of all photos your child's educators have shared. New photos appear within seconds of being taken.
 
+
+## Quick steps
+
+1. Open your child's day and scroll to the photos.
+2. Tap a photo to see it full size.
+3. To keep one, long-press on a phone or right-click on a computer, and save it.
+4. Share it with family if you wish — but see the note below first if other children are
+   in the picture.
+
+There is no comment or like button yet, and no way to search photos by date.
+
 ## How photos appear
 
 When an educator at your centre takes a photo with the tablet:

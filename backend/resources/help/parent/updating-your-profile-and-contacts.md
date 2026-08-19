@@ -8,6 +8,17 @@ order: 3
 
 Keeping your details current means the centre can always reach you, your forms pre-fill correctly, and educators recognise you at pickup. Here's what you can change and how.
 
+
+## Quick steps
+
+1. Open your **profile** from the menu.
+2. Tap your photo to replace it, and edit your phone, email, address or language.
+3. Save.
+4. For your child's photo, allergies or immunisations, use the setup step you were shown
+   when you joined — or message your director.
+5. For emergency contacts and pickup people, message your director. That one is
+   deliberate: it decides who may collect your child.
+
 ## What you can update yourself
 
 In **Settings** you can usually update:
@@ -27,7 +38,7 @@ For safety and accuracy, some things are managed by your director rather than ed
 - **Your child's enrolment, room, and schedule**
 - **Emergency contacts and authorised pickup people**
 - **Adding another guardian** to your family
-- **Your child's date of birth, allergies, and medical details**
+- **Your child's date of birth**
 
 To change any of these, send your director a message or email with the details. They'll update it — and because these affect who can collect your child, that extra step is deliberate.
 
@@ -41,9 +52,21 @@ These are among the most important details in the whole system: they decide who 
 
 Educators check this list at pickup, so it needs to be right.
 
-## Your child's photo
+## Your child's photo, allergies and immunisations
 
-A clear, current photo of your child helps every educator — especially supply staff — recognise them. If your child's photo is missing or out of date, add or update it (or ask your director to).
+You set these yourself. When you first set up your account you are asked for a photo of
+each child — it is required, because a clear, current photo is how every educator,
+especially supply staff, recognises them at the door.
+
+On the same step you can record:
+
+- **Allergies** — these become the alerts an educator sees at snack and mealtimes
+- **Dietary needs**
+- **Anything else the room should know** — medication, a condition to watch for, how they settle
+- **Immunisations** — a date against each vaccine your centre expects
+
+To change any of it afterwards, message your director. Allergies especially: tell them
+straight away rather than waiting, because that list is read every single day.
 
 ## Keeping it tidy
 
