@@ -22,10 +22,16 @@ Anyone without a number, or who's opted out, is silently skipped — the broadca
 1. Sidebar → **SMS broadcast**.
 2. Pick an audience:
    - **By role** — pick guardian / educator / centre_director / agency_admin
-   - **By centre** — everyone with a role at that centre
+   - **By centre** (or provider, whichever your agency calls them) — everyone with a
+     role at the one you choose
+   - **By room** — the educators assigned to that room, plus the guardians of the
+     children currently enrolled in it
    - **Whole agency** — everyone with any active role
-3. Write your message (max 300 characters — Twilio splits at 160).
-4. Click **Send broadcast**.
+3. For **by centre** or **by room**, choose which one from the picker that appears. The
+   message will not send until you do — an audience that cannot narrow is refused rather
+   than quietly widened to everybody.
+4. Write your message (max 300 characters — Twilio splits at 160).
+5. Click **Send broadcast**.
 
 ## Cost & limits
 

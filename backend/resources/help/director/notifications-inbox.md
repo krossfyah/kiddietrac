@@ -26,12 +26,22 @@ Three options at the top:
 - **Unread only** — what still needs attention
 - **Read only** — historical view
 
-## Marking read
+## Marking read, and unread
 
-Two ways:
+Three ways:
 
-- **Click any row** — flips that one to read (optimistic, instant UI; reverts only if the API call fails)
-- **Mark all read** — prompts for confirmation, then PATCHes every unread row sequentially
+- **Click any row** — flips it to read on the way to whatever it points at
+- **The ⋮ menu on the row** — **Mark read** or **Mark unread**, plus **Delete**
+- **Mark all read** — asks first, then clears every unread row
+
+Marking something **unread** is the way back if you opened a notification by accident.
+Until recently there was none: a row tapped by mistake dropped out of the unread filter
+and the bell count for good.
+
+## Deleting
+
+Use **Delete** in the row's ⋮ menu. It asks first, because deleting a notification
+cannot be undone. To clear several at once, use **Select** and tick the rows.
 
 ## Deep links
 

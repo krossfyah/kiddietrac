@@ -27,3 +27,16 @@ Directors and agency admins see every staff member's punches at their centre via
 ## Source field
 
 Every punch records `source` (web / kiosk / mobile). The web button uses `source=web`; future kiosk + mobile integrations will use the other two.
+
+
+## Reminder and auto sign-off settings
+
+**Settings → Clock settings** holds both halves of the time clock:
+
+- **Reminders** — when to nudge somebody who has not clocked in, and somebody still on
+  the clock. Set the hours to suit your day; a centre opening at 06:00 should not be
+  reminded at 10:00 like everybody else.
+- **Auto sign-off** — close shifts and children's days that somebody forgot to close.
+
+Reminders are checked once an hour, so they go out during the hour you choose rather
+than at an exact minute. Both are set per agency, in your own timezone.
