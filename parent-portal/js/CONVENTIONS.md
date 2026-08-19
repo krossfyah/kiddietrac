@@ -176,3 +176,27 @@ for free, because kt-list-controls / kt-table-export / kt-row-actions all key of
 Hand-tuning column widths to "match" the others is the wrong instinct and was done twice on
 the subscribers table before the pattern was checked. If a table looks out of place, the
 question is which of the three lines above is missing.
+
+## `data-kt-list` brings two primitives, not one
+
+Marking a container `data-kt-list` gets it the ⋮ kebab from `kt-row-actions.js` — and
+also a search box + A–Z sort bar from `kt-list-controls.js`. On a screen that already
+has a filter or toolbar of its own that is a second bar of furniture nobody asked for.
+Add `data-kt-no-controls` alongside (notifications does; it already has a filter
+dropdown and "Mark all read").
+
+Inside the kebab menu, a button's **text is the menu item** — a bare glyph (`🗑`)
+becomes a blank row. Label them (`🗑 Delete`); words matching the DESTRUCTIVE pattern
+pick up the red styling for free.
+
+## An event on a calendar should open
+
+Anything drawn on the calendar grid is expected to open when clicked, the way Outlook
+does. A `title` attribute is a hover convenience, not a way in: it is unreachable on a
+touch screen. When wiring one up, stop `mousedown` as well as `click` — the month grid
+drag-selects from mousedown and the day cell opens the new-shift form on click, so a
+chip that only stops `click` still fires two things at once.
+
+Edit the record where the screen owns it. The calendar owns closures, so it edits them
+in place; time off, vacation holds and absences get an "Open <screen>" button instead.
+A second editor for someone else's record only drifts from the real one.
