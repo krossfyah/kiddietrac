@@ -36,6 +36,14 @@ final class ZumRails
     private const TOKEN_KEY = 'zumrails:token';
     private const TOKEN_TTL = 3000;          // 50 minutes; their token lasts 60.
 
+    /** The two methods we use. Their Canadian set also includes Interac, VisaDirect,
+     *  PrepaidCard and CreditCardIssuance, which we deliberately do not. */
+    public const EFT = 'Eft';
+    public const CARD = 'CreditCard';
+
+    /** Their statuses, verbatim, so the mapping below has something to be checked against:
+     *  InProgress, Completed, Failed, Cancelled, Scheduled, InReview, Pending Cancellation. */
+
     public static function configured(): bool
     {
         $c = config('services.zumrails');
@@ -165,6 +173,83 @@ final class ZumRails
     }
 
     /**
+     * Charge a parent's card. Acceptance is AccountsReceivable + CreditCard — the same
+     * transaction endpoint, with the direction expressed as a field.
+     */
+    public static function chargeCard(int $userId, float $amount, array $links = [], string $comment = ''): ?int
+    {
+        return self::transact('in', $userId, $amount, self::CARD, $links, $comment);
+    }
+
+    /** Collect by EFT from a parent's bank account. */
+    public static function collectEft(int $userId, float $amount, array $links = [], string $comment = ''): ?int
+    {
+        return self::transact('in', $userId, $amount, self::EFT, $links, $comment);
+    }
+
+    /**
+     * Void a transaction that has not gone through yet.
+     *
+     * Deliberately refuses rather than tries, where their rules say it cannot work:
+     *
+     *  • EFT can only be cancelled before it reaches the financial institution, so a
+     *    settled one is refused here rather than sent and rejected.
+     *  • A card payment cannot be cancelled at all once taken — it has to be reversed,
+     *    which is a different operation (see refund below).
+     *
+     * Returns true only when Zum accepted the cancellation.
+     */
+    public static function void(int $rowId): bool
+    {
+        $row = DB::table('zum_transactions')->where('id', $rowId)->first();
+        if (! $row || ! $row->zum_transaction_id || ! self::configured()) {
+            return false;
+        }
+        if (in_array($row->status, ['settled', 'cancelled', 'failed'], true)) {
+            return false;
+        }
+        if ($row->method === self::CARD) {
+            // Not a limitation of ours: their API does not allow it.
+            return false;
+        }
+
+        $res = self::call('DELETE', '/api/transaction/'.$row->zum_transaction_id);
+        if ($res === null) {
+            return false;
+        }
+
+        DB::table('zum_transactions')->where('id', $rowId)->update([
+            // Their cancel is not always immediate — some methods pass through
+            // "Pending Cancellation" first, and the webhook confirms the end state.
+            'status' => 'cancelling',
+            'last_response' => json_encode($res),
+            'updated_at' => now(),
+        ]);
+
+        return true;
+    }
+
+    /**
+     * Refund a settled payment.
+     *
+     * NOT IMPLEMENTED, on purpose. Zum's transaction reference documents create, get,
+     * filter, delete and a credit-card authorisation completion — no refund endpoint.
+     * Reversal appears only as an event name, which is not enough to build against.
+     *
+     * Guessing the path, verb or body of a refund call in a payments integration is the
+     * one thing worth refusing outright: a wrong guess either silently does nothing while
+     * a family is told they were refunded, or moves money twice. Confirm the endpoint
+     * with Zum, then this becomes a few lines.
+     */
+    public static function refund(int $rowId, ?float $amount = null): never
+    {
+        throw new \RuntimeException(
+            'Zum refunds are not implemented: their API reference documents no refund '
+            .'endpoint. Confirm the reversal endpoint with Zum before enabling this.'
+        );
+    }
+
+    /**
      * Move money. $direction is 'in' (collect from a parent) or 'out' (pay somebody).
      *
      * Returns our own zum_transactions row id, not theirs — callers should follow OUR
@@ -174,7 +259,7 @@ final class ZumRails
         string $direction,
         int $userId,
         float $amount,
-        string $method = 'Interac',
+        string $method = self::EFT,
         array $links = [],
         string $comment = ''
     ): ?int {

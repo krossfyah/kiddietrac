@@ -27,10 +27,14 @@ class ZumWebhookController extends Controller
 {
     /** Their statuses, mapped to the four our portal understands. */
     private const MAP = [
+        // Their documented set: InProgress, Completed, Failed, Cancelled, Scheduled,
+        // InReview, Pending Cancellation. Compared lower-cased with spaces and
+        // underscores stripped, so "Pending Cancellation" matches whichever way they
+        // write it.
         'started' => 'submitted',
         'inprogress' => 'submitted',
-        'in_progress' => 'submitted',
         'pending' => 'submitted',
+        'scheduled' => 'submitted',
         'completed' => 'settled',
         'succeeded' => 'settled',
         'success' => 'settled',
@@ -38,6 +42,10 @@ class ZumWebhookController extends Controller
         'error' => 'failed',
         'cancelled' => 'cancelled',
         'canceled' => 'cancelled',
+        'pendingcancellation' => 'cancelling',
+        // Zum has flagged it for review. Not settled, not failed — somebody has to look,
+        // so it gets its own status rather than being flattened into "submitted".
+        'inreview' => 'in_review',
     ];
 
     public function handle(Request $request): JsonResponse
@@ -53,6 +61,7 @@ class ZumWebhookController extends Controller
         $payload = $request->all();
         $zumId = $payload['TransactionId'] ?? $payload['Id'] ?? ($payload['data']['Id'] ?? null);
         $raw = strtolower((string) ($payload['Status'] ?? $payload['Event'] ?? ($payload['data']['Status'] ?? '')));
+        $raw = str_replace([' ', '_', '-'], '', $raw);
 
         if (! $zumId) {
             Log::info('zumrails webhook without a transaction id', ['keys' => array_keys($payload)]);
