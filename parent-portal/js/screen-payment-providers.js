@@ -21,6 +21,10 @@
     });
   }
 
+  // Which tab is open. Remembered across reloads of the screen so saving a provider
+  // does not throw you back to the first one.
+  var active = null;
+
   var META = {
     zumrails: {
       title: '🏦 Zum Rails',
@@ -40,6 +44,7 @@
       + '<div class="kt-page-hero"><h2>💳 Payment providers</h2>'
       + '<p>Your own payment accounts, held per agency. Money you take lands in your account, '
       + 'not somebody else&rsquo;s — so nothing works until your own keys are entered here.</p></div>'
+      + '<div id="pp-tabs" style="display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap;"></div>'
       + '<div id="pp-body">Loading…</div></div>';
 
     await load(main);
@@ -58,17 +63,64 @@
       return;
     }
 
+    var keys = Object.keys(res.providers || {});
+    if (!keys.length) {
+      body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">'
+        + 'No payment providers are available.</div>';
+      return;
+    }
+    if (keys.indexOf(active) === -1) { active = keys[0]; }
+
+    paintTabs(main, keys, res);
+
     body.innerHTML = '';
-    Object.keys(res.providers || {}).forEach(function (key) {
-      body.appendChild(card(main, key, res.providers[key], (res.webhook_urls || {})[key]));
-    });
+    body.appendChild(card(main, active, res.providers[active], (res.webhook_urls || {})[active]));
   }
 
+
+  /* One pill per provider, with a dot showing whether that one is ready — so an
+     admin can see at a glance which still needs keys without opening each in turn. */
+  function paintTabs(main, keys, res) {
+    var host = main.querySelector('#pp-tabs');
+    if (!host) { return; }
+    host.innerHTML = '';
+
+    keys.forEach(function (key) {
+      var p = res.providers[key] || {};
+      var on = key === active;
+      var meta = META[key] || { title: key };
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.style.cssText = 'display:inline-flex;align-items:center;gap:7px;border:1px solid '
+        + (on ? '#1F6080' : '#E2E8F0') + ';background:' + (on ? '#1F6080' : '#fff')
+        + ';color:' + (on ? '#fff' : '#475569')
+        + ';border-radius:999px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;';
+
+      var dot = document.createElement('span');
+      dot.textContent = '●';
+      dot.style.cssText = 'font-size:10px;color:' + (p.configured
+        ? (on ? '#A7F3D0' : '#1E8E60')
+        : (on ? 'rgba(255,255,255,.5)' : '#CBD5E1')) + ';';
+      dot.title = p.configured ? 'Ready' : 'Not configured yet';
+
+      var label = document.createElement('span');
+      label.textContent = meta.title || key;
+
+      b.appendChild(dot);
+      b.appendChild(label);
+      b.addEventListener('click', function () {
+        if (active === key) { return; }
+        active = key;
+        load(main);
+      });
+      host.appendChild(b);
+    });
+  }
   function card(main, key, p, webhookUrl) {
     var meta = META[key] || { title: key, blurb: '' };
     var box = document.createElement('div');
     box.className = 'kt-card';
-    box.style.cssText = 'max-width:680px;margin-bottom:16px;';
+    box.style.cssText = 'max-width:680px;';
 
     var rows = Object.keys(p.fields || {}).map(function (fk) {
       var f = p.fields[fk];
@@ -88,8 +140,7 @@
     }).join('');
 
     box.innerHTML =
-      '<div class="kt-card-header"><h3 class="kt-card-title">' + meta.title + '</h3></div>'
-      + '<div style="font-size:12.5px;color:#64748B;margin:-4px 0 8px;">' + meta.blurb + '</div>'
+      '<div style="font-size:12.5px;color:#64748B;margin:0 0 10px;">' + meta.blurb + '</div>'
       + '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;'
       +   'padding:10px 0;border-bottom:1px solid #F1F5F9;">'
       +   '<div><div style="font-size:14px;font-weight:600;color:#334155;">Enabled</div>'
