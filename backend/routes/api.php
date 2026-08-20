@@ -304,6 +304,11 @@ Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteCont
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
 
+// PUBLIC — Zum Rails settlement callbacks. No auth: Zum calls this, not a user. Guarded
+// by a shared secret compared inside the controller. This is the ONLY thing that marks a
+// Zum payment settled; the create response means "instruction accepted" and nothing more.
+Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle']);
+
 // PUBLIC — Twilio inbound SMS: STOP, START and HELP. No auth (Twilio holds no session);
 // the request is Twilio-signature-verified inside, and refused outright when TWILIO_TOKEN
 // is unset, since an unverifiable endpoint here would let anyone opt a number in or out.

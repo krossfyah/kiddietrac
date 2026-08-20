@@ -35,6 +35,18 @@ return [
         'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-7'),
     ],
 
+    // Zum Rails — Interac e-Transfer / EFT in from parents, payouts out to staff.
+    // Dark until all three of base_url, username and password are set: ZumRails::configured()
+    // is false without them and every call returns null rather than throwing.
+    // The base URL is deliberately NOT defaulted — their docs only ever write {{env}},
+    // and guessing a payments endpoint is not a thing to do.
+    'zumrails' => [
+        'base_url' => env('ZUMRAILS_BASE_URL'),
+        'username' => env('ZUMRAILS_USERNAME'),
+        'password' => env('ZUMRAILS_PASSWORD'),
+        'webhook_secret' => env('ZUMRAILS_WEBHOOK_SECRET'),
+    ],
+
     'stripe' => [
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),
