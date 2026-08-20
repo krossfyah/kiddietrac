@@ -1305,6 +1305,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'show']);
         Route::post ('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
         // Clock reminders sit beside auto sign-off, on the same screen.
+        // Settings -> Payment providers. Agency admins only; the controller re-checks.
+        Route::get  ('/admin/payment-providers', [\App\Http\Controllers\Api\PaymentProvidersController::class, 'index']);
+        Route::post ('/admin/payment-providers/{provider}', [\App\Http\Controllers\Api\PaymentProvidersController::class, 'update']);
+
         Route::get  ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'show']);
         Route::post ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'update']);
         Route::patch('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);

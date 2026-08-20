@@ -117,12 +117,24 @@ class ZumWebhookController extends Controller
     }
     public function handle(Request $request): JsonResponse
     {
-        $secret = (string) config('services.zumrails.webhook_secret');
-        if ($secret !== '') {
-            $given = (string) ($request->header('X-Zum-Signature') ?: $request->input('secret', ''));
-            if (! hash_equals($secret, $given)) {
-                return response()->json(['message' => 'Bad signature'], 401);
-            }
+        // With per-agency credentials the shared secret is also the identity: Zum calls
+        // unauthenticated, so matching it against each configured agency tells us whose
+        // callback this is. No match means we do not know, and a payments callback applied
+        // to a guessed agency would move the wrong customer's money.
+        $given = (string) ($request->header('X-Zum-Signature') ?: $request->input('secret', ''));
+        $agencyId = \App\Support\PaymentProviders::agencyForWebhookSecret(
+            \App\Support\PaymentProviders::ZUM, $given
+        );
+
+        // While no agency has configured Zum at all there is nothing to match against, and
+        // rejecting everything would make the endpoint untestable. Once ANY agency is
+        // live, an unmatched secret is refused.
+        $anyConfigured = DB::table('agency_payment_providers')
+            ->where('provider', \App\Support\PaymentProviders::ZUM)
+            ->where('enabled', true)->exists();
+
+        if ($anyConfigured && ! $agencyId) {
+            return response()->json(['message' => 'Bad signature'], 401);
         }
 
         $payload = $request->all();

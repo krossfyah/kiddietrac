@@ -44,25 +44,49 @@ final class ZumRails
     /** Their statuses, verbatim, so the mapping below has something to be checked against:
      *  InProgress, Completed, Failed, Cancelled, Scheduled, InReview, Pending Cancellation. */
 
-    public static function configured(): bool
+    /** This agency's credentials. Never another's, and never the platform's. */
+    private static function cfg(int $agencyId): array
     {
-        $c = config('services.zumrails');
+        return \App\Support\PaymentProviders::config($agencyId, \App\Support\PaymentProviders::ZUM);
+    }
 
-        return ! empty($c['base_url']) && ! empty($c['username']) && ! empty($c['password']);
+    public static function configured(int $agencyId): bool
+    {
+        return \App\Support\PaymentProviders::configured($agencyId, \App\Support\PaymentProviders::ZUM);
+    }
+
+    /** The agency a payment belongs to, from the paying user's own roles. */
+    public static function agencyOf(int $userId): ?int
+    {
+        $id = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->whereNotNull('agency_id')->value('agency_id');
+        if ($id) {
+            return (int) $id;
+        }
+
+        // A guardian has no agency role — find it through their family's centre.
+        return DB::table('guardians as g')
+            ->join('families as f', 'f.id', '=', 'g.family_id')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('g.user_id', $userId)
+            ->value('c.agency_id');
     }
 
     /** A bearer token, cached. Null when unconfigured or the exchange fails. */
-    public static function token(bool $fresh = false): ?string
+    public static function token(int $agencyId, bool $fresh = false): ?string
     {
-        if (! self::configured()) {
+        if (! self::configured($agencyId)) {
             return null;
         }
+        // Keyed by agency: two agencies hold different credentials, and a shared cache key
+        // would hand one agency the other's session.
+        $key = self::TOKEN_KEY.':'.$agencyId;
         if ($fresh) {
-            Cache::forget(self::TOKEN_KEY);
+            Cache::forget($key);
         }
 
-        return Cache::remember(self::TOKEN_KEY, self::TOKEN_TTL, function () {
-            $c = config('services.zumrails');
+        return Cache::remember($key, self::TOKEN_TTL, function () use ($agencyId) {
+            $c = self::cfg($agencyId);
             try {
                 $res = Http::timeout(20)->asJson()->post(rtrim($c['base_url'], '/').'/api/authorize', [
                     'Username' => $c['username'],
@@ -92,14 +116,18 @@ final class ZumRails
      * is normal rather than exceptional — retrying once with a fresh token is the whole
      * handling it needs.
      */
-    public static function call(string $method, string $path, array $payload = []): ?array
+    public static function call(int $agencyId, string $method, string $path, array $payload = []): ?array
     {
-        if (! self::configured()) {
+        if (! self::configured($agencyId)) {
+            return null;
+        }
+        $base = (string) (self::cfg($agencyId)['base_url'] ?? '');
+        if ($base === '') {
             return null;
         }
 
-        $attempt = function (?string $token) use ($method, $path, $payload) {
-            $url = rtrim(config('services.zumrails.base_url'), '/').'/'.ltrim($path, '/');
+        $attempt = function (?string $token) use ($method, $path, $payload, $base) {
+            $url = rtrim($base, '/').'/'.ltrim($path, '/');
             $req = Http::timeout(30)->withToken((string) $token)->asJson();
 
             return strtoupper($method) === 'GET'
@@ -108,9 +136,9 @@ final class ZumRails
         };
 
         try {
-            $res = $attempt(self::token());
+            $res = $attempt(self::token($agencyId));
             if ($res->status() === 401) {
-                $res = $attempt(self::token(true));
+                $res = $attempt(self::token($agencyId, true));
             }
             if (! $res->successful()) {
                 Log::warning('zumrails call failed', [
@@ -136,13 +164,13 @@ final class ZumRails
      * mapping rather than looking anything up by email each time — an email can change,
      * and a mismatched lookup would move money to the wrong person.
      */
-    public static function userIdFor(int $userId): ?string
+    public static function userIdFor(int $agencyId, int $userId): ?string
     {
         $existing = DB::table('zum_users')->where('user_id', $userId)->value('zum_user_id');
         if ($existing) {
             return $existing;
         }
-        if (! self::configured()) {
+        if (! self::configured($agencyId)) {
             return null;
         }
 
@@ -151,7 +179,7 @@ final class ZumRails
             return null;
         }
 
-        $res = self::call('POST', '/api/user', [
+        $res = self::call($agencyId, 'POST', '/api/user', [
             'FirstName' => (string) $u->first_name,
             'LastName' => (string) $u->last_name,
             'Email' => (string) $u->email,
@@ -202,7 +230,8 @@ final class ZumRails
     public static function void(int $rowId): bool
     {
         $row = DB::table('zum_transactions')->where('id', $rowId)->first();
-        if (! $row || ! $row->zum_transaction_id || ! self::configured()) {
+        $agencyId = $row ? self::agencyOf((int) $row->user_id) : null;
+        if (! $row || ! $row->zum_transaction_id || ! $agencyId || ! self::configured($agencyId)) {
             return false;
         }
         if (in_array($row->status, ['settled', 'cancelled', 'failed'], true)) {
@@ -213,7 +242,7 @@ final class ZumRails
             return false;
         }
 
-        $res = self::call('DELETE', '/api/transaction/'.$row->zum_transaction_id);
+        $res = self::call($agencyId, 'DELETE', '/api/transaction/'.$row->zum_transaction_id);
         if ($res === null) {
             return false;
         }
@@ -310,13 +339,14 @@ final class ZumRails
             'updated_at' => now(),
         ]);
 
-        $path = (string) config('services.zumrails.refund_path');
+        $agencyId = self::agencyOf((int) $row->user_id);
+        $path = $agencyId ? (string) (self::cfg($agencyId)['refund_path'] ?? '') : '';
 
         // Their API reference documents no refund endpoint. Until one is confirmed the
         // refund is recorded and left blocked -- deliberately NOT attempted against a
         // guessed URL, because a wrong guess either quietly does nothing while a family
         // has been told their money is coming back, or sends it twice.
-        if ($path === '' || ! self::configured()) {
+        if ($path === '' || ! $agencyId || ! self::configured($agencyId)) {
             DB::table('zum_refunds')->where('id', $refundId)->update([
                 'status' => 'blocked',
                 'last_response' => json_encode(['blocked' => 'no refund endpoint configured']),
@@ -329,7 +359,7 @@ final class ZumRails
             return $refundId;
         }
 
-        $res = self::call('POST', str_replace('{id}', (string) $row->zum_transaction_id, $path), [
+        $res = self::call($agencyId, 'POST', str_replace('{id}', (string) $row->zum_transaction_id, $path), [
             'Amount' => $amount,
             'Comment' => $reason !== '' ? $reason : null,
         ]);
@@ -358,10 +388,11 @@ final class ZumRails
         array $links = [],
         string $comment = ''
     ): ?int {
-        if (! self::configured() || $amount <= 0) {
+        $agencyId = self::agencyOf($userId);
+        if (! $agencyId || ! self::configured($agencyId) || $amount <= 0) {
             return null;
         }
-        $zumUser = self::userIdFor($userId);
+        $zumUser = self::userIdFor($agencyId, $userId);
         if (! $zumUser) {
             return null;
         }
@@ -378,7 +409,7 @@ final class ZumRails
             'updated_at' => now(),
         ]);
 
-        $res = self::call('POST', '/api/transaction', [
+        $res = self::call($agencyId, 'POST', '/api/transaction', [
             'ZumRailsType' => $direction === 'in' ? 'AccountsReceivable' : 'AccountsPayable',
             'TransactionMethod' => $method,
             'Amount' => round($amount, 2),
