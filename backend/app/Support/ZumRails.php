@@ -230,25 +230,120 @@ final class ZumRails
     }
 
     /**
-     * Refund a settled payment.
+     * How much of this payment can still be refunded.
      *
-     * NOT IMPLEMENTED, on purpose. Zum's transaction reference documents create, get,
-     * filter, delete and a credit-card authorisation completion — no refund endpoint.
-     * Reversal appears only as an event name, which is not enough to build against.
-     *
-     * Guessing the path, verb or body of a refund call in a payments integration is the
-     * one thing worth refusing outright: a wrong guess either silently does nothing while
-     * a family is told they were refunded, or moves money twice. Confirm the endpoint
-     * with Zum, then this becomes a few lines.
+     * Settled amount minus everything already refunded. Only SETTLED refunds count:
+     * one in flight has not moved any money yet, but it is still reserved here so two
+     * people refunding at once cannot together exceed the payment.
      */
-    public static function refund(int $rowId, ?float $amount = null): never
+    public static function refundableAmount(int $rowId): float
     {
-        throw new \RuntimeException(
-            'Zum refunds are not implemented: their API reference documents no refund '
-            .'endpoint. Confirm the reversal endpoint with Zum before enabling this.'
-        );
+        $row = DB::table('zum_transactions')->where('id', $rowId)->first();
+        if (! $row || $row->status !== 'settled') {
+            return 0.0;
+        }
+
+        // 'blocked' counts as in flight. It means recorded but not yet sent, because no
+        // refund endpoint is configured — an intent that WILL go out once one is. Without
+        // reserving it, ten blocked refunds of the full amount could be queued and all
+        // fire the moment the endpoint is set.
+        $inFlight = (float) DB::table('zum_refunds')
+            ->where('zum_transaction_id_local', $rowId)
+            ->whereIn('status', ['pending', 'submitted', 'blocked'])
+            ->sum('amount');
+
+        return max(0.0, round((float) $row->amount - (float) $row->refunded_amount - $inFlight, 2));
     }
 
+    /**
+     * Refund some or all of a settled payment.
+     *
+     * $amount omitted refunds everything still refundable. Returns our zum_refunds row
+     * id — follow OUR record, because the money only actually moves when the webhook
+     * says it has.
+     *
+     * Partial by design: a childcare refund is usually part of a payment — a closure
+     * credit, a withdrawn day, a sibling adjustment — so several refunds against one
+     * charge is the normal case rather than the exception.
+     *
+     * @throws \InvalidArgumentException when the amount is not refundable. Refusing
+     *         loudly beats returning null: over-refunding is somebody else's money.
+     */
+    public static function refund(
+        int $rowId,
+        ?float $amount = null,
+        string $reason = '',
+        ?int $byUserId = null
+    ): ?int {
+        $row = DB::table('zum_transactions')->where('id', $rowId)->first();
+        if (! $row) {
+            throw new \InvalidArgumentException('No such payment.');
+        }
+        if ($row->status !== 'settled') {
+            throw new \InvalidArgumentException('Only a settled payment can be refunded.');
+        }
+        if ($row->direction !== 'in') {
+            throw new \InvalidArgumentException('Only money collected from a family can be refunded.');
+        }
+
+        $available = self::refundableAmount($rowId);
+        $amount = $amount === null ? $available : round((float) $amount, 2);
+
+        if ($amount <= 0) {
+            throw new \InvalidArgumentException('Refund amount must be more than zero.');
+        }
+        if ($amount > $available + 0.005) {
+            throw new \InvalidArgumentException(sprintf(
+                'Only %s of this payment can still be refunded.', number_format($available, 2)
+            ));
+        }
+
+        // Recorded BEFORE the call, so a request that never returns still leaves a
+        // trace and the amount is reserved against further refunds.
+        $refundId = DB::table('zum_refunds')->insertGetId([
+            'zum_transaction_id_local' => $rowId,
+            'amount' => $amount,
+            'reason' => $reason !== '' ? mb_substr($reason, 0, 300) : null,
+            'status' => 'pending',
+            'requested_by_id' => $byUserId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $path = (string) config('services.zumrails.refund_path');
+
+        // Their API reference documents no refund endpoint. Until one is confirmed the
+        // refund is recorded and left blocked -- deliberately NOT attempted against a
+        // guessed URL, because a wrong guess either quietly does nothing while a family
+        // has been told their money is coming back, or sends it twice.
+        if ($path === '' || ! self::configured()) {
+            DB::table('zum_refunds')->where('id', $refundId)->update([
+                'status' => 'blocked',
+                'last_response' => json_encode(['blocked' => 'no refund endpoint configured']),
+                'updated_at' => now(),
+            ]);
+            Log::warning('zumrails refund recorded but not sent', [
+                'refund_id' => $refundId, 'reason' => 'services.zumrails.refund_path is not set',
+            ]);
+
+            return $refundId;
+        }
+
+        $res = self::call('POST', str_replace('{id}', (string) $row->zum_transaction_id, $path), [
+            'Amount' => $amount,
+            'Comment' => $reason !== '' ? $reason : null,
+        ]);
+
+        $zumRefundId = $res['Id'] ?? $res['result']['Id'] ?? null;
+        DB::table('zum_refunds')->where('id', $refundId)->update([
+            'zum_refund_id' => $zumRefundId,
+            'status' => $zumRefundId ? 'submitted' : 'failed',
+            'last_response' => json_encode($res),
+            'updated_at' => now(),
+        ]);
+
+        return $refundId;
+    }
     /**
      * Move money. $direction is 'in' (collect from a parent) or 'out' (pay somebody).
      *

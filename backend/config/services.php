@@ -45,6 +45,10 @@ return [
         'username' => env('ZUMRAILS_USERNAME'),
         'password' => env('ZUMRAILS_PASSWORD'),
         'webhook_secret' => env('ZUMRAILS_WEBHOOK_SECRET'),
+        // Their reference documents no refund route. Set this once Zum confirm one,
+        // using {id} for the transaction id, e.g. 'api/transaction/{id}/refund'.
+        // Empty means refunds are recorded but never sent.
+        'refund_path' => env('ZUMRAILS_REFUND_PATH', ''),
     ],
 
     'stripe' => [
