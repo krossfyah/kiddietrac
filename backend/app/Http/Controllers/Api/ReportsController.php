@@ -279,11 +279,16 @@ final class ReportsController extends Controller
      *   - the rooms they are assigned to (educator_rooms), and
      *   - their own clock-ins, never a colleague's.
      *
-     * An educator with NO room assignment falls back to every room at their own
-     * centre. That is not a new grant: EducatorRoomsController documents the same
-     * fallback ("an educator with no assignments falls back to their whole centre,
-     * so a new account is not stranded"), and EducatorSelfController::children
-     * already hands them exactly that child list.
+     * An educator with NO room assignment gets NOTHING here — no rooms, no report
+     * cards, just a line telling them to ask their director to assign their room(s)
+     * (Anthony, 2026-08-30: "the report should only be available to the room the
+     * educator is assigned to and not all centres"). This deliberately does NOT
+     * follow the centre-wide fallback the rest of the app uses for an unassigned
+     * educator (EducatorRoomsController, EducatorSelfController::children): seeing
+     * a roster you work with is one thing, exporting a centre's whole attendance
+     * history is another. 14 of 25 active educators were unassigned when this
+     * landed, so expect "my reports are empty" until directors assign rooms —
+     * that is the intended state, not a bug.
      *
      * @return array{user_id:int,room_ids:array<int,int>}|null
      */
@@ -314,19 +319,8 @@ final class ReportsController extends Controller
             ->where('c.agency_id', $agencyId)
             ->pluck('r.id')->map(fn ($v) => (int) $v)->all();
 
-        if (empty($roomIds)) {
-            $centreIds = DB::table('role_assignments as ra')
-                ->join('centres as c', 'c.id', '=', 'ra.centre_id')
-                ->where('ra.user_id', $userId)->where('ra.active', true)
-                ->where('c.agency_id', $agencyId)
-                ->pluck('c.id')->map(fn ($v) => (int) $v)->all();
-
-            $roomIds = $centreIds
-                ? DB::table('rooms')->whereIn('centre_id', $centreIds)
-                    ->pluck('id')->map(fn ($v) => (int) $v)->all()
-                : [];
-        }
-
+        // No fallback. An empty room_ids reaches cannedRows() as [0] and matches
+        // nothing, which is the whole point.
         return ['user_id' => $userId, 'room_ids' => array_values(array_unique($roomIds))];
     }
 
@@ -365,33 +359,66 @@ final class ReportsController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $scope = $this->educatorScope($request, $agencyId);
 
+        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+        $brand  = $agency ? ['name' => $agency->name, 'logo' => $agency->brand_logo_url ?: $agency->logo_url, 'color' => $agency->brand_primary_color ?: '#1F6080'] : null;
+
+        // ── Educator: rooms, never centres ───────────────────────────────────
+        if ($scope !== null) {
+            $rooms = $scope['room_ids']
+                ? DB::table('rooms as r')->join('centres as c', 'c.id', '=', 'r.centre_id')
+                    ->whereIn('r.id', $scope['room_ids'])
+                    ->orderBy('c.name')->orderBy('r.name')
+                    ->get(['r.id', 'r.name', 'c.name as centre_name'])
+                : collect();
+
+            // Unassigned: no cards at all, and a line saying why. Handing them an
+            // empty report with a centre picker would read as a broken screen.
+            if ($rooms->isEmpty()) {
+                return response()->json([
+                    'reports' => [], 'centres' => [], 'rooms' => [],
+                    'agency' => $brand, 'can_schedule' => false, 'scope_empty' => true,
+                    'scope_note' => 'No rooms are assigned to you yet. Ask your director to assign your room(s) and your reports will cover the children in them.',
+                ]);
+            }
+
+            $reports = [];
+            foreach (self::cannedDefs() as $k => $d) {
+                if (in_array($k, self::EDUCATOR_TYPES, true)) {
+                    $reports[] = ['type' => $k] + $d;
+                }
+            }
+
+            return response()->json([
+                'reports' => $reports,
+                'centres' => [],            // an educator picks a room, never a centre
+                'rooms'   => $rooms,
+                'agency'  => $brand,
+                // The screen asks the server what it may show rather than reading the
+                // role off the body class: scheduling posts to admin-only routes, so an
+                // educator rendering that panel would only be handed a 403 by it.
+                'can_schedule' => false,
+                'scope_empty'  => false,
+                'scope_note'   => $rooms->count() === 1
+                    ? 'Limited to ' . $rooms[0]->name . ' and your own clock-ins.'
+                    : 'Limited to your ' . $rooms->count() . ' rooms and your own clock-ins.',
+            ]);
+        }
+
         $centres = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')
-            ->when($scope !== null, fn ($q) => $q->whereIn('id', function ($sub) use ($scope) {
-                // Only the centres their own rooms are in - the picker listed every
-                // centre in the agency, which is a directory an educator should not
-                // be handed even before any report is run.
-                $sub->from('rooms')->select('centre_id')->whereIn('id', $scope['room_ids'] ?: [0]);
-            }))
             ->orderBy('name')->get(['id', 'name', 'logo_url', 'brand_color']);
 
         $reports = [];
         foreach (self::cannedDefs() as $k => $d) {
-            if ($scope !== null && ! in_array($k, self::EDUCATOR_TYPES, true)) {
-                continue;
-            }
             $reports[] = ['type' => $k] + $d;
         }
-        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+
         return response()->json([
             'reports' => $reports,
             'centres' => $centres,
-            'agency'  => $agency ? ['name' => $agency->name, 'logo' => $agency->brand_logo_url ?: $agency->logo_url, 'color' => $agency->brand_primary_color ?: '#1F6080'] : null,
-            // The screen asks the server what it may show rather than reading the role
-            // off the body class: scheduling posts to admin-only routes, so an educator
-            // rendering that panel would only be handed a 403 by the buttons in it.
-            'can_schedule' => $scope === null,
-            'scope_note'   => $scope === null ? null
-                : 'Limited to the children in your room(s) and your own clock-ins.',
+            'agency'  => $brand,
+            'can_schedule' => true,
+            'scope_empty'  => false,
+            'scope_note'   => null,
         ]);
     }
 
@@ -409,6 +436,16 @@ final class ReportsController extends Controller
         }
         $scope = $this->educatorScope($request, $agencyId);
         $this->guardScopedType($scope, $type);
+        if ($scope !== null) {
+            // An educator narrows by ROOM. centre_id is ignored outright rather than
+            // validated: honouring it would let a caller widen a room-scoped report
+            // back out to a centre, which is exactly what this scope exists to stop.
+            $centreId = null;
+            $roomId = (int) $request->query('room_id');
+            if ($roomId && in_array($roomId, $scope['room_ids'], true)) {
+                $scope['room_ids'] = [$roomId];
+            }
+        }
 
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
             $request->query('status'), $request->query('balance'), $scope);
@@ -1137,6 +1174,16 @@ final class ReportsController extends Controller
         }
         $scope = $this->educatorScope($request, $agencyId);
         $this->guardScopedType($scope, $type);
+        if ($scope !== null) {
+            // An educator narrows by ROOM. centre_id is ignored outright rather than
+            // validated: honouring it would let a caller widen a room-scoped report
+            // back out to a centre, which is exactly what this scope exists to stop.
+            $centreId = null;
+            $roomId = (int) $request->query('room_id');
+            if ($roomId && in_array($roomId, $scope['room_ids'], true)) {
+                $scope['room_ids'] = [$roomId];
+            }
+        }
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
             $request->query('status'), $request->query('balance'), $scope);
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
@@ -1167,6 +1214,16 @@ final class ReportsController extends Controller
         }
         $scope = $this->educatorScope($request, $agencyId);
         $this->guardScopedType($scope, $type);
+        if ($scope !== null) {
+            // An educator narrows by ROOM. centre_id is ignored outright rather than
+            // validated: honouring it would let a caller widen a room-scoped report
+            // back out to a centre, which is exactly what this scope exists to stop.
+            $centreId = null;
+            $roomId = (int) $request->query('room_id');
+            if ($roomId && in_array($roomId, $scope['room_ids'], true)) {
+                $scope['room_ids'] = [$roomId];
+            }
+        }
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
             $request->query('status'), $request->query('balance'), $scope);
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;

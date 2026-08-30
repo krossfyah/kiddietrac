@@ -40,8 +40,29 @@
     main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>📋 Reports</h2><p>Loading…</p></div></div>';
     META = await Api.get('/reports/canned').catch(function () { return { reports: [], centres: [], agency: null }; });
 
-    var centreOpts = '<option value="">All centres</option>' +
-      (META.centres || []).map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
+    // Unassigned educator: no rooms, so no reports. Say that plainly instead of
+    // rendering a full screen whose every card comes back empty.
+    if (META.scope_empty) {
+      main.innerHTML =
+        '<div style="padding:14px 24px;">' +
+          '<div class="kt-page-hero"><h2>📋 Reports</h2><p>Attendance and hours for the room(s) you are assigned to.</p></div>' +
+          '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:22px 18px;text-align:center;color:#475569;font-size:13.5px;line-height:1.5;">' +
+            '<div style="font-size:28px;margin-bottom:8px;">🚪</div>' +
+            esc(META.scope_note || 'No rooms are assigned to you yet.') +
+          '</div>' +
+        '</div>';
+      return;
+    }
+
+    // An educator picks one of THEIR rooms; everyone else picks a centre.
+    var rooms = META.rooms || [];
+    var pickerLabel = rooms.length ? 'Room' : 'Centre';
+    var pickerId = rooms.length ? 'rep-room' : 'rep-centre';
+    var centreOpts = rooms.length
+      ? '<option value="">' + (rooms.length > 1 ? 'All my rooms' : esc(rooms[0].name)) + '</option>' +
+        (rooms.length > 1 ? rooms.map(function (r) { return '<option value="' + r.id + '">' + esc(r.name) + '</option>'; }).join('') : '')
+      : '<option value="">All centres</option>' +
+        (META.centres || []).map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
 
     /* Scheduling posts to /admin/report-schedules, which is admin-only - so for
        an educator this panel would render, then hand them a 403 from every button
@@ -65,10 +86,11 @@
         '<div class="kt-page-hero"><h2>📋 Reports</h2><p>Pick a report, set a date range and centre, then run it. Every report is branded and print-ready.</p></div>' +
         scopeNote +
         '<div class="kt-report-noprint" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:14px 16px;margin-bottom:16px;">' +
-          '<label style="font-size:12px;font-weight:700;color:#475569;">Centre<br><select id="rep-centre" style="margin-top:4px;">' + centreOpts + '</select></label>' +
+          '<label style="font-size:12px;font-weight:700;color:#475569;">' + pickerLabel + '<br><select id="' + pickerId + '" style="margin-top:4px;">' + centreOpts + '</select></label>' +
           '<label id="rep-from-wrap" style="font-size:12px;font-weight:700;color:#475569;">From<br><input type="date" id="rep-from" value="' + todayISO(-30) + '" style="margin-top:4px;"></label>' +
           '<label id="rep-to-wrap" style="font-size:12px;font-weight:700;color:#475569;">To<br><input type="date" id="rep-to" value="' + todayISO(0) + '" style="margin-top:4px;"></label>' +
-          '<span style="font-size:12px;color:#64748B;align-self:center;">Date range applies to dated reports (attendance, payments, invoices, staff hours).</span>' +
+          '<span style="font-size:12px;color:#64748B;align-self:center;">Date range applies to dated reports (' +
+            (rooms.length ? 'attendance, staff hours, observations, incidents' : 'attendance, payments, invoices, staff hours') + ').</span>' +
         '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:18px;">' + cards + '</div>' +
         // ── Scheduled reports ──
@@ -443,7 +465,9 @@
     if (type === 'invoices' && !opts) { return openInvoiceCriteria(type); }
     var out = document.getElementById('rep-out');
     if (!out) return;
-    var centreId = (document.getElementById('rep-centre') || {}).value || '';
+    var roomSel = document.getElementById('rep-room');
+    var centreId = roomSel ? '' : ((document.getElementById('rep-centre') || {}).value || '');
+    var roomId = roomSel ? (roomSel.value || '') : '';
     var from = (document.getElementById('rep-from') || {}).value || '';
     var to = (document.getElementById('rep-to') || {}).value || '';
     out.innerHTML = '<div style="padding:24px;color:#64748B;">Generating report…</div>';
@@ -454,6 +478,7 @@
 
     var qs = 'type=' + encodeURIComponent(type);
     if (centreId) qs += '&centre_id=' + encodeURIComponent(centreId);
+    if (roomId) qs += '&room_id=' + encodeURIComponent(roomId);
     if (from) qs += '&from=' + encodeURIComponent(from);
     if (to) qs += '&to=' + encodeURIComponent(to);
     if (opts && opts.status) qs += '&status=' + encodeURIComponent(opts.status);

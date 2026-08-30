@@ -54,8 +54,17 @@
   .app-shell--sidebar .app-main,
   .app-main { padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 74px) !important; }
   #appMain > div[style*="max-width"] { max-width: 100% !important; }
+  /* This is how a screen's own desktop page padding is flattened on a phone: the
+     shell's 10px gutter is the only one wanted, and a second one nested inside it
+     costs ~22% of a 378px viewport. It matched on the literal style string, so it
+     only ever caught the `padding:24px` spelling — a screen written as
+     `padding:14px 24px` (Reports, the settings screens, the parent screen) sailed
+     straight past it and rendered inset, with dead space between the top bar and
+     its own banner. Both spellings are matched now. 2026-08-30. */
   #appMain > div[style*="padding:24px"],
-  #appMain > div[style*="padding: 24px"] { padding: 4px 2px !important; }
+  #appMain > div[style*="padding: 24px"],
+  #appMain > div[style*="padding:14px 24px"],
+  #appMain > div[style*="padding: 14px 24px"] { padding: 4px 2px !important; }
 
   /* ── Section headings: clear hierarchy, less air ── */
   #appMain h1 { font-size: 20px !important; line-height: 1.2 !important; }
@@ -268,7 +277,27 @@ body.kt-parentview [data-export] { display: none !important; }
      edge-to-edge mode they were built for broke the nav anchoring. Re-scoped to the
      (now-unused) .kt-native-fullscreen class so they stay inert unless a proper
      edge-to-edge layout is reintroduced. Normal windows need no extra top padding. */
-  html.kt-native-fullscreen #appMain { padding-top: calc(env(safe-area-inset-top, 0px) + 4px) !important; }
+  /* SAFE AREA, TOP (fixed 2026-08-25).
+     This was gated on html.kt-native-fullscreen — a class nothing in the codebase ever
+     sets, so it never applied and the iOS status bar painted straight over the header.
+     env() is 0px on hardware without an inset, so applying it unconditionally is
+     identical on Android and correct on iPhone. The old selector stays for anything that
+     starts setting that class later. */
+  /* ⚠ The inset belongs to whatever TOUCHES the status bar, and that is #appSidebar
+     (padded with env()+6px further down, and with var(--kt-safe-top)+6px on the iOS
+     fallback path). #appMain sits BELOW that header in normal flow and never reaches
+     the status bar, so adding the inset here counted it a second time and opened a
+     ~47px dead band between the top bar and the first thing on every screen — the gap
+     Anthony reported on the APK. Plain 4px; the header keeps the inset. 2026-08-30. */
+  #appMain,
+  html.kt-native-fullscreen #appMain { padding-top: 4px !important; }
+
+  /* The greeting/logo strip sits above #appMain's own padding on some screens, so it
+     needs the inset too — otherwise the status bar clears the content but still
+     overlaps the header itself. */
+  .kt-greet-bar, .kt-mobile-greet, #kt-greeting, .kt-hero-greet-wrap {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 6px) !important;
+  }
   html.kt-native-fullscreen #kt-gear { top: calc(env(safe-area-inset-top, 0px) + 8px) !important; }
   html.kt-native-fullscreen #kt-topbar { top: env(safe-area-inset-top, 0px) !important; }
 }
@@ -956,3 +985,86 @@ html.kt-native #appMain .kt-rw-head { margin-bottom: 3px !important; }
 html.kt-native #appMain .kt-rw-icon { flex: 0 0 auto !important; margin: 0 !important; align-self: center !important; width: 30px !important; height: 30px !important; font-size: 15px !important; }
 html.kt-native #appMain .kt-rw-value { font-size: 19px !important; line-height: 1.1 !important; margin: 0 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; word-break: normal !important; overflow-wrap: normal !important; }
 html.kt-native #appMain .kt-rw-label { font-size: 9px !important; letter-spacing: .4px !important; margin: 2px 0 0 !important; line-height: 1.2 !important; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   iOS SAFE AREA — 2026-08-25
+
+   Reported: on iPhone the status bar (clock, signal, battery) sits ON TOP of the
+   KiddieTrac header, where on Android it does not.
+
+   Cause: every top-inset rule in this file is gated behind `html.kt-app`, and that
+   class is only added when `window.Capacitor` is detected (dashboard.html, inline
+   head script). The iOS build is a WKWebView wrapper, so on iPhone `nat` is false,
+   `kt-app` never lands, and the insets are simply never applied. Android gets the
+   class, so it looks right there — which is exactly the asymmetry reported.
+
+   Fix: apply the inset WITHOUT requiring the native class. `env(safe-area-inset-*)`
+   resolves to 0px on any device that has no notch or home indicator, so this is inert
+   everywhere it is not needed — no phone without a cutout moves by a pixel. Where
+   html.kt-app also matches, both rules set the SAME value, so nothing doubles up.
+
+   Deliberately NOT widening the kt-app detection instead: that class drives a great
+   deal of other native-only styling, and switching all of it on for iOS at once is a
+   far bigger change than the one bug being fixed here.
+
+   NOTE: if the native iOS layer is ever set to inset the web view itself
+   (contentInsetAdjustmentBehavior), this padding would double up and should be
+   removed. As of today it is not — the screenshot shows no inset at all.
+   ════════════════════════════════════════════════════════════════════════════ */
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (max-width: 768px) {
+    /* !important throughout, to match the rest of this stylesheet. Without it these
+       lose to the existing `html.kt-app` rules and to line 55's padding shorthand,
+       and the fix would look applied while doing nothing. */
+
+    /* The header block that carries the logo, greeting and role pill. */
+    #appSidebar {
+      padding-top: calc(env(safe-area-inset-top, 0px) + 6px) !important;
+    }
+    /* Fixed chrome measures from the true top of the screen, so it needs the inset
+       added to its offset rather than to its padding. */
+    #kt-topbar {
+      top: env(safe-area-inset-top, 0px) !important;
+    }
+    #kt-gear {
+      top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+    }
+
+    /* NOTHING is set for the bottom here on purpose. The bar adds the inset to its own
+       padding (kt-mobilenav.js), and room below the content is already reserved with
+       `padding-bottom: calc(env(safe-area-inset-bottom,0px) + 100px) !important` — both
+       unconditional, so the bottom was never the broken half. Adding another rule here
+       would either lose to that !important or fight it. */
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   iOS FALLBACK when the WebView reports env(safe-area-inset-*) as 0.
+
+   Everything above is correct and works on Android. On the iPhone build the web view
+   runs full-screen while still reporting a zero inset, so every env()-based rule is
+   inert and the logo ends up under the clock. kt-ios-safearea.js MEASURES the inset
+   and only adds .kt-ios-inset-fallback when it is genuinely 0 on a device with a
+   cutout — so these rules can never double up with a working env().
+   (Anthony, reported repeatedly; fixed 2026-08-26)
+   ════════════════════════════════════════════════════════════════════════════ */
+html.kt-ios-inset-fallback #appSidebar {
+  padding-top: calc(var(--kt-safe-top, 0px) + 6px) !important;
+}
+html.kt-ios-inset-fallback #kt-topbar { top: var(--kt-safe-top, 0px) !important; }
+html.kt-ios-inset-fallback #kt-gear   { top: calc(var(--kt-safe-top, 0px) + 8px) !important; }
+
+/* The element actually colliding with the status bar is #appSidebar, and it is padded
+   by the rule above. This one says "the page header" but selects #appMain — the content
+   column underneath it — so the measured inset was applied twice and left a ~47px dead
+   band between the top bar and the first card. Same fix as the env() path. 2026-08-30. */
+html.kt-ios-inset-fallback #appMain { padding-top: 4px !important; }
+
+/* The bottom bar sits ON the home indicator without this. */
+html.kt-ios-inset-fallback #kt-mobilenav {
+  padding-bottom: calc(var(--kt-safe-bottom, 0px) + 5px) !important;
+}
+/* ...and the content behind it needs the same room, or the last row is unreachable. */
+html.kt-ios-inset-fallback #appMain {
+  padding-bottom: calc(var(--kt-safe-bottom, 0px) + 100px) !important;
+}
