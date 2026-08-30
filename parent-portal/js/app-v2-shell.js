@@ -136,6 +136,10 @@
         // tooling) is super-admin only — hide it from tenant agency admins.
         ...(isPlatformAdmin_v22p34 ? [{ label: 'Reseller', items: [
           { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
+          /* Beside MRR: the same money from the other side — MRR is what is owed in
+             aggregate, this is the individual invoices behind it. Reseller because that
+             is a platform_admin section, and the API is guarded role:platform_admin. */
+          { hash: 'sales-invoices', label: 'Invoices',         icon: '🧾' },
           { hash: 'admin-features', label: 'Feature flags',    icon: '⚙️' },
           { hash: 'admin-branding', label: 'Branding',         icon: '🎨' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
@@ -163,7 +167,6 @@
           { hash: 'admin-users',      label: 'User management',  icon: '👥' },
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
-          { hash: 'admin-billing',    label: 'Billing (Stripe)', icon: '💳' },
           { hash: 'admin-forms',      label: 'Custom forms',     icon: '📝' },
           { hash: 'compliance',       label: 'Compliance',       icon: '✅' },
           { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
@@ -322,6 +325,7 @@
           { hash: 'home',          label: 'Home',          icon: '🏠' },
           { hash: 'today',         label: 'Today',         icon: '✨' },
           { hash: 'my-tasks',      label: 'My tasks',      icon: '📋' },
+          { hash: 'parent-feedback', label: 'Parent Feedback', icon: '💬' },
           // v22p98: educators clock in/out here — needed for ratio compliance,
           // payroll and reporting. The time-clock screen was already built and
           // registered for the educator role; it was just missing from this nav.
@@ -334,6 +338,9 @@
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
           { hash: 'announcements', label: 'News',          icon: '📢' },
           { hash: 'time-off',      label: 'Time off',      icon: '🌴' },
+          // 2026-08-30: the canned Reports screen, scoped server-side to this
+          // educator's own rooms and their own clock-ins.
+          { hash: 'reports',       label: 'Reports',       icon: '📊' },
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
@@ -369,7 +376,6 @@
           { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
           { hash: 'sales-new',       label: 'New lead',        icon: '➕', sub: true },
           { hash: 'sales-followups', label: 'Follow-ups',      icon: '⏰' },
-          { hash: 'sales-plans',     label: 'Plans & pricing', icon: '💲' },
           { hash: 'sales-demo',      label: 'Launch demo',     icon: '🚀' },
         ]},
         { label: 'Account', items: [
@@ -594,6 +600,7 @@
     'admin-centres': 'Centres and the rooms inside them.',
     'admin-children': 'Every child enrolled, and their records.',
     'admin-families': 'Families, guardians and contact details.',
+    'parent-feedback': 'What families said about their child’s day.',
     'admin-roles': 'What each role is allowed to do.',
     'admin-forms': 'Forms families and staff are asked to complete.',
     'forms-manager': 'Upload a form, assign it to parents, educators or home visitors, and track who has signed it.',
@@ -614,10 +621,11 @@
     'audit-logs': 'Every change made in the portal, and by whom.',
     'security-alerts': 'Sign-in anomalies and security events.',
     'birthday-settings': 'Warm notes when a child or colleague has a birthday coming up.',
+    'payroll-settings': 'When payroll is next due, so the overview can count down to it.',
     'data-retention': 'How long records are kept before deletion.',
     'anomalies': 'Unusual activity worth a second look.',
 
-    'admin-billing': 'Invoices, payments and Stripe.',
+
     'external-billing': 'Invoices and balances for the agency.',
     'billing': 'Invoices, payments and balances.',
     'billing-setup': 'Fees, schedules and automatic reminders.',
@@ -892,20 +900,82 @@
     else { wrap.style.position = 'fixed'; wrap.style.left = '14px'; wrap.style.bottom = '14px'; wrap.style.zIndex = '9000'; document.body.appendChild(wrap); }
   }
 
+  /* ── Holding the reader's place across a same-screen re-render ─────────────
+     A re-render of the screen you are already on (a live update after a write, the
+     45s poll) is not navigation, and it must not cost you your position.
+
+     Restoring on the next animation frame is not enough, and that was the bug behind
+     "the view keeps jumping". Most screens return from their render function BEFORE
+     their data arrives — the audit log paints a "Loading…" line and fetches — so one
+     frame later the document is a few hundred pixels tall, the browser CLAMPS
+     scrollTo(0, 4000) to the bottom of that short page, and when the real table lands
+     the reader is somewhere they never asked to be.
+
+     So keep re-applying the target while the page is still growing, and stop the
+     moment the reader touches the scroll themselves — putting somebody back where they
+     were is help, moving them while they are scrolling is a fight they always lose.
+     (Anthony, 2026-08-26) */
+  function __ktSettleScroll(y, releaseEl) {
+    var tries = 0, aborted = false;
+    function abort() { aborted = true; }
+    var opts = { passive: true, capture: true };
+    ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) {
+      window.addEventListener(ev, abort, opts);
+    });
+    function release() {
+      ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) {
+        try { window.removeEventListener(ev, abort, opts); } catch (e) {}
+      });
+      // Let the screen size itself again — the pin exists only for the blank moment.
+      if (releaseEl) { try { releaseEl.style.minHeight = ''; } catch (e) {} }
+    }
+    function step() {
+      if (aborted) { release(); return; }
+      var doc = document.documentElement;
+      var max = Math.max(0, (doc ? doc.scrollHeight : 0) - window.innerHeight);
+      try { window.scrollTo(0, Math.min(y, max)); } catch (e) {}
+      // Tall enough to honour the request, or out of patience (~1.6s of async render).
+      if (max >= y || ++tries > 32) { release(); return; }
+      setTimeout(step, 50);
+    }
+    requestAnimationFrame(step);
+  }
+
   async function renderScreen() {
+    /* A re-render of the screen you are already on (a save, a tab switch) is NOT
+       navigation. The resets below are correct for navigation and stay as they are;
+       this records where you were so the same-screen case can be put back. */
+    var _ktSameScreen = (location.hash === window.__ktLastHash);
+    var _ktPrevScroll = _ktSameScreen
+      ? (window.scrollY || (document.scrollingElement || {}).scrollTop || 0) : 0;
+    window.__ktLastHash = location.hash;
     const main = Dom.$('#appMain');
     // Reset scroll to the top BEFORE we clear + render. If we only reset after
     // render, the shell's hashchange listener (registered before kt-mobilenav's)
     // paints the new, tall screen at the OLD scroll position for a frame first —
     // that's the "shows the bottom, then jumps to the top" flash. Resetting here,
     // while the old content is still in place, means the new screen paints at 0.
-    try {
-      window.scrollTo(0, 0);
-      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
-      if (document.documentElement) document.documentElement.scrollTop = 0;
-      if (document.body) document.body.scrollTop = 0;
-      if (main) main.scrollTop = 0;
-    } catch (e) {}
+    /* Landing at the top is right for NAVIGATION and wrong for a re-render of the
+       screen you are already on — that is somebody's place on a page, not a new page. */
+    if (!_ktSameScreen) {
+      try {
+        window.scrollTo(0, 0);
+        if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+        if (document.documentElement) document.documentElement.scrollTop = 0;
+        if (document.body) document.body.scrollTop = 0;
+        if (main) main.scrollTop = 0;
+      } catch (e) {}
+    } else if (main) {
+      /* Hold the page's height across the blank moment. Dom.clear() empties #appMain,
+         the document collapses to nothing, and the browser clamps the scroll position
+         to the bottom of an empty page — the reader is already lost before the new
+         content has even been asked for. Pinning the old height keeps the scrollbar
+         still; __ktSettleScroll releases it once the screen has painted. */
+      try {
+        var _h = main.getBoundingClientRect().height;
+        if (_h > 0) { main.style.minHeight = _h + 'px'; }
+      } catch (e) {}
+    }
     Dom.clear(main);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
 
@@ -950,13 +1020,20 @@
       // (not just on hashchange, before the async content exists) is what stops the
       // "shows the bottom, then scrolls to the top" flash on tall screens like Home.
       try {
-        window.scrollTo(0, 0);
-        if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
-        if (document.documentElement) document.documentElement.scrollTop = 0;
-        if (document.body) document.body.scrollTop = 0;
-        main.scrollTop = 0;
-        requestAnimationFrame(function () { try { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; } catch (e) {} });
-      } catch (e) {}
+        if (_ktSameScreen) {
+          /* Same screen: never scroll to 0 first. The old code reset to the top and then
+             raced a single restore frame against it — which is why a live refresh flung
+             you to the top and sometimes left you there. */
+          __ktSettleScroll(_ktPrevScroll, main);
+        } else {
+          window.scrollTo(0, 0);
+          if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+          if (document.documentElement) document.documentElement.scrollTop = 0;
+          if (document.body) document.body.scrollTop = 0;
+          main.scrollTop = 0;
+          requestAnimationFrame(function () { try { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; } catch (e) {} });
+        }
+      } catch (e) { try { if (main) main.style.minHeight = ''; } catch (e2) {} }
       try {
         var __info = navItemFor(role, hash);
         // ONE banner per screen, and it always looks the same.

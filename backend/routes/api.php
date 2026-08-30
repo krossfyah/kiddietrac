@@ -108,6 +108,11 @@ Route::prefix('v1')->group(function () {
             'viewport'    => mb_substr((string) $r->input('viewport'), 0, 24),
             'native'      => (bool) $r->input('native'),
             'trace'       => mb_substr((string) $r->input('trace'), 0, 8000),
+            /* What the session was doing before it broke — navigations, failed
+               requests, service-worker takeovers, clicks. A stack trace says WHERE it
+               died; this says how it got there. Added after ticket #18 filed with
+               "Last action: not captured". (2026-08-26) */
+            'breadcrumbs' => mb_substr((string) $r->input('breadcrumbs'), 0, 2400),
             'ip'          => $r->ip(),
         ];
         try { \Illuminate\Support\Facades\Storage::append('crash-reports.log', json_encode($data)); } catch (\Throwable $e) {}
@@ -156,6 +161,9 @@ Route::prefix('v1')->group(function () {
                 . '   IP: ' . $data['ip'] . "\n"
                 . 'Service worker: ' . ($data['sw'] ?: 'not reported')
                 . '   Recorded ' . $data['at_utc'] . ' UTC' . "\n\n"
+                . ($data['breadcrumbs']
+                    ? "What led up to it (oldest first):\n" . $data['breadcrumbs'] . "\n\n"
+                    : '')
                 . "Trace:\n" . $data['trace'];
 
             if ($existing) {
@@ -301,20 +309,36 @@ Route::get('/marketing-site/config', [\App\Http\Controllers\Api\MarketingSiteCon
 Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead'])->middleware('throttle:5,1');
 Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit'])->middleware('throttle:60,1');
 Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat'])->middleware('throttle:20,1');
+// A finished conversation goes to sales as a transcript. Throttled hard: one chat
+// ends once, and this one sends mail.
+Route::post('/marketing-site/chat/end', [\App\Http\Controllers\Api\MarketingSiteController::class, 'endChat'])->middleware('throttle:6,1');
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
-Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook']);
+Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1');
 
 // PUBLIC — Zum Rails settlement callbacks. No auth: Zum calls this, not a user. Guarded
 // by a shared secret compared inside the controller. This is the ONLY thing that marks a
 // Zum payment settled; the create response means "instruction accepted" and nothing more.
-Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle']);
+Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle'])->middleware('throttle:600,1');
 
 // PUBLIC — Twilio inbound SMS: STOP, START and HELP. No auth (Twilio holds no session);
 // the request is Twilio-signature-verified inside, and refused outright when TWILIO_TOKEN
 // is unset, since an unverifiable endpoint here would let anyone opt a number in or out.
-Route::post('/sms/inbound', [\App\Http\Controllers\Api\SmsConsentController::class, 'inbound']);
+Route::post('/sms/inbound', [\App\Http\Controllers\Api\SmsConsentController::class, 'inbound'])->middleware('throttle:120,1');
 // Signed (session-less) e-document view — a mobile WebView can open this URL directly.
 Route::get('/edoc/{id}/view', [\App\Http\Controllers\Api\EDocumentController::class, 'signedStream'])->name('edoc.signed')->middleware('signed');
+// One-tap time-off decisions from the approver's email. The GET only DISPLAYS —
+// mail scanners fetch every link in a message, so a GET that decided anything would
+// be decided by the scanner before the director saw it. The POST does the work.
+/* Parent day-feedback from the daily summary email. Signed, no login, write-only,
+   14-day expiry. The GET renders a form and changes NOTHING — mail scanners fetch every
+   link before delivery, so a GET that mutated would file feedback nobody wrote. */
+Route::get ('/feedback/day/{child}', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'form'])
+    ->name('parent.feedback.form')->middleware('signed')->whereNumber('child');
+Route::post('/feedback/day/{child}', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'submit'])
+    ->middleware('signed')->whereNumber('child');
+
+Route::get ('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::class, 'actPage'])->name('timeoff.act')->middleware('signed');
+Route::post('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::class, 'actSubmit'])->middleware('signed');
 
 // v22p49 — Public tour booking. Throttled aggressively because the public
 // endpoint is the most-likely target for spam — 8 requests per hour per IP.
@@ -531,6 +555,18 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // unlock method had been added to their account and nobody could report on it.
         // How today is going for the educator asking — same numbers as the evening email.
         Route::get('/educator/day-score', [\App\Http\Controllers\Api\EducatorSelfController::class, 'dayScore']);
+        /* Which of today's assigned forms this educator has actually submitted. Sits in
+           the same educator-facing group as day-score; it also serves a director looking
+           at one of their own educators, which the controller authorises. */
+        Route::get('/educator/forms-today', [\App\Http\Controllers\Api\EducatorSelfController::class, 'formsToday']);
+        /* The supervisor's view of the same data: every educator in scope. Authorised and
+           agency-scoped inside the controller, which fails closed without agency context. */
+        Route::get('/admin/forms-today', [\App\Http\Controllers\Api\EducatorSelfController::class, 'formsTodayRollup']);
+
+        /* Which provider has a child on which day. Admin/director configuration for a
+           family that splits its week across providers. */
+        Route::get ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'show']);
+        Route::put ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'update']);
         Route::post('/me/biometric-enrolled', [\App\Http\Controllers\Api\BiometricController::class, 'enrolled']);
         Route::post('/me/biometric-revoked',  [\App\Http\Controllers\Api\BiometricController::class, 'revoked']);
         Route::get ('/admin/biometric-report', [\App\Http\Controllers\Api\BiometricController::class, 'report']);
@@ -542,16 +578,24 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/parent/absences/{child}/{date}', [\App\Http\Controllers\Api\AbsenceController::class, 'destroy']);
         // Which rooms an educator is assigned to (director / agency-admin only —
         // the controller checks centre access on both the user and the rooms).
-        Route::get('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'show']);
-        Route::put('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'update']);
-        // A staff member's clock in/out history, on their own record.
-        Route::get('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'punches']);
-        // Correcting a punch. Nothing could do this before — the educator's clock only
-        // toggles, and there was no admin route — which is why punches sat open for weeks.
-        Route::patch('/admin/users/{user}/punches/{punch}', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'updatePunch']);
-        // Enter a shift by hand — there was no create, so a shift that was never clocked
-        // could not be added at all and payroll had no way to be made whole.
-        Route::post('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'storePunch']);
+        // 2026-08-30 — these five carried NO role middleware. The controller's own
+        // guard is authorizeCentreAccess(), which passes for ANY active role at the
+        // centre — an EDUCATOR included — so a colleague could read, correct and
+        // invent another educator's payroll punches, and reassign their rooms.
+        // Room assignment is a director/agency-admin decision (the controller says so
+        // in its own docblock); punch correction is payroll. Both are admin-only.
+        Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+            Route::get('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'show']);
+            Route::put('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'update']);
+            // A staff member's clock in/out history, on their own record.
+            Route::get('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'punches']);
+            // Correcting a punch. Nothing could do this before — the educator's clock only
+            // toggles, and there was no admin route — which is why punches sat open for weeks.
+            Route::patch('/admin/users/{user}/punches/{punch}', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'updatePunch']);
+            // Enter a shift by hand — there was no create, so a shift that was never clocked
+            // could not be added at all and payroll had no way to be made whole.
+            Route::post('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'storePunch']);
+        });
         Route::put('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'update']);
 
         // Onboarding — Privacy Policy & NDA. Every role signs once; the signature,
@@ -572,7 +616,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/care/portfolio/{child}',    [\App\Http\Controllers\Api\CareController::class, 'portfolio']);
         Route::post  ('/staff/punch',               [\App\Http\Controllers\Api\CareController::class, 'punch']);
         Route::get   ('/staff/punches/me',          [\App\Http\Controllers\Api\CareController::class, 'myPunches']);
-        Route::get   ('/staff/punches/centre',      [\App\Http\Controllers\Api\CareController::class, 'centrePunches']);
+        // A supervisor view — every staff member's punches at the centre. Gated like
+        // one (2026-08-30); it previously answered to any authenticated role there.
+        Route::get   ('/staff/punches/centre',      [\App\Http\Controllers\Api\CareController::class, 'centrePunches'])->middleware('role:centre_director,agency_admin,platform_admin');
 
         // 2026-07-13 — self-scoped staff data for the educator mobile app.
         // Own shifts only, and child records only for children the caller can
@@ -601,6 +647,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Route-level role gate kept lenient; controller does the agency-scope check
         // via getAgencyId() so platform_admin in a tenant context Just Works.
         Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+            // Reusable headers and footers — uploaded once, picked per campaign.
+            Route::get   ('/marketing/assets',              [\App\Http\Controllers\Api\MarketingController::class, 'assetsIndex']);
+            Route::post  ('/marketing/assets',              [\App\Http\Controllers\Api\MarketingController::class, 'assetsStore']);
+            Route::delete('/marketing/assets/{id}',         [\App\Http\Controllers\Api\MarketingController::class, 'assetsDestroy']);
             Route::get   ('/marketing/campaigns',           [\App\Http\Controllers\Api\MarketingController::class, 'index']);
             Route::post  ('/marketing/campaigns',           [\App\Http\Controllers\Api\MarketingController::class, 'store']);
             Route::get   ('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'show']);
@@ -680,6 +730,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/check-in-batch', [CheckEventController::class, 'checkInBatch']);
 
             Route::post('/events', [DailyEventController::class, 'store']);
+            // Log one thing for a whole room at once (sunscreen, snack, nap).
+            Route::post('/events/bulk', [DailyEventController::class, 'storeBulk']);
             Route::patch('/events/{event}', [DailyEventController::class, 'update']);
             Route::delete('/events/{event}', [DailyEventController::class, 'destroy']);
 
@@ -743,6 +795,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/enrollments', [ChildController::class, 'enrollmentList']);
             Route::post('/enrollments', [ChildController::class, 'enroll']);
             Route::patch('/enrollments/{enrollment}', [ChildController::class, 'updateEnrollment']);
+            /* Move a child (and, deliberately, their siblings) from one provider to
+               another — one transaction instead of two manual edits with a cross-tenant
+               trap between them. GET lists valid destinations with places left. */
+            Route::get ('/children/{child}/transfer-targets', [ChildController::class, 'transferTargets'])->where('child', '[0-9]+');
+            Route::post('/children/{child}/transfer',         [ChildController::class, 'transferChild'])->where('child', '[0-9]+');
             Route::get('/waitlist', [ChildController::class, 'waitlist']);
 
             Route::get('/children/{child}', [ChildController::class, 'show']);
@@ -750,6 +807,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/children/{child}/daily-events', [ChildController::class, 'dailyEvents']);
             Route::get('/children/{child}/feed',         [ChildController::class, 'feed']);
             Route::get('/children/{child}/documents',    [ChildController::class, 'documents']);
+            /* Full retained history. Registered here as well as under /admin because
+               this screen serves centre directors too, and the record must open for
+               them the same way. */
+            Route::get('/children/{child}/history', [\App\Http\Controllers\Api\RecordHistoryController::class, 'child'])->whereNumber('child');
+            /* Attachments on a child record were read-only until 2026-08-25 - the tab
+               listed files that nobody had any way to put there. Mirrors the per-user set. */
+            Route::post  ('/children/{child}/documents',                [ChildController::class, 'uploadDocument'])->where('child', '[0-9]+');
+            Route::get   ('/children/{child}/documents/{doc}/download', [ChildController::class, 'downloadDocument'])->where(['child' => '[0-9]+', 'doc' => '[0-9]+']);
+            Route::delete('/children/{child}/documents/{doc}',          [ChildController::class, 'deleteDocument'])->where(['child' => '[0-9]+', 'doc' => '[0-9]+']);
             // v22p5: full CRUD on child record (separate from enrollment updates)
             Route::patch('/children/{child}', [ChildController::class, 'update']);
             Route::delete('/children/{child}', [ChildController::class, 'destroy']);
@@ -771,6 +837,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/staff/invite', [StaffController::class, 'invite']);
             Route::get('/staff/{user}/certifications', [StaffController::class, 'certifications']);
             Route::post('/staff/{user}/certifications', [StaffController::class, 'addCertification']);
+            // The contractor flag — the announcement audience needs it and nothing
+            // else in the portal could set it.
+            Route::patch('/staff/{user}/contractor', [StaffController::class, 'setContractor']);
             Route::get('/staff/schedule', [StaffController::class, 'schedule']);
             Route::post('/staff/shifts', [StaffController::class, 'createShift']);
 
@@ -859,6 +928,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
                     ->limit(100)
                     ->select('audit_logs.*', 'users.first_name', 'users.last_name', 'users.email')
                     ->get();
+                // Narrated at read time so the ~10,600 rows already in the table
+                // become readable too, not just the ones written from now on.
+                $logs = \App\Support\AuditNarrator::narrate($logs);
                 return response()->json(['logs' => $logs]);
             });
         });
@@ -911,6 +983,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/centres', [AdminController::class, 'createCentre']);
         Route::patch('/centres/{centre}', [AdminController::class, 'updateCentre']);
         Route::delete('/centres/{centre}', [AdminController::class, 'archiveCentre']);
+        // What closing this provider would involve. Read-only; changes nothing.
+        Route::get('/centres/{centre}/offboard-plan', [\App\Http\Controllers\Api\CentreOffboardController::class, 'plan'])->whereNumber('centre');
+        // Carry the plan out. Without confirm=true it previews and writes nothing.
+        Route::post('/centres/{centre}/offboard', [\App\Http\Controllers\Api\CentreOffboardController::class, 'execute'])->whereNumber('centre');
         Route::delete('/centres/{centre}/permanent', [AdminController::class, 'permanentDeleteCentre']);
         Route::post('/centres/{centre}/restore', [AdminController::class, 'restoreCentre']);
         // v22p3.4: per-centre branding logo upload
@@ -925,6 +1001,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/users/{user}/notes', [AdminController::class, 'addUserNote']);
         Route::post('/users/{user}/role', [AdminController::class, 'setUserRole']);
         // v22p1.2: user lifecycle
+        /* Off-boarding a member of staff: what it would involve, then do it.
+           destroyUser below closes the ACCOUNT; this wraps it with the handover —
+           rooms, forgotten punches, outstanding tasks. */
+        Route::get ('/users/{user}/offboard-plan', [\App\Http\Controllers\Api\StaffOffboardController::class, 'plan'])->whereNumber('user');
+        Route::post('/users/{user}/offboard',      [\App\Http\Controllers\Api\StaffOffboardController::class, 'execute'])->whereNumber('user');
         Route::delete('/users/{user}', [AdminController::class, 'destroyUser']);
         Route::post('/users/{user}/reactivate', [AdminController::class, 'reactivateUser']);
         Route::post('/users/{user}/reset-password', [AdminController::class, 'resetUserPassword']);
@@ -975,6 +1056,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/forms/{form}/email', [\App\Http\Controllers\Api\FormsController::class, 'emailToParents']);
         Route::get('/families/{family}', [AdminController::class, 'showFamily']);
         Route::patch('/guardians/{guardian}', [AdminController::class, 'updateGuardian']);
+        /* The family record's own editing surface: notes with an author and a date, and
+           unlinking a guardian. Adding a child and inviting a guardian already had
+           endpoints (enrollments / families.invite) that nothing on screen called. */
+        Route::get   ('/families/{family}/provider-history',     [\App\Http\Controllers\Api\FamilyRecordController::class, 'providerHistory']);
+        Route::get   ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'listNotes']);
+        Route::post  ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'addNote']);
+        Route::delete('/families/{family}/notes/{note}',         [\App\Http\Controllers\Api\FamilyRecordController::class, 'deleteNote']);
+        Route::post  ('/families/{family}/notes/{note}/pin',     [\App\Http\Controllers\Api\FamilyRecordController::class, 'pinNote']);
+        Route::delete('/families/{family}/guardians/{guardian}', [\App\Http\Controllers\Api\FamilyRecordController::class, 'removeGuardian']);
+
         Route::post('/families/{family}/emergency-contacts', [AdminController::class, 'addEmergencyContact']);
         Route::patch('/emergency-contacts/{id}', [AdminController::class, 'updateEmergencyContact']);
         Route::delete('/emergency-contacts/{id}', [AdminController::class, 'deleteEmergencyContact']);
@@ -982,6 +1073,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/families', [AdminController::class, 'createFamily']);
         Route::patch('/families/{family}', [AdminController::class, 'updateFamily']);
         // v22p46: family delete (soft) — keeps children + audit history intact
+        /* What a family still owes — the de-enrolment dialog reads this first, so the
+           admin sees the figure before the accounts (and the invoices) close. */
+        /* Everything that has LEFT the agency, with the retention clock on each —
+           de-enrolling keeps records rather than deleting them, and nothing in the
+           portal could see them until now. */
+        Route::get('/archived', [AdminController::class, 'archivedIndex']);
+        /* EVERYTHING held about one child or family — 57 tables carry a child_id or
+           family_id, and a retained record you cannot read is not really retained. */
+        Route::get('/children/{child}/history', [\App\Http\Controllers\Api\RecordHistoryController::class, 'child'])->whereNumber('child');
+        Route::get('/families/{family}/history', [\App\Http\Controllers\Api\RecordHistoryController::class, 'family'])->whereNumber('family');
+        Route::get('/families/{family}/outstanding', [AdminController::class, 'familyBalance'])->whereNumber('family');
         Route::delete('/families/{family}', [AdminController::class, 'destroyFamily']);
         Route::post('/families/{family}/provider-welcome', [AdminController::class, 'resendProviderWelcome']);
         Route::get('/email-template/provider-welcome', [AdminController::class, 'getProviderWelcomeTemplate']);
@@ -991,12 +1093,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Generic multi-template editor (#77). provider-welcome above is a static
         // route so it wins over these {key} wildcards; the rest hit the registry.
         Route::get('/email-templates', [AdminController::class, 'emailTemplateList']);
+        // The full inventory — everything the system sends, not just the four that
+        // are editable. Read-only; the editor routes below still own changes.
+        Route::get('/email-catalogue', [AdminController::class, 'emailCatalogue']);
         Route::get('/email-template/{key}', [AdminController::class, 'getEmailTemplate']);
         Route::put('/email-template/{key}', [AdminController::class, 'saveEmailTemplate']);
         Route::post('/email-template/{key}/test', [AdminController::class, 'testEmailTemplate']);
         Route::post('/email-template/{key}/preview', [AdminController::class, 'previewEmailTemplate']);
         Route::post('/families/{family}/suspend', [AdminController::class, 'suspendFamily']);
         Route::post('/families/{family}/reactivate', [AdminController::class, 'reactivateFamily']);
+        // Undo a de-enrolment, so a returning family is not re-created from scratch.
+        Route::post('/families/{family}/restore', [AdminController::class, 'restoreFamily']);
+        // Move a whole family to another provider (siblings travel together).
+        Route::get ('/families/{family}/transfer-targets', [ChildController::class, 'familyTransferTargets'])->whereNumber('family');
+        Route::post('/families/{family}/transfer',         [ChildController::class, 'familyTransfer'])->whereNumber('family');
     
         Route::get('/analytics', [AdminController::class, 'analytics']);
     
@@ -1016,6 +1126,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // PARENT chat routes
     Route::middleware('role:guardian')->prefix('parent')->group(function () {
         Route::get('/chats',                       [ChatController::class, 'parentList']);
+        /* Private 1:1 threads for parents — the other end of a broadcast.
+           Reuses the colleague-thread controller because those methods authorise on
+           PARTICIPATION alone, not on being staff: show()/send() call isParticipant(),
+           and threads() lists only threads you are in. contacts()/start() carry the
+           staff-only gate and are deliberately NOT exposed here. */
+        Route::get ('/threads',                    [\App\Http\Controllers\Api\TeamChatController::class, 'threads']);
+        Route::get ('/threads/unread-count',       [\App\Http\Controllers\Api\TeamChatController::class, 'unreadCount']);
+        Route::get ('/threads/{thread}',           [\App\Http\Controllers\Api\TeamChatController::class, 'show'])->where('thread', '[0-9]+');
+        Route::post('/threads/{thread}/send',      [\App\Http\Controllers\Api\TeamChatController::class, 'send'])->where('thread', '[0-9]+');
+        Route::post('/threads/{thread}/messages/{message}/react', [\App\Http\Controllers\Api\TeamChatController::class, 'react'])->where(['thread' => '[0-9]+', 'message' => '[0-9]+']);
         Route::post('/chats/start',                [ChatController::class, 'parentStart']);
         Route::get('/chats/{conversation}',        [ChatController::class, 'parentShow']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'parentSend']);
@@ -1050,6 +1170,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // home_visitor is agency-scoped in providerCentreIds so they message families
     // across their agency. This group is chat-only — NOT the provider toolset.
     Route::middleware('role:educator,centre_director,agency_admin,home_visitor')->prefix('provider')->group(function () {
+        // One message to a whole audience. POST without confirm=1 returns a COUNT
+        // only, so the screen can say who it reaches before it reaches them.
+        Route::post('/chats/broadcast',            [ChatController::class, 'broadcast']);
         Route::get('/chats',                       [ChatController::class, 'providerList']);
         Route::get('/chats/{conversation}',        [ChatController::class, 'providerShow']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'providerSend']);
@@ -1070,6 +1193,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/team-threads/start',         [\App\Http\Controllers\Api\TeamChatController::class, 'start']);
         Route::get ('/team-threads/{thread}',      [\App\Http\Controllers\Api\TeamChatController::class, 'show'])->where('thread', '[0-9]+');
         Route::post('/team-threads/{thread}/send', [\App\Http\Controllers\Api\TeamChatController::class, 'send'])->where('thread', '[0-9]+');
+        Route::post('/team-threads/{thread}/messages/{message}/react', [\App\Http\Controllers\Api\TeamChatController::class, 'react'])->where(['thread' => '[0-9]+', 'message' => '[0-9]+']);
         // Archiving is per person and covers both kinds of thread, so it lives on its
         // own endpoint rather than being duplicated into each chat controller.
         // Interface state that follows the person rather than the browser.
@@ -1216,9 +1340,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get   ('/admin/agencies/{id}/features',     [FeatureFlagController::class, 'show']);
     Route::patch ('/admin/agencies/{id}/features',     [FeatureFlagController::class, 'update']);
     
-    // MRR dashboard (platform-admin only)
-    Route::get   ('/admin/mrr/overview',               [MrrDashboardController::class, 'overview']);
-    Route::get   ('/admin/mrr/agencies',               [MrrDashboardController::class, 'agencyList']);
+    /* MRR dashboard. The role guard is ON EACH ROUTE, not on an enclosing group —
+       this comment previously claimed platform-admin only while the routes carried
+       no role middleware at all, and any authenticated user could read them. */
+    Route::get   ('/admin/mrr/overview',               [MrrDashboardController::class, 'overview'])->middleware('role:platform_admin');
+    Route::get   ('/admin/mrr/agencies',               [MrrDashboardController::class, 'agencyList'])->middleware('role:platform_admin');
+
+    /* Platform invoices — what agencies owe KiddieTrac. Same platform-admin group
+       as the MRR dashboard above; nothing agency-scoped may reach these. */
+    Route::get   ('/platform/invoices',                [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'index'])->middleware('role:platform_admin');
+    Route::get   ('/platform/billing-automation',      [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'automation'])->middleware('role:platform_admin');
+    Route::put   ('/platform/billing-automation',      [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveAutomation'])->middleware('role:platform_admin');
+    Route::get   ('/platform/billing-plans',           [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'plans'])->middleware('role:platform_admin');
+    Route::put   ('/platform/billing-plans/{agencyId}',[\App\Http\Controllers\Api\PlatformInvoiceController::class, 'savePlan'])->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/email',     [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'email'])->middleware('role:platform_admin');
+    Route::patch ('/platform/invoices/{id}',           [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'update'])->middleware('role:platform_admin');
+    Route::delete('/platform/invoices/{id}',           [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'destroy'])->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/raise',          [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'raise'])->middleware('role:platform_admin');
+    Route::get   ('/platform/invoices/{id}/pdf',       [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'pdf'])->where('id', '[0-9]+')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/issue',     [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'issue'])->where('id', '[0-9]+')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/mark-paid', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'markPaid'])->where('id', '[0-9]+')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/void',      [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'void'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     
     // White-label invoice preview (returns text/html)
     Route::get   ('/invoices/{id}/preview',            [InvoicePreviewController::class, 'previewExisting']);
@@ -1312,6 +1454,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'show']);
         Route::post ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'update']);
         Route::patch('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
+        // Pay schedule — drives the "Next payroll" card on the overview.
+        Route::get  ('/admin/payroll-settings', [\App\Http\Controllers\Api\PayrollSettingsController::class, 'show']);
+        Route::patch('/admin/payroll-settings', [\App\Http\Controllers\Api\PayrollSettingsController::class, 'update']);
+        Route::post ('/admin/payroll-settings', [\App\Http\Controllers\Api\PayrollSettingsController::class, 'update']);
         Route::get  ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'show']);
         Route::patch('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
         Route::post ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
@@ -1413,6 +1559,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // fetch() can't read for CORS reasons) as an attachment, like the payslip PDF.
     Route::get ('/media/download',     [\App\Http\Controllers\Api\MediaController::class, 'download']);
     Route::post('/photos',             [\App\Http\Controllers\Api\PhotoFeedController::class, 'upload']);
+    /* An educator sees only feedback RELEASED to them; a director releases the rest. */
+    Route::get ('/feedback/mine-educator', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'mine']);
+    Route::post('/feedback/mine-educator/read', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'markRead']);
+    Route::post('/feedback/{id}/release', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'release'])->whereNumber('id');
     Route::get ('/feedback',           [\App\Http\Controllers\Api\FeedbackController::class, 'index']);
     Route::get ('/feedback/mine',      [\App\Http\Controllers\Api\FeedbackController::class, 'mine']);
     Route::post('/feedback',           [\App\Http\Controllers\Api\FeedbackController::class, 'submit']);
@@ -1527,22 +1677,40 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/families/{familyId}/ledger/pdf',    [\App\Http\Controllers\Api\LedgerController::class, 'familyLedgerPdf']);
     });
     // Reports
-    Route::get   ('/reports/canned',     [\App\Http\Controllers\Api\ReportsController::class, 'cannedList']);
-    Route::get   ('/reports/canned/run', [\App\Http\Controllers\Api\ReportsController::class, 'canned']);
-    Route::get   ('/reports/canned/pdf', [\App\Http\Controllers\Api\ReportsController::class, 'cannedPdf']);
-    Route::get   ('/reports/canned/xlsx', [\App\Http\Controllers\Api\ReportsController::class, 'cannedXlsx']);
-    Route::get   ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'listMine']);
-    Route::post  ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'create']);
-    Route::patch ('/reports/{id}',                  [\App\Http\Controllers\Api\ReportsController::class, 'update']);
-    Route::delete('/reports/{id}',                  [\App\Http\Controllers\Api\ReportsController::class, 'destroy']);
-    Route::get   ('/reports/{id}/run',              [\App\Http\Controllers\Api\ReportsController::class, 'run']);
+    // ⚠ 2026-08-30 — ALL of these were auth-only: no role middleware at all, and
+    // ReportsController does no role check of its own (resolveAgencyId scopes to the
+    // caller's AGENCY, and stops there). Any authenticated token — an educator's, a
+    // parent's — could therefore pull the agency-wide attendance log, staff hours,
+    // payments, invoices and family directory. The UI hid the screen; the API did not.
+    //
+    // Educators are inside the canned group ON PURPOSE: the reports screen is now
+    // theirs too, but ReportsController::educatorScope() cuts what they can ask for
+    // down to their own rooms and their own clock-ins. Guardians are out entirely.
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin,auditor')->group(function () {
+        Route::get   ('/reports/canned',      [\App\Http\Controllers\Api\ReportsController::class, 'cannedList']);
+        Route::get   ('/reports/canned/run',  [\App\Http\Controllers\Api\ReportsController::class, 'canned']);
+        Route::get   ('/reports/canned/pdf',  [\App\Http\Controllers\Api\ReportsController::class, 'cannedPdf']);
+        Route::get   ('/reports/canned/xlsx', [\App\Http\Controllers\Api\ReportsController::class, 'cannedXlsx']);
+    });
+    // The saved custom-report builder stays admin-only. Unlike the canned set it
+    // takes caller-supplied tables, columns and filters, so there is no subset of it
+    // that could be handed to an educator and still be safe.
+    Route::middleware('role:centre_director,agency_admin,platform_admin,auditor')->group(function () {
+        Route::get   ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'listMine']);
+        Route::post  ('/reports',                       [\App\Http\Controllers\Api\ReportsController::class, 'create']);
+        Route::patch ('/reports/{id}',                  [\App\Http\Controllers\Api\ReportsController::class, 'update']);
+        Route::delete('/reports/{id}',                  [\App\Http\Controllers\Api\ReportsController::class, 'destroy']);
+        Route::get   ('/reports/{id}/run',              [\App\Http\Controllers\Api\ReportsController::class, 'run']);
+    });
     // Scheduled reports — email a canned report on a cadence (PDF/CSV).
-    Route::get   ('/admin/report-schedules',            [\App\Http\Controllers\Api\ScheduledReportController::class, 'index']);
-    Route::post  ('/admin/report-schedules',            [\App\Http\Controllers\Api\ScheduledReportController::class, 'store']);
-    Route::patch ('/admin/report-schedules/{id}',       [\App\Http\Controllers\Api\ScheduledReportController::class, 'update']);
-    Route::delete('/admin/report-schedules/{id}',       [\App\Http\Controllers\Api\ScheduledReportController::class, 'destroy']);
-    Route::post  ('/admin/report-schedules/{id}/run',   [\App\Http\Controllers\Api\ScheduledReportController::class, 'runNow']);
-    Route::post  ('/reports/preview',               [\App\Http\Controllers\Api\ReportsController::class, 'preview']);
+    // The four write routes below were already gated; only this read was not, so the
+    // list of what every centre has scheduled, and to whom it is emailed, was open.
+    Route::get   ('/admin/report-schedules',            [\App\Http\Controllers\Api\ScheduledReportController::class, 'index'])->middleware('role:agency_admin,centre_director,platform_admin');
+    Route::post  ('/admin/report-schedules',            [\App\Http\Controllers\Api\ScheduledReportController::class, 'store'])->middleware('role:agency_admin,centre_director,platform_admin');
+    Route::patch ('/admin/report-schedules/{id}',       [\App\Http\Controllers\Api\ScheduledReportController::class, 'update'])->middleware('role:agency_admin,centre_director,platform_admin');
+    Route::delete('/admin/report-schedules/{id}',       [\App\Http\Controllers\Api\ScheduledReportController::class, 'destroy'])->middleware('role:agency_admin,centre_director,platform_admin');
+    Route::post  ('/admin/report-schedules/{id}/run',   [\App\Http\Controllers\Api\ScheduledReportController::class, 'runNow'])->middleware('role:agency_admin,centre_director,platform_admin');
+    Route::post  ('/reports/preview',               [\App\Http\Controllers\Api\ReportsController::class, 'preview'])->middleware('role:centre_director,agency_admin,platform_admin,auditor');
     // Reactions + video
     Route::get   ('/reactions/{type}/{id}',         [\App\Http\Controllers\Api\MediaV2Controller::class, 'listReactions']);
     Route::post  ('/reactions',                     [\App\Http\Controllers\Api\MediaV2Controller::class, 'addReaction']);
@@ -1596,6 +1764,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Walks & outings — educator-started live-GPS trips (parents of present children can watch)
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/provider/walks/active',      [\App\Http\Controllers\Api\WalkController::class, 'active']);
+        // A whole day of walks across the centres you oversee — who is out, with
+        // which educator, where they set off from and where they are now.
+        Route::get ('/provider/walks/tracker',       [\App\Http\Controllers\Api\WalkController::class, 'tracker']);
+        Route::get ('/provider/walks/tracker-dates', [\App\Http\Controllers\Api\WalkController::class, 'trackerDates']);
         Route::get ('/provider/walks/eligible-children', [\App\Http\Controllers\Api\WalkController::class, 'eligibleChildren']);
         Route::post('/provider/walks/start',       [\App\Http\Controllers\Api\WalkController::class, 'start']);
         Route::post('/provider/walks/{id}/end',    [\App\Http\Controllers\Api\WalkController::class, 'end']);
@@ -1633,6 +1805,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get ('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'listMine']);
     Route::post('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'create']);
     Route::get ('/tickets/{id}',                  [\App\Http\Controllers\Api\SupportTicketController::class, 'show']);
+    // Attachments. Both ends check the ticket is one this user may see, and files are
+    // stored off the public root and streamed — never reachable by guessing a name.
+    Route::post('/tickets/{id}/files',            [\App\Http\Controllers\Api\SupportTicketController::class, 'uploadFile']);
+    Route::get ('/tickets/{id}/files/{fileId}',   [\App\Http\Controllers\Api\SupportTicketController::class, 'downloadFile']);
     Route::post('/tickets/{id}/reply',            [\App\Http\Controllers\Api\SupportTicketController::class, 'reply']);
     Route::patch('/tickets/{id}/status',          [\App\Http\Controllers\Api\SupportTicketController::class, 'updateStatus']);
 
@@ -1736,6 +1912,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/waitlist', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertWaitlist']);
         Route::get ('/waitlist/pull', [\App\Http\Controllers\Api\IntegrationController::class, 'pullWaitlist']);
         Route::get ('/contacts/pull', [\App\Http\Controllers\Api\IntegrationController::class, 'pullContacts']);
+        // The other direction: families and children that ORIGINATED here, so a
+        // consumer can create them. pullContacts only refreshes what it already owns.
+        Route::get ('/pull/new', [\App\Http\Controllers\Api\IntegrationController::class, 'pullNew']);
         Route::post('/sync',     [\App\Http\Controllers\Api\IntegrationController::class, 'sync']);
     });
 
@@ -1751,14 +1930,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 // v22p5: kiosk mode — public endpoints (no auth; centre token in URL)
 Route::prefix('kiosk')->group(function () {
     Route::get('/{token}', [\App\Http\Controllers\Api\KioskController::class, 'lookup']);
-    Route::post('/{token}/check-event', [\App\Http\Controllers\Api\KioskController::class, 'checkEvent']);
+    Route::post('/{token}/check-event', [\App\Http\Controllers\Api\KioskController::class, 'checkEvent'])->middleware('throttle:120,1');
 });
 
 // ===== v22p51 PUBLIC ROUTES =====
 
 
 // v22p51 — Stripe parent-pay webhook (no auth; signature-verified inside)
-Route::post('/stripe/parent-webhook', [\App\Http\Controllers\Api\StripeParentPayController::class, 'webhook']);
+Route::post('/stripe/parent-webhook', [\App\Http\Controllers\Api\StripeParentPayController::class, 'webhook'])->middleware('throttle:600,1');
 
 // v22p51 — Public agency landing pages (HTML)
 Route::get('/public/landing/{slug}', [\App\Http\Controllers\Api\LandingController::class, 'landing']);
@@ -1772,7 +1951,7 @@ Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController:
 
 // ===== v22p53 PUBLIC =====
 
-Route::post('/kiosk/{token}/signature', [\App\Http\Controllers\Api\OperationsController::class, 'captureSignature']);
+Route::post('/kiosk/{token}/signature', [\App\Http\Controllers\Api\OperationsController::class, 'captureSignature'])->middleware('throttle:120,1');
 
 
 
@@ -1782,7 +1961,7 @@ Route::prefix('v1')->group(function () {
     Route::get ('/sso/providers',                [\App\Http\Controllers\Api\SsoController::class, 'providers']);
     Route::get ('/sso/{provider}',               [\App\Http\Controllers\Api\SsoController::class, 'redirect']);
     Route::get ('/sso/{provider}/callback',      [\App\Http\Controllers\Api\SsoController::class, 'callback']);
-    Route::post('/kiosk/{token}/temperature',    [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record']);
+    Route::post('/kiosk/{token}/temperature',    [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record'])->middleware('throttle:120,1');
 });
 
 /* v22p68 help routes */

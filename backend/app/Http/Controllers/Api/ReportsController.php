@@ -255,6 +255,93 @@ final class ReportsController extends Controller
        agency + centre branding so the UI can render a branded, zebra-striped,
        printable document. */
 
+    /**
+     * The canned reports an educator may run at all (2026-08-30).
+     *
+     * Everything else in cannedDefs() - payments, invoices, the family directory,
+     * enrolment, the waitlist, tours - is agency business, not classroom business,
+     * and stays out of reach whatever the caller asks for.
+     */
+    private const EDUCATOR_TYPES = ['attendance', 'staff_hours', 'observations', 'incidents'];
+
+    /**
+     * How far a caller may see inside their own agency - null means "the whole
+     * agency", which is what a director, agency_admin, platform_admin or auditor
+     * has always had.
+     *
+     * WHY THIS EXISTS. Until 2026-08-30 the canned reports were role-BLIND: the
+     * routes carried no role middleware and this controller checked nothing but the
+     * agency, so any authenticated token could pull the agency-wide attendance log,
+     * staff hours, payments and family directory. The routes are gated now, and
+     * educators are deliberately still allowed in - but through here, which cuts
+     * what they get down to:
+     *
+     *   - the rooms they are assigned to (educator_rooms), and
+     *   - their own clock-ins, never a colleague's.
+     *
+     * An educator with NO room assignment falls back to every room at their own
+     * centre. That is not a new grant: EducatorRoomsController documents the same
+     * fallback ("an educator with no assignments falls back to their whole centre,
+     * so a new account is not stranded"), and EducatorSelfController::children
+     * already hands them exactly that child list.
+     *
+     * @return array{user_id:int,room_ids:array<int,int>}|null
+     */
+    private function educatorScope(Request $request, int $agencyId): ?array
+    {
+        $roles = \App\Support\UserRoles::names($request);
+
+        foreach (['platform_admin', 'agency_admin', 'centre_director', 'auditor'] as $full) {
+            if (in_array($full, $roles, true)) {
+                return null;
+            }
+        }
+        // Belt and braces behind the route middleware. If a new route ever forgets the
+        // gate, the answer here is still no rather than the whole agency.
+        if (! in_array('educator', $roles, true)) {
+            abort(403, 'Reports are not available for this role.');
+        }
+
+        $userId = (int) $request->user()->id;
+
+        // The agency bound is on every branch on purpose: a user with roles in two
+        // agencies must not drag the other one's rooms into the report they are
+        // running here. See the standing tenant-isolation rule.
+        $roomIds = DB::table('educator_rooms as er')
+            ->join('rooms as r', 'r.id', '=', 'er.room_id')
+            ->join('centres as c', 'c.id', '=', 'r.centre_id')
+            ->where('er.user_id', $userId)
+            ->where('c.agency_id', $agencyId)
+            ->pluck('r.id')->map(fn ($v) => (int) $v)->all();
+
+        if (empty($roomIds)) {
+            $centreIds = DB::table('role_assignments as ra')
+                ->join('centres as c', 'c.id', '=', 'ra.centre_id')
+                ->where('ra.user_id', $userId)->where('ra.active', true)
+                ->where('c.agency_id', $agencyId)
+                ->pluck('c.id')->map(fn ($v) => (int) $v)->all();
+
+            $roomIds = $centreIds
+                ? DB::table('rooms')->whereIn('centre_id', $centreIds)
+                    ->pluck('id')->map(fn ($v) => (int) $v)->all()
+                : [];
+        }
+
+        return ['user_id' => $userId, 'room_ids' => array_values(array_unique($roomIds))];
+    }
+
+    /**
+     * Refuse a report type this caller is not scoped for. Called by every entry point
+     * - screen, PDF and XLSX - because each takes its own `type` off the query string
+     * and the export routes are just as reachable as the one the UI uses.
+     */
+    private function guardScopedType(?array $scope, string $type): void
+    {
+        if ($scope !== null && ! in_array($type, self::EDUCATOR_TYPES, true)) {
+            abort(403, 'That report is not available for your role.');
+        }
+    }
+
     private static function cannedDefs(): array
     {
         return [
@@ -276,10 +363,22 @@ final class ReportsController extends Controller
     public function cannedList(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
+        $scope = $this->educatorScope($request, $agencyId);
+
         $centres = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->when($scope !== null, fn ($q) => $q->whereIn('id', function ($sub) use ($scope) {
+                // Only the centres their own rooms are in - the picker listed every
+                // centre in the agency, which is a directory an educator should not
+                // be handed even before any report is run.
+                $sub->from('rooms')->select('centre_id')->whereIn('id', $scope['room_ids'] ?: [0]);
+            }))
             ->orderBy('name')->get(['id', 'name', 'logo_url', 'brand_color']);
+
         $reports = [];
         foreach (self::cannedDefs() as $k => $d) {
+            if ($scope !== null && ! in_array($k, self::EDUCATOR_TYPES, true)) {
+                continue;
+            }
             $reports[] = ['type' => $k] + $d;
         }
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
@@ -287,6 +386,12 @@ final class ReportsController extends Controller
             'reports' => $reports,
             'centres' => $centres,
             'agency'  => $agency ? ['name' => $agency->name, 'logo' => $agency->brand_logo_url ?: $agency->logo_url, 'color' => $agency->brand_primary_color ?: '#1F6080'] : null,
+            // The screen asks the server what it may show rather than reading the role
+            // off the body class: scheduling posts to admin-only routes, so an educator
+            // rendering that panel would only be handed a 403 by the buttons in it.
+            'can_schedule' => $scope === null,
+            'scope_note'   => $scope === null ? null
+                : 'Limited to the children in your room(s) and your own clock-ins.',
         ]);
     }
 
@@ -302,9 +407,11 @@ final class ReportsController extends Controller
         if ($centreId && ! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()) {
             $centreId = null;
         }
+        $scope = $this->educatorScope($request, $agencyId);
+        $this->guardScopedType($scope, $type);
 
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
-            $request->query('status'), $request->query('balance'));
+            $request->query('status'), $request->query('balance'), $scope);
 
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
@@ -320,7 +427,7 @@ final class ReportsController extends Controller
             'columns'   => $columns,
             // Only when the answer was zero: where the records for this report actually
             // are. Turns "try widening the range" — guess until it works — into a fact.
-            'available_range' => empty($rows) ? $this->availableRange($type, $agencyId, $centreId) : null,
+            'available_range' => (empty($rows) && $scope === null) ? $this->availableRange($type, $agencyId, $centreId) : null,
             'rows'      => $rows,
             'count'     => count($rows),
         ]);
@@ -414,8 +521,29 @@ final class ReportsController extends Controller
         }
     }
 
-    private function cannedRows(string $type, int $agencyId, ?int $centreId, ?string $from, ?string $to, ?string $statusCsv = null, ?string $balance = null): array
+    /**
+     * @param  array{user_id:int,room_ids:array<int,int>}|null  $scope  Educator scope;
+     *         null = the whole agency. See educatorScope().
+     */
+    private function cannedRows(string $type, int $agencyId, ?int $centreId, ?string $from, ?string $to, ?string $statusCsv = null, ?string $balance = null, ?array $scope = null): array
     {
+        // Nothing below reaches this function without guardScopedType() having run, but
+        // a report type added later would arrive here scoped and unhandled - and would
+        // then return agency-wide rows to an educator. Fail closed instead.
+        if ($scope !== null && ! in_array($type, self::EDUCATOR_TYPES, true)) {
+            abort(403, 'That report is not available for your role.');
+        }
+        // An educator with no rooms and no centre matches nothing. Spelled out so the
+        // whereIns below cannot degenerate into "no constraint" on an empty array.
+        $scopeRooms = $scope === null ? null : ($scope['room_ids'] ?: [0]);
+        // The children of those rooms, as a subquery rather than a plucked id list: a
+        // centre-fallback educator can cover several hundred, and end_date is NOT
+        // filtered on purpose - a child who has since moved on was still in this
+        // educator's room during the period the report covers.
+        $scopedChildIds = function ($q) use ($scopeRooms) {
+            $q->from('enrollments')->select('child_id')->whereIn('room_id', $scopeRooms);
+        };
+
         switch ($type) {
             case 'attendance':
                 $q = DB::table('check_events as ce')
@@ -425,13 +553,16 @@ final class ReportsController extends Controller
                     ->leftJoin('users as bu', 'bu.id', '=', 'ce.by_user_id')
                     ->leftJoin('authorized_pickups as ap', 'ap.id', '=', 'ce.by_pickup_id')
                     ->where('c.agency_id', $agencyId);
+                // A check event carries its own room, so an educator's slice is exact
+                // and historical - no "who is enrolled today" guesswork.
+                if ($scopeRooms !== null) $q->whereIn('ce.room_id', $scopeRooms);
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->whereDate('ce.occurred_at', '>=', $from);
                 if ($to) $q->whereDate('ce.occurred_at', '<=', $to);
                 $events = $q->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'r.name as room', 'c.name as centre', 'ce.kiosk_source',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"),
                         DB::raw("TRIM(CONCAT(COALESCE(bu.first_name,''),' ',COALESCE(bu.last_name,''))) as by_user"),
-                        'ap.full_name as by_pickup')
+                        'ap.full_name as by_pickup', 'ce.notes')
                     ->orderBy('ce.occurred_at')->limit(4000)->get();
                 $byDay = [];
                 foreach ($events as $e) {
@@ -439,7 +570,14 @@ final class ReportsController extends Controller
                     $key = $e->child_id . '|' . $d;
                     if (! isset($byDay[$key])) $byDay[$key] = ['Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Status' => 'Present', 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—', 'Absence reason' => '—', 'Reported by' => '—', 'Note' => ''];
                     $t = date('g:i A', strtotime((string) $e->occurred_at));
-                    $who = trim((string) $e->by_user) ?: (trim((string) $e->by_pickup) ?: ($e->kiosk_source ? 'Kiosk' : '—'));
+                    /* An automatic overnight close is not a person. by_user_id holds
+                       a borrowed id, so without this the report attributes the
+                       sign-out to an educator who had already gone home. */
+                    $isAuto = \App\Support\SystemAction::isAuto($e->notes ?? null);
+                    if ($isAuto) { $t .= ' (auto)'; }
+                    $who = $isAuto
+                        ? 'System (auto sign-off)'
+                        : (trim((string) $e->by_user) ?: (trim((string) $e->by_pickup) ?: ($e->kiosk_source ? 'Kiosk' : '—')));
                     if ($e->event_type === 'check_in') {
                         if ($byDay[$key]['Check in'] === '—') { $byDay[$key]['Check in'] = $t; $byDay[$key]['Checked in by'] = $who; }
                     } else {
@@ -456,6 +594,9 @@ final class ReportsController extends Controller
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->leftJoin('users as ru', 'ru.id', '=', 'a.reported_by_id')
                     ->where('c.agency_id', $agencyId);
+                // An absence has no room of its own - it is the child who is placed -
+                // so this one has to come back through the enrolment.
+                if ($scopeRooms !== null) $abs->whereIn('a.child_id', $scopedChildIds);
                 if ($centreId) $abs->where('c.id', $centreId);
                 if ($from) $abs->whereDate('a.absent_on', '>=', $from);
                 if ($to) $abs->whereDate('a.absent_on', '<=', $to);
@@ -673,6 +814,9 @@ final class ReportsController extends Controller
                 // report was empty. Columns: punched_in_at / punched_out_at.
                 $q = DB::table('time_punches as t')->join('users as u', 'u.id', '=', 't.user_id')
                     ->join('centres as c', 'c.id', '=', 't.centre_id')->where('c.agency_id', $agencyId);
+                // An educator gets their OWN timesheet and no one else's. Room scope is
+                // beside the point here - a colleague's pay is not classroom business.
+                if ($scope !== null) $q->where('t.user_id', $scope['user_id']);
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->whereDate('t.punched_in_at', '>=', $from);
                 if ($to) $q->whereDate('t.punched_in_at', '<=', $to);
@@ -707,6 +851,7 @@ final class ReportsController extends Controller
                 if ($from) $ceq->whereDate('ce.occurred_at', '>=', $from);
                 if ($to) $ceq->whereDate('ce.occurred_at', '<=', $to);
                 $ceRows = $ceq->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'c.name as centre',
+                        'ce.notes',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"))
                     ->orderBy('ce.occurred_at')->limit(6000)->get();
 
@@ -720,7 +865,12 @@ final class ReportsController extends Controller
                     }
                     $t = date('g:i A', strtotime((string) $e->occurred_at));
                     if ($e->event_type === 'check_in') { if ($days[$key]['Check in'] === '—') $days[$key]['Check in'] = $t; }
-                    else { $days[$key]['Check out'] = $t; }
+                    else {
+                        /* Mark it, or a midnight row reads as though the child was
+                           collected at 12:00 AM rather than closed by the nightly job. */
+                        $days[$key]['Check out'] = $t
+                            . \App\Support\SystemAction::label($e->notes ?? null);
+                    }
                 }
                 // Tally care events (daily_events) for the same child-days.
                 $deq = DB::table('daily_events as de')
@@ -921,6 +1071,7 @@ final class ReportsController extends Controller
                 $q = DB::table('incidents as inc')->join('children as ch', 'ch.id', '=', 'inc.child_id')
                     ->join('families as f', 'f.id', '=', 'ch.family_id')->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->where('c.agency_id', $agencyId);
+                if ($scopeRooms !== null) $q->whereIn('ch.id', $scopedChildIds);
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->whereDate('inc.occurred_at', '>=', $from);
                 if ($to) $q->whereDate('inc.occurred_at', '<=', $to);
@@ -938,6 +1089,7 @@ final class ReportsController extends Controller
                 $q = DB::table('observations as o')->join('children as ch', 'ch.id', '=', 'o.child_id')
                     ->join('families as f', 'f.id', '=', 'ch.family_id')->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->leftJoin('users as u', 'u.id', '=', 'o.recorded_by_id')->where('c.agency_id', $agencyId);
+                if ($scopeRooms !== null) $q->whereIn('ch.id', $scopedChildIds);
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->whereDate('o.observed_at', '>=', $from);
                 if ($to) $q->whereDate('o.observed_at', '<=', $to);
@@ -983,8 +1135,10 @@ final class ReportsController extends Controller
         if ($centreId && ! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()) {
             $centreId = null;
         }
+        $scope = $this->educatorScope($request, $agencyId);
+        $this->guardScopedType($scope, $type);
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
-            $request->query('status'), $request->query('balance'));
+            $request->query('status'), $request->query('balance'), $scope);
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
         $html = $this->cannedHtml($defs[$type], $columns, $rows, $agency, $centre, $from, $to, $this->producedBy($request));
@@ -1011,8 +1165,10 @@ final class ReportsController extends Controller
         if ($centreId && ! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()) {
             $centreId = null;
         }
+        $scope = $this->educatorScope($request, $agencyId);
+        $this->guardScopedType($scope, $type);
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
-            $request->query('status'), $request->query('balance'));
+            $request->query('status'), $request->query('balance'), $scope);
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
 
         // Column headers double as row keys (cannedRows keys rows by display header).
@@ -1085,7 +1241,11 @@ final class ReportsController extends Controller
             $centreId = null;
         }
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
-            $request->query('status'), $request->query('balance'));
+            null, null);   /* no $request here — this runs from the scheduler, not an HTTP
+               call. These are the interactive screen's optional query-string
+               filters; null means "no extra filter", which is what a whole
+               agency's scheduled report wants. Referencing $request threw on
+               every run, so these reports silently never sent. */
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
 

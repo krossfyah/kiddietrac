@@ -43,6 +43,15 @@
     var centreOpts = '<option value="">All centres</option>' +
       (META.centres || []).map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
 
+    /* Scheduling posts to /admin/report-schedules, which is admin-only - so for
+       an educator this panel would render, then hand them a 403 from every button
+       in it. The server says whether to draw it at all. */
+    var canSchedule = META.can_schedule !== false;
+    var scopeNote = META.scope_note
+      ? '<div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:10px;padding:9px 12px;font-size:12.5px;margin-bottom:14px;">' +
+        '🔒 ' + esc(META.scope_note) + '</div>'
+      : '';
+
     var cards = (META.reports || []).map(function (r) {
       return '<button class="kt-rep-card" data-type="' + esc(r.type) + '" data-dated="' + (r.dated ? '1' : '0') +
         '" style="text-align:left;background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px;cursor:pointer;display:flex;gap:12px;align-items:flex-start;transition:box-shadow .15s,border-color .15s;">' +
@@ -54,6 +63,7 @@
     main.innerHTML =
       '<div style="padding:14px 24px;">' +
         '<div class="kt-page-hero"><h2>📋 Reports</h2><p>Pick a report, set a date range and centre, then run it. Every report is branded and print-ready.</p></div>' +
+        scopeNote +
         '<div class="kt-report-noprint" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:14px 16px;margin-bottom:16px;">' +
           '<label style="font-size:12px;font-weight:700;color:#475569;">Centre<br><select id="rep-centre" style="margin-top:4px;">' + centreOpts + '</select></label>' +
           '<label id="rep-from-wrap" style="font-size:12px;font-weight:700;color:#475569;">From<br><input type="date" id="rep-from" value="' + todayISO(-30) + '" style="margin-top:4px;"></label>' +
@@ -62,6 +72,7 @@
         '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:18px;">' + cards + '</div>' +
         // ── Scheduled reports ──
+        (canSchedule ?
         '<div class="kt-report-noprint" style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px;margin-bottom:16px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
             '<div><div style="font-weight:800;font-size:15px;color:#0D1B2A;">📅 Scheduled reports</div>' +
@@ -69,7 +80,7 @@
             '<button id="rep-add-sched" style="background:#1F6080;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;">＋ Schedule a report</button>' +
           '</div>' +
           '<div id="rep-sched-list"><div style="color:#94A3B8;font-size:13px;padding:6px 0;">Loading…</div></div>' +
-        '</div>' +
+        '</div>' : '') +
         '<div id="rep-out"></div>' +
       '</div>';
 
@@ -79,9 +90,11 @@
       b.addEventListener('click', function () { runReport(b.getAttribute('data-type')); });
     });
 
-    loadSchedules();
-    var addSchedBtn = document.getElementById('rep-add-sched');
-    if (addSchedBtn) addSchedBtn.addEventListener('click', function () { openScheduleModal(); });
+    if (canSchedule) {
+      loadSchedules();
+      var addSchedBtn = document.getElementById('rep-add-sched');
+      if (addSchedBtn) addSchedBtn.addEventListener('click', function () { openScheduleModal(); });
+    }
   }
 
   var DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -608,7 +621,13 @@
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  ['agency_admin', 'platform_admin', 'centre_director', 'auditor'].forEach(function (role) {
+  /* Educators joined this list on 2026-08-30. They do NOT get the same screen:
+     /reports/canned returns them a four-report subset (attendance, staff hours,
+     observations, incidents), each cut down to their own rooms and their own
+     clock-ins, and `can_schedule:false` so the scheduling panel never renders.
+     The whole role decision is the server's - this file only draws what it is
+     handed, which is why nothing here tests the body class. */
+  ['agency_admin', 'platform_admin', 'centre_director', 'auditor', 'educator'].forEach(function (role) {
     Shell.registerScreen(role + ':reports', render);
   });
   if (KT) KT.CannedReports = { render: render };
