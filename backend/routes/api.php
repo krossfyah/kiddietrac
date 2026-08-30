@@ -1191,6 +1191,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/team-threads',               [\App\Http\Controllers\Api\TeamChatController::class, 'threads']);
         Route::get ('/team-threads/unread-count',  [\App\Http\Controllers\Api\TeamChatController::class, 'unreadCount']);
         Route::post('/team-threads/start',         [\App\Http\Controllers\Api\TeamChatController::class, 'start']);
+        // Group conversations (2026-08-30). 'group' is a literal segment and the
+        // {thread} routes below are [0-9]+-constrained, so it can never be read as
+        // a thread id — the same guard /unread-count relies on.
+        Route::post('/team-threads/group',         [\App\Http\Controllers\Api\TeamChatController::class, 'startGroup']);
+        Route::post('/team-threads/{thread}/participants', [\App\Http\Controllers\Api\TeamChatController::class, 'addParticipants'])->where('thread', '[0-9]+');
         Route::get ('/team-threads/{thread}',      [\App\Http\Controllers\Api\TeamChatController::class, 'show'])->where('thread', '[0-9]+');
         Route::post('/team-threads/{thread}/send', [\App\Http\Controllers\Api\TeamChatController::class, 'send'])->where('thread', '[0-9]+');
         Route::post('/team-threads/{thread}/messages/{message}/react', [\App\Http\Controllers\Api\TeamChatController::class, 'react'])->where(['thread' => '[0-9]+', 'message' => '[0-9]+']);

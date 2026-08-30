@@ -10,7 +10,15 @@
   'use strict';
 
   const POLL_INTERVAL_MS = 15000;
-  const THREAD_POLL_MS = 10000;     // faster poll while a thread is open (realtime feel)
+  /* Adaptive cadence for an open thread. A flat 10s made a live exchange feel
+     laggy; a flat 2s would hammer the API for every idle open tab. These follow
+     the conversation instead. */
+  const THREAD_POLL_MS = 10000;        // legacy fallback, still used elsewhere
+  const THREAD_POLL_ACTIVE_MS = 2000;  // someone spoke in the last 45s
+  const THREAD_POLL_WARM_MS = 5000;    // spoke in the last 3 minutes
+  const THREAD_POLL_IDLE_MS = 12000;   // quiet — back off
+  const THREAD_ACTIVE_FOR_MS = 45000;
+  const THREAD_WARM_FOR_MS = 180000;
   let pollTimer = null;
   let threadPollTimer = null;
   let openThreadId = null;
@@ -86,6 +94,192 @@
     return myRole === 'guardian' ? '/parent/chats' : '/provider/chats';
   }
 
+  /* Private 1:1 threads. Same split as endpointBase(): a guardian reaches them
+     through /parent/threads, which exposes only the participation-guarded
+     read/send methods — never contacts() or start(). */
+  function threadBase() {
+    return myRole === 'guardian' ? '/parent/threads' : '/provider/team-threads';
+  }
+
+  /* Ask the server who this reaches, then send. Two steps on purpose: the count
+     comes back from the same resolver that will do the sending, so the number on the
+     button is the number that gets the message — not a guess made in the browser. */
+  function openBroadcast(container) {
+    var m = document.createElement('div');
+    m.setAttribute('data-no-modal-guard', '1');
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;'
+      + 'display:flex;align-items:center;justify-content:center;padding:20px;';
+    m.innerHTML = '<div style="background:#fff;padding:26px;border-radius:14px;max-width:540px;'
+      + 'width:100%;max-height:calc(100vh - 40px);overflow-y:auto;">'
+      + '<h3 style="margin:0 0 6px;">Message everyone</h3>'
+      + '<p style="margin:0 0 16px;font-size:13.5px;color:#64748B;line-height:1.55;">'
+      + 'Each person gets this in their own thread, so anyone who replies is replying '
+      + 'privately &mdash; not to the whole group.</p>'
+      + '<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Send to</label>'
+      + '<select id="bc-aud" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">'
+      + '<option value="parents">All parents</option>'
+      + '<option value="educators">All educators</option>'
+      + '<option value="staff">All staff</option>'
+      + '<option value="contractors">All contractors</option>'
+      + '<option value="admins">All admins and directors</option>'
+      + '<option value="all">Everyone</option>'
+      + '</select>'
+      + '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Subject (optional)</label>'
+      + '<input id="bc-subj" placeholder="e.g. Closure on Friday" '
+      + 'style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">'
+      + '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Message</label>'
+      + '<textarea id="bc-body" rows="5" placeholder="What do they need to know?" '
+      + 'style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;'
+      + 'font-family:inherit;box-sizing:border-box;"></textarea>'
+      + '<div id="bc-msg" style="font-size:13px;margin-top:12px;min-height:18px;color:#64748B;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">'
+      + '<button id="bc-cancel" class="kt-btn kt-btn-secondary" type="button">Cancel</button>'
+      + '<button id="bc-send" class="kt-btn kt-btn-primary" type="button">Check who this reaches</button>'
+      + '</div></div>';
+    document.body.appendChild(m);
+
+    var msg = m.querySelector('#bc-msg');
+    var btn = m.querySelector('#bc-send');
+    var confirmed = false;
+
+    m.querySelector('#bc-cancel').onclick = function () { m.remove(); };
+
+    // Changing the audience invalidates a count already shown for the previous one.
+    m.querySelector('#bc-aud').addEventListener('change', function () {
+      confirmed = false;
+      btn.textContent = 'Check who this reaches';
+      msg.style.color = '#64748B';
+      msg.textContent = '';
+    });
+
+    btn.onclick = async function () {
+      var body = (m.querySelector('#bc-body').value || '').trim();
+      if (!body) {
+        msg.style.color = '#B91C1C';
+        msg.textContent = 'Write the message first.';
+        return;
+      }
+      var payload = {
+        audience: m.querySelector('#bc-aud').value,
+        subject: (m.querySelector('#bc-subj').value || '').trim() || null,
+        body: body,
+      };
+      btn.disabled = true;
+
+      try {
+        if (!confirmed) {
+          var p = await api('POST', '/provider/chats/broadcast', payload);
+          var bits = [];
+          if (p.families) { bits.push(p.families + ' family thread' + (p.families === 1 ? '' : 's')); }
+          if (p.staff) { bits.push(p.staff + ' staff'); }
+          if (!bits.length) {
+            msg.style.color = '#B45309';
+            msg.textContent = 'That group has nobody in it right now.';
+            btn.disabled = false;
+            return;
+          }
+          confirmed = true;
+          msg.style.color = '#0F172A';
+          msg.textContent = 'This goes to ' + bits.join(' and ') + '. There is no undo.';
+          btn.textContent = 'Send to ' + bits.join(' and ');
+          btn.disabled = false;
+          return;
+        }
+
+        payload.confirm = true;
+        msg.style.color = '#64748B';
+        msg.textContent = 'Sending…';
+        var r = await api('POST', '/provider/chats/broadcast', payload);
+        m.remove();
+        if (window.KT && KT.Dom && KT.Dom.toast) {
+          KT.Dom.toast('Sent to ' + r.label
+            + (r.families ? ' — ' + r.families + ' thread' + (r.families === 1 ? '' : 's') : ''), 'success');
+        }
+        renderList(container);
+      } catch (e) {
+        btn.disabled = false;
+        msg.style.color = '#B91C1C';
+        msg.textContent = (e && e.message) || 'Could not send that.';
+      }
+    };
+  }
+
+  /* Delivery state of the last thing the CENTRE said, as a tick rather than a word.
+     After a broadcast to 41 families the question is who has actually seen it, and
+     opening 41 threads to find out is not an answer. Nothing is shown against a
+     message the family sent us — a tick there would imply we had told them something
+     we had not. */
+  /**
+   * The role badge on a 1:1 thread row.
+   *
+   * Prints who the person actually is — Parent, Educator, Admin — instead of the flat
+   * word "Colleague" that every staff thread used to carry. A parent thread labelled
+   * "Colleague" is not a cosmetic slip: these rows are how you pick the right person out
+   * of several accounts sharing a name, and the wrong label sends the message to the
+   * wrong one.
+   *
+   * Parents are tinted differently from staff, because that is the distinction that
+   * actually changes how you write the message.
+   */
+  function staffRoleChip(role) {
+    var r = String(role || '').trim();
+    var isParent = /parent|guardian|family/i.test(r);
+    var label = r || 'Colleague';
+    var tip = isParent
+      ? 'A one-to-one conversation with a parent or guardian'
+      : (r ? 'A one-to-one conversation with a colleague (' + r + ')'
+           : 'A one-to-one conversation with a colleague — not a family thread');
+    var bg = isParent ? 'rgba(31,96,128,.12)' : 'rgba(100,116,139,.12)';
+    var fg = isParent ? '#1F6080' : '#475569';
+    return ' <span title="' + escapeHtml(tip) + '" style="margin-left:5px;padding:1px 6px;'
+      + 'border-radius:9px;background:' + bg + ';color:' + fg + ';font-size:10px;font-weight:800;'
+      + 'letter-spacing:.03em;text-transform:uppercase;vertical-align:middle;">'
+      + escapeHtml(label) + '</span>';
+  }
+
+  function chipHtml(icon, label, color, tip) {
+    return '<span title="' + tip + '" style="display:inline-flex;align-items:center;gap:4px;'
+      + 'font-size:11.5px;font-weight:700;color:' + color + ';white-space:nowrap;">'
+      + '<span style="font-size:12px;letter-spacing:-1px;">' + icon + '</span>' + label + '</span>';
+  }
+  /* Never blank. Ticks mean what ticks mean, but only for a message the CENTRE sent —
+     we cannot claim "read" on a message the family sent us. So when the family sent
+     last, the cell reports the one status that is true from our side: whether we have
+     opened it. Returning '' there made a working column look broken. */
+  function statusChip(c) {
+    var st = c && c.last_status;
+    if (!st && c && c.last_from === 'family') {
+      /* They sent last, so they have unquestionably read what we sent — a reply is a
+         stronger receipt than any tick. "Opened" read as a claim about THEM when it
+         actually described us opening their message. */
+      return (c.unread_count > 0)
+        ? chipHtml('●', 'New reply', '#8EC73C', 'They replied — nobody here has opened it yet')
+        : chipHtml('↩', 'Replied', '#159FB4', 'They replied, so they have read your messages');
+    }
+    var map = {
+      sent:      { icon: '✓',  label: 'Sent',      color: '#94A3B8', tip: 'Sent — not read yet' },
+      delivered: { icon: '✓✓', label: 'Delivered', color: '#94A3B8', tip: 'Delivered to their device' },
+      read:      { icon: '✓✓', label: 'Read',      color: '#159FB4', tip: 'Opened by the family' },
+    };
+    var m = map[st];
+    // A staff-to-staff thread carries no delivery receipts — an em dash, not a blank.
+    if (!m) { return '<span style="color:#CBD5E1;font-size:12px;" title="No delivery receipt for this thread">—</span>'; }
+    /* The tick describes YOUR latest message. Whether they have replied is a separate
+       fact, shown alongside it — otherwise a thread where they replied and you answered
+       afterwards looked identical to one they never answered at all. */
+    /* Two separate facts, shown as two separate things. The tick is about your
+       LATEST message; the badge is about the relationship. "Sent + ACTIVE" means they
+       do answer you but have not seen the newest thing you sent — which reads very
+       differently from a bare "Sent". */
+    var replied = (c && c.has_replied)
+      ? '<span title="This person has replied in this thread before" style="display:inline-flex;'
+        + 'align-items:center;margin-left:6px;padding:1px 6px;border-radius:9px;background:rgba(21,159,180,.12);'
+        + 'color:#0F7C8C;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;'
+        + 'white-space:nowrap;">Active</span>'
+      : '';
+    return '<span style="display:inline-flex;align-items:center;white-space:nowrap;">'
+      + chipHtml(m.icon, m.label, m.color, m.tip) + replied + '</span>';
+  }
   function escapeHtml(s) {
     if (s == null) return '';
     return String(s)
@@ -121,11 +315,39 @@
   }
 
   async function renderList(container) {
+    /* Tell the global refreshers to leave this screen alone.
+       Messenger polls its own list and its open thread; kt-live.js used to tear the
+       whole screen down 600ms after every send (a POST rings its bus) and
+       kt-auto-refresh.js did it again every 45s. That is the flashing — and on desktop
+       the re-mount orphaned the thread held in the floating dock, so the message you
+       had just sent never rendered. Both refreshers honour this attribute. */
+    try { container.setAttribute('data-kt-self-live', '1'); } catch (e) {}
+
     var deepId = deepLinkedConversationId();
     if (deepId) {
       // Strip the parameter so a later re-render doesn't re-open it on top.
       try { history.replaceState(null, '', location.pathname + location.search + '#chat'); } catch (e) {}
       return openThread(deepId, container);   // openThread(cid, container)
+    }
+
+    /* The list endpoint pages at 25 and reports `meta.pages`. This screen filters and
+       sorts across the WHOLE inbox client-side, so it needs the whole inbox — paging
+       server-side would quietly turn the filter box into "search the current page".
+       Pull page 1, then the rest in parallel. Capped at 40 pages (4,000 threads); past
+       that the screen needs a server-side redesign, not a bigger loop. */
+    async function fetchAllConvs() {
+      const first = await api('GET', endpointBase() + '?page=1&per_page=100');
+      let out = (first && first.conversations) || [];
+      const meta = (first && first.meta) || null;
+      if (meta && meta.pages > 1) {
+        const rest = [];
+        for (let p = 2; p <= Math.min(meta.pages, 40); p++) { rest.push(p); }
+        // One slow page must not empty the inbox — a failed page drops out, the rest show.
+        const more = await Promise.all(rest.map(p =>
+          api('GET', endpointBase() + '?page=' + p + '&per_page=100').catch(() => null)));
+        more.forEach(r => { if (r && r.conversations) { out = out.concat(r.conversations); } });
+      }
+      return { conversations: out, meta: meta };
     }
 
     container.innerHTML = '<div class="kt-chat-loading" style="text-align:center;padding:32px;color:#6B7280;">Loading conversations…</div>';
@@ -135,9 +357,9 @@
       // render paths below already understand. A failed staff fetch must not empty the
       // inbox — it degrades to families only.
       const both = await Promise.all([
-        api('GET', endpointBase()),
-        myRole === 'guardian' ? Promise.resolve(null)
-          : api('GET', '/provider/team-threads').catch(function () { return null; }),
+        fetchAllConvs(),
+        // Parents have private threads too now — a broadcast lands in one.
+        api('GET', threadBase()).catch(function () { return null; }),
         // Archived is per person, so it travels with the list rather than being baked
         // into it. A failure here must not hide the inbox — it just shows everything.
         api('GET', '/provider/chat-archive').catch(function () { return null; }),
@@ -164,11 +386,37 @@
             preview: t.preview || '',
             last_message_at: t.at,
             unread_count: t.unread || 0,
+            /* The person's REAL role. The row used to print the word "Colleague" on
+               every staff thread regardless of who was in it, so a message to a PARENT
+               was labelled Colleague — Anthony, 2026-08-26. The API has always returned
+               this; the mapping simply dropped it on the floor.
+
+               It also disambiguates: there are five accounts here named "Safia Ali"
+               (parent, educator, agency admin, and two closed ones — see the
+               multi-account model). Three of them show up in this list as identical
+               rows, and the role is the only thing that tells them apart. */
+            /* A group has no single counterpart, so there is no one role to print.
+               "4 members" is the honest label and the one that tells a room full of
+               people apart from a colleague at a glance. */
+            other_role: t.is_group ? ((t.member_count || 0) + ' members') : (t.role || t.other_role || ''),
+            is_group: !!t.is_group,
+            // Carried through so a colleague row ticks like a family row.
+            last_status: t.last_status || null,
+            last_from: t.last_from || null,
+            has_replied: !!t.has_replied,
           };
         }));
       const isProvider = myRole !== 'guardian';
       const newChatBtnHtml = isProvider
-        ? `<button id="kt-new-chat-btn" style="background:#1F6080;color:white;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">+ New chat</button>`
+        ? `<button id="kt-new-chat-btn" class="kt-btn kt-btn-primary kt-btn-sm">+ New chat</button>`
+        : '';
+      /* Reaching every family at once is an admin/director action. An educator
+         messages the families they work with, one thread at a time. */
+      const canBroadcast = (myRole === 'agency_admin' || myRole === 'centre_director'
+        || myRole === 'platform_admin');
+      const broadcastBtnHtml = canBroadcast
+        ? `<button id="kt-broadcast-btn" class="kt-btn kt-btn-secondary kt-btn-sm"
+             title="Send one message to a whole group">📣 Message everyone</button>`
         : '';
       // v22p16: notifications-enable button for any role that hasn't subscribed yet.
       const notifBtnHtml = `<button id="kt-notif-btn" style="background:white;color:#1F6080;border:1px solid #1F6080;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:none;" title="Get an OS notification when a new message arrives, even when this tab is closed.">🔔 Enable notifications</button>`;
@@ -176,7 +424,7 @@
         container.innerHTML = `
           <div class="kt-chat-header" style="padding:16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;">
             <h2 style="font-size:20px;margin:0;">💬 Messenger</h2>
-            <div style="display:flex;gap:8px;align-items:center;">${notifBtnHtml}${newChatBtnHtml}</div>
+            <div style="display:flex;gap:8px;align-items:center;">${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}</div>
           </div>
           <div style="text-align:center;padding:48px 16px;color:#6B7280;">
             <div style="font-size:48px;margin-bottom:12px;">💬</div>
@@ -184,6 +432,10 @@
             ${isProvider ? '<p style="font-size:14px;margin-top:8px;">Click <strong>+ New chat</strong> above to message a family or a colleague.</p>' : '<p style="font-size:14px;margin-top:8px;">Your centre will reach out about your child\'s day.</p>'}
           </div>`;
         var b = $('#kt-new-chat-btn', container);
+        // Bound alongside the new-chat button because this header is rebuilt in
+        // several branches; binding once would work in one state only.
+        var _bcBtn = $('#kt-broadcast-btn', container);
+        if (_bcBtn) { _bcBtn.onclick = function () { openBroadcast(container); }; }
         if (b) b.addEventListener('click', function () { openNewChatModal(container); });
         wireNotifBtn(container);
         return;
@@ -191,7 +443,76 @@
       const myId = getUser().id;
       const nameOf = (c) => (myRole === 'guardian' ? c.centre_name : c.family_name) || 'Conversation';
       // showArchived flips the list between the live inbox and the archived pile.
-      const state = { sort: 'date', dir: -1, q: '', showArchived: false };
+      const state = { sort: 'date', dir: -1, q: '', showArchived: false, page: 1, perPage: 25, total: 0 };
+
+      /* Pagination, client-side over the fully-fetched list. Anything that changes WHICH
+         rows qualify (search, sort, archive) resets to page 1 — otherwise you filter to
+         three results while parked on page 2 and the screen looks empty. */
+      const PAGE_SIZES = [25, 50, 100];
+      const pageSlice = (list) => {
+        state.total = list.length;
+        const pages = Math.max(1, Math.ceil(list.length / state.perPage));
+        if (state.page > pages) { state.page = pages; }
+        if (state.page < 1) { state.page = 1; }
+        const start = (state.page - 1) * state.perPage;
+        return list.slice(start, start + state.perPage);
+      };
+      const pagerHtml = () => {
+        const total = state.total, per = state.perPage;
+        const pages = Math.max(1, Math.ceil(total / per));
+        const start = total ? ((state.page - 1) * per + 1) : 0;
+        const end = Math.min(total, state.page * per);
+        const btn = (lbl, act, dis, cur) =>
+          `<button class="kt-pg" data-pg="${act}" type="button" ${dis ? 'disabled' : ''}
+            style="min-width:30px;height:30px;padding:0 8px;border:1px solid ${cur ? '#1F6080' : '#D7DEE5'};
+            background:${cur ? '#1F6080' : '#fff'};color:${cur ? '#fff' : (dis ? '#C2CBD4' : '#334155')};
+            border-radius:7px;font-size:12.5px;font-weight:${cur ? '800' : '600'};
+            cursor:${dis ? 'default' : 'pointer'};">${lbl}</button>`;
+        // A sliding window of five, so 40 pages does not print 40 buttons.
+        let nums = '';
+        let from = Math.max(1, state.page - 2);
+        const to = Math.min(pages, from + 4);
+        from = Math.max(1, to - 4);
+        for (let p = from; p <= to; p++) { nums += btn(String(p), p, false, p === state.page); }
+        // One page of results needs a count, not a pager.
+        const controls = pages > 1
+          ? `${btn('‹', 'prev', state.page <= 1)}${nums}${btn('›', 'next', state.page >= pages)}`
+          : '';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+            flex-wrap:wrap;padding:9px 14px;border-top:1px solid #E9EDF1;background:#FBFCFD;">
+            <span style="font-size:12.5px;color:#64748B;">${total
+              ? 'Showing <strong style="color:#334155;">' + start + '–' + end + '</strong> of <strong style="color:#334155;">' + total + '</strong>'
+              : 'No conversations'}</span>
+            <span style="display:flex;align-items:center;gap:5px;">${controls}
+              <select class="kt-pgsize" aria-label="Rows per page"
+                style="height:30px;margin-left:4px;border:1px solid #D7DEE5;border-radius:7px;
+                font-size:12.5px;padding:0 6px;color:#334155;background:#fff;">
+                ${PAGE_SIZES.map(s => '<option value="' + s + '"' + (s === per ? ' selected' : '') + '>' + s + ' / page</option>').join('')}
+              </select>
+            </span>
+          </div>`;
+      };
+      const wirePager = (root, repaintFn) => {
+        root.querySelectorAll('.kt-pg').forEach(b => b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (b.disabled) { return; }
+          const pages = Math.max(1, Math.ceil(state.total / state.perPage));
+          const v = b.getAttribute('data-pg');
+          state.page = v === 'prev' ? Math.max(1, state.page - 1)
+            : v === 'next' ? Math.min(pages, state.page + 1)
+            : (parseInt(v, 10) || 1);
+          repaintFn();
+        }));
+        const sel = root.querySelector('.kt-pgsize');
+        if (sel) {
+          sel.addEventListener('change', (e) => {
+            e.stopPropagation();
+            state.perPage = parseInt(sel.value, 10) || 25;
+            state.page = 1;
+            repaintFn();
+          });
+        }
+      };
       const visible = () => convs.filter(c => isArchived(c) === state.showArchived);
       const archivedCount = () => convs.filter(isArchived).length;
 
@@ -285,7 +606,7 @@
           <div style="padding:12px 12px 4px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
               <h2 style="font-size:19px;font-weight:800;color:#0D1B2A;margin:0;">💬 Messenger</h2>
-              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${notifBtnHtml}${newChatBtnHtml}</div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}</div>
             </div>
             <input id="kt-msg-filter" type="search" placeholder="🔍 Search messages…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D1D5DB;border-radius:12px;font-size:14px;margin-bottom:10px;">
             <div id="kt-msg-cards"></div>
@@ -298,10 +619,10 @@
             <span style="flex:1;min-width:0;">
               <span style="display:flex;align-items:center;gap:8px;">
                 <span style="font-weight:${unread ? '800' : '700'};font-size:14.5px;color:#0D1B2A;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}${c.child_name ? ` · <span style="color:#64748B;font-weight:600;">${escapeHtml(c.child_name)}</span>` : ''}</span>
-                <span style="font-size:11px;color:#64748B;flex-shrink:0;">${formatDateTime(c.last_message_at)}</span>
+                <span style="font-size:11px;color:#64748B;flex-shrink:0;display:inline-flex;align-items:center;gap:8px;">${statusChip(c)}${formatDateTime(c.last_message_at)}</span>
               </span>
               <span style="display:flex;align-items:center;gap:6px;margin-top:3px;">
-                <span style="flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${unread ? 'color:#0D1B2A;font-weight:600;' : 'color:#64748B;'}">${c.last_sender_id == myId ? '<span style="color:#64748B;">You: </span>' : ''}${escapeHtml(c.preview || '(no messages yet)')}</span>
+                <span style="flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${unread ? 'color:#0D1B2A;font-weight:600;' : 'color:#64748B;'}">${c.last_sender_id == myId ? '<span style="color:#64748B;">You: </span>' : (c.last_sender_name ? `<span style="color:#1F6080;font-weight:700;" title="${escapeHtml(String(c.last_sender_name))} is staff, not a member of this family">${escapeHtml(String(c.last_sender_name).split(' ')[0])} <span style="font-weight:600;color:#94A3B8;font-size:.92em;">(staff)</span>: </span>` : '')}${escapeHtml(c.preview || '(no messages yet)')}</span>
                 ${unread ? `<span style="background:#8EC73C;color:#fff;font-size:11px;font-weight:800;min-width:20px;height:20px;padding:0 6px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${c.unread_count}</span>` : ''}
               </span>
             </span>
@@ -313,10 +634,13 @@
           let listx = visible();
           if (q) listx = listx.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
           listx.sort((a, b) => sortValM(b) - sortValM(a));
+          listx = pageSlice(listx);
           const n = archivedCount();
           cardsWrap.innerHTML = (listx.length ? listx.map(cardHtml).join('')
             : `<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</div>`)
+            + pagerHtml()
             + ((n || state.showArchived) ? `<button id="kt-arch-toggle" style="width:100%;margin-top:4px;background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:10px;">${state.showArchived ? '← Back to inbox' : '📥 Archived (' + n + ')'}</button>` : '');
+          wirePager(cardsWrap, paintM);
           cardsWrap.querySelectorAll('.kt-msg-card').forEach(row => row.addEventListener('click', () => openThread(row.dataset.cid, container)));
           cardsWrap.querySelectorAll('.kt-conv-kebab').forEach(b => b.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -324,13 +648,17 @@
             if (c) openKebab(b, c);
           }));
           const at = cardsWrap.querySelector('#kt-arch-toggle');
-          if (at) at.addEventListener('click', () => { state.showArchived = !state.showArchived; paintM(); });
+          if (at) at.addEventListener('click', () => { state.showArchived = !state.showArchived; state.page = 1; paintM(); });
         };
         repaint = paintM;
         const fiM = $('#kt-msg-filter', container);
-        if (fiM) fiM.addEventListener('input', () => { state.q = fiM.value || ''; paintM(); });
+        if (fiM) fiM.addEventListener('input', () => { state.q = fiM.value || ''; state.page = 1; paintM(); });
         paintM();
         const nbM = $('#kt-new-chat-btn', container);
+        // Bound alongside the new-chat button because this header is rebuilt in
+        // several branches; binding once would work in one state only.
+        var _bcBtn = $('#kt-broadcast-btn', container);
+        if (_bcBtn) { _bcBtn.onclick = function () { openBroadcast(container); }; }
         if (nbM) nbM.addEventListener('click', () => openNewChatModal(container));
         wireNotifBtn(container);
         return;
@@ -343,7 +671,7 @@
             <h2 style="font-size:20px;margin:0;">💬 Messenger</h2>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <input id="kt-msg-filter" type="search" placeholder="🔍 Filter…" style="padding:8px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;min-width:180px;">
-              ${notifBtnHtml}${newChatBtnHtml}
+              ${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}
             </div>
           </div>
           <div style="background:#fff;">
@@ -352,12 +680,14 @@
                 <tr style="position:sticky;top:0;z-index:1;background:#F9FAFB;box-shadow:inset 0 -1px 0 #E5E7EB;">
                   ${th('name', 'From', { w: '250px' })}
                   ${th('preview', 'Message')}
+                  <th style="text-align:left;padding:10px 14px;font-size:12px;color:#6B7280;font-weight:600;width:110px;">Status</th>
                   ${th('date', 'Date', { w: '140px', right: true })}
                   <th style="width:46px;padding:10px 6px;"></th>
                 </tr>
               </thead>
               <tbody id="kt-msg-tbody"></tbody>
             </table>
+            <div id="kt-msg-pager"></div>
           </div>
         </div>
       `;
@@ -373,13 +703,14 @@
           <td style="padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             <span style="display:inline-flex;align-items:center;gap:9px;max-width:100%;">
               ${avatarFor(nm, c.photo_url || c.child_photo_url, 30)}
-              <span style="font-weight:${unread ? '800' : '600'};color:#111827;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(nm)}${c.child_name ? ` <span style="color:#64748B;font-weight:400;">· ${escapeHtml(c.child_name)}</span>` : ''}</span>
+              <span style="font-weight:${unread ? '800' : '600'};color:#111827;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(nm)}${c.child_name ? ` <span style="color:#64748B;font-weight:400;">· ${escapeHtml(c.child_name)}</span>` : ''}${c.kind === 'staff' ? staffRoleChip(c.other_role) : ''}</span>
             </span>
           </td>
           <td style="padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6B7280;font-weight:${unread ? '600' : '400'};">
-            ${c.last_sender_id == myId ? '<span style="color:#64748B;">You: </span>' : ''}${escapeHtml(c.preview || '(no messages yet)')}
+            ${c.last_sender_id == myId ? '<span style="color:#64748B;">You: </span>' : (c.last_sender_name ? `<span style="color:#1F6080;font-weight:700;" title="${escapeHtml(String(c.last_sender_name))} is staff, not a member of this family">${escapeHtml(String(c.last_sender_name).split(' ')[0])} <span style="font-weight:600;color:#94A3B8;font-size:.92em;">(staff)</span>: </span>` : '')}${escapeHtml(c.preview || '(no messages yet)')}
             ${unread ? `<span style="background:#1F6080;color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;">${c.unread_count}</span>` : ''}
           </td>
+          <td style="padding:10px 14px;white-space:nowrap;">${statusChip(c)}</td>
           <td style="padding:10px 14px;text-align:right;color:#64748B;white-space:nowrap;font-weight:${unread ? '700' : '400'};">${formatDateTime(c.last_message_at)}</td>
           <td style="padding:10px 6px;text-align:center;white-space:nowrap;">
             <button class="kt-conv-act kt-conv-open" data-cid="${c.id}" type="button" title="Open">Open</button>
@@ -393,10 +724,11 @@
         let list = visible();
         if (q) list = list.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
         list.sort((a, b) => { const va = sortVal(a), vb = sortVal(b); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
+        list = pageSlice(list);
         const n = archivedCount();
         tbody.innerHTML = (list.length ? list.map(rowHtml).join('')
-          : `<tr><td colspan="4" style="padding:26px;text-align:center;color:#64748B;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</td></tr>`)
-          + ((n || state.showArchived) ? `<tr><td colspan="4" style="padding:10px;text-align:center;"><button id="kt-arch-toggle" style="background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:6px 10px;">${state.showArchived ? '← Back to inbox' : '📥 Archived (' + n + ')'}</button></td></tr>` : '');
+          : `<tr><td colspan="5" style="padding:26px;text-align:center;color:#64748B;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</td></tr>`)
+          + ((n || state.showArchived) ? `<tr><td colspan="5" style="padding:10px;text-align:center;"><button id="kt-arch-toggle" style="background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:6px 10px;">${state.showArchived ? '← Back to inbox' : '📥 Archived (' + n + ')'}</button></td></tr>` : '');
         let z = 0;
         tbody.querySelectorAll('.kt-msg-row').forEach(row => {
           const base = (z++ % 2) ? '#F7F9FB' : '#FFFFFF';
@@ -418,19 +750,27 @@
           e.stopPropagation(); const c = convOf(b); if (c) deleteConv(c);
         }));
         const at = tbody.querySelector('#kt-arch-toggle');
-        if (at) at.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = !state.showArchived; paint(); });
+        if (at) at.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = !state.showArchived; state.page = 1; paint(); });
+        // Drawn after the slice, because the slice is what sets state.total.
+        const pgBox = $('#kt-msg-pager', container);
+        if (pgBox) { pgBox.innerHTML = pagerHtml(); wirePager(pgBox, paint); }
         container.querySelectorAll('.kt-msg-th').forEach(h => { const ar = h.querySelector('.kt-ar'); if (ar) ar.textContent = (h.getAttribute('data-sort') === state.sort) ? (state.dir < 0 ? '▾' : '▴') : ''; });
       };
       container.querySelectorAll('.kt-msg-th').forEach(h => h.addEventListener('click', () => {
         const k = h.getAttribute('data-sort');
         if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = (k === 'date') ? -1 : 1; }
+        state.page = 1;
         paint();
       }));
       const fi = $('#kt-msg-filter', container);
-      if (fi) fi.addEventListener('input', () => { state.q = fi.value || ''; paint(); });
+      if (fi) fi.addEventListener('input', () => { state.q = fi.value || ''; state.page = 1; paint(); });
       repaint = paint;
       paint();
       var newBtn = $('#kt-new-chat-btn', container);
+      // Bound alongside the new-chat button because this header is rebuilt in
+      // several branches; binding once would work in one state only.
+      var _bcBtn = $('#kt-broadcast-btn', container);
+      if (_bcBtn) { _bcBtn.onclick = function () { openBroadcast(container); }; }
       if (newBtn) newBtn.addEventListener('click', function () { openNewChatModal(container); });
       wireNotifBtn(container);
     } catch (e) {
@@ -528,23 +868,164 @@
   // Loads families the caller has access to, lets them pick one, write a subject
   // + first message, and POSTs to /provider/chats/start. On success, opens the
   // resulting thread directly.
+  /**
+   * Pick several colleagues at once — used by "Add people" on a thread and by the group
+   * option in the new-conversation dialog. Colleagues only: staff_thread groups are
+   * vetted server-side against the staff list, and a group holding two families would
+   * put one family's messages in front of another.
+   *
+   * opts: {title, sub, exclude[], needName, min, okLabel, historyNote, onPick(ids,title)}
+   */
+  async function pickColleaguesModal(opts) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px;';
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:white;border-radius:14px;padding:22px;max-width:520px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);';
+    modal.innerHTML = '<h3 style="margin:0 0 10px;font-size:18px;">' + escapeHtml(opts.title) + '</h3>'
+      + '<div style="color:#6B7280;font-size:13px;">Loading colleagues…</div>';
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+
+    var res = await api('GET', '/provider/team-contacts').catch(function () { return null; });
+    var exclude = opts.exclude || [];
+    var people = ((res && res.contacts) || []).filter(function (c) {
+      return exclude.indexOf(parseInt(c.id, 10)) === -1;
+    });
+    if (! people.length) {
+      modal.innerHTML = '<h3 style="margin:0 0 10px;font-size:18px;">' + escapeHtml(opts.title) + '</h3>'
+        + '<div style="color:#6B7280;font-size:13.5px;">Everyone you can message is already in this conversation.</div>'
+        + '<div style="display:flex;justify-content:flex-end;margin-top:14px;">'
+        + '<button id="kt-pk-x" style="background:#F1F5F9;border:1px solid #D1D5DB;border-radius:8px;padding:9px 16px;font-weight:600;cursor:pointer;">Close</button></div>';
+      modal.querySelector('#kt-pk-x').addEventListener('click', function () { overlay.remove(); });
+      return;
+    }
+
+    var ORDER = ['Admin', 'Director', 'Home visitor', 'Educator', 'Auditor', 'Parent', 'Staff'];
+    people.sort(function (a, b) {
+      var ra = ORDER.indexOf(a.role || 'Staff'), rb = ORDER.indexOf(b.role || 'Staff');
+      if (ra < 0) ra = 9; if (rb < 0) rb = 9;
+      if (ra !== rb) return ra - rb;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    modal.innerHTML = '<h3 style="margin:0 0 4px;font-size:18px;">' + escapeHtml(opts.title) + '</h3>'
+      + '<div style="color:#6B7280;font-size:12.5px;margin-bottom:10px;">' + escapeHtml(opts.sub || '') + '</div>'
+      + (opts.needName ? '<input id="kt-pk-name" maxlength="80" placeholder="Group name (e.g. Toddler Room Team)" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-bottom:8px;">' : '')
+      + '<input id="kt-pk-q" placeholder="Search colleagues…" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-bottom:8px;">'
+      + '<div id="kt-pk-list" style="max-height:42vh;overflow:auto;border:1px solid #EEF2F7;border-radius:9px;padding:4px;">'
+      + people.map(function (p) {
+          return '<label class="kt-pk-row" data-hay="' + escapeHtml(((p.name || '') + ' ' + (p.role || '')).toLowerCase()) + '" '
+            + 'style="display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;cursor:pointer;">'
+            + '<input type="checkbox" value="' + p.id + '" data-name="' + escapeHtml(p.name || '') + '" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;">'
+            + '<span style="flex:1;min-width:0;font-size:14px;color:#0F172A;font-weight:600;">' + escapeHtml(p.name || '')
+            + ' <span style="font-weight:500;color:#64748B;">(' + escapeHtml(p.role || 'Staff') + ')</span></span></label>';
+        }).join('')
+      + '</div>'
+      + '<div id="kt-pk-sel" style="font-size:12.5px;color:#64748B;margin-top:8px;">No one selected yet.</div>'
+      + (opts.historyNote
+          ? '<div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:8px;padding:8px 11px;font-size:12.5px;margin-top:8px;">'
+            + '\u{1F4D6} Anyone you add can read the whole conversation, including everything said before they joined.</div>'
+          : '')
+      + '<div id="kt-pk-err" style="color:#DC2626;font-size:13px;margin-top:8px;min-height:16px;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;">'
+      + '<button id="kt-pk-cancel" style="background:white;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>'
+      + '<button id="kt-pk-ok" disabled style="background:#1F6080;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;opacity:.5;">' + escapeHtml(opts.okLabel || 'Add') + '</button></div>';
+
+    var list = modal.querySelector('#kt-pk-list'), okBtn = modal.querySelector('#kt-pk-ok');
+    var selBox = modal.querySelector('#kt-pk-sel'), nameEl = modal.querySelector('#kt-pk-name');
+    function chosen() { return [].slice.call(list.querySelectorAll('input:checked')); }
+    function refresh() {
+      var c = chosen();
+      var ok = c.length >= (opts.min || 1) && (! opts.needName || (nameEl && nameEl.value.trim() !== ''));
+      okBtn.disabled = ! ok; okBtn.style.opacity = ok ? '1' : '.5';
+      selBox.textContent = c.length
+        ? c.length + ' selected: ' + c.map(function (i) { return i.getAttribute('data-name'); }).join(', ')
+        : ((opts.min || 1) > 1 ? 'Pick at least ' + opts.min + ' colleagues.' : 'No one selected yet.');
+    }
+    list.addEventListener('change', refresh);
+    if (nameEl) nameEl.addEventListener('input', refresh);
+    modal.querySelector('#kt-pk-q').addEventListener('input', function (e) {
+      var q = e.target.value.toLowerCase();
+      modal.querySelectorAll('.kt-pk-row').forEach(function (r) {
+        r.style.display = r.getAttribute('data-hay').indexOf(q) > -1 ? '' : 'none';
+      });
+    });
+    modal.querySelector('#kt-pk-cancel').addEventListener('click', function () { overlay.remove(); });
+    okBtn.addEventListener('click', async function () {
+      var c = chosen();
+      okBtn.disabled = true; okBtn.textContent = 'Working…';
+      try {
+        await opts.onPick(c.map(function (i) { return parseInt(i.value, 10); }), nameEl ? nameEl.value.trim() : null);
+        overlay.remove();
+      } catch (err) {
+        okBtn.disabled = false; okBtn.textContent = opts.okLabel || 'Add';
+        modal.querySelector('#kt-pk-err').textContent = (err && err.message) || 'Could not do that.';
+      }
+    });
+    refresh();
+    setTimeout(function () { (nameEl || modal.querySelector('#kt-pk-q')).focus(); }, 40);
+  }
+
+  function openAddPeopleModal(tid, existingIds, onDone) {
+    pickColleaguesModal({
+      title: '\uFF0B Add people', sub: 'They will join this conversation.',
+      exclude: existingIds, min: 1, okLabel: 'Add', historyNote: true,
+      onPick: async function (ids) {
+        await api('POST', '/provider/team-threads/' + tid + '/participants', { user_ids: ids });
+        if (onDone) onDone();
+      }
+    });
+  }
+
   async function openNewChatModal(container) {
     var overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
     var modal = document.createElement('div');
     modal.style.cssText = 'background:white;border-radius:14px;padding:24px;max-width:520px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);';
     modal.innerHTML =
-      '<h3 style="margin:0 0 12px;font-size:18px;">💬 Start a new conversation</h3>' +
+      '<h3 style="margin:0 0 10px;font-size:18px;">💬 Start a new conversation</h3>' +
+      /* A group is a different shape of thing — several colleagues and a name — so it
+         gets its own button here rather than a mode toggle bolted onto the To picker,
+         which would have to hide the Subject field and swap the select for a checkbox
+         list and still post to a different endpoint. */
+      '<button id="kt-nc-group" type="button" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;margin-bottom:14px;cursor:pointer;">' +
+        '<span style="font-size:19px;">\u{1F465}</span>' +
+        '<span><span style="display:block;font-weight:700;font-size:13.5px;color:#0F172A;">New group</span>' +
+        '<span style="display:block;font-size:12px;color:#64748B;">Several colleagues in one conversation</span></span>' +
+      '</button>' +
       '<div id="kt-new-chat-form-body" style="color:#6B7280;font-size:14px;">Loading families…</div>';
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    modal.querySelector('#kt-nc-group').addEventListener('click', function () {
+      overlay.remove();
+      pickColleaguesModal({
+        title: '\u{1F465} New group', sub: 'Name the group and pick who is in it.',
+        needName: true, min: 2, okLabel: 'Create group',
+        onPick: async function (ids, title) {
+          var r = await api('POST', '/provider/team-threads/group', { user_ids: ids, title: title });
+          if (r && r.thread_id) { openThread('staff:' + r.thread_id, container); }
+          else { renderList(container); }
+        }
+      });
+    });
 
     // Pick the right families endpoint based on role. platform_admin was missing and
     // fell through to "not available for your role".
     var famPath = (myRole === 'agency_admin' || myRole === 'platform_admin') ? '/admin/families'
                 : (myRole === 'centre_director' || myRole === 'educator' || myRole === 'home_visitor') ? '/director/families'
                 : null;
+
+    /* Disambiguate people who share a name within the same role group. Only adds a
+       qualifier when it is actually needed, so the common case stays clean. */
+    function dupeLabel(p, role, group) {
+      var base = p.name + ' (' + role + ')';
+      var sameName = (group || []).filter(function (x) { return String(x.name) === String(p.name); });
+      if (sameName.length < 2) return base;
+      var extra = p.centre_name || p.email || ('#' + p.id);
+      return p.name + ' (' + role + ' · ' + extra + ')';
+    }
 
     // Colleagues too. This dialog only ever offered families, so a director or admin was
     // unreachable from Messages — the complaint that started this. Staff threads are a
@@ -583,7 +1064,13 @@
               return '<optgroup label="' + escapeHtml(role === 'Admin' ? 'Admins' : role + 's') + '">' +
                 byRole[role].sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); })
                   .map(function (p) {
-                    return '<option value="user:' + p.id + '">' + escapeHtml(p.name) + ' (' + escapeHtml(role) + ')</option>';
+                    /* One person can legitimately hold several accounts here — the same
+                       name appears as an educator, an admin and a parent. Showing four
+                       identical "Safia Ali (Educator)" rows makes the list unusable, and
+                       picking the wrong one starts a colleague thread with someone you
+                       meant to reach as a parent. Add whatever tells them apart.
+                       (Anthony, 2026-08-26) */
+                    return '<option value="user:' + p.id + '">' + escapeHtml(dupeLabel(p, role, byRole[role])) + '</option>';
                   }).join('') + '</optgroup>';
             }).join('');
           })() +
@@ -650,7 +1137,10 @@
   var staffPoll = null;
   function stopStaffPoll() { if (staffPoll) { clearInterval(staffPoll); staffPoll = null; } }
 
+  var staffOtherReadAt = null;   // when the colleague last opened this thread
+
   async function openStaffThread(tid, container) {
+    staffOtherReadAt = null;
     openThreadId = 'staff:' + tid;
     threadListContainer = container;
     threadDocked = !!(KT.ChatDock && KT.ChatDock.enabled());
@@ -664,10 +1154,82 @@
 
     var lastCount = -1;
 
+    /* Reactions on a COLLEAGUE thread (2026-08-25).
+       Emoji were only ever built for family conversations. When broadcasts moved to 1:1
+       staff threads the feature silently came away with them - "it was once there and now
+       it isn't". Same six emoji, same chip, same toggle as the family thread, so the two
+       do not drift into behaving differently. */
+    var ST_EMOJI = ['\u{1F44D}', '\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F64F}'];
+
+    function staffChip(mid, rx) {
+      return '<button type="button" class="kt-st-chip" data-react-mid="' + mid + '" data-emoji="'
+        + escapeHtml(rx.emoji) + '" style="border:1px solid ' + (rx.mine ? '#1F6080' : '#E2E8F0')
+        + ';background:' + (rx.mine ? '#EFF6FF' : '#fff')
+        + ';border-radius:12px;padding:1px 7px;font-size:12.5px;cursor:pointer;line-height:1.6;">'
+        + escapeHtml(rx.emoji) + ' ' + rx.count + '</button>';
+    }
+
+    function staffApply(mid, reactions) {
+      var row = target.querySelector('[data-mid="' + mid + '"]');
+      if (!row) return;
+      var wrap = row.querySelector('.kt-st-reactions');
+      if (!wrap) return;
+      var html = (reactions && reactions.length)
+        ? reactions.map(function (rx) { return staffChip(mid, rx); }).join('') : '';
+      wrap.innerHTML = html;
+      wrap.style.display = html ? 'flex' : 'none';
+    }
+
+    function staffReact(mid, emoji) {
+      api('POST', threadBase() + '/' + tid + '/messages/' + mid + '/react', { emoji: emoji })
+        .then(function (r) { staffApply(mid, r && r.reactions); })
+        .catch(function (err) {
+          if (window.KT && KT.toast) KT.toast('\u26A0\uFE0F', 'Could not react', (err && err.message) || '', '#DC2626');
+        });
+    }
+
+    /* Delegated on `target`, which survives paint()'s innerHTML rewrites - binding to the
+       message list itself would come undone on the next poll. */
+    target.addEventListener('click', function (e) {
+      if (!e.target || !e.target.closest) return;
+      var chip = e.target.closest('.kt-st-chip');
+      if (chip) { staffReact(chip.getAttribute('data-react-mid'), chip.getAttribute('data-emoji')); return; }
+      var rb = e.target.closest('.kt-st-react');
+      if (!rb) return;
+      var open = document.querySelector('.kt-st-pop'); if (open) open.remove();
+      var mid = rb.getAttribute('data-react-mid');
+      var pop = document.createElement('div');
+      pop.className = 'kt-st-pop';
+      pop.style.cssText = 'position:fixed;background:#fff;border:1px solid #E5E7EB;border-radius:20px;'
+        + 'box-shadow:0 6px 20px rgba(0,0,0,.16);padding:4px 6px;display:flex;gap:2px;z-index:100000;';
+      pop.innerHTML = ST_EMOJI.map(function (em) {
+        return '<button type="button" class="kt-st-pick" data-emoji="' + em + '" style="background:none;'
+          + 'border:none;font-size:20px;cursor:pointer;padding:2px 5px;border-radius:8px;line-height:1;">' + em + '</button>';
+      }).join('');
+      var rect = rb.getBoundingClientRect();
+      pop.style.left = Math.max(6, Math.min(rect.left - 40, window.innerWidth - 230)) + 'px';
+      pop.style.top = Math.max(6, rect.top - 46) + 'px';
+      document.body.appendChild(pop);
+      pop.querySelectorAll('.kt-st-pick').forEach(function (pb) {
+        pb.addEventListener('click', function () { staffReact(mid, pb.getAttribute('data-emoji')); pop.remove(); });
+      });
+      setTimeout(function () {
+        document.addEventListener('click', function away() { pop.remove(); document.removeEventListener('click', away); }, { once: true });
+      }, 0);
+    });
+
     function bubble(m) {
       var mine = !!m.mine;
       // Their photo beside their bubble, matching the family thread. Own messages get
       // none — you know who you are.
+      /* "Emily added Olivia" is the conversation reporting what happened, not somebody
+         speaking. Rendered as a bubble it looked like a colleague announcing themselves
+         in the third person, and — because the adder is often you — as YOUR message. */
+      if (m.system) {
+        return '<div data-mid="' + m.id + '" style="text-align:center;margin:12px 0;">'
+          + '<span style="display:inline-block;background:#EDF2F7;color:#64748B;font-size:11.5px;'
+          + 'font-weight:600;border-radius:20px;padding:4px 12px;">' + escapeHtml(m.body || '') + '</span></div>';
+      }
       var pic = '';
       if (!mine) {
         var url = absPhotoUrl(m.photo);
@@ -675,7 +1237,25 @@
           ? '<span style="flex-shrink:0;align-self:flex-end;display:inline-flex;margin-right:8px;">' + KT.avatar(m.sender || '?', { size: 30, photoUrl: url }) + '</span>'
           : '<span style="flex-shrink:0;align-self:flex-end;margin-right:8px;width:30px;height:30px;border-radius:50%;background:' + senderColor(m.sender) + ';color:#fff;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">' + escapeHtml((String(m.sender || '?').charAt(0) || '?').toUpperCase()) + '</span>';
       }
-      return '<div style="display:flex;align-items:flex-end;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin-bottom:10px;">' +
+      /* Same receipt the family thread shows: ✓✓ once they have opened the thread
+         since this message was sent, ✓ until then. Only on our own messages — a tick
+         on theirs would be telling them what they already know. */
+      var tick = '';
+      if (mine) {
+        // This payload timestamps messages as `at`; `created_at` is the family shape.
+        var seen = staffOtherReadAt && m.at
+          && (new Date(String(staffOtherReadAt).replace(' ', 'T') + 'Z')
+              >= new Date(String(m.at).replace(' ', 'T') + 'Z'));
+        tick = seen
+          ? ' <span title="Seen" style="color:#7DD3FC;font-weight:700;">✓✓</span>'
+          : ' <span title="Sent — not read yet" style="opacity:.85;">✓</span>';
+      }
+      var rBtn = '<button type="button" class="kt-st-react" data-react-mid="' + m.id + '" title="React" aria-label="React" style="background:none;border:none;cursor:pointer;color:#94A3B8;font-size:12.5px;line-height:1;padding:0 2px;margin-left:6px;">\u{1F60A}</button>';
+      var rHtml = (m.reactions && m.reactions.length)
+        ? '<div class="kt-st-reactions" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';">'
+          + m.reactions.map(function (rx) { return staffChip(m.id, rx); }).join('') + '</div>'
+        : '<div class="kt-st-reactions" style="display:none;"></div>';
+      return '<div data-mid="' + m.id + '" style="display:flex;align-items:flex-end;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin-bottom:10px;">' +
         pic +
         '<div style="max-width:78%;">' +
           (mine ? '' : '<div style="font-size:11px;color:#64748B;font-weight:700;margin:0 0 3px 4px;">' + escapeHtml(m.sender || '') + '</div>') +
@@ -698,18 +1278,36 @@
                 return '<div style="margin-top:6px;"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">📎 ' + escapeHtml(a.name || 'Attachment') + '</a></div>';
               }).join('');
             })() + '</div>' +
-          '<div style="font-size:10.5px;color:#94A3B8;margin:3px 4px 0;text-align:' + (mine ? 'right' : 'left') + ';">' + formatDateTime(m.at) + '</div>' +
+          '<div style="font-size:10.5px;color:#94A3B8;margin:3px 4px 0;text-align:' + (mine ? 'right' : 'left') + ';">' + formatDateTime(m.at) + tick + rBtn + '</div>' +
+          rHtml +
         '</div></div>';
     }
 
     async function paint(force) {
       var data;
-      try { data = await api('GET', '/provider/team-threads/' + tid); }
+      try { data = await api('GET', threadBase() + '/' + tid); }
       catch (e) {
         stopStaffPoll();
+        /* A 404 here is almost always a thread the dock REMEMBERED that no longer
+           resolves for you — you switched agency, or it was deleted. That is not an
+           error the person caused, and re-opening it every load is worse than not
+           opening it. Forget it and close quietly. */
+        if (/(403|404)/.test(String(e && e.message))) {
+          if (KT.ChatDock && KT.ChatDock.forget) { KT.ChatDock.forget(); }
+          closeThreadCleanup();
+          if (threadDocked && KT.ChatDock && KT.ChatDock.hide) { KT.ChatDock.hide(); }
+          else { target.innerHTML = ''; }
+          return;
+        }
         target.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load this conversation: ' + escapeHtml(e.message) + '</div>';
         return;
       }
+      staffOtherReadAt = data.other_read_at || null;
+      /* The await above took time, and the person may have opened somebody else while
+         it was in flight. Writing now would put THIS thread's messages under THEIR name.
+         Checked after every await, not only before the fetch. */
+      if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
+
       var msgs = data.messages || [];
       // Only repaint when something actually arrived — a blind repaint every few seconds
       // would wipe whatever the person is part-way through typing.
@@ -718,7 +1316,12 @@
       var oldBox = target.querySelector('#kt-st-input');
       if (oldBox) { draft = oldBox.value; }
       lastCount = msgs.length;
-      if (threadDocked) KT.ChatDock.show(data.name || 'Chat', cleanup);
+      if (threadDocked) {
+        KT.ChatDock.show(data.name || 'Chat', cleanup);
+        // Save the REAL name against this thread's key. show() no longer saves, so
+        // without this the dock would come back titled 'Chat'.
+        if (KT.ChatDock.rememberThread) { KT.ChatDock.rememberThread('staff:' + tid, data.name || 'Chat'); }
+      }
 
       target.innerHTML =
         '<div style="display:flex;flex-direction:column;height:100%;min-height:0;background:#F7F9FB;">' +
@@ -727,6 +1330,23 @@
               '<button id="kt-st-back" style="background:none;border:none;font-size:24px;color:#1F6080;cursor:pointer;padding:0 4px;line-height:1;">‹</button>' +
               '<strong style="font-size:16px;color:#0D1B2A;">' + escapeHtml(data.name || 'Colleague') + '</strong>' +
             '</div>') +
+          /* Who can see what you are about to type. In a group that question must never
+             be answered by scanning the bubbles, and on a 1:1 this is the affordance that
+             turns it into a group. Rendered in the dock too, where the header is just a
+             title and there is nowhere else for it to live. */
+          (function () {
+            var ppl = data.participants || [];
+            var others = ppl.filter(function (p) { return !p.me; });
+            var names = others.map(function (p) { return p.name; }).join(', ');
+            return '<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:#F1F5F9;border-bottom:1px solid #E5E7EB;flex:0 0 auto;font-size:12px;color:#475569;">' +
+              '<span style="min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+                (data.is_group
+                  ? '\u{1F465} <strong>' + escapeHtml(String(data.member_count || ppl.length)) + ' members</strong> · ' + escapeHtml(names)
+                  : 'Private with ' + escapeHtml(names || 'a colleague')) +
+              '</span>' +
+              '<button id="kt-st-addppl" type="button" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:700;color:#1F6080;cursor:pointer;white-space:nowrap;">\uFF0B Add people</button>' +
+            '</div>';
+          })() +
           '<div id="kt-st-body" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px;">' +
             (msgs.length ? msgs.map(bubble).join('')
               : '<div style="text-align:center;color:#64748B;padding:26px;font-size:13px;">No messages yet. Say hello.</div>') +
@@ -752,6 +1372,15 @@
 
       var back = target.querySelector('#kt-st-back');
       if (back) { back.addEventListener('click', function () { stopStaffPoll(); closeThreadCleanup(); }); }
+
+      var addPplBtn = target.querySelector('#kt-st-addppl');
+      if (addPplBtn) {
+        addPplBtn.addEventListener('click', function () {
+          openAddPeopleModal(tid, (data.participants || []).map(function (p) { return p.id; }), function () {
+            paint(true);
+          });
+        });
+      }
 
       // ── emoji ─────────────────────────────────────────────────────────
       var EMOJI = ['😀','😄','😊','🙂','😉','😍','🥳','😅','🤔','😴','🙌','👍','👏','🙏','💪','🤝',
@@ -835,7 +1464,7 @@
             var fd = new FormData();
             fd.append('body', text);
             fd.append('attachment', pendingFile);
-            var res = await fetch(apiBase() + '/provider/team-threads/' + tid + '/send', {
+            var res = await fetch(apiBase() + threadBase() + '/' + tid + '/send', {
               method: 'POST',
               headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
               body: fd,
@@ -845,12 +1474,27 @@
               throw new Error(err.message || ('Upload failed (HTTP ' + res.status + ')'));
             }
           } else {
-            await api('POST', '/provider/team-threads/' + tid + '/send', { body: text });
+            await api('POST', threadBase() + '/' + tid + '/send', { body: text });
           }
           input.value = '';
           setPending(null);
           lastCount = -1;          // force the next paint to show it
+          /* Re-assert which thread is open before repainting. paint() returns SILENTLY
+             when openThreadId does not match, so anything that reset it — a re-mount of
+             the screen while the dock stayed open — made the sender's own message vanish
+             from the view even though the server had accepted it. You cannot send into a
+             thread you are not looking at, so at this point this IS the open thread. */
+          openThreadId = 'staff:' + tid;
           await paint(true);
+          // If the poll had already given up, bring it back — otherwise the thread
+          // renders once and then goes quiet again.
+          if (!staffPoll) {
+            staffPoll = setInterval(function () {
+              if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
+              if (document.hidden) { return; }
+              paint(false);
+            }, 2500);
+          }
         } catch (e) {
           sendBtn.disabled = false;
           if (window.KT && KT.toast) { KT.toast('⚠️', 'Could not send', (e && e.message) || '', '#DC2626'); }
@@ -864,7 +1508,16 @@
 
     await paint(true);
     stopStaffPoll();
-    staffPoll = setInterval(function () { paint(false); }, 6000);
+    /* Guarded exactly like the family poll below. Without this the interval outlived
+       the thread that started it and kept repainting ITS messages into the dock after
+       the user had opened somebody else — one person's name over another's words. */
+    staffPoll = setInterval(function () {
+      if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
+      /* Skip a backgrounded tab: nobody is reading it, and openStaffThread's
+         visibility handling catches up when it returns. */
+      if (document.hidden) { return; }
+      paint(false);
+    }, 2500);
   }
 
   /* ─── Thread view ───────────────────────────────────────────── */
@@ -881,11 +1534,81 @@
     });
   })();
 
+  /* The dock's contact list. Registered at MODULE scope, not inside the Messenger
+     screen's load() — that only runs when the screen itself renders, so opening a
+     chat from a notification or the login pop-out left the list unregistered and the
+     panel stuck on "Open Messenger once". It fetches its own data, and reuses the
+     screen's rows when they happen to be there. */
+  KT.Chat = KT.Chat || {};
+  KT.Chat.conversationsForSwitcher = async function () {
+    var rows = [];
+    try {
+      var both = await Promise.all([
+        api('GET', endpointBase() + '?page=1&per_page=100').catch(function () { return null; }),
+        myRole === 'guardian'
+          ? api('GET', '/parent/threads').catch(function () { return null; })
+          : api('GET', '/provider/team-threads').catch(function () { return null; }),
+        /* Archived conversations, so the dock can leave them out. A failure here
+           must not hide the inbox -- it just means everything shows. */
+        api('GET', '/provider/chat-archive').catch(function () { return null; }),
+      ]);
+      ((both[0] && both[0].conversations) || []).forEach(function (c) {
+        rows.push({
+          id: c.id,
+          name: (myRole === 'guardian' ? c.centre_name : c.family_name) || 'Conversation',
+          preview: c.preview || '',
+          unread_count: c.unread_count || 0,
+          at: c.last_message_at || '',
+          photo: c.photo_url || c.child_photo_url || '',
+          presence: c.presence || '',
+        });
+      });
+      ((both[1] && both[1].threads) || []).forEach(function (t) {
+        rows.push({
+          id: 'staff:' + t.id,
+          // A group row that says only "Toddler Room Team" reads like one more colleague;
+          // the member count is what tells you it is a room full of people.
+          name: (t.name || 'Colleague') + (t.is_group ? ' · ' + (t.member_count || 0) + ' members' : ''),
+          preview: t.preview || '',
+          unread_count: t.unread || 0,
+          at: t.at || '',
+          photo: t.photo_url || '',
+          presence: t.presence || '',
+        });
+      });
+      /* Drop what this person has archived. Without this the row reappeared the
+         moment the list refreshed, which is why archiving looked broken. */
+      var arch = both[2] || {};
+      var archFamily = (arch.family || []).map(String);
+      var archStaff = (arch.staff || []).map(String);
+      rows = rows.filter(function (r) {
+        var id = String(r.id);
+        return id.indexOf('staff:') === 0
+          ? archStaff.indexOf(id.slice(6)) === -1
+          : archFamily.indexOf(id) === -1;
+      });
+
+      /* Unread first, then newest first within each group. The list still reads
+         chronologically; it just puts what needs answering where the eye lands. */
+      rows.sort(function (a, b) {
+        var au = (a.unread_count || 0) > 0 ? 1 : 0;
+        var bu = (b.unread_count || 0) > 0 ? 1 : 0;
+        if (au !== bu) { return bu - au; }
+        return String(b.at).localeCompare(String(a.at));
+      });
+    } catch (e) { /* an empty list is better than a broken dock */ }
+
+    return rows;
+  };
+
   async function openThread(cid, container) {
     // "staff:12" goes to the colleague thread; anything else is a family conversation.
     if (String(cid).indexOf('staff:') === 0) {
       return openStaffThread(parseInt(String(cid).slice(6), 10), container);
     }
+    // A colleague thread's poll must not keep writing into the dock we are about to
+    // fill with a family conversation.
+    stopStaffPoll();
     openThreadId = cid;
     threadListContainer = container;
     threadDocked = !!(KT.ChatDock && KT.ChatDock.enabled());
@@ -897,14 +1620,31 @@
     }
     try {
       const data = await api('GET', endpointBase() + '/' + cid);
+      // Same race as the colleague path: they may have switched during the fetch.
+      if (String(openThreadId) !== String(cid)) { return; }
       renderThread(data, target);
       if (threadDocked) {
         var c0 = data.conversation || {};
-        KT.ChatDock.show((myRole === 'guardian' ? c0.centre_name : c0.family_name) || 'Chat', closeThreadCleanup);
+        var label0 = (myRole === 'guardian' ? c0.centre_name : c0.family_name) || 'Chat';
+        KT.ChatDock.show(label0, closeThreadCleanup);
+        // Same key, real title — the pair is written together or not at all.
+        if (KT.ChatDock.rememberThread) { KT.ChatDock.rememberThread(cid, label0); }
       }
       // Refresh badge after opening (now zero unread)
       if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge();
     } catch (e) {
+      /* 403 or 404 here means the remembered thread is not reachable by THIS session —
+         another agency, or another of the accounts sharing this email. The dock
+         restores it on every load, so without this the person meets the same red error
+         each refresh for a conversation they cannot open anyway. Forget it and close
+         quietly; it comes back when they switch back. */
+      if (/(403|404)/.test(String(e && e.message))) {
+        if (KT.ChatDock && KT.ChatDock.forget) { KT.ChatDock.forget(); }
+        closeThreadCleanup();
+        if (threadDocked && KT.ChatDock && KT.ChatDock.hide) { KT.ChatDock.hide(); }
+        else { target.innerHTML = ''; }
+        return;
+      }
       target.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load thread: ' + escapeHtml(e.message) + '</div>';
     }
   }
@@ -913,7 +1653,7 @@
   // it must NOT re-close the dock (the dock is already closing) to avoid recursion.
   function closeThreadCleanup() {
     openThreadId = null;
-    if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
+    if (threadPollTimer) { clearTimeout(threadPollTimer); threadPollTimer = null; }
     threadDocked = false;
   }
 
@@ -930,7 +1670,7 @@
           ${(window.KT && KT.avatar && c.child_name) ? `<span style="flex-shrink:0;display:inline-flex;">${KT.avatar(c.child_name, { size: 38, photoUrl: c.child_photo_url || '' })}</span>` : ''}
           <div style="flex:1;min-width:0;">
             <div style="font-weight:700;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(headerLabel)} ${escapeHtml(subLabel)}</div>
-            ${c.subject ? `<div style="font-size:13px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(c.subject)}</div>` : ''}
+            <div style="font-size:13px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(c.subject || (c.child_name ? 'About ' + c.child_name : 'Conversation'))}</div>
           </div>
           ${myRole !== 'guardian' ? `<button class="kt-nudge" type="button" title="Nudge the family for a reply" style="background:rgba(31,96,128,.12);border:none;width:40px;height:40px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;line-height:1;">👋</button>` : ''}
         </div>
@@ -1029,7 +1769,7 @@
     function leaveThread() {
       if (threadDocked && KT.ChatDock) { KT.ChatDock.close(); return; }  // close() → onClose → closeThreadCleanup
       openThreadId = null;
-      if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
+      if (threadPollTimer) { clearTimeout(threadPollTimer); threadPollTimer = null; }
       renderList(container);
     }
 
@@ -1241,9 +1981,21 @@
 
     // ── Realtime: poll the OPEN thread, append new messages, alert on incoming ──
     lastThreadMsgId = messages.length ? Math.max.apply(null, messages.map(m => m.id || 0)) : 0;
-    if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
-    threadPollTimer = setInterval(async () => {
-      if (openThreadId !== c.id) { clearInterval(threadPollTimer); threadPollTimer = null; return; }
+    if (threadPollTimer) { clearTimeout(threadPollTimer); threadPollTimer = null; }
+    /* Last time anything happened in this thread. Seeded to now, so opening a
+       conversation starts fast and settles down if nobody speaks. */
+    var lastThreadActivity = Date.now();
+    var threadPollBusy = false;
+
+    function threadPollDelay() {
+      var since = Date.now() - lastThreadActivity;
+      if (since < THREAD_ACTIVE_FOR_MS) { return THREAD_POLL_ACTIVE_MS; }
+      if (since < THREAD_WARM_FOR_MS) { return THREAD_POLL_WARM_MS; }
+      return THREAD_POLL_IDLE_MS;
+    }
+
+    var threadTick = async () => {
+      if (openThreadId !== c.id) { clearTimeout(threadPollTimer); threadPollTimer = null; return; }
       try {
         const fresh = await api('GET', endpointBase() + '/' + c.id);
         const msgs = (fresh && fresh.messages) || [];
@@ -1258,6 +2010,7 @@
           }
         });
         if (added) bodyEl.scrollTop = bodyEl.scrollHeight;
+        if (added) { lastThreadActivity = Date.now(); }
         if (gotIncoming) {
           playPing();
           if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge();
@@ -1265,7 +2018,40 @@
         }
         setTyping(bodyEl, (fresh && fresh.typing_users) || []);
       } catch (e) {}
-    }, THREAD_POLL_MS);
+      threadPollBusy = false;
+    };
+
+    /* One tick, then schedule the next at whatever the cadence now calls for.
+       A hidden tab is skipped rather than polled: nobody is reading it, and the
+       catch-up happens the moment it comes back into focus. */
+    function scheduleThreadPoll() {
+      if (openThreadId !== c.id) { return; }
+      threadPollTimer = setTimeout(async function () {
+        if (openThreadId !== c.id) { return; }
+        if (!document.hidden && !threadPollBusy) {
+          threadPollBusy = true;
+          await threadTick();
+        }
+        scheduleThreadPoll();
+      }, document.hidden ? THREAD_POLL_IDLE_MS : threadPollDelay());
+    }
+    scheduleThreadPoll();
+
+    /* Do not make someone wait for the next tick when they have just come back to
+       the tab, or when anything in the portal reported a change. */
+    var threadWake = function () {
+      if (openThreadId !== c.id || document.hidden || threadPollBusy) { return; }
+      lastThreadActivity = Date.now();
+      threadPollBusy = true;
+      threadTick();
+    };
+    try {
+      window.addEventListener('focus', threadWake);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { threadWake(); }
+      });
+      window.addEventListener('kt:data-changed', threadWake);
+    } catch (e) {}
 
     input.focus();
   }
@@ -1433,20 +2219,61 @@
   }
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    if (threadPollTimer) { clearInterval(threadPollTimer); threadPollTimer = null; }
+    if (threadPollTimer) { clearTimeout(threadPollTimer); threadPollTimer = null; }
   }
 
   /* ─── Public mount API ─────────────────────────────────────── */
   function mount(container, options) {
     options = options || {};
     myRole = options.role || (getUser().primary_role || 'guardian');
-    openThreadId = null;
+
+    /* Do NOT clear openThreadId while a thread is live in the DOCK.
+       On desktop an open conversation lives in the floating dock, which deliberately
+       outlives this screen — it sits above the whole portal. But paint() and both polls
+       key on openThreadId:
+
+           if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
+
+       so every re-mount of #chat orphaned the conversation that was already open. The
+       symptom is precise and misleading: the POST still succeeds and the message is
+       saved, but the repaint after it bails silently and the 2.5s poll stops — so the
+       thread looks frozen and nothing you type ever appears, while the server has it all
+       along. (Anthony, 2026-08-26)
+
+       Cleared only when there is no live dock thread to orphan. */
+    var dockLive = false;
+    try {
+      dockLive = !!(KT.ChatDock && KT.ChatDock.enabled && KT.ChatDock.enabled()
+                    && KT.ChatDock.isActive && KT.ChatDock.isActive());
+    } catch (e) { dockLive = false; }
+    if (!dockLive) { openThreadId = null; }
+
     renderList(container);
   }
 
   // Expose
   window.KT = window.KT || {};
-  window.KT.Chat = { mount: mount, refreshUnreadBadge: refreshUnreadBadge };
+  /* openThread is exposed so an incoming message can pop its own conversation open
+     (kt-toasts calls it). It needs a container; the dock is the right home on desktop,
+     and mount() has already put one there whenever Messenger has been visited. */
+  /* Preserve anything already on KT.Chat — this used to be a plain assignment,
+     which wiped the dock's contact-list provider defined above. */
+  window.KT.Chat = Object.assign({}, window.KT.Chat || {}, {
+    mount: mount,
+    refreshUnreadBadge: refreshUnreadBadge,
+    openThread: function (cid) {
+      try {
+        var host = (window.KT.ChatDock && window.KT.ChatDock.contentEl)
+          ? window.KT.ChatDock.contentEl()
+          : document.getElementById('appMain');
+        if (!host) { location.hash = '#chat'; return; }
+        if (window.KT.ChatDock && window.KT.ChatDock.show) { window.KT.ChatDock.show(); }
+        return openThread(cid, host);
+      } catch (e) {
+        location.hash = '#chat';
+      }
+    },
+  });
   window.KT.refreshUnreadBadge = refreshUnreadBadge;
 
   // Auto-start polling once user is loaded
