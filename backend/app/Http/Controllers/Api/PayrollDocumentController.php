@@ -115,6 +115,10 @@ class PayrollDocumentController extends Controller
             ->get([
                 'id', 'kind', 'reference', 'period_start', 'period_end', 'units', 'unit_label',
                 'rate', 'gross', 'net', 'currency', 'status', 'source', 'issued_at', 'paid_at', 'role_label',
+                // Not the URL — the browser never needs it and must never have it. Just
+                // enough for the screen to say WHOSE document this is and, when it is
+                // password-protected, how to open it.
+                'external_source', 'pdf_password_hint',
             ]);
 
         return response()->json([
@@ -229,6 +233,55 @@ class PayrollDocumentController extends Controller
             $isAdmin = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
                 ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
             abort_unless($isAdmin, 403, 'Not permitted.');
+        }
+
+        /* IF THE SOURCE SYSTEM MADE THE DOCUMENT, SERVE THAT DOCUMENT.
+
+           Everything below draws a payslip from the figures in payroll_documents. For a
+           row that came from iLearn that is a second, slightly different payslip: theirs
+           carries the agency branding, the non-employee clause that makes a provider's
+           payslip coherent on its own, year-to-date totals and terms. An educator
+           comparing the PDF in their inbox with the one in this portal should not find
+           two documents.
+
+           FETCHED HERE, NOT REDIRECTED TO. Every screen in the portal already asks this
+           endpoint for a payslip, so proxying means all of them get the real document
+           with no client change at all — and the signed URL stays on this server rather
+           than landing in somebody's browser history or on a shared screen.
+
+           FALLS BACK RATHER THAN FAILS. If the far end is down, slow, or has been
+           reconfigured, the locally-drawn payslip below is still a correct payslip. A
+           worse document beats an error page on payday. */
+        if (! empty($doc->pdf_url)) {
+            try {
+                $res = \Illuminate\Support\Facades\Http::timeout(20)
+                    ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                    ->get((string) $doc->pdf_url);
+
+                // Content-type checked, not assumed: a login page or an error screen is
+                // a 200 too, and handing somebody an HTML file named .pdf is worse than
+                // quietly using our own.
+                $body = $res->successful() ? (string) $res->body() : '';
+                if ($body !== '' && str_starts_with($body, '%PDF')) {
+                    $name = ($doc->kind === 'invoice' ? 'payroll-invoice-' : 'payslip-')
+                        . ($doc->period_start ?: $doc->id) . '.pdf';
+
+                    return response($body, 200, [
+                        'Content-Type' => 'application/pdf',
+                        'Content-Disposition' => 'inline; filename="' . $name . '"',
+                        // So a support question can be answered without guessing which
+                        // of the two documents somebody is looking at.
+                        'X-KT-Document-Source' => (string) ($doc->external_source ?: 'external'),
+                    ]);
+                }
+                \Illuminate\Support\Facades\Log::warning('[payroll] source PDF was not a PDF; using ours', [
+                    'doc' => $doc->id, 'status' => $res->status(),
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('[payroll] could not fetch the source PDF; using ours', [
+                    'doc' => $doc->id, 'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         $agency = DB::table('agencies')->where('id', $doc->agency_id)->first(['name', 'logo_url', 'settings']);

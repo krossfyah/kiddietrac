@@ -149,7 +149,19 @@
         + esc((d.status || 'issued').charAt(0).toUpperCase() + (d.status || 'issued').slice(1)) + '</span>'
         + (Number(d.rate) > 0 ? '' : '<span style="font-size:11.5px;color:#9A3412;">No pay rate on file</span>')
         + '<button data-doc="' + d.id + '" class="kt-pay-dl" style="margin-left:auto;">⬇ PDF</button>'
-        + '</div></div>';
+        + '</div>'
+        /* This one is iLearn's own payslip, served through us unchanged — and iLearn
+           password-protects every payslip it renders. Saying so BEFORE the prompt
+           appears is the difference between a familiar step and a broken download;
+           the hint is the format, never the password. */
+        + (d.pdf_password_hint
+            ? '<div style="margin-top:8px;padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;'
+              + 'border-radius:8px;font-size:12px;color:#475569;line-height:1.5;">'
+              + '🔒 <strong>Password-protected.</strong> ' + esc(d.pdf_password_hint)
+              + '<br><span style="color:#64748B;">The same password as the copy emailed to you.</span>'
+              + '</div>'
+            : '')
+        + '</div>';
     }).join('');
 
     host.innerHTML = head + '<div class="kt-pay-list">' + cards + '</div>';

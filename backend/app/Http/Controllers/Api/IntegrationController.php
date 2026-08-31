@@ -835,6 +835,15 @@ class IntegrationController extends Controller
             'notes'            => 'nullable|string',
             'currency'         => 'nullable|string|max:8',
             'deleted'          => 'nullable|boolean',
+            /* The source system's OWN payslip, when it renders one. We draw a payslip
+               from the figures above, which is close but not the same paper -- theirs
+               carries the branding, the non-employee clause, year-to-date totals and
+               terms. Given a url, PayrollDocumentController::pdf() serves that instead.
+               url NOT active_url: the far end may be unreachable from here at validation
+               time, and a payslip is not worth rejecting over a DNS blip. */
+            'pdf_url'           => 'nullable|url|max:500',
+            // The FORMAT of the password, never the password itself.
+            'pdf_password_hint' => 'nullable|string|max:200',
         ]);
         $source = $this->source($request);
         $key = $source . ':' . $data['kind'] . ':' . $data['external_id'];
@@ -953,6 +962,10 @@ class IntegrationController extends Controller
             'issued_at'        => $data['issued_at'] ?? null,
             'paid_at'          => $data['paid_at'] ?? null,
             'notes'            => $data['notes'] ?? null,
+            /* Where the source system's own payslip lives, and how to open it. Null
+               for anything KiddieTrac produces itself, so nothing changes for those. */
+            'pdf_url'           => $data['pdf_url'] ?? null,
+            'pdf_password_hint' => $data['pdf_password_hint'] ?? null,
             'updated_at'       => now(),
         ];
 
