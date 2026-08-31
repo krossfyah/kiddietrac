@@ -221,7 +221,7 @@
       + '<div id="xb-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px;"></div>'
       // Voided invoices are excluded from the default list on purpose — they are not
       // part of what is outstanding — so they need a tab of their own to be reachable.
-      + '<div id="xb-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
+      + '<div id="xb-tabs" class="kt-subtabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
       + '<div class="kt-card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'
       +   '<select id="xb-family" style="padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;min-width:220px;background:#fff;"><option value="0">All families</option></select>'
       +   '<input id="xb-search" placeholder="🔍 Search invoice # / description / status…" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;box-sizing:border-box;">'

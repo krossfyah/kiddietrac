@@ -724,7 +724,7 @@
     ];
     var active = 'parents';
 
-    var tabs = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;' });
+    var tabs = Dom.el('div', { class: 'kt-subtabs', style: 'display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;' });
     var pane = Dom.el('div', {});
 
     function paintTabs() {

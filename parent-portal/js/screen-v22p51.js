@@ -76,6 +76,47 @@
     var when = decidedStamp(r.decided_at);
     return who + (when ? '<div style="font-size:11.5px;color:#94A3B8;">' + escapeHtml(when) + '</div>' : '');
   }
+  /* Mirrors TimeOffController::whenPhrase so the screen, the calendar and every email
+     describe a request the same way. "Sep 3 – Sep 3" is what an afternoon off looked
+     like when only the dates were known. */
+  function torWhen(r) {
+    var sameDay = String(r.start_at || '').slice(0, 10) === String(r.end_at || '').slice(0, 10);
+    if (!r.all_day && r.start_time) {
+      return fmtDate(r.start_at) + ', ' + torTime(r.start_time) + ' – ' + torTime(r.end_time);
+    }
+    return sameDay ? fmtDate(r.start_at) : fmtDate(r.start_at) + ' – ' + fmtDate(r.end_at);
+  }
+  function torTime(t) {
+    if (!t) return '';
+    var p = String(t).split(':');
+    var h = parseInt(p[0], 10), mnt = p[1] || '00';
+    var ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + mnt + ' ' + ap;
+  }
+
+  /* Taking a request back. Allowed while it is pending AND after it has been approved —
+     plans change, and withdrawing an approved one also removes the closure it created
+     and tells the people who were told about it. */
+  async function withdrawTor(r) {
+    var wasApproved = (r.status || '').toLowerCase() === 'approved';
+    var msg = wasApproved
+      ? 'Withdraw this approved time off?\n\nThe calendar goes back to normal and everyone who'
+        + ' was told will be notified that you will be working as usual.'
+      : 'Withdraw this request?';
+    if (!window.confirm(msg)) return;
+    try {
+      await Api.post('/time-off/' + r.id + '/cancel', {});
+      renderTimeOff(document.getElementById('appMain') || document.querySelector('main'));
+    } catch (e) {
+      alert((e && e.message) || 'Could not withdraw that request.');
+    }
+  }
+  function canWithdraw(r) {
+    var st = (r.status || 'pending').toLowerCase();
+    return st === 'pending' || st === 'approved';
+  }
+
   function torStatusColors(st) {
     return st === 'approved' ? { bg: '#DCFCE7', fg: '#15803D' }
       : st === 'denied' ? { bg: '#FEE2E2', fg: '#B91C1C' }
@@ -98,7 +139,7 @@
     head.appendChild(mid);
     head.appendChild(el('span', { style: 'flex:0 0 auto;font-size:11.5px;font-weight:800;text-transform:capitalize;padding:4px 11px;border-radius:20px;background:' + sc.bg + ';color:' + sc.fg + ';' }, status));
     card.appendChild(head);
-    card.appendChild(el('div', { style: 'font-size:13.5px;font-weight:600;color:#334155;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;' }, '📅 ' + fmtDate(r.start_at) + ' – ' + fmtDate(r.end_at)));
+    card.appendChild(el('div', { style: 'font-size:13.5px;font-weight:600;color:#334155;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;' }, '📅 ' + torWhen(r)));
     if (r.reason) card.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.45;' }, r.reason));
     // Mobile renders cards, not the table, so the decision has to be added here too.
     var decidedLine = decidedText(r);
@@ -113,6 +154,13 @@
       deny.onclick = function () { actOnTor(r.id, 'denied'); };
       actions.appendChild(appr); actions.appendChild(deny);
       card.appendChild(actions);
+    }
+    // Your own request — you can take it back, approved or not.
+    if (!isApprover && canWithdraw(r)) {
+      var wd = el('button', { type: 'button', class: 'kt-btn kt-btn-secondary',
+        style: 'width:100%;margin-top:12px;justify-content:center;' }, 'Withdraw');
+      wd.onclick = function () { withdrawTor(r); };
+      card.appendChild(wd);
     }
     return card;
   }
@@ -130,13 +178,22 @@
       const color = status === 'approved' ? '#047857' : status === 'denied' ? '#B91C1C' : '#D97706';
       tr.innerHTML = `<td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name || 'You')}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-transform:capitalize;">${escapeHtml(r.request_type)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${fmtDate(r.start_at)} – ${fmtDate(r.end_at)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(torWhen(r))}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span></td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && status === 'pending' ? `<button data-act="approved" data-id="${r.id}" style="background:#10B981;color:#fff;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;margin-right:6px;">Approve</button><button data-act="denied" data-id="${r.id}" style="background:#EF4444;color:#fff;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;">Deny</button>` : ''}</td>`;
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && status === 'pending'
+          ? `<button data-act="approved" data-id="${r.id}" class="kt-btn kt-btn-success kt-btn-sm" style="margin-right:6px;">Approve</button><button data-act="denied" data-id="${r.id}" class="kt-btn kt-btn-danger kt-btn-sm">Deny</button>`
+          : (!isApprover && canWithdraw(r)
+            ? `<button data-withdraw="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Withdraw</button>` : '')}</td>`;
       tb.appendChild(tr);
     });
     host.appendChild(tbl);
+    host.querySelectorAll('button[data-withdraw]').forEach(b => {
+      b.onclick = function () {
+        var row = rows.filter(function (x) { return String(x.id) === b.dataset.withdraw; })[0];
+        if (row) withdrawTor(row);
+      };
+    });
     host.querySelectorAll('button[data-act]').forEach(b => {
       b.onclick = async () => {
         await Api.patch(`/admin/time-off/${b.dataset.id}`, { status: b.dataset.act });
@@ -191,22 +248,65 @@
         <input id="tor-start" type="date" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></label>
       <label style="display:block;margin-top:10px;font-size:13px;color:#374151;font-weight:600;">End date
         <input id="tor-end" type="date" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></label>
+      <label style="display:flex;align-items:center;gap:9px;margin-top:14px;font-size:14px;color:#374151;font-weight:600;">
+        <input id="tor-allday" type="checkbox" checked data-kt-switch="1"> All day</label>
+      <div id="tor-times" style="display:none;gap:10px;margin-top:10px;">
+        <label style="flex:1;display:block;font-size:13px;color:#374151;font-weight:600;">From
+          <input id="tor-tstart" type="time" value="09:00" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></label>
+        <label style="flex:1;display:block;font-size:13px;color:#374151;font-weight:600;">To
+          <input id="tor-tend" type="time" value="12:00" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></label>
+      </div>
+      <div id="tor-partial-note" style="display:none;font-size:12px;color:#64748B;margin-top:6px;">
+        Part of a day has to be a single date, and does not close the centre.</div>
       <label style="display:block;margin-top:10px;font-size:13px;color:#374151;font-weight:600;">Reason
         <textarea id="tor-reason" rows="3" style="width:100%;padding:11px;border:1px solid #E5E7EB;border-radius:9px;margin-top:5px;font-size:16px;box-sizing:border-box;"></textarea></label>
-      <div style="margin-top:20px;text-align:right;">
-        <button id="tor-cancel" style="background:#F3F4F6;border:0;padding:9px 16px;border-radius:4px;margin-right:8px;cursor:pointer;">Cancel</button>
-        <button id="tor-submit" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:4px;cursor:pointer;">Submit</button>
+      <div id="tor-err" style="font-size:13px;color:#B91C1C;margin-top:10px;min-height:18px;"></div>
+      <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px;">
+        <button id="tor-cancel" class="kt-btn kt-btn-secondary" type="button">Cancel</button>
+        <button id="tor-submit" class="kt-btn kt-btn-primary" type="button">Submit</button>
       </div></div>`;
     document.body.appendChild(m);
+
+    var allDayEl = m.querySelector('#tor-allday');
+    var timesEl = m.querySelector('#tor-times');
+    var noteEl = m.querySelector('#tor-partial-note');
+    var startEl = m.querySelector('#tor-start');
+    var endEl = m.querySelector('#tor-end');
+    var errEl = m.querySelector('#tor-err');
+
+    function syncAllDay() {
+      var partial = !allDayEl.checked;
+      timesEl.style.display = partial ? 'flex' : 'none';
+      noteEl.style.display = partial ? 'block' : 'none';
+      // Part of a day only means anything within one date, so the end follows the
+      // start rather than letting someone ask for 2–4pm across a fortnight.
+      endEl.disabled = partial;
+      if (partial && startEl.value) { endEl.value = startEl.value; }
+    }
+    allDayEl.addEventListener('change', syncAllDay);
+    startEl.addEventListener('change', function () {
+      if (!allDayEl.checked) { endEl.value = startEl.value; }
+    });
+    syncAllDay();
+
     m.querySelector('#tor-cancel').onclick = () => m.remove();
     m.querySelector('#tor-submit').onclick = async () => {
+      var allDay = allDayEl.checked;
       const payload = {
         request_type: m.querySelector('#tor-type').value,
-        start_at: m.querySelector('#tor-start').value,
-        end_at: m.querySelector('#tor-end').value,
+        start_at: startEl.value,
+        end_at: allDay ? endEl.value : startEl.value,
         reason: m.querySelector('#tor-reason').value,
+        all_day: allDay,
       };
-      if (!payload.start_at || !payload.end_at) { alert('Pick start and end dates'); return; }
+      if (!allDay) {
+        payload.start_time = m.querySelector('#tor-tstart').value;
+        payload.end_time = m.querySelector('#tor-tend').value;
+        if (!payload.start_time || !payload.end_time) { errEl.textContent = 'Give a start and end time.'; return; }
+        if (payload.end_time <= payload.start_time) { errEl.textContent = 'The end time has to be after the start.'; return; }
+      }
+      if (!payload.start_at || !payload.end_at) { errEl.textContent = 'Pick the dates.'; return; }
+      errEl.textContent = '';
       await Api.post('/time-off', payload);
       m.remove();
       renderTimeOff(document.getElementById('main') || document.querySelector('main'));
@@ -361,7 +461,7 @@
     main.innerHTML = `
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 12px;color:#1F6080;">Payroll</h2>
-        <div id="pr-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 16px;padding:0 0 2px;"></div>
+        <div id="pr-tabs" class="kt-subtabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 16px;padding:0 0 2px;"></div>
         <div style="display:flex;gap:12px;margin-bottom:18px;align-items:end;">
           <label style="font-size:13px;color:#374151;">From <input id="pr-from" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
           <label style="font-size:13px;color:#374151;">To <input id="pr-to" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>

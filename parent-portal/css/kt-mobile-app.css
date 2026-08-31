@@ -77,13 +77,14 @@
      down this file, and the height of the strip stops depending on how many tabs a
      screen happens to have.
 
-     Matched on the inline style because six screens hand-roll this identical strip
-     rather than sharing a component (screen-billing-settings, bulk-invoices,
-     external-billing, integrations, late-events, v22p51) — so a class would mean editing
-     six files and missing the seventh somebody writes next. If a new strip ever styles
-     itself differently this will not catch it; the real fix is one shared component.
+     Keyed on .kt-subtabs. Six screens hand-roll this identical strip rather than
+     sharing a component (billing-settings, bulk-invoices, external-billing,
+     integrations, late-events, v22p51); tagging all six with one class is a smaller
+     change than a refactor and, unlike matching a substring of their inline style, it
+     does not quietly stop working the day somebody reorders a declaration. A seventh
+     strip opts in by wearing the class. The real fix is still one shared component.
      2026-08-31. */
-  #appMain div[style*="flex-wrap:wrap"][style*="border-bottom:1px solid #E2E8F0"] {
+  #appMain .kt-subtabs {
     flex-wrap: nowrap !important;
     overflow-x: auto;
     overflow-y: hidden;
@@ -91,13 +92,9 @@
     scrollbar-width: none;
     padding-bottom: 4px !important;
   }
-  #appMain div[style*="flex-wrap:wrap"][style*="border-bottom:1px solid #E2E8F0"]::-webkit-scrollbar {
-    display: none;
-  }
+  #appMain .kt-subtabs::-webkit-scrollbar { display: none; }
   /* Each pill keeps its own width instead of being squeezed to fit. */
-  #appMain div[style*="flex-wrap:wrap"][style*="border-bottom:1px solid #E2E8F0"] > * {
-    flex: 0 0 auto;
-  }
+  #appMain .kt-subtabs > * { flex: 0 0 auto; }
 
   /* ── Section headings: clear hierarchy, less air ── */
   #appMain h1 { font-size: 20px !important; line-height: 1.2 !important; }

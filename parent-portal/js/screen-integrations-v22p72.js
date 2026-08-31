@@ -158,6 +158,14 @@
       + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">📬 Mail &amp; notifications</span>'
       + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">Master switch for every outgoing email and notification for this agency. Turn it <strong>OFF</strong> and nothing goes out to families or staff.</span></span>'
       + '<input type="checkbox" id="es-mailenabled" data-kt-switch="1"' + (s.mail_enabled !== false ? ' checked' : '') + '></label>'
+      /* Reminds an educator (and BCCs admins/directors) when daily moments are logged
+         for a child who is not signed in. On by default — a safety check that ships
+         off stays off. */
+      + '<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #F1F5F9;">'
+      + '<span><span style="font-weight:700;font-size:13.5px;color:#0F172A;">⏰ Attendance reminders</span>'
+      + '<span style="display:block;font-size:12px;color:#64748B;margin-top:2px;">'
+      + 'Email an educator when they log daily moments for a child who is not signed in. Admins and directors are BCC’d.</span></span>'
+      + '<input type="checkbox" id="es-attendreminders" data-kt-switch="1"' + (s.attendance_reminders !== false ? ' checked' : '') + '></label>'
       + '<div id="es-mailenabled-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
       + '</div>'
       // ── Onboarding-reminder daily email (configurable) ──
@@ -294,7 +302,11 @@
       var out = document.getElementById('es-mailenabled-out');
       mailToggle.disabled = true;
       try {
-        await patch('/admin/email-settings', { mail_enabled: mailToggle.checked });
+        var arT = document.getElementById('es-attendreminders');
+        await patch('/admin/email-settings', {
+          mail_enabled: mailToggle.checked,
+          attendance_reminders: arT ? arT.checked : undefined,
+        });
         if (out) { out.style.color = '#047857'; out.textContent = mailToggle.checked ? '✓ Mail enabled for this agency.' : '✓ Mail disabled — nothing will be sent.'; }
         if (window.KT && KT.toast) KT.toast(mailToggle.checked ? '📬' : '🔕', 'Mail ' + (mailToggle.checked ? 'enabled' : 'disabled'), 'Saved for this agency.', mailToggle.checked ? '#16A34A' : '#B45309');
       } catch (e) {
@@ -458,7 +470,11 @@
     { key: 'mailbox',   label: 'Mailbox',   icon: '📥', match: /mailbox|microsoft 365/i },
     { key: 'delivery',  label: 'Delivery',  icon: '🎛️', id: 'es-delivery' },
     { key: 'closures',  label: 'Closures',  icon: '🗓', id: 'es-closures' },
-    { key: 'birthdays', label: 'Birthdays', icon: '🎂', birthdays: true }
+    { key: 'birthdays', label: 'Birthdays', icon: '🎂', birthdays: true },
+    /* The Reseller "Email" screen, folded in here. requiresEl means the tab only
+       appears when its container was actually rendered — platform admins only, since
+       nobody else can load /platform/mail-settings. */
+    { key: 'platform', label: 'Platform mail', icon: '🌐', id: 'es-platform-mail', requiresEl: true }
   ];
 
   /* Closure reminders. Saved on change rather than behind a Save button, like the other
@@ -528,13 +544,17 @@
   }
 
   function applyEmailTabs(main) {
+    /* A tab whose container was never rendered must not appear as an empty pane. */
+    var TABS = EMAIL_TABS.filter(function (t) {
+      return !t.requiresEl || (main && main.querySelector('#' + t.id));
+    });
     var root = main.firstElementChild;
     if (!root || root.getAttribute('data-kt-tabbed')) { return; }
     root.setAttribute('data-kt-tabbed', '1');
     var hero = root.querySelector('.kt-page-hero');
 
     var panes = {};
-    EMAIL_TABS.forEach(function (t) {
+    TABS.forEach(function (t) {
       var p = document.createElement('div');
       p.setAttribute('data-es-pane', t.key);
       p.style.display = 'none';
@@ -546,8 +566,8 @@
     Array.prototype.slice.call(root.children).forEach(function (child) {
       if (child === hero) { return; }
       var key = 'general';
-      for (var i = 0; i < EMAIL_TABS.length; i++) {
-        var t = EMAIL_TABS[i];
+      for (var i = 0; i < TABS.length; i++) {
+        var t = TABS[i];
         if (t.id && child.id === t.id) { key = t.key; break; }
         if (t.match && t.match.test(child.textContent || '')) { key = t.key; break; }
       }
@@ -555,8 +575,9 @@
     });
 
     var bar = document.createElement('div');
+    bar.classList.add('kt-subtabs');
     bar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 18px;padding:0 0 2px;';
-    bar.innerHTML = EMAIL_TABS.map(function (t) {
+    bar.innerHTML = TABS.map(function (t) {
       return '<button type="button" data-es-tab="' + t.key + '" style="background:none;border:0;border-bottom:2px solid transparent;'
         + 'padding:9px 13px;font-size:13.5px;font-weight:700;color:#64748B;cursor:pointer;border-radius:8px 8px 0 0;">'
         + t.icon + ' ' + t.label + '</button>';
@@ -564,11 +585,11 @@
 
     if (hero && hero.nextSibling) { root.insertBefore(bar, hero.nextSibling); }
     else { root.appendChild(bar); }
-    EMAIL_TABS.forEach(function (t) { root.appendChild(panes[t.key]); });
+    TABS.forEach(function (t) { root.appendChild(panes[t.key]); });
 
     var birthdaysLoaded = false;
     function show(key) {
-      EMAIL_TABS.forEach(function (t) {
+      TABS.forEach(function (t) {
         panes[t.key].style.display = (t.key === key) ? '' : 'none';
         var b = bar.querySelector('[data-es-tab="' + t.key + '"]');
         if (b) {
@@ -616,6 +637,29 @@
       // is unchanged if the tabs are ever dropped.
       window.KT.Shell.registerScreen(r + ':email-settings', async function (main, ctx) {
         await renderEmailSettings(main, ctx);
+        /* Fold the Reseller "Email" screen in as a tab. Rendered BEFORE the tab
+           layer, which relocates whatever it finds. Platform admins only — its
+           endpoint is /platform/* and would 403 for anyone else. */
+        try {
+          var isPlat = false;
+          try { isPlat = sessionStorage.getItem('kt_is_platform_admin') === '1'; } catch (e) {}
+          if (!isPlat) {
+            try {
+              var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+              isPlat = !!(u.is_platform_admin || u.role_key === 'platform_admin' || u.role === 'platform_admin');
+            } catch (e2) {}
+          }
+          if (isPlat && window.KT && KT.MailSettingsScreen && KT.MailSettingsScreen.render
+              && !main.querySelector('#es-platform-mail')) {
+            var pm = document.createElement('div');
+            pm.id = 'es-platform-mail';
+            /* Into root, not main: applyEmailTabs relocates root.children, and
+               root is main.firstElementChild. A sibling of root is invisible to it. */
+            (main.firstElementChild || main).appendChild(pm);
+            KT.MailSettingsScreen.render(pm);
+          }
+        } catch (e) { /* the rest of the screen must still tab */ }
+
         try { applyEmailTabs(main); } catch (e) { /* an un-tabbed screen still works */ }
       });
     });

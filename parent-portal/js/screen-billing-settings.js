@@ -56,7 +56,7 @@
     }
     main.innerHTML = '<div style="padding:14px 24px;max-width:1000px;">'
       + '<div class="kt-page-hero"><h2>🧾 Billing</h2><p>What you charge, how it is worked out, and how families are reminded.</p></div>'
-      + '<div id="bs-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
+      + '<div id="bs-tabs" class="kt-subtabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
       + '<div id="bs-pane"></div></div>';
 
     var tabBar = main.querySelector('#bs-tabs');
