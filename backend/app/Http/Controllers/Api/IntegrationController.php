@@ -1222,11 +1222,15 @@ class IntegrationController extends Controller
             $kidQ2->where('ch.updated_at', '>=', $sinceSql);
         }
         $deactivations['children'] = $kidQ2->orderBy('ch.updated_at')->limit(500)
+            // Same omission as families had: a child pushed to us is known over there
+            // as 'child-<their id>', never by our kt_id.
             ->get(['ch.id', 'ch.first_name', 'ch.last_name', 'ch.enrollment_status',
-                   'ch.deleted_at', 'ch.updated_at'])
+                   'ch.external_id', 'ch.external_source', 'ch.deleted_at', 'ch.updated_at'])
             ->map(fn ($c) => [
                 'kt_id' => (int) $c->id,
                 'name' => trim(($c->first_name ?? '').' '.($c->last_name ?? '')),
+                'external_id' => $c->external_id,
+                'external_source' => $c->external_source,
                 'reason' => $c->deleted_at ? 'deleted' : 'withdrawn',
                 'at' => $c->updated_at,
             ])->values();
@@ -1235,11 +1239,21 @@ class IntegrationController extends Controller
         if ($sinceSql) {
             $famQ2->where('updated_at', '>=', $sinceSql);
         }
+        /* external_id / external_source, the same as centres already carry.
+
+           Without them this list was only usable for families that ORIGINATED here —
+           the consumer matches those by our kt_id. A family the source system pushed
+           to us has no id of ours on its side; it knows the family as its own record
+           ('parent-<their id>'), which is exactly the external_id sitting in this row.
+           Omitting it meant the commonest case — iLearn de-enrolling a family iLearn
+           itself created — arrived as an announcement nobody could act on. */
         $deactivations['families'] = $famQ2->orderBy('updated_at')->limit(500)
-            ->get(['id', 'family_name', 'updated_at'])
+            ->get(['id', 'family_name', 'external_id', 'external_source', 'updated_at'])
             ->map(fn ($f) => [
                 'kt_id' => (int) $f->id,
                 'name' => $f->family_name,
+                'external_id' => $f->external_id,
+                'external_source' => $f->external_source,
                 'reason' => 'de_enrolled',
                 'at' => $f->updated_at,
             ])->values();
