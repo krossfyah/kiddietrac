@@ -131,6 +131,32 @@ Route::prefix('v1')->group(function () {
         $firstLine = trim((string) ($lines[0] ?? ''));
         $subject = 'Crash: ' . mb_substr($firstLine !== '' ? $firstLine : 'Unknown error', 0, 150);
 
+        /* AN OPAQUE "Script error." IS NOT OURS AND CANNOT BE WORKED ON.
+
+           The browser refuses to describe an exception raised by a cross-origin script —
+           an extension, a content blocker, a password manager, an injected script — so
+           there is no file, no line and no stack, and nothing in KiddieTrac to change.
+           The reporter already recognises this class and replaces the useless trace with
+           an explanation; what it could not do was stop it becoming a ticket.
+
+           That mattered little while reports were opt-in, because somebody had to tap
+           Send. Since 2026-08-31 they send automatically, so every extension misbehaving
+           on somebody's phone would file a high-priority technical ticket nobody can act
+           on — the queue becomes noise and the real crashes get lost in it.
+
+           Still LOGGED (crash-reports.log), because the pattern is worth seeing if it
+           ever becomes twenty users in a day. Just not filed, and not emailed. Found
+           when Eisha Wright hit exactly this at 8:06 on 2026-08-31. */
+        $isOpaque = (bool) preg_match('/^script error/i', trim($firstLine))
+            || str_contains($data['trace'], 'Script error (opaque)');
+        if ($isOpaque) {
+            return response()->json([
+                'ok' => true,
+                'ticket_id' => null,
+                'note' => 'Logged. No ticket filed: the browser withheld the detail, so there is nothing actionable.',
+            ]);
+        }
+
         // Track it as a support ticket, so a crash is something you can work through
         // and close rather than a line in a log nobody opens.
         $ticketId = null;
