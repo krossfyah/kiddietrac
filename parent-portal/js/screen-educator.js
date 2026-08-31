@@ -88,6 +88,13 @@
       shell.appendChild(scoreBox);
       renderDayScore(scoreBox);
 
+      /* The daily forms. Submitting one used to leave no trace anywhere an educator
+         could see — the signoff went into the database and no screen mentioned it — so
+         there was no way to tell what was still owed without opening each form. */
+      const formsBox = Dom.el('div', { id: 'kt-forms-today' });
+      shell.appendChild(formsBox);
+      renderFormsToday(formsBox);
+
       // Room topbar (centre name + room selector + ratio) — now BELOW the brief.
       const topbar = buildTopbar(rooms, centreLabel, providerMode);
       shell.appendChild(topbar);
@@ -195,6 +202,73 @@
         if (p < 1) { requestAnimationFrame(step); }
       })();
     });
+  }
+
+  /**
+   * "Forms today" — what this educator is expected to submit, and what they have.
+   *
+   * The state that matters is STARTED vs SUBMITTED. Opening a form saves a draft
+   * signoff, and only a signature counts; on the day this was built, 4 of 10 entries
+   * across the agency were drafts nobody had finished. Showing a draft as done would
+   * have told several educators they were finished when they were not, which is worse
+   * than showing nothing.
+   */
+  async function renderFormsToday(container) {
+    let d;
+    try { d = await Api.get('/educator/forms-today'); }
+    catch (e) { container.innerHTML = ''; return; }   // never break Today for a tile
+    if (!d || !d.expected) { container.innerHTML = ''; return; }
+
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    const done = d.submitted || 0;
+    const total = d.expected || 0;
+    const allDone = done === total;
+
+    /* Amber while something is outstanding, green when finished. Deliberately not red:
+       a form still to be filled in during the day is normal, not a failure. */
+    const accent = allDone ? '#16A34A' : (d.drafts ? '#D97706' : '#64748B');
+
+    const pip = (f) => {
+      const c = f.state === 'submitted' ? '#16A34A' : (f.state === 'draft' ? '#F59E0B' : '#CBD5E1');
+      return '<span title="' + esc(f.title) + ' — ' + f.state.replace('_', ' ') + '" style="width:9px;height:9px;'
+        + 'border-radius:50%;background:' + c + ';display:inline-block;"></span>';
+    };
+
+    const row = (f) => {
+      const mark = f.state === 'submitted' ? '✓' : (f.state === 'draft' ? '◌' : '○');
+      const col = f.state === 'submitted' ? '#166534' : (f.state === 'draft' ? '#92400E' : '#64748B');
+      const note = f.state === 'submitted' ? esc(f.at)
+        : (f.state === 'draft' ? 'started ' + esc(f.at) + ' — not submitted' : '');
+      return '<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid #F1F5F9;">'
+        + '<span style="color:' + col + ';font-size:14px;width:14px;text-align:center;">' + mark + '</span>'
+        + '<span style="flex:1;min-width:0;font-size:13px;color:#0F172A;overflow:hidden;text-overflow:ellipsis;'
+        + 'white-space:nowrap;">' + esc(f.title) + '</span>'
+        + '<span style="font-size:11.5px;color:' + col + ';font-variant-numeric:tabular-nums;">' + note + '</span>'
+        + '</div>';
+    };
+
+    container.innerHTML =
+      '<div style="background:#fff;border:1px solid #E8EDF3;border-radius:14px;padding:14px 16px;margin:0 0 14px;'
+        + 'box-shadow:0 1px 3px rgba(0,0,0,.04);">'
+      + '<div style="display:flex;align-items:center;gap:10px;">'
+        + '<div style="flex:1;min-width:0;">'
+          + '<div style="font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#64748B;">Forms today</div>'
+          + '<div style="font-size:17px;font-weight:800;color:' + accent + ';margin-top:2px;">'
+            + done + ' of ' + total + ' submitted'
+            + (d.drafts ? '<span style="font-size:12.5px;font-weight:600;color:#92400E;"> · '
+                + d.drafts + ' started</span>' : '')
+          + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:5px;align-items:center;">' + (d.forms || []).map(pip).join('') + '</div>'
+      + '</div>'
+      + '<div style="margin-top:9px;">' + (d.forms || []).map(row).join('') + '</div>'
+      + '<div style="margin-top:10px;text-align:right;">'
+        + '<a href="#forms" style="font-size:12.5px;color:#1F6080;font-weight:700;text-decoration:none;">'
+        + (allDone ? 'View forms' : 'Open forms') + ' →</a>'
+      + '</div>'
+      + '</div>';
   }
 
   async function renderDayBrief(container) {
@@ -403,6 +477,16 @@
         return;
       }
 
+      /* One action for a whole room. Sunscreen before going outside, the afternoon
+         snack, everyone down for a nap - these are things you do to the ROOM, and
+         logging them one child at a time was the most repetitive part of the day. */
+      /* The "Log for several children" button lived here. Removed 2026-08-26 at
+         Anthony's request: bulk logging belongs to the Daily log (#care-log),
+         where "All children" already covers it. Two routes to the same action,
+         on two different tables, is how the roster quick-log and the care log
+         drifted apart in the first place. openBulkLog() is left in place for the
+         roster path that still calls it. */
+
       data.roster.forEach(child => {
         grid.appendChild(buildChildCard(child));
       });
@@ -530,8 +614,16 @@
 
     // Action buttons — big and colour-coded so check-in / check-out is unmissable:
     // green to sign a child IN, amber to sign them OUT.
-    const actions = Dom.el('div', { class: 'child-card-actions', style: 'display:flex;gap:8px;margin-top:10px;' });
-    const bigBtn = 'padding:11px 12px;border-radius:12px;font-size:14px;font-weight:800;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1;';
+    /* flex-wrap, because on a narrow card two buttons on one line do not fit and the
+       second one was being CUT OFF at the card's edge rather than moving down (Anthony,
+       2026-08-30: "the absent button looks to be cut off"). */
+    const actions = Dom.el('div', { class: 'child-card-actions', style: 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;' });
+    /* min-width:0 is the other half. A flex item defaults to min-width:auto, i.e. "never
+       narrower than my own content", so a button with flex:0 0 auto refuses to shrink and
+       simply overflows. Put here, on the shared primitive, so every button on this card
+       can shrink — not just the one that was reported. Same trap as the grid rule in
+       kt-layout: the default min sizing is what breaks narrow layouts. */
+    const bigBtn = 'padding:11px 12px;border-radius:12px;font-size:14px;font-weight:800;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1;min-width:0;';
     if (child.is_at_centre) {
       actions.appendChild(Dom.el('button', {
         style: bigBtn + 'flex:1 1 40%;background:#EEF2F6;color:#0f172a;',
@@ -551,7 +643,8 @@
       // told first. Same endpoint the parent uses; the API already allows staff of
       // the child's centre.
       actions.appendChild(Dom.el('button', {
-        style: bigBtn + 'flex:0 0 auto;background:#fff;color:#B45309;border:1.5px solid #FDE68A;',
+        // 1 1 auto, not 0 0 auto: it may shrink (and wrap) rather than run off the card.
+        style: bigBtn + 'flex:1 1 auto;background:#fff;color:#B45309;border:1.5px solid #FDE68A;',
         title: 'Report ' + (child.display_name || 'this child') + ' absent today',
         onClick: (e) => { e.stopPropagation(); markAbsent(child, card); },
       }, '🏠 Absent'));
@@ -572,7 +665,9 @@
   function markAbsent(child, cardEl) {
     const REASONS = [
       ['sick', '🤒 Unwell'],
-      ['vacation', '🏖 Holiday'],
+      // 'holiday', not 'vacation': the API accepts sick|appointment|holiday|family|other
+      // and rejected 'vacation' with a 422, so this button never once worked.
+      ['holiday', '🏖 Holiday'],
       ['appointment', '🩺 Appointment'],
       ['other', '📝 Other'],
     ];
@@ -706,6 +801,218 @@
           done();
         }
       },
+    });
+  }
+
+  /**
+   * Log ONE thing for several children at once.
+   *
+   * Deliberately a separate flow rather than a mode bolted onto openQuickLog: the
+   * per-child dialog is a fast path ("what did Ava just do?") and adding a picker to it
+   * would slow the common case down to serve the rarer one.
+   *
+   * Children present are ticked by default, because that is nearly always the answer -
+   * but every one is unticked-able, since "everyone had sunscreen" is rarely quite true.
+   */
+  function openBulkLog(roster) {
+    const present = (roster || []).filter(c => c.is_at_centre);
+    const pool = present.length ? present : (roster || []);
+    if (!pool.length) {
+      Dom.toast('No children in this room to log for', 'error');
+      return;
+    }
+
+    const TYPES = [
+      { icon: '\u{1F37D}\u{FE0F}', label: 'Meal',      type: 'meal' },
+      { icon: '\u{1F34E}', label: 'Snack',     type: 'snack' },
+      { icon: '\u{1F37C}', label: 'Bottle',    type: 'bottle' },
+      { icon: '\u{1F9F4}', label: 'Sunscreen', type: 'sunscreen' },
+      { icon: '\u{1F60A}', label: 'Mood',      type: 'mood' },
+      { icon: '\u{1F634}', label: 'Nap down',  type: 'nap_start' },
+      { icon: '\u{2600}\u{FE0F}', label: 'Nap woke',  type: 'nap_end' },
+    ];
+
+    let chosen = 'sunscreen';
+    const body = Dom.el('div', {});
+
+    // ── what happened ──────────────────────────────────────────────────────
+    body.appendChild(Dom.el('div', {
+      style: 'font-size:12px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;',
+    }, 'What happened'));
+
+    const typeWrap = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;' });
+    const typeBtns = {};
+    const paintTypes = () => {
+      Object.keys(typeBtns).forEach(t => {
+        const on = (t === chosen);
+        typeBtns[t].style.background = on ? '#E4EEF2' : '#fff';
+        typeBtns[t].style.borderColor = on ? '#1F6080' : '#E2E8F0';
+        typeBtns[t].style.color = on ? '#1F6080' : '#334155';
+        typeBtns[t].style.fontWeight = on ? '800' : '600';
+      });
+      paintForm();
+    };
+    TYPES.forEach(t => {
+      const b = Dom.el('button', {
+        type: 'button',
+        style: 'border:1.5px solid #E2E8F0;background:#fff;border-radius:10px;padding:9px 13px;'
+          + 'font-size:14px;cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:7px;',
+        onClick: () => { chosen = t.type; paintTypes(); },
+      }, t.icon + ' ' + t.label);
+      typeBtns[t.type] = b;
+      typeWrap.appendChild(b);
+    });
+    body.appendChild(typeWrap);
+
+    // ── who ────────────────────────────────────────────────────────────────
+    const whoHead = Dom.el('div', {
+      style: 'display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;',
+    });
+    whoHead.appendChild(Dom.el('div', {
+      style: 'font-size:12px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.06em;',
+    }, 'Who'));
+    const allBtn = Dom.el('button', {
+      type: 'button',
+      style: 'background:none;border:none;color:#1F6080;font-weight:700;font-size:13px;cursor:pointer;padding:4px 6px;',
+    }, 'Select all');
+    whoHead.appendChild(allBtn);
+    body.appendChild(whoHead);
+
+    const kidWrap = Dom.el('div', {
+      style: 'display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto;'
+        + 'border:1px solid #E2E8F0;border-radius:10px;padding:6px;margin-bottom:16px;',
+    });
+    const boxes = [];
+    pool.forEach(c => {
+      const row = Dom.el('label', {
+        style: 'display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;cursor:pointer;font-size:14.5px;',
+      });
+      const cb = Dom.el('input', { type: 'checkbox', style: 'width:18px;height:18px;flex-shrink:0;cursor:pointer;' });
+      cb.checked = true;
+      cb.value = String(c.id);
+      boxes.push(cb);
+      row.appendChild(cb);
+      row.appendChild(Dom.el('span', {}, c.display_name || c.first_name || ('Child ' + c.id)));
+      if (!c.is_at_centre) {
+        row.appendChild(Dom.el('span', {
+          style: 'margin-left:auto;font-size:11px;color:#B45309;background:#FEF3C7;border-radius:6px;padding:1px 6px;',
+        }, 'not in'));
+      }
+      kidWrap.appendChild(row);
+    });
+    body.appendChild(kidWrap);
+    allBtn.addEventListener('click', () => {
+      const turnOn = boxes.some(b => !b.checked);
+      boxes.forEach(b => { b.checked = turnOn; });
+      allBtn.textContent = turnOn ? 'Select none' : 'Select all';
+    });
+
+    // ── details, which depend on the type ──────────────────────────────────
+    const formWrap = Dom.el('div', { class: 'form-grid' });
+    body.appendChild(formWrap);
+    let buildPayload = () => ({});
+
+    function paintForm() {
+      Dom.clear(formWrap);
+      buildPayload = () => ({});
+
+      if (chosen === 'meal' || chosen === 'snack') {
+        const amount = selectInput('How much?', [
+          ['all', 'All of it'], ['most', 'Most of it'], ['half', 'About half'],
+          ['little', 'A little'], ['none', 'Did not eat'],
+        ]);
+        const items = textInput('Items (comma separated)', '', { placeholder: 'apple, crackers' });
+        items.row.classList.add('full-width');
+        formWrap.appendChild(amount.row);
+        formWrap.appendChild(items.row);
+        buildPayload = () => ({
+          amount: amount.input.value,
+          items: items.input.value.split(',').map(s => s.trim()).filter(Boolean),
+        });
+      } else if (chosen === 'bottle') {
+        const amt = textInput('Amount', '', { placeholder: 'e.g. 120 ml' });
+        amt.row.classList.add('full-width');
+        formWrap.appendChild(amt.row);
+        buildPayload = () => ({ amount: amt.input.value });
+      } else if (chosen === 'mood') {
+        const mood = selectInput('How are they?', [
+          ['happy', '\u{1F60A} Happy'], ['calm', '\u{1F60C} Calm'], ['tired', '\u{1F634} Tired'],
+          ['upset', '\u{1F622} Upset'], ['unwell', '\u{1F912} Unwell'],
+        ]);
+        mood.row.classList.add('full-width');
+        formWrap.appendChild(mood.row);
+        buildPayload = () => ({ score: mood.input.value });
+      }
+      // sunscreen / nap_start / nap_end carry no extra fields - the time and the note
+      // below are the whole record.
+
+      const when = textInput('Time it happened', nowHHMM(), { type: 'time' });
+      formWrap.appendChild(when.row);
+      const note = textInput('Note (optional)', '', { placeholder: 'Anything worth saying' });
+      note.row.classList.add('full-width');
+      formWrap.appendChild(note.row);
+      formWrap._when = when;
+      formWrap._note = note;
+    }
+
+    function nowHHMM() {
+      const d = new Date();
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+
+    paintTypes();
+
+    Modal.open({
+      title: 'Log for several children',
+      body,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save',
+          primary: true,
+          busyLabel: 'Logging…',
+          /* Modal.open calls this with NO arguments and reads the RETURN value:
+             `false` keeps the dialog open (and restores the button), anything else
+             closes it. There is no done() callback - getting that wrong would have
+             closed the dialog on a validation error and thrown the entry away. */
+          handler: async () => {
+            const ids = boxes.filter(b => b.checked).map(b => parseInt(b.value, 10));
+            if (!ids.length) { Dom.toast('Pick at least one child', 'error'); return false; }
+
+            // "HH:MM" today, in the browser's zone, sent as ISO - the same shape the
+            // single-child log sends, so both land on the same instant.
+            let occurredAt = null;
+            try {
+              const v = formWrap._when && formWrap._when.input.value;
+              if (v) {
+                const d = new Date();
+                const [hh, mm] = v.split(':');
+                d.setHours(parseInt(hh, 10), parseInt(mm, 10), 0, 0);
+                occurredAt = d.toISOString();
+              }
+            } catch (e) {}
+
+            try {
+              const res = await Api.post('/provider/events/bulk', {
+                child_ids: ids,
+                room_id: currentRoomId,
+                event_type: chosen,
+                payload: buildPayload(),
+                occurred_at: occurredAt,
+                notes: (formWrap._note && formWrap._note.input.value) || null,
+              });
+              const refused = (res && res.refused) || [];
+              const base = (res && res.message) || 'Logged';
+              Dom.toast(base + (refused.length ? ' · ' + refused.length + ' skipped' : ''), 'success');
+              await renderRoster(Dom.$('#educatorRoster'));
+              return true;                       // closes the dialog
+            } catch (e) {
+              Dom.toast(e.message || 'Could not save', 'error');
+              return false;                      // keeps it open so the entry is not lost
+            }
+          },
+        },
+      ],
     });
   }
 

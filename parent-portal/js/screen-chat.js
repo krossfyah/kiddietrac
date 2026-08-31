@@ -478,11 +478,16 @@
         const controls = pages > 1
           ? `${btn('‹', 'prev', state.page <= 1)}${nums}${btn('›', 'next', state.page >= pages)}`
           : '';
+        /* Nothing to page through: say so, and stop. Offering "25 / page" for a table
+           with no rows is a control that cannot do anything — Anthony, 2026-08-30:
+           "why is there a button there since there is not data shown in that table". */
+        if (!total) {
+          return `<div style="padding:9px 14px;border-top:1px solid #E9EDF1;background:#FBFCFD;
+              font-size:12.5px;color:#64748B;">No conversations</div>`;
+        }
         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;
             flex-wrap:wrap;padding:9px 14px;border-top:1px solid #E9EDF1;background:#FBFCFD;">
-            <span style="font-size:12.5px;color:#64748B;">${total
-              ? 'Showing <strong style="color:#334155;">' + start + '–' + end + '</strong> of <strong style="color:#334155;">' + total + '</strong>'
-              : 'No conversations'}</span>
+            <span style="font-size:12.5px;color:#64748B;">${'Showing <strong style="color:#334155;">' + start + '–' + end + '</strong> of <strong style="color:#334155;">' + total + '</strong>'}</span>
             <span style="display:flex;align-items:center;gap:5px;">${controls}
               <select class="kt-pgsize" aria-label="Rows per page"
                 style="height:30px;margin-left:4px;border:1px solid #D7DEE5;border-radius:7px;

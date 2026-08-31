@@ -769,6 +769,64 @@
     return true;
   }
 
+  /**
+   * A screen that draws its OWN banner very often ALSO draws a plain <h1> + subtitle
+   * above it, so the page opens with the title twice — once as grey text, once in the
+   * branded banner further down — and the banner no longer leads the page.
+   * (Anthony, 2026-08-30, on #admin-families: "the banner is not at the top and there is
+   * other text at the top which is redundant to the banner".)
+   *
+   * De-duplication already existed for the shell's own `.kt-hero-auto` and for the
+   * legacy `.page-header-v17`, which is why this looked handled — a bare <h1>+<div> pair
+   * matched neither. Fixed HERE rather than in screen-admin.js so it covers every screen
+   * with the pattern, including ones written later.
+   *
+   * Deliberately narrow, because this deletes markup a screen rendered:
+   *   • the heading must say the SAME thing as the banner (heroKey-normalised, so
+   *     "👪 Families" and "Families" match while "Families" and "Children" never do);
+   *   • it must come BEFORE the banner in document order;
+   *   • its container is only removed when it holds nothing interactive — otherwise just
+   *     the heading goes and whatever else was in there stays.
+   */
+  function tidyOwnBanner(main) {
+    var banner = main.querySelector('.kt-hero:not(.kt-hero-auto), .kt-page-hero');
+    if (!banner) return false;
+    var changed = false;
+    var title = heroKey((banner.querySelector('h1, h2') || {}).textContent);
+
+    if (title) {
+      var heads = main.querySelectorAll('h1, h2');
+      for (var i = 0; i < heads.length; i++) {
+        var h = heads[i];
+        if (banner.contains(h)) continue;
+        if (heroKey(h.textContent) !== title) continue;
+        // Only a heading ABOVE the banner is the redundant one. A matching heading
+        // further down is a section of the page that happens to share the name.
+        if (!(h.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+
+        var block = h.parentElement;
+        var disposable = block && block !== main && block.children.length <= 3 &&
+          [].every.call(block.children, function (c) {
+            return c === h || !c.querySelector('button, input, select, textarea, table, a');
+          });
+        if (disposable) block.parentNode.removeChild(block);
+        else h.parentNode.removeChild(h);
+        changed = true;
+        break;
+      }
+    }
+
+    /* And the banner leads its own section. Bounded to the first few positions: a banner
+       sitting third behind a title and a tab strip is one that was meant to be at the
+       top, whereas one halfway down the page belongs where the screen put it. */
+    var par = banner.parentElement;
+    if (par && par.firstElementChild !== banner) {
+      var idx = [].indexOf.call(par.children, banner);
+      if (idx > 0 && idx <= 2) { par.insertBefore(banner, par.firstElementChild); changed = true; }
+    }
+    return changed;
+  }
+
   function normaliseBanners(main, hash) {
     var hero = main.querySelector('.kt-hero-auto');
 
@@ -778,11 +836,11 @@
     // element we created, never one the screen owns.
     if (hero) {
       var own = main.querySelector('.kt-hero:not(.kt-hero-auto), .kt-page-hero');
-      if (own) { hero.parentNode.removeChild(hero); return true; }
+      if (own) { hero.parentNode.removeChild(hero); tidyOwnBanner(main); return true; }
     }
     // No auto-banner: the screen brought its own (role-home's greeting, or a
-    // .kt-page-hero). Nothing to fold or de-duplicate — but its buttons still come out.
-    if (!hero) return liftBannerButtons(main);
+    // .kt-page-hero). Its buttons still come out — and so does any heading repeating it.
+    if (!hero) { var t = tidyOwnBanner(main); return liftBannerButtons(main) || t; }
     var changed = liftBannerButtons(main);
     var h1 = hero.querySelector('h1');
     var title = heroKey(h1 && h1.textContent);
@@ -838,6 +896,23 @@
       var hk = heroKey(H.textContent);
       if (!hk) continue;
       if (title && hk === title) {                 // (a) duplicate
+        H.parentNode.removeChild(H);
+        changed = true;
+        break;
+      }
+      /* (c) the heading EXTENDS the banner's title — "White-Label Branding" under a
+         banner reading "Branding", which is the same page named twice, just not
+         character-for-character, so (a) never caught it. The longer one is the real
+         name: promote it, drop the heading. Whole-word containment only, so "Room
+         ratios" is never folded into a banner titled "Rooms". */
+      /* endsWith/startsWith, NOT indexOf-arithmetic: `hk.indexOf(' '+title) === hk.length
+         - title.length - 1` is true whenever BOTH sides are -1, i.e. whenever the two
+         strings merely happen to be the same LENGTH. That promoted "Live invoice preview"
+         (20 chars) into a banner titled "White-Label Branding" (20 chars) the moment this
+         shipped. Compared as strings there is no sentinel to collide with. */
+      if (title && hk !== title &&
+          (hk.indexOf(title + ' ') === 0 || hk.slice(-(title.length + 1)) === ' ' + title)) {
+        if (h1) h1.textContent = (H.textContent || '').replace(/[^\p{L}\p{N} &'\-]/gu, '').trim();
         H.parentNode.removeChild(H);
         changed = true;
         break;

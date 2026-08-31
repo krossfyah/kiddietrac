@@ -134,6 +134,22 @@
   #appMain input:not([type=checkbox]):not([type=radio]),
   #appMain select,
   #appMain textarea { font-size: 16px !important; padding: 11px 12px !important; border-radius: 10px !important; }
+  /* …but NOT table chrome. The rule above exists so iOS does not zoom when you focus a
+     form field, and 16px text with 11px/12px of padding is right for one. A rows-per-page
+     picker is not a form field: it is a 30px-high control sitting in a table footer, and
+     22px of vertical padding inside it is what made the pager look enormous on the phone
+     (Anthony, 2026-08-30: "why is the page pagination button so big… its big in mobile
+     apk view"). Anything compact opts out with .kt-pgsize or [data-kt-compact], so the
+     next one of these does not have to be reported again. */
+  #appMain select.kt-pgsize,
+  #appMain select[data-kt-compact],
+  #appMain [data-kt-compact] select {
+    font-size: 13px !important;
+    padding: 0 8px !important;
+    height: 32px !important;
+    min-height: 0 !important;
+    border-radius: 8px !important;
+  }
   #appMain button, .kt-modal button, .kt-modal-actions button { min-height: 42px; }
   #appMain form button[type="submit"] { width: 100% !important; }
 

@@ -28,20 +28,22 @@
     if (hash.startsWith('admin-')) state.activeTab = hash.replace('admin-', '');
     else if (hash.startsWith('admin/')) state.activeTab = hash.replace('admin/', '');
 
-    // Header — a section-specific title when arriving via a sidebar deep-link (a clean
-    // standalone view), else the legacy hub title.
-    const SECTION = {
-      centres:  ['Centres / Rooms', 'Manage your centres and their rooms.'],
-      users:    ['User management', 'Manage staff and admin user accounts.'],
-      families: ['Families', 'Manage enrolled families and their children.'],
-      branding: ['Branding', 'Customise your portal logo and colours.'],
-      billing:  ['Billing', 'Manage your subscription and payment settings.'],
-    };
-    const sec = SECTION[state.activeTab] || ['Admin', 'Manage centres, users, families, and branding'];
-    const header = Dom.el('div', { style: 'margin-bottom: 24px;' });
-    header.appendChild(Dom.el('h1', { style: 'font-size: 28px; font-weight: 800; margin: 0;' }, isDeepLink ? sec[0] : 'Admin'));
-    header.appendChild(Dom.el('div', { style: 'color: var(--ink-500); margin-top: 4px;' }, isDeepLink ? sec[1] : 'Manage centres, users, families, and branding'));
-    wrap.appendChild(header);
+    // Header — the legacy hub title only. The per-section titles that used to live here
+    // are gone with the header they fed; each section's own banner carries its name now.
+    /* Only the legacy "#admin" hub gets this plain header. Every admin-<tab> deep-link
+       is its own sidebar item whose CONTENT draws a branded banner, so rendering a title
+       here too opened those pages with the name twice — grey text on top, the real banner
+       below it — and pushed the banner off the top of the page. (Anthony, 2026-08-30:
+       "the banner is not at the top and there is other text at the top which is redundant
+       to the banner".) The shell also strips a heading that exactly repeats the banner
+       (app-v2-shell normaliseBanners/tidyOwnBanner), but that cannot catch "Centres /
+       Rooms" above a banner titled "Centres" — near-duplicates have to stop at source. */
+    if (! isDeepLink) {
+      const header = Dom.el('div', { style: 'margin-bottom: 24px;' });
+      header.appendChild(Dom.el('h1', { style: 'font-size: 28px; font-weight: 800; margin: 0;' }, 'Admin'));
+      header.appendChild(Dom.el('div', { style: 'color: var(--ink-500); margin-top: 4px;' }, 'Manage centres, users, families, and branding'));
+      wrap.appendChild(header);
+    }
 
     // Tab strip
     const tabs = Dom.el('div', { style: 'display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--ink-200, #E5E7EB); overflow-x: auto; overflow-y: hidden;' });
@@ -163,6 +165,7 @@
     }
 
     Dom.clear(content);
+    content.appendChild(archiveSwitch(content, 'centres', renderCentresTab, 'active'));
 
     // v22p12.1: tab hero
     content.appendChild(tabHero(
@@ -279,10 +282,58 @@
   // v22p30: card-grid alternative to the table. Same data, larger touch targets,
   // brand colour as the card's left rail. Best on tablets and for at-a-glance
   // visual scanning when you have fewer than ~12 centres.
+  /* A stable colour per provider. Keyed by id, not by position in the list, so a
+     provider keeps the same colour when the list is sorted, filtered or added to —
+     colour is only a shortcut if it means the same thing every time you look. */
+  var PROVIDER_BANDS = [
+    '#1F6080', '#B45309', '#166534', '#7C3AED', '#BE123C',
+    '#0F766E', '#A16207', '#4338CA', '#9D174D', '#065F46',
+    '#C2410C', '#1D4ED8',
+  ];
+  /* id -> palette slot, built once per render from the whole list. */
+  var _bandBy = {};
+  function buildProviderBands(list) {
+    _bandBy = {};
+    (list || []).slice()
+      .sort(function (a, b) { return (a.id || 0) - (b.id || 0); })
+      .forEach(function (c, i) {
+        _bandBy[String(c.id)] = PROVIDER_BANDS[i % PROVIDER_BANDS.length];
+      });
+  }
+
+  function providerBand(c) {
+    /* '#1f6080' is the seeded default every centre carries, not a chosen colour —
+       honouring it gave nine identical navy cards. Only a brand_color that DIFFERS
+       from the default counts as a real preference. */
+    var SEEDED_DEFAULT = '#1f6080';
+    var chosen = (c && c.brand_color) ? String(c.brand_color).trim().toLowerCase() : '';
+    if (chosen && chosen !== SEEDED_DEFAULT) { return c.brand_color; }
+    var key = (c && c.id != null) ? String(c.id) : '';
+    /* Position-assigned, so no two providers share a colour while there are fewer
+       of them than palette entries. Hashing collided at nine. */
+    if (key && _bandBy[key]) { return _bandBy[key]; }
+    key = key || String((c && c.name) || '');
+    var h = 0;
+    for (var i = 0; i < key.length; i++) { h = (h * 31 + key.charCodeAt(i)) >>> 0; }
+    return PROVIDER_BANDS[h % PROVIDER_BANDS.length];
+  }
+
+  /* Published so every screen showing providers uses the SAME colour for the same
+     person. A colour is only a shortcut if it means the same thing everywhere;
+     two screens each deriving their own would be worse than one flat colour. */
+  window.KT = window.KT || {};
+  window.KT.providerBand = function (centre, allCentres) {
+    if (allCentres) { buildProviderBands(allCentres); }
+    return providerBand(centre);
+  };
+
   function renderCentresCards(centres, content) {
+    buildProviderBands(centres);
     var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;' });
     centres.forEach(function (c) {
-      var accent = c.brand_color || '#1F6080';
+      /* Was a flat #1F6080 for everyone, since no provider has a brand_color set —
+         nine identical navy cards. */
+      var accent = providerBand(c);
       var card = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;cursor:pointer;border-left:6px solid ' + accent + ';position:relative;' });
 
       var editBtn = Dom.el('button', {
@@ -322,7 +373,21 @@
         return cell;
       }
       var staffZero = (c.staff_count || 0) === 0;
-      stats.appendChild(statCell('Enrolled', (c.enrolled_count || 0) + ' / ' + (c.license_capacity || 0), '#1D4ED8', '#EFF6FF'));
+      /* Present now vs how many may be here at once — the pair that answers
+         "is this provider compliant right now". Enrolment may lawfully exceed the
+         concurrent limit, so the old enrolled/licence pair flagged compliant
+         providers as over. Falls back to the enrolment view when no limit is set,
+         rather than showing a total with nothing to compare it against. */
+      var _lim = c.max_concurrent_children;
+      var _in = c.children_present || 0;
+      if (_lim) {
+        var _over = _in > _lim, _at = _in === _lim;
+        stats.appendChild(statCell('In now', _in + ' / ' + _lim,
+          _over ? '#B91C1C' : (_at ? '#B45309' : '#1D4ED8'),
+          _over ? '#FEE2E2' : (_at ? '#FEF3C7' : '#EFF6FF')));
+      } else {
+        stats.appendChild(statCell('Enrolled', (c.enrolled_count || 0) + ' / ' + (c.license_capacity || 0), '#1D4ED8', '#EFF6FF'));
+      }
       stats.appendChild(statCell('Families', c.family_count || 0, '#334155', '#F8FAFC'));
       stats.appendChild(statCell('Staff', c.staff_count || 0, staffZero ? '#B91C1C' : '#15803D', staffZero ? '#FEF2F2' : '#F0FDF4'));
       card.appendChild(stats);
@@ -342,8 +407,9 @@
       { key: 'name', label: 'Centre name', required: true },
       { key: 'license_number', label: 'License number' },
       { key: 'license_capacity', label: 'Maximum children enrolled (capacity)', type: 'number' },
-      { key: 'open_time', label: 'Opening time', type: 'time' },
-      { key: 'close_time', label: 'Closing time', type: 'time' },
+      /* Deliberately the next line down: the contrast with the enrolment cap above
+         is the whole point. Enrolment may exceed this; attendance may not. */
+      { key: 'max_concurrent_children', label: 'Maximum children at one time', type: 'number' },
       { key: 'address_line1', label: 'Address' },
       { key: 'city', label: 'City' },
       { key: 'province', label: 'Province', default: 'ON' },
@@ -387,6 +453,25 @@
     // weekly menu shows (staff editor + parent view). Defaults to Mon–Fri.
     const openWrap = Dom.el('div', { style: 'margin: 14px 0;' });
     openWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:6px;' }, 'Open days'));
+    /* Opening and closing sit WITH the days rather than up in the address block: which
+       days you operate and between what hours is one idea, and both drive the same
+       downstream rules -- late-pickup detection, clock in/out and attendance. */
+    const hoursRow = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:12px;margin:0 0 10px;' });
+    ['open_time', 'close_time'].forEach(function (key, n) {
+      const cell = Dom.el('div', { style: 'flex:0 0 auto;' });
+      cell.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;color:#475569;margin-bottom:3px;' },
+        n === 0 ? 'Opens' : 'Closes'));
+      const inp = Dom.el('input', { type: 'time',
+        style: 'height:32px;padding:0 9px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;' });
+      inp.value = (centre && centre[key]) ? String(centre[key]).slice(0, 5) : '';
+      inputs[key] = inp;
+      cell.appendChild(inp);
+      hoursRow.appendChild(cell);
+    });
+    openWrap.appendChild(hoursRow);
+    openWrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin:0 0 12px;line-height:1.5;' },
+      'Closing time is what a late pickup is measured against, and it drives clock in/out reporting. '
+      + 'Leave blank if this provider has no fixed closing time -- nothing can then be counted as late.'));
     const dayDefs = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']];
     const initialDays = (centre && Array.isArray(centre.open_days) && centre.open_days.length) ? centre.open_days.slice() : [1, 2, 3, 4, 5];
     const selectedDays = new Set(initialDays);
@@ -501,7 +586,7 @@
       // child. A short, warm first-person introduction works best.
       const bioWrap = Dom.el('div', { style: 'margin-bottom:12px;' });
       bioWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Provider bio'));
-      const bioIn = Dom.el('textarea', { placeholder: "Hi! I'm … I've cared for children for … years. I believe every child grows best with …", style: 'width:100%;min-height:88px;padding:9px 12px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;font-family:inherit;resize:vertical;' });
+      const bioIn = Dom.el('textarea', { placeholder: "Hi! I'm … I've cared for children for … years. I believe every child grows best with …", style: 'width:100%;min-height:190px;padding:10px 12px;line-height:1.55;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;font-family:inherit;resize:vertical;' });
       bioIn.value = centre.provider_bio || '';
       inputs.provider_bio = bioIn;
       bioWrap.appendChild(bioIn);
@@ -686,6 +771,17 @@
         try { await Api.delete('/admin/centres/' + centre.id + '/permanent'); if (typeof onSaved === 'function') { await onSaved(); } else { await renderCentresTab(content); } Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre permanently deleted', 'success'); }
         catch (e) { dzMsg.textContent = (e.message || 'Could not delete'); dzMsg.style.color = '#DC2626'; }
       });
+      /* Closing a provider properly, which is what somebody reaching for Archive
+         usually actually means. Archive refuses while children are still enrolled, so
+         this sits immediately before it: decide where every family goes, then archive.
+         (2026-08-25) */
+      const offboardBtn = Dom.el('button', {
+        type: 'button',
+        style: 'padding:8px 14px;background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;'
+          + 'border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;',
+      }, 'Close this provider\u2026');
+      offboardBtn.addEventListener('click', () => openCentreOffboard(centre, content));
+      dz.appendChild(offboardBtn);
       dz.appendChild(archiveBtn); dz.appendChild(delBtn); dz.appendChild(dzMsg);
       form.appendChild(dz);
     }
@@ -995,7 +1091,7 @@
     headCheck.appendChild(selectAll);
     headRow.appendChild(headCheck);
 
-    ['Name', 'Username', 'Email', 'Roles', 'Status', 'Last login', ''].forEach(h => {
+    ['Name', 'Username', 'Email', 'Roles', 'Status', 'Last seen', ''].forEach(h => {
       headRow.appendChild(Dom.el('th', { style: 'text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.5px;' }, h));
     });
     thead.appendChild(headRow);
@@ -1058,8 +1154,8 @@
       });
       row.appendChild(rolesCell);
 
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(u.status)));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px; white-space: nowrap;' }, fmtLoginStamp(u.last_login_at)));
+      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(u.status, inviteTip(u))));
+      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px; white-space: nowrap;' }, fmtLoginStamp(u.last_seen_at || u.last_login_at)));
 
       let actionEl;
       if (showDeactivated) {
@@ -1090,6 +1186,9 @@
           iconBtn('⚙️', 'Manage', function () { showUserModal(u, content); }),
           iconBtn('✉️', 'Resend welcome invite', function () { rowResendWelcome(u); }),
           iconBtn('🔑', 'Reset password', function () { rowResetPassword(u); }),
+          // The moment you need this is usually while scanning the list —
+          // somebody says they never received the email.
+          iconBtn('🔗', 'Manual sign-in link', function () { rowManualSignIn(u); }),
         ]);
       }
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, actionEl));
@@ -1237,7 +1336,13 @@
       if (!email && nm.length < 3) { dupWarn.style.display = 'none'; dupHasMatches = false; return; }
       const qs = email ? 'type=user&email=' + encodeURIComponent(email) : 'type=user&name=' + encodeURIComponent(nm);
       Api.get('/admin/duplicate-check?' + qs).then((r) => {
-        const m = (r && r.matches) || [];
+        /* A check that did not RUN is not a check that came back clean. This used to
+           read `(r && r.matches) || []`, so a failed request produced an empty list,
+           hid the warning and set dupHasMatches = false — telling the admin it was safe
+           to create a person who already exists. Same shape as the clock bar reading a
+           failed poll as "not clocked in" (2026-08-25). */
+        if (!r || !Array.isArray(r.matches)) { throw new Error('dup-check-unavailable'); }
+        const m = r.matches;
         if (!m.length) { dupWarn.style.display = 'none'; dupHasMatches = false; return; }
         dupHasMatches = true; dupConfirm = false;
         dupWarn.style.display = 'block';
@@ -1248,7 +1353,13 @@
           + '<label style="display:flex;gap:7px;align-items:center;margin-top:8px;font-weight:700;cursor:pointer;"><input type="checkbox" id="kt-dup-ok"> I’ve checked — this is a different person</label>';
         const cb = dupWarn.querySelector('#kt-dup-ok');
         if (cb) cb.addEventListener('change', () => { dupConfirm = cb.checked; });
-      }).catch(() => {});
+      }).catch(() => {
+        // Say so, plainly. Note it does NOT clear dupHasMatches: if an earlier check
+        // did find something, that finding stands until a later check succeeds.
+        dupWarn.style.display = 'block';
+        dupWarn.innerHTML = '<div style="font-weight:800;margin-bottom:4px;">\u26a0 Could not check for existing records</div>'
+            + '<div>The duplicate check did not run \u2014 please confirm this is not already in KiddieTrac before saving.</div>';
+      });
     };
     if (inputs.email) inputs.email.addEventListener('blur', runDupCheck);
     if (inputs.last_name) inputs.last_name.addEventListener('blur', runDupCheck);
@@ -1283,6 +1394,27 @@
           if (inputs.username && inputs.username.value.trim()) data.username = inputs.username.value.trim();
           if (data.username && !uOK) { status.style.color = '#DC2626'; status.textContent = 'That username is taken — please choose an available one.'; return; }
           if (inputs.centre_id.value) data.centre_id = parseInt(inputs.centre_id.value, 10);
+          /* Every role except these is scoped to ONE centre — without it the
+             role_assignment has no scope and the user would not even appear in the
+             list. The server enforces this and says so plainly; catching it here means
+             the person is told before they submit, next to the field they need to
+             fix. */
+          // Must match the server's list exactly, or the form blocks a choice the
+          // API would have accepted — which is what happened when "agency-wide" was
+          // offered for a home visitor and then refused.
+          var NO_CENTRE_NEEDED = ['agency_admin', 'platform_admin', 'sales_rep', 'home_visitor'];
+          if (NO_CENTRE_NEEDED.indexOf(data.role) === -1 && !data.centre_id) {
+            status.style.color = '#DC2626';
+            status.textContent = 'Please choose a centre — ' + (data.role || 'this role') + ' must belong to one.';
+            try {
+              inputs.centre_id.style.borderColor = '#DC2626';
+              inputs.centre_id.focus();
+              inputs.centre_id.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            } catch (e) {}
+            try { _toast('⚠️', 'Pick a centre', 'This role must belong to one centre.', '#DC2626'); } catch (e) {}
+            return;
+          }
+          try { inputs.centre_id.style.borderColor = ''; } catch (e) {}
           // Always request the set-password invite email. Without this flag the
           // backend created the user but emailed nothing — invited users never
           // received anything.
@@ -1298,8 +1430,14 @@
             await renderUsersTab(content);
             Shell.Modal.close();
           } catch (e) {
+            /* The API's message is the useful part — it names the actual problem.
+               Shown inline AND as a toast, because inline text in a scrolled modal is
+               easy to miss, which is exactly how a clear message went unread. */
+            var why = (e && e.message) ? e.message : 'Something went wrong — please try again.';
             status.style.color = '#DC2626';
-            status.textContent = 'Create failed: ' + (e.message || 'error');
+            status.textContent = why;
+            try { _toast('⚠️', 'Could not create the user', why, '#DC2626'); } catch (e) {}
+            try { status.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e2) {}
           }
         },
       }],
@@ -1331,6 +1469,9 @@
     body.appendChild(rowEl('Phone', u.phone));
     body.appendChild(rowEl('Roles', (u.roles || []).map(function (r) { return r.replace(/_/g, ' '); }).join(', ') || '—'));
     body.appendChild(rowEl('Last login', fmtDT(u.last_login_at)));
+    /* A different fact, worth having beside it: last_login_at is the last
+       authentication; this is when they were last actually in the portal. */
+    body.appendChild(rowEl('Last seen', fmtDT(u.last_seen_at)));
     body.appendChild(rowEl('Onboarded', u.onboarded_at ? fmtDT(u.onboarded_at) : 'Not yet'));
     body.appendChild(rowEl('Created', fmtDT(u.created_at)));
 
@@ -1389,6 +1530,59 @@
     return (window.KT && KT.confirm) ? await KT.confirm(msg) : window.confirm(msg);
   }
   // Per-row account actions (also available inside the Manage modal).
+  /* Credentials an admin can read out or paste into a message.
+     Shown as a dialog that STAYS until dismissed — this used to be a toast that
+     vanished after six seconds, which is unusable for something you must copy.
+     Offered regardless of whether the email "sent": email_sent only means the mailer
+     accepted it, and suppression happens afterwards in the listener. */
+  function showSignInDetails(u, tempPassword, emailSent) {
+    var esc = function (v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    };
+    var portal = 'https://app.kiddietrac.com';
+    var who = u.username ? (u.email + '  (username: ' + u.username + ')') : (u.email || '');
+    var pw = tempPassword || '(not returned)';
+    var body = Dom.el('div', {});
+    body.innerHTML =
+        '<div style="font-size:13px;color:#0F172A;line-height:1.8;">'
+      + '<div><span style="color:#64748B;">Portal</span><br><strong>' + portal + '</strong></div>'
+      + '<div style="margin-top:8px;"><span style="color:#64748B;">Sign in as</span><br><strong>' + esc(who) + '</strong></div>'
+      + '<div style="margin-top:8px;"><span style="color:#64748B;">Temporary password</span><br>'
+      + '<strong style="font-family:ui-monospace,Menlo,monospace;font-size:16px;letter-spacing:.5px;">'
+      + esc(pw) + '</strong></div></div>'
+      + '<div style="font-size:12px;color:#475569;margin-top:12px;padding-top:10px;border-top:1px solid #E2E8F0;">'
+      + (emailSent
+          ? 'The welcome email was accepted for delivery. Check the email log to confirm it was not suppressed.'
+          : 'The email did not send. Share these details directly.')
+      + '</div>';
+    var copy = Dom.el('button', { class: 'kt-btn kt-btn-secondary kt-btn-sm',
+      'data-kt-iconized': '1', style: 'margin-top:12px;' }, 'Copy details');
+    copy.onclick = function () {
+      var NL = String.fromCharCode(10);
+      var text = 'KiddieTrac sign-in' + NL + portal + NL + 'Sign in as: ' + who
+        + NL + 'Temporary password: ' + pw;
+      try {
+        navigator.clipboard.writeText(text);
+        copy.textContent = 'Copied';
+        setTimeout(function () { copy.textContent = 'Copy details'; }, 2000);
+      } catch (e) { copy.textContent = 'Select and copy manually'; }
+    };
+    body.appendChild(copy);
+    Shell.Modal.open({ title: 'Sign-in details for ' + (u.name || u.email || 'this user'), body: body, actions: [] });
+  }
+
+  async function rowManualSignIn(u) {
+    if (!await _confirm('Generate a temporary password for ' + (u.name || u.email)
+        + '? Their current password will stop working.')) { return; }
+    try {
+      var r = await Api.post('/admin/users/' + u.id + '/resend-welcome', {});
+      showSignInDetails(u, r && r.temp_password, !!(r && r.email_sent));
+    } catch (e) {
+      _toast('⚠️', 'Could not generate a link', (e && e.message) || 'error', '#DC2626');
+    }
+  }
+
   async function rowResendWelcome(u) {
     if (!await _confirm('Resend the welcome invite to ' + (u.email || u.name) + '? A new temporary password will be generated.')) return;
     try {
@@ -1426,11 +1620,30 @@
       tabBar.appendChild(b);
       return b;
     }
+    /* One bar for everything. The record was a single long scroll — a pay rate sat
+       below a full punch history — so the heavy sections get their own panes here
+       rather than a second strip nested inside Details. */
+    const paneStaff = Dom.el('div', { style: 'display:none;' });
+    const paneChecks = Dom.el('div', { style: 'display:none;' });
+    const paneClock = Dom.el('div', { style: 'display:none;' });
+    const paneData = Dom.el('div', { style: 'display:none;' });
+
+    // Marked so the button normaliser below leaves the tabs alone — without this it
+    // applied min-height + inline-flex to them and they grew to 65px.
+    try { tabBar.setAttribute('data-kt-tabbar', '1'); } catch (e) {}
     const _detailsTab = mkTab('Details', paneDetails);
     mkTab('📎 Files & documents', paneFiles);
+    mkTab('💵 Pay & rooms', paneStaff);
+    mkTab('🛡️ Background checks', paneChecks);
+    mkTab('🕓 Clock in / out', paneClock);
+    mkTab('🗄️ Data & retention', paneData);
     root.appendChild(tabBar);
     root.appendChild(paneDetails);
     root.appendChild(paneFiles);
+    root.appendChild(paneStaff);
+    root.appendChild(paneChecks);
+    root.appendChild(paneClock);
+    root.appendChild(paneData);
     _detailsTab.style.color = '#1F6080'; _detailsTab.style.borderBottomColor = '#1F6080';
     // Existing sections all append to `body` → point it at the Details pane so the
     // rest of this function is unchanged; only the Files card targets paneFiles.
@@ -1739,7 +1952,7 @@
           'Everything held about this person, why it is kept, and when it is destroyed.'));
         var mapBody = Dom.el('div', { style: 'font-size:13px;color:#64748B;' }, 'Loading…');
         card.appendChild(mapBody);
-        body.appendChild(card);
+        paneData.appendChild(card);
 
         Api.get('/admin/users/' + uid + '/data-map').then(function (d) {
           Dom.clear(mapBody);
@@ -1788,7 +2001,7 @@
         var bc = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
         bc.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, '🛡️ Background checks'));
         var bcBody = Dom.el('div', { style: 'font-size:13px;color:#64748B;' }, 'Loading…');
-        bc.appendChild(bcBody); body.appendChild(bc);
+        bc.appendChild(bcBody); paneChecks.appendChild(bc);
         Api.get('/admin/background-checks').then(function (d) {
           var rows = (d.data || d || []).filter(function (r) { return String(r.user_id) === String(user.id); });
           if (!rows.length) { bcBody.textContent = 'No background checks on file.'; return; }
@@ -1877,7 +2090,7 @@
       row.appendChild(rateWrap); row.appendChild(typeWrap); row.appendChild(save); row.appendChild(msg);
       sec.appendChild(row);
       sec.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:8px;' }, 'Set for educators, directors, admins or contractors. Hourly (× hours worked), per-visit (× visits logged), or salary/flat (fixed amount each pay period). Drives their payslips.'));
-      body.appendChild(sec);
+      paneStaff.appendChild(sec);
     })();
 
 
@@ -1895,7 +2108,7 @@
       const roomBody = Dom.el('div', {});
       roomBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' }, 'Loading…'));
       roomSection.appendChild(roomBody);
-      body.appendChild(roomSection);
+      paneStaff.appendChild(roomSection);
 
       Api.get('/admin/users/' + user.id + '/rooms').then(function (d) {
         Dom.clear(roomBody);
@@ -1968,7 +2181,8 @@
       const clockBody = Dom.el('div', {});
       clockBody.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13px;' }, 'Loading…'));
       clockSection.appendChild(clockBody);
-      body.appendChild(clockSection);
+      paneClock.appendChild(clockSection);
+
 
       // Named so the editor below can re-run it after a correction; it was an
       // anonymous one-shot call.
@@ -2229,11 +2443,30 @@
     const danger = Dom.el('div', { style: 'margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ink-100, #E5E7EB);' });
     danger.appendChild(Dom.el('div', { style: 'font-size: 11px; font-weight: 800; color: var(--ink-500); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;' }, 'Account actions'));
 
-    const actionRow = Dom.el('div', { style: 'display: flex; gap: 8px; flex-wrap: wrap;' });
+    const actionRow = Dom.el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;' });
+    /* Every button in this row was styled by hand — different padding, border widths
+       and font sizes — so they sat at different heights and never lined up. One pass
+       over the row's own children normalises them, and keeps doing so for any button
+       added here later. Colours are left alone: only the box is standardised. */
+    actionRow.ktNormalise = function () {
+      Array.prototype.forEach.call(actionRow.querySelectorAll('button'), function (b) {
+        b.style.padding = '8px 14px';
+        b.style.borderRadius = '8px';
+        b.style.borderWidth = '1.5px';
+        b.style.borderStyle = 'solid';
+        b.style.fontSize = '13px';
+        b.style.fontWeight = '700';
+        b.style.lineHeight = '1.2';
+        b.style.minHeight = '38px';
+        b.style.display = 'inline-flex';
+        b.style.alignItems = 'center';
+        b.style.justifyContent = 'center';
+        b.style.whiteSpace = 'nowrap';
+        b.style.cursor = 'pointer';
+      });
+    };
 
-    const resetBtn = Dom.el('button', {
-      style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
-    }, '🔑 Reset password');
+    const resetBtn = Dom.el('button', { class: 'kt-btn kt-btn-secondary' }, '🔑 Reset password');
     resetBtn.addEventListener('click', async () => {
       if (!await KT.confirm('Reset ' + user.name + "'s password? A new temporary password will be emailed to " + user.email + '.')) return;
       resetBtn.disabled = true; resetBtn.textContent = 'Resetting...';
@@ -2252,10 +2485,72 @@
     });
     actionRow.appendChild(resetBtn);
 
+    /* Hand over credentials directly when email cannot be relied on. email_sent only
+       means the mailer accepted the message — suppression happens later in the
+       listener, so a "sent" invite can still never arrive. This path does not depend
+       on delivery at all. */
+    const linkBtn = Dom.el('button', { class: 'kt-btn kt-btn-secondary', 'data-kt-iconized': '1' }, 'Manual sign-in link');
+    linkBtn.addEventListener('click', async () => {
+      if (!await KT.confirm('Generate a temporary password for ' + user.name + '? Their current password will stop working.')) { return; }
+      linkBtn.disabled = true;
+      const restore = 'Manual sign-in link';
+      linkBtn.textContent = 'Generating...';
+      try {
+        const r = await Api.post('/admin/users/' + user.id + '/resend-welcome', {});
+        const portal = 'https://app.kiddietrac.com';
+        const who = user.username ? (user.email + '  (username: ' + user.username + ')') : user.email;
+        const pw = r.temp_password || '(not returned)';
+        // Local — this file has no shared escaper, and both values below are
+        // interpolated into innerHTML.
+        const esc = function (v) {
+          return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        };
+        const box = Dom.el('div', { style:
+          'margin-top:12px;padding:14px 16px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;' });
+        box.innerHTML =
+            '<div style="font-size:11px;font-weight:800;color:#0C4A6E;letter-spacing:.06em;margin-bottom:8px;">SIGN-IN DETAILS</div>'
+          + '<div style="font-size:13px;color:#0F172A;line-height:1.8;">'
+          + '<div><span style="color:#64748B;">Portal</span><br><strong>' + portal + '</strong></div>'
+          + '<div style="margin-top:8px;"><span style="color:#64748B;">Sign in as</span><br><strong>' + esc(who) + '</strong></div>'
+          + '<div style="margin-top:8px;"><span style="color:#64748B;">Temporary password</span><br>'
+          + '<strong style="font-family:ui-monospace,Menlo,monospace;font-size:15px;letter-spacing:.5px;">'
+          + esc(pw) + '</strong></div></div>'
+          + '<div style="font-size:12px;color:#475569;margin-top:10px;">'
+          + (r.email_sent
+              ? 'The welcome email was accepted for delivery. Check the email log to confirm it was not suppressed.'
+              : 'The email did not send. Share these details directly.')
+          + '</div>';
+        const copy = Dom.el('button', { class: 'kt-btn kt-btn-secondary kt-btn-sm',
+          'data-kt-iconized': '1', style: 'margin-top:10px;' }, 'Copy details');
+        copy.onclick = function () {
+          const text = 'KiddieTrac sign-in' + String.fromCharCode(10) + portal
+            + String.fromCharCode(10) + 'Sign in as: ' + who
+            + String.fromCharCode(10) + 'Temporary password: ' + pw;
+          try {
+            navigator.clipboard.writeText(text);
+            copy.textContent = 'Copied';
+            setTimeout(function () { copy.textContent = 'Copy details'; }, 2000);
+          } catch (e) { copy.textContent = 'Select and copy manually'; }
+        };
+        box.appendChild(copy);
+        const prev = actionRow.parentElement.querySelector('[data-kt-signin-box]');
+        if (prev) { prev.remove(); }
+        box.setAttribute('data-kt-signin-box', '1');
+        actionRow.parentElement.appendChild(box);
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = 'Could not generate a link: ' + ((e && e.message) || 'error');
+      } finally {
+        linkBtn.disabled = false;
+        linkBtn.textContent = restore;
+      }
+    });
+    actionRow.appendChild(linkBtn);
+
     // v22p3.5: reopen onboarding wizard
-    const reopenBtn = Dom.el('button', {
-      style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
-    }, '🪄 Reopen onboarding');
+    const reopenBtn = Dom.el('button', { class: 'kt-btn kt-btn-secondary' }, '🪄 Reopen onboarding');
     reopenBtn.addEventListener('click', async () => {
       if (!await KT.confirm('Reopen the onboarding wizard for ' + user.name + '? They will be prompted to complete their profile on their next sign-in.')) return;
       reopenBtn.disabled = true; reopenBtn.textContent = 'Reopening...';
@@ -2272,9 +2567,7 @@
     });
     actionRow.appendChild(reopenBtn);
 
-    const resendBtn = Dom.el('button', {
-      style: 'padding: 8px 14px; background: white; color: #1F6080; border: 1.5px solid #1F6080; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;',
-    }, '✉ Resend welcome');
+    const resendBtn = Dom.el('button', { class: 'kt-btn kt-btn-secondary' }, '✉ Resend welcome');
     resendBtn.addEventListener('click', async () => {
       if (!await KT.confirm('Resend the welcome invite to ' + user.email + '? A new temporary password will be generated.')) return;
       resendBtn.disabled = true; resendBtn.textContent = 'Sending...';
@@ -2293,9 +2586,25 @@
     });
     actionRow.appendChild(resendBtn);
 
-    const deleteBtn = Dom.el('button', {
-      style: 'padding: 8px 14px; background: white; color: #B91C1C; border: 1.5px solid #FCA5A5; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-left: auto;',
-    }, '🗑 Delete user');
+    /* Off-boarding proper, sitting before the blunt Delete. Closing the account is
+       only part of somebody leaving — the rooms have to go to a person, and the shift
+       they never clocked out of has to be closed. (Anthony, 2026-08-26)
+
+       STAFF ONLY. A parent is not off-boarded, they are DE-ENROLLED with their family:
+       the unit that leaves is the family, and that flow handles the children, the
+       balance and the goodbye email. Offering "off-board" on a guardian would be a
+       second, wrong route out of the same situation. */
+    const STAFF_ROLES_FOR_OFFBOARD = ['educator', 'centre_director', 'agency_admin',
+                                      'home_visitor', 'auditor', 'sales_rep', 'platform_admin'];
+    const _userRoles = user.roles || (user.role ? [user.role] : []);
+    const _isStaff = _userRoles.some(function (r) { return STAFF_ROLES_FOR_OFFBOARD.indexOf(r) !== -1; });
+    if (_isStaff) {
+      const offboardBtn = Dom.el('button', { class: 'kt-btn' }, '👋 Off-board…');
+      offboardBtn.addEventListener('click', function () { openStaffOffboard(user, content); });
+      actionRow.appendChild(offboardBtn);
+    }
+
+    const deleteBtn = Dom.el('button', { class: 'kt-btn kt-btn-danger' }, '🗑 Delete user');
     deleteBtn.addEventListener('click', async () => {
       const c1 = await KT.confirm('Delete ' + user.name + ' (' + user.email + ')?\n\nThey will be unable to sign in. Their family/child records stay intact for audit.');
       if (!c1) return;
@@ -2313,6 +2622,43 @@
       }
     });
     actionRow.appendChild(deleteBtn);
+    try { actionRow.ktNormalise(); } catch (e) {}
+
+    /* One box for every secondary button in this record. Measured live, they ran
+       27/31/35/38/45px tall with fonts from 11 to 15px — each row consistent with
+       itself and with nothing else, which is what looked out of place. The primary
+       CTA is skipped on purpose: it should stand out. Runs after the record is
+       built, and again shortly after, so buttons added by a late fetch are caught. */
+    (function () {
+      function tidy() {
+        var root = document.querySelector('.kt-modal, [role="dialog"]');
+        if (!root) { return; }
+        Array.prototype.forEach.call(root.querySelectorAll('button'), function (b) {
+          var label = (b.textContent || '').trim();
+          if (/save changes/i.test(label)) { return; }        // the primary CTA
+          if (!label || label.length > 34) { return; }         // icon-only / prose
+          if (b.closest('.kt-urec-tabs, [data-kt-tabbar]')) {
+            // Belt and braces: strip anything a previous pass may have set on a tab.
+            b.style.minHeight = ''; b.style.display = ''; b.style.alignItems = '';
+            b.style.justifyContent = ''; b.style.borderRadius = '';
+            return;
+          }
+          var r = b.getBoundingClientRect();
+          if (!r.height) { return; }                           // hidden pane
+          if (b.classList.contains('kt-btn')) { return; }   // house class owns its own box
+          b.style.minHeight = '36px';
+          b.style.padding = '8px 14px';
+          b.style.fontSize = '13px';
+          b.style.lineHeight = '1.2';
+          b.style.borderRadius = '8px';
+          b.style.display = 'inline-flex';
+          b.style.alignItems = 'center';
+          b.style.justifyContent = 'center';
+        });
+      }
+      try { tidy(); } catch (e) {}
+      [400, 1200].forEach(function (d) { setTimeout(function () { try { tidy(); } catch (e) {} }, d); });
+    })();
 
     danger.appendChild(actionRow);
     body.appendChild(danger);
@@ -2348,6 +2694,402 @@
   // ════════════════════════════════════════════════════════════════
   //   FAMILIES TAB
   // ════════════════════════════════════════════════════════════════
+  /**
+   * ARCHIVED \u2014 everyone who has left, and the retention clock on each record.
+   *
+   * De-enrolling is deliberately not a delete: licensed child care records have to
+   * outlive the family that generated them. Until now nothing in the portal could see
+   * one, which meant "it's gone" and "it's retained but invisible" looked identical
+   * from the outside \u2014 the worst possible answer to a parent asking whether their
+   * child's file still exists. (2026-08-25)
+   */
+  /* One fetch, reused by every section's Archived view. */
+  var _archCache = null;
+  async function archivedData(force) {
+    if (!force && _archCache) return _archCache;
+    _archCache = await Api.get('/admin/archived');
+    return _archCache;
+  }
+
+  /**
+   * The Active / Archived switch that every section carries.
+   *
+   * Anthony (2026-08-25): archived records belong INSIDE the section they left, not in
+   * one global graveyard screen \u2014 somebody looking for a departed family looks in
+   * Families. The count is filled in after paint so a section never waits on it.
+   */
+  function archiveSwitch(content, key, renderActive, showing) {
+    var wrap = Dom.el('div', { style: 'display:inline-flex;gap:0;border:1px solid var(--ink-200,#E5E7EB);border-radius:9px;overflow:hidden;margin-bottom:14px;' });
+    function seg(label, on, go) {
+      var b = Dom.el('button', {
+        type: 'button',
+        style: 'padding:7px 14px;border:0;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;'
+          + (on ? 'background:var(--brand-blue,#1F6080);color:#fff;' : 'background:#fff;color:var(--ink-600,#475569);'),
+      }, label);
+      if (!on) b.addEventListener('click', go);
+      return b;
+    }
+    wrap.appendChild(seg('Active', showing !== 'archived', function () { renderActive(content); }));
+    var archBtn = seg('Archived', showing === 'archived', function () { renderArchivedInto(content, key, renderActive); });
+    wrap.appendChild(archBtn);
+    // Fill the count in afterwards; the section must not block on it.
+    archivedData().then(function (d) {
+      var n = (d.counts || {})[key];
+      if (typeof n === 'number') archBtn.textContent = 'Archived (' + n + ')';
+    }).catch(function () { /* no count is fine; the tab still works */ });
+    return wrap;
+  }
+
+  async function renderArchivedInto(content, key, renderActive) {
+    Dom.clear(content);
+    content.appendChild(archiveSwitch(content, key, renderActive, 'archived'));
+    var body = Dom.el('div', {});
+    content.appendChild(body);
+    body.appendChild(Dom.el('div', { style: 'padding:24px;color:var(--ink-500);font-size:14px;' }, 'Loading\u2026'));
+
+    var d;
+    try { d = await archivedData(true); }
+    catch (e) {
+      Dom.clear(body);
+      body.appendChild(Dom.el('div', { style: 'padding:20px;color:#B91C1C;font-size:14px;' },
+        'Could not load archived records: ' + (e.message || 'error')));
+      return;
+    }
+
+    Dom.clear(body);
+    var ret = d.retention || {};
+    var counts = d.counts || {};
+
+    // The retention promise, stated in the agency's own numbers.
+    var banner = Dom.el('div', {
+      style: 'background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:13.5px;color:#075985;line-height:1.6;',
+    });
+    banner.appendChild(Dom.el('div', { style: 'font-weight:800;margin-bottom:4px;' }, '\ud83d\udd12 Records are kept, not deleted'));
+    banner.appendChild(Dom.el('div', {},
+      'Child and family records are retained for ' + (ret.child_record_years || 7) + ' years after a child leaves; '
+      + 'staff and document records for ' + (ret.document_years || 7) + ' years. '
+      + (ret.auto_enforce
+          ? ('Automatic clean-up is ON (' + (ret.enforce_mode || 'anonymise') + ') once a record passes its date.')
+          : 'Automatic clean-up is OFF, so nothing is removed until you turn it on in Settings \u2192 Data retention.')));
+    body.appendChild(banner);
+
+    var GROUPS = [
+      { key: 'families', label: '\ud83d\udc6a Families', cols: ['Family', 'Provider', 'Children', 'Left', 'Kept until'] },
+      { key: 'children', label: '\ud83d\udc76 Children', cols: ['Child', 'Family', 'Provider', 'State', 'Left', 'Kept until'] },
+      { key: 'staff', label: '\ud83d\udc64 Staff & educators', cols: ['Name', 'Role', 'State', 'Left', 'Kept until'] },
+      { key: 'centres', label: '\ud83c\udfeb Providers', cols: ['Provider', 'Archived', 'Kept until'] },
+    ];
+
+    // This section shows ITS OWN group only — no cross-section chips.
+    var active = GROUPS.find(function (g) { return g.key === key; }) || GROUPS[0];
+    var pane = Dom.el('div', {});
+
+    /* Full date INCLUDING the year, plus the time when there is one (Anthony,
+       2026-08-25). Two different kinds of value arrive here and must not be treated
+       the same:
+         - deleted_at is a TIMESTAMP -> an instant, rendered in the AGENCY timezone.
+         - withdrawn_at / retained_until are DATE-ONLY -> a calendar day. Every form
+           of new Date('2026-08-11') parses as UTC midnight, so converting it lands on
+           the day before in any western zone. KT.dayLabel formats from the string
+           parts, so nothing shifts. */
+    function _archStamp(v) {
+      if (!v) return '—';
+      var str = String(v).trim();
+      var dateOnly = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(str);
+      try {
+        if (dateOnly) {
+          return (window.KT && KT.dayLabel) ? KT.dayLabel(str) : str;
+        }
+        if (window.KT && KT.fmtDate && KT.fmtTime) {
+          var d = KT.fmtDate(str), t = KT.fmtTime(str);
+          return t ? (d + ', ' + t) : d;
+        }
+      } catch (e) {}
+      return str.replace('T', ' ').slice(0, 16);
+    }
+    var fmtDate = _archStamp;
+
+    function cell(text, extra) {
+      return Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:var(--ink-700,#334155);' + (extra || '') }, text);
+    }
+
+    function paint() {
+      Dom.clear(pane);
+      var rows = d[active.key] || [];
+      if (!rows.length) {
+        pane.appendChild(Dom.el('div', {
+          style: 'padding:26px;text-align:center;color:var(--ink-500,#64748B);font-size:14px;background:#fff;border:1px solid #EEF0F3;border-radius:12px;',
+        }, 'Nobody in this group has left.'));
+        return;
+      }
+
+      var table = Dom.el('table', { style: 'width:100%;border-collapse:collapse;background:#fff;border:1px solid #EEF0F3;border-radius:12px;overflow:hidden;' });
+      var thead = Dom.el('thead');
+      var hr = Dom.el('tr', { style: 'background:var(--ink-50,#F8FAFC);' });
+      active.cols.forEach(function (c) {
+        hr.appendChild(Dom.el('th', {
+          style: 'text-align:left;padding:11px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;',
+        }, c));
+      });
+      thead.appendChild(hr); table.appendChild(thead);
+
+      /* An archived record you cannot open is barely a record. Admins and directors
+         keep full read access for the whole retention period. (Anthony, 2026-08-25) */
+      function archivedOpen(g, r) {
+        if (g === 'families') return function () { showFamilyDetail(r.id, true); };
+        if (g === 'children') return function () { window.location.hash = 'child-detail?id=' + r.id + '&archived=1'; };
+        if (g === 'staff') return function () {
+          if (typeof showUserModal === 'function') showUserModal({ id: r.id, first_name: (r.name || '').split(' ')[0], last_name: (r.name || '').split(' ').slice(1).join(' '), email: r.email, status: r.state === 'removed' ? 'deactivated' : 'deactivated' }, null, document.getElementById('appMain'));
+          else window.location.hash = 'admin-users';
+        };
+        return null;
+      }
+
+      var tb = Dom.el('tbody');
+      rows.forEach(function (r) {
+        var tr = Dom.el('tr', { style: 'border-top:1px solid #E5E7EB;' });
+        var _go = archivedOpen(active.key, r);
+        if (_go) {
+          tr.style.cursor = 'pointer';
+          tr.title = 'Open this archived record';
+          tr.addEventListener('click', _go);
+        }
+        if (active.key === 'families') {
+          tr.appendChild(cell(r.name || '\u2014', 'font-weight:600;'));
+          tr.appendChild(cell(r.centre_name || '\u2014'));
+          tr.appendChild(cell(String(r.children == null ? '\u2014' : r.children)));
+        } else if (active.key === 'children') {
+          tr.appendChild(cell(r.name || '\u2014', 'font-weight:600;'));
+          tr.appendChild(cell(r.family_name || '\u2014'));
+          tr.appendChild(cell(r.centre_name || '\u2014'));
+          tr.appendChild(cell(r.state === 'removed' ? 'Removed' : 'Withdrawn',
+            r.state === 'removed' ? 'color:#B91C1C;font-weight:600;' : ''));
+        } else if (active.key === 'staff') {
+          var nm = Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' });
+          nm.appendChild(Dom.el('div', { style: 'font-weight:600;color:var(--ink-900,#0F172A);' }, r.name || '\u2014'));
+          if (r.email) nm.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#94A3B8;' }, r.email));
+          tr.appendChild(nm);
+          tr.appendChild(cell((r.role || '').replace(/_/g, ' ')));
+          tr.appendChild(cell(r.state === 'removed' ? 'Removed' : 'Closed',
+            r.state === 'removed' ? 'color:#B91C1C;font-weight:600;' : ''));
+        } else {
+          tr.appendChild(cell(r.name || '\u2014', 'font-weight:600;'));
+        }
+
+        // "Left" — flagged when the date is inferred rather than recorded.
+        var left = Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:var(--ink-700,#334155);white-space:nowrap;' });
+        left.appendChild(Dom.el('span', {}, fmtDate(r.departed_at)));
+        if (r.departed_at_is_estimate) {
+          left.appendChild(Dom.el('span', {
+            title: 'No exact closure date was recorded, so this is the last time the account changed.',
+            style: 'margin-left:6px;font-size:10.5px;font-weight:700;color:#B45309;background:#FEF3C7;border-radius:5px;padding:1px 5px;',
+          }, 'EST.'));
+        }
+        tr.appendChild(left);
+
+        tr.appendChild(cell(fmtDate(r.retained_until), 'white-space:nowrap;font-weight:600;'));
+        tb.appendChild(tr);
+      });
+      table.appendChild(tb);
+
+      var scroll = Dom.el('div', { style: 'overflow-x:auto;' });
+      scroll.appendChild(table);
+      pane.appendChild(scroll);
+      pane.appendChild(Dom.el('div', { style: 'margin-top:10px;font-size:12px;color:var(--ink-500,#64748B);' },
+        rows.length + ' record' + (rows.length === 1 ? '' : 's')));
+    }
+
+    body.appendChild(pane);
+    paint();
+  }
+
+  // Shared with the other section screens (children live in their own file).
+  KT.Archive = { renderInto: renderArchivedInto, switchEl: archiveSwitch, data: archivedData };
+
+  /**
+   * Off-board a member of staff: hand over their rooms, tidy what they left open, then
+   * close the account.
+   *
+   * Deliberately not one click. `DELETE /admin/users/{id}` already closed accounts
+   * cleanly, but it left the rooms with nobody on them and any forgotten clock-in still
+   * open — measured: 2 of 7 already-closed staff still carried one, quietly distorting
+   * hours and ratio history. Preview first, then confirm.
+   */
+  async function openStaffOffboard(user, content) {
+    const body = Dom.el('div', {});
+    body.appendChild(Dom.el('div', { style: 'padding:14px;color:var(--ink-500);font-size:13px;' }, 'Loading the plan…'));
+
+    let plan = null;
+    const reassign = Dom.el('select', { style: 'padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;font-family:inherit;min-width:220px;' });
+    const closePunches = Dom.el('input', { type: 'checkbox', style: 'width:17px;height:17px;' });
+    const moveTasks = Dom.el('input', { type: 'checkbox', style: 'width:17px;height:17px;' });
+    const cancelShifts = Dom.el('input', { type: 'checkbox', style: 'width:17px;height:17px;' });
+    const sendNotice = Dom.el('input', { type: 'checkbox', style: 'width:17px;height:17px;' });
+    const lastDay = Dom.el('input', { type: 'date', style: 'padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;font-family:inherit;' });
+    const status = Dom.el('div', { style: 'margin-top:12px;font-size:13px;min-height:20px;line-height:1.5;' });
+
+    async function run(confirm) {
+      status.style.color = 'var(--ink-600)';
+      status.textContent = confirm ? 'Closing…' : 'Checking…';
+      try {
+        const res = await Api.post('/admin/users/' + user.id + '/offboard', {
+          last_day: lastDay.value || undefined,
+          reassign_to: reassign.value ? Number(reassign.value) : undefined,
+          close_punches: closePunches.checked,
+          move_tasks: moveTasks.checked,
+          cancel_shifts: cancelShifts.checked,
+          send_notice: sendNotice.checked,
+          confirm: !!confirm,
+        });
+        if (!confirm) {
+          status.style.color = 'var(--ink-700)';
+          status.textContent = res.will_reassign_rooms + ' room(s) handed over, '
+            + res.will_close_punches + ' open shift(s) closed, '
+            + res.will_move_tasks + ' task(s) moved, '
+            + res.will_cancel_shifts + ' upcoming shift(s) dealt with'
+            + (res.will_send_notice ? ', goodbye email sent' : '')
+            + (res.unpaid_hours ? ', ' + res.unpaid_hours + 'h unpaid' : '')
+            + (res.rooms_left_uncovered ? '. ⚠ ' + res.rooms_left_uncovered + ' room(s) left with nobody' : '')
+            + '. Nothing has changed yet.';
+          return false;
+        }
+        const errs = (res.report && res.report.errors) || [];
+        if (window.KT && KT.Dom && KT.Dom.toast) {
+          KT.Dom.toast(errs.length ? (errs.length + ' problem(s)') : (user.name + ' off-boarded'),
+            errs.length ? 'error' : 'success');
+        }
+        if (errs.length) {
+          status.style.color = '#B91C1C';
+          status.textContent = errs.map(function (e) { return e.stage + ': ' + e.message; }).join('; ');
+          return false;
+        }
+        await renderUsersTab(content);
+        return true;
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = (e && e.message) || 'Could not complete this.';
+        return false;
+      }
+    }
+
+    Shell.Modal.open({
+      title: 'Off-board ' + (user.name || 'this person'),
+      body: body,
+      large: true,
+      actions: [
+        { label: 'Preview', onClick: async () => { await run(false); return false; } },
+        {
+          label: 'Off-board',
+          primary: true,
+          onClick: async () => {
+            const ok = await KT.confirm({
+              title: 'Off-board ' + (user.name || 'this person') + '?',
+              description: 'Their sign-in ends immediately and their rooms are released. '
+                + 'The record is kept — you will find them under Show deactivated.',
+              tone: 'danger',
+              okLabel: 'Off-board',
+            });
+            if (!ok) return false;
+            const done = await run(true);
+            if (!done) return false;
+          },
+        },
+      ],
+    });
+
+    try {
+      plan = await Api.get('/admin/users/' + user.id + '/offboard-plan');
+    } catch (e) {
+      Dom.clear(body);
+      body.appendChild(Dom.el('div', { style: 'padding:14px;color:#DC2626;font-size:13px;' },
+        'Could not load the plan: ' + (e.message || 'error')));
+      return;
+    }
+
+    Dom.clear(body);
+    const sum = plan.summary || {};
+
+    const head = Dom.el('div', {
+      style: 'background:var(--ink-50);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13.5px;color:var(--ink-700);line-height:1.6;',
+    });
+    head.appendChild(Dom.el('div', {}, (plan.user && plan.user.email) || ''));
+    head.appendChild(Dom.el('div', {},
+      sum.rooms + ' room(s) · ' + sum.open_punches + ' unclosed shift(s) · '
+      + sum.open_tasks + ' open task(s) · ' + (sum.future_shifts || 0) + ' upcoming shift(s) · '
+      + sum.documents + ' document(s) on file'));
+    if (sum.unpaid_hours) {
+      head.appendChild(Dom.el('div', { style: 'color:#075985;font-weight:700;margin-top:4px;' },
+        sum.unpaid_hours + ' hours worked since their last payslip'
+        + (sum.unpaid_since ? ' (' + String(sum.unpaid_since).slice(0, 10) + ')' : '')));
+    }
+    if (sum.rooms_they_alone_cover) {
+      head.appendChild(Dom.el('div', { style: 'color:#B45309;font-weight:700;margin-top:4px;' },
+        '⚠ ' + sum.rooms_they_alone_cover + ' room(s) have no other educator — hand them over.'));
+    }
+    body.appendChild(head);
+
+    (plan.rooms || []).forEach(function (r) {
+      body.appendChild(Dom.el('div', {
+        style: 'display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--ink-100);font-size:13px;',
+      },
+        Dom.el('span', {}, r.name + (r.centre_name ? ' · ' + r.centre_name : '')),
+        Dom.el('span', { style: r.other_educators ? 'color:var(--ink-500);' : 'color:#B45309;font-weight:700;' },
+          r.other_educators ? (r.other_educators + ' other educator(s)') : 'sole cover')));
+    });
+
+    const opts = Dom.el('div', { style: 'margin-top:16px;display:flex;flex-direction:column;gap:10px;' });
+
+    reassign.appendChild(Dom.el('option', { value: '' }, 'Nobody — just release the rooms'));
+    (plan.candidates || []).forEach(function (c) {
+      reassign.appendChild(Dom.el('option', { value: String(c.id) }, c.name + ' (' + c.role + ')'));
+    });
+    const rRow = Dom.el('label', { style: 'display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink-700);flex-wrap:wrap;' });
+    rRow.appendChild(Dom.el('span', { style: 'font-weight:700;' }, 'Hand their rooms to'));
+    rRow.appendChild(reassign);
+    opts.appendChild(rRow);
+
+    const dRow = Dom.el('label', { style: 'display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink-700);' });
+    dRow.appendChild(Dom.el('span', { style: 'font-weight:700;' }, 'Last working day'));
+    dRow.appendChild(lastDay);
+    opts.appendChild(dRow);
+
+    if (sum.open_punches) {
+      const pRow = Dom.el('label', { style: 'display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--ink-700);cursor:pointer;' });
+      closePunches.checked = true;
+      pRow.appendChild(closePunches);
+      const pt = Dom.el('span', {});
+      pt.appendChild(Dom.el('span', { style: 'font-weight:600;' }, 'Close their ' + sum.open_punches + ' unclosed shift(s)'));
+      pt.appendChild(Dom.el('span', { style: 'display:block;font-size:12px;color:var(--ink-500);' },
+        'Closed 8 hours after the clock-in, not now — stamping an old shift with today’s time would invent hours nobody worked.'));
+      pRow.appendChild(pt);
+      opts.appendChild(pRow);
+    }
+
+    const mkOpt = function (cb, label, hint, on) {
+      cb.checked = !!on;
+      const l = Dom.el('label', { style: 'display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--ink-700);cursor:pointer;' });
+      l.appendChild(cb);
+      const t = Dom.el('span', {});
+      t.appendChild(Dom.el('span', { style: 'font-weight:600;' }, label));
+      t.appendChild(Dom.el('span', { style: 'display:block;font-size:12px;color:var(--ink-500);' }, hint));
+      l.appendChild(t);
+      return l;
+    };
+    if (sum.open_tasks) {
+      opts.appendChild(mkOpt(moveTasks, 'Move their ' + sum.open_tasks + ' open task(s)',
+        'To whoever takes their rooms — or back to the pool, unassigned, if you pick nobody.', true));
+    }
+    if (sum.future_shifts) {
+      opts.appendChild(mkOpt(cancelShifts, 'Deal with their ' + sum.future_shifts + ' upcoming shift(s)',
+        'Reassigned if you picked someone; otherwise cancelled — never silently deleted.', true));
+    }
+    opts.appendChild(mkOpt(sendNotice, 'Email them a goodbye',
+      'Their last day, what happens to their records, and any hours not yet on a payslip. Sent before access ends.', true));
+
+    body.appendChild(opts);
+    body.appendChild(status);
+  }
+
   async function renderFamiliesTab(content) {
     Dom.clear(content);
     content.appendChild(loading('Loading families...'));
@@ -2365,17 +3107,67 @@
     }
 
     Dom.clear(content);
+    content.appendChild(archiveSwitch(content, 'families', renderFamiliesTab, 'active'));
+
+    /* Status is a different question from Active|Archived — that pair asks whether the
+       RECORD is live or history, this asks whether the family is currently in care. A
+       suspended family used to sit in the list indistinguishable from an enrolled one
+       except for a small pill, under a line that read "All enrolled families".
+       Defaults to Enrolled; remembered for the session so the list does not reset itself
+       every time you come back from a family. (2026-08-27) */
+    var FAM_STATUS_KEY = 'kt_fam_status';
+    var famStatus = 'enrolled';
+    try {
+      var _fs = sessionStorage.getItem(FAM_STATUS_KEY);
+      if (_fs === '' || _fs === 'enrolled' || _fs === 'suspended') { famStatus = _fs; }
+    } catch (e) {}
+
+    var _allFamilies = data.families || [];
+    data = Object.assign({}, data, {
+      families: _allFamilies.filter(function (f) {
+        if (famStatus === 'enrolled') { return !f.suspended; }
+        if (famStatus === 'suspended') { return !!f.suspended; }
+        return true;
+      }),
+    });
+    var _suspendedCount = _allFamilies.filter(function (f) { return !!f.suspended; }).length;
 
     // v22p12.1: tab hero
     content.appendChild(tabHero(
       '👪 Families',
-      data.families.length + ' famil' + (data.families.length === 1 ? 'y' : 'ies') + ' across your centres. Click any card to see children, guardians, and balances.',
+      data.families.length + ' famil' + (data.families.length === 1 ? 'y' : 'ies')
+        + (famStatus === 'enrolled' ? ' enrolled' : (famStatus === 'suspended' ? ' suspended' : ''))
+        + ' across your centres. Click any card to see children, guardians, and balances.',
       'familyGroup'
     ));
 
     // v22p11: action bar with count on the left + Add button on the right
     const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;' });
-    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, 'All enrolled families'));
+
+    var famStatusSel = Dom.el('select', {
+      style: 'padding:6px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;'
+           + 'background:#fff;flex:0 0 auto;',
+      title: 'Filter by status',
+    });
+    [
+      ['enrolled',  'Enrolled'],
+      ['suspended', 'Suspended' + (_suspendedCount ? ' (' + _suspendedCount + ')' : '')],
+      ['',          'All statuses'],
+    ].forEach(function (o) {
+      var opt = Dom.el('option', { value: o[0] }, o[1]);
+      if (famStatus === o[0]) { opt.selected = true; }
+      famStatusSel.appendChild(opt);
+    });
+    famStatusSel.addEventListener('change', function () {
+      try { sessionStorage.setItem(FAM_STATUS_KEY, famStatusSel.value); } catch (e) {}
+      renderFamiliesTab(content);
+    });
+    bar.appendChild(famStatusSel);
+
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' },
+      famStatus === 'enrolled' ? 'Families currently in care'
+        : (famStatus === 'suspended' ? 'Suspended — access paused, enrolment kept'
+                                     : 'Enrolled and suspended families')));
 
     // v22p45: CSV download
     const famCsvBtn = Dom.el('button', { class: 'kt-act-icon kt-act-ok kt-icon-tip kt-legacy-export', title: 'Download CSV', 'data-kttip': 'Download CSV', 'aria-label': 'Download CSV' }, '📄');
@@ -2401,10 +3193,18 @@
     } catch (e) {}
 
     if (data.families.length === 0) {
-      content.appendChild(emptyMsg(
-        'Click + Add family to register the first one. You can attach children, set the billing split, and invite guardians from the card afterward.',
-        { title: 'No families enrolled yet', illustration: 'emptyFamilies' }
-      ));
+      /* Distinguish "you have no families" from "none match this filter" — telling an
+         agency with 33 families to add their first one is nonsense, and hides the fact
+         that a filter is on. */
+      content.appendChild(_allFamilies.length
+        ? emptyMsg('Nothing matches the ' + (famStatus === 'suspended' ? 'Suspended' : 'Enrolled')
+            + ' filter. Choose All statuses to see the other '
+            + _allFamilies.length + '.',
+            { title: 'No families with this status', illustration: 'emptyFamilies' })
+        : emptyMsg(
+            'Click + Add family to register the first one. You can attach children, set the billing split, and invite guardians from the card afterward.',
+            { title: 'No families enrolled yet', illustration: 'emptyFamilies' }
+          ));
       return;
     }
 
@@ -2485,6 +3285,492 @@
   //  • Suspend (temporary): blocks the family's guardian logins (user.status).
   //  • Reactivate: restores them (shown instead of Suspend when f.suspended).
   //  • Inactivate (permanent): archives the family record (soft-delete).
+  /**
+   * Move a whole family to another provider.
+   *
+   * The destination list comes from the server with live occupancy, so a provider who is
+   * full is shown as full and cannot be chosen — rather than letting the admin pick one
+   * and meet a 422 after they have already told the family. Their current provider is
+   * listed too, greyed, so the starting point is never ambiguous.
+   */
+  async function openFamilyTransfer(f, content) {
+    const body = Dom.el('div', {});
+    body.appendChild(Dom.el('p', { style: 'margin:0 0 14px;color:var(--ink-600);font-size:14px;line-height:1.5;' },
+      'Everyone in ' + (f.family_name || 'this family') + ' moves together, and their records move with them. '
+      + 'Their parents are emailed and the educators at both ends are told.'));
+
+    const listWrap = Dom.el('div', { style: 'max-height:270px;overflow-y:auto;border:1px solid var(--ink-200);border-radius:10px;padding:6px;margin-bottom:14px;' });
+    listWrap.appendChild(Dom.el('div', { style: 'padding:14px;color:var(--ink-500);font-size:13px;' }, 'Loading providers\u2026'));
+    body.appendChild(listWrap);
+
+    const dateRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:10px;' });
+    dateRow.appendChild(Dom.el('label', { style: 'font-size:13px;font-weight:700;color:var(--ink-600);' }, 'Effective'));
+    const today = new Date();
+    const iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const dateInput = Dom.el('input', { type: 'date', value: iso,
+      style: 'padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;font-family:inherit;' });
+    dateRow.appendChild(dateInput);
+    body.appendChild(dateRow);
+
+    const reason = Dom.el('input', { type: 'text', placeholder: 'Reason (optional) \u2014 included in the letter to parents',
+      style: 'width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;font-family:inherit;' });
+    body.appendChild(reason);
+
+    const status = Dom.el('div', { style: 'margin-top:10px;font-size:13px;min-height:18px;' });
+    body.appendChild(status);
+
+    let chosenRoom = null;
+    Shell.Modal.open({
+      title: 'Move ' + (f.family_name || 'family') + ' to another provider',
+      body: body,
+      actions: [
+        {
+          label: 'Move family',
+          primary: true,
+          onClick: async () => {
+            if (!chosenRoom) { status.style.color = '#B45309'; status.textContent = 'Pick a provider first.'; return false; }
+            status.style.color = 'var(--ink-600)'; status.textContent = 'Moving\u2026';
+            try {
+              const res = await Api.post('/admin/families/' + f.id + '/transfer', {
+                to_room_id: chosenRoom,
+                effective_date: dateInput.value,
+                reason: reason.value.trim() || null,
+              });
+              if (window.KT && KT.Dom && KT.Dom.toast) KT.Dom.toast(res.message || 'Family moved', 'success');
+              await renderFamiliesTab(content);
+            } catch (e) {
+              status.style.color = '#DC2626';
+              status.textContent = e.message || 'Could not move this family.';
+              return false;          // keep the dialog open so the entry is not lost
+            }
+          },
+        },
+      ],
+    });
+
+    // Destinations load after the dialog is up, so it never feels stuck.
+    try {
+      const t = await Api.get('/admin/families/' + f.id + '/transfer-targets');
+      const rows = (t && t.data) || [];
+      Dom.clear(listWrap);
+      if (!rows.length) {
+        listWrap.appendChild(Dom.el('div', { style: 'padding:14px;color:var(--ink-500);font-size:13px;' },
+          t.message || 'No other providers are available in this agency.'));
+        return;
+      }
+      if ((t.siblings || 0) > 0) {
+        body.insertBefore(Dom.el('div', {
+          style: 'background:#EFF6FF;border:1px solid #BFDBFE;border-radius:9px;padding:9px 12px;margin:0 0 12px;font-size:13px;color:#1E40AF;',
+        }, (t.party_size || 1) + ' children move together.'), listWrap);
+      }
+      rows.forEach((d) => {
+        const usable = d.can_take_party && !d.is_current;
+        const row = Dom.el('label', {
+          style: 'display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;font-size:14px;'
+            + (usable ? 'cursor:pointer;' : 'opacity:.55;cursor:not-allowed;'),
+        });
+        const radio = Dom.el('input', { type: 'radio', name: 'kt-xfer-room', style: 'width:16px;height:16px;flex-shrink:0;' });
+        if (!usable) radio.disabled = true;
+        radio.addEventListener('change', () => { chosenRoom = d.room_id; status.textContent = ''; });
+        row.appendChild(radio);
+        const label = Dom.el('div', { style: 'min-width:0;flex:1;' });
+        label.appendChild(Dom.el('div', { style: 'font-weight:600;color:var(--ink-900);' }, d.centre_name));
+        label.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);' },
+          d.is_current ? 'Their provider now'
+            : (d.capacity ? (d.places_left + ' of ' + d.capacity + ' places free') : 'No capacity set')));
+        row.appendChild(label);
+        if (!d.is_current && !d.can_take_party) {
+          row.appendChild(Dom.el('span', { style: 'font-size:10.5px;font-weight:800;color:#B91C1C;background:#FEE2E2;border-radius:5px;padding:2px 6px;' }, 'FULL'));
+        }
+        listWrap.appendChild(row);
+      });
+    } catch (e) {
+      Dom.clear(listWrap);
+      listWrap.appendChild(Dom.el('div', { style: 'padding:14px;color:#DC2626;font-size:13px;' },
+        'Could not load providers: ' + (e.message || 'error')));
+    }
+  }
+
+  /**
+   * Close a provider down: decide every family's destination, then execute.
+   *
+   * Deliberately refuses to be a one-click action. The server will not accept a plan with
+   * a family left undecided, and this screen mirrors that — an undecided family is a child
+   * stranded at a closed provider, which is exactly the state the archive guard exists to
+   * prevent. Preview first, then confirm: the operations are irreversible.
+   */
+  async function openCentreOffboard(centre, content) {
+    const body = Dom.el('div', {});
+    body.appendChild(Dom.el('div', { style: 'padding:14px;color:var(--ink-500);font-size:13px;' }, 'Loading the plan\u2026'));
+
+    let plan = null;
+    const picks = {};                 // family_id -> 'withdraw' | room id
+    const dateInput = Dom.el('input', { type: 'date',
+      style: 'padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;font-family:inherit;' });
+    const closeStaff = Dom.el('input', { type: 'checkbox', style: 'width:17px;height:17px;' });
+    const doArchive = Dom.el('input', { type: 'checkbox', style: 'width:17px;height:17px;' });
+    doArchive.checked = true;
+    const status = Dom.el('div', { style: 'margin-top:12px;font-size:13px;min-height:20px;line-height:1.5;' });
+
+    const modal = Shell.Modal.open({
+      title: 'Close ' + centre.name,
+      body: body,
+      large: true,
+      actions: [
+        {
+          label: 'Preview',
+          onClick: async () => { await run(false); return false; },   // never closes
+        },
+        {
+          label: 'Close provider',
+          primary: true,
+          onClick: async () => {
+            const ok = await KT.confirm({
+              title: 'Close ' + centre.name + '?',
+              description: 'Transfers and withdrawals are applied and parents are emailed. This cannot be undone.',
+              tone: 'danger',
+            });
+            if (!ok) return false;
+            const done = await run(true);
+            if (!done) return false;
+            await renderCentresTab(content);
+          },
+        },
+      ],
+    });
+
+    async function run(confirm) {
+      const decisions = [];
+      let missing = 0;
+      (plan ? plan.families : []).forEach((f) => {
+        const v = picks[f.family_id];
+        if (!v) { missing++; return; }
+        decisions.push(v === 'withdraw'
+          ? { family_id: f.family_id, action: 'withdraw' }
+          : { family_id: f.family_id, action: 'transfer', to_room_id: Number(v) });
+      });
+      if (missing) {
+        status.style.color = '#B45309';
+        status.textContent = missing + ' family(ies) still need a decision.';
+        return false;
+      }
+      if (!dateInput.value) {
+        status.style.color = '#B45309'; status.textContent = 'Pick the last operating day.'; return false;
+      }
+      status.style.color = 'var(--ink-600)';
+      status.textContent = confirm ? 'Closing\u2026' : 'Checking\u2026';
+      try {
+        const res = await Api.post('/admin/centres/' + centre.id + '/offboard', {
+          last_day: dateInput.value,
+          decisions: decisions,
+          close_staff: closeStaff.checked,
+          archive: doArchive.checked,
+          confirm: !!confirm,
+        });
+        if (!confirm) {
+          status.style.color = 'var(--ink-700)';
+          status.textContent = 'Ready: ' + res.transfers + ' transfer(s), ' + res.withdrawals
+            + ' withdrawal(s)' + (res.will_close_staff ? ', staff accounts closed' : '')
+            + (res.will_archive ? ', then archived' : '') + '. Nothing has changed yet.';
+          return false;
+        }
+        const errs = (res.report && res.report.errors) || [];
+        if (window.KT && KT.Dom && KT.Dom.toast) {
+          KT.Dom.toast(errs.length ? (errs.length + ' problem(s) — see details') : (centre.name + ' closed'),
+            errs.length ? 'error' : 'success');
+        }
+        status.style.color = errs.length ? '#B91C1C' : '#15803D';
+        status.textContent = (res.timing || '') + ' ' + (res.archive_message || '')
+          + (errs.length ? ('  Problems: ' + errs.map(e => (e.stage + ': ' + e.message)).join('; ')) : '');
+        return !errs.length;
+      } catch (e) {
+        status.style.color = '#DC2626';
+        status.textContent = e.message || 'Could not complete this.';
+        return false;
+      }
+    }
+
+    try {
+      plan = await Api.get('/admin/centres/' + centre.id + '/offboard-plan');
+    } catch (e) {
+      Dom.clear(body);
+      body.appendChild(Dom.el('div', { style: 'padding:14px;color:#DC2626;font-size:13px;' },
+        'Could not load the plan: ' + (e.message || 'error')));
+      return;
+    }
+
+    Dom.clear(body);
+    const sum = plan.summary || {};
+    body.appendChild(Dom.el('div', {
+      style: 'background:var(--ink-50);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13.5px;color:var(--ink-700);line-height:1.6;',
+    }, sum.children_to_place + ' child(ren) across ' + sum.families_affected + ' family(ies) need a destination. '
+       + sum.places_available_elsewhere + ' place(s) free elsewhere in the agency'
+       + (sum.enough_room_in_agency ? '.' : ' \u2014 not enough for everyone.')
+       + (sum.staff_to_close ? ('  ' + sum.staff_to_close + ' staff account(s) here.') : '')));
+
+    if (!(plan.families || []).length) {
+      body.appendChild(Dom.el('div', { style: 'font-size:13.5px;color:var(--ink-600);margin-bottom:12px;' },
+        'No children are enrolled here, so this provider can simply be archived.'));
+    }
+
+    (plan.families || []).forEach((f) => {
+      const row = Dom.el('div', {
+        style: 'display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--ink-100);',
+      });
+      const who = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      who.appendChild(Dom.el('div', { style: 'font-weight:600;color:var(--ink-900);' }, f.family_name || 'Family'));
+      who.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);' },
+        (f.children || []).map(c => c.name).join(', ')));
+      row.appendChild(who);
+
+      const sel = Dom.el('select', {
+        style: 'padding:8px 10px;border:1px solid var(--ink-300);border-radius:8px;font-size:13.5px;font-family:inherit;max-width:260px;',
+      });
+      sel.appendChild(Dom.el('option', { value: '' }, 'Choose\u2026'));
+      sel.appendChild(Dom.el('option', { value: 'withdraw' }, 'Withdraw \u2014 leaving care'));
+      (plan.destinations || []).forEach((d) => {
+        const need = (f.children || []).length;
+        const fits = d.capacity === 0 || d.places_left >= need;
+        const o = Dom.el('option', { value: String(d.room_id) },
+          'Move to ' + d.centre_name + (fits ? ' (' + d.places_left + ' free)' : ' \u2014 full'));
+        if (!fits) o.disabled = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => { picks[f.family_id] = sel.value; status.textContent = ''; });
+      row.appendChild(sel);
+      body.appendChild(row);
+    });
+
+    const opts = Dom.el('div', { style: 'margin-top:16px;display:flex;flex-direction:column;gap:10px;' });
+    const dRow = Dom.el('label', { style: 'display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink-700);' });
+    dRow.appendChild(Dom.el('span', { style: 'font-weight:700;' }, 'Last operating day'));
+    dRow.appendChild(dateInput);
+    opts.appendChild(dRow);
+    const mk = (cb, label, hint) => {
+      const l = Dom.el('label', { style: 'display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--ink-700);cursor:pointer;' });
+      l.appendChild(cb);
+      const t = Dom.el('span', {});
+      t.appendChild(Dom.el('span', { style: 'font-weight:600;' }, label));
+      t.appendChild(Dom.el('span', { style: 'display:block;font-size:12px;color:var(--ink-500);' }, hint));
+      l.appendChild(t);
+      return l;
+    };
+    opts.appendChild(mk(closeStaff, 'Close their staff accounts',
+      'Sign-in is refused, tokens revoked and room assignments cleared. Your own account is never closed.'));
+    opts.appendChild(mk(doArchive, 'Archive the centre afterwards',
+      'Only happens once no child is enrolled here.'));
+    body.appendChild(opts);
+    body.appendChild(status);
+  }
+
+  /**
+   * De-enrolment confirmation, with the outstanding balance in front of the admin.
+   *
+   * Closing a family removes the portal their invoices were visible in, so the last
+   * moment anyone can act on a debt is this dialog. Anthony's call (2026-08-25) was
+   * to WARN, not block: a disputed invoice must never trap a record. But the figure
+   * has to be seen and ticked, and that acknowledgement is written to the audit log.
+   *
+   * Resolves to false (cancelled) or true (go ahead, acknowledged).
+   */
+  async function confirmDeEnrol(f) {
+    var owing = null;
+    try { owing = await Api.get('/admin/families/' + f.id + '/outstanding'); }
+    catch (e) { owing = null; }   // a failed lookup must not read as "owes nothing"
+
+    /* A short title and a readable body, not one run-on paragraph. KT.confirm
+       escapes its text and renders the description with white-space:pre-line, so
+       line breaks here survive; they did not before, and this dialog was the wall
+       of text that proved it. (2026-08-26) */
+    var lines = [
+      '\u2022 Their children are marked WITHDRAWN as of today',
+      '\u2022 Guardian accounts are closed \u2014 they can no longer sign in',
+      '\u2022 Each guardian is emailed a goodbye notice with your retention policy',
+      '',
+      'Care records, attendance and history are preserved.',
+      'The email cannot be unsent.',
+    ];
+
+    if (owing === null) {
+      lines.push('', '\u26a0 Their balance could not be checked just now,',
+                     'so this may leave money owed.');
+    } else if ((owing.total || 0) > 0) {
+      lines.push('', 'OUTSTANDING: $' + Number(owing.total).toFixed(2)
+        + ' across ' + owing.count + ' invoice' + (owing.count === 1 ? '' : 's'));
+      (owing.invoices || []).slice(0, 4).forEach(function (i) {
+        lines.push('   ' + i.number + '  due ' + (i.due_at || '\u2014')
+          + '  \u2014 $' + Number(i.balance_due).toFixed(2));
+      });
+      if ((owing.invoices || []).length > 4) {
+        lines.push('   \u2026and ' + ((owing.invoices || []).length - 4) + ' more');
+      }
+      lines.push('', 'The goodbye email will itemise this and request payment.');
+    }
+
+    /* Ask WHEN before asking whether. A family gives notice — "their last day is the
+       30th" — and the old dialog could only do it today, so an admin either closed them
+       early or had to remember to come back on the day. A future date schedules it and
+       leaves their access alone until then. */
+    /* The AGENCY's date. toISOString() is UTC, so in Toronto this read as tomorrow from
+       8pm every evening — which defaulted the picker to tomorrow and then described a
+       same-day de-enrolment to the admin as scheduled. */
+    var today = (window.KT && KT.agencyToday) ? KT.agencyToday()
+      : (function (d) {
+          return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2)
+            + '-' + ('0' + d.getDate()).slice(-2);
+        })(new Date());
+    var dateBox = Dom.el('div', {});
+    dateBox.appendChild(Dom.el('div', {
+      style: 'font-size:13px;color:#334155;margin-bottom:6px;',
+    }, 'What is their last day?'));
+    /* No `min`. Paperwork follows departures: somebody notices on the Wednesday that a
+       family stopped coming on the Friday, and the last day is what rosters, capacity,
+       CACFP claims and the final invoice are counted against. Blocking the past forced
+       the admin to record a date they knew was wrong. (2026-08-27) */
+    var lastDayIn = Dom.el('input', {
+      type: 'date', value: today,
+      style: 'width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #CBD5E1;'
+           + 'border-radius:8px;font-size:14px;',
+    });
+    dateBox.appendChild(lastDayIn);
+    var dateNote = Dom.el('div', {
+      style: 'font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.5;',
+    }, 'Today — they are closed straight away.');
+    dateBox.appendChild(dateNote);
+    /* A 'YYYY-MM-DD' as a LOCAL date.
+       kt-tz-global.js makes Date parse a zone-less string as UTC, so
+       new Date('2026-08-21T00:00:00') is 8pm on the 20th in Toronto and every
+       toLocaleDateString on it names the day before. Numeric parts are local by
+       construction. Differences between two such dates were always right, which is how
+       this hid: the day count read correctly while the date beside it did not. */
+    function ymdToLocalDate(v) {
+      var p = String(v || '').split('-');
+      return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    }
+
+    /* Three outcomes, and the admin should know which one they are choosing BEFORE they
+       press the red button. A last day in the past is a BACKDATED departure: it closes
+       them now, but the records read as though they left on the day they actually did. */
+    function describeLastDay() {
+      var v = lastDayIn.value;
+      if (v && v > today) {
+        dateNote.style.color = '#166534';
+        dateNote.textContent = 'Scheduled. They keep their portal access, daily updates '
+          + 'and invoices until that day, and the de-enrolment completes by itself the '
+          + 'morning after.';
+        return;
+      }
+      if (v && v < today) {
+        var d = ymdToLocalDate(v);
+        var back = Math.round((ymdToLocalDate(today) - d) / 86400000);
+        dateNote.style.color = '#B45309';
+        dateNote.textContent = 'Backdated ' + back + ' day' + (back === 1 ? '' : 's') + '. '
+          + 'Their access closes now, and the records show they left on '
+          + d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+          + ' — so rosters, capacity and their final invoice count to that day, not today.';
+        return;
+      }
+      dateNote.style.color = '#64748B';
+      dateNote.textContent = 'Today — they are closed straight away.';
+    }
+    lastDayIn.addEventListener('change', describeLastDay);
+    lastDayIn.addEventListener('input', describeLastDay);
+
+    /* WHY they are leaving. Mirrors AdminController::DEPARTURE_REASONS — change both.
+       The note box is always shown, not just under "Other": a picked reason is a category
+       and the sentence beside it is what a person actually needs six months later. */
+    var DEENROL_REASONS = [
+      ['moved_away',       'Moved out of the area'],
+      ['started_school',   'Child started school'],
+      ['schedule_change',  'Change in care needs or schedule'],
+      ['work_change',      "Change in the parent's work or income"],
+      ['other_provider',   'Moved to another provider'],
+      ['cost',             'Cost of care'],
+      ['non_payment',      'Unpaid fees'],
+      ['family_request',   'Family request — no reason given'],
+      ['agency_initiated', 'Agency decision'],
+      ['other',            'Other — describe below']
+    ];
+
+    dateBox.appendChild(Dom.el('div', {
+      style: 'font-size:13px;color:#334155;margin:14px 0 6px;',
+    }, 'Why are they leaving?'));
+
+    var reasonSel = Dom.el('select', {
+      style: 'width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #CBD5E1;'
+           + 'border-radius:8px;font-size:14px;background:#fff;',
+    });
+    reasonSel.appendChild(Dom.el('option', { value: '' }, 'Choose a reason…'));
+    DEENROL_REASONS.forEach(function (r) {
+      reasonSel.appendChild(Dom.el('option', { value: r[0] }, r[1]));
+    });
+    dateBox.appendChild(reasonSel);
+
+    var reasonNote = Dom.el('input', {
+      type: 'text', maxlength: '300',
+      placeholder: 'Add a note (optional) — this is what people read later',
+      style: 'width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #CBD5E1;'
+           + 'border-radius:8px;font-size:14px;margin-top:7px;',
+    });
+    dateBox.appendChild(reasonNote);
+
+    var reasonWarn = Dom.el('div', {
+      style: 'font-size:12.5px;color:#B91C1C;margin-top:6px;min-height:0;display:none;',
+    }, '');
+    dateBox.appendChild(reasonWarn);
+
+    function reasonOk() {
+      // "Other" is a category, not an answer — it needs the sentence.
+      if (!reasonSel.value) { return 'Pick a reason before continuing.'; }
+      if (reasonSel.value === 'other' && !reasonNote.value.trim()) {
+        return 'Describe the reason in the note box.';
+      }
+      return '';
+    }
+    function clearWarn() { reasonWarn.style.display = 'none'; }
+    reasonSel.addEventListener('change', function () {
+      clearWarn();
+      if (reasonSel.value === 'other') { try { reasonNote.focus(); } catch (e) {} }
+    });
+    reasonNote.addEventListener('input', clearWarn);
+
+    /* Loops rather than failing: an admin who forgot the reason should be handed the
+       dialog back with the message on it, not made to start again from the kebab. */
+    while (true) {
+      var ok = await KT.confirm({
+        title: 'De-enrol ' + (f.family_name || 'this family') + '?',
+        description: lines.join('\n'),
+        extra: dateBox,
+        tone: 'danger',
+        okLabel: 'De-enrol',
+      });
+      if (!ok) return false;
+      var why = reasonOk();
+      if (!why) break;
+      reasonWarn.textContent = why;
+      reasonWarn.style.display = 'block';
+    }
+    var deEnrolLastDay = lastDayIn.value || today;
+
+    if (owing && (owing.total || 0) > 0) {
+      var ack = await KT.confirm({
+        title: '$' + Number(owing.total).toFixed(2) + ' is still owed',
+        description: (f.family_name || 'This family') + ' has an unpaid balance.\n\n'
+          + 'Continuing records that you have seen it, and sends the family an '
+          + 'itemised demand for payment.',
+        tone: 'warning',
+        okLabel: 'I have seen it \u2014 continue',
+      });
+      if (!ack) return false;
+    }
+    // The caller needs the date, so this returns it rather than a bare true.
+    return {
+      last_day: deEnrolLastDay,
+      reason_code: reasonSel.value,
+      reason: reasonNote.value.trim(),
+    };
+  }
+
   function familyActions(f, centres, content) {
     var bar = Dom.el('div', { style: 'display:flex;gap:6px;justify-content:flex-end;flex-shrink:0;' });
     var mk = function (icon, cls, tip, handler) {
@@ -2512,9 +3798,31 @@
         catch (e) { alert('Could not suspend: ' + (e.message || 'error')); }
       }));
     }
+    /* Moving a family to another provider. Sits with the other family-level actions
+       because that is what a transfer IS - a family belongs to one provider and siblings
+       cannot be split, so "move this child" is never the real operation. (2026-08-25) */
+    if (!f.suspended) {
+      bar.appendChild(mk('\u{1F501}', 'kt-act-teal', 'Move to another provider', function () {
+        openFamilyTransfer(f, content);
+      }));
+    }
     bar.appendChild(mk('🗑️', 'kt-act-danger', 'De-enrol', async function () {
-      if (!await KT.confirm('De-enrol this family?\n' + '  - Their children are marked WITHDRAWN as of today' + '\n  - Guardian accounts are closed - they can no longer sign in' + '\n  - Each guardian is emailed a goodbye notice with your retention policy' + '\n\nCare records, attendance and history are preserved. The email cannot be unsent.')) return;
-      try { await Api.delete('/admin/families/' + f.id); await renderFamiliesTab(content); }
+      /* Keep what the dialog returned - it carries the chosen last day. Testing the call
+         for truthiness alone left `ok` unbound and every de-enrol died on a
+         ReferenceError before it reached the API. (2026-08-27) */
+      var deEnrol = await confirmDeEnrol(f);
+      if (!deEnrol) return;
+      try {
+        var res = await Api.delete('/admin/families/' + f.id
+          + '?acknowledged_balance=1&last_day=' + encodeURIComponent(deEnrol.last_day)
+          + '&reason_code=' + encodeURIComponent(deEnrol.reason_code || '')
+          + '&reason=' + encodeURIComponent(deEnrol.reason || ''));
+        if (Dom.toast) {
+          Dom.toast(res && res.message ? res.message : 'Family de-enrolled',
+                    res && res.scheduled ? 'info' : 'success');
+        }
+        await renderFamiliesTab(content);
+      }
       catch (e) { alert('Could not inactivate: ' + (e.message || 'error')); }
     }));
     return bar;
@@ -2567,7 +3875,7 @@
       if (!await KT.confirm('De-enrol ' + ids.length + ' famil' + (ids.length === 1 ? 'y' : 'ies') + '?\n\nFor EACH one:' + '\n  - Their children are marked WITHDRAWN as of today' + '\n  - Guardian accounts are closed' + '\n  - A goodbye email is sent to every guardian' + '\n\nThat is up to ' + ids.length + ' email(s) which cannot be unsent. Care records and history are preserved.')) return;
       bulkDelete.disabled = true;
       var ok = 0, fail = 0;
-      for (const id of ids) { try { await Api.delete('/admin/families/' + id); ok++; } catch (e) { fail++; } }
+      for (const id of ids) { try { await Api.delete('/admin/families/' + id + '?acknowledged_balance=1'); ok++; } catch (e) { fail++; } }
       bulkDelete.disabled = false;
       alert('De-enrolled ' + ok + ' famil' + (ok === 1 ? 'y' : 'ies') + ', ' + fail + ' failed.');
       selectedIds.clear();
@@ -2669,7 +3977,7 @@
         billing_split: 'single', notes: '',
       },
       guardians: [{ email: '', first_name: '', last_name: '', phone: '', relationship: 'mother', is_primary: true, can_pickup: true }],
-      children: [{ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '' }],
+      children: [{ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '', expected_dropoff_time: '', expected_pickup_time: '' }],
       emergency: [],
     };
     var STEPS = ['Family', 'Guardians', 'Children', 'Emergency', 'Review'];
@@ -2696,8 +4004,8 @@
       var preview = Dom.el('div', { style: 'width:56px;height:56px;border-radius:12px;flex-shrink:0;background:#E2E8F0 no-repeat center/cover;display:flex;align-items:center;justify-content:center;font-size:24px;color:#94A3B8;overflow:hidden;' }, c.photo_url ? '' : '📷');
       if (c.photo_url) preview.style.backgroundImage = 'url(' + _wAbs(c.photo_url) + ')';
       var right = Dom.el('div', { style: 'flex:1;min-width:0;' });
-      right.appendChild(Dom.el('div', { style: 'font-size:12.5px;font-weight:700;color:#1F6080;' }, 'Child photo *'));
-      var msg = Dom.el('div', { style: 'font-size:11.5px;margin-top:2px;color:' + (c.photo_url ? '#16A34A' : '#64748B') + ';' }, c.photo_url ? '✓ Photo added' : 'Required — upload or take a photo');
+      right.appendChild(Dom.el('div', { style: 'font-size:12.5px;font-weight:700;color:#1F6080;' }, 'Child photo'));
+      var msg = Dom.el('div', { style: 'font-size:11.5px;margin-top:2px;color:' + (c.photo_url ? '#16A34A' : '#64748B') + ';' }, c.photo_url ? '✓ Photo added' : 'Optional — the family can add it later');
       right.appendChild(msg);
       var file = Dom.el('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none;' });
       var btn = Dom.el('button', { type: 'button', style: 'background:#1F6080;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;flex-shrink:0;' }, c.photo_url ? 'Change' : '📷 Upload');
@@ -2779,7 +4087,9 @@
         var nm = (state.family.family_name || '').trim();
         if (nm.length < 3) { famDup.style.display = 'none'; state._famDup = false; return; }
         Api.get('/admin/duplicate-check?type=family&name=' + encodeURIComponent(nm)).then(function (r) {
-          var m = (r && r.matches) || [];
+          // See the user check above: a failed request must not read as "no duplicates".
+          if (!r || !Array.isArray(r.matches)) { throw new Error('dup-check-unavailable'); }
+          var m = r.matches;
           if (!m.length) { famDup.style.display = 'none'; state._famDup = false; return; }
           state._famDup = true; state._famDupOk = false;
           famDup.style.display = 'block';
@@ -2788,7 +4098,11 @@
             + '<label style="display:flex;gap:7px;align-items:center;margin-top:7px;font-weight:700;cursor:pointer;"><input type="checkbox" id="kt-famdup-ok"> This is a different family</label>';
           var cb = famDup.querySelector('#kt-famdup-ok');
           if (cb) cb.addEventListener('change', function () { state._famDupOk = cb.checked; });
-        }).catch(function () {});
+        }).catch(function () {
+          famDup.style.display = 'block';
+          famDup.innerHTML = '<div style="font-weight:800;margin-bottom:4px;">\u26a0 Could not check for existing records</div>'
+            + '<div>The duplicate check did not run \u2014 please confirm this is not already in KiddieTrac before saving.</div>';
+        });
       });
       var r1 = fieldRow('1fr 1fr');
       r1.appendChild(wrap('Primary phone', bindPhone(state.family, 'primary_phone')));
@@ -2856,9 +4170,10 @@
       bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 10px;' }, 'Add the children in this family. Health, room and other details can be edited after creating.'));
       // Why the photo is mandatory — reassure parents on confidentiality/security.
       var blurb = Dom.el('div', { style: 'background:#F0F7FB;border:1px solid #D6E6F0;border-left:4px solid #1F6080;border-radius:10px;padding:12px 14px;margin:0 0 16px;font-size:12.5px;color:#334155;line-height:1.55;' });
-      blurb.innerHTML = '<strong style="color:#1F6080;">📷 A recent photo is required for each child.</strong><br>'
-        + 'Educators use it to confirm they have the right child at drop-off, pickup, headcounts and in an emergency — it’s a core safety check. '
-        + 'The photo is <strong>private and encrypted</strong>: it’s only ever visible to your child’s assigned educators and centre administrators, is never shared publicly or with other families, and is removed when the child leaves the centre.';
+      blurb.innerHTML = '<strong style="color:#1F6080;">📷 A photo helps, but you can add it later.</strong><br>'
+        + 'Educators use it to confirm they have the right child at drop-off, pickup, headcounts and in an emergency, so it is worth having — but you do not need one to add the family now. '
+        + '<strong>The family is asked for it during their own onboarding</strong>, when they have one to hand.<br>'
+        + 'The photo is <strong>private</strong>: only the child’s assigned educators and centre administrators ever see it, it is never shared publicly or with other families, and it is removed when the child leaves.';
       bodyEl.appendChild(blurb);
       state.children.forEach(function (c, idx) {
         var card = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;background:#FBFDFE;' });
@@ -2886,7 +4201,9 @@
             var nm = ((child.first_name || '') + ' ' + (child.last_name || '')).trim();
             if (nm.length < 3) { warnEl.style.display = 'none'; child._dup = false; return; }
             Api.get('/admin/duplicate-check?type=child&name=' + encodeURIComponent(nm)).then(function (r) {
-              var mm = (r && r.matches) || [];
+              // See the user check above: a failed request must not read as "no duplicates".
+              if (!r || !Array.isArray(r.matches)) { throw new Error('dup-check-unavailable'); }
+              var mm = r.matches;
               if (!mm.length) { warnEl.style.display = 'none'; child._dup = false; return; }
               child._dup = true; child._dupOk = false;
               warnEl.style.display = 'block';
@@ -2895,7 +4212,11 @@
                 + '<label style="display:flex;gap:7px;align-items:center;margin-top:7px;font-weight:700;cursor:pointer;"><input type="checkbox" class="kt-cdup-ok"> This is a different child</label>';
               var cb = warnEl.querySelector('.kt-cdup-ok');
               if (cb) cb.addEventListener('change', function () { child._dupOk = cb.checked; });
-            }).catch(function () {});
+            }).catch(function () {
+              warnEl.style.display = 'block';
+              warnEl.innerHTML = '<div style="font-weight:800;margin-bottom:4px;">\u26a0 Could not check for existing records</div>'
+            + '<div>The duplicate check did not run \u2014 please confirm this is not already in KiddieTrac before saving.</div>';
+            });
           };
           cFirst.addEventListener('blur', check);
           cLast.addEventListener('blur', check);
@@ -2924,6 +4245,14 @@
         card.appendChild(r5);
         var r6 = fieldRow('1fr 1fr');
         r6.appendChild(wrap('Doctor phone', bindInput(c, 'doctor_phone')));
+
+        /* The usual hours. Optional — plenty of families settle these later — but asked
+           here, because the alternative is editing each child afterwards and every child
+           on the system currently reads "times not set". */
+        var r7 = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' });
+        r7.appendChild(wrap('Usual drop-off', bindInput(c, 'expected_dropoff_time', { type: 'time' })));
+        r7.appendChild(wrap('Usual pick-up', bindInput(c, 'expected_pickup_time', { type: 'time' })));
+        card.appendChild(r7);
         r6.appendChild(Dom.el('div', {}));
         card.appendChild(r6);
         var med = Dom.el('textarea', { style: inStyle + 'min-height:52px;font-family:inherit;' });
@@ -2932,7 +4261,7 @@
         bodyEl.appendChild(card);
       });
       var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add another child');
-      add.addEventListener('click', function () { state.children.push({ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '' }); renderChildrenStep(); });
+      add.addEventListener('click', function () { state.children.push({ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '', expected_dropoff_time: '', expected_pickup_time: '' }); renderChildrenStep(); });
       bodyEl.appendChild(add);
     }
 
@@ -3025,7 +4354,9 @@
           var c = state.children[j];
           if (!c.first_name.trim() || !c.last_name.trim()) { status.textContent = 'Child ' + (j + 1) + ': first and last name are required.'; return false; }
           if (!c.date_of_birth) { status.textContent = 'Child ' + (j + 1) + ': date of birth is required.'; return false; }
-          if (!c.photo_url) { status.textContent = 'Child ' + (j + 1) + ': a photo is required — please upload or take one.'; return false; }
+          /* No longer a gate. The person filling this in is working from an enrolment
+             form and rarely has a photo of the child; the family is asked for it during
+             their own onboarding, where they actually have one. */
           if (c._dup && !c._dupOk) { status.style.color = '#B45309'; status.textContent = 'Child ' + (j + 1) + ' looks like an existing child — tick “This is a different child”, or open the existing record instead.'; return false; }
         }
       }
@@ -3083,7 +4414,9 @@
         }),
         children: state.children.map(function (c) {
           return { first_name: c.first_name.trim(), last_name: c.last_name.trim(), preferred_name: c.preferred_name.trim() || null, date_of_birth: c.date_of_birth, gender: c.gender, enrollment_status: c.enrollment_status,
-            allergies: (c.allergies || '').trim() || null, dietary_restrictions: (c.dietary_restrictions || '').trim() || null, medical_notes: (c.medical_notes || '').trim() || null, doctor_name: (c.doctor_name || '').trim() || null, doctor_phone: (c.doctor_phone || '').trim() || null, school: (c.school || '').trim() || null };
+            allergies: (c.allergies || '').trim() || null, dietary_restrictions: (c.dietary_restrictions || '').trim() || null, medical_notes: (c.medical_notes || '').trim() || null, doctor_name: (c.doctor_name || '').trim() || null, doctor_phone: (c.doctor_phone || '').trim() || null, school: (c.school || '').trim() || null,
+            expected_dropoff_time: (c.expected_dropoff_time || '').trim() || null,
+            expected_pickup_time: (c.expected_pickup_time || '').trim() || null };
         }),
         emergency_contacts: (state.emergency || []).filter(function (e) { return ((e.first_name || '') + (e.last_name || '')).trim(); }).map(function (e) {
           return { name: ((e.first_name || '') + ' ' + (e.last_name || '')).trim(), relationship: (e.relationship || '').trim() || null, phone: (e.phone || '').trim() || null, alt_phone: (e.alt_phone || '').trim() || null, can_pickup: !!e.can_pickup };
@@ -3098,10 +4431,46 @@
         var res = await Api.post('/admin/families', payload);
         status.innerHTML = '<span style="display:inline-flex;align-items:center;gap:10px;color:#16A34A;"><span style="width:18px;height:18px;border:3px solid #BBF7D0;border-top-color:#16A34A;border-radius:50%;display:inline-block;animation:kt-spin .7s linear infinite;"></span> Family created — finishing up…</span>';
         await new Promise(function (r) { setTimeout(r, 1000); });
-        if (Dom.toast) Dom.toast('Family created — ' + (res.guardians || 0) + ' guardian(s), ' + (res.children || 0) + ' child(ren). Invites sent.', 'success');
+        /* Say what actually happened, not what we hoped would happen.
+           This used to end with a flat "Invites sent." regardless — but the API returns
+           how many actually went, and it is often zero: every guardian may already have
+           an account, or the agency may be under mail suppression. Telling an admin that
+           invites were sent when none were is how a parent ends up never hearing from us
+           and nobody knowing. (Anthony, 2026-08-26) */
         await renderFamiliesTab(content);
         Shell.Modal.close();
+        ktFamilyCreatedSummary(res);
       } catch (e) {
+        /* This household is already on file, de-enrolled. Don't just say no — the whole
+           reason duplicates got created is that saying no was all anyone could do.
+           Offer the restore, which is now a real route. (2026-08-30) */
+        var _d = e.data || {};
+        if (_d.code === 'family_deenrolled_exists' && _d.family_id) {
+          status.style.color = '#9A3412';
+          status.innerHTML = '';
+          status.appendChild(Dom.el('div', { style: 'margin-bottom:9px;line-height:1.55;' }, e.message));
+          var _rb = Dom.el('button', {
+            type: 'button',
+            style: 'background:#0F766E;color:#fff;border:0;border-radius:8px;'
+                 + 'padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;',
+          }, '\u21a9\ufe0f Bring that family back instead');
+          _rb.addEventListener('click', async function () {
+            _rb.disabled = true; _rb.textContent = 'Restoring…';
+            try {
+              await Api.post('/admin/families/' + _d.family_id + '/restore', {});
+              Shell.Modal.close();
+              await renderFamiliesTab(content);
+              if (window.KT.Dom && KT.Dom.toast) { KT.Dom.toast('Family restored with their full history', 'success'); }
+              showFamilyDetail(_d.family_id, false);
+            } catch (e2) {
+              _rb.disabled = false; _rb.textContent = '\u21a9\ufe0f Bring that family back instead';
+              if (window.KT.Dom && KT.Dom.toast) { KT.Dom.toast('Could not restore: ' + (e2.message || 'error'), 'error'); }
+            }
+          });
+          status.appendChild(_rb);
+          renderFooter();
+          return;
+        }
         status.style.color = '#DC2626';
         status.textContent = (e.message || 'Could not create family') + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '');
         renderFooter();
@@ -3112,6 +4481,60 @@
     render();
   }
 
+  /**
+   * What the admin needs to know the moment a family is created.
+   *
+   * A toast is right when everything worked and nothing is owed. It is the wrong shape
+   * for "this family exists but cannot use the portal yet", which is a task, not a
+   * notification — so anything still outstanding gets a dialog that has to be dismissed
+   * deliberately, listing the specific thing and who it concerns.
+   */
+  function ktFamilyCreatedSummary(res) {
+    res = res || {};
+    var guardians = res.guardians || 0;
+    var children = res.children || 0;
+    var invited = res.invited || 0;
+    var unplaced = res.unplaced || [];
+
+    var todo = [];
+    if (!invited && guardians) {
+      todo.push('No welcome email went out. ' + (guardians === 1 ? 'The guardian' : 'The guardians')
+        + ' cannot sign in until one is sent — either they already had an account, or this '
+        + 'agency is currently under mail suppression. Open the family and use Send welcome.');
+    }
+    if (unplaced.length) {
+      todo.push(unplaced.join(' and ') + (unplaced.length === 1 ? ' has' : ' have')
+        + ' no room yet, so ' + (unplaced.length === 1 ? 'they will' : 'they will')
+        + ' not appear in any educator\'s list. Assign a room on the child record.');
+    }
+
+    if (!todo.length) {
+      if (Dom.toast) {
+        Dom.toast('Family created — ' + guardians + ' guardian(s), ' + children + ' child(ren), '
+          + invited + ' welcome email(s) sent.', 'success');
+      }
+      return;
+    }
+
+    var body = document.createElement('div');
+    body.innerHTML =
+      '<p style="margin:0 0 14px;font-size:14.5px;line-height:1.6;color:#0F172A;">'
+        + 'Family created with <strong>' + guardians + '</strong> guardian(s) and <strong>'
+        + children + '</strong> child(ren). Before they can use KiddieTrac:</p>'
+      + '<ul style="margin:0;padding-left:20px;">'
+        + todo.map(function (t) {
+            return '<li style="font-size:13.5px;line-height:1.65;color:#7C2D12;margin-bottom:9px;">'
+              + String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>';
+          }).join('')
+      + '</ul>';
+
+    Shell.Modal.open({
+      title: 'Family created — still to do',
+      body: body,
+      actions: [{ label: 'Got it', primary: true, onClick: function () { Shell.Modal.close(); } }],
+    });
+  }
+
   function showFamilyModal(family, centres, content) {
     const isEdit = !!family;
     if (!isEdit) { return showFamilyWizard(centres, content); }
@@ -3119,6 +4542,17 @@
   }
 
   // Full tabbed family editor: Family · Guardians · Children · Emergency.
+  /** The "add" affordance each edit tab was missing. Reuses the detail view's dialogs. */
+  function editTabAddBtn(label, onClick) {
+    var b = Dom.el('button', {
+      type: 'button',
+      style: 'margin:0 0 12px;padding:7px 13px;background:#fff;border:1px solid #1F6080;'
+           + 'color:#1F6080;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;',
+    }, label);
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
   function showFamilyEditTabs(family, centres, content) {
     centres = centres || [];
     content = content || document.getElementById('appMain');
@@ -3183,6 +4617,9 @@
     }
 
     function renderGuardians() {
+      pane.appendChild(editTabAddBtn('＋ Add guardian', function () {
+        showAddGuardian(f, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
+      }));
       pane.innerHTML = '';
       (DATA.guardians || []).forEach(function (g) {
         var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
@@ -3208,6 +4645,9 @@
     }
 
     function renderChildren() {
+      pane.appendChild(editTabAddBtn('＋ Add child', function () {
+        showAddChildToFamily(f, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
+      }));
       pane.innerHTML = '';
       pane.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:12px;' }, 'Open a child’s record to edit health, enrolment and details.'));
       (DATA.children || []).forEach(function (c) {
@@ -3252,6 +4692,9 @@
       return card;
     }
     function renderEmergency() {
+      pane.appendChild(editTabAddBtn('＋ Add contact', function () {
+        showAddEmergencyContact(f, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
+      }));
       pane.innerHTML = '';
       (DATA.emergency_contacts || []).forEach(function (e) { pane.appendChild(ecCard(e)); });
       var add = Dom.el('button', { style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add emergency contact');
@@ -3400,17 +4843,479 @@
     });
   }
 
-  async function showFamilyDetail(familyId) {
+  /** A section heading with an optional action on the right. */
+  function famSectionHead(label, actionLabel, onAction) {
+    var h = Dom.el('div', {
+      style: 'display:flex;align-items:center;gap:10px;margin:18px 0 8px;',
+    });
+    h.appendChild(Dom.el('h4', {
+      style: 'flex:1;font-size:14px;font-weight:700;margin:0;letter-spacing:0.5px;color:var(--ink-700);',
+    }, label));
+    if (actionLabel && onAction) {
+      var b = Dom.el('button', {
+        type: 'button',
+        style: 'background:#fff;border:1px solid #1F6080;color:#1F6080;border-radius:7px;'
+             + 'padding:5px 11px;font-size:12.5px;font-weight:700;cursor:pointer;',
+      }, actionLabel);
+      b.addEventListener('click', onAction);
+      h.appendChild(b);
+    }
+    return h;
+  }
+
+  /** A labelled field for the small dialogs below. */
+  function famField(label, el) {
+    var w = Dom.el('label', { style: 'display:block;margin-bottom:10px;' });
+    w.appendChild(Dom.el('div', {
+      style: 'font-size:12px;font-weight:700;color:var(--ink-500);margin-bottom:4px;',
+    }, label));
+    w.appendChild(el);
+    return w;
+  }
+  function famInput(attrs) {
+    return Dom.el('input', Object.assign({
+      style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #CBD5E1;'
+           + 'border-radius:8px;font-size:13.5px;',
+    }, attrs || {}));
+  }
+
+  /**
+   * Add another child to a family that already exists.
+   *
+   * The endpoint has been there all along (POST /director/enrollments takes a family_id);
+   * nothing on the family record ever called it, and the Users screen sent people to
+   * "Add Family" — which is no help when the family is already there.
+   */
+  async function showAddChildToFamily(family, onDone) {
+    var body = Dom.el('div', {});
+    body.appendChild(Dom.el('p', {
+      style: 'margin:0 0 14px;font-size:13.5px;color:var(--ink-500);',
+    }, 'Adding a child to the ' + (family.family_name || '') + ' family. They inherit the '
+      + 'family\'s guardians and billing.'));
+
+    var first = famInput({ placeholder: 'First name' });
+    var last = famInput({ placeholder: 'Last name', value: family.family_name || '' });
+    var dob = famInput({ type: 'date' });
+    var start = famInput({ type: 'date', value: (new Date()).toISOString().slice(0, 10) });
+    var fee = famInput({ type: 'number', min: '0', step: '0.01', value: '0' });
+    var room = Dom.el('select', {
+      style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #CBD5E1;'
+           + 'border-radius:8px;font-size:13.5px;background:#fff;',
+    });
+
+    // Rooms at the family's own centre first — that is nearly always the answer.
+    try {
+      var rr = await Api.get('/director/rooms').catch(function () { return { rooms: [] }; });
+      var rooms = rr.rooms || rr.data || [];
+      rooms.forEach(function (r) {
+        room.appendChild(Dom.el('option', { value: r.id }, (r.centre_name ? r.centre_name + ' · ' : '') + r.name));
+      });
+    } catch (e) { /* the field just stays empty and the save will say so */ }
+
+    body.appendChild(famField('First name', first));
+    body.appendChild(famField('Last name', last));
+    body.appendChild(famField('Date of birth', dob));
+    body.appendChild(famField('Provider / room', room));
+    body.appendChild(famField('Start date', start));
+    body.appendChild(famField('Monthly fee', fee));
+    var msg = Dom.el('div', { style: 'font-size:12.5px;color:#B91C1C;min-height:16px;' });
+    body.appendChild(msg);
+
     Shell.Modal.open({
-      title: 'Family details',
+      title: 'Add child',
+      body: body,
+      actions: [{
+        label: 'Add child', primary: true,
+        onClick: async function () {
+          msg.textContent = '';
+          if (!first.value.trim() || !last.value.trim() || !dob.value) {
+            msg.textContent = 'First name, last name and date of birth are needed.'; return;
+          }
+          if (!room.value) { msg.textContent = 'Choose a provider or room.'; return; }
+          try {
+            await Api.post('/director/enrollments', {
+              first_name: first.value.trim(),
+              last_name: last.value.trim(),
+              date_of_birth: dob.value,
+              family_id: family.id,
+              room_id: parseInt(room.value, 10),
+              start_date: start.value,
+              monthly_fee: parseFloat(fee.value || '0'),
+            });
+            if (Dom.toast) { Dom.toast(first.value.trim() + ' added to the family', 'success'); }
+            onDone && onDone();
+          } catch (e) {
+            msg.textContent = (e.message || 'Could not add the child')
+              + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '');
+          }
+        },
+      }],
+    });
+  }
+
+  /** Add a guardian to an existing family, and optionally send their invite. */
+  function showAddGuardian(family, onDone) {
+    var body = Dom.el('div', {});
+    var first = famInput({ placeholder: 'First name' });
+    var last = famInput({ placeholder: 'Last name' });
+    var email = famInput({ type: 'email', placeholder: 'name@example.com' });
+    var phone = famInput({ placeholder: 'Phone' });
+    var rel = Dom.el('select', {
+      style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #CBD5E1;'
+           + 'border-radius:8px;font-size:13.5px;background:#fff;',
+    });
+    [['mother', 'Mother'], ['father', 'Father'], ['guardian', 'Guardian'],
+     ['grandparent', 'Grandparent'], ['foster', 'Foster'], ['other', 'Other']]
+      .forEach(function (o) { rel.appendChild(Dom.el('option', { value: o[0] }, o[1])); });
+
+    var pickup = Dom.el('input', { type: 'checkbox', checked: true });
+    var invite = Dom.el('input', { type: 'checkbox', checked: true });
+
+    body.appendChild(famField('First name', first));
+    body.appendChild(famField('Last name', last));
+    body.appendChild(famField('Email', email));
+    body.appendChild(famField('Phone', phone));
+    body.appendChild(famField('Relationship', rel));
+    var cb = Dom.el('div', { style: 'display:flex;flex-direction:column;gap:7px;margin:6px 0 10px;font-size:13.5px;' });
+    var l1 = Dom.el('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer;' });
+    l1.appendChild(pickup); l1.appendChild(Dom.el('span', {}, 'May collect the children'));
+    var l2 = Dom.el('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer;' });
+    l2.appendChild(invite); l2.appendChild(Dom.el('span', {}, 'Send them a welcome email now'));
+    cb.appendChild(l1); cb.appendChild(l2);
+    body.appendChild(cb);
+    var msg = Dom.el('div', { style: 'font-size:12.5px;color:#B91C1C;min-height:16px;' });
+    body.appendChild(msg);
+
+    Shell.Modal.open({
+      title: 'Add guardian',
+      body: body,
+      actions: [{
+        label: 'Add guardian', primary: true,
+        onClick: async function () {
+          msg.textContent = '';
+          if (!first.value.trim() || !last.value.trim() || !email.value.trim()) {
+            msg.textContent = 'First name, last name and email are needed.'; return;
+          }
+          try {
+            await Api.post('/director/families/' + family.id + '/invite', {
+              email: email.value.trim(),
+              first_name: first.value.trim(),
+              last_name: last.value.trim(),
+              relationship: rel.value,
+              is_primary: false,
+              can_pickup: pickup.checked,
+              can_receive_billing: false,
+              send_email: invite.checked,
+            });
+            if (Dom.toast) { Dom.toast(first.value.trim() + ' added as a guardian', 'success'); }
+            onDone && onDone();
+          } catch (e) {
+            msg.textContent = (e.message || 'Could not add the guardian')
+              + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '');
+          }
+        },
+      }],
+    });
+  }
+
+  /** Emergency contacts could only be set while creating the family. Now they can be added. */
+  function showAddEmergencyContact(family, onDone) {
+    var body = Dom.el('div', {});
+    body.appendChild(Dom.el('p', {
+      style: 'margin:0 0 14px;font-size:13.5px;color:var(--ink-500);',
+    }, 'Someone to ring when the guardians cannot be reached. This appears on the child\'s emergency card.'));
+    var name = famInput({ placeholder: 'Full name' });
+    var rel = famInput({ placeholder: 'Relationship (e.g. Grandmother)' });
+    var phone = famInput({ placeholder: 'Phone' });
+    var alt = famInput({ placeholder: 'Alternate phone (optional)' });
+    var notes = famInput({ placeholder: 'Notes (optional)' });
+    var pickup = Dom.el('input', { type: 'checkbox' });
+
+    body.appendChild(famField('Name', name));
+    body.appendChild(famField('Relationship', rel));
+    body.appendChild(famField('Phone', phone));
+    body.appendChild(famField('Alternate phone', alt));
+    body.appendChild(famField('Notes', notes));
+    var l = Dom.el('label', { style: 'display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13.5px;margin-bottom:10px;' });
+    l.appendChild(pickup); l.appendChild(Dom.el('span', {}, 'May collect the children'));
+    body.appendChild(l);
+    var msg = Dom.el('div', { style: 'font-size:12.5px;color:#B91C1C;min-height:16px;' });
+    body.appendChild(msg);
+
+    Shell.Modal.open({
+      title: 'Add emergency contact',
+      body: body,
+      actions: [{
+        label: 'Add contact', primary: true,
+        onClick: async function () {
+          msg.textContent = '';
+          if (!name.value.trim()) { msg.textContent = 'A name is needed.'; return; }
+          try {
+            await Api.post('/admin/families/' + family.id + '/emergency-contacts', {
+              name: name.value.trim(),
+              relationship: rel.value.trim() || null,
+              phone: phone.value.trim() || null,
+              alt_phone: alt.value.trim() || null,
+              notes: notes.value.trim() || null,
+              can_pickup: pickup.checked,
+            });
+            if (Dom.toast) { Dom.toast('Emergency contact added', 'success'); }
+            onDone && onDone();
+          } catch (e) {
+            msg.textContent = (e.message || 'Could not add the contact')
+              + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '');
+          }
+        },
+      }],
+    });
+  }
+
+  /**
+   * The notes thread: who wrote it, and when.
+   *
+   * Append-only. A note is a record of what somebody knew at a point in time, and it
+   * stops being that the moment anyone can rewrite it — so corrections are made by
+   * adding another note, and only the author can remove their own within the hour.
+   */
+  async function renderFamilyNotes(host, familyId) {
+    host.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">Loading notes…</div>';
+
+    var d;
+    try { d = await Api.get('/admin/families/' + familyId + '/notes'); }
+    catch (e) {
+      host.innerHTML = '<div style="font-size:13px;color:#B45309;">Could not load notes.</div>';
+      return;
+    }
+
+    var esc = function (v) {
+      return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+      });
+    };
+    var when = function (ts) {
+      try {
+        var dt = (window.KT && KT.Fmt && KT.Fmt.parse) ? KT.Fmt.parse(ts) : new Date(String(ts).replace(' ', 'T') + 'Z');
+        return dt.toLocaleString('en-CA', { year: 'numeric', month: 'short', day: 'numeric',
+                                            hour: 'numeric', minute: '2-digit' });
+      } catch (e) { return String(ts || ''); }
+    };
+
+    var notes = d.notes || [];
+    var list = notes.length
+      ? notes.map(function (n) {
+          return '<div style="background:' + (n.pinned ? '#FFFBEB' : 'var(--ink-50)')
+            + ';border:1px solid ' + (n.pinned ? '#FDE68A' : 'transparent')
+            + ';border-radius:8px;padding:10px 12px;margin-bottom:7px;">'
+            + '<div style="font-size:13.5px;color:#0F172A;line-height:1.5;white-space:pre-wrap;">'
+              + esc(n.body) + '</div>'
+            + '<div style="font-size:11.5px;color:var(--ink-500);margin-top:6px;">'
+              + (n.pinned ? '📌 ' : '') + esc(n.author) + ' · ' + esc(when(n.created_at)) + '</div>'
+            + '</div>';
+        }).join('')
+      : '<div style="font-size:13px;color:var(--ink-500);margin-bottom:8px;">No notes yet.</div>';
+
+    host.innerHTML = list
+      + '<textarea id="fn-body" rows="2" maxlength="4000" placeholder="Add a note — it is saved with your name and the time."'
+      + ' style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #CBD5E1;'
+      + 'border-radius:8px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-top:7px;">'
+        + '<button id="fn-add" class="kt-btn kt-btn-primary kt-btn-sm">Add note</button>'
+        + '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink-500);cursor:pointer;">'
+          + '<input type="checkbox" id="fn-pin"> Pin to the top</label>'
+        + '<span id="fn-msg" style="font-size:12.5px;color:#B91C1C;"></span>'
+      + '</div>';
+
+    host.querySelector('#fn-add').addEventListener('click', async function () {
+      var box = host.querySelector('#fn-body');
+      var text = String(box.value || '').trim();
+      var m = host.querySelector('#fn-msg');
+      if (!text) { m.textContent = 'Write something first.'; return; }
+      this.disabled = true;
+      try {
+        await Api.post('/admin/families/' + familyId + '/notes', {
+          body: text, pinned: host.querySelector('#fn-pin').checked,
+        });
+        renderFamilyNotes(host, familyId);
+      } catch (e) {
+        this.disabled = false;
+        m.textContent = e.message || 'Could not save the note';
+      }
+    });
+  }
+
+  /**
+   * Who has had this family's children, and when.
+   *
+   * Grouped by child rather than listed flat: a family reads this to follow one child's
+   * path, and interleaving two children by date makes both harder to follow. The current
+   * placement is marked, because "where are they now" is the question most often asked
+   * of a history.
+   */
+  async function renderProviderHistory(host, familyId) {
+    host.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">Loading…</div>';
+
+    var d;
+    try { d = await Api.get('/admin/families/' + familyId + '/provider-history'); }
+    catch (e) {
+      host.innerHTML = '<div style="font-size:13px;color:#B45309;">Could not load provider history.</div>';
+      return;
+    }
+
+    var rows = (d && d.history) || [];
+    if (!rows.length) {
+      host.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">No provider history yet.</div>';
+      return;
+    }
+
+    var esc = function (v) {
+      return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+      });
+    };
+    var day = function (v) {
+      return (window.KT && KT.dayLabel) ? KT.dayLabel(v) : String(v || '');
+    };
+
+    var byChild = {};
+    rows.forEach(function (r) { (byChild[r.child_name] = byChild[r.child_name] || []).push(r); });
+
+    host.innerHTML = Object.keys(byChild).map(function (name) {
+      var lines = byChild[name].map(function (r) {
+        return '<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;'
+          + (r.current ? 'border-left:3px solid #1F6080;padding-left:9px;margin-left:-9px;' : '') + '">'
+          + '<span style="flex:1;min-width:0;font-size:13.5px;color:#0F172A;'
+            + (r.current ? 'font-weight:700;' : '') + '">' + esc(r.provider || '—')
+            + (r.current ? ' <span style="font-size:11px;font-weight:800;color:#1F6080;">CURRENT</span>' : '')
+            + (r.days ? '<span style="font-weight:400;color:#64748B;"> · ' + esc(r.days.join(', ')) + '</span>' : '')
+          + '</span>'
+          + '<span style="font-size:12px;color:var(--ink-500);white-space:nowrap;">'
+            + esc(day(r.start_date)) + ' → ' + (r.end_date ? esc(day(r.end_date)) : 'present')
+            + (r.changed_by ? ' · ' + esc(r.changed_by) : '')
+          + '</span></div>';
+      }).join('');
+
+      return '<div style="margin-bottom:12px;">'
+        + '<div style="font-size:12px;font-weight:800;letter-spacing:.03em;color:var(--ink-500);'
+          + 'text-transform:uppercase;margin-bottom:2px;">' + esc(name) + '</div>'
+        + lines + '</div>';
+    }).join('');
+  }
+
+  /* Which family the open edit session belongs to, not a bare boolean.
+     A flat flag stayed on when you closed one family and opened the next, so the second
+     record arrived already editable — the same trap the child record hit. Keyed by id,
+     opening a different family is read-only again by construction. (2026-08-27) */
+  var famEditFor = null;
+
+  async function showFamilyDetail(familyId, archived) {
+    Shell.Modal.open({
+      title: archived ? 'Family details (archived)' : 'Family details',
       body: loading('Loading...'),
       large: true,
     });
     try {
-      const data = await Api.get('/admin/families/' + familyId);
+      /* A de-enrolled family is retained, not deleted, so the record is still
+         readable — but only when asked for explicitly, so no ordinary screen
+         starts showing departed families by accident. (2026-08-25) */
+      const data = await Api.get('/admin/families/' + familyId + (archived ? '?archived=1' : ''));
       const body = Dom.el('div', {});
 
+      /* ESC-SCOPE: the departure block below builds raw HTML and calls esc(), but this
+         function never had one — every archived family with departure details opened as
+         an "esc is not defined" error modal instead of a record. (2026-08-30) */
+      var esc = function (v) {
+        return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+        });
+      };
+
+      /* A de-enrolled family is history and can never be edited, whatever the toggle
+         says — the banner already promises the reader as much. */
+      var _canEdit = !data.is_archived && famEditFor === familyId;
+
       var _f = data.family || {};
+      if (data.is_archived) {
+        body.appendChild(Dom.el('div', {
+          style: 'background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:#9A3412;line-height:1.55;',
+        }, '\ud83d\uddc4\ufe0f This family has been de-enrolled'
+           + (data.departed_at ? ' (' + String(data.departed_at).slice(0, 10) + ')' : '')
+           + '. The record is kept for your retention period and is read-only history.'));
+
+        /* RESTORE-UI: the way back.
+
+           There was none — nothing in the system cleared families.deleted_at — so a
+           returning family had to be typed in again from scratch, splitting the child's
+           attendance, logs, invoices and documents across two records. Two iLearn
+           families are in exactly that state. (2026-08-30) */
+        var _restoreWrap = Dom.el('div', { style: 'margin:-4px 0 14px;' });
+        var _restoreBtn = Dom.el('button', {
+          type: 'button', class: 'btn',
+          style: 'background:#0F766E;color:#fff;border:0;border-radius:8px;'
+               + 'padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;',
+        }, '\u21a9\ufe0f Bring this family back');
+        _restoreBtn.addEventListener('click', async function () {
+          if (window.KT && KT.confirm && !await KT.confirm(
+            'Bring this family back?\n'
+            + '  - The family record becomes active again\n'
+            + '  - Their children return to enrolled, in the rooms they left\n'
+            + '  - Guardian logins are restored\n\n'
+            + 'Their whole history comes with them. Check room placement and billing '
+            + 'afterwards.')) { return; }
+          _restoreBtn.disabled = true;
+          _restoreBtn.textContent = 'Restoring…';
+          try {
+            var _rr = await Api.post('/admin/families/' + familyId + '/restore', {});
+            if (window.KT.Dom && KT.Dom.toast) {
+              KT.Dom.toast('Family restored — ' + (_rr.children_restored || 0)
+                + ' child(ren) re-enrolled', 'success');
+            }
+            Shell.Modal.close();
+            // Reopen as an ACTIVE family, not the archived view it was.
+            showFamilyDetail(familyId, false);
+          } catch (e) {
+            _restoreBtn.disabled = false;
+            _restoreBtn.textContent = '\u21a9\ufe0f Bring this family back';
+            if (window.KT.Dom && KT.Dom.toast) { KT.Dom.toast('Could not restore: ' + (e.message || 'error'), 'error'); }
+            else { alert('Could not restore: ' + (e.message || 'error')); }
+          }
+        });
+        _restoreWrap.appendChild(_restoreBtn);
+        body.appendChild(_restoreWrap);
+
+        /* Who, when and why — on the record itself. It was only ever in the audit log,
+           which you have to know to go and look at. (2026-08-27) */
+        var _dep = data.departure;
+        if (_dep) {
+          var _fact = function (k, v, tone) {
+            if (!v) { return ''; }
+            return '<div style="display:flex;gap:8px;padding:2px 0;">'
+              + '<span style="color:#9A3412;flex:0 0 88px;">' + esc(k) + '</span>'
+              + '<span style="color:' + (tone || '#7C2D12') + ';font-weight:600;">'
+              + esc(v) + '</span></div>';
+          };
+          var _when = '';
+          if (_dep.recorded_at && window.KT && KT.fmtDateTime) {
+            try { _when = KT.fmtDateTime(_dep.recorded_at); } catch (e) {}
+          }
+          var _lastDay = _dep.last_day && window.KT && KT.dayLabel
+            ? KT.dayLabel(_dep.last_day) : (_dep.last_day || '');
+          var _html = _fact('Last day', _lastDay)
+            + _fact('Reason', _dep.reason || 'Not recorded',
+                    _dep.reason ? '#7C2D12' : '#B45309')
+            + _fact('De-enrolled by', _dep.by_name || 'Not recorded',
+                    _dep.by_name ? '#7C2D12' : '#B45309')
+            + _fact('Recorded', _when);
+          if (_html) {
+            body.appendChild(Dom.el('div', {
+              class: 'kt-departure-facts',
+              style: 'background:#FFF7ED;border:1px solid #FED7AA;border-top:none;'
+                   + 'border-radius:0 0 10px 10px;margin:-12px 0 12px;padding:10px 14px 12px;'
+                   + 'font-size:13px;line-height:1.6;',
+              html: _html,
+            }));
+          }
+        }
+      }
       var _hd = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;' });
       _hd.appendChild(Dom.el('h3', { style: 'font-size: 19px; margin: 0;' }, _f.family_name));
       var _edit = Dom.el('button', { style: 'padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;flex:0 0 auto;' }, '✏️ Edit family');
@@ -3437,9 +5342,43 @@
         }
       });
       var _btns = Dom.el('div', { style: 'display:flex;gap:8px;flex-shrink:0;' });
-      _btns.appendChild(_resend); _btns.appendChild(_edit);
+
+      /* Archived: no actions at all. Sending a welcome to closed accounts, or offering to
+         edit history, are both meaningless — and showing the buttons implied otherwise. */
+      if (!data.is_archived) {
+        var _toggle = Dom.el('button', {
+          style: 'padding:8px 14px;border-radius:8px;font-weight:700;font-size:13px;'
+               + 'cursor:pointer;flex:0 0 auto;border:'
+               + (_canEdit ? 'none;background:#166534;color:#fff;'
+                           : '1.5px solid #1F6080;background:#fff;color:#1F6080;'),
+        }, _canEdit ? '\u2713 Done editing' : '\u270f\ufe0f Edit');
+        _toggle.addEventListener('click', function () {
+          famEditFor = _canEdit ? null : familyId;
+          Shell.Modal.close();
+          setTimeout(function () { showFamilyDetail(familyId, archived); }, 60);
+        });
+
+        if (_canEdit) {
+          // The field-level form for the family's own details. Only offered once they
+          // have said they are editing, so View stays a single, quiet screen.
+          _edit.textContent = '\u270f\ufe0f Edit details\u2026';
+          _btns.appendChild(_edit);
+        } else {
+          _btns.appendChild(_resend);
+        }
+        _btns.appendChild(_toggle);
+      }
+
       _hd.appendChild(_btns);
       body.appendChild(_hd);
+
+      if (_canEdit) {
+        body.appendChild(Dom.el('div', {
+          style: 'background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;'
+               + 'padding:8px 12px;margin:0 0 10px;font-size:12.5px;color:#166534;',
+        }, 'Editing \u2014 you can add children, guardians and contacts, set kiosk PINs, '
+           + 'and remove guardians. Press Done when you have finished.'));
+      }
       function _kv(k, v) { var d = Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:14px;padding:4px 0;font-size:13.5px;' }); d.appendChild(Dom.el('span', { style: 'color:var(--ink-500);flex-shrink:0;' }, k)); d.appendChild(Dom.el('span', { style: 'font-weight:600;color:#0F172A;text-align:right;word-break:break-word;' }, (v == null || v === '') ? '—' : String(v))); return d; }
       var _famCard = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;margin:8px 0 6px;' });
       _famCard.appendChild(_kv('Email', _f.primary_email));
@@ -3451,7 +5390,22 @@
       if (_f.notes) _famCard.appendChild(_kv('Notes', _f.notes));
       body.appendChild(_famCard);
 
-      body.appendChild(Dom.el('h4', { style: 'font-size: 14px; font-weight: 700; margin: 16px 0 8px; letter-spacing: 0.5px; color: var(--ink-700);' }, 'CHILDREN'));
+      /* Where they actually are. Useful when arranging a home visit or working out whose
+         route a child is on, and it costs nothing when the address is missing — the map
+         simply does not render rather than showing an empty grey box. */
+      if (_addr) {
+        var _mapHost = Dom.el('div', { style: 'margin:10px 0 4px;' });
+        body.appendChild(_mapHost);
+        try {
+          if (window.KT && KT.MiniMap) {
+            KT.MiniMap.render(_mapHost, _addr, { label: _f.family_name || 'Family', height: 190 });
+          }
+        } catch (e) { /* a map is never worth breaking the record for */ }
+      }
+
+      body.appendChild(famSectionHead('CHILDREN', _canEdit ? '＋ Add child' : null, _canEdit ? function () {
+        showAddChildToFamily(data.family, function () { Shell.Modal.close(); showFamilyDetail(familyId, archived); });
+      } : null));
       if (data.children.length === 0) {
         body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'No children'));
       } else {
@@ -3475,7 +5429,9 @@
         });
       }
 
-      body.appendChild(Dom.el('h4', { style: 'font-size: 14px; font-weight: 700; margin: 16px 0 8px; letter-spacing: 0.5px; color: var(--ink-700);' }, 'GUARDIANS'));
+      body.appendChild(famSectionHead('GUARDIANS', _canEdit ? '＋ Add guardian' : null, _canEdit ? function () {
+        showAddGuardian(data.family, function () { Shell.Modal.close(); showFamilyDetail(familyId, archived); });
+      } : null));
       data.guardians.forEach(g => {
         const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;' });
         // v22p83: guardian avatar (photo or initials)
@@ -3486,7 +5442,7 @@
         info.appendChild(Dom.el('div', { style: 'font-size: 11px; color: #94A3B8;margin-top:1px;' }, (g.can_pickup ? '✓ authorized for pickup' : '✗ not for pickup') + (g.status ? ' · ' + g.status : '')));
         row.appendChild(info);
         // v22p5.2: per-guardian kiosk PIN setter (gates parent sign-in on the kiosk)
-        if (g.can_pickup && g.id) {
+        if (_canEdit && g.can_pickup && g.id) {
           const pinBtn = Dom.el('button', {
             type: 'button',
             style: 'padding: 6px 10px; background: white; color: #1F6080; border: 1px solid #1F6080; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;',
@@ -3509,12 +5465,46 @@
           });
           row.appendChild(pinBtn);
         }
+        /* Unlinking, not deleting: the same person may be a guardian of another family
+           or staff here, so their ACCOUNT is never touched. The API refuses to remove a
+           family's last guardian. */
+        if (_canEdit) {
+        var _rm = Dom.el('button', {
+          type: 'button', title: 'Remove from this family',
+          style: 'flex:0 0 auto;background:none;border:1px solid #FECACA;color:#B91C1C;'
+               + 'border-radius:6px;padding:4px 9px;font-size:12px;font-weight:700;cursor:pointer;',
+        }, 'Remove');
+        _rm.addEventListener('click', async function () {
+          var who = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
+          var ok = !(window.KT && KT.confirm) || await KT.confirm({
+            title: 'Remove ' + who + ' from this family?',
+            description: 'They stop being a guardian here and lose access to these children. '
+              + 'Their account stays — this does not delete the person.',
+            okLabel: 'Remove',
+          });
+          if (!ok) { return; }
+          _rm.disabled = true;
+          try {
+            await Api.delete('/admin/families/' + familyId + '/guardians/' + g.id);
+            if (Dom.toast) { Dom.toast(who + ' removed from this family', 'success'); }
+            Shell.Modal.close();
+            showFamilyDetail(familyId, archived);
+          } catch (err) {
+            _rm.disabled = false;
+            if (Dom.toast) { Dom.toast(err.message || 'Could not remove', 'error'); }
+          }
+        });
+        row.appendChild(_rm);
+        }   /* /_canEdit — unlinking a parent is not a thing a "view" should offer */
+
         body.appendChild(row);
       });
 
       // Emergency contacts — previously not shown in the family view at all.
       var _ecs = data.emergency_contacts || [];
-      body.appendChild(Dom.el('h4', { style: 'font-size: 14px; font-weight: 700; margin: 16px 0 8px; letter-spacing: 0.5px; color: var(--ink-700);' }, 'EMERGENCY CONTACTS'));
+      body.appendChild(famSectionHead('EMERGENCY CONTACTS', _canEdit ? '＋ Add contact' : null, _canEdit ? function () {
+        showAddEmergencyContact(data.family, function () { Shell.Modal.close(); showFamilyDetail(familyId, archived); });
+      } : null));
       if (!_ecs.length) {
         body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'None on file.'));
       } else {
@@ -3525,6 +5515,18 @@
           body.appendChild(er);
         });
       }
+
+      /* Notes, with who wrote them and when. `families.notes` is still shown above as a
+         single field, but anything written from here is attributed and kept. */
+      body.appendChild(famSectionHead('PROVIDER HISTORY', null, null));
+      var _phHost = Dom.el('div', {});
+      body.appendChild(_phHost);
+      renderProviderHistory(_phHost, familyId);
+
+      body.appendChild(famSectionHead('NOTES', null, null));
+      var _notesHost = Dom.el('div', {});
+      body.appendChild(_notesHost);
+      renderFamilyNotes(_notesHost, familyId);
 
       Shell.Modal.open({ title: 'Family — ' + (data.family.family_name || ''), body: body, large: true });
     } catch (e) {
@@ -4238,7 +6240,49 @@
     } catch (e) { return 'Never'; }
   }
 
-  function statusBadge(status) {
+  /** Human sentence describing what happened to someone's invite.
+      Returns '' when there is nothing useful to say, so the badge stays plain. */
+  function inviteTip(u) {
+    var i = u && u.invite;
+    if (!i) { return ''; }
+    var when = function (v) {
+      if (!v) { return ''; }
+      try {
+        if (window.KT && KT.Fmt && KT.Fmt.dateTime) { return KT.Fmt.dateTime(v); }
+      } catch (e) {}
+      return String(v).replace('T', ' ').slice(0, 16);
+    };
+
+    if (i.state === 'never_sent') { return 'No invite has ever been sent to this address.'; }
+    if (i.state === 'blocked') {
+      return 'Invite was blocked before delivery (' + when(i.sent_at) + ').\nIt never left the system.';
+    }
+
+    var out = 'Invite sent ' + when(i.sent_at)
+      + (i.count > 1 ? '  \u00B7  ' + i.count + ' sent in total' : '');
+    if (i.state === 'opened') {
+      out += '\nOpened ' + when(i.opened_at) + (i.opens > 1 ? '  \u00B7  ' + i.opens + ' times' : '');
+    } else {
+      /* Never claim it went unread. Open tracking is a pixel and most mail apps block
+         images, so the large majority of real opens are never recorded. */
+      out += '\nNo open recorded \u2014 but most mail apps block the tracking'
+           + '\npixel, so this is not proof it went unread.';
+    }
+    return out;
+  }
+
+  /** The badge, with a hover explanation attached. */
+  function badgeWithTip(colours, label, tip) {
+    var el = Dom.el('span', {
+      style: 'display:inline-block;background:' + colours[0] + ';color:' + colours[1]
+        + ';padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;'
+        + 'text-transform:capitalize;cursor:help;border-bottom:1px dotted currentColor;',
+    }, label);
+    el.setAttribute('title', tip);
+    return el;
+  }
+
+  function statusBadge(status, tip) {
     const colors = {
       active: ['#DCFCE7', '#166534'],
       onboarding: ['#FEF3C7', '#92400E'],
@@ -4253,6 +6297,7 @@
     };
     const labels = { not_invited: 'Not invited' };
     const c = colors[status] || ['#F3F4F6', '#374151'];
+    if (tip) { return badgeWithTip(c, labels[status] || status, tip); }
     return Dom.el('span', {
       style: 'display: inline-block; background: ' + c[0] + '; color: ' + c[1] + '; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;',
     }, labels[status] || status);

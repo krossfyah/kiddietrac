@@ -56,10 +56,10 @@ class AutoSignOffCommand extends Command
             }
 
             if ($cfg['staff_enabled']) {
-                $staffClosed += $this->closeStaff($centreIds, $cfg, $tz, $now, $dry);
+                $staffClosed += $this->closeStaff((int) $agency->id, $centreIds, $cfg, $tz, $now, $dry);
             }
             if ($cfg['children_enabled']) {
-                $childClosed += $this->closeChildren($centreIds, $cfg, $tz, $now, $dry);
+                $childClosed += $this->closeChildren((int) $agency->id, $centreIds, $cfg, $tz, $now, $dry);
             }
         }
 
@@ -67,7 +67,46 @@ class AutoSignOffCommand extends Command
         return self::SUCCESS;
     }
 
-    private function closeStaff(array $centreIds, array $cfg, string $tz, Carbon $now, bool $dry): int
+    /**
+     * Audit one automatic close, as "System".
+     *
+     * Was a closure inside closeStaff(), but closeChildren() called it too — so child
+     * auto-check-out died on "Undefined variable $auditAuto" every night at 04:00 and
+     * never closed a single check-in. A method is what this always needed to be: both
+     * paths write the same shape, and they cannot drift. (2026-08-30)
+     *
+     * user_id NULL is deliberate — the audit screen renders that as "System", so the
+     * trail says who ended the shift rather than leaving it simply ended.
+     *
+     * ⚠ $agencyId is NOT optional, and this is why: since the strict-isolation hardening
+     * (2026-08-11) the audit viewer filters `WHERE al.agency_id = <active agency>` with NO
+     * fallback, so a row written without it is invisible to EVERY agency, permanently —
+     * not mis-filed, just gone. The `AuditActivity::claimUnstamped()` safety net that
+     * covers the rest of the app only runs inside an HTTP request, and a scheduled command
+     * has none. Symptom (Anthony, 2026-08-30): Bruni was auto-clocked-out at 20:00 and
+     * nothing appeared in the audit log — the row was there all along, unstamped.
+     */
+    private function auditAuto(int $agencyId, string $action, string $entityType, $entityId, array $extra = []): void
+    {
+        try {
+            DB::table('audit_logs')->insert([
+                'user_id' => null,
+                'agency_id' => $agencyId,
+                'action' => $action,
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'payload' => json_encode(array_merge([
+                    'automatic' => true,
+                    'reason' => 'Nightly auto sign-off — nobody recorded a sign-out.',
+                ], $extra)),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Auditing must never stop the sign-off itself from completing.
+        }
+    }
+
+    private function closeStaff(int $agencyId, array $centreIds, array $cfg, string $tz, Carbon $now, bool $dry): int
     {
         $open = DB::table('time_punches as p')
             ->join('users as u', 'u.id', '=', 'p.user_id')
@@ -98,6 +137,10 @@ class AutoSignOffCommand extends Command
             $this->line(sprintf('    %-24s in %s -> out %s', $name, $in->format('D H:i'), $cutoff->format('D H:i')));
 
             if (! $dry) {
+                $this->auditAuto($agencyId, 'staff.auto_clock_out', 'time_punch', $p->id, [
+                    'staff' => trim((string) ($p->first_name ?? '') . ' ' . (string) ($p->last_name ?? '')),
+                    'punched_in_at' => $p->punched_in_at,
+                ]);
                 DB::table('time_punches')->where('id', $p->id)->update([
                     'punched_out_at' => $cutoff->clone()->utc(),
                     // Marked, so a timesheet can show this was not a real clock-out.
@@ -115,7 +158,7 @@ class AutoSignOffCommand extends Command
         return $n;
     }
 
-    private function closeChildren(array $centreIds, array $cfg, string $tz, Carbon $now, bool $dry): int
+    private function closeChildren(int $agencyId, array $centreIds, array $cfg, string $tz, Carbon $now, bool $dry): int
     {
         // The last event per child decides whether they are still in. Looking only at
         // check-ins would re-close a child who left properly.
@@ -126,7 +169,11 @@ class AutoSignOffCommand extends Command
             ->whereIn('f.centre_id', $centreIds)
             ->where('e.occurred_at', '>=', $since)
             ->orderBy('e.occurred_at')
-            ->get(['e.child_id', 'e.room_id', 'e.event_type', 'e.occurred_at', 'ch.first_name', 'ch.last_name']);
+            ->get(['e.child_id', 'e.room_id', 'e.event_type', 'e.occurred_at',
+                   // Carried through so the automatic check-out can be attributed to
+                   // whoever checked the child IN — see the insert below.
+                   'e.by_user_id', 'e.recorded_by_id',
+                   'ch.first_name', 'ch.last_name']);
 
         $last = [];
         foreach ($events as $e) {
@@ -151,10 +198,37 @@ class AutoSignOffCommand extends Command
             $this->line(sprintf('    %-24s in %s -> out %s', $name, $in->format('D H:i'), $cutoff->format('D H:i')));
 
             if (! $dry) {
+                // by_user_id and recorded_by_id are NOT NULL with no default, and this
+                // insert supplied neither — so every run since 17 Aug died on SQLSTATE
+                // 1364 and no child was ever signed off. Attributed to whoever checked
+                // the child IN, which is what logToDay() below already does for the day
+                // log; the note is what marks it as automatic. Falls back to the room's
+                // last known actor so a missing value can never break the run again.
+                $by = $e->recorded_by_id ?? $e->by_user_id ?? null;
+                if (! $by) {
+                    $by = DB::table('check_events')->where('room_id', $e->room_id)
+                        ->whereNotNull('recorded_by_id')->orderByDesc('id')->value('recorded_by_id');
+                }
+                if (! $by) {
+                    $this->warn('  skipped child '.$childId.' — nobody to attribute the sign-off to.');
+                    continue;
+                }
+
+                $this->auditAuto($agencyId, 'child.auto_check_out', 'child', $e->child_id, [
+                    'room_id' => $e->room_id,
+                    'last_seen_in_at' => $e->occurred_at,
+                    /* Recorded so nobody later mistakes the borrowed id in
+                       check_events for the person who actually did this. */
+                    'attributed_to_user_id' => $by,
+                ]);
                 DB::table('check_events')->insert([
                     'child_id' => $childId,
                     'room_id' => $e->room_id,
                     'event_type' => 'check_out',
+                    /* The fact, as a column rather than a phrase in notes. */
+                    'is_automatic' => true,
+                    'by_user_id' => $by,
+                    'recorded_by_id' => $by,
                     'occurred_at' => $cutoff->clone()->utc(),
                     // kiosk_source is a tinyint(1), not a label: writing 'auto' there
                     // would have recorded "this came from a kiosk", which is false. The
