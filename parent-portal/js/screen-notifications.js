@@ -325,25 +325,39 @@
 
     filter.addEventListener('change', paint);
 
+    /* ONE request that marks every unread row server-side, then a reload.
+
+       This used to fire a PATCH per notification, in parallel, over whatever the list
+       happened to be holding — and that is why stale notifications kept coming back
+       (Anthony, 2026-08-31):
+         • it could only ever reach the newest 200, the cap on GET /notifications, so
+           anything older stayed unread for good;
+         • 47 simultaneous PATCHes is a burst the throttle can and does refuse — and
+           the .catch() swallowed the failure while .finally() set read_at LOCALLY
+           anyway, so the screen showed them read while the server still had them
+           unread. On the next load they were all back, which is exactly the symptom.
+
+       POST /notifications/mark-read already updates every unread row for the user in a
+       single statement. Re-reading afterwards means the list shows what the server
+       actually holds rather than what we hoped it did. */
     markAll.addEventListener('click', async function () {
       var unread = cache.filter(function (r) { return !r.read_at; });
       if (!unread.length) return;
       if (!await KT.confirm('Mark all ' + unread.length + ' as read?')) return;
       markAll.disabled = true; markAll.textContent = 'Marking…';
-      var done = 0;
-      unread.forEach(function (n) {
-        Api.patch('/notifications/' + n.id + '/read', {})
-          .catch(function () {})
-          .finally(function () {
-            n.read_at = new Date().toISOString();
-            done++;
-            if (done === unread.length) {
-              markAll.disabled = false; markAll.textContent = 'Mark all read';
-              paint();
-              if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge();
-            }
-          });
-      });
+      try {
+        await Api.post('/notifications/mark-read', {});
+        var fresh = await Api.get('/notifications');
+        cache = (fresh && fresh.notifications) ? fresh.notifications : (Array.isArray(fresh) ? fresh : cache);
+        paint();
+        if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge();
+      } catch (e) {
+        // Say so, and leave the rows alone — claiming they are read when they are not
+        // is what made this untrustworthy in the first place.
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not mark them read — please try again.', 'error');
+        else if (KT.toast) KT.toast('⚠️', 'Could not mark them read', (e && e.message) || '', '#B91C1C');
+      }
+      markAll.disabled = false; markAll.textContent = 'Mark all read';
     });
 
     // v22p45: notifications live under /parent/* in the current routes

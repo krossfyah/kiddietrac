@@ -296,6 +296,16 @@
         // registered so any existing deep link or notification still resolves, but it
         // is no longer advertised anywhere in the UI.
         wrap.appendChild(iconBtn('📣', 'Announcements', function () { location.hash = '#announcements'; }));
+        /* What's new — for the STAFF roles that now have release notes of their own.
+           The 🎁 button lives in kt-topbar, which returns early for these roles, so
+           until now an educator could not open it at all: features written for them
+           were announced only to admins. Parents are left out deliberately — no entry
+           targets them, and a button that always opens an empty panel is clutter. */
+        if (['educator', 'home_visitor', 'auditor'].indexOf(role) !== -1) {
+          wrap.appendChild(iconBtn('🎁', "What's new", function () {
+            if (window.KT && window.KT.openWhatsNew) window.KT.openWhatsNew();
+          }, 'kt-tb-wn-badge'));
+        }
         // Notification bell for educators + home visitors (their role-relevant
         // inbox). Parents keep just Messages/Announcements.
         if (role !== 'guardian') wrap.appendChild(iconBtn('🔔', 'Notifications', function () { location.hash = '#notifications'; }, 'kt-pc-notif-badge'));
@@ -453,7 +463,7 @@
   // A slow safety net only — the observers do the real work.
   setInterval(boot, 2000);
   setInterval(tick, 15000);
-  setInterval(refreshUnread, 60000);   // keep the Messages unread badge current
+  setInterval(refreshUnread, 15000);   // was 60s; matches the top bar so the two agree
   w.addEventListener('resize', function () {
     var wrap = document.getElementById('kt-pc-wrap');
     if (!isDesktop()) { if (wrap) wrap.remove(); ensureGreeting(); }

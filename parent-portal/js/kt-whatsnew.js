@@ -13,12 +13,46 @@
   var DATA = null;
 
   function user() { try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
-  function isAdmin() { var r = (user().roles) || []; return ADMIN.some(function (x) { return r.indexOf(x) !== -1; }); }
+  function isAdmin() { var r = myRoles(); return ADMIN.some(function (x) { return r.indexOf(x) !== -1; }); }
+
+  function myRoles() {
+    var u = user();
+    var r = (u.roles && u.roles.length) ? u.roles.slice() : [];
+    // role_key is what the portal actually gates on elsewhere; a kt_user rebuilt by
+    // hand often has it and no roles array at all.
+    if (u.role_key && r.indexOf(u.role_key) === -1) r.push(u.role_key);
+    return r;
+  }
+
+  /**
+   * The entries THIS person should be told about.
+   *
+   * An entry may name the roles it matters to (`roles: ["educator", ...]`). One that
+   * does not is admin news, which is what every entry written before this was — so the
+   * default keeps the existing 45 exactly where they were rather than suddenly showing
+   * an educator three months of billing changes.
+   *
+   * This is why the panel is no longer admin-only: an educator now has features of
+   * their own to hear about (Anthony, 2026-08-31: "add them to the new feature list for
+   * all roles that are relevant to the new features"), and a release note nobody in that
+   * role can open is a release note that was not written.
+   */
+  function forMe(entries) {
+    var mine = myRoles();
+    var admin = isAdmin();
+    return (entries || []).filter(function (e) {
+      if (! e.roles || ! e.roles.length) return admin;
+      for (var i = 0; i < e.roles.length; i++) {
+        if (mine.indexOf(e.roles[i]) !== -1) return true;
+      }
+      return false;
+    });
+  }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function within3mo(d) { if (!d) return false; var t = new Date(d + 'T00:00:00'); if (isNaN(t)) return false; return (Date.now() - t.getTime()) <= 92 * 86400000; }
   // Date-only: see KT.dayLabel.
   function fmtDate(s) { return (window.KT && KT.dayLabel) ? KT.dayLabel(s) : s; }
-  function newest(d) { var ns = (d.entries || []).filter(function (e) { return e.type === 'new' && e.date; }).map(function (e) { return e.date; }).sort(); return ns.length ? ns[ns.length - 1] : ''; }
+  function newest(d) { var ns = forMe(d.entries).filter(function (e) { return e.type === 'new' && e.date; }).map(function (e) { return e.date; }).sort(); return ns.length ? ns[ns.length - 1] : ''; }
   function seenDate() { try { return localStorage.getItem('kt_whatsnew_seen') || ''; } catch (e) { return ''; } }
 
   function load(cb) {
@@ -30,8 +64,8 @@
   function openWhatsNew() {
     load(function (d) {
       if (!d) return;
-      var news = (d.entries || []).filter(function (e) { return e.type === 'new' && within3mo(e.date); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-      var up = (d.entries || []).filter(function (e) { return e.type === 'upcoming'; });
+      var news = forMe(d.entries).filter(function (e) { return e.type === 'new' && within3mo(e.date); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+      var up = forMe(d.entries).filter(function (e) { return e.type === 'upcoming'; });
       var entry = function (e) {
         return '<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #F1F5F9;">' +
           '<span style="font-size:22px;flex-shrink:0;line-height:1.2;">' + (e.icon || '✨') + '</span>' +
@@ -67,7 +101,15 @@
   window.KT.openWhatsNew = openWhatsNew;
   window.KT.whatsNewIsAdmin = isAdmin;
 
-  function tick() { if (!isAdmin()) return; load(function (d) { if (d && newest(d) > seenDate()) badge(true); }); }
-  setInterval(tick, 2500);
+  /* Anyone with something addressed to them, not just admins — and the badge clears
+     itself when there is nothing left to say, which the old one never did. */
+  function tick() {
+    load(function (d) {
+      if (! d) return;
+      var n = newest(d);
+      badge(!!n && n > seenDate());
+    });
+  }
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(tick) : setInterval(tick, 2500);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tick); else tick();
 })();

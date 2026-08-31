@@ -1,6 +1,66 @@
 {
-  "updated": "2026-08-05",
+  "updated": "2026-08-31",
   "entries": [
+    {
+      "type": "new",
+      "date": "2026-08-30",
+      "icon": "📊",
+      "title": "Reports for educators",
+      "body": "Educators now have their own Reports screen: an attendance log, their own clock-in hours, observations and incidents — covering the room(s) they are assigned to. Pick a room, set a date range, print or export. Ask your director to assign your rooms if the list looks empty.",
+      "roles": [
+        "educator",
+        "centre_director",
+        "agency_admin"
+      ]
+    },
+    {
+      "type": "new",
+      "date": "2026-08-30",
+      "icon": "👥",
+      "title": "Group conversations in Messenger",
+      "body": "Start a group with several colleagues from + New chat → New group, or add people to a conversation you are already in — adding a third person turns a one-to-one into a group. Anyone added can read the whole history, so they arrive with the context. Rename a group, remove someone or leave from the member list at the top of the thread.",
+      "roles": [
+        "educator",
+        "centre_director",
+        "agency_admin",
+        "home_visitor"
+      ]
+    },
+    {
+      "type": "new",
+      "date": "2026-08-30",
+      "icon": "🗓️",
+      "title": "Filter the calendar by staff member",
+      "body": "The staff calendar can now be narrowed to one person — their shifts and their time off — alongside the existing filter for the role played on a shift. Opening a day still shows the whole day, so nothing is hidden while you are arranging cover.",
+      "roles": [
+        "centre_director",
+        "agency_admin"
+      ]
+    },
+    {
+      "type": "new",
+      "date": "2026-08-31",
+      "icon": "⏱",
+      "title": "The clock follows the rota",
+      "body": "Where a centre keeps a staff rota, an educator who is not on today's schedule is asked to speak to their director instead of clocking in. Centres that do not use the schedule are unaffected, and anyone already on shift can always clock out.",
+      "roles": [
+        "educator",
+        "centre_director",
+        "agency_admin"
+      ]
+    },
+    {
+      "type": "new",
+      "date": "2026-08-31",
+      "icon": "📜",
+      "title": "The audit log says what was deleted",
+      "body": "Deleting a sales lead now records which lead it was — name, contact and stage — rather than only that a deletion happened. Automatic overnight clock-outs also appear in the log properly now.",
+      "roles": [
+        "agency_admin",
+        "centre_director",
+        "auditor"
+      ]
+    },
     {
       "type": "new",
       "date": "2026-08-05",
