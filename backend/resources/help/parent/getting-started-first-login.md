@@ -44,8 +44,41 @@ You can update all of this later in **Settings**.
 
 The phone app gives you push notifications, faster loading, and a camera check-in scanner.
 
-- **Android** — install the KiddieTrac app your centre shared, or add the website to your home screen from your browser menu.
-- **iPhone** — open the portal in Safari, tap **Share → Add to Home Screen**.
+### iPhone and iPad
+
+1. **Open the portal in Safari itself.** This is the step people miss. If you tapped
+   the link inside your email app, Facebook or Messages, you are in that app's own
+   little browser — it looks like Safari but it is not, and it has no way to add
+   anything to your Home Screen. Look for a small compass icon, or **⋯ → Open in
+   Safari**. If you can't find it, open Safari yourself and type **app.kiddietrac.com**.
+2. **Sign in**, so the app opens ready to use rather than at the login screen.
+3. **Tap the Share button** — the square with an arrow pointing up out of it. On an
+   iPhone it sits in the bar along the *bottom* of the screen; on an iPad it is at the
+   top right. If you can't see the bottom bar, it has hidden itself while you scrolled
+   — tap once on the address bar and it slides back.
+4. **Scroll down** the grey list that appears. **Add to Home Screen** is well down it,
+   below *Copy*, *Add to Favourites* and *Find on Page*. It is the one with a grey
+   square-and-plus icon.
+5. Tap **Add** in the top right. The KiddieTrac icon is now on your Home Screen, and
+   opening it from there gives you the full app.
+
+**If "Add to Home Screen" simply isn't in the list**, one of these is why:
+
+- You aren't in Safari — go back to step 1; this is nearly always the answer.
+- You are already *in* the installed app, which has no Share button. Close it and check
+  your Home Screen for the KiddieTrac icon; it may be on a later page or inside a
+  folder. Swipe down on the Home Screen and search "KiddieTrac".
+- A school or work profile on the phone has hidden the option. Scroll to the bottom of
+  the share list, tap **Edit Actions**, and see whether *Add to Home Screen* can be
+  switched back on there.
+
+### Android
+
+Install the KiddieTrac app your centre shared, or open the portal in Chrome and choose
+**⋮ → Add to Home screen** (some phones call it *Install app*).
+
+Either way this is optional — everything works in the browser too. The Home Screen icon
+just makes it quicker to reach and lets notifications through.
 
 ## 5. Find your way around
 

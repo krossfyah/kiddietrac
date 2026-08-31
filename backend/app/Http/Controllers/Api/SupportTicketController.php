@@ -33,9 +33,24 @@ final class SupportTicketController extends Controller
             ->where('active', 1)->exists();
         if (! $isStaff) return false;
         if ($this->isPlatformAdminUser($u)) {
-            return (int) $ticket->agency_id === (int) $this->resolveAgencyId($request);
+            /* A ticket with NO agency belongs to the platform, and the platform admin is
+               the only person who can act on it — index() already lists them for exactly
+               that reason. This guard did not agree: (int) null === (int) $agencyId is
+               0 === 2, so the row appeared in the queue and 403'd the moment it was
+               clicked. Anthony hit it on ticket #27 at 10:30 on 2026-08-31 and the failed
+               open filed crash ticket #31.
+
+               HALF A FIX IS ITS OWN BUG. The list was widened for unattributed tickets on
+               2026-08-31 and the guard beside it was not, which is worse than leaving both
+               strict: a row you can see and cannot open reads as the portal being broken,
+               not as a permission boundary. Reader and guard have to move together. */
+            return $ticket->agency_id === null
+                || (int) $ticket->agency_id === (int) $this->resolveAgencyId($request);
         }
-        return $this->userBelongsToAgency($u->id, (int) $ticket->agency_id);
+        // A tenant admin still sees only their own agency's tickets — an unattributed
+        // platform ticket is not theirs, and (int) null would quietly match agency 0.
+        return $ticket->agency_id !== null
+            && $this->userBelongsToAgency($u->id, (int) $ticket->agency_id);
     }
     public function listMine(Request $request): JsonResponse
     {

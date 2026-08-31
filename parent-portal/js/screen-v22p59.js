@@ -230,6 +230,21 @@
     // A tint per rotation so a week reads at a glance rather than by reading text.
     const TINT = { full: '#DCFCE7', am: '#DBEAFE', pm: '#FEF3C7', before: '#EDE9FE', after: '#FFE4E6', bna: '#E0F2FE' };
     const INK = { full: '#166534', am: '#1E40AF', pm: '#92400E', before: '#5B21B6', after: '#9F1239', bna: '#075985' };
+    // A rotation added on the server side should not silently come out grey like every
+    // other unknown key. Any key without a hand-picked colour gets its own, derived from
+    // the key itself so it is stable between loads rather than shuffling on each render.
+    function tintFor(key) {
+      if (TINT[key]) { return TINT[key]; }
+      let h = 0;
+      for (let i = 0; i < key.length; i++) { h = (h * 31 + key.charCodeAt(i)) % 360; }
+      return 'hsl(' + h + ',72%,91%)';
+    }
+    function inkFor(key) {
+      if (INK[key]) { return INK[key]; }
+      let h = 0;
+      for (let i = 0; i < key.length; i++) { h = (h * 31 + key.charCodeAt(i)) % 360; }
+      return 'hsl(' + h + ',68%,28%)';
+    }
 
     main.innerHTML =
       '<div style="padding:24px;max-width:1600px;margin:0 auto;">'
@@ -295,16 +310,28 @@
 
     function cell(c, d) {
       const cur = draft[c.id][d] || '';
-      const bg = cur ? (TINT[cur] || '#F1F5F9') : '#fff';
-      const fg = cur ? (INK[cur] || '#334155') : '#94A3B8';
+      // A day with nothing set is dimmed and dashed rather than left white. White is the
+      // table's own colour, so a gap in a child's week disappeared into the background —
+      // and a gap is exactly what you are scanning this grid for.
+      const bg = cur ? tintFor(cur) : '#F8FAFC';
+      const fg = cur ? inkFor(cur) : '#CBD5E1';
+      const border = cur ? '1px solid transparent' : '1px dashed #E2E8F0';
       let html = '<td style="padding:4px;text-align:center;border-bottom:1px solid #F1F5F9;">'
         + '<select data-child="' + c.id + '" data-day="' + d + '" '
-        + 'style="width:100%;min-width:74px;height:30px;border:1px solid ' + (cur ? 'transparent' : '#E2E8F0') + ';'
+        + 'style="width:100%;min-width:74px;height:30px;border:' + border + ';'
         + 'border-radius:7px;background:' + bg + ';color:' + fg + ';font-size:12px;font-weight:700;'
         + 'text-align:center;cursor:pointer;padding:0 4px;">';
-      html += '<option value=""' + (cur === '' ? ' selected' : '') + '>—</option>';
+      // The options carry their category colour too, so the list is read by colour and
+      // the cell then takes the same one — you see what you picked before you pick it.
+      html += '<option value="" style="background:#F8FAFC;color:#94A3B8;"'
+        + (cur === '' ? ' selected' : '') + '>—</option>';
       ROT.forEach((r) => {
-        html += '<option value="' + esc(r.key) + '"' + (cur === r.key ? ' selected' : '') + '>' + esc(r.short) + '</option>';
+        const on = cur === r.key;
+        html += '<option value="' + esc(r.key) + '"'
+          + ' style="background:' + tintFor(r.key) + ';color:' + inkFor(r.key) + ';'
+          // Not the current choice = dimmed, so the one in force stands out in the list.
+          + 'font-weight:' + (on ? '800' : '600') + ';opacity:' + (on ? '1' : '.72') + ';"'
+          + (on ? ' selected' : '') + '>' + esc(r.short) + '</option>';
       });
       return html + '</select></td>';
     }
@@ -701,12 +728,12 @@
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Ticket</th><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th><th>Raised by</th><th>Created</th></tr></thead>
+          <thead><tr><th>Ticket</th><th>Subject</th><th>Category</th><th>Severity</th><th>Status</th><th>Raised by</th><th>Created</th></tr></thead>
           <tbody>${(r.data || []).map(t => `<tr style="cursor:pointer;" data-open="${t.id}"><td style="font-weight:800;color:#475569;white-space:nowrap;">#${t.id}</td>
             <td><strong>${esc(t.subject)}</strong></td>
-            <td><span class="kt-pill kt-pill-info">${esc(t.category)}</span></td>
-            <td><span class="kt-pill ${t.priority === 'urgent' ? 'kt-pill-danger' : t.priority === 'high' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.priority)}</span></td>
-            <td><span class="kt-pill ${t.status === 'resolved' || t.status === 'closed' ? 'kt-pill-success' : t.status === 'awaiting_user' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.status)}</span></td>
+            <td><span class="kt-pill kt-pill-info">${esc(tkCat(t.category))}</span></td>
+            <td><span class="kt-pill ${tkSev(t.priority).cls}">${esc(tkSev(t.priority).label)}</span></td>
+            <td><span class="kt-pill ${tkStatus(t.status).cls}">${esc(tkStatus(t.status).label)}</span></td>
             <td>${esc(t.raised_by_name)}</td>
             <td>${fmtStamp(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No tickets yet.</td></tr>'}</tbody>
         </table>
@@ -717,86 +744,466 @@
   }
   function openTicketModal() {
     const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:520px;width:92%;">
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    // Severity says what each level MEANS. "High" and "urgent" are indistinguishable
+    // to somebody who is already having a bad morning, so everything lands as urgent.
+    m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:560px;width:100%;max-height:calc(100vh - 40px);overflow-y:auto;">
       <h3 style="margin:0 0 16px;">Raise a ticket</h3>
+
       <label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Category</label>
       <select id="tk-cat" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
         <option value="billing">Billing question</option><option value="enrollment">Enrollment</option>
         <option value="maintenance">Maintenance / repair</option><option value="technical">Technical / app issue</option>
         <option value="policy">Policy question</option><option value="other">Other</option>
       </select>
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Priority</label>
+
+      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Severity</label>
       <select id="tk-pri" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-        <option value="low">Low</option><option value="normal" selected>Normal</option>
-        <option value="high">High</option><option value="urgent">Urgent</option>
+        <option value="low">Low — a question, no rush</option>
+        <option value="normal" selected>Normal — needs sorting, but we can work</option>
+        <option value="high">High — something is broken and it is slowing us down</option>
+        <option value="urgent">Urgent — we cannot run the day, or a child is affected</option>
       </select>
+
       <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Subject</label>
-      <input id="tk-sub" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Description</label>
-      <textarea id="tk-body" rows="5" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
-      <div style="margin-top:20px;text-align:right;">
-        <button id="tk-cancel" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Cancel</button>
-        <button id="tk-save" class="kt-btn kt-btn-primary" style="margin-left:8px;">Raise ticket</button>
+      <input id="tk-sub" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">
+
+      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">What happened?</label>
+      <textarea id="tk-body" rows="5" placeholder="What you were doing, what you expected, and what happened instead."
+        style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;box-sizing:border-box;"></textarea>
+
+      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Screenshots or logs</label>
+      <div style="font-size:12.5px;color:#64748B;margin-bottom:6px;">
+        A screenshot usually explains it faster than a paragraph. Images, PDFs, logs, CSV or a zip — up to 10&nbsp;MB each.</div>
+      <input id="tk-files" type="file" multiple accept="image/*,.pdf,.txt,.log,.csv,.json,.xml,.zip"
+        style="width:100%;padding:9px;border:1px dashed #CBD5E1;border-radius:8px;font-size:13px;background:#F8FAFC;box-sizing:border-box;">
+      <div id="tk-file-list" style="font-size:12.5px;color:#475569;margin-top:6px;"></div>
+
+      <div id="tk-msg" style="font-size:13px;margin-top:12px;min-height:18px;"></div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+        <button id="tk-cancel" class="kt-btn kt-btn-secondary" type="button">Cancel</button>
+        <button id="tk-save" class="kt-btn kt-btn-primary" type="button">Raise ticket</button>
       </div></div>`;
+
     document.body.appendChild(m);
-    m.querySelector('#tk-cancel').onclick = () => m.remove();
-    m.querySelector('#tk-save').onclick = async () => {
-      await Api.post('/tickets', {
-        category: m.querySelector('#tk-cat').value,
-        priority: m.querySelector('#tk-pri').value,
-        subject: m.querySelector('#tk-sub').value,
-        body: m.querySelector('#tk-body').value,
+
+    const files = m.querySelector('#tk-files');
+    const list = m.querySelector('#tk-file-list');
+    const msg = m.querySelector('#tk-msg');
+
+    files.addEventListener('change', function () {
+      const names = Array.prototype.map.call(files.files || [], function (f) {
+        return f.name + ' (' + Math.max(1, Math.round(f.size / 1024)) + ' KB)';
       });
-      m.remove();
-      renderTickets(document.querySelector('main'));
-    };
-  }
-  async function openTicket(id) {
-    const r = await Api.get(`/tickets/${id}`);
-    const t = r.ticket;
-    const msgs = r.messages || [];
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:600px;width:92%;max-height:88vh;overflow:auto;">
-      <h3 style="margin:0 0 8px;color:#0F172A;">${esc(t.subject)}</h3>
-      <div style="color:#475569;font-size:13px;margin-bottom:14px;">
-        <span class="kt-pill kt-pill-info">${esc(t.category)}</span>
-        <span class="kt-pill ${t.priority === 'urgent' ? 'kt-pill-danger' : t.priority === 'high' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(t.priority)}</span>
-        <span class="kt-pill ${t.status === 'resolved' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(t.status)}</span>
-      </div>
-      <div style="background:#F8FAFC;padding:14px;border-radius:8px;font-size:14px;">${esc(t.body || '')}</div>
-      <h4 style="margin:18px 0 10px;color:#0F172A;font-size:14px;">Replies</h4>
-      <div style="max-height:240px;overflow:auto;">${msgs.map(msg => `<div style="padding:10px;background:#FAFCFE;border-radius:8px;margin-bottom:8px;">
-        <div style="font-size:12px;color:#64748B;font-weight:600;">${esc(msg.author_name)} · ${fmtStamp(msg.created_at)}</div>
-        <div style="margin-top:4px;font-size:14px;">${esc(msg.body)}</div></div>`).join('') || '<div style="color:#64748B;font-size:13px;">No replies yet.</div>'}
-      </div>
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Reply</label>
-      <textarea id="tk-reply" rows="3" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
-      <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;">
-        <button id="tk-resolve" class="kt-btn kt-btn-success" style="font-size:12px;padding:6px 12px;">Mark resolved</button>
-        <div>
-          <button id="tk-close" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Close</button>
-          <button id="tk-send" class="kt-btn kt-btn-primary" style="margin-left:8px;">Reply</button>
-        </div>
-      </div></div>`;
-    document.body.appendChild(m);
-    m.querySelector('#tk-close').onclick = () => m.remove();
-    m.querySelector('#tk-send').onclick = async () => {
-      const body = m.querySelector('#tk-reply').value;
-      if (!body) return;
-      await Api.post(`/tickets/${id}/reply`, { body });
-      m.remove();
-      openTicket(id);
-    };
-    m.querySelector('#tk-resolve').onclick = async () => {
-      await Api.patch(`/tickets/${id}/status`, { status: 'resolved' });
-      m.remove();
-      renderTickets(document.querySelector('main'));
+      list.textContent = names.length ? '📎 ' + names.join(', ') : '';
+    });
+
+    m.querySelector('#tk-cancel').onclick = () => m.remove();
+
+    m.querySelector('#tk-save').onclick = async () => {
+      const btn = m.querySelector('#tk-save');
+      const subject = m.querySelector('#tk-sub').value.trim();
+      if (!subject) {
+        msg.style.color = '#B91C1C';
+        msg.textContent = 'Please give it a subject so it can be found again.';
+        return;
+      }
+
+      btn.disabled = true;
+      msg.style.color = '#64748B';
+      msg.textContent = 'Raising…';
+
+      try {
+        const res = await Api.post('/tickets', {
+          category: m.querySelector('#tk-cat').value,
+          priority: m.querySelector('#tk-pri').value,
+          subject: subject,
+          body: m.querySelector('#tk-body').value,
+        });
+
+        // Files go up AFTER the ticket exists — one needs the other to hang off. A
+        // failed upload therefore costs the attachment, never the ticket itself.
+        const id = (res && (res.id || res.ticket_id)) || null;
+        const chosen = Array.prototype.slice.call(files.files || []);
+        let failed = 0;
+
+        if (id && chosen.length) {
+          msg.textContent = 'Uploading ' + chosen.length + ' file' + (chosen.length === 1 ? '' : 's') + '…';
+          for (const f of chosen) {
+            const fd = new FormData();
+            fd.append('file', f, f.name);
+            try {
+              // Api.post detects FormData, leaves Content-Type to the browser so the
+              // multipart boundary is right, and carries the active-agency header.
+              await Api.post('/tickets/' + id + '/files', fd);
+            } catch (e) { failed++; }
+          }
+        }
+
+        if (failed) {
+          msg.style.color = '#B45309';
+          msg.textContent = 'Ticket raised, but ' + failed + ' file' + (failed === 1 ? '' : 's')
+            + ' could not be attached. You can add them from the ticket.';
+          setTimeout(function () { m.remove(); refreshTickets(); }, 2600);
+          return;
+        }
+
+        m.remove();
+        refreshTickets();
+      } catch (e) {
+        btn.disabled = false;
+        msg.style.color = '#B91C1C';
+        msg.textContent = (e && e.message) || 'Could not raise the ticket.';
+      }
     };
   }
 
-  // ============================ Photo tagging (extends feed) ============================
+  /* Repaint the list after a change, without assuming which element is "main" — the
+     old code passed document.querySelector('main'), which is not the portal container
+     on every screen. */
+  function refreshTickets() {
+    const host = document.querySelector('#appMain') || document.querySelector('main');
+    if (host) { renderTickets(host); }
+  }
+  /* ── Words, not column values ────────────────────────────────────────────
+     A support screen is read by people who did not design the database. `awaiting_user`
+     is a value; "Waiting on you" is what it means, and which of those two it is
+     depends on who is reading. */
+  const TK_STATUS = {
+    open: { label: 'Open', cls: 'kt-pill-warning', dot: '#F59E0B' },
+    awaiting_user: { label: 'Waiting on a reply', cls: 'kt-pill-info', dot: '#3B82F6' },
+    resolved: { label: 'Resolved', cls: 'kt-pill-success', dot: '#10B981' },
+    closed: { label: 'Closed', cls: 'kt-pill-success', dot: '#64748B' },
+  };
+  const TK_CAT = {
+    billing: 'Billing question', enrollment: 'Enrollment',
+    maintenance: 'Maintenance / repair', technical: 'Technical / app issue',
+    policy: 'Policy question', crash: 'App crash',
+    /* Raised by the help screen, not by the ticket form. */
+    documentation: 'Help guide feedback', other: 'Other',
+  };
+  const TK_SEV = {
+    low: { label: 'Low', cls: 'kt-pill-info' },
+    normal: { label: 'Normal', cls: 'kt-pill-info' },
+    high: { label: 'High', cls: 'kt-pill-warning' },
+    urgent: { label: 'Urgent', cls: 'kt-pill-danger' },
+  };
+  function tkStatus(v) {
+    return TK_STATUS[v] || { label: String(v || '—').replace(/_/g, ' '), cls: 'kt-pill-info', dot: '#94A3B8' };
+  }
+  function tkCat(v) { return TK_CAT[v] || String(v || '—').replace(/_/g, ' '); }
+  function tkSev(v) { return TK_SEV[v] || { label: String(v || '—'), cls: 'kt-pill-info' }; }
+
+  function tkSize(b) {
+    b = +b || 0;
+    if (b < 1024) { return b + ' B'; }
+    if (b < 1024 * 1024) { return Math.round(b / 1024) + ' KB'; }
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+
+  /* Attachments are access-controlled: the endpoint checks that this user may see
+     this ticket before it streams a byte. That means an <img src> cannot fetch one —
+     it carries no Authorization header — so each file is fetched with the token and
+     turned into a blob URL. Which is also the reason these files are safe to keep:
+     they are not sitting under the public root waiting to be guessed at. */
+  async function tkFileBlob(ticketId, fileId) {
+    const base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    const headers = { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token') };
+    const active = sessionStorage.getItem('kt_active_agency_id');
+    if (active) { headers['X-Active-Agency-Id'] = active; }
+    const r = await fetch(base + '/tickets/' + ticketId + '/files/' + fileId, { headers });
+    if (!r.ok) { throw new Error('Could not load that file.'); }
+    return URL.createObjectURL(await r.blob());
+  }
+
+  async function openTicket(id) {
+    /* A failed load used to reject with nothing catching it, so the row simply did not
+       open — no dialog, no message, nothing — and the unhandled rejection was picked up
+       by the crash reporter and filed as a ticket of its own. That is how ticket #31 came
+       to exist: a 403 opening ticket #27 became a crash report about "Error".
+
+       Anything that can 403 or time out and is triggered by a click needs to say so. */
+    let r;
+    try {
+      r = await Api.get(`/tickets/${id}`);
+    } catch (e) {
+      const code = e && e.status;
+      const msg =
+        code === 403 ? 'You do not have access to that ticket.'
+        : code === 404 ? 'That ticket no longer exists.'
+        : ('Could not open that ticket' + (e && e.message ? ': ' + e.message : '.'));
+      (window.KT && KT.toast) ? KT.toast(msg, 'error') : alert(msg);
+      return;
+    }
+    const t = r.ticket || {};
+    const msgs = r.messages || [];
+    const files = r.files || [];
+    const events = r.events || [];
+
+    const st = tkStatus(t.status);
+    const sev = tkSev(t.priority);
+    const done = t.status === 'resolved' || t.status === 'closed';
+
+    /* One thread in time order. Replies and status changes were two separate lists,
+       so a ticket that was answered and then reopened read as neither. */
+    const thread = []
+      .concat(msgs.map(x => ({ at: x.created_at, kind: 'msg', d: x })))
+      .concat(events.map(x => ({ at: x.created_at, kind: 'evt', d: x })))
+      .sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+
+    function evtLine(e) {
+      if (e.type === 'status') {
+        return 'Status changed from <strong>' + esc(tkStatus(e.from_value).label)
+          + '</strong> to <strong>' + esc(tkStatus(e.to_value).label) + '</strong>';
+      }
+      if (e.type === 'priority') {
+        return 'Severity changed from <strong>' + esc(tkSev(e.from_value).label)
+          + '</strong> to <strong>' + esc(tkSev(e.to_value).label) + '</strong>';
+      }
+      if (e.type === 'assigned') {
+        return e.to_value ? 'Assigned to <strong>' + esc(e.to_value) + '</strong>' : 'Unassigned';
+      }
+      return esc(String(e.type || '').replace(/_/g, ' '));
+    }
+
+    // The facts, as a labelled list. They were a row of pills, which is fine for a
+    // table and useless when you are trying to find out who raised something.
+    const facts = [
+      ['Raised by', esc(t.raised_by_name || '—')],
+      ['Raised', esc(fmtStamp(t.created_at))],
+      ['Category', esc(tkCat(t.category))],
+      ['Centre', esc(t.centre_name || '—')],
+      ['Assigned to', esc(t.assigned_name || 'Nobody yet')],
+      ['Last activity', esc(fmtStamp(t.updated_at || t.created_at))],
+    ].map(p => '<div><div style="font-size:11.5px;font-weight:800;letter-spacing:.4px;'
+      + 'text-transform:uppercase;color:#94A3B8;margin-bottom:2px;">' + p[0] + '</div>'
+      + '<div style="font-size:14px;color:#0F172A;">' + p[1] + '</div></div>').join('');
+
+    const m = document.createElement('div');
+    m.setAttribute('data-no-modal-guard', '1');
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;'
+      + 'display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    m.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:760px;width:100%;
+      max-height:calc(100vh - 40px);display:flex;flex-direction:column;overflow:hidden;">
+
+      <div style="padding:20px 24px 16px;border-bottom:1px solid #E2E8F0;flex:0 0 auto;">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+              <span style="font-size:12.5px;font-weight:800;color:#94A3B8;">TICKET #${t.id}</span>
+              <span class="kt-pill ${st.cls}">${esc(st.label)}</span>
+              <span class="kt-pill ${sev.cls}">${esc(sev.label)} severity</span>
+            </div>
+            <h3 style="margin:0;font-size:19px;line-height:1.3;color:#0F172A;">${esc(t.subject)}</h3>
+          </div>
+          <button id="tk-x" class="kt-btn kt-btn-secondary kt-btn-sm" type="button"
+            aria-label="Close" style="flex:0 0 auto;">✕</button>
+        </div>
+      </div>
+
+      <div style="overflow-y:auto;flex:1 1 auto;padding:0 24px 4px;">
+
+        ${done ? `<div style="margin:18px 0 0;padding:14px 16px;background:#ECFDF5;
+          border:1px solid #A7F3D0;border-left:4px solid #10B981;border-radius:10px;">
+          <div style="font-size:13px;font-weight:800;color:#065F46;margin-bottom:4px;">
+            ✅ ${esc(st.label)}${t.resolved_by_name ? ' by ' + esc(t.resolved_by_name) : ''}
+            ${t.resolved_at ? ' · ' + esc(fmtStamp(t.resolved_at)) : ''}</div>
+          <div style="font-size:14px;color:#065F46;white-space:pre-wrap;line-height:1.55;">
+${t.resolution ? esc(t.resolution) : '<em style="opacity:.75;">No note was left explaining what fixed it.</em>'}</div>
+        </div>` : ''}
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+          gap:14px 18px;margin:18px 0 4px;padding-bottom:18px;border-bottom:1px solid #F1F5F9;">
+          ${facts}
+        </div>
+
+        <div style="margin:18px 0 0;">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+            color:#94A3B8;margin-bottom:8px;">What happened</div>
+          <div style="background:#F8FAFC;border:1px solid #E2E8F0;padding:14px 16px;border-radius:10px;
+            font-size:14.5px;line-height:1.6;color:#1E293B;white-space:pre-wrap;word-break:break-word;">
+${t.body ? esc(t.body) : '<em style="color:#94A3B8;">Nothing was written in the description.</em>'}</div>
+        </div>
+
+        ${files.length ? `<div style="margin:18px 0 0;">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+            color:#94A3B8;margin-bottom:8px;">Attached (${files.length})</div>
+          <div id="tk-files-box" style="display:flex;flex-wrap:wrap;gap:10px;">
+            ${files.map(f => `<button type="button" class="tk-file" data-fid="${f.id}"
+              data-img="${/^image\//.test(f.mime || '') ? 1 : 0}"
+              style="display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid #E2E8F0;
+              background:#fff;border-radius:10px;cursor:pointer;font-family:inherit;text-align:left;max-width:100%;">
+              <span style="font-size:18px;flex:0 0 auto;">${/^image\//.test(f.mime || '') ? '🖼️' : '📎'}</span>
+              <span style="min-width:0;">
+                <span style="display:block;font-size:13.5px;font-weight:600;color:#0F172A;
+                  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;">${esc(f.original_name)}</span>
+                <span style="display:block;font-size:11.5px;color:#94A3B8;">${tkSize(f.size_bytes)}</span>
+              </span></button>`).join('')}
+          </div>
+          <div id="tk-preview" style="margin-top:12px;"></div>
+        </div>` : ''}
+
+        <div style="margin:20px 0 0;">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+            color:#94A3B8;margin-bottom:10px;">History</div>
+          <div style="border-left:2px solid #E2E8F0;padding-left:16px;margin-left:5px;">
+
+            <div style="position:relative;padding-bottom:16px;">
+              <span style="position:absolute;left:-23px;top:3px;width:10px;height:10px;border-radius:50%;
+                background:#1F6080;border:2px solid #fff;box-shadow:0 0 0 2px #E2E8F0;"></span>
+              <div style="font-size:13px;color:#475569;">
+                <strong style="color:#0F172A;">${esc(t.raised_by_name || 'Someone')}</strong> raised this
+                · <span style="color:#94A3B8;">${esc(fmtStamp(t.created_at))}</span></div>
+            </div>
+
+            ${thread.map(item => item.kind === 'msg' ? `
+              <div style="position:relative;padding-bottom:16px;">
+                <span style="position:absolute;left:-23px;top:3px;width:10px;height:10px;border-radius:50%;
+                  background:${item.d.is_staff ? '#159FB4' : '#CBD5E1'};border:2px solid #fff;
+                  box-shadow:0 0 0 2px #E2E8F0;"></span>
+                <div style="font-size:13px;color:#475569;margin-bottom:5px;">
+                  <strong style="color:#0F172A;">${esc(item.d.author_name || 'Someone')}</strong>
+                  ${item.d.is_staff ? '<span style="font-size:10.5px;font-weight:800;letter-spacing:.3px;color:#0E7490;background:#CFFAFE;padding:2px 6px;border-radius:5px;margin-left:4px;">SUPPORT</span>' : ''}
+                  replied · <span style="color:#94A3B8;">${esc(fmtStamp(item.d.created_at))}</span></div>
+                <div style="background:${item.d.is_staff ? '#F0FDFA' : '#F8FAFC'};
+                  border:1px solid ${item.d.is_staff ? '#CCFBF1' : '#E2E8F0'};padding:11px 13px;
+                  border-radius:9px;font-size:14px;line-height:1.55;color:#1E293B;
+                  white-space:pre-wrap;word-break:break-word;">${esc(item.d.body)}</div>
+              </div>` : `
+              <div style="position:relative;padding-bottom:16px;">
+                <span style="position:absolute;left:-22px;top:5px;width:8px;height:8px;border-radius:50%;
+                  background:#CBD5E1;border:2px solid #fff;box-shadow:0 0 0 2px #E2E8F0;"></span>
+                <div style="font-size:12.5px;color:#64748B;">${evtLine(item.d)}
+                  ${item.d.actor_name ? ' by ' + esc(item.d.actor_name) : ''}
+                  · <span style="color:#94A3B8;">${esc(fmtStamp(item.d.created_at))}</span></div>
+                ${item.d.note ? `<div style="margin-top:5px;font-size:13px;color:#475569;
+                  white-space:pre-wrap;border-left:2px solid #E2E8F0;padding-left:10px;">${esc(item.d.note)}</div>` : ''}
+              </div>`).join('')}
+
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:0 0 auto;border-top:1px solid #E2E8F0;padding:16px 24px;background:#FCFDFE;">
+        <div id="tk-resolve-box" style="display:none;margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:700;margin-bottom:5px;color:#0F172A;">
+            What fixed it?</label>
+          <div style="font-size:12.5px;color:#64748B;margin-bottom:6px;">
+            The next person to hit this reads your answer. One or two lines is plenty.</div>
+          <textarea id="tk-resolution" rows="3" placeholder="e.g. The room\u2019s photo permission was set to staff-only. Switched it to parents + staff."
+            style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;
+            font-size:14px;box-sizing:border-box;"></textarea>
+        </div>
+
+        <div id="tk-reply-box" ${done ? 'style="display:none;"' : ''}>
+          <textarea id="tk-reply" rows="2" placeholder="Write a reply…"
+            style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;
+            font-size:14px;box-sizing:border-box;"></textarea>
+        </div>
+
+        <div id="tk-err" style="font-size:13px;color:#B91C1C;min-height:0;margin-top:6px;"></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;
+          flex-wrap:wrap;">
+          <div>${done
+            ? '<button id="tk-reopen" class="kt-btn kt-btn-secondary" type="button">Reopen</button>'
+            : '<button id="tk-resolve" class="kt-btn kt-btn-success" type="button">Mark resolved</button>'}</div>
+          <div style="display:flex;gap:8px;">
+            <button id="tk-close" class="kt-btn kt-btn-secondary" type="button">Close</button>
+            ${done ? '' : '<button id="tk-send" class="kt-btn kt-btn-primary" type="button">Send reply</button>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    document.body.appendChild(m);
+
+    const err = m.querySelector('#tk-err');
+    const say = (t2) => { err.textContent = t2 || ''; };
+
+    m.querySelector('#tk-x').onclick = () => m.remove();
+    m.querySelector('#tk-close').onclick = () => m.remove();
+    m.addEventListener('click', (e) => { if (e.target === m) { m.remove(); } });
+
+    // Attachments open in place. Images are shown; anything else opens in a tab.
+    m.querySelectorAll('.tk-file').forEach(btn => {
+      btn.onclick = async () => {
+        const prev = m.querySelector('#tk-preview');
+        prev.innerHTML = '<div style="font-size:13px;color:#64748B;">Opening…</div>';
+        try {
+          const url = await tkFileBlob(id, btn.dataset.fid);
+          if (btn.dataset.img === '1') {
+            prev.innerHTML = '<img alt="" style="max-width:100%;border-radius:10px;'
+              + 'border:1px solid #E2E8F0;">';
+            prev.firstChild.src = url;
+          } else {
+            window.open(url, '_blank');
+            prev.innerHTML = '';
+          }
+        } catch (e2) {
+          prev.innerHTML = '<div style="font-size:13px;color:#B91C1C;">Could not open that file.</div>';
+        }
+      };
+    });
+
+    const sendBtn = m.querySelector('#tk-send');
+    if (sendBtn) {
+      sendBtn.onclick = async () => {
+        const body = m.querySelector('#tk-reply').value.trim();
+        if (!body) { say('Write something first.'); return; }
+        sendBtn.disabled = true; say('');
+        try {
+          await Api.post(`/tickets/${id}/reply`, { body });
+          m.remove();
+          openTicket(id);
+        } catch (e2) {
+          sendBtn.disabled = false; say((e2 && e2.message) || 'Could not send that reply.');
+        }
+      };
+    }
+
+    /* Resolving takes two taps on purpose: the first asks what fixed it. A ticket
+       closed with no explanation is where the next person's search ends. */
+    const resolveBtn = m.querySelector('#tk-resolve');
+    if (resolveBtn) {
+      resolveBtn.onclick = async () => {
+        const box = m.querySelector('#tk-resolve-box');
+        const note = m.querySelector('#tk-resolution');
+        if (box.style.display === 'none') {
+          box.style.display = 'block';
+          m.querySelector('#tk-reply-box').style.display = 'none';
+          resolveBtn.textContent = 'Confirm resolved';
+          note.focus();
+          return;
+        }
+        resolveBtn.disabled = true; say('');
+        try {
+          await Api.patch(`/tickets/${id}/status`, { status: 'resolved', resolution: note.value.trim() });
+          m.remove();
+          refreshTickets();
+        } catch (e2) {
+          resolveBtn.disabled = false; say((e2 && e2.message) || 'Could not resolve that ticket.');
+        }
+      };
+    }
+
+    const reopenBtn = m.querySelector('#tk-reopen');
+    if (reopenBtn) {
+      reopenBtn.onclick = async () => {
+        reopenBtn.disabled = true; say('');
+        try {
+          await Api.patch(`/tickets/${id}/status`, { status: 'open' });
+          m.remove();
+          openTicket(id);
+        } catch (e2) {
+          reopenBtn.disabled = false; say((e2 && e2.message) || 'Could not reopen that ticket.');
+        }
+      };
+    }
+  }
   async function renderPhotoTagging(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
