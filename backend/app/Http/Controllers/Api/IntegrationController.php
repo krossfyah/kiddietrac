@@ -29,6 +29,69 @@ use Illuminate\Support\Str;
  */
 class IntegrationController extends Controller
 {
+    /**
+     * GET /integration/audit — what do you actually hold for me?
+     *
+     * A push integration can only ever report that it SENT something. Whether it
+     * arrived, and whether it is still there, are different questions, and until now
+     * nothing could ask them. That gap was not theoretical: 19 parent invoices for two
+     * active families sat missing here for three weeks (2026-08-31). The observer that
+     * pushes them had missed them once, and the only scheduled reconcile used a rolling
+     * one-week window — so by the time anybody could have noticed, the window had moved
+     * past and nothing would ever pick them up again. Silent, permanent, and invisible
+     * from both ends.
+     *
+     * So this returns the ids, not just the counts. Counts tell you THAT something is
+     * wrong; ids tell you WHICH, which is the difference between an alarm and a fix.
+     * Agency-scoped and namespaced by source like everything else here.
+     */
+    public function audit(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        $source = $this->source($request);
+
+        $centreIds = Centre::where('agency_id', $agencyId)->pluck('id');
+        $famRows = Family::withTrashed()->whereIn('centre_id', $centreIds)
+            ->where('external_source', $source)->whereNotNull('external_id')
+            ->get(['id', 'external_id', 'deleted_at']);
+
+        // Every family of ours, including de-enrolled ones — the caller needs to tell
+        // "you never sent it" apart from "we removed it", which are opposite problems.
+        $active = $famRows->whereNull('deleted_at');
+        $gone = $famRows->whereNotNull('deleted_at');
+
+        return response()->json([
+            'ok' => true,
+            'agency_id' => $agencyId,
+            'source' => $source,
+            'at' => now()->toIso8601String(),
+            'families' => [
+                'active' => $active->count(),
+                'de_enrolled' => $gone->count(),
+                'active_external_ids' => $active->pluck('external_id')->values(),
+                'de_enrolled_external_ids' => $gone->pluck('external_id')->values(),
+            ],
+            /* Scoped on agency_id + external_source, which both mirrors carry, rather
+               than through family_id. A family join would quietly drop every invoice
+               belonging to a family the caller has since de-enrolled -- and "my invoice
+               vanished" is precisely the alarm this endpoint exists to raise. */
+            'invoices' => [
+                'count' => DB::table('external_invoices')->where('agency_id', $agencyId)
+                    ->where('external_source', $source)->count(),
+                'external_ids' => DB::table('external_invoices')->where('agency_id', $agencyId)
+                    ->where('external_source', $source)->pluck('external_id')->values(),
+            ],
+            'payroll' => [
+                'count' => DB::table('payroll_documents')->where('agency_id', $agencyId)
+                    ->where('external_source', $source)->whereNotNull('external_id')->count(),
+                'external_ids' => DB::table('payroll_documents')->where('agency_id', $agencyId)
+                    ->where('external_source', $source)->whereNotNull('external_id')
+                    ->pluck('external_id')->values(),
+            ],
+        ]);
+    }
+
     /** GET /integration/ping — verify the token + see which agency it writes to. */
     public function ping(Request $request): JsonResponse
     {

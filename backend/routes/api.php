@@ -1959,6 +1959,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // consumer can create them. pullContacts only refreshes what it already owns.
         Route::get ('/pull/new', [\App\Http\Controllers\Api\IntegrationController::class, 'pullNew']);
         Route::post('/sync',     [\App\Http\Controllers\Api\IntegrationController::class, 'sync']);
+        /* What we actually hold, by id — so a push integration can check that what it
+           sent arrived, instead of only knowing that it was sent. */
+        Route::get ('/audit',    [\App\Http\Controllers\Api\IntegrationController::class, 'audit']);
     });
 
 
