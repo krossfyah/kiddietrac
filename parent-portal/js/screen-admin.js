@@ -3586,6 +3586,9 @@
       '\u2022 Their children are marked WITHDRAWN as of today',
       '\u2022 Guardian accounts are closed \u2014 they can no longer sign in',
       '\u2022 Each guardian is emailed a goodbye notice with your retention policy',
+      // Drafted, NOT sent — the wording must not let anyone think the family receives
+      // one automatically on the way out.
+      '\u2022 A leaving report card is DRAFTED for each child, waiting in Report cards',
       '',
       'Care records, attendance and history are preserved.',
       'The email cannot be unsent.',
@@ -3818,7 +3821,12 @@
           + '&reason_code=' + encodeURIComponent(deEnrol.reason_code || '')
           + '&reason=' + encodeURIComponent(deEnrol.reason || ''));
         if (Dom.toast) {
-          Dom.toast(res && res.message ? res.message : 'Family de-enrolled',
+          /* Name the report cards in the confirmation: they are the one part of a
+             de-enrolment that still needs somebody to go and do something afterwards. */
+          var _rc = (res && res.report_cards_drafted) || 0;
+          Dom.toast(res && res.message
+              ? (res.message + (_rc ? ' · ' + _rc + ' leaving report' + (_rc === 1 ? '' : 's') + ' drafted' : ''))
+              : 'Family de-enrolled',
                     res && res.scheduled ? 'info' : 'success');
         }
         await renderFamiliesTab(content);
@@ -3872,7 +3880,7 @@
       // Spelled out at length on purpose: this is a checkbox that sends one
       // irreversible goodbye email per selected family, and it used to promise that
       // nothing beyond a row was touched.
-      if (!await KT.confirm('De-enrol ' + ids.length + ' famil' + (ids.length === 1 ? 'y' : 'ies') + '?\n\nFor EACH one:' + '\n  - Their children are marked WITHDRAWN as of today' + '\n  - Guardian accounts are closed' + '\n  - A goodbye email is sent to every guardian' + '\n\nThat is up to ' + ids.length + ' email(s) which cannot be unsent. Care records and history are preserved.')) return;
+      if (!await KT.confirm('De-enrol ' + ids.length + ' famil' + (ids.length === 1 ? 'y' : 'ies') + '?\n\nFor EACH one:' + '\n  - Their children are marked WITHDRAWN as of today' + '\n  - Guardian accounts are closed' + '\n  - A goodbye email is sent to every guardian' + '\n  - A leaving report card is drafted for each child' + '\n\nThat is up to ' + ids.length + ' email(s) which cannot be unsent. Care records and history are preserved.')) return;
       bulkDelete.disabled = true;
       var ok = 0, fail = 0;
       for (const id of ids) { try { await Api.delete('/admin/families/' + id + '?acknowledged_balance=1'); ok++; } catch (e) { fail++; } }

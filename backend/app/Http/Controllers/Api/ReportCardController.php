@@ -63,12 +63,41 @@ final class ReportCardController extends Controller
         $this->assertStaff($request);
         // SECURITY (v22p94): scope to a child the caller can actually access.
         abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
-        $child = DB::table('children')->where('id', $data['child_id'])->first();
-        abort_unless($child, 404);
+        abort_unless(DB::table('children')->where('id', $data['child_id'])->exists(), 404);
 
-        // AI is OPTIONAL now. If the key is absent (or a call fails) we still produce a
+        $out = $this->draftFor((int) $data['child_id'], (string) $data['term'], (int) $request->user()->id);
+        abort_unless($out, 404);
+
+        return response()->json($out);
+    }
+
+    /**
+     * Draft a report card for one child, with no Request in sight.
+     *
+     * Split out of generate() so something OTHER than a person pressing the button can
+     * ask for one — de-enrolling a family now drafts a leaving report for each child
+     * (AdminController::destroyFamily). generate() keeps every bit of the request
+     * handling and the authorisation; this does the work.
+     *
+     * $useAi is how the caller says "not now": on this host the Anthropic calls fail
+     * rather than refuse (see the notes on the fallback), and four failing calls per
+     * domain per child is a wait a de-enrolment cannot afford. Passing false goes
+     * straight to the data-grounded templates, which is what those calls produce here
+     * anyway.
+     *
+     * @return array{id:int,narratives:array,next_steps:string,source:string}|null
+     */
+    public function draftFor(int $childId, string $term, ?int $byUserId, bool $useAi = true): ?array
+    {
+        $child = DB::table('children')->where('id', $childId)->first();
+        if (! $child) {
+            return null;
+        }
+        $data = ['child_id' => $childId, 'term' => $term];
+
+        // AI is OPTIONAL. If the key is absent (or a call fails) we still produce a
         // data-grounded draft from the child's logged records below — no more hard 503.
-        $key = env('ANTHROPIC_API_KEY');
+        $key = $useAi ? env('ANTHROPIC_API_KEY') : null;
 
         // Pull the child's logged records. IMPORTANT: observation `domain` values are the
         // real developmental domains (social_emotional, physical, cognitive,
@@ -167,7 +196,7 @@ final class ReportCardController extends Controller
         $payload = [
             'child_id' => $child->id,
             'term' => $data['term'],
-            'generated_by_user_id' => $request->user()->id,
+            'generated_by_user_id' => $byUserId,
             'narrative_belonging' => $narratives['belonging'] ?? '',
             'narrative_wellbeing' => $narratives['wellbeing'] ?? '',
             'narrative_engagement' => $narratives['engagement'] ?? '',
@@ -184,12 +213,12 @@ final class ReportCardController extends Controller
             $id = DB::table('report_cards')->insertGetId($payload);
         }
         // `source` lets the UI note whether these are AI drafts or logged-record summaries.
-        return response()->json([
+        return [
             'id' => $id,
             'narratives' => $narratives,
             'next_steps' => $nextSteps,
             'source' => $key ? 'ai' : 'summary',
-        ]);
+        ];
     }
 
     /**

@@ -31,11 +31,7 @@ final class AdminController extends Controller
     {
         // v22p20: honor X-Active-Agency-Id header for multi-agency admins.
         // v22p21: platform_admin trumps tenant scope — they can target ANY agency.
-        $isPlatformAdmin = DB::table('role_assignments')
-            ->where('user_id', $request->user()->id)
-            ->where('role', 'platform_admin')
-            ->where('active', true)
-            ->exists();
+        $isPlatformAdmin = \App\Support\UserRoles::has($request, 'platform_admin');
         $activeId = (int) $request->header('X-Active-Agency-Id');
         if ($isPlatformAdmin) {
             // SECURITY (v22p98): a platform_admin must EXPLICITLY select an agency.
@@ -301,6 +297,30 @@ final class AdminController extends Controller
                 'slug' => $c->slug,
                 'license_number' => $c->license_number,
                 'license_capacity' => $c->license_capacity,
+                /* Read back from the centre's single room, which is where the limit
+                   actually lives. Null when the centre has several rooms — the form
+                   must not show one room's number as if it were the centre's. */
+                /* Children PRESENT right now, defined identically to
+                   RatioEngine::presentChildrenCount so the card and the ratio engine can
+                   never report different numbers for the same room. */
+                'children_present' => \Illuminate\Support\Facades\DB::table('check_events as ce1')
+                    ->join('rooms as r', 'r.id', '=', 'ce1.room_id')
+                    ->where('r.centre_id', $c->id)
+                    ->where('ce1.event_type', 'check_in')
+                    ->whereDate('ce1.occurred_at', now()->toDateString())
+                    ->whereNotExists(function ($q) {
+                        $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                          ->from('check_events as ce2')
+                          ->whereColumn('ce2.child_id', 'ce1.child_id')
+                          ->where('ce2.event_type', 'check_out')
+                          ->whereColumn('ce2.occurred_at', '>', 'ce1.occurred_at');
+                    })
+                    ->distinct()->count('ce1.child_id'),
+                'max_concurrent_children' => \Illuminate\Support\Facades\DB::table('rooms')
+                    ->where('centre_id', $c->id)->count() === 1
+                    ? \Illuminate\Support\Facades\DB::table('rooms')->where('centre_id', $c->id)
+                        ->value('max_concurrent_children')
+                    : null,
                 'address_line1' => $c->address_line1,
                 'address_line2' => $c->address_line2,
                 'city' => $c->city,
@@ -387,6 +407,7 @@ final class AdminController extends Controller
             'supervisor_last_name' => ['nullable', 'string', 'max:80'],
             'license_number' => ['nullable', 'string', 'max:60'],
             'license_capacity' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'max_concurrent_children' => ['nullable', 'integer', 'min:0', 'max:500'],
             'address_line1' => ['nullable', 'string', 'max:200'],
             'city' => ['nullable', 'string', 'max:80'],
             'province' => ['nullable', 'string', 'max:40'],
@@ -447,6 +468,7 @@ final class AdminController extends Controller
             'name' => ['sometimes', 'string', 'max:180'],
             'license_number' => ['sometimes', 'nullable', 'string', 'max:60'],
             'license_capacity' => ['sometimes', 'integer', 'min:0', 'max:500'],
+            'max_concurrent_children' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:500'],
             'address_line1' => ['sometimes', 'nullable', 'string', 'max:200'],
             'city' => ['sometimes', 'nullable', 'string', 'max:80'],
             'province' => ['sometimes', 'nullable', 'string', 'max:40'],
@@ -466,6 +488,23 @@ final class AdminController extends Controller
             'open_days'    => ['sometimes', 'array'],
             'open_days.*'  => ['integer', 'between:1,7'],
         ]);
+
+        /* Not a centres column — it lives on rooms, because ratios are enforced per
+           room. Pulled out here so it never reaches the centre column update, and
+           written through only when the centre has exactly ONE room. With several the
+           number is ambiguous, so it is left alone rather than applied to all of them. */
+        if (array_key_exists('max_concurrent_children', $data)) {
+            $limit = $data['max_concurrent_children'];
+            unset($data['max_concurrent_children']);
+
+            $roomIds = DB::table('rooms')->where('centre_id', $centre->id)->pluck('id');
+            if ($roomIds->count() === 1) {
+                DB::table('rooms')->where('id', $roomIds->first())->update([
+                    'max_concurrent_children' => $limit === null || $limit === '' ? null : (int) $limit,
+                    'updated_at' => now(),
+                ]);
+            }
+        }
 
         // open_days lives inside the settings JSON, not a column — merge it in so
         // other settings keys survive, and don't pass it to the column update.
@@ -507,8 +546,37 @@ final class AdminController extends Controller
         if (!$centre || !$this->canManageCentre($request, $centre)) {
             return response()->json(['message' => 'Centre not found'], 404);
         }
+        /* GUARD (2026-08-25): archiving used to be this one update and nothing else — no
+           enrolment ended, no parent told, no provider account closed. A provider archived
+           mid-roster left their children still `enrolled` at a closed centre with working
+           parent logins and silence. permanentDeleteCentre has always refused to run while
+           children remain; archive simply never used the same check.
+
+           Only ENROLLED children block it. A centre whose children have all been withdrawn
+           or transferred is exactly what archive is for. */
+        $blocking = DB::table('children')
+            ->join('families', 'families.id', '=', 'children.family_id')
+            ->where('families.centre_id', $centreId)
+            ->where('children.enrollment_status', 'enrolled')
+            ->whereNull('children.deleted_at')
+            ->select('children.first_name', 'children.last_name', 'children.preferred_name')
+            ->get();
+
+        if ($blocking->isNotEmpty()) {
+            $names = $blocking->map(fn ($c) => trim(($c->preferred_name ?: $c->first_name).' '.($c->last_name ?? '')))->all();
+            return response()->json([
+                'message' => $blocking->count().' '.($blocking->count() === 1 ? 'child is' : 'children are')
+                    .' still enrolled here. Transfer or withdraw them first — archiving now would leave '
+                    .($blocking->count() === 1 ? 'them' : 'them').' enrolled at a closed centre.',
+                'enrolled_children' => $names,
+                'count' => $blocking->count(),
+            ], 422);
+        }
+
         DB::table('centres')->where('id', $centreId)->update(['deleted_at' => now(), 'status' => 'closed']);
-        $this->audit($request->user()->id, 'centre.archived', 'centre', $centreId, []);
+        $this->audit($request->user()->id, 'centre.archived', 'centre', $centreId, [
+            'name' => $centre->name ?? null,
+        ]);
         return response()->json(['message' => 'Centre archived']);
     }
 
@@ -1129,6 +1197,19 @@ final class AdminController extends Controller
                 $w->whereIn('al.user_id', $scopedUserIds ?: [0])->orWhereNull('al.user_id');
             });
         }
+        /* Turn the raw rows into sentences. The middleware records HTTP verbs and
+           bare ids -- "post:api/v1/provider/team-threads/5/send", entity_id=5 --
+           which tells a reader nothing about who was messaged or which child was
+           checked out. AuditNarrator resolves those, batched per page.
+
+           Applied at read time so the ~10,800 rows already in the table become
+           readable too, and the wording can be corrected later without a migration. */
+        try {
+            $rows = \App\Support\AuditNarrator::narrate($rows);
+        } catch (\Throwable $e) {
+            // Unreadable beats unavailable: show the raw rows rather than nothing.
+        }
+
         $distinctActions = (clone $optionsBase)->select('al.action')->distinct()
             ->orderBy('al.action')->limit(80)->pluck('al.action')->filter()->values();
         $distinctEntities = (clone $optionsBase)->select('al.entity_type')->distinct()
@@ -1369,14 +1450,71 @@ final class AdminController extends Controller
             'ce.id as centre_id', 'ce.name as centre_name',
         ])->all();
 
+        /* When each child was last actually here. Enrolment status says what the
+           paperwork claims; this says whether they have been in. One grouped query
+           for the page — a per-child lookup would be up to 2,000 of them.
+
+           check_in only: a check_out tells you they left, which is the same visit,
+           and using MAX over both would report a departure as an attendance. */
+        try {
+            $ids = array_values(array_filter(array_map(fn ($r) => (int) $r->id, $rows)));
+            if ($ids) {
+                $seen = DB::table('check_events')
+                    ->whereIn('child_id', $ids)
+                    ->where('event_type', 'check_in')
+                    ->groupBy('child_id')
+                    ->select('child_id', DB::raw('MAX(occurred_at) as seen'))
+                    ->pluck('seen', 'child_id');
+                foreach ($rows as $r) {
+                    $r->last_seen_at = $seen[$r->id] ?? null;
+                }
+            }
+        } catch (\Throwable $e) {
+            /* The list must still render without attendance data. Every row gets the
+               property so the front end never has to test for its absence. */
+            foreach ($rows as $r) {
+                if (! isset($r->last_seen_at)) { $r->last_seen_at = null; }
+            }
+        }
+
+        /* Who is actually in the building right now: a check-in today with no later
+           check-out. Deliberately the SAME query as ChildController's roster rather
+           than a second definition of "present" — the daily-log screen asks every
+           loader for this one flag, and because the agency-wide list omitted it,
+           "All children" told admins the room was empty while children were standing
+           in it. (2026-08-25)
+
+           null means "we could not find out", which is not the same as false. */
+        try {
+            $present = DB::table('check_events as ci')
+                ->whereDate('ci.occurred_at', now())
+                ->where('ci.event_type', 'check_in')
+                ->whereNotExists(fn ($qq) => $qq->select(DB::raw(1))
+                    ->from('check_events as co')
+                    ->whereColumn('co.child_id', 'ci.child_id')
+                    ->where('co.event_type', 'check_out')
+                    ->where('co.occurred_at', '>', DB::raw('ci.occurred_at')))
+                ->pluck('ci.child_id')
+                ->all();
+            $present = array_flip(array_map('intval', $present));
+            foreach ($rows as $r) {
+                $r->is_at_centre = isset($present[(int) $r->id]);
+            }
+        } catch (\Throwable $e) {
+            foreach ($rows as $r) {
+                if (! isset($r->is_at_centre)) { $r->is_at_centre = null; }
+            }
+        }
+
         if (strtolower((string) $request->query('format', '')) === 'csv') {
             return $this->streamCsv('children', [
                 'ID', 'First name', 'Last name', 'Preferred', 'Date of birth',
-                'Status', 'Enrolled', 'Family', 'Centre',
+                'Status', 'Enrolled', 'Last seen', 'Family', 'Centre',
                 'Allergies', 'Health alerts',
             ], array_map(fn ($r) => [
                 $r->id, $r->first_name, $r->last_name, $r->preferred_name,
                 $r->date_of_birth, $r->enrollment_status, $r->enrolled_at,
+                $r->last_seen_at ?? '',
                 $r->family_name, $r->centre_name,
                 $r->allergies, $r->health_alerts,
             ], $rows));
@@ -1455,6 +1593,18 @@ final class AdminController extends Controller
 
         $usersQuery = DB::table('users')
             ->whereIn('id', $userIds)
+            /* Integration and no-reply inboxes hold real roles, so they match the
+               query above — but they are not people and should not be listed as
+               staff. Nothing else changes: they keep working, they are just not
+               shown, messaged, or mailed as users. */
+            ->where(function ($q) {
+                $q->whereNull('email')
+                  ->orWhere(function ($w) {
+                      $w->where('email', 'not like', '%integration+%')
+                        ->where('email', 'not like', 'noreply@%')
+                        ->where('email', 'not like', 'no-reply@%');
+                  });
+            })
             ->when($deactivated,
                 function ($q) { $q->whereNotNull('deleted_at'); },
                 function ($q) { $q->whereNull('deleted_at'); });
@@ -1483,7 +1633,44 @@ final class AdminController extends Controller
             ->get()
             ->groupBy('user_id');
 
-        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks) {
+        /* Invite delivery, for the status tooltip. One query for the page, keyed by
+           lowercased email. Newest row per address wins, so a re-invite supersedes
+           the original. Wrapped because email_logs is optional in older installs. */
+        $inviteBy = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('email_logs')) {
+                $emails = $users->pluck('email')->filter()
+                    ->map(fn ($e) => mb_strtolower(trim((string) $e)))->values()->all();
+                if (! empty($emails)) {
+                    foreach (DB::table('email_logs')
+                        ->whereIn(DB::raw('LOWER(TRIM(to_email))'), $emails)
+                        ->where(function ($q) {
+                            $q->where('subject', 'like', '%invited%')
+                              ->orWhere('subject', 'like', 'Welcome to Kiddietrac%')
+                              ->orWhere('subject', 'like', 'Reminder: finish setting up%');
+                        })
+                        ->orderBy('id')
+                        ->get(['to_email', 'subject', 'status', 'opened_at', 'opens', 'created_at']) as $row) {
+                        $key = mb_strtolower(trim((string) $row->to_email));
+                        $prev = $inviteBy[$key] ?? null;
+                        $inviteBy[$key] = [
+                            'subject' => $row->subject,
+                            'status' => $row->status,
+                            'sent_at' => $row->created_at,
+                            // Keep the best evidence across ALL their invites: one
+                            // opened reminder still proves the address is live.
+                            'opened_at' => $row->opened_at ?: ($prev['opened_at'] ?? null),
+                            'opens' => (int) $row->opens + (int) ($prev['opens'] ?? 0),
+                            'count' => (int) ($prev['count'] ?? 0) + 1,
+                        ];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // The Users table must render even if delivery data cannot be read.
+        }
+
+        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy) {
             $roles = ($allAssignments[$u->id] ?? collect())->pluck('role')->unique()->values()->all();
             $guardianLinks = $allGuardianLinks[$u->id] ?? collect();
             if ($guardianLinks->isNotEmpty() && !in_array('guardian', $roles)) {
@@ -1510,8 +1697,27 @@ final class AdminController extends Controller
                 'status' => $u->status,
                 'deactivated' => ! empty($u->deleted_at),
                 'deactivated_at' => $u->deleted_at ?? null,
+                /* When they were last ACTIVE. last_login_at freezes for anyone who
+                   stays signed in, so it is not the question an admin is asking. */
+                'last_seen_at' => $u->last_seen_at ?? null,
                 'last_login_at' => $u->last_login_at,
                 'onboarded_at' => $u->onboarded_at ?? null,
+                'invite' => (function () use ($u, $inviteBy) {
+                    $k = mb_strtolower(trim((string) ($u->email ?? '')));
+                    $i = $inviteBy[$k] ?? null;
+                    if (! $i) {
+                        return ['state' => 'never_sent'];
+                    }
+                    return [
+                        'state' => $i['status'] === 'suppressed' ? 'blocked'
+                            : (! empty($i['opened_at']) ? 'opened' : 'sent'),
+                        'sent_at' => $i['sent_at'],
+                        'opened_at' => $i['opened_at'],
+                        'opens' => $i['opens'],
+                        'count' => $i['count'],
+                        'subject' => $i['subject'],
+                    ];
+                })(),
                 'profile_extras' => $extras,
                 'roles' => $roles,
                 'created_at' => $u->created_at,
@@ -1595,7 +1801,26 @@ final class AdminController extends Controller
             'send_invite' => ['nullable', 'boolean'],
             // Optional per-account username (unique). Needed when a person has more
             // than one account on the same email so they can sign in to the right one.
-            'username' => ['nullable', 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/', Rule::unique('users', 'username')->whereNull('deleted_at')],
+            /* Mandatory once the email is already in use. The first account on an
+               address needs no username and nothing existing changes; a SECOND one
+               cannot be told apart at login without it, and today that ambiguity
+               cancelled a live invite and double-delivered a broadcast. `nullable`
+               stays so the first account still validates. */
+            'username' => [
+                'nullable',
+                Rule::requiredIf(fn () => filled($request->input('email'))
+                    && DB::table('users')->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $request->input('email')))])
+                        ->whereNull('deleted_at')->exists()),
+                'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/',
+                Rule::unique('users', 'username')->whereNull('deleted_at'),
+            ],
+        ], [
+            // Named causes, not field names. Somebody who has never needed a username
+            // needs to know why this one appeared.
+            'username.required' => 'This email address already has an account. Add a username so the two can be told apart at sign-in.',
+            'username.unique' => 'That username is already taken — please choose another.',
+            'username.regex' => 'A username can use letters, numbers, dots, dashes and underscores only.',
+            'username.min' => 'A username needs at least 3 characters.',
         ]);
 
         // v22p23: only platform_admin can mint another platform_admin.
@@ -1616,7 +1841,10 @@ final class AdminController extends Controller
         // v22p18: non-admin roles MUST be tied to a specific centre — otherwise
         // the role_assignment row has no scope and the user becomes invisible
         // in listUsers (its WHERE clause requires agency_id OR centre_id).
-        if (! in_array($data['role'], ['agency_admin', 'platform_admin', 'sales_rep'], true) && empty($data['centre_id'])) {
+        // home_visitor works across the agency's families, not at one centre, so it may
+        // be created agency-wide. The scope requirement is satisfied by agency_id — the
+        // rule exists so listUsers (agency_id OR centre_id) can still see the row.
+        if (! in_array($data['role'], ['agency_admin', 'platform_admin', 'sales_rep', 'home_visitor'], true) && empty($data['centre_id'])) {
             return response()->json([
                 'message' => 'Centre is required for this role.',
                 'errors' => ['centre_id' => ['Please pick a centre for centre directors, educators, and auditors.']],
@@ -1805,6 +2033,8 @@ final class AdminController extends Controller
                 // Exempt from the not-onboarded gate: the invite MUST reach a user
                 // who hasn't accepted yet — that's the whole point of it.
                 $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
+                // Carries a first-password link — see the invariant in SuppressAgencyMail.
+                $m->getHeaders()->addTextHeader('X-KT-Onboarding-Invite', '1');
                 $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
             });
         })->onQueue('mail');
@@ -2164,7 +2394,42 @@ final class AdminController extends Controller
 
         $families = $query->orderBy('families.family_name')->limit(200)->get();
 
-        $result = $families->map(function ($f) {
+        /* ── OUTSTANDING lives in TWO tables, with different vocabularies ──────────
+           `invoices` are raised inside KiddieTrac and say sent / partial / overdue.
+           `external_invoices` are pulled from the agency's own billing system (iLearn
+           for agency 2) and say open / overdue. Reading only the first is why the
+           Outstanding column was blank for a whole agency: agency 2 has 41 families
+           and ONE native invoice against 400+ external ones, so every row showed a
+           dash while real money was owed.
+
+           Grouped queries rather than a lookup inside the map(): this list runs to
+           200 families, and a per-family sum would be 200 round trips per table.
+           (2026-08-25) */
+        $famIds = $families->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $owedByFamily = [];
+
+        foreach (DB::table('invoices')
+            ->whereIn('family_id', $famIds ?: [0])
+            ->whereIn('status', ['sent', 'partial', 'overdue'])
+            ->groupBy('family_id')
+            ->select('family_id', DB::raw('SUM(balance_due) as bal'))->get() as $r) {
+            $owedByFamily[(int) $r->family_id] = (float) $r->bal;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+            foreach (DB::table('external_invoices')
+                ->whereIn('family_id', $famIds ?: [0])
+                // Everything that is not settled or cancelled. Listed explicitly so a
+                // new status cannot silently start counting as paid.
+                ->whereIn('status', ['open', 'overdue', 'partial', 'sent', 'unpaid'])
+                ->groupBy('family_id')
+                ->select('family_id', DB::raw('SUM(balance_due) as bal'))->get() as $r) {
+                $owedByFamily[(int) $r->family_id] =
+                    ($owedByFamily[(int) $r->family_id] ?? 0) + (float) $r->bal;
+            }
+        }
+
+        $result = $families->map(function ($f) use ($owedByFamily) {
             $childCount = DB::table('children')
                 ->where('family_id', $f->id)
                 ->whereNull('deleted_at')
@@ -2176,10 +2441,6 @@ final class AdminController extends Controller
                 ->where('guardians.family_id', $f->id)
                 ->where('users.status', 'suspended')
                 ->count();
-            $balance = DB::table('invoices')
-                ->where('family_id', $f->id)
-                ->whereIn('status', ['sent', 'partial', 'overdue'])
-                ->sum('balance_due');
 
             return [
                 'id' => $f->id,
@@ -2192,7 +2453,7 @@ final class AdminController extends Controller
                 'child_count' => $childCount,
                 'guardian_count' => $guardianCount,
                 'suspended' => $suspendedGuardians > 0,
-                'outstanding_balance' => (float) $balance,
+                'outstanding_balance' => round((float) ($owedByFamily[(int) $f->id] ?? 0), 2),
                 'created_at' => $f->created_at,
             ];
         });
@@ -2226,17 +2487,24 @@ final class AdminController extends Controller
         $agencyId = $this->getAgencyId($request);
         $centreIds = $this->getCentreIds($agencyId);
 
+        /* A de-enrolled family is RETAINED, not deleted — the records outlive the
+           enrolment by years, and an admin has to be able to read them or the
+           retention promise is meaningless. Opt-in per request rather than always,
+           so ordinary screens keep excluding departed families by default and no
+           existing list silently starts including them. (2026-08-25) */
+        $wantArchived = $request->boolean('archived');
+
         $family = DB::table('families')
             ->whereIn('centre_id', $centreIds ?: [0])
             ->where('id', $familyId)
-            ->whereNull('deleted_at')
+            ->when(! $wantArchived, fn ($q) => $q->whereNull('deleted_at'))
             ->first();
 
         if (!$family) return response()->json(['message' => 'Not found'], 404);
 
         $children = DB::table('children')
             ->where('family_id', $familyId)
-            ->whereNull('deleted_at')
+            ->when(! $wantArchived, fn ($q) => $q->whereNull('deleted_at'))
             ->get();
 
         $guardians = DB::table('guardians')
@@ -2249,8 +2517,45 @@ final class AdminController extends Controller
             ->where('family_id', $familyId)
             ->get();
 
+        /* Who closed this record, when, and why. Resolved here rather than handing the
+           screen a bare user id it would have to chase — and the actor may since have been
+           off-boarded, so a missing user degrades to "no longer with the agency" instead of
+           a blank. Times are the agency's, never UTC. */
+        $departure = null;
+        if (($family->deleted_at ?? null) || ($family->departure_date ?? null)) {
+            $tz = \App\Support\AgencyTime::tz((int) $this->getAgencyId($request));
+            $byName = null;
+            if ($family->departure_by_id ?? null) {
+                $by = DB::table('users')->where('id', $family->departure_by_id)
+                    ->first(['first_name', 'last_name', 'email', 'deleted_at']);
+                if ($by) {
+                    $byName = trim(($by->first_name ?? '') . ' ' . ($by->last_name ?? ''))
+                        ?: ($by->email ?? null);
+                    if ($by->deleted_at && $byName) { $byName .= ' (no longer with the agency)'; }
+                }
+            }
+            $appliedAt = $family->departure_applied_at ?? $family->deleted_at ?? null;
+            $departure = [
+                'last_day' => $family->departure_date ?? null,
+                'reason' => $family->departure_reason ?? null,
+                'reason_code' => $family->departure_reason_code ?? null,
+                'by_id' => $family->departure_by_id ?? null,
+                'by_name' => $byName,
+                'recorded_at' => $appliedAt
+                    ? \Illuminate\Support\Carbon::parse($appliedAt)->setTimezone($tz)->toIso8601String()
+                    : null,
+                'scheduled' => ! ($family->departure_applied_at ?? null)
+                    && (bool) ($family->departure_date ?? null)
+                    && ! ($family->deleted_at ?? null),
+            ];
+        }
+
         return response()->json([
             'family' => $family,
+            // So the screen can say plainly that this record has left.
+            'is_archived' => (bool) ($family->deleted_at ?? null),
+            'departed_at' => $family->deleted_at ?? null,
+            'departure' => $departure,
             'children' => $children,
             'guardians' => $guardians,
             'emergency_contacts' => $emergency,
@@ -2341,6 +2646,36 @@ final class AdminController extends Controller
     /**
      * v22p11 — agency_admin can create a family at any centre in their agency.
      */
+    /**
+     * Which room does a newly-added child go into?
+     *
+     * Answered in this order:
+     *   1. What the admin explicitly chose - provided it really is a room at this
+     *      centre. A room id from anywhere else is ignored, never trusted.
+     *   2. If the centre has exactly ONE active room, that room. There is no decision
+     *      to make, and making somebody confirm it only adds a step they can skip -
+     *      which is how a child ended up enrolled into nothing. Every centre in a
+     *      home-childcare agency is one provider with one room, so this is the normal
+     *      path here, not an edge case.
+     *   3. Otherwise null, and the caller reports the child as unplaced. Choosing among
+     *      several rooms on the admin's behalf would be a guess, and a child in the wrong
+     *      room is worse than a child the system openly says still needs placing.
+     */
+    private function resolveRoomForNewChild($centreRooms, $explicitRoomId): ?int
+    {
+        if ($explicitRoomId) {
+            foreach ($centreRooms as $r) {
+                if ((int) $r->id === (int) $explicitRoomId) {
+                    return (int) $r->id;
+                }
+            }
+
+            return null;   // not this centre's room - never silently accept it
+        }
+
+        return count($centreRooms) === 1 ? (int) $centreRooms[0]->id : null;
+    }
+
     public function createFamily(Request $request): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
@@ -2376,6 +2711,15 @@ final class AdminController extends Controller
             'children.*.date_of_birth' => ['required_with:children', 'date'],
             'children.*.gender' => ['nullable', 'in:female,male,non_binary,prefer_not_to_say,other'],
             'children.*.enrollment_status' => ['nullable', 'in:waitlist,enrolled,withdrawn,graduated'],
+            /* Where the child actually goes. This did not exist, which is the whole bug:
+               the wizard could not send a room even if the admin had picked one, so every
+               child created through this endpoint came out enrolled into nothing. */
+            'children.*.room_id' => ['nullable', 'integer'],
+            /* The usual hours, asked for while the child is being added rather than left
+               to a later edit that never happens. Wall-clock and stored as typed —
+               see the note on the child record's own fields. */
+            'children.*.expected_dropoff_time' => ['nullable', 'date_format:H:i'],
+            'children.*.expected_pickup_time' => ['nullable', 'date_format:H:i'],
             // v22p… onboarding wizard — rich child + emergency-contact data.
             'children.*.allergies' => ['nullable', 'string', 'max:1000'],
             'children.*.dietary_restrictions' => ['nullable', 'string', 'max:1000'],
@@ -2404,6 +2748,55 @@ final class AdminController extends Controller
             ], 422);
         }
 
+        /* READD-GUARD: this household is already on file, de-enrolled — restore it
+           rather than building a second record.
+
+           Two iLearn families were re-created from scratch after being de-enrolled
+           (one of them the same day), because until now there was no way to bring a
+           de-enrolled family back. The duplicate check warns about this, but a warning on
+           a screen can be scrolled past; this cannot. (2026-08-30)
+
+           EMAIL only, on purpose. It is the field that identifies a household. Matching on
+           family_name would refuse unrelated families who happen to share a surname —
+           Test Agency has seven such pairs — and a guard that fires wrongly is a guard
+           people learn to route around.
+
+           Overridable: two genuinely different households can share one address. */
+        $newEmail = trim((string) ($data['primary_email'] ?? ''));
+        if ($newEmail !== '' && ! $request->boolean('allow_duplicate')) {
+            $priorId = DB::table('families')
+                ->whereIn('centre_id', $this->getCentreIds($agencyId) ?: [0])
+                ->whereNotNull('deleted_at')
+                ->whereRaw('LOWER(primary_email) = ?', [mb_strtolower($newEmail)])
+                ->orderByDesc('id')
+                ->first(['id', 'family_name', 'departure_date']);
+
+            if ($priorId) {
+                return response()->json([
+                    'message' => trim($priorId->family_name ?: 'This family')
+                        . ' is already on file as de-enrolled'
+                        . ($priorId->departure_date
+                            ? ' (last day ' . substr((string) $priorId->departure_date, 0, 10) . ')'
+                            : '')
+                        . '. Restore that record instead of creating a new one, so the '
+                        . 'children keep their attendance, logs, invoices and documents.',
+                    'code' => 'family_deenrolled_exists',
+                    'family_id' => (int) $priorId->id,
+                    // What the screen should offer, and how to proceed anyway.
+                    'restore_url' => '/admin/families/' . (int) $priorId->id . '/restore',
+                    'override_with' => 'allow_duplicate',
+                ], 409);
+            }
+        }
+
+        /* The rooms this centre actually has. Used to validate an explicit choice and,
+           when there is only one, to make the choice nobody should have to make. */
+        $centreRooms = DB::table('rooms')
+            ->where('centre_id', $data['centre_id'])
+            ->where('active', 1)
+            ->orderBy('id')
+            ->get(['id', 'name', 'age_min_months', 'age_max_months']);
+
         $guardians = $data['guardians'] ?? [];
         $children = $data['children'] ?? [];
         $emergency = $data['emergency_contacts'] ?? [];
@@ -2425,7 +2818,8 @@ final class AdminController extends Controller
 
         $newGuardians = [];   // freshly-created guardians to invite by email
         try {
-            $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId, &$newGuardians) {
+            $unplaced = [];
+            $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId, $centreRooms, &$newGuardians, &$unplaced) {
                 $famId = DB::table('families')->insertGetId(array_merge($data, [
                     'preferred_lang' => $data['preferred_lang'] ?? 'en-CA',
                     'billing_split' => $data['billing_split'] ?? 'single',
@@ -2487,7 +2881,15 @@ final class AdminController extends Controller
                 $childIds = [];
                 foreach ($children as $c) {
                     $status = $c['enrollment_status'] ?? 'enrolled';
-                    $childIds[] = (int) DB::table('children')->insertGetId([
+                    $roomId = $this->resolveRoomForNewChild($centreRooms, $c['room_id'] ?? null);
+                    $cid = (int) DB::table('children')->insertGetId([
+                        /* Set HERE, not in a follow-up update. Half the portal reads
+                           children.primary_room_id (the educator's room list, ratios, the
+                           day brief) and half INNER JOINs enrollments (centre roster, room
+                           roster, QR check-in). A child missing either one is invisible to
+                           that half — which is how a child could be marked "enrolled" and
+                           still not appear in her own educator's list. */
+                        'primary_room_id' => $roomId,
                         'family_id' => $famId,
                         'first_name' => $c['first_name'],
                         'last_name' => $c['last_name'],
@@ -2502,12 +2904,34 @@ final class AdminController extends Controller
                         'doctor_name' => $c['doctor_name'] ?? null,
                         'doctor_phone' => $c['doctor_phone'] ?? null,
                         'school' => $c['school'] ?? null,
+                        'expected_dropoff_time' => $c['expected_dropoff_time'] ?? null,
+                        'expected_pickup_time' => $c['expected_pickup_time'] ?? null,
                         'preferred_lang' => 'en-CA',
                         'enrollment_status' => $status,
                         'enrolled_at' => $status === 'enrolled' ? now()->toDateString() : null,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
+                    $childIds[] = $cid;
+
+                    /* The enrolment row is the OTHER half of being in a room.
+                       A waitlisted child correctly has neither — they have not started. */
+                    if ($roomId && $status === 'enrolled') {
+                        DB::table('enrollments')->insert([
+                            'child_id' => $cid,
+                            'room_id' => $roomId,
+                            'start_date' => now()->toDateString(),
+                            'schedule' => json_encode(['mon', 'tue', 'wed', 'thu', 'fri']),
+                            'monthly_fee' => 0.00,
+                            'cwelcc_eligible' => 1,
+                            'created_at' => now(),
+                        ]);
+                    } elseif ($status === 'enrolled') {
+                        /* Enrolled but unplaced. Reported rather than swallowed: this is
+                           the state that looks correct on the family record and is missing
+                           everywhere the child is supposed to appear. */
+                        $unplaced[] = trim($c['first_name'].' '.$c['last_name']);
+                    }
                 }
 
                 $emergencyIds = [];
@@ -2538,7 +2962,16 @@ final class AdminController extends Controller
             'centre_id' => $data['centre_id'],
             'guardians' => count($result['guardian_ids']),
             'children' => count($result['child_ids']),
+            'unplaced_children' => $unplaced,
         ]);
+
+        /* Tell the office. The audit log recorded this already, but an audit log is a
+           forensic tool — nobody watches it, and until now a family arriving was learned
+           about by noticing a count had gone up. (2026-08-27) */
+        \App\Services\FamilyJoinedNotice::fire(
+            (int) $result['family_id'],
+            $request->user()->id ?? null
+        );
 
         // Invite each NEW guardian by email — login + a nudge to complete their
         // family profile (onboarding). Uses AccountNotice (carries X-KT-Invite so
@@ -2582,7 +3015,12 @@ final class AdminController extends Controller
             'guardians' => count($result['guardian_ids']),
             'children' => count($result['child_ids']),
             'invited' => $invited,
-            'message' => 'Family created',
+            /* The caller needs to know if anybody landed nowhere, so it can say so rather
+               than report a clean success over a child no educator can see. */
+            'unplaced' => $unplaced,
+            'message' => $unplaced
+                ? 'Family created, but '.implode(' and ', $unplaced).' still needs a room.'
+                : 'Family created',
         ], 201);
     }
 
@@ -2660,6 +3098,102 @@ final class AdminController extends Controller
             }
         }
 
+        /* A departing family with money owed is the one case where de-enrolling
+           quietly costs the agency something: closing the accounts removes the very
+           portal the invoices were visible in. Anthony's call (2026-08-25) was to
+           WARN rather than hard-block — a disputed invoice or a five-cent rounding
+           error must never trap a record with no way out — but the admin has to have
+           seen the figure, and it is written into the audit trail either way. */
+        /* The agreed last day. Defaults to today, so anything that called this before
+           behaves exactly as it did. */
+        /* Compared against the AGENCY's date, not UTC. now()->toDateString() rolls over
+           at 8pm Toronto, and until this was fixed a departure booked for tomorrow read
+           as "not future" all evening - so the family was closed and emailed that night
+           instead of being scheduled. (2026-08-27) */
+        $agencyToday = \App\Support\AgencyTime::today($agencyId);
+        $lastDay = $request->input('last_day')
+            ? \Illuminate\Support\Carbon::parse($request->input('last_day'))->toDateString()
+            : $agencyToday;
+        $isFuture = $lastDay > $agencyToday;
+
+        /* Why they are leaving. Not required by the server: this endpoint is called from
+           more than one screen and an older client must not start failing. The dialog
+           insists on it, which is where insisting belongs. */
+        $reasonCode = $request->input('reason_code');
+        $reasonCode = is_string($reasonCode) && isset(self::DEPARTURE_REASONS[$reasonCode])
+            ? $reasonCode : null;
+        $reasonText = $this->departureReasonText($reasonCode, $request->input('reason'));
+
+        /* The rooms these children are in, resolved BEFORE anything is withdrawn — a few
+           lines further down their enrolments end and this becomes unanswerable. A child
+           on a split week has two providers and both need telling. */
+        $affectedRooms = DB::table('children as ch')
+            ->leftJoin('enrollments as e', function ($j) {
+                $j->on('e.child_id', '=', 'ch.id')->whereNull('e.end_date');
+            })
+            ->where('ch.family_id', $familyId)->whereNull('ch.deleted_at')
+            ->selectRaw('ch.primary_room_id as a, e.room_id as b')
+            ->get()
+            ->flatMap(fn ($r) => [$r->a, $r->b])
+            ->filter()->map(fn ($v) => (int) $v)->unique()->values()->all();
+
+        $owing = $this->familyOutstanding($familyId);
+        if ($owing['total'] > 0 && ! $request->boolean('acknowledged_balance')) {
+            return response()->json([
+                'message' => 'This family still owes ' . number_format($owing['total'], 2)
+                    . ' across ' . $owing['count'] . ' invoice(s). Confirm you have seen this to continue.',
+                'requires_balance_acknowledgement' => true,
+                'outstanding' => $owing,
+            ], 422);
+        }
+
+        /* A last day in the FUTURE is a booking, not a departure.
+           Closing the logins now would take the portal away from a family who are still
+           attending and still being invoiced — so the date is recorded, the family is
+           told, and `families:apply-departures` finishes the job on the morning after
+           their last day. Nothing else changes until then. */
+        if ($isFuture) {
+            DB::table('families')->where('id', $familyId)->update([
+                'departure_date' => $lastDay,
+                'departure_by_id' => $request->user()->id ?? null,
+                'departure_reason_code' => $reasonCode,
+                'departure_reason' => $reasonText,
+                'departure_applied_at' => null,
+                'updated_at' => now(),
+            ]);
+
+            $guardianIdsSched = DB::table('guardians')->where('family_id', $familyId)
+                ->whereNotNull('user_id')->pluck('user_id')->all();
+            $notifiedSched = $this->notifyFamilyDeparture($family, $guardianIdsSched, $request, $owing, null, $lastDay);
+
+            $this->audit($request->user()->id, 'family.departure_scheduled', 'family', $familyId, [
+                'last_day' => $lastDay,
+                'reason_code' => $reasonCode,
+                'reason' => $reasonText,
+                'outstanding' => $owing['total'],
+                'acknowledged_balance' => $request->boolean('acknowledged_balance'),
+                'notified' => $notifiedSched,
+            ]);
+
+            /* The people who need to know, told at the moment the decision was made rather
+               than on the morning the cron finishes the job. */
+            $provSched = $this->notifyProviderOfDeparture($family, $affectedRooms, $request, $lastDay);
+            $adminSched = $this->notifyAdminsOfDeparture($family, $request, $lastDay, $reasonText, [
+                'children_withdrawn' => 0,
+                'accounts_closed' => 0,
+            ], $owing);
+
+            return response()->json([
+                'scheduled' => true,
+                'last_day' => $lastDay,
+                'notified' => $notifiedSched,
+                'provider_notified' => $provSched,
+                'admins_notified' => $adminSched,
+                'message' => 'De-enrolment scheduled for '.\Illuminate\Support\Carbon::parse($lastDay)->format('j M Y')
+                    .'. They keep their access until then, and the family has been told.',
+            ]);
+        }
+
         // Withdraw the children. Without this their enrolment still read 'enrolled'
         // after the family had gone, so they stayed in every roster count and capacity
         // figure the agency reports on. 'withdrawn' + withdrawn_at is what the
@@ -2672,9 +3206,29 @@ final class AdminController extends Controller
                 ->where('enrollment_status', 'enrolled')
                 ->update([
                     'enrollment_status' => 'withdrawn',
-                    'withdrawn_at' => now()->toDateString(),
+                    // Their LAST DAY, not the day the button was pressed — those differ
+                    // whenever a family gives notice, and the roster history should say
+                    // when the child actually stopped attending.
+                    'withdrawn_at' => $lastDay,
                     'updated_at' => now(),
                 ]);
+
+            /* ...and close their enrolments too.
+               Being in a room is stored TWICE — children.primary_room_id and
+               enrollments.room_id — and this path was only writing the first. It left 8
+               iLearn children marked withdrawn with an open enrolment row (found
+               2026-08-30). The room roster filters on both so it looked fine, but
+               fourteen controllers join enrollments without a status filter, including
+               DailyEventController::storeBulk, which WRITES — so a room-wide care log
+               could attach an entry to a child who had left.
+
+               Dated to the last day, matching children.withdrawn_at, so the enrolment
+               record agrees with the final invoice and the CWELCC submission.
+               WithdrawalController has always done this; this path had not. */
+            DB::table('enrollments')
+                ->whereIn('child_id', $childIds)
+                ->whereNull('end_date')
+                ->update(['end_date' => $lastDay]);
         }
 
         // End the guardians' access. Removing the family left their logins working —
@@ -2685,7 +3239,7 @@ final class AdminController extends Controller
 
         // Send BEFORE the accounts are closed, so the notice is composed from a family
         // that still exists — and the send itself is exempt from the suspension gate.
-        $notified = $this->notifyFamilyDeparture($family, $guardianIds, $request);
+        $notified = $this->notifyFamilyDeparture($family, $guardianIds, $request, $owing, null, $lastDay);
 
         if ($guardianIds) {
             DB::table('users')->whereIn('id', $guardianIds)->update(['status' => 'deactivated']);
@@ -2693,19 +3247,77 @@ final class AdminController extends Controller
 
         DB::table('families')->where('id', $familyId)->update([
             'deleted_at' => now(),
+            'departure_date' => $lastDay,
+            'departure_by_id' => $request->user()->id ?? null,
+            'departure_reason_code' => $reasonCode,
+            'departure_reason' => $reasonText,
+            'departure_applied_at' => now(),
             'updated_at' => now(),
         ]);
         $this->audit($request->user()->id, 'family.deleted', 'family', $familyId, [
             'family_name' => $family->family_name,
+            'last_day' => $lastDay,
+            'reason_code' => $reasonCode,
+            'reason' => $reasonText,
             'children_withdrawn' => $withdrawn,
             'accounts_closed' => count($guardianIds),
+            'outstanding_at_departure' => $owing['total'],
+            'balance_acknowledged' => $owing['total'] > 0,
             'notice_attempted' => $notified,   // handed to the mail layer; it may still suppress a recipient
         ]);
+
+        /* The educator loses children off their roster today; the office has a final
+           invoice and possibly a balance to chase. Both after the record is written, so
+           neither can leave the de-enrolment half-applied. */
+        $provNotified = $this->notifyProviderOfDeparture($family, $affectedRooms, $request, $lastDay);
+        $adminNotified = $this->notifyAdminsOfDeparture($family, $request, $lastDay, $reasonText, [
+            'children_withdrawn' => $withdrawn,
+            'accounts_closed' => count($guardianIds),
+        ], $owing);
+
+        /* A leaving report for each child, DRAFTED as part of the exit.
+         *
+         * Asked for as part of the de-enrolment wizard (Anthony, 2026-08-30): the family
+         * is going, and the last thing the centre can offer them is a record of the
+         * child's time there. Drafted, never sent — exactly like one a director generates
+         * by hand, because an unreviewed narrative is not something to post to a family
+         * on their way out. It waits in Report cards for somebody to read and release.
+         *
+         * AI is deliberately skipped ($useAi = false): the Anthropic calls fail on this
+         * host rather than refuse, and four of them per domain per child is a wait the
+         * person pressing De-enrol should not sit through — the data-grounded templates
+         * are what those calls fall back to here anyway.
+         *
+         * Best-effort at every level: a family must still be able to leave if this
+         * stumbles, and one child failing must not cost the others their report.
+         */
+        $reportCards = 0;
+        try {
+            /* The template writes "Over {term}, Liam took part in...", so the term has to
+               read as a PERIOD. "Leaving report - Aug 2026" made that sentence nonsense;
+               "Final term (Aug 2026)" reads properly and is still unmistakable in the
+               Report cards list. */
+            $term = 'Final term (' . now()->format('M Y') . ')';
+            $rc = app(\App\Http\Controllers\Api\ReportCardController::class);
+            foreach ($childIds as $cid) {
+                try {
+                    if ($rc->draftFor((int) $cid, $term, (int) $request->user()->id, false)) {
+                        $reportCards++;
+                    }
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Leaving report card failed',
+                        ['child' => (int) $cid, 'error' => $e->getMessage()]);
+                }
+            }
+        } catch (\Throwable $e) { /* never block the de-enrolment */ }
 
         return response()->json([
             'message' => 'Family removed', 'id' => $familyId,
             'children_withdrawn' => $withdrawn,
+            'report_cards_drafted' => $reportCards,
             'accounts_closed' => count($guardianIds),
+            'provider_notified' => $provNotified,
+            'admins_notified' => $adminNotified,
             'notice_attempted' => $notified,   // handed to the mail layer; it may still suppress a recipient
         ]);
     }
@@ -2737,6 +3349,96 @@ final class AdminController extends Controller
     }
 
     /** Undo a suspension: flip suspended guardians back to active. */
+    /**
+     * POST /admin/families/{family}/restore — undo a de-enrolment.
+     *
+     * Until this existed there was no way back: reactivateFamily() clears `suspended_at`
+     * only, and nothing anywhere cleared `deleted_at`. A returning family therefore had to
+     * be re-created from scratch, which split the child's attendance, care logs, invoices
+     * and documents across two records. Two iLearn families are in exactly that state.
+     *
+     * Reverses destroyFamily() and nothing more. Deliberately NOT a general un-delete: it
+     * restores the departure, so anything a human changed afterwards is left alone.
+     */
+    public function restoreFamily(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) { return response()->json(['message' => 'No agency access'], 403); }
+
+        // familyForWrite() filters deleted_at, which is exactly what we need to see here,
+        // so the tenant check is done explicitly instead — same rule, archived included.
+        $family = DB::table('families')->where('id', $familyId)->first();
+        if (! $family) { return response()->json(['message' => 'Not found'], 404); }
+
+        $isPlatformAdmin = \App\Support\UserRoles::has($request, 'platform_admin');
+        if (! $isPlatformAdmin) {
+            $centreIds = $this->getCentreIds($agencyId);
+            if (! in_array($family->centre_id, $centreIds, true)) {
+                return response()->json(['message' => 'Family not in your agency'], 403);
+            }
+        }
+        if (! $family->deleted_at) {
+            return response()->json(['message' => 'This family is not de-enrolled.'], 422);
+        }
+
+        $restored = ['children' => 0, 'enrolments' => 0, 'accounts' => 0];
+        $departure = $family->departure_date ? substr((string) $family->departure_date, 0, 10) : null;
+        $childIds = DB::table('children')->where('family_id', $familyId)->pluck('id')->all();
+
+        DB::transaction(function () use ($familyId, $childIds, $departure, &$restored) {
+            DB::table('families')->where('id', $familyId)->update([
+                'deleted_at' => null,
+                'departure_date' => null,
+                'departure_applied_at' => null,
+                'departure_reason' => null,
+                'departure_reason_code' => null,
+                'departure_by_id' => null,
+                'updated_at' => now(),
+            ]);
+
+            if ($childIds) {
+                $restored['children'] = DB::table('children')->whereIn('id', $childIds)
+                    ->where('enrollment_status', 'withdrawn')
+                    ->update(['enrollment_status' => 'enrolled', 'withdrawn_at' => null, 'updated_at' => now()]);
+
+                /* Only the enrolments this departure closed. A child who left earlier on
+                   their own keeps their own end date — restoring the FAMILY must not
+                   silently re-enrol a child who had already gone. */
+                if ($departure) {
+                    $restored['enrolments'] = DB::table('enrollments')
+                        ->whereIn('child_id', $childIds)
+                        ->whereDate('end_date', $departure)
+                        ->update(['end_date' => null]);
+                }
+            }
+        });
+
+        // Their logins, which destroyFamily deactivated.
+        $userIds = DB::table('guardians')->where('family_id', $familyId)
+            ->whereNotNull('user_id')->pluck('user_id')->all();
+        if ($userIds) {
+            $restored['accounts'] = DB::table('users')->whereIn('id', $userIds)
+                ->where('status', 'deactivated')->update(['status' => 'active', 'updated_at' => now()]);
+        }
+
+        $this->audit($request->user()->id, 'family.restored', 'family', $familyId, [
+            'family_name' => $family->family_name,
+            'was_departed_on' => $departure,
+            'children_restored' => $restored['children'] ?? 0,
+            'enrolments_reopened' => $restored['enrolments'] ?? 0,
+            'accounts_reactivated' => $restored['accounts'] ?? 0,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'family_id' => $familyId,
+            'children_restored' => $restored['children'] ?? 0,
+            'enrolments_reopened' => $restored['enrolments'] ?? 0,
+            'accounts_reactivated' => $restored['accounts'] ?? 0,
+            'message' => 'Family restored. Check their room placement and billing before the next run.',
+        ]);
+    }
+
     public function reactivateFamily(Request $request, int $familyId): JsonResponse
     {
         $family = $this->familyForWrite($request, $familyId);
@@ -2756,6 +3458,234 @@ final class AdminController extends Controller
     }
 
     /**
+     * What a family still owes, from BOTH billing tables.
+     *
+     * `invoices` are raised inside KiddieTrac (sent / partial / overdue).
+     * `external_invoices` come from the agency's own billing system — iLearn for
+     * agency 2 — and use a different vocabulary (open / overdue). An agency can be
+     * on either, so a balance check that reads one table declares a family paid up
+     * when they are not, which at de-enrolment is the moment it matters most.
+     */
+    private function familyOutstanding(int $familyId): array
+    {
+        $lines = [];
+        $total = 0.0;
+
+        try {
+            foreach (DB::table('invoices')->where('family_id', $familyId)
+                ->whereIn('status', ['sent', 'partial', 'overdue'])
+                ->orderBy('due_at')
+                ->get(['id', 'invoice_number', 'status', 'issued_at', 'due_at',
+                       'total', 'amount_paid', 'balance_due', 'pdf_url']) as $r) {
+                $bal = (float) $r->balance_due;
+                if ($bal <= 0) { continue; }
+                $total += $bal;
+                $lines[] = [
+                    'source' => 'kiddietrac',
+                    'number' => $r->invoice_number ?: ('#' . $r->id),
+                    'status' => $r->status,
+                    'issued_at' => $r->issued_at,
+                    'due_at' => $r->due_at,
+                    'total' => (float) $r->total,
+                    'amount_paid' => (float) $r->amount_paid,
+                    'balance_due' => $bal,
+                    'pdf_url' => $r->pdf_url,
+                ];
+            }
+        } catch (\Throwable $e) { /* a missing column must not block a de-enrolment */ }
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+                foreach (DB::table('external_invoices')->where('family_id', $familyId)
+                    ->whereIn('status', ['open', 'overdue', 'partial', 'sent', 'unpaid'])
+                    ->orderBy('due_at')
+                    ->get(['id', 'number', 'status', 'issued_at', 'due_at', 'total',
+                           'amount_paid', 'balance_due', 'pdf_url', 'source_label']) as $r) {
+                    $bal = (float) $r->balance_due;
+                    if ($bal <= 0) { continue; }
+                    $total += $bal;
+                    $lines[] = [
+                        'source' => $r->source_label ?: 'billing',
+                        'number' => $r->number ?: ('#' . $r->id),
+                        'status' => $r->status,
+                        'issued_at' => $r->issued_at,
+                        'due_at' => $r->due_at,
+                        'total' => (float) $r->total,
+                        'amount_paid' => (float) $r->amount_paid,
+                        'balance_due' => $bal,
+                        'pdf_url' => $r->pdf_url,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) { /* as above */ }
+
+        usort($lines, fn ($a, $b) => strcmp((string) ($a['due_at'] ?? ''), (string) ($b['due_at'] ?? '')));
+
+        return ['total' => round($total, 2), 'count' => count($lines), 'invoices' => $lines];
+    }
+
+    /**
+     * Everyone and everything that has LEFT this agency, and how long the records
+     * must be kept.
+     *
+     * De-enrolling is deliberately not a delete — licensed child care records have to
+     * survive the family that generated them, and until now there was no screen in the
+     * portal that could see one. "It's gone" and "it's retained but invisible" look
+     * identical from the outside, which is the worst possible answer to a parent asking
+     * whether their child's file still exists.
+     *
+     * Retention comes from the agency's OWN compliance settings, never a number chosen
+     * here, so the date shown is the date the agency is actually committed to.
+     */
+    public function archivedIndex(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
+        $centreIds = $this->getCentreIds($agencyId);
+        if (empty($centreIds)) $centreIds = [0];
+
+        $agency = DB::table('agencies')->where('id', $agencyId)->first(['settings']);
+        $comp = [];
+        try { $comp = (json_decode((string) ($agency->settings ?? ''), true) ?: [])['compliance'] ?? []; }
+        catch (\Throwable $e) { $comp = []; }
+        $childYears = (int) ($comp['child_record_years'] ?? 7);
+        $docYears   = (int) ($comp['document_years'] ?? $childYears);
+
+        $until = function ($when, int $years) {
+            if (! $when) return null;
+            try { return \Illuminate\Support\Carbon::parse($when)->addYears($years)->toDateString(); }
+            catch (\Throwable $e) { return null; }
+        };
+
+        // ── FAMILIES that were de-enrolled ────────────────────────────────────
+        $families = DB::table('families as f')
+            ->leftJoin('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->whereIn('f.centre_id', $centreIds)
+            ->whereNotNull('f.deleted_at')
+            ->orderByDesc('f.deleted_at')->limit(500)
+            ->get(['f.id', 'f.family_name', 'f.deleted_at', 'ce.name as centre_name'])
+            ->map(fn ($r) => [
+                'id' => (int) $r->id,
+                'name' => $r->family_name,
+                'centre_name' => $r->centre_name,
+                'departed_at' => $r->deleted_at,
+                'retained_until' => $until($r->deleted_at, $childYears),
+                'children' => DB::table('children')->where('family_id', $r->id)->count(),
+            ])->values();
+
+        // ── CHILDREN: withdrawn (still on file) or removed ────────────────────
+        $children = DB::table('children as c')
+            ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->leftJoin('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->whereIn('f.centre_id', $centreIds)
+            ->where(function ($q) {
+                $q->whereNotNull('c.deleted_at')->orWhere('c.enrollment_status', 'withdrawn');
+            })
+            ->orderByDesc(DB::raw('COALESCE(c.deleted_at, c.withdrawn_at)'))
+            ->limit(1000)
+            ->get(['c.id', 'c.first_name', 'c.last_name', 'c.deleted_at', 'c.withdrawn_at',
+                   'c.enrollment_status', 'f.family_name', 'ce.name as centre_name'])
+            ->map(function ($r) use ($until, $childYears) {
+                $when = $r->deleted_at ?: $r->withdrawn_at;
+                return [
+                    'id' => (int) $r->id,
+                    'name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')),
+                    'family_name' => $r->family_name,
+                    'centre_name' => $r->centre_name,
+                    // "removed" and "withdrawn" are different states and are not merged:
+                    // a withdrawn child is still a readable record, a removed one is not.
+                    'state' => $r->deleted_at ? 'removed' : 'withdrawn',
+                    'departed_at' => $when,
+                    'retained_until' => $until($when, $childYears),
+                ];
+            })->values();
+
+        // ── STAFF / EDUCATORS whose accounts were closed ──────────────────────
+        $staff = DB::table('users as u')
+            ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+            ->where('ra.agency_id', $agencyId)
+            ->whereIn('ra.role', ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor', 'sales_rep'])
+            ->where(function ($q) { $q->whereNotNull('u.deleted_at')->orWhere('u.status', 'deactivated'); })
+            ->orderByDesc(DB::raw('COALESCE(u.deleted_at, u.updated_at)'))
+            ->limit(500)
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.status',
+                   'u.deleted_at', 'u.updated_at', 'ra.role'])
+            ->unique('id')
+            ->map(function ($r) use ($until, $docYears) {
+                /* There is no deactivated_at column, so a closed-but-not-deleted account
+                   falls back to updated_at. It is labelled `departed_at_is_estimate` rather
+                   than presented as fact — a retention date quoted to a former employee
+                   should not quietly be a guess. */
+                $exact = (bool) $r->deleted_at;
+                $when = $r->deleted_at ?: $r->updated_at;
+                return [
+                    'id' => (int) $r->id,
+                    'name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')),
+                    'email' => $r->email,
+                    'role' => $r->role,
+                    'state' => $r->deleted_at ? 'removed' : 'closed',
+                    'departed_at' => $when,
+                    'departed_at_is_estimate' => ! $exact,
+                    'retained_until' => $until($when, $docYears),
+                ];
+            })->values();
+
+        // ── PROVIDERS / CENTRES that were archived ────────────────────────────
+        $centres = DB::table('centres')
+            ->where('agency_id', $agencyId)->whereNotNull('deleted_at')
+            ->orderByDesc('deleted_at')->limit(200)
+            ->get(['id', 'name', 'deleted_at'])
+            ->map(fn ($r) => [
+                'id' => (int) $r->id,
+                'name' => $r->name,
+                'departed_at' => $r->deleted_at,
+                'retained_until' => $until($r->deleted_at, $childYears),
+            ])->values();
+
+        return response()->json([
+            'retention' => [
+                'child_record_years' => $childYears,
+                'document_years' => $docYears,
+                'auto_enforce' => (bool) ($comp['auto_enforce'] ?? false),
+                'enforce_mode' => $comp['enforce_mode'] ?? null,
+            ],
+            'families' => $families,
+            'children' => $children,
+            'staff' => $staff,
+            'centres' => $centres,
+            'counts' => [
+                'families' => $families->count(),
+                'children' => $children->count(),
+                'staff' => $staff->count(),
+                'centres' => $centres->count(),
+            ],
+        ]);
+    }
+
+    /** What this family owes — read by the de-enrolment dialog before it will proceed. */
+    public function familyBalance(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
+
+        $family = DB::table('families')->where('id', $familyId)->whereNull('deleted_at')->first();
+        if (! $family) return response()->json(['message' => 'Not found'], 404);
+
+        $callerIsPlatformAdmin = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+        if (! $callerIsPlatformAdmin) {
+            if (! in_array($family->centre_id, $this->getCentreIds($agencyId), true)) {
+                return response()->json(['message' => 'Family not in your agency'], 403);
+            }
+        }
+
+        return response()->json($this->familyOutstanding($familyId) + [
+            'family_name' => $family->family_name,
+        ]);
+    }
+
+    /**
      * Tell a family that they have been de-enrolled.
      *
      * Distinct from the suspension notice: this one is final, so it has to answer the
@@ -2767,7 +3697,368 @@ final class AdminController extends Controller
      *
      * Returns how many people were emailed.
      */
-    private function notifyFamilyDeparture($family, array $userIds, Request $request): int
+    /**
+     * Why families leave. The codes are stable — reporting counts them — and the labels
+     * are what the person picked, kept verbatim so an email never has to un-translate a
+     * code. Mirrored in screen-admin.js; change both together.
+     */
+    private const DEPARTURE_REASONS = [
+        'moved_away'       => 'Moved out of the area',
+        'started_school'   => 'Child started school',
+        'schedule_change'  => 'Change in care needs or schedule',
+        'work_change'      => "Change in the parent's work or income",
+        'other_provider'   => 'Moved to another provider',
+        'cost'             => 'Cost of care',
+        'non_payment'      => 'Unpaid fees',
+        'family_request'   => 'Family request — no reason given',
+        'agency_initiated' => 'Agency decision',
+        'other'            => 'Other',
+    ];
+
+    /**
+     * The reason as a human sentence. A free-text note always wins over the label — it is
+     * the more specific thing the admin actually wrote — and an unknown code degrades to
+     * whatever text came with it rather than throwing the reason away.
+     */
+    private function departureReasonText(?string $code, ?string $free): ?string
+    {
+        $free = trim((string) $free);
+        if ($free !== '') {
+            return mb_substr($free, 0, 300);
+        }
+        $label = self::DEPARTURE_REASONS[(string) $code] ?? null;
+        return $label ?: null;
+    }
+
+    /**
+     * Tell the educator(s) who actually had these children that the family has gone.
+     *
+     * Rooms are passed in because by the time this runs the enrolments have ended and the
+     * question "whose room were they in?" no longer has an answer. A child on a split week
+     * has two providers and both are told.
+     *
+     * The reason is deliberately absent. The educator needs to know the family has left
+     * and when; why they left is the family's business, and "unpaid fees" or "agency
+     * decision" is not something to circulate.
+     */
+    private function notifyProviderOfDeparture($family, array $roomIds, Request $request, string $lastDay, ?string $previewTo = null): int
+    {
+        $sent = 0;
+        try {
+            $agencyId = (int) $this->getAgencyId($request);
+            $agency = DB::table('agencies')->where('id', $agencyId)->first();
+            $agencyName = $agency->name ?? 'KiddieTrac';
+            $tz = \App\Support\AgencyTime::tz($agencyId);
+
+            $kids = DB::table('children')->where('family_id', $family->id)
+                ->get(['first_name', 'preferred_name'])
+                ->map(fn ($c) => trim((string) ($c->preferred_name ?: $c->first_name)))
+                ->filter()->values()->all();
+            $kidList = count($kids) ? $this->joinNames($kids) : 'a child';
+            $plural = count($kids) > 1;
+
+            if ($previewTo) {
+                $recips = [(object) ['email' => $previewTo, 'first_name' => 'Anthony']];
+            } elseif (! empty($roomIds)) {
+                $recips = DB::table('educator_rooms as er')
+                    ->join('users as u', 'u.id', '=', 'er.user_id')
+                    ->whereIn('er.room_id', $roomIds)
+                    ->whereNull('u.deleted_at')->where('u.status', 'active')
+                    ->whereNotNull('u.email')
+                    ->distinct()->get(['u.email', 'u.first_name']);
+            } else {
+                $recips = collect();
+            }
+            if (! count($recips)) {
+                return 0;
+            }
+
+            $last = \Illuminate\Support\Carbon::parse($lastDay)->format('l, j F Y');
+            $isPast = $lastDay < \App\Support\AgencyTime::today($agencyId);
+
+            foreach ($recips as $u) {
+                $who = trim((string) ($u->first_name ?? ''));
+                $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">'
+                    . ($who !== '' ? 'Hi ' . e($who) . ',' : 'Hello,') . '</p>'
+                    . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">'
+                    . 'We wanted you to hear this from us rather than from an empty space on your '
+                    . 'roster. <strong>' . e($family->family_name) . '</strong> '
+                    . ($isPast ? 'has left' : 'is leaving') . ' ' . e($agencyName) . ', and '
+                    . e($kidList) . ' ' . ($plural ? 'are' : 'is')
+                    . ' no longer in your care.</p>'
+
+                    . '<div style="background:#F8FAFC;border-left:3px solid #1F6080;border-radius:6px;'
+                    . 'padding:12px 15px;margin:0 0 16px;">'
+                    . '<div style="font-size:12px;font-weight:800;letter-spacing:.04em;'
+                    . 'text-transform:uppercase;color:#64748B;margin-bottom:4px;">Last day</div>'
+                    . '<div style="font-size:15px;font-weight:700;color:#0F172A;">' . e($last) . '</div>'
+                    . '</div>'
+
+                    . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">'
+                    . 'Thank you for the care you gave ' . e($kidList) . '. The small, daily things '
+                    . 'you did &mdash; the greeting at the door, knowing what settles them, noticing '
+                    . 'what changed &mdash; are what made this a good place for '
+                    . ($plural ? 'them' : 'them') . ', and they carry that on with them.</p>'
+
+                    . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">'
+                    . 'There is nothing you need to do. ' . ($plural ? 'They have' : 'They have')
+                    . ' been taken off your roster and your ratios, and their daily logs, photos and '
+                    . 'records stay exactly where they are &mdash; nothing you wrote has been lost. '
+                    . 'If anything of theirs is still with you, or you have a question about the '
+                    . 'handover, your director will be glad to help.</p>'
+
+                    . '<p style="margin:0;font-size:15px;line-height:1.65;color:#334155;">'
+                    . 'With thanks,<br><strong>' . e($agencyName) . '</strong></p>';
+
+                $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                    'eyebrow' => 'A FAMILY HAS LEFT',
+                    'title' => 'Goodbye to ' . $kidList,
+                    'subtitle' => $agencyName,
+                    'preheader' => $family->family_name . ' has left ' . $agencyName
+                        . '. Last day ' . $last . '.',
+                ]);
+
+                try {
+                    \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
+                        ->html($html, function ($m) use ($u, $kidList, $agencyName, $previewTo) {
+                            $m->to($u->email)->subject('Goodbye to ' . $kidList);
+                            if ($previewTo) {
+                                $m->subject('[Preview — educator] Goodbye to ' . $kidList);
+                                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+                            }
+                        });
+                    $sent++;
+                } catch (\Throwable $e) {
+                    \Log::warning('provider departure notice failed', ['e' => $e->getMessage()]);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('provider departure notice failed', ['e' => $e->getMessage()]);
+        }
+
+        return $sent;
+    }
+
+    /**
+     * Tell the agency's admins and directors that a de-enrolment happened.
+     *
+     * This is the record, not a courtesy: who did it, when, from when, and why. The
+     * checklist at the foot is the point of the whole message — closing a family removes
+     * the portal the invoices lived in, so anything owed has to be chased NOW, and the
+     * subsidy and food-programme claims stop counting a child who has gone.
+     */
+    private function notifyAdminsOfDeparture($family, Request $request, string $lastDay, ?string $reasonText, array $stats, ?array $owing = null, ?string $previewTo = null): int
+    {
+        $sent = 0;
+        try {
+            $agencyId = (int) $this->getAgencyId($request);
+            $agency = DB::table('agencies')->where('id', $agencyId)->first();
+            $agencyName = $agency->name ?? 'KiddieTrac';
+            $tz = \App\Support\AgencyTime::tz($agencyId);
+            $when = now()->setTimezone($tz);
+
+            $actor = $request->user();
+            $actorName = $actor
+                ? trim(($actor->first_name ?? '') . ' ' . ($actor->last_name ?? '')) : '';
+            if ($actorName === '') { $actorName = $actor->email ?? 'someone'; }
+
+            if ($previewTo) {
+                $to = [$previewTo];
+            } else {
+                $to = DB::table('users as u')
+                    ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                    ->where('ra.agency_id', $agencyId)->where('ra.active', true)
+                    ->whereIn('ra.role', ['agency_admin', 'centre_director'])
+                    ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                    ->distinct()->pluck('u.email')->all();
+                if (! empty($agency->contact_email)) { $to[] = $agency->contact_email; }
+                $to = array_values(array_unique(array_filter($to)));
+            }
+            if (empty($to)) {
+                return 0;
+            }
+
+            $centre = DB::table('centres')->where('id', $family->centre_id)->first();
+            $kids = DB::table('children')->where('family_id', $family->id)
+                ->get(['first_name', 'preferred_name'])
+                ->map(fn ($c) => trim((string) ($c->preferred_name ?: $c->first_name)))
+                ->filter()->values()->all();
+
+            $scheduled = $lastDay > \App\Support\AgencyTime::today($agencyId);
+            $last = \Illuminate\Support\Carbon::parse($lastDay)->format('l, j F Y');
+
+            $row = function ($k, $v) {
+                return '<tr>'
+                    . '<td style="padding:6px 12px 6px 0;font-size:13.5px;color:#64748B;'
+                    . 'white-space:nowrap;vertical-align:top;">' . e($k) . '</td>'
+                    . '<td style="padding:6px 0;font-size:13.5px;color:#0F172A;font-weight:600;">'
+                    . $v . '</td></tr>';
+            };
+
+            $facts = '<table style="width:100%;border-collapse:collapse;margin:0 0 18px;">'
+                . $row('Family', e($family->family_name))
+                . ($centre ? $row('Provider', e($centre->name)) : '')
+                . ($kids ? $row(count($kids) > 1 ? 'Children' : 'Child', e($this->joinNames($kids))) : '')
+                . $row('Last day', e($last) . ($scheduled
+                    ? ' <span style="color:#166534;font-weight:700;">(scheduled)</span>'
+                    : ($lastDay < \App\Support\AgencyTime::today($agencyId)
+                        ? ' <span style="color:#B45309;font-weight:700;">(backdated)</span>' : '')))
+                . $row('Reason', $reasonText ? e($reasonText)
+                    : '<span style="color:#B45309;">Not recorded</span>')
+                . $row('De-enrolled by', e($actorName))
+                . $row('Recorded', e($when->format('l, j F Y')) . ' at '
+                    . e($when->format('g:i A')) . ' ' . e($when->format('T')))
+                . '</table>';
+
+            /* What the system already did, so nobody repeats it — and, by omission, what it
+               did not do, which is the entire reason for the checklist below. */
+            $did = [];
+            if ($scheduled) {
+                $did[] = 'Nothing has changed yet. Their access, daily updates and invoices '
+                    . 'continue until the last day, and the de-enrolment completes by itself '
+                    . 'the following morning.';
+            } else {
+                $did[] = ((int) ($stats['children_withdrawn'] ?? 0)) . ' child record(s) marked withdrawn';
+                $did[] = ((int) ($stats['accounts_closed'] ?? 0)) . ' guardian login(s) closed';
+                $did[] = 'The family has been emailed their departure notice';
+            }
+            $didHtml = '<ul style="margin:0 0 18px;padding-left:20px;font-size:14px;line-height:1.7;'
+                . 'color:#334155;"><li>' . implode('</li><li>', array_map('e', $did)) . '</li></ul>';
+
+            $owed = (float) ($owing['total'] ?? 0);
+            $balanceHtml = '';
+            if ($owed > 0) {
+                $balanceHtml = '<div style="background:#FEF2F2;border:1px solid #FECACA;'
+                    . 'border-radius:8px;padding:14px 16px;margin:0 0 18px;">'
+                    . '<div style="font-size:13px;font-weight:800;color:#B91C1C;'
+                    . 'text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">'
+                    . 'Outstanding at departure</div>'
+                    . '<div style="font-size:22px;font-weight:800;color:#B91C1C;">$'
+                    . e(number_format($owed, 2)) . '</div>'
+                    . '<div style="font-size:13px;color:#7F1D1D;margin-top:5px;line-height:1.6;">'
+                    . 'Across ' . (int) ($owing['count'] ?? 0) . ' invoice(s). The family has been '
+                    . 'sent an itemised request for payment, but their portal access '
+                    . ($scheduled ? 'will end' : 'has ended') . ' &mdash; so the invoices they '
+                    . 'could look up are no longer reachable to them. Chase this now.</div></div>';
+            }
+
+            $body = '<p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#334155;">'
+                . '<strong>' . e($family->family_name) . '</strong> '
+                . ($scheduled ? 'is scheduled to leave' : 'has been de-enrolled from') . ' '
+                . e($agencyName) . '. Here is the record, and what still needs a person.</p>'
+                . $facts
+                . $balanceHtml
+                . '<div style="font-size:12px;font-weight:800;letter-spacing:.04em;'
+                . 'text-transform:uppercase;color:#64748B;margin:0 0 6px;">'
+                . ($scheduled ? 'What happens automatically' : 'What the system has already done')
+                . '</div>'
+                . $didHtml
+
+                . '<div style="font-size:12px;font-weight:800;letter-spacing:.04em;'
+                . 'text-transform:uppercase;color:#64748B;margin:0 0 6px;">'
+                . 'Please check</div>'
+                . '<ul style="margin:0 0 18px;padding-left:20px;font-size:14px;line-height:1.7;color:#334155;">'
+                . '<li><strong>Final invoice</strong> &mdash; raise or adjust it to the last day '
+                . 'above, not to today, and refund any credit on the account.</li>'
+                . '<li><strong>Outstanding balance</strong> &mdash; anything unpaid needs chasing '
+                . 'while you still have current contact details.</li>'
+                . '<li><strong>Subsidy and CACFP claims</strong> &mdash; stop counting '
+                . (count($kids) > 1 ? 'these children' : 'this child') . ' from the last day, '
+                . 'and correct any claim already submitted past it.</li>'
+                . '<li><strong>Deposits, cheques and direct debits</strong> &mdash; cancel any '
+                . 'standing payment so the family is not charged again.</li>'
+                . '<li><strong>The child\'s file</strong> &mdash; medication, immunisation records '
+                . 'and anything of theirs still on site should be returned or filed.</li>'
+                . '<li><strong>Ratios and capacity</strong> &mdash; the space is now free; check '
+                . 'your waiting list.</li>'
+                . '</ul>'
+
+                . '<p style="margin:0 0 6px;font-size:14px;line-height:1.65;color:#334155;">'
+                . 'The full record, including notes and history, is kept and stays readable under '
+                . '<strong>Archived</strong> in the portal for your retention period.</p>'
+                . '<p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#94A3B8;">'
+                . 'Sent automatically by KiddieTrac when a family is de-enrolled.</p>';
+
+            $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                'eyebrow' => $scheduled ? 'DE-ENROLMENT SCHEDULED' : 'DE-ENROLMENT RECORDED',
+                'title' => $family->family_name . ($scheduled ? ' is leaving' : ' has left'),
+                'subtitle' => $agencyName,
+                'preheader' => $family->family_name . ' &middot; last day ' . $last
+                    . ' &middot; by ' . $actorName
+                    . ($owed > 0 ? ' &middot; $' . number_format($owed, 2) . ' outstanding' : ''),
+            ]);
+
+            $subject = ($scheduled ? 'De-enrolment scheduled: ' : 'De-enrolment recorded: ')
+                . $family->family_name
+                . ($owed > 0 ? ' — $' . number_format($owed, 2) . ' outstanding' : '');
+
+            try {
+                \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
+                    ->html($html, function ($m) use ($to, $subject, $previewTo) {
+                        $m->to($to[0])->subject($subject);
+                        if (count($to) > 1) { $m->bcc(array_slice($to, 1, 20)); }
+                        if ($previewTo) {
+                            $m->subject('[Preview — oversight] ' . $subject);
+                            $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+                        }
+                    });
+                $sent = count($to);
+            } catch (\Throwable $e) {
+                \Log::warning('oversight departure notice failed', ['e' => $e->getMessage()]);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('oversight departure notice failed', ['e' => $e->getMessage()]);
+        }
+
+        return $sent;
+    }
+
+    /** "Aydan", "Aydan and Mylah", "Aydan, Mylah and Sara" — never a bare comma list. */
+    private function joinNames(array $names): string
+    {
+        $n = array_values(array_filter($names));
+        if (count($n) <= 1) { return (string) ($n[0] ?? ''); }
+        $last = array_pop($n);
+        return implode(', ', $n) . ' and ' . $last;
+    }
+
+    /**
+     * GET /admin/email-catalogue — every email the system can send.
+     *
+     * Grouped for display, and each entry says honestly whether it can be shown
+     * ('render'), sent as a real sample ('sample'), or only described ('none'). The
+     * counts let the screen say "49 emails across 4 audiences" without the client
+     * recounting a shape it does not own.
+     */
+    public function emailCatalogue(Request $request): JsonResponse
+    {
+        $grouped = \App\Support\EmailCatalogue::grouped();
+
+        $out = [];
+        foreach (\App\Support\EmailCatalogue::AUDIENCES as $key => $label) {
+            $rows = $grouped[$key] ?? [];
+            if (! $rows) {
+                continue;
+            }
+            $out[] = [
+                'key' => $key,
+                'label' => $label,
+                'count' => count($rows),
+                'emails' => array_values($rows),
+            ];
+        }
+
+        $all = \App\Support\EmailCatalogue::all();
+
+        return response()->json([
+            'audiences' => $out,
+            'total' => count($all),
+            'editable' => count(array_filter($all, fn ($e) => ($e['preview'] ?? '') === 'render')),
+            'sampleable' => count(array_filter($all, fn ($e) => ($e['preview'] ?? '') === 'sample')),
+        ]);
+    }
+
+    private function notifyFamilyDeparture($family, array $userIds, Request $request, ?array $owing = null, ?string $previewTo = null, ?string $lastDay = null): int
     {
         if (empty($userIds)) return 0;
         $sent = 0;
@@ -2803,8 +4094,88 @@ final class AdminController extends Controller
                 ->distinct()->pluck('u.email')->all();
             if (!empty($agency->contact_email)) $oversight[] = $agency->contact_email;
 
+            /* ── OUTSTANDING BALANCE ──────────────────────────────────────────
+               Anthony, 2026-08-25: a family must not leave without being told, in
+               writing, exactly what is owed and what happens if it is not paid.
+
+               This is the last message that reaches them — their portal access ends
+               moments later, so the invoices they could previously look up are about
+               to become unreachable. That is precisely why the ledger is itemised
+               here rather than merely summarised: it has to stand on its own as the
+               record they keep. The tone is deliberately warm before it is firm. */
+            $balanceBlock = '';
+            if ($owing && ($owing['total'] ?? 0) > 0) {
+                $money = fn ($v) => '$' . number_format((float) $v, 2);
+                $rows = '';
+                foreach (($owing['invoices'] ?? []) as $i => $inv) {
+                    $due = $inv['due_at'] ? \Illuminate\Support\Carbon::parse($inv['due_at'])->format('j M Y') : '—';
+                    $overdue = $inv['due_at'] && \Illuminate\Support\Carbon::parse($inv['due_at'])->isPast();
+                    $rows .= '<tr>'
+                        . '<td style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#0F172A;">'
+                        .   e((string) $inv['number'])
+                        . '</td>'
+                        . '<td style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;'
+                        .   ($overdue ? 'color:#B91C1C;font-weight:700;' : 'color:#475569;') . '">'
+                        .   e($due) . ($overdue ? ' (overdue)' : '')
+                        . '</td>'
+                        . '<td style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#475569;text-align:right;">'
+                        .   e($money($inv['total']))
+                        . '</td>'
+                        . '<td style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#0F172A;font-weight:700;text-align:right;">'
+                        .   e($money($inv['balance_due']))
+                        . '</td></tr>';
+                }
+
+                $balanceBlock =
+                      '<div style="margin:18px 0 0;padding:16px 18px;background:#FFF8EC;border:1px solid #FCD9A5;border-radius:12px;">'
+                    . '<div style="font-size:15px;font-weight:800;color:#7A4E10;margin:0 0 8px;">'
+                    .   'Before we close your file: ' . e($money($owing['total'])) . ' is still outstanding'
+                    . '</div>'
+                    . '<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#7A4E10;">'
+                    .   'Our records show ' . (int) $owing['count'] . ' unpaid invoice'
+                    .   ((int) $owing['count'] === 1 ? '' : 's') . ', itemised below. Because your portal '
+                    .   'access ends with this message, please keep this email — it is your copy of the ledger.'
+                    . '</p>'
+                    . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                    .   'style="border-collapse:collapse;background:#fff;border-radius:9px;overflow:hidden;">'
+                    . '<tr>'
+                    .   '<th align="left" style="padding:8px 10px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#94A3B8;">Invoice</th>'
+                    .   '<th align="left" style="padding:8px 10px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#94A3B8;">Due</th>'
+                    .   '<th align="right" style="padding:8px 10px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#94A3B8;">Invoiced</th>'
+                    .   '<th align="right" style="padding:8px 10px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#94A3B8;">Still owed</th>'
+                    . '</tr>'
+                    . $rows
+                    . '<tr><td colspan="3" style="padding:10px;border-top:2px solid #EEF2F6;background:#FFFBF3;font-size:13px;font-weight:800;color:#0F172A;">Total outstanding</td>'
+                    .   '<td style="padding:10px;border-top:2px solid #EEF2F6;background:#FFFBF3;font-size:15px;font-weight:800;color:#B45309;text-align:right;">'
+                    .   e($money($owing['total'])) . '</td></tr>'
+                    . '</table>'
+                    . '<p style="margin:14px 0 0;font-size:14px;line-height:1.65;color:#7A4E10;">'
+                    .   'We would much rather settle this with you directly than through anyone else, so please '
+                    .   'arrange payment in full at your earliest opportunity. If an invoice looks wrong, or you '
+                    .   'need a little time, tell us — we will work something out with you, and we would far '
+                    .   'sooner hear from you than not.'
+                    . '</p>'
+                    . '<p style="margin:10px 0 0;font-size:14px;line-height:1.65;color:#7A4E10;">'
+                    .   'We do have to be straightforward with you about the alternative: where an account '
+                    .   'remains unpaid and we have not been able to reach an arrangement, ' . e($agencyName)
+                    .   ' reserves the right to recover the amount owed, including by referring the account to '
+                    .   'a collections agency. That is genuinely a last resort, and one a single reply from you '
+                    .   'will almost always avoid.'
+                    . '</p>'
+                    . '</div>';
+            }
+
             $users = DB::table('users')->whereIn('id', $userIds)->whereNull('deleted_at')
                 ->whereNotNull('email')->get(['id', 'first_name', 'email']);
+
+            /* PREVIEW: render and send exactly this notice to one address, with no
+               oversight copies and no real family touched. The wording here makes a
+               demand for money, so it has to be reviewable before anyone receives it
+               for real — and the only trustworthy preview is the live code path, not
+               a second copy of the markup that drifts. */
+            if ($previewTo) {
+                $users = collect([(object) ['id' => 0, 'first_name' => 'there', 'email' => $previewTo]]);
+            }
 
             foreach ($users as $u) {
                 $first = trim((string) ($u->first_name ?? '')) ?: 'Hello';
@@ -2829,10 +4200,24 @@ final class AdminController extends Controller
                 }
                 $reach .= '.';
 
+                /* A family that gave notice has not left yet, and telling them their
+                   access "has now ended" while they are still attending would be both
+                   wrong and alarming. The letter says which of the two it is. */
+                $leaveDate = $lastDay ? \Illuminate\Support\Carbon::parse($lastDay) : null;
+                $isFutureLeave = $leaveDate && $leaveDate->toDateString() > now()->toDateString();
+
+                $opening = $isFutureLeave
+                    ? e($kidList) . ' will be leaving ' . e($agencyName) . ' on <strong>'
+                        . e($leaveDate->format('l, j F Y')) . '</strong>. Everything carries on as '
+                        . 'normal until then — you keep your parent portal access, and the daily '
+                        . 'updates continue right up to their last day.'
+                    : e($kidList) . ' has been de-enrolled from ' . e($agencyName)
+                        . ($leaveDate ? ', with a last day of <strong>' . e($leaveDate->format('l, j F Y')) . '</strong>' : '')
+                        . ', and your access to the parent portal has now ended. You will not be able to sign in.';
+
                 $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($first) . ',</p>'
-                    . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
-                    . e($kidList) . ' has been de-enrolled from ' . e($agencyName)
-                    . ', and your access to the parent portal has now ended. You will not be able to sign in.</p>'
+                    . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . $opening . '</p>'
+                    . $balanceBlock
                     . \App\Services\EmailTemplate::calloutBox($records, 'info')
                     . '<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:#475569;">' . $reach . '</p>'
                     . '<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#0F172A;">'
@@ -2850,16 +4235,23 @@ final class AdminController extends Controller
                     'preheader' => e($kidList) . ' has been de-enrolled from ' . e($agencyName) . '.',
                 ]);
 
-                $bcc = array_values(array_unique(array_filter($oversight, function ($e) use ($u) {
+                $owed = $balanceBlock !== '';
+                $bcc = $previewTo ? [] : array_values(array_unique(array_filter($oversight, function ($e) use ($u) {
                     return $e && strcasecmp(trim($e), trim((string) $u->email)) !== 0;
-                })));
+                }))); // (ternary above: preview => [])
                 $bcc = array_slice($bcc, 0, 15);
 
                 try {
                     \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
-                        ->html($html, function ($m) use ($u, $agencyName, $bcc) {
-                            $m->to($u->email)->subject('Leaving ' . $agencyName . ' — your records and access');
+                        ->html($html, function ($m) use ($u, $agencyName, $bcc, $owed, $previewTo) {
+                            $m->to($u->email)->subject($owed
+                                ? ('Leaving ' . $agencyName . ' — your records, access and outstanding balance')
+                                : ('Leaving ' . $agencyName . ' — your records and access'));
                             if ($bcc) $m->bcc($bcc);
+                            if ($previewTo) {
+                                $m->subject('[Preview] ' . $agencyName . ' de-enrolment notice');
+                                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+                            }
                             // The accounts are closed moments after this is sent, and a
                             // closed account is exactly what the mail gate blocks.
                             $m->getHeaders()->addTextHeader('X-KT-Account-Notice', '1');
@@ -3184,10 +4576,27 @@ final class AdminController extends Controller
             return response()->json(['message' => 'This is the protected super-admin account and cannot be deleted.'], 422);
         }
 
+        /* Which rooms were theirs. Captured BEFORE the delete so it can go in the audit
+           payload — a room assignment is an operational fact, and losing the record of
+           who covered what makes a departure impossible to reconstruct. */
+        $hadRooms = DB::table('educator_rooms as er')
+            ->leftJoin('rooms as r', 'r.id', '=', 'er.room_id')
+            ->where('er.user_id', $userId)
+            ->get(['er.room_id', 'r.name'])
+            ->map(fn ($r) => ['room_id' => (int) $r->room_id, 'name' => $r->name])
+            ->values()->all();
+
         DB::transaction(function () use ($userId) {
             DB::table('role_assignments')->where('user_id', $userId)->update([
                 'active' => false,
             ]);
+            /* Take them off their rooms (2026-08-25). Deactivating used to leave
+               educator_rooms untouched, and SIX readers pluck educators by room without
+               checking the person is still active — WithdrawalController, SmsController,
+               FamilyController, the transfer and walk notifiers, RoomController. So a
+               departed educator kept receiving "a child has been withdrawn" emails and
+               still showed to families as the person covering that room. */
+            DB::table('educator_rooms')->where('user_id', $userId)->delete();
             // Revoke any sanctum tokens so the user is logged out instantly.
             DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
             DB::table('users')->where('id', $userId)->update([
@@ -3196,6 +4605,22 @@ final class AdminController extends Controller
                 'updated_at' => now(),
             ]);
         });
+
+        /* Of the rooms they covered, which now have NOBODY active on them. This is the
+           thing an admin actually needs to know at the moment somebody leaves, and it was
+           never surfaced — a departure could silently leave a room unstaffed. */
+        $roomsLeftUnstaffed = [];
+        foreach ($hadRooms as $room) {
+            $stillCovered = DB::table('educator_rooms as er')
+                ->join('users as u', 'u.id', '=', 'er.user_id')
+                ->where('er.room_id', $room['room_id'])
+                ->whereNull('u.deleted_at')
+                ->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)
+                ->exists();
+            if (! $stillCovered) {
+                $roomsLeftUnstaffed[] = $room;
+            }
+        }
 
         // Tell the person. Their access has just been withdrawn; finding out by
         // failing to sign in is both discourteous and, for a privacy request, no
@@ -3345,9 +4770,29 @@ final class AdminController extends Controller
         $this->audit($request->user()->id, 'user.deleted', 'user', $userId, [
             'email' => $user->email,
             'notice_emailed' => $emailSent,
+            // What they covered, and what is now uncovered. Without this a departure
+            // leaves no record of which rooms changed hands.
+            'rooms_removed' => $hadRooms,
+            'rooms_left_unstaffed' => $roomsLeftUnstaffed,
         ]);
 
-        return response()->json(['message' => 'User deleted', 'id' => $userId, 'notice_emailed' => $emailSent]);
+        /* Say plainly if a room now has nobody on it. This is the one thing an admin needs
+           at the moment somebody leaves, and it used to be silent. */
+        $msg = 'User deactivated.';
+        if ($roomsLeftUnstaffed) {
+            $names = array_values(array_filter(array_map(fn ($r) => $r['name'] ?? null, $roomsLeftUnstaffed)));
+            $msg .= ' '.count($roomsLeftUnstaffed).' '
+                .(count($roomsLeftUnstaffed) === 1 ? 'room now has no educator' : 'rooms now have no educator')
+                .($names ? ': '.implode(', ', $names) : '').'.';
+        }
+
+        return response()->json([
+            'message' => $msg,
+            'id' => $userId,
+            'notice_emailed' => $emailSent,
+            'rooms_removed' => $hadRooms,
+            'rooms_left_unstaffed' => $roomsLeftUnstaffed,
+        ]);
     }
 
     /**
@@ -4085,9 +5530,32 @@ final class AdminController extends Controller
         $matches = [];
 
         if ($type === 'user') {
+            /* THIS AGENCY ONLY. The query below used to run across the whole users
+               table, so typing an email here reported whether that address exists at
+               another agency and handed back the person's name — one tenant reading
+               another tenant's people from an entry form.
+               Same scope duplicateUsers() uses: staff assigned to this agency or its
+               centres, plus guardians of families at those centres. */
+            $scopedIds = DB::table('role_assignments')->where('active', true)
+                ->where(function ($qq) use ($agencyId, $centreIds) {
+                    $qq->where('agency_id', $agencyId);
+                    if (! empty($centreIds)) { $qq->orWhereIn('centre_id', $centreIds); }
+                })->pluck('user_id')
+                ->merge(
+                    DB::table('guardians')->join('families', 'families.id', '=', 'guardians.family_id')
+                        ->whereIn('families.centre_id', $centreIds ?: [0])
+                        ->whereNotNull('guardians.user_id')
+                        ->pluck('guardians.user_id')
+                )->unique()->values();
+
+            // Fail closed: no scope means no matches, never "everybody".
+            if ($scopedIds->isEmpty()) {
+                return response()->json(['matches' => []]);
+            }
+
             // DUP-DEACT: include deactivated accounts so re-inviting a deactivated
             // person prompts a reactivate instead of creating a duplicate.
-            $q = DB::table('users');
+            $q = DB::table('users')->whereIn('id', $scopedIds);
             if ($email !== '') $q->whereRaw('LOWER(email) = ?', [mb_strtolower($email)]);
             elseif (mb_strlen($name) >= 3) $q->whereRaw("LOWER(CONCAT(first_name,' ',last_name)) LIKE ?", ['%' . mb_strtolower($name) . '%']);
             else return response()->json(['matches' => []]);
@@ -4101,11 +5569,40 @@ final class AdminController extends Controller
                 ->limit(6)->get(['c.id', 'c.first_name', 'c.last_name', 'f.family_name']) as $c) {
                 $matches[] = ['id' => (int) $c->id, 'label' => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) ?: 'Child', 'detail' => 'Family: ' . ($c->family_name ?: '—')];
             }
-        } elseif ($type === 'family' && mb_strlen($name) >= 3) {
-            foreach (DB::table('families')->whereIn('centre_id', $centreIds ?: [0])->whereNull('deleted_at')
-                ->whereRaw('LOWER(family_name) LIKE ?', ['%' . mb_strtolower($name) . '%'])
-                ->limit(6)->get(['id', 'family_name']) as $f) {
-                $matches[] = ['id' => (int) $f->id, 'label' => $f->family_name ?: 'Family', 'detail' => 'Existing family'];
+        } elseif ($type === 'family' && (mb_strlen($name) >= 3 || $email !== '')) {
+            /* DUP-DEENROLLED: include families that have been de-enrolled, and match on
+               EMAIL as well as name.
+
+               Both were missing, and both had to be missing for the bug to happen: the old
+               query filtered `whereNull('deleted_at')`, so a de-enrolled family was
+               invisible to the check meant to catch exactly this, and it only ever compared
+               names. Two iLearn families were re-created from scratch days (in one case
+               hours) after being de-enrolled, splitting each child's history across two
+               records. (2026-08-30)
+
+               Same reasoning the user branch already applies to deactivated accounts:
+               better to offer a reactivate than to let someone build a second record. */
+            $q = DB::table('families')->whereIn('centre_id', $centreIds ?: [0]);
+            if ($email !== '') {
+                $q->whereRaw('LOWER(primary_email) = ?', [mb_strtolower($email)]);
+            } else {
+                $q->whereRaw('LOWER(family_name) LIKE ?', ['%' . mb_strtolower($name) . '%']);
+            }
+            foreach ($q->orderByRaw('deleted_at IS NULL DESC')->limit(6)
+                ->get(['id', 'family_name', 'primary_email', 'deleted_at', 'departure_date']) as $f) {
+                $gone = ! empty($f->deleted_at);
+                $matches[] = [
+                    'id' => (int) $f->id,
+                    'label' => $f->family_name ?: 'Family',
+                    // Say plainly that it left, and when — that is what tells the admin to
+                    // reactivate the record rather than start a new one.
+                    'detail' => $gone
+                        ? ('De-enrolled' . ($f->departure_date ? ' — last day ' . substr((string) $f->departure_date, 0, 10) : '')
+                           . ($f->primary_email ? ' · ' . $f->primary_email : ''))
+                        : ('Existing family' . ($f->primary_email ? ' · ' . $f->primary_email : '')),
+                    // Same key the user branch returns, so any UI handling already applies.
+                    'deactivated' => $gone,
+                ];
             }
         }
         return response()->json(['matches' => $matches]);
