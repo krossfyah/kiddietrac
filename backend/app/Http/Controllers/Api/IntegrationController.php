@@ -113,7 +113,12 @@ class IntegrationController extends Controller
             if (! $roomId) {
                 $roomId = \Illuminate\Support\Facades\DB::table('rooms')->insertGetId([
                     'centre_id'       => $centre->id,
-                    'name'            => 'Main room',
+                    /* Named for the provider, not "Main room". Every centre in a
+                       home-childcare agency IS a provider, so nine identical
+                       "Main room" entries told an admin nothing about whose room
+                       they were looking at. Admins can rename it afterwards —
+                       this only sets what it starts as. */
+                    'name'            => trim((string) ($centre->name ?? '')) ?: 'Main room',
                     'age_group'       => 'preschool',
                     'age_min_months'  => 0,
                     'age_max_months'  => 72,
@@ -134,18 +139,70 @@ class IntegrationController extends Controller
                 })
                 ->pluck('c.id');
             foreach ($unenrolled as $cid) {
+                $this->placeChildInRoom((int) $cid, (int) $roomId);
+            }
+        } catch (\Throwable $e) {
+            // never fail the sync because of the default room / enrolment
+        }
+    }
+
+    /**
+     * Put a child in a room — BOTH halves of it, idempotently.
+     *
+     * "Being in a room" is stored twice, and the portal reads the two separately:
+     * children.primary_room_id drives the educator's room list, the ratios and the day
+     * brief, while the centre roster, room roster and QR check-in INNER JOIN enrollments.
+     * Writing only one leaves a child who shows up in some screens and not others, with
+     * nothing anywhere to say why — which is far harder to notice than a child who is
+     * plainly missing everywhere.
+     *
+     * Returns the room id it settled on, or null if it could not place the child.
+     */
+    private function placeChildInRoom(int $childId, int $roomId): ?int
+    {
+        try {
+            $child = \Illuminate\Support\Facades\DB::table('children')->find($childId);
+            if (! $child) {
+                return null;
+            }
+
+            if (! $child->primary_room_id) {
+                \Illuminate\Support\Facades\DB::table('children')->where('id', $childId)
+                    ->update(['primary_room_id' => $roomId, 'updated_at' => now()]);
+            }
+
+            $hasEnrolment = \Illuminate\Support\Facades\DB::table('enrollments')
+                ->where('child_id', $childId)->exists();
+
+            if (! $hasEnrolment) {
+                /* The start date must not be in the FUTURE. app.timezone is UTC, so
+                   now()->toDateString() after ~8pm Toronto returns tomorrow — and a
+                   roster filtering start_date <= today would then skip the child for a
+                   day. Prefer the date the child was actually enrolled, and fall back to
+                   the centre's own clock rather than the server's. */
+                $tz = \Illuminate\Support\Facades\DB::table('centres as ce')
+                    ->join('families as f', 'f.centre_id', '=', 'ce.id')
+                    ->where('f.id', $child->family_id)->value('ce.timezone') ?: 'America/Toronto';
+
+                $start = $child->enrolled_at
+                    ? substr((string) $child->enrolled_at, 0, 10)
+                    : now($tz)->toDateString();
+
                 \Illuminate\Support\Facades\DB::table('enrollments')->insert([
-                    'child_id'        => $cid,
+                    'child_id'        => $childId,
                     'room_id'         => $roomId,
-                    'start_date'      => now()->toDateString(),
+                    'start_date'      => $start,
                     'schedule'        => json_encode(['mon', 'tue', 'wed', 'thu', 'fri']),
                     'monthly_fee'     => 0,
                     'cwelcc_eligible' => 1,
                     'created_at'      => now(),
                 ]);
             }
+
+            return $roomId;
         } catch (\Throwable $e) {
-            // never fail the sync because of the default room / enrolment
+            // never fail a sync over placement
+            return null;
         }
     }
 
@@ -251,9 +308,66 @@ class IntegrationController extends Controller
             $child->save();
         }
 
+        /* Put the child in a room, HERE, on the child's own sync.
+           This was only ever done by ensureDefaultRoom(), which runs from upsertCentre.
+           So a child who arrived after their centre had already been synced — the normal
+           case, because centres are created once and children keep arriving — was never
+           placed at all. That is how Briar Mills reached the portal marked "enrolled"
+           while her educator's list stayed empty: nothing was broken at sync time, the
+           placement step simply never ran again. (Anthony, 2026-08-26) */
+        $placed = null;
+        if (($child->enrollment_status ?? 'enrolled') === 'enrolled') {
+            $roomId = \Illuminate\Support\Facades\DB::table('rooms')
+                ->where('centre_id', $family->centre_id)->where('active', 1)
+                ->orderBy('id')->value('id');
+            if ($roomId) {
+                $placed = $this->placeChildInRoom((int) $child->id, (int) $roomId);
+            }
+        }
+
+        /* A record appearing in the portal with no trace of where it came from is its
+           own problem: when a family turned up unplaced there was nothing in the audit
+           log to explain it, and the obvious reading — that an admin had added them and
+           skipped a step — was wrong. */
+        try {
+            \Illuminate\Support\Facades\DB::table('audit_logs')->insert([
+                'user_id'     => optional($request->user())->id,
+                'agency_id'   => $agencyId,
+                'action'      => $created ? 'integration.child_created' : 'integration.child_updated',
+                'entity_type' => 'child',
+                'entity_id'   => $child->id,
+                /* payload, not summary — audit_logs has no summary column, and the
+                   surrounding try/catch would have swallowed that quietly, leaving this
+                   whole audit silently doing nothing. */
+                'payload'     => json_encode([
+                    'name'      => trim(($child->first_name ?? '').' '.($child->last_name ?? '')),
+                    'source'    => $source,
+                    'family_id' => $family->id,
+                    'placed_in_room' => $placed,
+                ]),
+                'created_at'  => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // auditing must never fail a sync
+        }
+
+        /* Tell the admins there is a family to set up.
+           Fired from the CHILD sync, not the family sync, because the checklist is only
+           worth sending once the children are known — a notice listing nothing to do,
+           followed a second later by children arriving, is worse than no notice at all.
+           Guarded to once per family for its whole life: this runs from a daily cron and
+           an observer, and a reminder that arrives every morning gets filtered. */
+        if ($created) {
+            \App\Services\NewFamilyNotice::forSyncedFamily((int) $family->id, $agencyId);
+            // The bell, beside the email. No actor: this runs from a cron, and naming a
+            // person who did not do it is worse than naming nobody.
+            \App\Services\FamilyJoinedNotice::fire((int) $family->id, null);
+        }
+
         return response()->json([
             'ok' => true, 'entity' => 'child', 'created' => $created,
             'id' => $child->id, 'external_id' => $child->external_id, 'family_id' => $family->id,
+            'room_id' => $placed,
         ], $created ? 201 : 200);
     }
 
@@ -298,11 +412,150 @@ class IntegrationController extends Controller
         $child->withdrawn_at = $data['withdrawn_at'] ?? ($child->withdrawn_at ?? now());
         $child->save();
 
+        /* ...and close the enrolment as well.
+           Room membership lives in two tables and this wrote only one of them, so a child
+           withdrawn through the sync kept an open `enrollments` row: still a member of the
+           room as far as every query that joins enrolments is concerned. Four of the eight
+           orphaned rows found on 2026-08-30 came from here — their families were never
+           de-enrolled, so nothing else could have caused it.
+
+           Dated to the child's own withdrawn_at, matching the family de-enrolment path. */
+        $lastDay = $child->withdrawn_at instanceof \DateTimeInterface
+            ? $child->withdrawn_at->format('Y-m-d')
+            : substr((string) $child->withdrawn_at, 0, 10);
+        if ($lastDay) {
+            DB::table('enrollments')
+                ->where('child_id', $child->id)
+                ->whereNull('end_date')
+                // Never close an enrolment before it began — that would be a
+                // negative-length placement, and two such records already exist.
+                ->where(function ($q) use ($lastDay) {
+                    $q->whereNull('start_date')->orWhere('start_date', '<=', $lastDay);
+                })
+                ->update(['end_date' => $lastDay]);
+        }
+
         return response()->json([
             'ok' => true, 'entity' => 'child', 'found' => true, 'changed' => $changed,
             'id' => $child->id, 'external_id' => $child->external_id,
             'enrollment_status' => $status, 'withdrawn_at' => $child->withdrawn_at?->toIso8601String(),
         ]);
+    }
+
+    /**
+     * POST /integration/families/deactivate — de-enrol a family that the source
+     * system has switched off.
+     *
+     * iLearn now carries a per-parent "onboard to KiddieTrac" flag. Turning it off
+     * has to mean something here, and the honest meaning is the one the portal
+     * already has a word for: de-enrolment. Not a delete — de-enrolling keeps the
+     * children, the invoices and the history, and restoreFamily() brings it all back
+     * if the flag goes on again.
+     *
+     * IT DELEGATES TO AdminController::destroyFamily RATHER THAN REPEATING IT. That
+     * method is not a soft delete with a nice name — it ends open enrolments, closes
+     * the guardians' logins, tells the affected rooms, honours a FUTURE last day as a
+     * booking rather than a departure, computes the last day in the AGENCY's timezone,
+     * and writes the audit row. A second implementation reached through the API would
+     * be that list minus whatever was forgotten, drifting further apart with every
+     * change to either one.
+     *
+     * THE MONEY GUARD IS DELIBERATELY NOT BYPASSED. destroyFamily answers 422 with
+     * `requires_balance_acknowledgement` and the figure when the family still owes,
+     * and that answer is passed straight back to the caller so it can put the number
+     * in front of a person — the same warn-don't-block bargain the de-enrolment dialog
+     * makes. An integration is not a reason to skip the safeguard; it is a second
+     * doorway that has to honour it.
+     */
+    public function deactivateFamily(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+
+        $data = $request->validate([
+            'external_id'          => 'required|string|max:191',
+            'reason'               => 'nullable|string|max:500',
+            'last_day'             => 'nullable|date',
+            'acknowledged_balance' => 'nullable|boolean',
+        ]);
+        $source = $this->source($request);
+
+        $centreIds = Centre::where('agency_id', $agencyId)->pluck('id');
+        $family = Family::whereIn('centre_id', $centreIds)
+            ->where('external_source', $source)
+            ->where('external_id', $data['external_id'])
+            ->whereNull('deleted_at')
+            ->first();
+
+        /* Idempotent on purpose. The caller may retry, or may be switching off a
+           family that never reached us — neither is an error, and answering 404
+           would leave the far end unable to tell "already done" from "broken". */
+        if (! $family) {
+            return response()->json([
+                'ok' => true, 'entity' => 'family', 'found' => false,
+                'external_id' => $data['external_id'],
+                'note' => 'not present (or already de-enrolled) — nothing to do',
+            ]);
+        }
+
+        /* destroyFamily() resolves the agency from the header, and an integration
+           caller has no reason to have sent one. Set it to the agency this request
+           has ALREADY been authorised against, two lines above — not to anything the
+           caller supplied. */
+        $request->headers->set('X-Active-Agency-Id', (string) $agencyId);
+        $request->merge([
+            'reason_code'          => 'other',
+            'reason'               => $data['reason']
+                ?? 'Onboarding to KiddieTrac was switched off in ' . $source . '.',
+            'last_day'             => $data['last_day'] ?? null,
+            'acknowledged_balance' => (bool) ($data['acknowledged_balance'] ?? false),
+        ]);
+
+        return app(AdminController::class)->destroyFamily($request, (int) $family->id);
+    }
+
+    /**
+     * POST /integration/families/restore — the flag went back on.
+     *
+     * Without this, re-enabling a family would fall through to the ordinary upsert,
+     * which cannot see a de-enrolled record (every lookup filters deleted_at) and so
+     * would build a SECOND family beside the first — the children orphaned from their
+     * invoices and history, and two rows where a parent expects one. Duplicate
+     * families are the specific mess that made the lifecycle work necessary in the
+     * first place; a reversible switch has to reverse, not re-create.
+     */
+    public function restoreFamilyExternal(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+
+        $data = $request->validate(['external_id' => 'required|string|max:191']);
+        $source = $this->source($request);
+
+        $centreIds = Centre::where('agency_id', $agencyId)->pluck('id');
+        // withTrashed: the whole point is to find one that IS de-enrolled.
+        $family = Family::withTrashed()->whereIn('centre_id', $centreIds)
+            ->where('external_source', $source)
+            ->where('external_id', $data['external_id'])
+            ->first();
+
+        if (! $family) {
+            return response()->json([
+                'ok' => true, 'entity' => 'family', 'found' => false,
+                'external_id' => $data['external_id'],
+                'note' => 'never synced here — the ordinary upsert will create it',
+            ]);
+        }
+        if (! $family->deleted_at) {
+            return response()->json([
+                'ok' => true, 'entity' => 'family', 'found' => true, 'restored' => false,
+                'id' => $family->id, 'note' => 'already active — nothing to restore',
+            ]);
+        }
+
+        $request->headers->set('X-Active-Agency-Id', (string) $agencyId);
+
+        return app(AdminController::class)->restoreFamily($request, (int) $family->id);
     }
 
     /**
@@ -793,6 +1046,229 @@ class IntegrationController extends Controller
      * Each item uses the same shape as the single endpoints. Returns per-item results
      * so a partial failure never blocks the rest of the batch.
      */
+    /**
+     * GET /integration/pull/new — families and children that ORIGINATED in KiddieTrac.
+     *
+     * The counterpart to pullContacts. That one returns records the caller already owns,
+     * so it can refresh their field values; this one returns the records the caller has
+     * never seen, so it can create them.
+     *
+     * `since` is required in spirit if not in syntax: without it this hands back every
+     * KiddieTrac-native family in the agency, which for a first run is usually not what
+     * anyone wants. The consumer is expected to pass its high-water mark.
+     */
+    public function pullNew(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+
+        // Everything below hangs off this list, so a caller can only ever reach families
+        // inside the agency its token belongs to.
+        $centres = DB::table('centres')->where('agency_id', $agencyId)
+            ->get(['id', 'name', 'external_id', 'external_source'])->keyBy('id');
+        $centreIds = $centres->keys()->all();
+        if (! $centreIds) {
+            return response()->json(['ok' => true, 'families' => [], 'children' => []]);
+        }
+
+        $since = $request->query('since');
+        $sinceSql = $since
+            ? \Illuminate\Support\Carbon::parse($since)->utc()->format('Y-m-d H:i:s')
+            : null;
+
+        $decode = function ($v) {
+            if ($v === null || $v === '') {
+                return null;
+            }
+            $j = json_decode((string) $v, true);
+
+            // allergies / dietary_restrictions are JSON arrays here but plain text in
+            // iLearn, so they are flattened on the way out rather than at the far end.
+            return is_array($j) ? (implode(', ', array_filter($j)) ?: null) : (string) $v;
+        };
+
+        $mapChild = fn ($c) => [
+            'kt_id'             => (int) $c->id,
+            'first_name'        => $c->first_name,
+            'last_name'         => $c->last_name,
+            'date_of_birth'     => $c->date_of_birth,
+            'gender'            => $c->gender,
+            'allergies'         => $decode($c->allergies ?? null),
+            'dietary'           => $decode($c->dietary_restrictions ?? null),
+            'medical_notes'     => $c->medical_notes,
+            'enrollment_status' => $c->enrollment_status,
+            'enrolled_at'       => $c->enrolled_at,
+            'updated_at'        => $c->updated_at,
+        ];
+
+        $childCols = ['id', 'family_id', 'first_name', 'last_name', 'date_of_birth', 'gender',
+            'allergies', 'dietary_restrictions', 'medical_notes', 'enrollment_status',
+            'enrolled_at', 'updated_at'];
+
+        // ── 1. Families created here, with their guardians and children ──────
+        $famQ = DB::table('families')
+            ->whereIn('centre_id', $centreIds)
+            ->whereNull('external_source')          // no external origin => created here
+            ->whereNull('deleted_at');
+        if ($sinceSql) {
+            // A family is "changed" if its OWN row changed, or if any of its children
+            // did. Adding a child does not touch the family row, so filtering on
+            // families.updated_at alone means the family syncs once and every child
+            // added afterwards is invisible — in neither this list nor the orphan list
+            // below, which only covers families that came FROM the consumer.
+            $famQ->where(function ($q) use ($sinceSql) {
+                $q->where('families.updated_at', '>=', $sinceSql)
+                    ->orWhereExists(function ($w) use ($sinceSql) {
+                        $w->select(DB::raw(1))->from('children')
+                            ->whereColumn('children.family_id', 'families.id')
+                            ->whereNull('children.deleted_at')
+                            ->where('children.updated_at', '>=', $sinceSql);
+                    });
+            });
+        }
+        $families = $famQ->orderBy('updated_at')->limit(500)->get();
+        $famIds = $families->pluck('id')->all();
+
+        $kidsByFamily = $famIds
+            ? DB::table('children')->whereIn('family_id', $famIds)->whereNull('deleted_at')
+                ->get($childCols)->groupBy('family_id')
+            : collect();
+
+        $guardsByFamily = $famIds
+            ? DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                ->whereIn('g.family_id', $famIds)->whereNull('u.deleted_at')
+                ->get(['g.family_id', 'g.relationship', 'g.is_primary',
+                       'u.first_name', 'u.last_name', 'u.email', 'u.phone'])
+                ->groupBy('family_id')
+            : collect();
+
+        $famOut = $families->map(function ($f) use ($centres, $kidsByFamily, $guardsByFamily, $mapChild) {
+            $centre = $centres->get($f->centre_id);
+
+            return [
+                'kt_id'              => (int) $f->id,
+                'family_name'        => $f->family_name,
+                'primary_email'      => $f->primary_email ?? null,
+                'primary_phone'      => $f->primary_phone ?? null,
+                'address_line1'      => $f->address_line1 ?? null,
+                'city'               => $f->city ?? null,
+                'province'           => $f->province ?? null,
+                'postal_code'        => $f->postal_code ?? null,
+                'centre_name'        => $centre->name ?? null,
+                // The consumer maps its own provider from this, so a KiddieTrac centre
+                // that itself has no external origin gives them nothing to match on —
+                // said plainly here rather than silently omitted.
+                'centre_external_id' => $centre->external_id ?? null,
+                'created_at'         => $f->created_at,
+                'updated_at'         => $f->updated_at,
+                'guardians'          => ($guardsByFamily[$f->id] ?? collect())->map(fn ($g) => [
+                    'first_name'   => $g->first_name,
+                    'last_name'    => $g->last_name,
+                    'email'        => $g->email,
+                    'phone'        => $g->phone,
+                    'relationship' => $g->relationship,
+                    'is_primary'   => (bool) $g->is_primary,
+                ])->values(),
+                'children'           => ($kidsByFamily[$f->id] ?? collect())->map($mapChild)->values(),
+            ];
+        })->values();
+
+        // ── 2. Children created here inside a family that came from elsewhere ─
+        // A new sibling added in KiddieTrac to a family the consumer already owns. It
+        // must attach to the existing parent, not create a second one — hence the
+        // family's external id rather than its KiddieTrac id.
+        $extFamilies = DB::table('families')->whereIn('centre_id', $centreIds)
+            ->whereNotNull('external_id')->whereNull('deleted_at')
+            ->get(['id', 'external_id', 'external_source'])->keyBy('id');
+
+        $orphanOut = collect();
+        if ($extFamilies->isNotEmpty()) {
+            $kidQ = DB::table('children')
+                ->whereIn('family_id', $extFamilies->keys()->all())
+                ->whereNull('external_source')       // the CHILD was created here
+                ->whereNull('deleted_at');
+            if ($sinceSql) {
+                $kidQ->where('updated_at', '>=', $sinceSql);
+            }
+            $orphanOut = $kidQ->orderBy('updated_at')->limit(500)->get($childCols)
+                ->map(function ($c) use ($mapChild, $extFamilies) {
+                    $row = $mapChild($c);
+                    $fam = $extFamilies->get($c->family_id);
+                    $row['family_external_id'] = $fam->external_id ?? null;
+                    $row['family_external_source'] = $fam->external_source ?? null;
+
+                    return $row;
+                })->values();
+        }
+
+        /* ── 3. DE-ACTIVATIONS: things that have STOPPED here ──────────────────
+           Until 2026-08-25 this feed only ever said what had been CREATED or CHANGED.
+           A child withdrawn, a family de-enrolled or a provider closed simply stopped
+           appearing, and "stopped appearing" is indistinguishable from "unchanged" to a
+           poller — so iLearn kept them Active for ever. Departures have to be stated,
+           not implied by absence.
+
+           Only genuine endings are listed. A SUSPENDED family is deliberately excluded:
+           a suspension is an explicitly reversible pause, and flipping the far end to
+           Inactive and back would churn a record that has not actually ended. */
+        $deactivations = ['children' => [], 'families' => [], 'centres' => []];
+
+        $kidQ2 = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->whereIn('f.centre_id', $centreIds)
+            ->where(function ($q) {
+                $q->where('ch.enrollment_status', 'withdrawn')->orWhereNotNull('ch.deleted_at');
+            });
+        if ($sinceSql) {
+            $kidQ2->where('ch.updated_at', '>=', $sinceSql);
+        }
+        $deactivations['children'] = $kidQ2->orderBy('ch.updated_at')->limit(500)
+            ->get(['ch.id', 'ch.first_name', 'ch.last_name', 'ch.enrollment_status',
+                   'ch.deleted_at', 'ch.updated_at'])
+            ->map(fn ($c) => [
+                'kt_id' => (int) $c->id,
+                'name' => trim(($c->first_name ?? '').' '.($c->last_name ?? '')),
+                'reason' => $c->deleted_at ? 'deleted' : 'withdrawn',
+                'at' => $c->updated_at,
+            ])->values();
+
+        $famQ2 = DB::table('families')->whereIn('centre_id', $centreIds)->whereNotNull('deleted_at');
+        if ($sinceSql) {
+            $famQ2->where('updated_at', '>=', $sinceSql);
+        }
+        $deactivations['families'] = $famQ2->orderBy('updated_at')->limit(500)
+            ->get(['id', 'family_name', 'updated_at'])
+            ->map(fn ($f) => [
+                'kt_id' => (int) $f->id,
+                'name' => $f->family_name,
+                'reason' => 'de_enrolled',
+                'at' => $f->updated_at,
+            ])->values();
+
+        $cenQ = DB::table('centres')->where('agency_id', $agencyId)->whereNotNull('deleted_at');
+        if ($sinceSql) {
+            $cenQ->where('updated_at', '>=', $sinceSql);
+        }
+        $deactivations['centres'] = $cenQ->orderBy('updated_at')->limit(200)
+            ->get(['id', 'name', 'external_id', 'external_source', 'updated_at'])
+            ->map(fn ($c) => [
+                'kt_id' => (int) $c->id,
+                'name' => $c->name,
+                // How the consumer knows this provider, when it created it.
+                'external_id' => $c->external_id,
+                'external_source' => $c->external_source,
+                'reason' => 'archived',
+                'at' => $c->updated_at,
+            ])->values();
+
+        return response()->json([
+            'ok'       => true,
+            'since'    => $sinceSql,
+            'families' => $famOut,
+            'children' => $orphanOut,
+            'deactivations' => $deactivations,
+        ]);
+    }
+
     public function sync(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);

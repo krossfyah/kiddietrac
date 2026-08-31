@@ -1944,6 +1944,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/guardians', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertGuardian']);
         Route::post('/children', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertChild']);
         Route::post('/children/deactivate', [\App\Http\Controllers\Api\IntegrationController::class, 'deactivateChild']);
+        /* A source system switching a family OFF. De-enrolment, not deletion — and it
+           answers 422 with the outstanding balance rather than closing the accounts
+           quietly, so the far end can put the figure in front of a person. */
+        Route::post('/families/deactivate', [\App\Http\Controllers\Api\IntegrationController::class, 'deactivateFamily']);
+        // ...and switching it back on. Restores rather than creating a second family.
+        Route::post('/families/restore',    [\App\Http\Controllers\Api\IntegrationController::class, 'restoreFamilyExternal']);
         Route::post('/invoices', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertInvoice']);
         Route::post('/payroll',  [\App\Http\Controllers\Api\IntegrationController::class, 'upsertPayroll']);
         Route::post('/waitlist', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertWaitlist']);
