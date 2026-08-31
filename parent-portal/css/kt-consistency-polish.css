@@ -348,25 +348,129 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
 .kt-act-icon.kt-icon-tip[data-kttip]:hover::after  { left: auto; right: 0; transform: none; }
 .kt-act-icon.kt-icon-tip[data-kttip]:hover::before { left: auto; right: 11px; transform: none; }
 
-/* ── On/off toggle switch (2026-07-28) ───────────────────────────────────
-   kt-switches.js adds .kt-switchified to on/off setting checkboxes so every
-   yes/no setting reads as a physical toggle (desktop + mobile/APK). Restyles
-   the native checkbox in place — state, name and handlers are preserved. */
+/* ── On/off toggle switch (2026-07-28, made the default 2026-08-19) ───────
+   Every yes/no setting reads as a physical toggle. The native checkbox is
+   restyled in place, so state, name and handlers are all preserved.
+
+   This used to require .kt-switchified, which kt-switches.js added on a sweep —
+   so a checkbox was painted as the OLD square first and became a toggle up to
+   two seconds later, on every screen change. That flicker between two live
+   designs is what looked like the fix coming and going.
+
+   Now the toggle is what a checkbox IS, and a square has to be asked for. The
+   controls that must stay square are listed by where they sit, just below, so
+   they never flash either. .kt-switchified is still honoured for anything that
+   opts in explicitly. */
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]),
 input.kt-switchified {
   -webkit-appearance: none; appearance: none; box-sizing: border-box;
-  width: 48px; height: 28px; min-width: 48px; border-radius: 999px; background: #CBD5E1;
+  /* min-HEIGHT matters as much as min-width, and its absence was the bug.
+     Callers write inline `width:16px;height:16px` on what they still think is a
+     checkbox. `min-width:48px` quietly clamped the width back, so the track stayed
+     48px wide — but nothing defended the height, so it collapsed to 16px while the
+     ::after knob stayed 22px and bulged out top and bottom. Measured in the live
+     page: 48x16 track, 22px knob. One property fixes every such caller at once,
+     which is why this is here and not in ~30 call sites. (2026-08-25) */
+  width: 48px; height: 28px; min-width: 48px;
+  min-height: 28px; /* see note above */ border-radius: 999px; background: #CBD5E1;
   position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0;
   margin: 0; border: none; display: inline-block; transition: background .16s ease;
 }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"])::after,
 input.kt-switchified::after {
   content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
   border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.35);
   transition: transform .16s ease;
 }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):checked,
 input.kt-switchified:checked { background: #159FB4; }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):checked::after,
 input.kt-switchified:checked::after { transform: translateX(20px); }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):disabled,
 input.kt-switchified:disabled { opacity: .5; cursor: not-allowed; }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):focus-visible,
 input.kt-switchified:focus-visible { outline: 2px solid #1F6080; outline-offset: 2px; }
+
+/* ── Hand-rolled switches: opt them OUT of native button chrome ──────────
+   The toggle above is a restyled <input type=checkbox>, and the FIRST thing it does is
+   `-webkit-appearance:none`. Without that a control keeps the platform's own widget
+   styling, and the platform is entitled to size, pad and paint it however it likes.
+
+   Some switches are built as a <button> instead (Settings' mkSwitch, the autopay row).
+   Those set their own width/height/background inline and look right in desktop Chrome,
+   which normalises a button with explicit geometry — but they never opted out of native
+   appearance, so in the iOS/APK WebView the platform's button chrome is still in play.
+   That is the difference between "looks right on my laptop" and the toggle Anthony has
+   reported repeatedly from the phone.
+
+   Fixed here, once, keyed on what makes something a switch (aria-pressed / role=switch)
+   rather than on each screen — so the next hand-rolled one is covered before it ships.
+   Only the platform chrome is neutralised: width, height, background and radius are
+   still the control's own inline styles, which beat this rule. 2026-08-30. */
+#appMain button[aria-pressed],
+#appMain button[role="switch"],
+.kt-modal button[aria-pressed],
+.kt-modal button[role="switch"],
+body button[aria-pressed],
+body button[role="switch"] {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  background-clip: padding-box;
+  font: inherit;
+}
+
+/* ── Checkboxes that are deliberately INVISIBLE ──────────────────────────
+   Some controls hide a real checkbox behind their own UI (the symbol picker in
+   screen-v22p63.js draws coloured chips and keeps the input for state). Giving
+   those switch geometry grows a hit area on top of the control they hide behind —
+   and `min-width:48px` was already doing that before min-height existed. This
+   opts out of both switch and checkbox geometry entirely. */
+input[type="checkbox"].kt-sw-none {
+  -webkit-appearance: none; appearance: none;
+  width: 0 !important; height: 0 !important;
+  min-width: 0 !important; min-height: 0 !important;
+  background: none !important; border-radius: 0 !important;
+  border: none !important; box-shadow: none !important;
+}
+input[type="checkbox"].kt-sw-none::after { content: none !important; }
+
+/* ── The checkboxes that must stay checkboxes ────────────────────────────
+   A row-select in a table, or one of several boxes in a choice list, is not an
+   on/off setting and must not look like a switch. These are matched by WHERE
+   THEY SIT rather than by a class a script adds later, so they are square from
+   the first paint — no flicker here either.
+
+   .kt-nosw is the same statement for the one case CSS cannot see: several
+   checkboxes sharing a name. kt-switches.js marks those. */
+table input[type="checkbox"],
+thead input[type="checkbox"],
+tbody input[type="checkbox"],
+[role="grid"] input[type="checkbox"],
+[role="listbox"] input[type="checkbox"],
+[data-kt-noswitch] input[type="checkbox"],
+.kt-checkbox-group input[type="checkbox"],
+input[type="checkbox"].kt-nosw {
+  -webkit-appearance: auto; appearance: auto;
+  /* min-height: 0 or these inherit the switch track's 28px and a row-select
+     checkbox grows to switch height. */
+  width: 18px; height: 18px; min-width: 18px; min-height: 0; border-radius: 4px;
+  background: none; accent-color: #1F6080; position: static;
+  transition: none;
+}
+table input[type="checkbox"]::after,
+thead input[type="checkbox"]::after,
+tbody input[type="checkbox"]::after,
+[role="grid"] input[type="checkbox"]::after,
+[role="listbox"] input[type="checkbox"]::after,
+[data-kt-noswitch] input[type="checkbox"]::after,
+.kt-checkbox-group input[type="checkbox"]::after,
+input[type="checkbox"].kt-nosw::after { content: none; }
 
 /* ── Tooltips now rendered by kt-tooltip-global.js (2026-08-05) ───────────────
    The old ::after/::before bubbles below were position:absolute and got CLIPPED
@@ -477,3 +581,134 @@ input.kt-switchified:checked,
 input.kt-switchified:checked:hover,
 input.kt-switchified:checked:focus { background: #159FB4 !important; }
 input.kt-switchified:disabled { opacity: .5 !important; }
+
+
+/* ══ Buttons in dialogs ══════════════════════════════════════════════════════
+   Every .kt-btn rule in this portal is written as `[data-kt-pretty] .kt-btn`, and
+   data-kt-pretty lives on the screen container. Modals are appended to document.body,
+   which is OUTSIDE that container — so `class="kt-btn kt-btn-primary"` in a dialog
+   matched nothing and rendered as a bare browser button. That is why ~400 buttons
+   across the portal are painted by hand with inline styles: the house class looked
+   broken, so nobody used it.
+
+   These are the same values as the scoped rules, without the scope. Inside a screen
+   the [data-kt-pretty] versions still win on specificity and !important, so nothing
+   that already renders correctly moves. This only reaches what matched nothing. */
+.kt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.2;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter .12s, transform .12s, background .12s, border-color .12s;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+}
+.kt-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; filter: none; }
+.kt-btn-sm { padding: 7px 14px; font-size: 12.5px; }
+
+.kt-btn-primary { background: linear-gradient(180deg, #2D7BA8 0%, #1F6080 100%); color: #fff; }
+.kt-btn-primary:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+
+.kt-btn-success { background: #10B981; color: #fff; }
+.kt-btn-success:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+
+.kt-btn-danger { background: #EF4444; color: #fff; }
+.kt-btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+
+/* ── The secondary button ─────────────────────────────────────────────────
+   Every dialog needs a Cancel beside its primary action and there was no class for
+   one, so each dialog hand-rolled a grey box with its own padding and radius. Beside
+   a .kt-btn they sat at different heights with different corners.
+
+   Always write class="kt-btn kt-btn-secondary" so it inherits the metrics above and
+   cannot drift from the primary it stands next to. Distinct from .kt-btn-ghost, which
+   is translucent white and only legible on a dark banner — on a white modal it is
+   invisible, which is a trap worth knowing about. */
+.kt-btn-secondary,
+[data-kt-pretty] .kt-btn-secondary {
+  background: #F1F5F9;
+  color: #334155;
+  border: 1px solid #E2E8F0;
+}
+.kt-btn-secondary:hover:not(:disabled),
+[data-kt-pretty] .kt-btn-secondary:hover:not(:disabled) { background: #E2E8F0; border-color: #CBD5E1; }
+
+
+/* ── Today, made visible (2026-08-27) ────────────────────────────────────────
+   Every screen that marks today had picked its own tint, and each was chosen on a
+   good monitor in a dark room: #F0F9FF and rgba(224,242,254,.45) are both within a
+   few percent of white. A highlight nobody can see is worse than none at all — the
+   reader concludes the row is not marked rather than that they missed it.
+
+   A tint with enough contrast to survive daylight and a printer, plus an accent edge,
+   because colour alone fails for a colour-blind reader and disappears in greyscale. */
+:root {
+  --kt-today-bg: #DCEEF7;
+  --kt-today-edge: #1F6080;
+}
+
+/* A whole row in a table (the child's weekly schedule, rosters, any day list). */
+tr.kt-today-row > td,
+tr.kt-today-row > th {
+  background: var(--kt-today-bg) !important;
+}
+tr.kt-today-row > td:first-child,
+tr.kt-today-row > th:first-child {
+  box-shadow: inset 3px 0 0 var(--kt-today-edge);
+}
+
+/* A single cell or column (the weekly menu grid). */
+td.kt-today-cell, th.kt-today-cell {
+  background: var(--kt-today-bg) !important;
+}
+th.kt-today-cell { box-shadow: inset 0 3px 0 var(--kt-today-edge); }
+
+/* A header cell needs a louder selector than the class alone.
+   `[data-kt-pretty] table thead th` paints an !important GRADIENT, and being an
+   attribute plus three elements it outranks `th.kt-today-cell` — so the tint lost while
+   the inset edge (which nothing else sets) survived. That is why the today column read
+   as half-highlighted. background-image is cleared explicitly: a gradient is an image,
+   and setting only a colour leaves it painted on top. */
+[data-kt-pretty] table thead th.kt-today-cell,
+#appMain table > thead > tr > th.kt-today-cell,
+table thead th.kt-today-cell {
+  background: var(--kt-today-bg) !important;
+  background-image: none !important;
+  color: var(--kt-today-edge) !important;
+}
+
+/* A block/card rather than a table row. */
+.kt-today-block {
+  background: var(--kt-today-bg) !important;
+  border-left: 3px solid var(--kt-today-edge) !important;
+}
+
+/* The little "TODAY" tag, so it reads the same wherever it appears. */
+.kt-today-tag {
+  display: inline-block;
+  margin-left: 6px;
+  background: var(--kt-today-edge);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  padding: 1px 7px;
+  border-radius: 9px;
+  vertical-align: middle;
+}
+
+@media print {
+  /* Printers drop background colour by default, which would erase the only cue. */
+  tr.kt-today-row > td, tr.kt-today-row > th,
+  td.kt-today-cell, th.kt-today-cell, .kt-today-block {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+}

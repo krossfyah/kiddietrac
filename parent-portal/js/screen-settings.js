@@ -25,7 +25,12 @@
   // pill buttons before (biometric, urgent alerts, autopay). .kt_set(bool) paints
   // it; .kt_disabled(bool) greys it out when the feature isn't available.
   function mkSwitch() {
-    var s = el('button', { type: 'button', 'aria-pressed': 'false', style: 'position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;box-sizing:border-box;border-radius:999px;border:none;background:#CBD5E1;cursor:pointer;padding:0;transition:background .18s ease;' });
+    /* -webkit-appearance:none FIRST, for the same reason the checkbox toggle sets it:
+       a <button> that does not opt out keeps the platform's native widget styling, and
+       the iOS/APK WebView then sizes and paints it its own way while desktop Chrome
+       renders it exactly as authored. Inline as well as in kt-consistency-polish.css,
+       because this one control is worth not depending on a stylesheet for. */
+    var s = el('button', { type: 'button', 'aria-pressed': 'false', style: '-webkit-appearance:none;appearance:none;position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;max-height:28px;box-sizing:border-box;border-radius:999px;border:none;background:#CBD5E1;cursor:pointer;padding:0;font:inherit;transition:background .18s ease;' });
     var knob = el('span', {});
     knob.style.cssText = 'position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.28);transition:transform .18s ease;';
     s.appendChild(knob);

@@ -74,7 +74,7 @@
               : '<div style="font-size:13px;color:#6B7280;margin-top:4px;">Autopay off · monthly invoice must be paid manually</div>'
             }
           </div>
-          <button class="kt-ap-switch" data-fid="${f.family_id}" data-fname="${esc(f.family_name)}" data-on="${f.autopay_enabled ? '1' : '0'}" role="switch" aria-checked="${f.autopay_enabled ? 'true' : 'false'}" aria-label="Autopay for ${esc(f.family_name)}" style="position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;box-sizing:border-box;border-radius:999px;border:none;background:${f.autopay_enabled ? '#159FB4' : '#CBD5E1'};cursor:pointer;padding:0;transition:background .18s ease;">
+          <button class="kt-ap-switch" data-fid="${f.family_id}" data-fname="${esc(f.family_name)}" data-on="${f.autopay_enabled ? '1' : '0'}" role="switch" aria-checked="${f.autopay_enabled ? 'true' : 'false'}" aria-label="Autopay for ${esc(f.family_name)}" style="-webkit-appearance:none;appearance:none;position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;max-height:28px;box-sizing:border-box;border-radius:999px;border:none;background:${f.autopay_enabled ? '#159FB4' : '#CBD5E1'};cursor:pointer;padding:0;font:inherit;transition:background .18s ease;">
             <span style="position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.28);transition:transform .18s ease;transform:${f.autopay_enabled ? 'translateX(20px)' : 'translateX(0)'};"></span>
           </button>
         </div>
