@@ -313,7 +313,15 @@
       META = { owners: data.owners || [], products: data.products || [], stats: data.stats || {} };
       clear(host);
       if (!data.leads || !data.leads.length) { host.appendChild(card([el('div', { style: 'text-align:center;color:#64748B;padding:20px' }, ['No leads yet. ', el('a', { href: '#sales-new', style: 'color:' + ACCENT + ';font-weight:700' }, ['Add one →'])])])); return; }
-      var tbl = el('table', { style: 'width:100%;border-collapse:collapse;background:#fff;border:1px solid #e6ebf1;border-radius:12px;overflow:hidden' });
+      /* data-kt-filtered opts this table OUT of the GLOBAL auto-search that
+         kt-table-filter.js attaches to every #appMain table. Without it the screen
+         showed TWO search boxes doing the same job (Anthony, 2026-08-31: "two filters
+         that looks to be doing the same job") — and the two do not even agree: the
+         box above searches the SERVER across name, company and email, including
+         fields this table does not show, while the global one hides rows already on
+         screen. The server search is the better answer, so the global one goes. Same
+         fix as Announcements, which had the identical clash. */
+      var tbl = el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;background:#fff;border:1px solid #e6ebf1;border-radius:12px;overflow:hidden' });
       tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#f4f6f9;text-align:left' }, ['Company / contact', 'Stage', 'Value', 'Owner', 'Follow-up'].map(function (h) { return el('th', { style: 'padding:10px 12px;font-size:12px;color:#5a7080' }, [h]); }))]));
       var tb = el('tbody');
       data.leads.forEach(function (l) {

@@ -23,7 +23,9 @@
      Three sidebar entries meant remembering three places to set fees up; as tabs they
      read as one job. The other two screens are HOSTED, not reimplemented — a second copy
      of a fee-plan editor drifts from the first the moment either is fixed. */
-  var TABS = [
+  /* The base set. render() copies this and may append role-specific tabs, so the
+     module-level list is never mutated across visits. */
+  var BASE_TABS = [
     { key: 'tax', label: '🧾 Tax' },
     { key: 'tuition', label: '💵 Tuition plans', global: 'FeePlans' },
     { key: 'siblings', label: '👨‍👩‍👧 Sibling discounts', global: 'SiblingDiscountsScreen' },
@@ -37,6 +39,21 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
+
+    /* Appended per render, not baked into TABS, because TABS is module-level and
+       would otherwise accumulate a duplicate tab on every visit. */
+    var TABS = BASE_TABS.slice();
+    var isPlatform = false;
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var roles = [].concat(u.roles || [], u.role || []);
+      isPlatform = roles.indexOf('platform_admin') !== -1;
+    } catch (e) {}
+    if (isPlatform) {
+      // Every other tab in this strip carries an icon; this one did not, so it read as
+      // a different kind of thing sitting at the end of the row.
+      TABS.push({ key: 'platform', label: '🏦 Platform billing', local: 'platform' });
+    }
     main.innerHTML = '<div style="padding:14px 24px;max-width:1000px;">'
       + '<div class="kt-page-hero"><h2>🧾 Billing</h2><p>What you charge, how it is worked out, and how families are reminded.</p></div>'
       + '<div id="bs-tabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
@@ -65,6 +82,7 @@
     function paintPane() {
       pane.innerHTML = '';
       var tab = TABS.filter(function (t) { return t.key === active; })[0];
+      if (tab.local === 'platform') { return renderPlatform(pane); }
       if (! tab.global) { return renderTax(pane); }
       var mod = KT[tab.global];
       var fn = mod && (tab.fn ? mod[tab.fn] : mod.render);
@@ -88,6 +106,90 @@
     if (! TABS.some(function (t) { return t.key === active; })) { active = 'tax'; }
     paintTabs();
     paintPane();
+  }
+
+
+  /* Platform-admin only: the nightly billing run. Agency admins never see this — it
+     governs what KiddieTrac bills THEM, not what they bill families. */
+  async function renderPlatform(main) {
+    var I = 'height:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13.5px;width:100%;box-sizing:border-box;';
+    main.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">Loading…</div>';
+
+    var d = await Api.get('/platform/billing-automation')
+      .catch(function (e) { return { __err: (e && e.message) || 'error' }; });
+    if (d.__err) {
+      main.innerHTML = '<div style="color:#B91C1C;font-size:13px;">' + d.__err + '</div>';
+      return;
+    }
+
+    var blocked = !d.issuer_ready;
+    main.innerHTML =
+      '<div style="max-width:640px;">'
+      + '<div style="font-weight:600;margin-bottom:2px;">Automatic billing</div>'
+      + '<div style="color:#64748B;font-size:12.5px;margin-bottom:14px;">'
+      + 'Runs nightly at 06:00. With both off, nothing happens on its own and you raise '
+      + 'invoices by hand from Reseller → Invoices.</div>'
+
+      + '<label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;cursor:pointer;">'
+      + '<input type="checkbox" id="pb-raise"' + (d.auto_raise ? ' checked' : '') + ' style="margin-top:3px;">'
+      + '<span><strong>Raise invoices automatically</strong>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;">'
+      + 'Creates drafts for any agency whose billing date has arrived. Nothing is sent.</span></span></label>'
+
+      + '<label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;cursor:pointer;">'
+      + '<input type="checkbox" id="pb-email"' + (d.auto_email ? ' checked' : '') + ' style="margin-top:3px;">'
+      + '<span><strong>Email them to the agency automatically</strong>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;">'
+      + 'Issues each invoice and emails it to the agency contact with the PDF attached, '
+      + 'unattended. An agency with no usable contact address is left as a draft.</span></span></label>'
+
+      /* Stated, not hidden — the server enforces this whatever the switch says. */
+      + (blocked
+          ? '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;'
+            + 'border-radius:8px;padding:11px 13px;font-size:12.5px;margin:10px 0 16px;">'
+            + '<strong>Auto-email cannot run yet.</strong> The invoice is missing your '
+            + (d.issuer_missing || []).join(' and ')
+            + ', so every PDF would go out stamped INCOMPLETE. Fill these in and it will arm.'
+            + '</div>'
+          : '<div style="background:#DCFCE7;border:1px solid #BBF7D0;color:#166534;'
+            + 'border-radius:8px;padding:11px 13px;font-size:12.5px;margin:10px 0 16px;">'
+            + 'Issuer details are set — auto-email can run.</div>')
+
+      + '<div style="font-weight:600;margin:18px 0 2px;">Your business details</div>'
+      + '<div style="color:#64748B;font-size:12.5px;margin-bottom:10px;">'
+      + 'Printed on every invoice KiddieTrac issues. A tax invoice must carry the '
+      + 'registration number of the business charging the tax.</div>'
+      + '<label style="display:block;font-size:12.5px;color:#475569;margin-bottom:4px;">Business address</label>'
+      + '<textarea id="pb-addr" rows="3" placeholder="123 Main Street, Suite 4&#10;Toronto, ON  M5V 1A1&#10;Canada" '
+      + 'style="' + I + 'height:auto;padding:8px 10px;font-family:inherit;">'
+      + (d.issuer && d.issuer.address ? String(d.issuer.address).replace(/</g, '&lt;') : '') + '</textarea>'
+      + '<label style="display:block;font-size:12.5px;color:#475569;margin:12px 0 4px;">GST/HST registration number</label>'
+      + '<input id="pb-tax" placeholder="12345 6789 RT0001" style="' + I + '" value="'
+      + (d.issuer && d.issuer.tax_id ? String(d.issuer.tax_id).replace(/"/g, '&quot;') : '') + '">'
+
+      + '<div style="margin-top:18px;"><button id="pb-save" class="kt-btn">Save</button>'
+      + '<span id="pb-msg" style="margin-left:10px;font-size:13px;color:#166534;"></span></div>'
+      + '</div>';
+
+    main.querySelector('#pb-save').addEventListener('click', function () {
+      var btn = this;
+      var msg = main.querySelector('#pb-msg');
+      btn.disabled = true; msg.style.color = '#166534'; msg.textContent = '';
+      Api.put('/platform/billing-automation', {
+        auto_raise: main.querySelector('#pb-raise').checked,
+        auto_email: main.querySelector('#pb-email').checked,
+        issuer_address: main.querySelector('#pb-addr').value.trim(),
+        issuer_tax_id: main.querySelector('#pb-tax').value.trim(),
+      }).then(function () {
+        /* Re-render rather than just flashing "Saved": enabling auto-email may have been
+           downgraded by the issuer gate, and the banner has to reflect what is actually true. */
+        renderPlatform(main);
+      }).catch(function (e) {
+        btn.disabled = false;
+        msg.style.color = '#B91C1C';
+        msg.textContent = (e && e.message) || 'Could not save';
+      });
+    });
   }
 
   async function renderTax(main) {

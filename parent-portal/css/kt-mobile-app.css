@@ -66,6 +66,39 @@
   #appMain > div[style*="padding:14px 24px"],
   #appMain > div[style*="padding: 14px 24px"] { padding: 4px 2px !important; }
 
+  /* ── Settings subsection tabs: one scrolling row, not four ragged ones ──
+     Billing has seven of them (Tax, Tuition plans, Sibling discounts, Defaults & fees,
+     Billing comms, Reminders, Platform billing). Wrapped on a 371px screen that is FOUR
+     rows and ~200px of tabs before you reach a single setting, with the last row holding
+     one lonely pill — which is what "subsections not showing properly, alignment" looks
+     like, and why a tab on row three gets missed entirely.
+
+     One row that scrolls sideways instead: the same idiom as the room selector further
+     down this file, and the height of the strip stops depending on how many tabs a
+     screen happens to have.
+
+     Matched on the inline style because six screens hand-roll this identical strip
+     rather than sharing a component (screen-billing-settings, bulk-invoices,
+     external-billing, integrations, late-events, v22p51) — so a class would mean editing
+     six files and missing the seventh somebody writes next. If a new strip ever styles
+     itself differently this will not catch it; the real fix is one shared component.
+     2026-08-31. */
+  #appMain div[style*="flex-wrap:wrap"][style*="border-bottom:1px solid #E2E8F0"] {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px !important;
+  }
+  #appMain div[style*="flex-wrap:wrap"][style*="border-bottom:1px solid #E2E8F0"]::-webkit-scrollbar {
+    display: none;
+  }
+  /* Each pill keeps its own width instead of being squeezed to fit. */
+  #appMain div[style*="flex-wrap:wrap"][style*="border-bottom:1px solid #E2E8F0"] > * {
+    flex: 0 0 auto;
+  }
+
   /* ── Section headings: clear hierarchy, less air ── */
   #appMain h1 { font-size: 20px !important; line-height: 1.2 !important; }
   #appMain h2 { font-size: 18px !important; margin: 6px 2px 6px !important; }
