@@ -21,6 +21,11 @@
   var POLL_MS = 60000;          // re-check the punch state once a minute
   var LONG_SHIFT_HOURS = 9;     // past this, start nudging them to clock out
   var openPunch = null;         // the current open punch, if any
+  /* Has a check ever actually SUCCEEDED? Until it has, we do not know whether this
+     person is on the clock, and saying "You're not clocked in" is a claim we have not
+     earned. Cassandra Schnarr reported being shown as clocked out while punch #334 was
+     open in the database all along — see refresh(). */
+  var punchKnown = false;
   var nudgedAt = 0;
 
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
@@ -89,7 +94,23 @@
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: 'mobile' }),
-    }).then(function (r) { return r.json().catch(function () { return {}; }); });
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        /* A REFUSAL IS NOT A SUCCESS. This used to return r.json() straight through, so a
+           422 — the centre is closed, you are not on today's rota — arrived as a body with
+           no `action` field, fell through both branches of the caller, and left the
+           optimistic "Clocked in" pill standing. The server has been explaining itself
+           politely to nobody. Reject with the server's own wording so the caller can say
+           it out loud and put the pill back. */
+        if (! r.ok) {
+          var err = new Error((d && d.message) || 'Could not clock in.');
+          err.kt_refusal = true;
+          err.kt_body = d || {};
+          throw err;
+        }
+        return d;
+      });
+    });
   }
 
   // Tapping the strip toggles the clock. Both directions update the UI OPTIMISTICALLY
@@ -114,7 +135,21 @@
           else if (d && d.action === 'out') { openPunch = null; paint(); }   // server said we were already in → now out
           refresh();
         })
-        .catch(function () { doneBusy(); openPunch = null; paint(); if (KT.toast) KT.toast('⚠️', 'Could not clock in', 'Please try again in a moment.', '#B91C1C'); });
+        .catch(function (e) {
+          doneBusy(); openPunch = null; paint();
+          if (! KT.toast) return;
+          /* A refusal is a normal answer, not a fault: say what the server said, in its
+             own words, and in a calm colour. Only a genuine failure gets the red warning
+             and "try again", because trying again will not change a closed centre. */
+          if (e && e.kt_refusal) {
+            var b = e.kt_body || {};
+            KT.toast(b.not_scheduled ? '📅' : (b.closed ? '🏠' : 'ℹ️'),
+                     b.not_scheduled ? 'Not on today\'s schedule' : (b.closed ? 'The centre is closed today' : 'Not clocked in'),
+                     e.message, '#0E7C90');
+          } else {
+            KT.toast('⚠️', 'Could not clock in', 'Please try again in a moment.', '#B91C1C');
+          }
+        });
       return;
     }
 
@@ -127,7 +162,12 @@
       var doneBusy = (KT.busy && pill) ? KT.busy(pill) : function () {};
       punchPost()
         .then(function (d) { doneBusy(); refresh(); if (KT.toast) KT.toast('👋', 'Clocked out', 'Your shift has been closed. Have a good evening.', '#0E7C90'); })
-        .catch(function () { doneBusy(); openPunch = prev; paint(); if (KT.toast) KT.toast('⚠️', 'Could not clock out', 'Please try again.', '#B91C1C'); });
+        .catch(function (e) {
+          doneBusy(); openPunch = prev; paint();
+          if (! KT.toast) return;
+          if (e && e.kt_refusal) { KT.toast('ℹ️', 'Still clocked in', e.message, '#0E7C90'); }
+          else { KT.toast('⚠️', 'Could not clock out', 'Please try again.', '#B91C1C'); }
+        });
     };
     var normalConfirm = function () {
       var e = elapsed(openPunch.punched_in_at);
@@ -228,6 +268,21 @@
     var ICON = 'flex:0 0 auto;width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:22px;';
     var MID = 'flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25;';
     var CHIP = 'flex:0 0 auto;background:#fff;font-size:13px;font-weight:800;padding:9px 15px;border-radius:11px;white-space:nowrap;';
+    /* Not yet checked — neutral, and deliberately NOT tappable. The strip paints on
+       every screen render, before any request has returned, so without this it asserted
+       "You're not clocked in" a beat before it knew, and again after any failed poll. */
+    if (!punchKnown) {
+      el.innerHTML =
+        '<span style="' + ICON + '">⏱</span>'
+        + '<span style="' + MID + '">'
+        +   '<span style="font-size:15px;font-weight:800;">Checking your shift…</span>'
+        +   '<span style="font-size:12px;font-weight:600;opacity:.9;">One moment</span>'
+        + '</span>';
+      el.style.background = '#64748B';
+      el.style.color = '#fff';
+      el.style.border = 'none';
+      return;
+    }
     if (!openPunch) {
       el.innerHTML =
         '<span style="' + ICON + '">⏱</span>'
@@ -270,8 +325,16 @@
   function refresh() {
     if (!isStaff() || !tok()) return;
     get('/staff/punches/me').then(function (d) {
-      var rows = (d && d.punches) || [];
-      openPunch = rows.find(function (p) { return !p.punched_out_at; }) || null;
+      /* get() resolves NULL for EVERY failure — dropped connection, timeout, 500, a
+         401 blip. This used to read `(d && d.punches) || []`, so a failure produced an
+         empty list, which produced openPunch = null, which repainted the strip as
+         "You're not clocked in" and offered a Clock in button. On a phone, one blip in
+         the 60-second poll was enough to tell a working educator she was off the clock
+         — and tapping that button would have opened a SECOND punch on top of her live
+         one. A failed question is not a "no": keep the last state we actually know. */
+      if (!d || !d.punches) return;
+      openPunch = d.punches.find(function (p) { return !p.punched_out_at; }) || null;
+      punchKnown = true;
       paint();
     });
   }
@@ -330,7 +393,7 @@
     requestAnimationFrame(function () { watchMain(tries + 1); });
   })(0);
   paint();                          // immediate first paint (no wait)
-  setInterval(paint, 4000);         // safety re-mount
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(paint) : setInterval(paint, 4000);         // safety re-mount
   setInterval(refresh, POLL_MS);    // the punch state itself changes rarely
   setTimeout(refresh, 300);         // fetch the punch state promptly (was 2500) so in/out is right fast
   window.addEventListener('hashchange', function () {

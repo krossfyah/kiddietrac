@@ -42,18 +42,75 @@ final class CareController extends Controller
     public function logCare(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'child_id' => ['required', 'integer'],
+            // child_id (one) or child_ids (many). Outdoor play, meals and sunscreen
+            // happen to a whole room at once; child_id is kept so every existing
+            // caller, including the installed APK, keeps working unchanged.
+            'child_id' => ['required_without:child_ids', 'integer'],
+            'child_ids' => ['required_without:child_id', 'array', 'min:1'],
+            'child_ids.*' => ['integer'],
             'log_type' => ['required', 'in:diaper,bathroom,nap,meal,snack,bottle,sunscreen,mood,outdoor'],
-            'occurred_at' => ['nullable', 'date'],
-            'ended_at' => ['nullable', 'date'],
+            // Not in the future. A log describes what happened; a picker set to the
+            // wrong day otherwise files an entry for a time that has not arrived,
+            // which is what put a 21:30 meal on a parent's timeline at 10:26.
+            // Five minutes of slack so a slightly fast device clock still works.
+            'occurred_at' => ['nullable', 'date', 'before_or_equal:'.now()->addMinutes(5)->toDateTimeString()],
+            'ended_at' => ['nullable', 'date', 'before_or_equal:'.now()->addMinutes(5)->toDateTimeString()],
+
             'details' => ['nullable', 'string', 'max:160'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'amount_ml' => ['nullable', 'integer', 'min:0', 'max:2000'],
             'amount_oz' => ['nullable', 'numeric', 'min:0', 'max:60'],
         ]);
 
-        $id = DB::table('daily_care_logs')->insertGetId([
-            'child_id' => (int) $data['child_id'],
+        /* Whose logs may this person write? logCare() previously inserted straight
+           from the posted id with NO access check, so any signed-in user could write a
+           care log against any child on the platform — every sibling method here
+           checks. Accepting a list would multiply that, so it is enforced now. */
+        $requested = ! empty($data['child_ids'])
+            ? array_map('intval', $data['child_ids'])
+            : [(int) $data['child_id']];
+        $requested = array_values(array_unique(array_filter($requested)));
+
+        $allowed = array_values(array_filter($requested, fn ($cid) => $this->canSeeChild($request, $cid)));
+        if (empty($allowed)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        /* Signed in? A care log describes something that happened to a child in the
+           room, so the child should be here. Not a hard block: an educator catching up
+           after sign-out is a real workflow, so they may confirm and continue — and
+           the confirmation is recorded, so a later reader can tell a live log from a
+           retrospective one. */
+        $absent = [];
+        if (! $request->boolean('confirm_absent')) {
+            foreach ($allowed as $childId) {
+                $lastIn = DB::table('check_events')->where('child_id', $childId)
+                    ->where('event_type', 'check_in')->orderByDesc('created_at')->value('created_at');
+                $isHere = false;
+                if ($lastIn) {
+                    $isHere = ! DB::table('check_events')->where('child_id', $childId)
+                        ->where('event_type', 'check_out')->where('created_at', '>', $lastIn)->exists();
+                }
+                if (! $isHere) {
+                    $absent[] = DB::table('children')->where('id', $childId)
+                        ->selectRaw("TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) as n")
+                        ->value('n') ?: ('child #'.$childId);
+                }
+            }
+        }
+        if ($absent) {
+            return response()->json([
+                'message' => 'not_signed_in',
+                'absent' => $absent,
+                'prompt' => (count($absent) === 1 ? $absent[0].' is' : implode(', ', $absent).' are')
+                    .' not signed in right now. Log this anyway as a catch-up entry?',
+            ], 422);
+        }
+
+        $ids = [];
+        foreach ($allowed as $childId) {
+        $ids[] = DB::table('daily_care_logs')->insertGetId([
+            'child_id' => $childId,
             'recorded_by_id' => $request->user()->id,
             'log_type' => $data['log_type'],
             // Parse to a real datetime — the app sends ISO 8601 ("2026-08-07T12:30:00.000Z")
@@ -67,7 +124,28 @@ final class CareController extends Controller
             'amount_oz' => $data['amount_oz'] ?? null,
             'created_at' => now(),
         ]);
-        return response()->json(['id' => $id, 'message' => 'Logged'], 201);
+        }
+
+        /* Catch-up logs are allowed, but somebody should know. One reminder per
+           educator per day — a morning of catching up must not send six emails. */
+        if ($request->boolean('confirm_absent') && ! empty($ids)) {
+            try {
+                \App\Support\AttendanceReminder::maybeSend(
+                    (int) $request->user()->id, $allowed, $request
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Attendance reminder failed: '.$e->getMessage());
+            }
+        }
+
+        // `id` kept for callers that expect a single value; `ids`/`count` are new.
+        return response()->json([
+            'id' => $ids[0],
+            'ids' => $ids,
+            'count' => count($ids),
+            'skipped' => count($requested) - count($allowed),
+            'message' => count($ids) === 1 ? 'Logged' : ('Logged for '.count($ids).' children'),
+        ], 201);
     }
 
     public function logsForChild(Request $request, int $child): JsonResponse
@@ -324,6 +402,17 @@ final class CareController extends Controller
     public function punch(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
+        /* `source` lands in an ENUM('web','kiosk','mobile','auto'). It was written
+           straight through from the request, so any other value — a typo, an old client,
+           a probe — reached MySQL as "Data truncated for column 'source'" and came back
+           as a 500 on somebody's clock-in. A punch is the last thing that should fail
+           loudly for a reason the person cannot act on: an unknown source is simply
+           'web'. (Found while testing the rota guard, 2026-08-31.) */
+        $source = (string) ($request->input('source') ?: 'web');
+        if (! in_array($source, ['web', 'kiosk', 'mobile', 'auto'], true)) {
+            $source = 'web';
+        }
+        $request->merge(['source' => $source]);
         // v22p97: resolve the centre WITHIN the active agency (header-aware) so a
         // multi-agency user clocks in at the agency they've switched into, and a
         // super-admin testing Test Agency resolves to its centre instead of the
@@ -351,6 +440,28 @@ final class CareController extends Controller
                     'dates' => \App\Support\Closures::dateLabel($closure),
                     'reason' => \App\Support\Closures::reason($closure),
                 ],
+            ], 422);
+        }
+
+        /* Not on today's rota.
+         *
+         * Clocking IN only, for the same reason as the closure guard above: somebody
+         * already on shift must always be able to clock OUT, or their hours are stranded
+         * and payroll is wrong.
+         *
+         * FAILS OPEN, and that matters more than the rule itself. It refuses only when
+         * the centre is demonstrably RUNNING a rota — there are shifts scheduled there in
+         * the surrounding fortnight — and this person has none today. A centre that does
+         * not use the schedule is untouched; without that, switching the rota on for one
+         * room would lock every other educator in the building out of their own clock.
+         */
+        if ($isClockingIn && $this->notRosteredToday($request, $userId, $centreId)) {
+            return response()->json([
+                'message' => "You're not on today's schedule yet, so there's no shift to "
+                    . "clock into. If you're covering for someone or your days have "
+                    . "changed, your centre director or admin can add you to today's rota "
+                    . "— a quick message to them will sort it out.",
+                'not_scheduled' => true,
             ], 422);
         }
 
@@ -398,6 +509,59 @@ final class CareController extends Controller
      * staff.clock_out) + a top-level `summary` string drive a clean line in the
      * audit viewer. Never throws.
      */
+    /**
+     * Is this person rostered off today, at a centre that actually keeps a rota?
+     *
+     * Three conditions, all of which must hold before anyone is refused:
+     *   1. they are an EDUCATOR and nothing more senior — a director or admin covering
+     *      the floor is exactly who has to be able to clock in on a day nobody rostered
+     *      them, and they are usually not on the rota at all;
+     *   2. the centre HAS shifts either side of today, i.e. somebody maintains it;
+     *   3. this person has none of them today.
+     *
+     * "Today" is the AGENCY's day, not the server's — a punch at 8pm Toronto is already
+     * tomorrow in UTC, and reading the wrong day would refuse an evening shift.
+     */
+    private function notRosteredToday(Request $request, int $userId, int $centreId): bool
+    {
+        try {
+            $roles = \App\Support\UserRoles::names($request);
+            foreach (['platform_admin', 'agency_admin', 'centre_director'] as $senior) {
+                if (in_array($senior, $roles, true)) return false;
+            }
+            if (! in_array('educator', $roles, true)) return false;
+
+            $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+            $tz = \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
+            $today = \Illuminate\Support\Carbon::now($tz)->toDateString();
+
+            $roomIds = DB::table('rooms')->where('centre_id', $centreId)->pluck('id')->all();
+            if (! $roomIds) return false;   // no rooms, no rota to be off
+
+            $mineToday = DB::table('shifts')
+                ->where('user_id', $userId)
+                ->whereIn('room_id', $roomIds)
+                ->whereDate('starts_at', $today)
+                ->exists();
+            if ($mineToday) return false;
+
+            // Does anyone run a rota here? A fortnight either side is wide enough to
+            // cover a centre that rosters weekly, and narrow enough that a rota abandoned
+            // months ago stops locking people out.
+            $centreRuns = DB::table('shifts')
+                ->whereIn('room_id', $roomIds)
+                ->whereDate('starts_at', '>=', \Illuminate\Support\Carbon::now($tz)->subDays(14)->toDateString())
+                ->whereDate('starts_at', '<=', \Illuminate\Support\Carbon::now($tz)->addDays(14)->toDateString())
+                ->exists();
+
+            return $centreRuns;
+        } catch (\Throwable $e) {
+            // Anything unexpected means we do not know — and "do not know" must never
+            // stop somebody starting their shift.
+            return false;
+        }
+    }
+
     private function auditClock(Request $request, int $userId, string $action, int $centreId, ?int $minutes): void
     {
         try {
@@ -603,8 +767,35 @@ final class CareController extends Controller
             'tour_at' => ['sometimes', 'date'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
+        // Who may touch a tour at all. listTours() already answers this the same
+        // way; the write was simply never asked. Without it, ANY authenticated user —
+        // a parent included — could change any booking by guessing an id.
+        $userId = $request->user()->id;
+        $isAdmin = DB::table('role_assignments')->where('user_id', $userId)
+            ->whereIn('role', ['agency_admin', 'platform_admin'])->where('active', true)->exists();
+        abort_unless($isAdmin, 403, 'Not authorized to change tour bookings.');
+
+        // And WHICH tours. The header is user-controlled, so it is only honoured for an
+        // agency they actually hold a role in — otherwise fall back to their own.
+        $headerAgency = (int) $request->header('X-Active-Agency-Id');
+        $belongs = $headerAgency && DB::table('role_assignments')->where('user_id', $userId)
+            ->where('active', true)
+            ->where(function ($q) use ($headerAgency) {
+                $q->where('agency_id', $headerAgency)->orWhere('role', 'platform_admin');
+            })->exists();
+        $agencyId = $belongs ? $headerAgency : (int) DB::table('role_assignments')
+            ->where('user_id', $userId)->where('role', 'agency_admin')
+            ->where('active', true)->value('agency_id');
+        abort_unless($agencyId, 403, 'No agency for this account.');
+
         $data['updated_at'] = now();
-        DB::table('tour_bookings')->where('id', $id)->update($data);
+
+        // Scoped by agency as well as id: a booking in another tenant simply is not
+        // found, rather than being found and refused.
+        $changed = DB::table('tour_bookings')
+            ->where('id', $id)->where('agency_id', $agencyId)->update($data);
+        abort_unless($changed, 404, 'Tour booking not found.');
+
         return response()->json(['message' => 'Tour updated']);
     }
 
