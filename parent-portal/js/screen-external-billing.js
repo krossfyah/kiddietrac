@@ -83,6 +83,31 @@
     });
   }
 
+  /* The invoice the billing system actually issued, fetched through our API rather
+     than opened at its source URL. That URL is signed, self-authenticating and does not
+     expire, so handing it to a browser left it in histories and made it forwardable by
+     anyone who came across it. Now it stays on the server and every request is checked
+     against who is asking. Same arrangement as the iLearn payslips. */
+  async function openOfficial(id, btn) {
+    var label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Opening…';
+    try {
+      var t; try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+      var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+      var h = { Authorization: 'Bearer ' + t };
+      // Staff are authorised against their ACTIVE agency, so this has to travel.
+      try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; } catch (e) {}
+      var r = await fetch(base + '/invoices/external/' + id + '/document', { headers: h });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var url = URL.createObjectURL(await r.blob());
+      window.open(url, '_blank');
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    } catch (e) {
+      if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open that invoice', 'error');
+    }
+    btn.disabled = false; btn.textContent = label;
+  }
+
   async function load(container) {
     if (state.busy) return;
     state.busy = true;
@@ -137,9 +162,9 @@
     var td = 'padding:10px 12px;font-size:13px;color:#334155;border-top:1px solid #F1F5F9;vertical-align:middle;';
     var rows = invoices.map(function (i) {
       var acts = '';
-      if (i.pdf_url) {
-        acts += '<button type="button" class="xb-act" data-act="view" data-id="' + i.id + '" data-pdf="' + esc(i.pdf_url) + '" style="border:none;background:none;cursor:pointer;color:#2563EB;font-weight:600;font-size:12.5px;padding:3px 7px;">👁 View</button>';
-        acts += '<button type="button" class="xb-act" data-act="download" data-id="' + i.id + '" data-pdf="' + esc(i.pdf_url) + '" style="border:none;background:none;cursor:pointer;color:#0F766E;font-weight:600;font-size:12.5px;padding:3px 7px;">⬇ Download</button>';
+      if (i.has_document || i.pdf_url) {
+        acts += '<button type="button" class="xb-act" data-act="view" data-id="' + i.id + '" style="border:none;background:none;cursor:pointer;color:#2563EB;font-weight:600;font-size:12.5px;padding:3px 7px;">👁 View</button>';
+        acts += '<button type="button" class="xb-act" data-act="download" data-id="' + i.id + '" style="border:none;background:none;cursor:pointer;color:#0F766E;font-weight:600;font-size:12.5px;padding:3px 7px;">⬇ Download</button>';
       }
       acts += '<button type="button" class="xb-act" data-act="edit" data-id="' + i.id + '" style="border:none;background:none;cursor:pointer;color:#334155;font-weight:600;font-size:12.5px;padding:3px 7px;">✏️ Edit</button>';
       return '<tr>'
@@ -200,8 +225,7 @@
       b.addEventListener('click', function () {
         var act = b.getAttribute('data-act');
         if (act === 'view' || act === 'download') {
-          var u = b.getAttribute('data-pdf');
-          try { window.open(u, '_blank', 'noopener'); } catch (e) { location.href = u; }
+          openOfficial(b.getAttribute('data-id'), b);
           return;
         }
         if (act === 'edit') {

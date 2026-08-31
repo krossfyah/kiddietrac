@@ -503,6 +503,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // shared with admins and decides for itself whose document may be opened.
     Route::get('/auth/me/payroll-documents', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'mine']);
     Route::get('/payroll-documents/{id}/pdf', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'pdf'])->where('id', '[0-9]+');
+    /* The invoice the source system actually issued, fetched by us rather than linked
+       to. Same shape as the payslip route above and for the same reason: the signed
+       URL is self-authenticating and permanent, so it must not reach a browser. Shared
+       between a parent and agency staff, and the method decides which of them is
+       asking -- a client can ask for any id it likes. */
+    Route::get('/invoices/external/{id}/document', [\App\Http\Controllers\Api\InvoiceController::class, 'externalDocument'])->where('id', '[0-9]+');
     Route::get ('/auth/me/auto-signoff-notice',     [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'show']);
     Route::post('/auth/me/auto-signoff-notice/ack', [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'ack']);
     Route::get('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'show']);

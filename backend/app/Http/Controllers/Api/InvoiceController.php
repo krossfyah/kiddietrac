@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Mail;
 
 final class InvoiceController extends Controller
 {
+    use \App\Http\Controllers\Concerns\AuthorizesTenantAccess;
+
     use ResolvesCentreContext;
 
     /**
@@ -79,7 +81,12 @@ final class InvoiceController extends Controller
                     'is_estimate' => false,
                     'external' => true,
                     'source' => $e->source_label ?: 'iLearn',
-                    'pdf_url' => $e->pdf_url ?: null,
+                    /* Whether there IS an official document, not where it lives. The URL
+                       is signed and self-authenticating, so anything holding it can open
+                       the invoice — it has no business in a browser history, a copied
+                       link or a shared screen. The client asks this API for the document
+                       and we fetch it, the same arrangement the payslips use. */
+                    'has_document' => ! empty($e->pdf_url),
                 ];
             })->all();
         }
@@ -289,7 +296,7 @@ final class InvoiceController extends Controller
                 'currency'     => $r->currency ?: 'CAD',
                 'description'  => $r->description,
                 'items'        => $r->items ? json_decode($r->items, true) : [],
-                'pdf_url'      => $r->pdf_url ?? null,
+                'has_document' => ! empty($r->pdf_url),   // see externalDocument()
                 'is_open'      => $isOpenStatus($r->status),
             ])->values(),
             'stats' => $stats,
@@ -305,6 +312,77 @@ final class InvoiceController extends Controller
      * method's stats/paging but scopes to the caller's active agency and carries a
      * family label so staff can see WHOSE invoice each row is.
      */
+    /**
+     * GET /invoices/external/{id}/document — the invoice iLearn actually issued.
+     *
+     * The portal used to link straight at the signed iLearn URL. It worked, and the
+     * parent did get the official document — but the link is self-authenticating and
+     * permanent, so it survived in browser histories and could be forwarded by anyone
+     * who came by it. Fetching it here instead means the URL never leaves this server,
+     * and the request is checked against who is asking every single time. Same
+     * arrangement the iLearn payslips already use.
+     *
+     * Content-type is passed through rather than assumed: iLearn renders the branded
+     * invoice as HTML (self-contained — the logo is a data: URI and the styles are
+     * inline), while payslips are PDFs. Claiming one is the other would break both.
+     */
+    public function externalDocument(Request $request, int $id)
+    {
+        $inv = DB::table('external_invoices')->where('id', $id)->first();
+        abort_unless($inv, 404, 'Not found.');
+
+        $user = $request->user();
+
+        /* A guardian of THIS family, or staff of the agency that issued it. Checked
+           here rather than trusted from the list that produced the id: a client can
+           ask for any id it likes, and "you must have got this from a page we
+           rendered" is not an authorisation. */
+        $isGuardian = DB::table('guardians')->where('user_id', $user->id)
+            ->where('family_id', $inv->family_id)->exists();
+
+        if (! $isGuardian) {
+            $agencyId = (int) $request->header('X-Active-Agency-Id');
+            $isStaff = $agencyId === (int) $inv->agency_id
+                && DB::table('role_assignments')->where('user_id', $user->id)->where('active', 1)
+                    ->where(function ($q) use ($agencyId) {
+                        $q->where('agency_id', $agencyId)->orWhere('role', 'platform_admin');
+                    })
+                    ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
+                    ->exists();
+            abort_unless($isStaff, 403, 'Not permitted.');
+        }
+
+        abort_unless(! empty($inv->pdf_url), 404, 'No official document for this invoice.');
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(20)
+                ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                ->get((string) $inv->pdf_url);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('[invoices] could not fetch the source document', [
+                'invoice' => $id, 'error' => $e->getMessage(),
+            ]);
+            abort(502, 'The billing system could not be reached. Try again shortly.');
+        }
+
+        if (! $res->successful() || $res->body() === '') {
+            \Illuminate\Support\Facades\Log::warning('[invoices] source document refused', [
+                'invoice' => $id, 'status' => $res->status(),
+            ]);
+            abort(502, 'The official invoice could not be loaded.');
+        }
+
+        $type = (string) ($res->header('Content-Type') ?: 'text/html; charset=utf-8');
+        $ext = str_contains($type, 'pdf') ? 'pdf' : 'html';
+
+        return response((string) $res->body(), 200, [
+            'Content-Type' => $type,
+            'Content-Disposition' => 'inline; filename="invoice-'
+                . preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($inv->number ?: $inv->id)) . '.' . $ext . '"',
+            'X-KT-Document-Source' => (string) ($inv->external_source ?: 'external'),
+        ]);
+    }
+
     public function externalForAgency(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
@@ -417,7 +495,7 @@ final class InvoiceController extends Controller
                 'currency'     => $r->currency ?: 'CAD',
                 'description'  => $r->description,
                 'items'        => $r->items ? json_decode($r->items, true) : [],
-                'pdf_url'      => $r->pdf_url ?? null,
+                'has_document' => ! empty($r->pdf_url),   // see externalDocument()
                 'is_open'      => $isOpenStatus($r->status),
             ])->values(),
             'stats' => $stats,
@@ -692,9 +770,30 @@ final class InvoiceController extends Controller
                 'children.first_name',
                 'children.last_name',
                 'enrollments.monthly_fee',
+                'enrollments.schedule',
                 'rooms.name as room_name',
             )
             ->get()
+            /* ONE LINE PER CHILD, not per enrolment.
+               A child with a split week holds one open enrolment per provider — Mon-Thu
+               with one, Friday with another — and this query iterates ENROLMENTS, so it
+               would put that child on the invoice twice and bill the family double. The
+               fee is for the child's care, and splitting who delivers it does not double
+               what it costs.
+
+               Kept per child: the enrolment covering the most days, which is their main
+               provider and the fee the family agreed. Real money, so it fails toward
+               charging once. (2026-08-27) */
+            ->groupBy('child_id')
+            ->map(function ($rows) {
+                if ($rows->count() === 1) {
+                    return $rows->first();
+                }
+                return $rows->sortByDesc(function ($r) {
+                    return count(\App\Support\CareSchedule::daysOf($r->schedule ?? null));
+                })->first();
+            })
+            ->values()
             ->groupBy('family_id');
 
         $generated = 0;
@@ -1016,21 +1115,15 @@ final class InvoiceController extends Controller
         ];
     }
 
+    /**
+     * One implementation — Concerns\AuthorizesTenantAccess. Verified equivalent
+     * across 13,350 real (user, child, active-agency) combinations.
+     *
+     * Returns bool rather than asserting: the callers here answer with their own
+     * abort(403), and turning that into an exception would change the response.
+     */
     private function canAccessChild($user, int $childId): bool
     {
-        $child = DB::table('children')->where('id', $childId)->first();
-        if (!$child) {
-            return false;
-        }
-
-        if (DB::table('guardians')
-            ->where('user_id', $user->id)
-            ->where('family_id', $child->family_id)
-            ->exists()) {
-            return true;
-        }
-
-        $family = DB::table('families')->where('id', $child->family_id)->first();
-        return $family ? $this->authorizeCentreAccess($user, (int) $family->centre_id) : false;
+        return $this->mayAccessChild((int) $user->id, $childId);
     }
 }

@@ -377,7 +377,18 @@
 
     var d;
     try { d = await Api.get('/parent/children/' + childId); }
-    catch (e) { card.innerHTML = '<div style="padding:40px;text-align:center;color:#B91C1C;">Could not load the record.</div>'; return; }
+    catch (e) {
+      // A parent seeing only "Could not load the record" cannot tell a server fault
+      // from a missing child, and has nothing to do about either.
+      card.innerHTML = '<div style="padding:40px;text-align:center;color:#B91C1C;">Could not load the record.'
+        + '<div style="font-size:12px;color:#64748B;margin-top:6px;">'
+        + ((e && e.message) ? String(e.message).replace(/[<>]/g, '') : 'The server did not respond.')
+        + '</div><button type="button" class="kt-retry" style="margin-top:12px;background:#1F6080;color:#fff;'
+        + 'border:0;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;">Try again</button></div>';
+      var rb = card.querySelector('.kt-retry');
+      if (rb) { rb.onclick = function () { location.reload(); }; }
+      return;
+    }
 
     var apiHost = ((window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
     var photo = d.photo_url ? (/^https?:/.test(d.photo_url) ? d.photo_url : apiHost + d.photo_url) : '';
@@ -555,14 +566,19 @@
     // so they resolve to an empty shape on failure — a walks outage must never take
     // the whole Today screen down with it.
     Promise.all([
-      Api.get(`/parent/children/${child.id}/timeline?date=${state.date}`),
-      Api.get(`/parent/children/${child.id}/digest/${state.date}`),
-      Api.get(`/parent/children/${child.id}/invoices?status=current`),
-      Api.get(`/parent/children/${child.id}/observations`),
+      Api.get(`/parent/children/${child.id}/timeline?date=${state.date}`).catch(() => ({ events: [] })),
+      Api.get(`/parent/children/${child.id}/digest/${state.date}`).catch(() => ({})),
+      Api.get(`/parent/children/${child.id}/invoices?status=current`).catch(() => ({ invoices: [] })),
+      /* 403s when an admin previews the parent role — they are not the child's
+         guardian. That is correct, and it used to take the whole screen with it. */
+      Api.get(`/parent/children/${child.id}/observations`).catch(() => ({ observations: [] })),
       Api.get('/parent/walks').catch(() => ({ walks: [] })),
       Api.get('/parent/active-walks').catch(() => ({ walks: [] })),
       Api.get(`/parent/children/${child.id}/photos`).catch(() => ({ photos: [] })),
-    ]).then(([timeline, digest, invoices, observations, walksRes, activeRes, mediaRes]) => {
+    ]).catch(() => [{}, {}, {}, {}, { walks: [] }, { walks: [] }, { photos: [] }])
+      .then(([timeline, digest, invoices, observations, walksRes, activeRes, mediaRes]) => {
+      /* Reached even if everything above failed, so no card is left claiming to be
+         loading. An empty card is honest; a permanent spinner is not. */
       // Stats
       const meals = (timeline.events || []).filter(e => e.type === 'meal' || e.type === 'snack').length;
       const naps = (timeline.events || []).filter(e => e.type === 'nap_end').length;
@@ -805,7 +821,23 @@
 
   async function renderMessagesTab(wrap) {
     wrap.appendChild(buildSubNav('messages'));
-    wrap.appendChild(Dom.el('h1', { style: 'margin: 0 0 24px;' }, 'Messages'));
+
+    /* Compose lived ONLY in renderMessagesMobile, so a parent on a computer had no way
+       to start a message at all - the desktop screen listed existing threads and, if
+       there were none, said "No conversations yet" and stopped. The full-screen composer
+       is reused as-is: it is position:fixed and works on either layout. (2026-08-25) */
+    const msgHead = Dom.el('div', {
+      style: 'display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 24px;',
+    });
+    msgHead.appendChild(Dom.el('h1', { style: 'margin:0;' }, 'Messages'));
+    const newMsgBtn = Dom.el('button', {
+      type: 'button',
+      style: 'display:inline-flex;align-items:center;gap:7px;background:#159FB4;color:#fff;border:none;'
+        + 'border-radius:22px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer;min-height:40px;',
+    }, [Dom.el('span', { style: 'font-size:15px;' }, '\u270E'), 'New message']);
+    newMsgBtn.addEventListener('click', () => openComposeNew());
+    msgHead.appendChild(newMsgBtn);
+    wrap.appendChild(msgHead);
 
     const container = Dom.el('div', { style: 'display: grid; grid-template-columns: 320px 1fr; gap: 24px; height: calc(100vh - 290px); min-height: 380px; max-height: calc(100vh - 290px);' });
     wrap.appendChild(container);
@@ -823,7 +855,16 @@
 
       if (!data.conversations || data.conversations.length === 0) {
         list.appendChild(Dom.el('p', { style: 'padding: 16px; color: var(--ink-500);' }, 'No conversations yet.'));
-        thread.appendChild(emptyState('💬', 'No conversations', 'Messages with your educators will appear here.'));
+        thread.appendChild(emptyState('\u{1F4AC}', 'No conversations',
+          'Messages with your educators will appear here \u2014 or start one now.'));
+        // A dead end otherwise: nothing here explained how to begin.
+        const startBtn = Dom.el('button', {
+          type: 'button',
+          style: 'display:block;margin:0 auto;background:#159FB4;color:#fff;border:none;border-radius:22px;'
+            + 'padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;min-height:42px;',
+        }, 'Start a message');
+        startBtn.addEventListener('click', () => openComposeNew());
+        thread.appendChild(startBtn);
         return;
       }
 
@@ -884,18 +925,60 @@
 
           // Compose box — send routes by child_id (find-or-create per child).
           const childId = convo.child_id || state.selectedChildId;
-          const compose = Dom.el('form', { style: 'border-top: 1px solid var(--ink-200); padding: 12px; display: flex; gap: 8px;' });
+          /* A photo is often the whole message - a rash, a lost jumper, a permission
+             slip. The mobile thread has had a camera button for a while; the desktop one
+             was text-only, and sendParentMessage() already accepts a file, so this was a
+             missing control rather than missing capability. */
+          const composeWrap = Dom.el('div', { style: 'border-top: 1px solid var(--ink-200);' });
+          const attachBar = Dom.el('div', { style: 'display:none;padding:8px 12px 0;' });
+          const compose = Dom.el('form', { style: 'padding: 12px; display: flex; gap: 8px; align-items: center;' });
+          const fileInput = Dom.el('input', { class: 'kt-desk-attach', type: 'file', accept: 'image/*', style: 'display:none;' });
+          const attachBtn = Dom.el('button', {
+            type: 'button', title: 'Attach a photo', 'aria-label': 'Attach a photo',
+            style: 'background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;line-height:1;flex-shrink:0;',
+          }, '\u{1F4F7}');
           const input = Dom.el('input', { class: 'kt-compose-input', type: 'text', placeholder: childId ? 'Type a message…' : 'Read-only conversation', style: 'flex: 1; padding: 13px 16px; border: 1px solid var(--ink-300); border-radius: 24px; font-size: 16px;' });
           const sendBtn = Dom.el('button', { type: 'submit', style: 'background: #159FB4; color: white; border: none; padding: 0 20px; border-radius: 24px; font-weight: 600; cursor: pointer;' }, 'Send');
-          if (!childId) { input.disabled = true; sendBtn.disabled = true; }
+          if (!childId) { input.disabled = true; sendBtn.disabled = true; attachBtn.disabled = true; }
+
+          let deskFile = null;
+          const clearFile = () => {
+            deskFile = null; fileInput.value = '';
+            Dom.clear(attachBar); attachBar.style.display = 'none';
+          };
+          attachBtn.addEventListener('click', () => fileInput.click());
+          fileInput.addEventListener('change', () => {
+            if (!fileInput.files || !fileInput.files[0]) return;
+            deskFile = fileInput.files[0];
+            Dom.clear(attachBar);
+            const chip = Dom.el('div', {
+              style: 'display:inline-flex;align-items:center;gap:8px;background:#F1F5F9;border:1px solid var(--ink-200);'
+                + 'border-radius:10px;padding:6px 10px;font-size:12px;max-width:100%;',
+            });
+            const img = Dom.el('img', { style: 'width:34px;height:34px;object-fit:cover;border-radius:6px;display:block;' });
+            img.src = URL.createObjectURL(deskFile);
+            chip.appendChild(img);
+            chip.appendChild(Dom.el('span', { style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;' }, deskFile.name));
+            const rm = Dom.el('button', { type: 'button', 'aria-label': 'Remove photo',
+              style: 'background:none;border:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;' }, '\u2715');
+            rm.addEventListener('click', clearFile);
+            chip.appendChild(rm);
+            attachBar.appendChild(chip);
+            attachBar.style.display = 'block';
+          });
+
+          compose.appendChild(fileInput);
+          compose.appendChild(attachBtn);
           compose.appendChild(input); compose.appendChild(sendBtn);
           compose.addEventListener('submit', async (ev) => {
             ev.preventDefault();
-            if (!input.value.trim() || !childId) return;
+            // A photo on its own is a message; it does not need a caption.
+            if ((!input.value.trim() && !deskFile) || !childId) return;
             sendBtn.disabled = true;
             try {
-              await Api.post('/parent/messages', { child_id: childId, body: input.value.trim() });
+              await sendParentMessage(childId, input.value.trim(), deskFile);
               input.value = '';
+              clearFile();
               loadThread(convo);
             } catch (e) {
               input.placeholder = 'Could not send — try again';
@@ -903,7 +986,9 @@
               sendBtn.disabled = false;
             }
           });
-          thread.appendChild(compose);
+          composeWrap.appendChild(attachBar);
+          composeWrap.appendChild(compose);
+          thread.appendChild(composeWrap);
         } catch (e) {
           Dom.clear(thread);
           thread.appendChild(emptyState('⚠️', 'Could not load', e.message));
@@ -1029,13 +1114,45 @@
       payBtn.addEventListener('click', () => { if (typeof opts.onPay === 'function') opts.onPay(inv); });
       body.appendChild(payBtn);
     }
-    // The official iLearn-generated invoice (opens the branded invoice; print/save from there).
-    if (inv.pdf_url) {
-      var pdfBtn = Dom.el('a', { href: inv.pdf_url, target: '_blank', rel: 'noopener', style: btnBase + 'text-decoration:none;border:0;color:#fff;background:#2C7BA0;' }, [
+    /* The official invoice the billing system issued, fetched through our API rather
+       than linked at directly. It used to be an <a> pointing straight at the signed
+       source URL: that worked, and the parent did get the real document, but the link
+       authenticates by itself and never expires, so it survived in browser histories
+       and could be forwarded by anyone who came across it. Now the URL stays on the
+       server and the request is checked against who is asking. */
+    if (inv.has_document || inv.pdf_url) {
+      var pdfBtn = Dom.el('button', { type: 'button', style: btnBase + 'border:0;color:#fff;background:#2C7BA0;' }, [
         Dom.el('span', { style: 'font-size:16px;' }, '📄'), Dom.el('span', {}, 'View / download official invoice'),
       ]);
+      pdfBtn.addEventListener('click', function () { openOfficialInvoice(inv, pdfBtn); });
       body.appendChild(pdfBtn);
     }
+    /* Fetched with the token, because the route is authenticated and a plain href
+       cannot carry the header. Opened as a blob so the document arrives exactly as the
+       billing system rendered it — its logo is a data: URI and its styles are inline,
+       so nothing external has to resolve. */
+    async function openOfficialInvoice(i, btn) {
+      var label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Opening…';
+      try {
+        var t; try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+        var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+        var h = { Authorization: 'Bearer ' + t };
+        // Staff opening a family's invoice are authorised against their ACTIVE agency,
+        // so the header has to travel or the check cannot be made.
+        try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; } catch (e) {}
+        var r = await fetch(base + '/invoices/external/' + i.id + '/document', { headers: h });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var url = URL.createObjectURL(await r.blob());
+        window.open(url, '_blank');
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      } catch (e) {
+        // Quick print below still works, so say what happened and leave them a way on.
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open the official invoice — use Quick print instead', 'error');
+      }
+      btn.disabled = false; btn.textContent = label;
+    }
+
     // Local quick-print fallback (works even if the official link is unavailable).
     var printBtn = Dom.el('button', { type: 'button', style: btnBase + 'background:#fff;border:1.6px solid #cbd5e1;color:#475569;' }, [
       Dom.el('span', { style: 'font-size:16px;' }, '🖨'), Dom.el('span', {}, inv.pdf_url ? 'Quick print' : 'Print / Save as PDF'),
