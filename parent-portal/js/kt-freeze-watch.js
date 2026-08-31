@@ -23,7 +23,11 @@
   var TICK_MS    = 1000;      // heartbeat
   var FREEZE_MS  = 5000;      // a gap this long is a stall worth recording
   var REPORT_MS  = 8000;      // this long is worth a ticket
-  var SLEEP_MS   = 60000;     // beyond this it is a sleeping device, not a freeze
+  /* Beyond this it is a suspended app or a sleeping device, not a freeze. Deliberately
+     not generous: on a phone the common gap is a backgrounded web view, and anything
+     approaching half a minute is far more likely to be that than a main thread genuinely
+     blocked — a freeze that long would have to survive the watchdog itself being frozen. */
+  var SLEEP_MS   = 25000;
   var MAX_REPORTS = 3;        // per session — a struggling device must not spam
 
   var last = Date.now();
@@ -33,12 +37,31 @@
 
   /* Any visibility change resets the clock. A tab coming back to the foreground has a
      huge gap behind it that says nothing about our code, and a tab going away is about
-     to accumulate one. */
+     to accumulate one.
+
+     ON A PHONE THIS IS THE WHOLE BALLGAME. The APK and the iOS build load this very
+     page (capacitor.config.json points at dashboard.html), and a backgrounded app has
+     its web view suspended outright — every return from the home screen arrives with a
+     gap behind it that looks exactly like a freeze. Getting this wrong does not mean
+     missing a freeze, it means filing a ticket every time somebody takes a phone call.
+
+     So the clock is reset from every signal a resume can arrive on, not just one:
+     visibilitychange, pageshow (bfcache restore), window focus, and Capacitor's
+     appStateChange, which is the only one guaranteed to fire in a native web view.
+     Belt and braces on purpose — a missed reset is a false accusation. */
+  function resume() {
+    last = Date.now();
+    visibleSince = d.hidden ? 0 : Date.now();
+  }
+  try { d.addEventListener('visibilitychange', resume); } catch (e) {}
+  try { w.addEventListener('pageshow', resume); } catch (e) {}
+  try { w.addEventListener('focus', resume); } catch (e) {}
   try {
-    d.addEventListener('visibilitychange', function () {
-      last = Date.now();
-      visibleSince = d.hidden ? 0 : Date.now();
-    });
+    var C = w.Capacitor;
+    var App = C && C.Plugins && C.Plugins.App;
+    if (App && App.addListener) {
+      App.addListener('appStateChange', function (st) { if (st && st.isActive) resume(); });
+    }
   } catch (e) {}
 
   function screenName() {

@@ -415,6 +415,9 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
   <script src="/js/kt-pin.js?v=20260809navy" defer></script>
   <script src="/js/kt-biometric.js?v=20260809navy" defer></script>
   <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
+  <!-- Freeze watchdog on the sign-in page too: a lock-up before anybody is signed in
+       is still a lock-up, and it was the one screen it could not see. -->
+  <script src="/js/kt-freeze-watch.js?v=20260831frz2" defer></script>
   <script src="/js/kt-i18n.js?v=20260808i24" defer></script>
 </body>
 </html>
