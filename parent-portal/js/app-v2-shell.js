@@ -1123,7 +1123,20 @@
           // A screen can opt out of the auto-hero explicitly (educator Today renders
           // its own "Today at a glance" banner in that slot) via data-kt-no-autohero,
           // without needing a .kt-hero element that global banner-fx would decorate.
-          return !!main.querySelector('.kt-hero, .kt-page-hero, [data-kt-no-autohero]');
+          //
+          // .kt-page-hero is NOT in this list, though it was until 2026-08-31 -- which
+          // contradicted the paragraph directly above and cost the parent Settings screen
+          // its banner. The class is used for SECTION headers as well as page ones, and
+          // Settings has one on its Payments tab ("Wallet"). Buried in a tab panel that
+          // is not even on screen, it still answered "this screen brought its own
+          // banner", so the shell stood down and Settings became the only screen in the
+          // portal without one.
+          //
+          // A selector that means "the screen has a banner" cannot be one that also
+          // matches things which are not banners. .kt-hero is the component; a legacy
+          // .kt-page-hero gets folded into the auto-hero by normaliseBanners(), which is
+          // what the comment above always said would happen.
+          return !!main.querySelector('.kt-hero, [data-kt-no-autohero]');
         };
         var __ensure = function () {
           // The budget is GLOBAL per screen visit, not per render pass. A screen that

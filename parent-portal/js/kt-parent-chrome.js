@@ -196,6 +196,15 @@
       // stretching its own 520px wrap to 100%). Keep forms narrow while content is full.
       'body.role-guardian #appMain [style*="max-width:520px"],',
       'body.role-educator #appMain [style*="max-width:520px"]{max-width:600px !important;margin-left:auto !important;margin-right:auto !important;}',
+      // ...and the BANNER above it has to agree. Keeping the form narrow while its
+      // banner still spanned the whole window left a 100px gradient bar 1865px wide
+      // heading a 600px column - the same mismatch My Hours had, where the banner
+      // promised a full-width screen and the content sat in the middle of it. A
+      // banner is a heading for the thing under it, so it is as wide as that thing.
+      // :has() is doing the looking-ahead CSS otherwise cannot; where it is not
+      // supported the rule simply does not apply and nothing changes.
+      'body.role-guardian #appMain:has(> div[style*="max-width:520px"]) .kt-hero,',
+      'body.role-educator #appMain:has(> div[style*="max-width:520px"]) .kt-hero{max-width:600px !important;margin-left:auto !important;margin-right:auto !important;}',
       // Smoother home launcher entrance — fade the whole tilehome as ONE unit.
       // The home launcher paints all at once (no fade/slide that reads as the cards loading after the chrome).
       'body.role-guardian #appMain > .kt-tilehome,body.role-educator #appMain > .kt-tilehome{animation:none !important;opacity:1 !important;transform:none !important;}',

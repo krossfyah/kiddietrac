@@ -16,6 +16,27 @@
   max-width: 100% !important;
 }
 
+/* ── ...and the ones that cap via a CLASS (2026-08-31) ─────────────────────
+   The selector above matches an INLINE max-width on a DIRECT child. A wrapper that
+   sets its width in a stylesheet rule instead escapes it completely, so the standard
+   this file declares was only being applied to screens that happened to write their
+   width the one way.
+
+   My Hours was the visible result: .kt-pay-wrap capped the pay section at 860px while
+   the "Issued documents" block right below it — an inline max-width on a direct child,
+   so caught by the rule — stretched to the full window. One screen, two alignments,
+   under a banner 1841px wide with 491px of dead space down each side.
+
+   Listed explicitly rather than broadened to descendants: `#appMain div[style*=
+   "max-width"]` would also catch the cards INSIDE a grid, which cap their width on
+   purpose, and stretching those would break every card layout in the portal to fix
+   one wrapper. New screens should carry data-kt-screen on their wrapper instead of
+   inventing another class for this. */
+#appMain .kt-pay-wrap,
+#appMain > [data-kt-screen] {
+  max-width: 100% !important;
+}
+
 /* Tables + their headers always span their (now full-width) container. */
 #appMain table { width: 100% !important; }
 
@@ -28,7 +49,19 @@
    their own container (table cells, narrow flex slots) stay smaller than the
    cap, so it only ever REDUCES an over-wide control. */
 #appMain select,
-#appMain input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]) {
+#appMain input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="time"]):not([type="date"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]) {
   max-width: 480px !important;
 }
 #appMain textarea { max-width: 720px !important; }
+
+/* A date or time field has a known intrinsic size, so the 480px cap above is far too
+   generous for it — the lesson planner's time inputs rendered 266px wide, filling the
+   day card for the sake of "09:00 AM". Capped to just above what the widest rendering
+   needs: enough headroom that a larger font or a longer locale format still fits,
+   without the field turning into a slab. Pairs with the min-width floor in
+   kt-polish-v22.css, which stops the meridiem being clipped. (Anthony, 2026-08-27) */
+#appMain input[type="time"] { max-width: 160px !important; }
+#appMain input[type="date"],
+#appMain input[type="month"],
+#appMain input[type="week"] { max-width: 190px !important; }
+#appMain input[type="datetime-local"] { max-width: 260px !important; }
