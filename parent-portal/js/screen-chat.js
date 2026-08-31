@@ -448,7 +448,6 @@
       /* Pagination, client-side over the fully-fetched list. Anything that changes WHICH
          rows qualify (search, sort, archive) resets to page 1 — otherwise you filter to
          three results while parked on page 2 and the screen looks empty. */
-      const PAGE_SIZES = [25, 50, 100];
       const pageSlice = (list) => {
         state.total = list.length;
         const pages = Math.max(1, Math.ceil(list.length / state.perPage));
@@ -462,12 +461,19 @@
         const pages = Math.max(1, Math.ceil(total / per));
         const start = total ? ((state.page - 1) * per + 1) : 0;
         const end = Math.min(total, state.page * per);
+        /* The SAME button as every other pager in the portal (kt-table-filter's pageBtn,
+           and kt-card-pager). Messenger had its own metrics and, uniquely, a "25 / page"
+           dropdown — so pagination looked like two different products depending on which
+           screen you were on (Anthony, 2026-08-30: "some pages it has it numbered in
+           pages and some has a drop down"). Numbered pages is the portal's answer
+           everywhere else, so this is the one that changes. */
         const btn = (lbl, act, dis, cur) =>
           `<button class="kt-pg" data-pg="${act}" type="button" ${dis ? 'disabled' : ''}
-            style="min-width:30px;height:30px;padding:0 8px;border:1px solid ${cur ? '#1F6080' : '#D7DEE5'};
+            style="min-width:34px;padding:6px 10px;border-radius:7px;
+            border:1px solid ${cur ? '#1F6080' : '#E2E8F0'};
             background:${cur ? '#1F6080' : '#fff'};color:${cur ? '#fff' : (dis ? '#C2CBD4' : '#334155')};
-            border-radius:7px;font-size:12.5px;font-weight:${cur ? '800' : '600'};
-            cursor:${dis ? 'default' : 'pointer'};">${lbl}</button>`;
+            font-size:13px;font-weight:600;transition:all .12s;
+            opacity:${dis ? '0.4' : '1'};cursor:${dis ? 'default' : 'pointer'};">${lbl}</button>`;
         // A sliding window of five, so 40 pages does not print 40 buttons.
         let nums = '';
         let from = Math.max(1, state.page - 2);
@@ -476,7 +482,7 @@
         for (let p = from; p <= to; p++) { nums += btn(String(p), p, false, p === state.page); }
         // One page of results needs a count, not a pager.
         const controls = pages > 1
-          ? `${btn('‹', 'prev', state.page <= 1)}${nums}${btn('›', 'next', state.page >= pages)}`
+          ? `${btn('‹ Prev', 'prev', state.page <= 1)}${nums}${btn('Next ›', 'next', state.page >= pages)}`
           : '';
         /* Nothing to page through: say so, and stop. Offering "25 / page" for a table
            with no rows is a control that cannot do anything — Anthony, 2026-08-30:
@@ -488,13 +494,7 @@
         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;
             flex-wrap:wrap;padding:9px 14px;border-top:1px solid #E9EDF1;background:#FBFCFD;">
             <span style="font-size:12.5px;color:#64748B;">${'Showing <strong style="color:#334155;">' + start + '–' + end + '</strong> of <strong style="color:#334155;">' + total + '</strong>'}</span>
-            <span style="display:flex;align-items:center;gap:5px;">${controls}
-              <select class="kt-pgsize" aria-label="Rows per page"
-                style="height:30px;margin-left:4px;border:1px solid #D7DEE5;border-radius:7px;
-                font-size:12.5px;padding:0 6px;color:#334155;background:#fff;">
-                ${PAGE_SIZES.map(s => '<option value="' + s + '"' + (s === per ? ' selected' : '') + '>' + s + ' / page</option>').join('')}
-              </select>
-            </span>
+            <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${controls}</span>
           </div>`;
       };
       const wirePager = (root, repaintFn) => {
@@ -508,15 +508,6 @@
             : (parseInt(v, 10) || 1);
           repaintFn();
         }));
-        const sel = root.querySelector('.kt-pgsize');
-        if (sel) {
-          sel.addEventListener('change', (e) => {
-            e.stopPropagation();
-            state.perPage = parseInt(sel.value, 10) || 25;
-            state.page = 1;
-            repaintFn();
-          });
-        }
       };
       const visible = () => convs.filter(c => isArchived(c) === state.showArchived);
       const archivedCount = () => convs.filter(isArchived).length;

@@ -255,20 +255,35 @@
     hero.innerHTML = '<div class="kt-hero-greet">📝 DAILY LOG</div><h1>Log a moment</h1><div class="kt-hero-sub">Quick-tap diaper / bathroom / nap / meal / bottle entries. They roll up into the parent\'s Today screen instantly.</div>';
     wrap.appendChild(hero);
 
-    // Provider filter — an agency admin spans the WHOLE agency, so they pick a
-    // provider first, then the child. Hidden for staff/parents (single scope).
-    var providerSelWrap = Dom.el('div', { style: 'margin:18px 0 -4px;background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);display:none;' });
-    providerSelWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;' }, 'Provider'));
-    var providerSel = Dom.el('select', { style: 'width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;background:white;' });
-    providerSelWrap.appendChild(providerSel);
-    wrap.appendChild(providerSelWrap);
+    /* Provider + Child in ONE card, side by side where there is room.
 
-    var childSelWrap = Dom.el('div', { style: 'margin:18px 0;background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
-    childSelWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;' }, 'Child'));
-    var childSel = Dom.el('select', { style: 'width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;background:white;' });
+       They were two full-width white cards stacked on top of each other, so two
+       dropdowns took two whole rows of a wide screen before you reached the thing you
+       came here to press (Anthony, 2026-08-30: "could you not put that on one line to
+       save space?"). auto-fit/minmax is the portal's existing answer to this: side by
+       side on a desktop, stacked on a phone, with no breakpoint to maintain.
+
+       The provider field is for an agency admin, who spans the whole agency and picks a
+       provider before a child; for everybody else it is hidden and Child simply takes
+       the full width, which the grid does on its own. */
+    var pickCard = Dom.el('div', { style: 'margin:18px 0;background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-items:end;' });
+    var FIELD_LABEL = 'display:block;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;';
+    var FIELD_SELECT = 'width:100%;box-sizing:border-box;padding:10px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;background:white;';
+
+    var providerSelWrap = Dom.el('div', { style: 'min-width:0;display:none;' });
+    providerSelWrap.appendChild(Dom.el('label', { style: FIELD_LABEL }, 'Provider'));
+    var providerSel = Dom.el('select', { style: FIELD_SELECT });
+    providerSelWrap.appendChild(providerSel);
+    pickCard.appendChild(providerSelWrap);
+
+    var childSelWrap = Dom.el('div', { style: 'min-width:0;' });
+    childSelWrap.appendChild(Dom.el('label', { style: FIELD_LABEL }, 'Child'));
+    var childSel = Dom.el('select', { style: FIELD_SELECT });
     childSel.appendChild(Dom.el('option', { value: '' }, 'Loading children…'));
     childSelWrap.appendChild(childSel);
-    wrap.appendChild(childSelWrap);
+    pickCard.appendChild(childSelWrap);
+
+    wrap.appendChild(pickCard);
 
     var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;' });
     var TYPES = [
@@ -300,7 +315,39 @@
       btn.addEventListener('mouseenter', function () { btn.style.borderColor = t.color; btn.style.background = '#FAFBFC'; });
       btn.addEventListener('mouseleave', function () { btn.style.borderColor = '#E5E7EB'; btn.style.background = 'white'; });
       btn.addEventListener('click', function () {
-        if (!childSel.value || childSel.value === '__all__') { alert('Pick a child to log for.'); return; }
+        if (!childSel.value) { alert('Pick a child to log for.'); return; }
+        /* "All children" is accepted for the things a room genuinely does TOGETHER.
+           Originally outdoor play only; Anthony extended it (2026-08-25) to snack, meal,
+           bottle, sunscreen, mood and nap, which are the entries an educator repeats
+           child-by-child all day. Sunscreen before going out and the afternoon snack are
+           one action about a whole room, and logging them ten times is the single most
+           repetitive thing in the day.
+
+           DIAPER and BATHROOM stay single-child on purpose: those describe one child's
+           body, and filing them for a room would record things that did not happen. */
+        var ALL_OK = ['outdoor', 'snack', 'meal', 'bottle', 'sunscreen', 'mood', 'nap'];
+        if (childSel.value === '__all__') {
+          if (ALL_OK.indexOf(t.type) === -1) {
+            alert('Pick a child to log for — "All children" does not apply to ' + t.label.toLowerCase() + '.');
+            return;
+          }
+          var everyone = CHILDREN.filter(function (c) { return c.at_centre === true; }).map(function (c) { return c.id; });
+          if (!everyone.length) {
+            /* "Nobody is here" and "we were never told who is here" are different
+               answers, and only one of them is a fact. Reporting the second as the
+               first is what made this look broken while children were checked in. */
+            var known = CHILDREN.some(function (c) { return c.at_centre === true || c.at_centre === false; });
+            if (!known) {
+              alert('Today\u2019s attendance hasn\u2019t loaded yet, so \u201cAll children\u201d can\u2019t tell who is here. Reload the screen, or pick a child from the list.');
+            } else {
+              // Logging a whole-room entry for an empty room is a typo, not an intention.
+              alert('No children are checked in right now, so there is nobody to log this for.');
+            }
+            return;
+          }
+          openDetailsModal(t, everyone);
+          return;
+        }
         if (t.late) openLateModal(t, parseInt(childSel.value, 10));
         else if (t.media) openMediaModal(t, parseInt(childSel.value, 10));
         else openDetailsModal(t, parseInt(childSel.value, 10));
@@ -465,12 +512,18 @@
         var cid = providerSel.value;
         var list = cid ? ALL.filter(function (k) { return String(k.centre_id) === String(cid); }) : ALL;
         fillOptions(list.map(function (c) {
-          return { id: c.id, name: c.name, centre_id: c.centre_id, suffix: cid ? '' : (c.centre_name || '') };
+          // at_centre has to survive BOTH maps or the agency-wide path silently
+          // loses it and "All children" thinks the building is empty.
+          return { id: c.id, name: c.name, centre_id: c.centre_id, at_centre: c.at_centre,
+                   suffix: cid ? '' : (c.centre_name || '') };
         }));
       }
       return Api.get('/admin/children').then(function (r) {
         ALL = ((r && r.children) || []).map(function (c) {
-          return { id: c.id, name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim(), centre_id: c.centre_id, centre_name: c.centre_name || '' };
+          return { id: c.id, name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim(),
+                   centre_id: c.centre_id, centre_name: c.centre_name || '',
+                   /* null = the server could not tell us; keep it distinct from false. */
+                   at_centre: (c.is_at_centre === null || c.is_at_centre === undefined) ? null : !!c.is_at_centre };
         });
         var seen = {}; var provs = [];
         ALL.forEach(function (k) { if (k.centre_id && !seen[k.centre_id]) { seen[k.centre_id] = 1; provs.push({ id: k.centre_id, name: k.centre_name }); } });
@@ -988,7 +1041,11 @@
         if (t.type === 'snack' && snackWhen) {
           detail = detail ? (snackWhen + ' snack · ' + detail) : (snackWhen + ' snack');
         }
-        var body = { child_id: childId, log_type: t.type, details: detail || null, notes: notesIn.value.trim() || null };
+        /* childId is an array when "All children" was chosen for outdoor play. The
+           API takes child_ids[] and writes one row per child; child_id still works for
+           every other case, so nothing else changes. */
+        var body = { log_type: t.type, details: detail || null, notes: notesIn.value.trim() || null };
+        if (Array.isArray(childId)) { body.child_ids = childId; } else { body.child_id = childId; }
         if (t.type === 'bottle' && amtIn && amtIn.value) body.amount_oz = parseFloat(amtIn.value);
         // Timestamps: nap uses its asleep→woke inputs (occurred/ended); everything
         // else uses the optional "When?" field so a late-logged moment lands at the
@@ -1014,7 +1071,26 @@
         // `logSaved` makes "Retry upload" retry ONLY the upload. Without it, a
         // failed upload followed by a retry would POST /care/logs a second time and
         // file the same moment twice on the parent's timeline.
-        (logSaved ? Promise.resolve() : Api.post('/care/logs', body).then(function () { logSaved = true; })).then(function () {
+        /* A child must be signed in before anything is logged for them. If they are
+           not, the server refuses with not_signed_in and hands back the wording —
+           the educator can still continue, because catching up after sign-out is a
+           real part of the day, and the entry is then marked as retrospective. */
+        function postLog(extra) {
+          var payload = extra ? Object.assign({}, body, extra) : body;
+          return Api.post('/care/logs', payload).then(function () { logSaved = true; })
+            .catch(function (err) {
+              var m = (err && err.message) || '';
+              var d = (err && err.data) || {};
+              if (!/not_signed_in/.test(m) && d.message !== 'not_signed_in') { throw err; }
+              var ask = d.prompt || 'That child is not signed in right now. Log this anyway as a catch-up entry?';
+              var ok = (window.KT && KT.confirm) ? KT.confirm(ask) : Promise.resolve(window.confirm(ask));
+              return Promise.resolve(ok).then(function (yes) {
+                if (!yes) { var e = new Error('cancelled'); e.ktCancelled = true; throw e; }
+                return postLog({ confirm_absent: 1 });
+              });
+            });
+        }
+        (logSaved ? Promise.resolve() : postLog()).then(function () {
           // The care log is saved. If media was attached, upload it as a second
           // step so a failed/slow upload can never lose the log itself — we report
           // the upload separately rather than rolling anything back.
