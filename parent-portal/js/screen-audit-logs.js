@@ -13,6 +13,7 @@
   // Neither is something you should have to decode while auditing an incident.
   var ACTION_LABELS = {
     'sales.lead_deleted': '🗑 Sales lead deleted',
+    'perf.slow_request': '🐌 Slow response',
     'login': 'Signed in',
     'login_failed': 'Failed sign-in',
     'logout': 'Signed out',
