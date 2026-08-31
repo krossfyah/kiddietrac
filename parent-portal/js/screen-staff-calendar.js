@@ -21,6 +21,10 @@
     centreId: parseInt(sessionStorage.getItem('kt_cal_centre_id') || '0', 10),
     cursor: new Date(),
     roleFilter: '',
+    // WHO a shift belongs to, which is what people mean by "filter by educator".
+    // The existing roleFilter is the role played ON the shift (lead/support), not the
+    // person — so there was no way to say "just show me Bruni's week". (2026-08-30)
+    staffFilter: '',
     centres: [],
     staff: [],
     rooms: [],
@@ -37,6 +41,59 @@
   function monthName(d)    { return d.toLocaleDateString('en-CA', { month: 'long', year: 'numeric' }); }
 
   var ROLE_COLORS = { lead: '#7C3AED', support: '#1F6080', floater: '#F59E0B', volunteer: '#8EC73C' };
+
+  /**
+   * Everything the grid is filtered by, in ONE place.
+   *
+   * The month cell, the week column, the day view and the agenda each carried their own
+   * copy of the role test. Four copies means a new filter has to be added in four places,
+   * and missing one filters the week but not the month — which is indistinguishable, to
+   * the person using it, from "the filter doesn't work".
+   */
+  /**
+   * Time off is somebody's too. Filtering the grid to one educator while another's
+   * holiday stayed on it reads as the filter half-working — and the row carries user_id,
+   * so there is nothing to look up. The ROLE filter deliberately does not apply here:
+   * time off has no shift role to match.
+   */
+  function filterOffs(list) {
+    var out = list || [];
+    if (state.staffFilter) {
+      out = out.filter(function (t) { return String(t.user_id) === String(state.staffFilter); });
+    }
+    return out;
+  }
+
+  /**
+   * Overlay events are a mixed bag — birthdays, child absences, closures and STAFF time
+   * off all arrive in one list. Filtering the calendar to one educator has to drop other
+   * people's time off (otherwise the filter visibly half-works) while keeping everything
+   * that is not about a particular staff member. Keyed on who==='staff' plus the user_id
+   * the API now sends; an event without one is never dropped.
+   */
+  function filterOverlays(list) {
+    var out = list || [];
+    if (state.staffFilter) {
+      out = out.filter(function (e) {
+        if (e && e.who === 'staff' && e.user_id) {
+          return String(e.user_id) === String(state.staffFilter);
+        }
+        return true;
+      });
+    }
+    return out;
+  }
+
+  function applyFilters(list) {
+    var out = list || [];
+    if (state.roleFilter) {
+      out = out.filter(function (s) { return s.role === state.roleFilter; });
+    }
+    if (state.staffFilter) {
+      out = out.filter(function (s) { return String(s.user_id) === String(state.staffFilter); });
+    }
+    return out;
+  }
 
   // v22p42: drag-select across day cells.
   // Mousedown on a cell hint -> remember its data-date.
@@ -126,7 +183,7 @@
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1F6080 0%,#7C3AED 60%,#16637A 100%);' });
-    hero.innerHTML = '<div class="kt-hero-greet">📅 AGENCY</div><h1>Calendar</h1><div class="kt-hero-sub">Click a day to add a shift, or any event to open it. Use + Add for closures, vacation holds, trips and conferences.</div>';
+    hero.innerHTML = '<div class="kt-hero-greet">📅 AGENCY</div><h1>Calendar</h1><div class="kt-hero-sub">Click a day to see everything on it, then any entry for its full details. Use + Add for closures, vacation holds, trips and conferences.</div>';
     wrap.appendChild(hero);
 
     var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:18px 0 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;' });
@@ -207,6 +264,43 @@
     });
     rsel.addEventListener('change', function () { state.roleFilter = rsel.value; reload(calRoot); });
     toolbar.appendChild(rsel);
+
+    /* Staff filter — "show me this educator's shifts". Built empty and filled from
+       /director/schedule/staff (the same list the New-shift form uses, so the two can
+       never disagree about who works at this centre); if that call fails it falls back
+       to the people who actually appear in the loaded range, so the control still works
+       rather than sitting there empty. */
+    var ssel = Dom.el('select', { style: selectStyle(), title: 'Filter by staff member' });
+    var fillStaff = function (people) {
+      Dom.clear(ssel);
+      ssel.appendChild(Dom.el('option', { value: '' }, 'All staff'));
+      (people || []).forEach(function (u) {
+        var nm = u.name || trimName(u);
+        var o = Dom.el('option', { value: String(u.id) }, nm);
+        if (String(state.staffFilter) === String(u.id)) o.selected = true;
+        ssel.appendChild(o);
+      });
+    };
+    fillStaff(state.staff);
+    if (! (state.staff || []).length) {
+      Api.get('/director/schedule/staff?centre_id=' + state.centreId).then(function (r) {
+        state.staff = (r && (r.staff || r.data)) || [];
+        fillStaff(state.staff);
+      }).catch(function () {
+        // Whoever is actually on the rota this period — better than an empty picker.
+        var seen = {};
+        Object.keys(state.days || {}).forEach(function (k) {
+          ((state.days[k] && state.days[k].shifts) || []).forEach(function (sh) {
+            if (sh.user_id && !seen[sh.user_id]) seen[sh.user_id] = { id: sh.user_id, name: sh.user_name };
+          });
+        });
+        state.staff = Object.keys(seen).map(function (k) { return seen[k]; })
+          .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+        fillStaff(state.staff);
+      });
+    }
+    ssel.addEventListener('change', function () { state.staffFilter = ssel.value; reload(calRoot); });
+    toolbar.appendChild(ssel);
 
     // + Add — a menu now, because a shift is only one of the things that lands on a day.
     var add = Dom.el('button', {
@@ -426,19 +520,19 @@
       var dj = addDays(start, j);
       var key = ymd(dj);
       var dayShifts = (state.days[key] && state.days[key].shifts) || [];
-      if (state.roleFilter) dayShifts = dayShifts.filter(function (s) { return s.role === state.roleFilter; });
+      dayShifts = applyFilters(dayShifts);
       var cell = Dom.el('div', { style: 'border-left:1px solid #F3F4F6;padding:6px;min-height:120px;cursor:pointer;position:relative;', 'data-date': key });
       cell.addEventListener('click', function (e) {
-        // Only open new-shift modal when clicking the cell itself, not a shift
+        // The day opens the DAY, not a blank shift form. Adding lives inside it.
         if (e.target === e.currentTarget || e.target.dataset.cellBg) {
-          openShiftModal({ date: e.currentTarget.dataset.date }, calRoot);
+          openDayModal(e.currentTarget.dataset.date, calRoot);
         }
       });
       // Cell hover hint
       var hint = Dom.el('div', { 'data-cell-bg': '1', style: 'position:absolute;inset:0;pointer-events:auto;' });
       cell.appendChild(hint);
       // Above the shifts: who is away is the thing you need before reading who is on.
-      ((state.timeOff && state.timeOff[key]) || []).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
+      filterOffs((state.timeOff && state.timeOff[key]) || []).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
       // Birthdays, absences, vacations and closures. These were added to the month view
       // only on the first pass, and week is the default view — so the whole feature was
       // invisible to anyone who had not switched to month.
@@ -473,7 +567,7 @@
       var inMonth = cursor.getMonth() === monthMid;
       var isToday = key === ymd(new Date());
       var dayShifts = (state.days[key] && state.days[key].shifts) || [];
-      if (state.roleFilter) dayShifts = dayShifts.filter(function (s) { return s.role === state.roleFilter; });
+      dayShifts = applyFilters(dayShifts);
       // Today is an accent, the way a calendar is read: a tinted cell and a ring, so the
       // eye lands on it without reading a single date. A pill on the number alone is easy
       // to miss in a grid of forty-two of them.
@@ -485,7 +579,7 @@
       });
       cell.addEventListener('click', function (e) {
         if (e.target === e.currentTarget || e.target.dataset.cellBg) {
-          openShiftModal({ date: e.currentTarget.dataset.date }, calRoot);
+          openDayModal(e.currentTarget.dataset.date, calRoot);
         }
       });
       cell.appendChild(Dom.el('div', {
@@ -497,7 +591,7 @@
       }, String(cursor.getDate())));
       var hint = Dom.el('div', { 'data-cell-bg': '1', style: 'position:absolute;inset:0;' });
       cell.appendChild(hint);
-      ((state.timeOff && state.timeOff[key]) || []).slice(0, 2).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
+      filterOffs((state.timeOff && state.timeOff[key]) || []).slice(0, 2).forEach(function (t) { cell.appendChild(timeOffChip(t)); });
       // Closures first — a closed day changes what every other chip on it means.
       overlaysFor(key).slice(0, 3).forEach(function (ev) { cell.appendChild(overlayChip(ev, calRoot)); });
       if (overlaysFor(key).length > 3) {
@@ -538,7 +632,11 @@
     return byDay;
   }
 
-  function overlaysFor(key) { return (state.overlays && state.overlays[key]) || []; }
+  /* The GRID's view of a day's overlays — staff-filtered, because six call sites each
+     wrapping the call themselves is how one of them gets missed. The day modal wants the
+     whole day and asks for it by name below. */
+  function overlaysFor(key) { return filterOverlays(allOverlaysFor(key)); }
+  function allOverlaysFor(key) { return (state.overlays && state.overlays[key]) || []; }
 
   function overlayChip(ev, calRoot) {
     var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
@@ -560,11 +658,11 @@
     var wrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);padding:16px;' });
 
     var shifts = (state.days[key] && state.days[key].shifts) || [];
-    if (state.roleFilter) shifts = shifts.filter(function (s) { return s.role === state.roleFilter; });
+    shifts = applyFilters(shifts);
     shifts = shifts.slice().sort(function (a, b) { return String(a.starts_hm).localeCompare(String(b.starts_hm)); });
 
     var evs = overlaysFor(key);
-    var offs = (state.timeOff && state.timeOff[key]) || [];
+    var offs = filterOffs((state.timeOff && state.timeOff[key]) || []);
 
     if (evs.length) {
       wrap.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin:0 0 8px;' }, 'On this day'));
@@ -632,9 +730,9 @@
       var d = addDays(wk, i);
       var key = ymd(d);
       var evs = overlaysFor(key);
-      var offs = (state.timeOff && state.timeOff[key]) || [];
+      var offs = filterOffs((state.timeOff && state.timeOff[key]) || []);
       var shifts = (state.days[key] && state.days[key].shifts) || [];
-      if (state.roleFilter) shifts = shifts.filter(function (x) { return x.role === state.roleFilter; });
+      shifts = applyFilters(shifts);
       if (!evs.length && !offs.length && !shifts.length) continue;
       anything = true;
 
@@ -1047,6 +1145,158 @@
     document.body.appendChild(overlay);
   }
 
+  /**
+   * Everything on one day, in one list.
+   *
+   * Reads the state the grid already holds rather than fetching again — the day you
+   * clicked is by definition inside the range on screen, so a round trip would only add
+   * latency and a chance to disagree with the cells behind the modal.
+   *
+   * Rows delegate to the same modals the chips use. That is the point: the detail view,
+   * "added by", Edit and Delete all already existed and were simply unreachable for
+   * anything the cell had clipped.
+   */
+  function openDayModal(dateKey, calRoot) {
+    var overlay = Dom.el('div', {
+      style: 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9000;'
+           + 'display:flex;align-items:center;justify-content:center;padding:20px;',
+    });
+    var modal = Dom.el('div', {
+      style: 'background:#fff;border-radius:14px;max-width:520px;width:100%;'
+           + 'max-height:82vh;display:flex;flex-direction:column;overflow:hidden;'
+           + 'box-shadow:0 20px 60px rgba(15,23,42,.28);',
+    });
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function close() {
+      document.removeEventListener('keydown', onEsc);
+      overlay.remove();
+    }
+    function onEsc(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onEsc);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+
+    var isToday = dateKey === ymd(new Date());
+
+    // ── header ──
+    var head = Dom.el('div', {
+      style: 'padding:16px 20px 14px;border-bottom:1px solid #E5E7EB;display:flex;'
+           + 'align-items:flex-start;justify-content:space-between;gap:12px;flex:0 0 auto;',
+    });
+    var hcol = Dom.el('div', { style: 'min-width:0;' });
+    hcol.appendChild(Dom.el('div', {
+      style: 'font-size:17px;font-weight:800;color:#0D1B2A;line-height:1.25;',
+    }, fullDayLabel(dateKey) + (isToday ? '  ·  Today' : '')));
+    head.appendChild(hcol);
+    var x = Dom.el('button', {
+      type: 'button', 'aria-label': 'Close',
+      style: 'background:transparent;border:none;font-size:22px;line-height:1;color:#64748B;'
+           + 'cursor:pointer;padding:0 2px;flex-shrink:0;',
+    }, '×');
+    x.addEventListener('click', close);
+    head.appendChild(x);
+    modal.appendChild(head);
+
+    // ── body ──
+    var body = Dom.el('div', { style: 'padding:6px 20px 14px;overflow-y:auto;flex:1 1 auto;' });
+    modal.appendChild(body);
+
+    var section = function (label) {
+      body.appendChild(Dom.el('div', {
+        style: 'font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;'
+             + 'color:#64748B;margin:14px 0 6px;',
+      }, label));
+    };
+    var rowShell = function (icon, title, sub, tone) {
+      var r = Dom.el('div', {
+        style: 'display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-radius:9px;'
+             + 'border:1px solid #EEF2F6;margin-bottom:6px;cursor:pointer;background:#fff;',
+      });
+      r.addEventListener('mouseenter', function () { r.style.background = '#F8FAFC'; });
+      r.addEventListener('mouseleave', function () { r.style.background = '#fff'; });
+      r.appendChild(Dom.el('span', { style: 'font-size:15px;line-height:1.3;flex:0 0 auto;' }, icon || '•'));
+      var col = Dom.el('div', { style: 'min-width:0;flex:1;' });
+      col.appendChild(Dom.el('div', {
+        style: 'font-size:13.5px;font-weight:600;color:#0F172A;', }, title || ''));
+      if (sub) {
+        col.appendChild(Dom.el('div', {
+          style: 'font-size:12px;color:' + (tone || '#64748B') + ';margin-top:1px;', }, sub));
+      }
+      r.appendChild(col);
+      r.appendChild(Dom.el('span', { style: 'color:#CBD5E1;font-size:16px;flex:0 0 auto;' }, '›'));
+      return r;
+    };
+
+    var evs = allOverlaysFor(dateKey);
+    var offs = (state.timeOff && state.timeOff[dateKey]) || [];
+    var shifts = (state.days[dateKey] && state.days[dateKey].shifts) || [];
+    // The grid's own filters — role AND staff — are deliberately NOT applied here. You
+    // clicked a day to see the day; silently hiding half of it because a filter is set
+    // upstairs is how a shift gets double-booked.
+    var total = evs.length + offs.length + shifts.length;
+
+    if (!total) {
+      body.appendChild(Dom.el('div', {
+        style: 'padding:22px 4px 18px;text-align:center;color:#94A3B8;font-size:13.5px;',
+      }, 'Nothing scheduled on this day.'));
+    }
+
+    if (evs.length) {
+      section(evs.length === 1 ? 'Event' : 'Events');
+      evs.forEach(function (ev) {
+        var r = rowShell(ev.icon, ev.title, ev.detail || (ev.type_label || KIND_LABEL[ev.kind] || ''));
+        r.addEventListener('click', function () { close(); openEventModal(ev, calRoot); });
+        body.appendChild(r);
+      });
+    }
+
+    if (offs.length) {
+      section('Staff away');
+      offs.forEach(function (t) {
+        var who = t.user_name || t.name || 'Staff';
+        var r = rowShell('🌴', who, t.reason || t.type || 'Time off', '#B45309');
+        // Time off has its own screen; the chip did nothing, so neither does this beyond
+        // saying who is away.
+        r.style.cursor = 'default';
+        r.removeChild(r.lastChild);
+        body.appendChild(r);
+      });
+    }
+
+    if (shifts.length) {
+      section(shifts.length === 1 ? 'Shift' : 'Shifts');
+      shifts.forEach(function (sh) {
+        var who = sh.user_name || sh.name || 'Unassigned';
+        var when = [sh.starts_at, sh.ends_at].filter(Boolean).join(' – ');
+        var r = rowShell('👤', who,
+          [when, sh.role, sh.room_name].filter(Boolean).join('  ·  '));
+        r.addEventListener('click', function () { close(); openShiftModal(sh, calRoot); });
+        body.appendChild(r);
+      });
+    }
+
+    // ── footer ──
+    var foot = Dom.el('div', {
+      style: 'display:flex;gap:8px;justify-content:flex-end;padding:13px 20px 16px;'
+           + 'border-top:1px solid #E5E7EB;flex:0 0 auto;',
+    });
+    var add = Dom.el('button', {
+      type: 'button',
+      style: 'background:#fff;color:#1F6080;border:1px solid #CBD5E1;padding:8px 14px;'
+           + 'border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;',
+    }, '＋ Add shift');
+    add.addEventListener('click', function () { close(); openShiftModal({ date: dateKey }, calRoot); });
+    var done = Dom.el('button', {
+      type: 'button',
+      style: 'background:#1F6080;color:#fff;border:none;padding:8px 18px;border-radius:8px;'
+           + 'font-weight:700;cursor:pointer;font-size:13px;',
+    }, 'Close');
+    done.addEventListener('click', close);
+    foot.appendChild(add); foot.appendChild(done);
+    modal.appendChild(foot);
+  }
+
   function openShiftModal(prefill, calRoot) {
     var isEdit = prefill && prefill.id;
     var hasRange = prefill && prefill.dateRange && prefill.dateRange.start && prefill.dateRange.end;
@@ -1207,6 +1457,9 @@
 
   // ─── Styling helpers ───────────────────────────────────────────────
   function inputStyle() { return 'width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:14px;background:white;'; }
+  function trimName(u) {
+    return String((u && (u.name || ((u.first_name || '') + ' ' + (u.last_name || '')))) || '').trim() || 'Staff';
+  }
   function selectStyle() { return 'background:white;border:1px solid #D1D5DB;border-radius:8px;padding:7px 12px;font-size:13px;color:#374151;cursor:pointer;'; }
   function navBtnStyle() { return 'background:white;border:1px solid #D1D5DB;border-radius:8px;padding:7px 10px;cursor:pointer;font-size:13px;color:#374151;min-width:36px;'; }
   function labelEl(t) { return Dom.el('label', { style: 'display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;' }, t); }

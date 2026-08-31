@@ -58,6 +58,7 @@ final class CalendarOverlayController extends Controller
             $cal['show_timeoff'] ? $this->staffTimeOff($agencyId, $centreIds, $from, $to) : [],
             $cal['show_vacations'] ? $this->vacationHolds($centreIds, $from, $to) : [],
             $cal['show_closures'] ? $this->closures($centreIds, $from, $to) : [],
+            ($cal['show_departures'] ?? true) ? $this->departures($agencyId, $centreIds, $from, $to) : [],
         );
 
         if (! $cal['show_pending']) {
@@ -71,6 +72,118 @@ final class CalendarOverlayController extends Controller
             'to' => $to->toDateString(),
             'events' => $events,
         ]);
+    }
+
+    /**
+     * Families leaving, and staff whose last day falls in this range.
+     *
+     * Three sources because a departure is recorded in three places and always has been:
+     * a family's agreed last day, a child withdrawal, and a staff member's exit. They are
+     * one thing to the person reading a calendar, so they are drawn as one kind.
+     *
+     * A date still ahead is marked pending — it is a plan, and plans change; a date past
+     * is stated plainly, because by then it is simply what happened.
+     */
+    private function departures(int $agencyId, array $centreIds, Carbon $from, Carbon $to): array
+    {
+        $out = [];
+        $today = now()->toDateString();
+        $f = $from->toDateString();
+        $t = $to->toDateString();
+
+        // ── Families ────────────────────────────────────────────────────────
+        try {
+            $fams = DB::table('families as fam')
+                ->join('centres as c', 'c.id', '=', 'fam.centre_id')
+                ->whereIn('fam.centre_id', $centreIds)
+                ->whereNotNull('fam.departure_date')
+                ->whereBetween('fam.departure_date', [$f, $t])
+                ->get(['fam.id', 'fam.family_name', 'fam.departure_date', 'fam.departure_applied_at', 'c.name as centre_name']);
+
+            foreach ($fams as $r) {
+                $ahead = $r->departure_date > $today;
+                $out[] = [
+                    'date' => (string) $r->departure_date,
+                    'kind' => 'departure',
+                    'icon' => '👋',
+                    'title' => 'Last day — '.$r->family_name,
+                    'detail' => $ahead
+                        ? 'Family leaving '.$r->centre_name.'. They keep access until this day.'
+                        : 'Family left '.$r->centre_name.'.',
+                    'who' => 'family',
+                    'tone' => $ahead ? 'pending' : 'closed',
+                    'family_id' => (int) $r->id,
+                ];
+            }
+        } catch (\Throwable $e) {
+            // A missing column must not empty the whole calendar.
+        }
+
+        // ── Individual children ─────────────────────────────────────────────
+        try {
+            $kids = DB::table('children as ch')
+                ->join('families as fam', 'fam.id', '=', 'ch.family_id')
+                ->whereIn('fam.centre_id', $centreIds)
+                ->whereNotNull('ch.withdrawn_at')
+                ->whereBetween('ch.withdrawn_at', [$f, $t])
+                // A family departure already draws the whole family; drawing each child
+                // as well would bury the day under one event per sibling.
+                ->whereNull('fam.departure_date')
+                ->get(['ch.id', 'ch.first_name', 'ch.preferred_name', 'ch.last_name', 'ch.withdrawn_at']);
+
+            foreach ($kids as $r) {
+                $name = trim(($r->preferred_name ?: $r->first_name).' '.($r->last_name ?? ''));
+                $ahead = $r->withdrawn_at > $today;
+                $out[] = [
+                    'date' => substr((string) $r->withdrawn_at, 0, 10),
+                    'kind' => 'departure',
+                    'icon' => '👋',
+                    'title' => 'Last day — '.$name,
+                    'detail' => $ahead ? 'Child withdrawing.' : 'Child withdrawn.',
+                    'who' => 'child',
+                    'tone' => $ahead ? 'pending' : 'closed',
+                    'child_id' => (int) $r->id,
+                ];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        // ── Staff and providers ─────────────────────────────────────────────
+        try {
+            $staff = DB::table('audit_logs as a')
+                ->leftJoin('users as u', 'u.id', '=', 'a.entity_id')
+                ->where('a.entity_type', 'user')
+                ->whereIn('a.action', ['staff.offboarded', 'centre.offboarded', 'provider.offboarded'])
+                ->where('a.agency_id', $agencyId)
+                ->get(['a.entity_id', 'a.payload', 'u.first_name', 'u.last_name']);
+
+            foreach ($staff as $r) {
+                $payload = json_decode((string) $r->payload, true) ?: [];
+                $day = $payload['last_day'] ?? $payload['effective_date'] ?? null;
+                if (! $day) {
+                    continue;
+                }
+                $day = substr((string) $day, 0, 10);
+                if ($day < $f || $day > $t) {
+                    continue;
+                }
+                $name = trim(($r->first_name ?? '').' '.($r->last_name ?? '')) ?: 'A team member';
+                $ahead = $day > $today;
+                $out[] = [
+                    'date' => $day,
+                    'kind' => 'departure',
+                    'icon' => '👋',
+                    'title' => 'Last day — '.$name,
+                    'detail' => $ahead ? 'Leaving the team.' : 'Left the team.',
+                    'who' => 'staff',
+                    'tone' => $ahead ? 'pending' : 'closed',
+                    'user_id' => (int) $r->entity_id,
+                ];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $out;
     }
 
     /** Birthdays recur, so they are matched on month-day across the range, not on the stored year. */
@@ -167,7 +280,8 @@ final class CalendarOverlayController extends Controller
             ->whereIn('t.status', ['approved', 'pending'])
             ->whereDate('t.start_at', '<=', $to->toDateString())
             ->whereDate('t.end_at', '>=', $from->toDateString())
-            ->get(['t.start_at', 't.end_at', 't.request_type', 't.status', 'u.first_name', 'u.last_name']);
+            ->get(['t.user_id', 't.start_at', 't.end_at', 't.request_type', 't.status', 't.all_day',
+                   't.start_time', 't.end_time', 'u.first_name', 'u.last_name']);
 
         $out = [];
         foreach ($rows as $r) {
@@ -177,6 +291,11 @@ final class CalendarOverlayController extends Controller
                     'kind' => 'timeoff',
                     'icon' => $r->status === 'pending' ? '🕗' : '🌴',
                     'title' => trim($r->first_name . ' ' . $r->last_name),
+                    /* WHOSE time off, as an id. The calendar can filter to one staff
+                       member, and matching on the displayed name is not safe here — the
+                       same person legitimately holds several accounts and different
+                       people share names. (2026-08-30) */
+                    'user_id' => (int) $r->user_id,
                     'detail' => trim(str_replace('_', ' ', (string) $r->request_type))
                         . ($r->status === 'pending' ? ' (pending)' : ''),
                     'who' => 'staff',
