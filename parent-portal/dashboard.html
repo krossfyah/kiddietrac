@@ -508,7 +508,11 @@ function showReloadGate(){
   <script src="/js/kt-pin.js?v=20260809navy" defer></script>
   <script src="/js/kt-biometric.js?v=20260817bio" defer></script>
   <script src="/js/kt-impersonate.js?v=20260724a11y" defer></script>
-  <script src="/js/kt-crash-report.js?v=20260826nofetch" defer></script>
+  <script src="/js/kt-crash-report.js?v=20260831frz1" defer></script>
+  <!-- Freeze watchdog: a heartbeat that notices the main thread being blocked, and
+       reports a stall through the same pipe as a crash. Must load AFTER the crash
+       reporter, whose KT.reportProblem it uses. -->
+  <script src="/js/kt-freeze-watch.js?v=20260831frz1" defer></script>
   <script src="/js/kt-progress.js?v=20260709prog" defer></script>
   <script src="/js/kt-mobilenav.js?v=20260824sw1" defer></script>
   <script src="/js/kt-clockbar.js?v=20260831clk1" defer></script>
