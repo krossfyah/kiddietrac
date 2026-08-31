@@ -72,7 +72,7 @@
         + (t.is_group ? groupAvatar(t.members, 44) : avatar(t.name, t.photo_url, 44))
         + '<div style="flex:1;min-width:0;"><div style="display:flex;justify-content:space-between;gap:8px;">'
         + '<span style="font-weight:700;color:#0F172A;">' + esc(t.name)
-        + (t.is_group ? '<span style="font-weight:600;color:#64748B;font-size:12px;"> · ' + (t.member_count || 0) + ' members</span>' : '')
+        + (t.is_group ? '<span style="font-weight:600;color:#64748B;font-size:12px;"> · ' + (t.member_count || 0) + ((t.member_count || 0) === 1 ? ' member' : ' members') + '</span>' : '')
         + '</span>'
         + '<span style="font-size:11px;color:#94A3B8;white-space:nowrap;">' + esc(rel(t.at)) + '</span></div>'
         + '<div style="font-size:13px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(t.preview || '') + '</div></div>'
@@ -320,7 +320,7 @@
       /* Who is in the room, spelled out. In a group "who can see this" must never be
          something you have to work out from the bubbles. */
       + (people.length ? '<div style="font-size:12px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
-          + (data.is_group ? esc(String(data.member_count || people.length)) + ' members · ' : '')
+          + (data.is_group ? esc(String(data.member_count || people.length)) + ((data.member_count || people.length) === 1 ? ' member · ' : ' members · ') : '')
           + esc(others.map(function (p) { return p.name; }).join(', ') || 'just you') + '</div>' : '')
       + '</div>'
       + (threadId ? '<button id="tc-add" title="Add people to this conversation" style="background:#fff;border:1px solid #D1D5DB;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer;white-space:nowrap;">＋ Add people</button>' : '')

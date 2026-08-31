@@ -491,6 +491,132 @@ final class TeamChatController extends Controller
     }
 
     /**
+     * POST /provider/team-threads/{thread}/leave — take yourself out of a group.
+     *
+     * A group with no way out is a room you can be put in and never escape, which is why
+     * this shipped alongside the ability to add people rather than after it. Leaving is
+     * always your own decision, so it needs no permission beyond being in the thread.
+     *
+     * Only groups. Leaving a 1:1 would leave the other person talking to nobody with no
+     * indication why — archiving is what that case already has.
+     */
+    public function leave(Request $request, int $thread): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+
+        $row = DB::table('staff_threads')->where('id', $thread)->first();
+        if (! $row || ! $row->is_group) {
+            return response()->json(['message' => 'You can only leave a group conversation.'], 422);
+        }
+
+        $now = now();
+        // The line goes in BEFORE the row comes out: systemLine() touches the thread, and
+        // writing it afterwards would be a message posted by someone no longer in it.
+        $this->systemLine($thread, $uid, $this->nameOf($uid) . ' left', $now);
+        DB::table('staff_thread_participants')->where('thread_id', $thread)->where('user_id', $uid)->delete();
+
+        return response()->json(['left' => true], 200);
+    }
+
+    /**
+     * DELETE /provider/team-threads/{thread}/participants/{user} — remove someone else.
+     *
+     * Deliberately NARROWER than adding. Anyone in the room may bring a colleague in;
+     * cutting somebody's access to a conversation they have been part of is the group
+     * OWNER's call, or a director's/admin's. Without that an educator could remove their
+     * director from a thread about them.
+     *
+     * Note the rule is "a MEMBER who is also the creator or a director", not "any
+     * director": the isParticipant gate runs first, so a director who is not in the group
+     * gets the same 404 as anyone else. They cannot read it either, and reaching into a
+     * conversation you cannot see is not a power worth having.
+     */
+    public function removeParticipant(Request $request, int $thread, int $user): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+
+        // Removing yourself is leaving, and leaving needs no permission — so route it
+        // there rather than refusing on the ownership rule below.
+        if ($user === $uid) return $this->leave($request, $thread);
+
+        $row = DB::table('staff_threads')->where('id', $thread)->first();
+        if (! $row || ! $row->is_group) {
+            return response()->json(['message' => 'Only a group conversation has members to remove.'], 422);
+        }
+        if (! $this->canManageGroup($request, $uid, $row)) {
+            return response()->json(['message' => 'Only the person who created this group, or a director in it, can remove someone.'], 403);
+        }
+        if (! $this->isParticipant($user, $thread)) {
+            return response()->json(['message' => 'They are not in this conversation.'], 422);
+        }
+
+        $now = now();
+        DB::table('staff_thread_participants')->where('thread_id', $thread)->where('user_id', $user)->delete();
+        $this->systemLine($thread, $uid, $this->nameOf($uid) . ' removed ' . $this->nameOf($user), $now);
+
+        /* Told, but not pushed. Losing access silently is confusing — you would just find
+           the conversation gone — while a phone banner announcing it would be a needless
+           sting. The in-app row is the honest middle. */
+        try {
+            DB::table('notifications')->insert([
+                'user_id' => $user, 'type' => 'team_message',
+                'title'   => '👥 Removed from a group',
+                'body'    => $this->nameOf($uid) . ' removed you from “' . ($row->title ?: 'a group conversation') . '”.',
+                'data'    => json_encode([]),
+                'created_at' => $now,
+            ]);
+        } catch (\Throwable $e) { /* best-effort */ }
+
+        return response()->json(['removed' => true], 200);
+    }
+
+    /**
+     * PATCH /provider/team-threads/{thread} {title} — rename a group.
+     *
+     * Any participant may. A name is cosmetic, shared, reversible and visible to everyone
+     * the moment it changes — none of which is true of removing a person, which is why
+     * that one is restricted and this is not.
+     */
+    public function rename(Request $request, int $thread): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+
+        $row = DB::table('staff_threads')->where('id', $thread)->first();
+        if (! $row || ! $row->is_group) {
+            return response()->json(['message' => 'Only a group conversation has a name.'], 422);
+        }
+
+        $data = $request->validate(['title' => ['required', 'string', 'max:80']]);
+        $title = trim($data['title']);
+        if ($title === '') return response()->json(['message' => 'Give the group a name.'], 422);
+        if ($title === (string) $row->title) return response()->json(['renamed' => false], 200);
+
+        $now = now();
+        DB::table('staff_threads')->where('id', $thread)->update(['title' => $title, 'updated_at' => $now]);
+        $this->systemLine($thread, $uid, $this->nameOf($uid) . ' renamed the group to “' . $title . '”', $now);
+
+        return response()->json(['renamed' => true, 'title' => $title], 200);
+    }
+
+    /**
+     * May this person restructure the group — i.e. remove somebody from it? The creator,
+     * or anyone senior enough to be running the centre. Checked against the roles the
+     * caller actually holds, not against a role name passed in.
+     */
+    private function canManageGroup(Request $request, int $uid, $row): bool
+    {
+        if ((int) ($row->created_by ?? 0) === $uid) return true;
+        $roles = \App\Support\UserRoles::names($request);
+        foreach (['platform_admin', 'agency_admin', 'centre_director'] as $r) {
+            if (in_array($r, $roles, true)) return true;
+        }
+        return false;
+    }
+
+    /**
      * The subset of $ids that really are colleagues the caller may message, or a 403.
      * One gate for both group paths — the 1:1 start() check was inline, and a second
      * inline copy is how one of them ends up not being updated.
@@ -639,6 +765,10 @@ final class TeamChatController extends Controller
         return response()->json([
             'thread_id' => $thread,
             'is_group'  => $isGroup,
+            // What this caller may do, decided here rather than re-derived in the browser
+            // from a role string — the buttons and the endpoints must agree.
+            'can_manage' => $isGroup && $row ? $this->canManageGroup($request, $uid, $row) : false,
+            'created_by' => $row->created_by ?? null,
             'title'     => $row->title ?? null,
             'name'      => $isGroup
                 ? (trim((string) ($row->title ?? '')) ?: self::memberNames($others->all()))

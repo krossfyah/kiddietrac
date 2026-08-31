@@ -398,7 +398,7 @@
             /* A group has no single counterpart, so there is no one role to print.
                "4 members" is the honest label and the one that tells a room full of
                people apart from a colleague at a glance. */
-            other_role: t.is_group ? ((t.member_count || 0) + ' members') : (t.role || t.other_role || ''),
+            other_role: t.is_group ? ((t.member_count || 0) + ((t.member_count || 0) === 1 ? ' member' : ' members')) : (t.role || t.other_role || ''),
             is_group: !!t.is_group,
             // Carried through so a colleague row ticks like a family row.
             last_status: t.last_status || null,
@@ -967,6 +967,105 @@
     setTimeout(function () { (nameEl || modal.querySelector('#kt-pk-q')).focus(); }, 40);
   }
 
+  /**
+   * Everything you can do to a group once it exists, in one place: rename it, see who is
+   * in it, remove somebody, leave. Split across the header it would be four affordances
+   * competing for a bar that also has to fit the member list.
+   *
+   * `data` is the thread payload — it already carries participants, can_manage and title,
+   * so this opens instantly rather than re-fetching what the caller just read.
+   * onChanged() repaints the thread; onGone() is for when you are no longer in it.
+   */
+  function openGroupDetails(tid, data, onChanged, onGone) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px;';
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:white;border-radius:14px;padding:22px;max-width:480px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);';
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+
+    var people = data.participants || [];
+    var canManage = !!data.can_manage;
+
+    modal.innerHTML =
+      '<h3 style="margin:0 0 12px;font-size:18px;">\u{1F465} Group details</h3>' +
+      '<label style="display:block;font-size:12.5px;font-weight:700;color:#475569;margin-bottom:4px;">Name</label>' +
+      '<div style="display:flex;gap:7px;margin-bottom:16px;">' +
+        '<input id="kt-gd-name" maxlength="80" value="' + escapeHtml(data.title || '') + '" style="flex:1;min-width:0;padding:9px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
+        '<button id="kt-gd-rename" style="flex:0 0 auto;background:#1F6080;color:#fff;border:none;border-radius:8px;padding:0 14px;font-size:13px;font-weight:700;cursor:pointer;">Save</button>' +
+      '</div>' +
+      '<div style="font-size:12.5px;font-weight:700;color:#475569;margin-bottom:6px;">' + people.length + (people.length === 1 ? ' member' : ' members') + '</div>' +
+      '<div id="kt-gd-people" style="max-height:34vh;overflow:auto;border:1px solid #EEF2F7;border-radius:9px;padding:4px;margin-bottom:12px;">' +
+        people.map(function (p) {
+          return '<div class="kt-gd-row" data-uid="' + p.id + '" style="display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;">' +
+            '<span style="flex:1;min-width:0;font-size:14px;color:#0F172A;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+              escapeHtml(p.name) + (p.me ? ' <span style="font-weight:500;color:#64748B;">(you)</span>' : '') +
+              (String(p.id) === String(data.created_by) ? ' <span style="font-weight:500;color:#94A3B8;">\u00B7 created this</span>' : '') +
+            '</span>' +
+            /* No remove button against yourself — that is Leave, which is its own thing
+               below and needs no permission. */
+            ((canManage && !p.me)
+              ? '<button class="kt-gd-rm" data-uid="' + p.id + '" data-name="' + escapeHtml(p.name) + '" title="Remove from group" style="flex:0 0 auto;background:none;border:none;color:#B91C1C;font-size:16px;cursor:pointer;padding:0 4px;line-height:1;">\u00D7</button>'
+              : '') +
+          '</div>';
+        }).join('') +
+      '</div>' +
+      (canManage ? '' : '<div style="font-size:12px;color:#94A3B8;margin:-6px 0 12px;">Only the person who created this group, or a director in it, can remove members.</div>') +
+      '<div id="kt-gd-err" style="color:#DC2626;font-size:13px;min-height:16px;margin-bottom:4px;"></div>' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">' +
+        '<button id="kt-gd-leave" style="background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Leave group</button>' +
+        '<button id="kt-gd-close" style="background:white;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Close</button>' +
+      '</div>';
+
+    var err = modal.querySelector('#kt-gd-err');
+    function fail(e) { err.textContent = (e && e.message) || 'Could not do that.'; }
+
+    modal.querySelector('#kt-gd-rename').addEventListener('click', async function () {
+      var btn = this, name = modal.querySelector('#kt-gd-name').value.trim();
+      if (!name) { fail({ message: 'Give the group a name.' }); return; }
+      btn.disabled = true; btn.textContent = 'Saving…'; err.textContent = '';
+      try {
+        await api('PATCH', '/provider/team-threads/' + tid, { title: name });
+        overlay.remove();
+        if (onChanged) onChanged();
+      } catch (e) { btn.disabled = false; btn.textContent = 'Save'; fail(e); }
+    });
+
+    modal.querySelector('#kt-gd-people').addEventListener('click', async function (e) {
+      var b = e.target.closest && e.target.closest('.kt-gd-rm');
+      if (!b) return;
+      var uid = b.getAttribute('data-uid'), nm = b.getAttribute('data-name');
+      /* The portal's own confirm, not window.confirm — this one is losing somebody their
+         access to a conversation, and it should read like the rest of the product. */
+      var go = (window.KT && KT.confirm)
+        ? await KT.confirm({ title: 'Remove ' + nm + '?', description: 'They will no longer see this conversation or anything posted in it.', tone: 'danger' })
+        : true;
+      if (!go) return;
+      b.disabled = true; err.textContent = '';
+      try {
+        await api('DELETE', '/provider/team-threads/' + tid + '/participants/' + uid);
+        overlay.remove();
+        if (onChanged) onChanged();
+      } catch (ex) { b.disabled = false; fail(ex); }
+    });
+
+    modal.querySelector('#kt-gd-leave').addEventListener('click', async function () {
+      var go = (window.KT && KT.confirm)
+        ? await KT.confirm({ title: 'Leave this group?', description: 'You will stop receiving its messages and will not be able to open it again unless somebody adds you back.', tone: 'danger' })
+        : true;
+      if (!go) return;
+      var btn = this; btn.disabled = true; btn.textContent = 'Leaving…'; err.textContent = '';
+      try {
+        await api('POST', '/provider/team-threads/' + tid + '/leave', {});
+        overlay.remove();
+        if (onGone) onGone();
+      } catch (e) { btn.disabled = false; btn.textContent = 'Leave group'; fail(e); }
+    });
+
+    modal.querySelector('#kt-gd-close').addEventListener('click', function () { overlay.remove(); });
+  }
+
   function openAddPeopleModal(tid, existingIds, onDone) {
     pickColleaguesModal({
       title: '\uFF0B Add people', sub: 'They will join this conversation.',
@@ -1339,11 +1438,17 @@
             var others = ppl.filter(function (p) { return !p.me; });
             var names = others.map(function (p) { return p.name; }).join(', ');
             return '<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:#F1F5F9;border-bottom:1px solid #E5E7EB;flex:0 0 auto;font-size:12px;color:#475569;">' +
-              '<span style="min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-                (data.is_group
-                  ? '\u{1F465} <strong>' + escapeHtml(String(data.member_count || ppl.length)) + ' members</strong> · ' + escapeHtml(names)
-                  : 'Private with ' + escapeHtml(names || 'a colleague')) +
-              '</span>' +
+              (data.is_group
+                ? (function () {
+                    /* "1 members ·" with nothing after it — what this reads as once
+                       everyone else has gone. Both halves have to survive that. */
+                    var n = data.member_count || ppl.length;
+                    return '<button id="kt-st-details" type="button" title="Group details — rename, remove, leave" style="min-width:0;flex:1;text-align:left;background:none;border:none;padding:0;cursor:pointer;font:inherit;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+                      '\u{1F465} <strong>' + escapeHtml(String(n)) + (n === 1 ? ' member' : ' members') + '</strong>' +
+                      (names ? ' · ' + escapeHtml(names) : ' · just you') +
+                    '</button>';
+                  })()
+                : '<span style="min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Private with ' + escapeHtml(names || 'a colleague') + '</span>') +
               '<button id="kt-st-addppl" type="button" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:700;color:#1F6080;cursor:pointer;white-space:nowrap;">\uFF0B Add people</button>' +
             '</div>';
           })() +
@@ -1372,6 +1477,29 @@
 
       var back = target.querySelector('#kt-st-back');
       if (back) { back.addEventListener('click', function () { stopStaffPoll(); closeThreadCleanup(); }); }
+
+      var detailsBtn = target.querySelector('#kt-st-details');
+      if (detailsBtn) {
+        detailsBtn.addEventListener('click', function () {
+          openGroupDetails(tid, data, function () { paint(true); }, function () {
+            /* No longer a member. The pane must not sit there with a working composer
+               posting into a thread the server will now 404 — which is exactly what it
+               did when this only called hide() behind a `threadDocked` guard. forget()
+               first so the dock does not restore it on the next load, then close()
+               (hide() only collapses it), unconditionally. */
+            stopStaffPoll();
+            closeThreadCleanup();
+            try {
+              if (KT.ChatDock) {
+                if (KT.ChatDock.forget) { KT.ChatDock.forget(); }
+                if (KT.ChatDock.close) { KT.ChatDock.close(); }
+                else if (KT.ChatDock.hide) { KT.ChatDock.hide(); }
+              }
+            } catch (e) {}
+            if (threadListContainer) { renderList(threadListContainer); }
+          });
+        });
+      }
 
       var addPplBtn = target.querySelector('#kt-st-addppl');
       if (addPplBtn) {
@@ -1568,7 +1696,7 @@
           id: 'staff:' + t.id,
           // A group row that says only "Toddler Room Team" reads like one more colleague;
           // the member count is what tells you it is a room full of people.
-          name: (t.name || 'Colleague') + (t.is_group ? ' · ' + (t.member_count || 0) + ' members' : ''),
+          name: (t.name || 'Colleague') + (t.is_group ? ' · ' + (t.member_count || 0) + ((t.member_count || 0) === 1 ? ' member' : ' members') : ''),
           preview: t.preview || '',
           unread_count: t.unread || 0,
           at: t.at || '',

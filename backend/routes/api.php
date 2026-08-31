@@ -1196,6 +1196,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // a thread id — the same guard /unread-count relies on.
         Route::post('/team-threads/group',         [\App\Http\Controllers\Api\TeamChatController::class, 'startGroup']);
         Route::post('/team-threads/{thread}/participants', [\App\Http\Controllers\Api\TeamChatController::class, 'addParticipants'])->where('thread', '[0-9]+');
+        // Managing the group once it exists: leave (yourself, always allowed), remove
+        // (creator or a director) and rename (any participant). See the controller for
+        // why those three permissions differ.
+        Route::post('/team-threads/{thread}/leave', [\App\Http\Controllers\Api\TeamChatController::class, 'leave'])->where('thread', '[0-9]+');
+        Route::delete('/team-threads/{thread}/participants/{user}', [\App\Http\Controllers\Api\TeamChatController::class, 'removeParticipant'])->where(['thread' => '[0-9]+', 'user' => '[0-9]+']);
+        Route::patch('/team-threads/{thread}', [\App\Http\Controllers\Api\TeamChatController::class, 'rename'])->where('thread', '[0-9]+');
         Route::get ('/team-threads/{thread}',      [\App\Http\Controllers\Api\TeamChatController::class, 'show'])->where('thread', '[0-9]+');
         Route::post('/team-threads/{thread}/send', [\App\Http\Controllers\Api\TeamChatController::class, 'send'])->where('thread', '[0-9]+');
         Route::post('/team-threads/{thread}/messages/{message}/react', [\App\Http\Controllers\Api\TeamChatController::class, 'react'])->where(['thread' => '[0-9]+', 'message' => '[0-9]+']);
