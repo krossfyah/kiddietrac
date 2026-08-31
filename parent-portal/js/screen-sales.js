@@ -511,7 +511,15 @@
             toast('✅', 'Saved'); renderDetail(container, ctx);
           } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; }
         }),
-        btn('🗑 Delete', 'danger', async function () { if (!confirm('Delete this lead?')) return; try { await Api.delete('/sales/leads/' + id); toast('🗑', 'Deleted'); go('sales'); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); } }),
+        btn('🗑 Delete', 'danger', async function () {
+          // KT.confirm, like the rest of the portal — and it names the lead, so a
+          // mis-click is caught before it becomes an audit entry rather than after.
+          var ok = (window.KT && KT.confirm)
+            ? await KT.confirm({ title: 'Delete this lead?',
+                description: (lead && (lead.company || lead.name)) ? ('“' + (lead.company || lead.name) + '” will be removed from the pipeline.') : 'It will be removed from the pipeline.',
+                tone: 'danger' })
+            : confirm('Delete this lead?');
+          if (!ok) return; try { await Api.delete('/sales/leads/' + id); toast('🗑', 'Deleted'); go('sales'); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); } }),
       ]),
     ], 'margin-bottom:14px'));
     attachAddressAutocomplete(e.address, { city: e.city, province: e.province, postal_code: e.postal_code, country: e.country });

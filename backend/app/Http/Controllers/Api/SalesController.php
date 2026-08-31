@@ -126,11 +126,72 @@ class SalesController extends Controller
         return response()->json($this->leadDetail($l->fresh(['owner', 'activities.user', 'quotes.items'])));
     }
 
-    public function destroy(int $lead)
+    public function destroy(Request $request, int $lead)
     {
-        SalesLead::findOrFail($lead)->delete();
+        $l = SalesLead::findOrFail($lead);
+
+        /* Audited BEFORE the delete, and with the lead's own details in it. Anthony
+           deleted several leads and the log could say only that a DELETE happened at
+           /leads/{id} — the generic AuditActivity middleware records method, path and
+           request body, and a DELETE carries an empty body with the id in the path. So
+           the one record of what was removed was the row being removed. */
+        $this->auditLeadDeleted($request, $l);
+
+        $l->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * "Deleted sales lead ‟Sunrise Montessori” — Jane Doe · jane@… · stage qualified".
+     *
+     * A name, not an id: ids are not readable, and whoever reads this later cannot look
+     * the lead up because it is gone. The whole row is snapshotted alongside the summary
+     * so a deletion can actually be undone by hand if it was a mistake.
+     */
+    private function auditLeadDeleted(Request $request, SalesLead $l): void
+    {
+        try {
+            $u = $request->user();
+            $uid = (int) ($u->id ?? 0);
+
+            $label = trim((string) ($l->company ?: $l->name ?: $l->email ?: ''))
+                ?: ('lead #' . $l->id);
+            $bits = array_values(array_filter([
+                ($l->company && $l->name) ? $l->name : null,
+                $l->email ?: null,
+                $l->phone ?: null,
+                $l->stage ? 'stage ' . $l->stage : null,
+                $l->value ? 'value ' . $l->value : null,
+            ]));
+
+            \Illuminate\Support\Facades\DB::table('audit_logs')->insert([
+                'user_id'   => $uid ?: null,
+                /* Leads are a single shared pipeline rather than an agency's, but the
+                   audit viewer filters strictly on agency_id and shows NOTHING for a null
+                   one — so this is stamped with the actor's active agency. Better visible
+                   in the agency the person was working in than invisible everywhere. */
+                'agency_id' => $uid ? \App\Support\AuditScope::resolve($uid, $request) : null,
+                'action'      => 'sales.lead_deleted',
+                'entity_type' => 'sales_lead',
+                'entity_id'   => $l->id,
+                'payload'     => json_encode([
+                    'summary' => 'Deleted sales lead “' . $label . '”'
+                        . ($bits ? ' — ' . implode(' · ', $bits) : ''),
+                    'lead' => [
+                        'id' => $l->id, 'name' => $l->name, 'company' => $l->company,
+                        'email' => $l->email, 'phone' => $l->phone, 'stage' => $l->stage,
+                        'status' => $l->status, 'source' => $l->source, 'value' => $l->value,
+                        'owner_id' => $l->owner_id, 'city' => $l->city,
+                        'created_at' => (string) $l->created_at,
+                    ],
+                ]),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Auditing must never be the reason a delete fails.
+        }
     }
 
     // ------------------------------------------------------- Activities / follow-ups

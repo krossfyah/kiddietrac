@@ -12,6 +12,7 @@
   // ("post:api/v1/notifications/mark-read", sometimes with a " [fail]" suffix).
   // Neither is something you should have to decode while auditing an incident.
   var ACTION_LABELS = {
+    'sales.lead_deleted': '🗑 Sales lead deleted',
     'login': 'Signed in',
     'login_failed': 'Failed sign-in',
     'logout': 'Signed out',
@@ -247,6 +248,10 @@
     'kiosk.checkin': '🟢', 'kiosk.checkout': '🔴',
   };
 
+  /* Session-scoped so it survives the periodic re-render and a reload, but does not
+     follow somebody into tomorrow's session on a shared machine. */
+  var KT_AUDIT_TAB_KEY = 'kt_audit_subtab';
+
   // Top-level screen: for platform admins, a tab bar with the Audit log + the
   // Email log (hosted here as a subtab). Everyone else just gets the audit log.
   function render(container) {
@@ -264,11 +269,29 @@
     var mkTab = function (label) { return Dom.el('button', { style: 'background:none;border:none;border-bottom:3px solid transparent;color:#64748B;font-weight:700;font-size:14px;padding:10px 16px;cursor:pointer;margin-bottom:-1px;' }, label); };
     var tA = mkTab('📜 Audit log');
     var tE = mkTab('📧 Email log');
+    // A dedicated home for mail that did not arrive. It was findable before only by
+    // knowing to set the Email log's status filter, so a bounce nobody went looking
+    // for was indistinguishable from a message that was never sent.
+    var tX = mkTab('⚠️ Email errors');
     var activate = function (which) {
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
       tE.style.borderBottomColor = which === 'email' ? '#1F6080' : 'transparent'; tE.style.color = which === 'email' ? '#1F6080' : '#64748B';
+      tX.style.borderBottomColor = which === 'errors' ? '#B91C1C' : 'transparent'; tX.style.color = which === 'errors' ? '#B91C1C' : '#64748B';
       Dom.clear(pane);
-      if (which === 'email') {
+      if (which === 'errors') {
+        var xInner = Dom.el('div', { style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
+        var xHero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#3F0D0A 0%,#8A1D16 60%,#B91C1C 100%);' });
+        xHero.innerHTML = '<div class="kt-hero-greet">⚠️ ADMIN</div><h1>Email errors</h1>'
+          + '<div class="kt-hero-sub">Every message that did not reach the person it was addressed to — bounced, '
+          + 'failed, deferred or suppressed — newest first, with the reason. Times are in your agency timezone ('
+          + auditTz() + ').</div>';
+        xInner.appendChild(xHero);
+        var xBody = Dom.el('div', { style: 'margin-top:16px;' });
+        xInner.appendChild(xBody);
+        pane.appendChild(xInner);
+        KT.EmailLog.render(xBody, { status: 'problems' });
+      }
+      else if (which === 'email') {
         var inner = Dom.el('div', { style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
         // The Email log had no banner at all, so it opened straight onto a table while
         // its sibling tab had the gradient hero. Same construction as renderAudit's
@@ -292,12 +315,27 @@
       // right on arrival and unshimmered when you switch back to it.
       try { if (window.KT && KT.normalizeBanner) KT.normalizeBanner(); } catch (e) {}
     };
-    tA.addEventListener('click', function () { activate('audit'); });
-    tE.addEventListener('click', function () { activate('email'); });
-    tabsRow.appendChild(tA); tabsRow.appendChild(tE);
+    /* Which tab you were on has to outlive the re-render.
+       This screen is in kt-auto-refresh's LIVE_SCREENS, so it is rebuilt from scratch on a
+       timer; the old code ended with a flat activate('audit'), which is why reading the
+       Email log dropped you back onto the Audit log at what felt like random moments.
+       (2026-08-27) */
+    var pick = function (which) {
+      try { sessionStorage.setItem(KT_AUDIT_TAB_KEY, which); } catch (e) {}
+      activate(which);
+    };
+    tA.addEventListener('click', function () { pick('audit'); });
+    tE.addEventListener('click', function () { pick('email'); });
+    tX.addEventListener('click', function () { pick('errors'); });
+    tabsRow.appendChild(tA); tabsRow.appendChild(tE); tabsRow.appendChild(tX);
     container.appendChild(tabsRow);
     container.appendChild(pane);
-    activate('audit');
+
+    var remembered = '';
+    try { remembered = sessionStorage.getItem(KT_AUDIT_TAB_KEY) || ''; } catch (e) {}
+    // Restore, but never trust it blindly — a stored value from an older build, or one
+    // whose tab this user cannot see, must fall back rather than render nothing.
+    activate(/^(audit|email|errors)$/.test(remembered) ? remembered : 'audit');
   }
 
   function renderAudit(container) {
@@ -320,7 +358,37 @@
     var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:#6B7280;' });
     wrap.appendChild(pager);
 
+    /* Paging used to throw the reader down the page.
+       reload() replaced a 50-row table with a single "Loading…" line, so the document
+       collapsed from a few thousand pixels to a few hundred; the browser clamped the
+       scroll position to the bottom of that short page, and when the new rows arrived
+       the reader was somewhere arbitrary. Holding the old height keeps the scrollbar
+       still across the gap. (Anthony, 2026-08-26) */
+    function holdHeight() {
+      try {
+        var h = listWrap.getBoundingClientRect().height;
+        if (h > 0) { listWrap.style.minHeight = h + 'px'; }
+      } catch (e) {}
+    }
+    function releaseHeight() {
+      try { listWrap.style.minHeight = ''; } catch (e) {}
+    }
+    /* Set by the pager and the filters: after THOSE reloads the reader wants the first
+       row of the new page, not wherever they happened to be standing when they clicked
+       Next — the pager sits below the table, so without this you land mid-way down a
+       page you have not read yet. A background refresh leaves the position alone. */
+    var jumpToTop = false;
+    function landOnTable() {
+      if (!jumpToTop) { return; }
+      jumpToTop = false;
+      try {
+        var top = listWrap.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0);
+        window.scrollTo({ top: Math.max(0, top - 90), behavior: 'smooth' });
+      } catch (e) {}
+    }
+
     function reload() {
+      holdHeight();
       Dom.clear(listWrap);
       listWrap.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading audit log…'));
 
@@ -356,9 +424,12 @@
           listWrap.appendChild(renderTable(data.logs));
         }
         buildPager();
+        releaseHeight();
+        landOnTable();
       }).catch(function (e) {
         Dom.clear(listWrap);
         listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
+        releaseHeight();
       });
     }
 
@@ -435,9 +506,9 @@
       pager.appendChild(Dom.el('div', {}, state.total === 0 ? '0 events' : (state.offset + 1 + '–' + shown + ' of ' + state.total)));
       var btns = Dom.el('div', { style: 'display:flex;gap:8px;' });
       var prev = Dom.el('button', { style: pagerBtn(), disabled: state.offset === 0 }, '◀ Prev');
-      prev.addEventListener('click', function () { state.offset = Math.max(0, state.offset - state.limit); reload(); });
+      prev.addEventListener('click', function () { state.offset = Math.max(0, state.offset - state.limit); jumpToTop = true; reload(); });
       var next = Dom.el('button', { style: pagerBtn(), disabled: state.offset + state.limit >= state.total }, 'Next ▶');
-      next.addEventListener('click', function () { if (state.offset + state.limit < state.total) { state.offset += state.limit; reload(); } });
+      next.addEventListener('click', function () { if (state.offset + state.limit < state.total) { state.offset += state.limit; jumpToTop = true; reload(); } });
       btns.appendChild(prev); btns.appendChild(next);
       pager.appendChild(btns);
     }
