@@ -115,10 +115,56 @@ class AgencyMail
         }
 
         return Cache::remember('agencymail.aoe.' . md5($email), 60, function () use ($email) {
-            $uid = DB::table('users')->whereRaw('LOWER(TRIM(email)) = ?', [$email])->value('id');
-            if (! $uid) {
+            /* ── AN AMBIGUOUS ADDRESS MUST NOT BE GUESSED ─────────────────────────
+               Several accounts can share one address, and they are not always in the
+               same agency. lloy_king@ilearnhcc.com is an educator at Sunny Meadows
+               (Test Agency) AND a home visitor at iLearn. Picking "the live one, or
+               else the first" resolved that to whichever row won a tie-break, and on
+               2026-08-31 it filed a Sunny Meadows daily digest into iLearn's audit
+               log — one agency reading another agency's centre name in its own trail.
+
+               There is no correct answer to derive here: the address genuinely
+               belongs to two tenants. So when the candidates disagree, this returns
+               null and the row is logged with no agency rather than the wrong one.
+               A log entry nobody can attribute is a nuisance; a log entry attributed
+               to the wrong tenant is a leak.
+
+               The right fix upstream is for every agency-scoped mail to stamp
+               X-KT-Agency-Id, which agencyForMessage() already prefers — this
+               fallback exists for mail that does not, and it should be cautious. */
+            $uids = DB::table('users')->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                ->whereNull('deleted_at')
+                ->whereNotIn('status', ['deactivated', 'suspended'])
+                ->orderBy('id')->pluck('id');
+            if ($uids->isEmpty()) {
+                $uids = DB::table('users')->whereRaw('LOWER(TRIM(email)) = ?', [$email])
+                    ->orderBy('id')->pluck('id');
+            }
+            if ($uids->isEmpty()) {
                 return null;
             }
+            /* Ambiguity is judged across EVERY account on the address, not just the
+               live ones. lloy_king@ilearnhcc.com is a deactivated educator at Sunny
+               Meadows (agency 6) and an invited home visitor at iLearn (agency 2);
+               filtering to live accounts left one candidate and a confident, wrong
+               answer — which is how a Sunny Meadows digest ended up in iLearn's
+               audit log. A deactivated account still means the address is shared. */
+            $allUids = DB::table('users')->whereRaw('LOWER(TRIM(email)) = ?', [$email])->pluck('id');
+            if ($allUids->count() > 1) {
+                $agencies = collect($allUids)->map(fn ($id) => self::agencyOfUser((int) $id))
+                    ->filter()->unique()->values();
+                if ($agencies->count() > 1) {
+                    \Illuminate\Support\Facades\Log::warning(
+                        'AgencyMail: address maps to more than one agency, refusing to guess',
+                        ['email' => $email, 'agencies' => $agencies->all()]
+                    );
+
+                    return null;
+                }
+
+                return $agencies->first();
+            }
+            $uid = $uids->first();
             // Staff / admin: agency on the role assignment, or via its centre.
             $ra = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
                 ->orderByRaw('agency_id IS NULL')->first(['agency_id', 'centre_id']);
@@ -141,6 +187,31 @@ class AgencyMail
 
             return $aid ? (int) $aid : null;
         });
+    }
+
+    /** The agency one specific user belongs to. Split out so the ambiguity check
+     *  above can compare candidates without duplicating the lookup. */
+    public static function agencyOfUser(int $uid): ?int
+    {
+        $ra = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->orderByRaw('agency_id IS NULL')->first(['agency_id', 'centre_id']);
+        if ($ra) {
+            if ($ra->agency_id) {
+                return (int) $ra->agency_id;
+            }
+            if ($ra->centre_id) {
+                $aid = DB::table('centres')->where('id', $ra->centre_id)->value('agency_id');
+                if ($aid) {
+                    return (int) $aid;
+                }
+            }
+        }
+        $aid = DB::table('guardians as g')
+            ->join('families as f', 'f.id', '=', 'g.family_id')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('g.user_id', $uid)->value('c.agency_id');
+
+        return $aid ? (int) $aid : null;
     }
 
     /** Non-secret view for the settings UI (never returns the secret itself). */
