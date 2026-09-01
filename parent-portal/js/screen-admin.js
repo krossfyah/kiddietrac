@@ -1583,13 +1583,28 @@
     }
   }
 
+  /* The prompt has to say what will ACTUALLY happen, which now depends on whether
+     the account was ever claimed. It used to promise a new temporary password for
+     everyone — and for someone already signed in that meant their own password
+     stopped working, silently, at the moment an admin tried to help them. */
+  function _claimed(u) { return ['invited', 'not_invited'].indexOf(String(u.status)) === -1; }
+
   async function rowResendWelcome(u) {
-    if (!await _confirm('Resend the welcome invite to ' + (u.email || u.name) + '? A new temporary password will be generated.')) return;
+    var who = u.email || u.name;
+    var msg = _claimed(u)
+      ? (who + ' has already signed in, so this sends a password-reset link. '
+         + 'Their current password keeps working until they choose a new one. Continue?')
+      : ('Resend the welcome invite to ' + who + '? A new temporary password will be generated.');
+    if (!await _confirm(msg)) return;
     try {
       var r = await Api.post('/admin/users/' + u.id + '/resend-welcome', {});
-      _toast(r && r.email_sent ? '✅' : '⚠️', r && r.email_sent ? 'Welcome email sent' : 'Email failed',
-        r && r.email_sent ? (u.email || '') : ('Share temp password: ' + ((r && r.temp_password) || '')),
-        r && r.email_sent ? '#16A34A' : '#B45309');
+      // Show what the server actually did — the two modes are different enough
+      // that a generic "sent" would leave the admin guessing.
+      var ok = r && r.email_sent;
+      _toast(ok ? '✅' : '⚠️',
+        ok ? (r.mode === 'reset_link' ? 'Reset link sent' : 'Welcome email sent') : 'Email failed',
+        (r && r.message) || (u.email || ''),
+        ok ? '#16A34A' : '#B45309');
     } catch (e) { _toast('⚠️', 'Resend failed', e && e.message ? e.message : 'error', '#DC2626'); }
   }
   async function rowResetPassword(u) {
@@ -2569,14 +2584,20 @@
 
     const resendBtn = Dom.el('button', { class: 'kt-btn kt-btn-secondary' }, '✉ Resend welcome');
     resendBtn.addEventListener('click', async () => {
-      if (!await KT.confirm('Resend the welcome invite to ' + user.email + '? A new temporary password will be generated.')) return;
+      var _alreadyIn = ['invited', 'not_invited'].indexOf(String(user.status)) === -1;
+      if (!await KT.confirm(_alreadyIn
+        ? (user.email + ' has already signed in, so this sends a password-reset link — '
+           + 'their current password keeps working until they choose a new one. Continue?')
+        : ('Resend the welcome invite to ' + user.email + '? A new temporary password will be generated.'))) return;
       resendBtn.disabled = true; resendBtn.textContent = 'Sending...';
       try {
         const r = await Api.post('/admin/users/' + user.id + '/resend-welcome', {});
         status.style.color = '#16A34A';
         status.textContent = r.email_sent
-          ? '✓ Welcome email sent.'
-          : ('Email failed — share temp password manually: ' + r.temp_password);
+          ? ('✓ ' + (r.message || 'Sent.'))
+          : (r.temp_password
+              ? ('Email failed — share temp password manually: ' + r.temp_password)
+              : ('Email failed — ' + (r.message || 'nothing was changed.')));
       } catch (e) {
         status.style.color = '#DC2626';
         status.textContent = 'Resend failed: ' + (e.message || 'error');

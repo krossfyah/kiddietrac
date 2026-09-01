@@ -2429,7 +2429,58 @@ final class AdminController extends Controller
             }
         }
 
-        $result = $families->map(function ($f) use ($owedByFamily) {
+        /* ── Onboarding state, per family ──────────────────────────────────────
+           Answers "did they get their invite, and did they act on it" without
+           opening each family. Three signals, and they mean different things:
+
+             users.status       not_invited | invited | active — was an invite sent
+             users.onboarded_at set once they finish the onboarding flow
+             email_logs         whether the welcome email actually left, or was
+                                suppressed / failed on the way out
+
+           The third matters because the first two can both look fine while the
+           email never arrived — an agency on suppression, or a bounce. A family
+           that has not onboarded reads very differently depending on whether we
+           actually wrote to them.
+
+           Grouped, like the balances above: this list runs to 200 families and a
+           per-family lookup would be 200 round trips. */
+        $guardianState = [];
+        foreach (DB::table('guardians as g')
+            ->join('users as u', 'u.id', '=', 'g.user_id')
+            ->whereIn('g.family_id', $famIds ?: [0])
+            ->get(['g.family_id', 'u.email', 'u.status', 'u.onboarded_at']) as $g) {
+            $guardianState[(int) $g->family_id][] = $g;
+        }
+
+        $guardianEmails = [];
+        foreach ($guardianState as $rows) {
+            foreach ($rows as $r) {
+                if ($r->email) {
+                    $guardianEmails[strtolower($r->email)] = true;
+                }
+            }
+        }
+        $welcomeSent = [];
+        if ($guardianEmails) {
+            foreach (DB::table('email_logs')
+                ->whereIn(DB::raw('LOWER(to_email)'), array_keys($guardianEmails))
+                ->where(function ($q) {
+                    $q->where('subject', 'like', 'Welcome to%')
+                      ->orWhere('subject', 'like', '%meet your child%');
+                })
+                ->orderBy('id')
+                ->get(['to_email', 'status', 'created_at']) as $row) {
+                // Last word wins: a later successful send supersedes an earlier
+                // suppression, which is exactly what a resend is for.
+                $welcomeSent[strtolower($row->to_email)] = [
+                    'status' => $row->status,
+                    'at' => $row->created_at,
+                ];
+            }
+        }
+
+        $result = $families->map(function ($f) use ($owedByFamily, $guardianState, $welcomeSent) {
             $childCount = DB::table('children')
                 ->where('family_id', $f->id)
                 ->whereNull('deleted_at')
@@ -2442,12 +2493,44 @@ final class AdminController extends Controller
                 ->where('users.status', 'suspended')
                 ->count();
 
+            $gs = $guardianState[(int) $f->id] ?? [];
+            $onboardedCount = 0;
+            $invitedCount = 0;
+            $mailTrouble = null;
+            $lastMailAt = null;
+            foreach ($gs as $g) {
+                if ($g->onboarded_at) {
+                    $onboardedCount++;
+                } elseif (($g->status ?? '') === 'invited') {
+                    $invitedCount++;
+                }
+                $log = $welcomeSent[strtolower((string) $g->email)] ?? null;
+                if ($log) {
+                    if (! $lastMailAt || $log['at'] > $lastMailAt) {
+                        $lastMailAt = $log['at'];
+                    }
+                    if ($log['status'] !== 'sent' && ! $mailTrouble) {
+                        $mailTrouble = $log['status'];       // suppressed / failed
+                    }
+                } elseif ($mailTrouble === null) {
+                    $mailTrouble = 'never_sent';
+                }
+            }
+
             return [
                 'id' => $f->id,
                 'family_name' => $f->family_name,
                 'centre_id' => $f->centre_id,
                 'centre_name' => $f->centre_name,
                 'primary_phone' => $f->primary_phone,
+                'onboarding' => [
+                    'guardians' => count($gs),
+                    'onboarded' => $onboardedCount,
+                    'invited' => $invitedCount,
+                    'welcome_at' => $lastMailAt,
+                    // null when every guardian got a clean send
+                    'welcome_issue' => count($gs) ? $mailTrouble : null,
+                ],
                 'primary_email' => $f->primary_email,
                 'city' => $f->city,
                 'child_count' => $childCount,
@@ -4870,35 +4953,111 @@ final class AdminController extends Controller
         $user = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
         if (!$user) return response()->json(['message' => 'User not found'], 404);
 
-        $tempPassword = Str::random(12);
+        /* ── DO NOT RESET A WORKING PASSWORD ──────────────────────────────────
+           This used to replace the password, set status back to 'invited' and
+           delete every session — for ANY user, including someone signing in fine.
+           An admin usually clicks this because a parent said "I can't get in", so
+           the fix made the problem: her own password stopped working, her sessions
+           died, and the mail gate (which keys off 'invited') then suppressed the
+           password reset the email itself told her to use. Locked out by the help.
+           2026-09-01, Umera Aziz: five failed sign-ins, a suppressed reset, and she
+           only got in by finding the temp password in the very email that broke it.
 
-        DB::transaction(function () use ($userId, $tempPassword) {
-            DB::table('users')->where('id', $userId)->update([
-                'password'   => Hash::make($tempPassword),
-                'status'     => 'invited',
-                'updated_at' => now(),
-            ]);
-            DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
-        });
+           So the behaviour now depends on whether the account was ever claimed:
 
-        $emailed = $this->sendAccountEmail(
-            $user->email,
-            trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
-            'Welcome to Kiddietrac',
-            "Welcome to Kiddietrac!\n\n" .
-            "Your account is ready at https://app.kiddietrac.com\n\n" .
-            "Temporary password: {$tempPassword}\n\n" .
-            "We recommend signing in then using 'Forgot password' to set your own."
-        );
+             never claimed  a temp password is exactly what "resend the welcome"
+                            means; nothing is being taken away.
+             already active they have a password that works. Send a reset LINK and
+                            change nothing. If it really is a lockout, the link
+                            fixes it; if it is not, nothing was destroyed.
+
+           An admin who genuinely wants to force a new temp password on an active
+           account can still ask for it explicitly with reset_password=true. */
+        $wasClaimed = ! in_array((string) $user->status, ['invited', 'not_invited'], true);
+        $forceReset = $request->boolean('reset_password');
+        $issueTemp = $forceReset || ! $wasClaimed;
+
+        $tempPassword = null;
+        if ($issueTemp) {
+            $tempPassword = Str::random(12);
+            DB::transaction(function () use ($userId, $tempPassword) {
+                DB::table('users')->where('id', $userId)->update([
+                    'password'   => Hash::make($tempPassword),
+                    'status'     => 'invited',
+                    'updated_at' => now(),
+                ]);
+                DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
+            });
+        }
+
+        $name = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
+
+        if ($issueTemp) {
+            $emailed = $this->sendAccountEmail(
+                $user->email,
+                $name,
+                'Welcome to Kiddietrac',
+                "Welcome to Kiddietrac!\n\n" .
+                "Your account is ready at https://app.kiddietrac.com\n\n" .
+                "Temporary password: {$tempPassword}\n\n" .
+                "Sign in with it, then change it under your profile."
+            );
+        } else {
+            /* A reset link rather than a temp password: it proves they own the
+               address, needs nothing typed twice, and leaves their current password
+               working until they actually choose a new one. */
+            $emailed = false;
+            try {
+                /* Built exactly the way AuthController::forgotPassword builds it —
+                   `password_resets`, a sha256 of the token, an expiry, and the
+                   reset-password.html page on the PORTAL host. My first attempt
+                   invented its own table, hashing and URL, which would have sent a
+                   link that could never validate: a worse failure than the one
+                   being fixed, because it looks like it worked. */
+                DB::table('password_resets')->where('email', $user->email)
+                    ->whereNull('used_at')->update(['used_at' => now()]);
+
+                $token = Str::random(64);
+                $ttl = 60;
+                DB::table('password_resets')->insert([
+                    'email' => $user->email,
+                    'token' => hash('sha256', $token),
+                    'expires_at' => now()->addMinutes($ttl),
+                    'requester_ip' => $request->ip(),
+                    'created_at' => now(),
+                ]);
+
+                \Illuminate\Support\Facades\Mail::to($user->email)->send(
+                    new \App\Mail\PasswordResetEmail(
+                        recipientName: $user->first_name ?: 'there',
+                        resetUrl: 'https://app.kiddietrac.com/reset-password.html?token=' . $token
+                            . '&email=' . urlencode($user->email),
+                        expiresInMinutes: (string) $ttl,
+                    )
+                );
+                $emailed = true;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Resend welcome: reset link failed', [
+                    'user' => $userId, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $this->audit($request->user()->id, 'user.welcome_resent', 'user', $userId, [
             'email_sent' => $emailed,
+            'mode' => $issueTemp ? 'temp_password' : 'reset_link',
+            'was_claimed' => $wasClaimed,
         ]);
 
         return response()->json([
-            'message'       => $emailed ? 'Welcome email sent.' : 'Welcome email failed to send (saved temp password — share manually).',
+            'message' => $issueTemp
+                ? ($emailed ? 'Welcome email sent with a temporary password.'
+                            : 'Welcome email failed to send (temp password saved — share it manually).')
+                : ($emailed ? 'This account is already in use, so a password-reset link was sent instead — their current password still works.'
+                            : 'Could not send the reset link. Their current password is unchanged.'),
             'temp_password' => $tempPassword,
             'email_sent'    => $emailed,
+            'mode'          => $issueTemp ? 'temp_password' : 'reset_link',
         ]);
     }
 
