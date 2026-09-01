@@ -332,10 +332,23 @@
     container.appendChild(tabsRow);
     container.appendChild(pane);
 
+    /* Restore the subtab across an auto-refresh, but NOT when somebody has just
+       navigated here. Remembering it for the whole session meant that once you had
+       read the Email log, clicking "Audit log" in the menu kept opening the Email
+       log — the screen was faithfully restoring a choice you made ten minutes and
+       four screens ago. Clicking the menu item is a fresh request for the thing it
+       names; a 45-second timer tick is not. */
     var remembered = '';
-    try { remembered = sessionStorage.getItem(KT_AUDIT_TAB_KEY) || ''; } catch (e) {}
-    // Restore, but never trust it blindly — a stored value from an older build, or one
-    // whose tab this user cannot see, must fall back rather than render nothing.
+    var byRefresh = false;
+    try { byRefresh = !!(window.KT && KT.autoRefresh && KT.autoRefresh.isRefreshing && KT.autoRefresh.isRefreshing()); } catch (e) {}
+    if (byRefresh) {
+      try { remembered = sessionStorage.getItem(KT_AUDIT_TAB_KEY) || ''; } catch (e) {}
+    } else {
+      // Arriving fresh: forget the old choice so it cannot resurface later either.
+      try { sessionStorage.removeItem(KT_AUDIT_TAB_KEY); } catch (e) {}
+    }
+    // Never trust it blindly — a stored value from an older build, or one whose tab
+    // this user cannot see, must fall back rather than render nothing.
     activate(/^(audit|email|errors)$/.test(remembered) ? remembered : 'audit');
   }
 

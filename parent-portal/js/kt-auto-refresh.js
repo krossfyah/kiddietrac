@@ -33,8 +33,17 @@
   var LIVE_SCREENS = {
     'dashboard': 1, 'agency-overview': 1, 'overview': 1, 'provider-overview': 1,
     'provider-day': 1, 'room-ratios': 1, 'waitlist': 1, 'tours': 1,
-    'incidents': 1, 'notifications': 1, 'chat': 1, 'messages': 1,
-    'attendance': 1, 'time-clock': 1
+    'incidents': 1, 'notifications': 1,
+    /* chat / messages are NOT here. Messenger polls its own list and its open thread
+       in place; a full re-render on top of that only produced a visible flash, and on
+       desktop it orphaned the conversation held in the floating dock. See kt-live.js's
+       SELF_LIVE for the same rule applied to write-triggered refreshes. */
+    'attendance': 1, 'time-clock': 1,
+    /* Screens whose whole purpose is watching what people are doing right now.
+       Without these the Users table showed the last-login time as at whenever the
+       page happened to load, which read as "last login is not updating". */
+    'admin-users': 1, 'users': 1, 'user-management': 1,
+    'staff': 1, 'audit-logs': 1, 'email-logs': 1
   };
 
   function now() { return Date.now(); }
@@ -69,13 +78,25 @@
       }
       // Explicit opt-out on the current screen.
       if (document.querySelector('[data-kt-no-autorefresh]')) return true;
+      // A screen that updates itself in place needs no teardown from us.
+      if (document.querySelector('[data-kt-self-live]')) return true;
     } catch (e) {}
     return false;
   }
 
+  /* A screen cannot otherwise tell a periodic re-render from somebody navigating
+     to it — both call renderScreen() and both look like a fresh mount. Screens that
+     restore state across a refresh (the audit log's subtab) need that difference:
+     keeping your place through a refresh is right, and keeping it when you clicked
+     the menu is how "Audit log" started opening the Email log. */
+  var refreshing = false;
   function refresh() {
     if (!shellReady() || booting() || busy()) return;
+    refreshing = true;
     try { KT.Shell.renderScreen(); } catch (e) {}
+    // Cleared on a timer, not immediately: a screen's async part renders after
+    // renderScreen() returns, and that is where the flag is read.
+    setTimeout(function () { refreshing = false; }, 4000);
   }
 
   // ── 1. Return-to-app visibility refresh ──────────────────────────
@@ -93,10 +114,23 @@
     if (now() - started < START_DELAY_MS) return;
     if (document.hidden) return;
     if (!LIVE_SCREENS[currentHash()]) return;
-    var y = window.scrollY || window.pageYOffset || 0;
-    if (y > 80) return;   // scrolled into content — leave the user be
+    /* The old rule was "scrolled past 80px? do not refresh". Combined with the 45s
+       cadence and the LIVE_SCREENS whitelist it meant a scrolled screen never refreshed
+       at all until you navigated away, which is exactly what "it takes minutes to catch
+       up" was. Scroll position is restored instead, so a refresh no longer costs you
+       your place. */
+    /* No scroll bookkeeping here any more. There were TWO restores fighting each
+       other — this fixed 60ms one and the shell's own — and both fired before the
+       async part of a screen had rendered, so each clamped to the height of a
+       half-built page and the reader ended up somewhere neither intended. The shell
+       owns this now (__ktSettleScroll): it re-applies the position while the page is
+       still growing and yields the moment the reader scrolls. */
     refresh();
   }, PERIODIC_MS);
 
-  KT.autoRefresh = { refresh: refresh, LIVE_SCREENS: LIVE_SCREENS };
+  KT.autoRefresh = {
+    refresh: refresh,
+    LIVE_SCREENS: LIVE_SCREENS,
+    isRefreshing: function () { return refreshing; },
+  };
 })();

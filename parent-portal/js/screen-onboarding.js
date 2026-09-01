@@ -809,7 +809,12 @@
       state.kids.schedule = (res && res.schedule) || [];
       paint();
     }).catch(function () {
-      wrap.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">'
+      /* A failed load must not read as "no children to photograph". It used to
+         leave the list empty, and an empty list satisfies the photo check — so one
+         flaky request turned a required step into a skipped one, permanently,
+         because onboarding only ever runs once. */
+      state.kids.failed = true;
+      wrap.innerHTML = '<div style="color:#B45309;font-size:13px;padding:8px 0;">'
         + 'We could not load your children just now. You can add these details later '
         + 'from your child\'s profile.</div>';
     });
@@ -839,6 +844,10 @@
         +   '<div data-kid-photo>' + photo + '</div>'
         +   '<div style="min-width:0;flex:1;">'
         +     '<div style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(kid.name) + '</div>'
+        +     (kid.photo_url ? '' :
+              '<div style="margin-top:3px;font-size:12px;color:#B45309;font-weight:700;">'
+              + 'Photo needed — educators use it to check they have the right child at '
+              + 'pickup and in an emergency.</div>')
         +     '<button type="button" data-kid-upload style="margin-top:6px;background:#1F6080;color:#fff;border:0;'
         +       'border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">'
         +       (kid.photo_url ? 'Change photo' : 'Add photo') + '</button>'
@@ -984,6 +993,12 @@
     // adult's own profile photo above, and for the same reason: a roster of grey
     // silhouettes helps nobody recognise a child at the door.
     if (id === 'children') {
+      // Could not read the list? Then we cannot claim every child has a photo.
+      if (state.kids && state.kids.failed) {
+        msg.style.color = '#DC2626';
+        msg.textContent = 'We could not load your children just now — please check your connection and try again before continuing.';
+        return false;
+      }
       var kids = (state.kids && state.kids.list) || [];
       var noPhoto = kids.filter(function (k) { return !k.photo_url; });
       if (noPhoto.length) {
