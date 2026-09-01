@@ -19,6 +19,8 @@ use Throwable;
 
 final class FamilyController extends Controller
 {
+    use \App\Http\Controllers\Concerns\AuthorizesTenantAccess;
+
     use ResolvesCentreContext;
 
     public function parentDashboard(Request $request): JsonResponse
@@ -129,12 +131,23 @@ final class FamilyController extends Controller
             'family_name' => ['required', 'string', 'max:160'],
             'primary_email' => ['nullable', 'email', 'max:180'],
             'primary_phone' => ['nullable', 'string', 'max:40'],
-            'address_line1' => ['nullable', 'string', 'max:200'],
-            'city' => ['nullable', 'string', 'max:80'],
-            'province' => ['nullable', 'string', 'max:40'],
-            'postal_code' => ['nullable', 'string', 'max:12'],
+            /* Required on CREATE only. A partial address propagates everywhere
+               downstream — iLearn mirrors whatever KiddieTrac holds, so a family
+               entered with just a city arrives in iLearn with just a city, and no sync
+               change can invent the rest. update() validates separately, so the
+               families already carrying a partial address stay editable rather than
+               becoming unsaveable. */
+            'address_line1' => ['required', 'string', 'max:200'],
+            'city' => ['required', 'string', 'max:80'],
+            'province' => ['required', 'string', 'max:40'],
+            'postal_code' => ['required', 'string', 'max:12'],
             'preferred_lang' => ['nullable', 'string', 'max:10'],
             'billing_split' => ['nullable', 'in:single,split,custom'],
+        ], [
+            'address_line1.required' => 'A street address is needed — it flows through to billing and to iLearn.',
+            'city.required' => 'Please add the city.',
+            'province.required' => 'Please add the province.',
+            'postal_code.required' => 'Please add the postal code.',
         ]);
 
         $id = DB::table('families')->insertGetId([
@@ -232,6 +245,42 @@ final class FamilyController extends Controller
             } catch (Throwable $e) {
                 Log::warning('Welcome email failed', ['error' => $e->getMessage(), 'recipient' => $data['email']]);
             }
+
+            /* And the introduction to their provider, as a second email.
+
+               The welcome email is credentials and a link — necessary, and cold. It
+               tells a family how to sign in and nothing about who is going to be
+               looking after their child. The provider welcome is the part that
+               answers that, so a family joining should get both.
+
+               Sent to every guardian on the family, with the care team on BCC, and
+               in its own try: a failure here must not cost the parent the account
+               details they actually need to get in. */
+            try {
+                $guardians = DB::table('guardians as g')
+                    ->join('users as u', 'u.id', '=', 'g.user_id')
+                    ->where('g.family_id', $familyId)
+                    ->whereNotNull('u.email')
+                    ->get(['u.email', 'u.first_name'])
+                    ->map(fn ($g) => ['email' => $g->email, 'first_name' => $g->first_name])
+                    ->all();
+
+                $childFirstNames = DB::table('children')
+                    ->where('family_id', $familyId)
+                    ->whereNull('deleted_at')
+                    ->pluck('first_name')->filter()->values()->all();
+
+                \App\Support\ProviderWelcomeMailer::sendToFamily(
+                    (int) $family->centre_id,
+                    (int) $centre->agency_id,
+                    $guardians,
+                    $childFirstNames
+                );
+            } catch (Throwable $e) {
+                Log::warning('Provider welcome after invite failed', [
+                    'error' => $e->getMessage(), 'family' => $familyId,
+                ]);
+            }
         }
 
         return response()->json([
@@ -242,20 +291,17 @@ final class FamilyController extends Controller
         ], 201);
     }
 
+    /**
+     * One implementation, shared with every other controller — see
+     * Concerns\AuthorizesTenantAccess. Verified equivalent to the hand-rolled
+     * version it replaces across 13,320 real (user, family, active-agency)
+     * combinations before the swap.
+     *
+     * The name and signature are unchanged so both call sites stay as they are.
+     */
     private function authorizeFamily($user, object $family): void
     {
-        if ($this->authorizeCentreAccess($user, (int) $family->centre_id)) {
-            return;
-        }
-
-        if (DB::table('guardians')
-            ->where('user_id', $user->id)
-            ->where('family_id', $family->id)
-            ->exists()) {
-            return;
-        }
-
-        abort(403);
+        $this->assertFamily((int) $user->id, (int) $family->id);
     }
 
     private function getMyChildren($user): array

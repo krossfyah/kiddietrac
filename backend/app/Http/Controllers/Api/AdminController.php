@@ -5062,72 +5062,11 @@ final class AdminController extends Controller
      */
     private function sendProviderWelcomeToFamily(int $centreId, ?int $agencyId, array $guardians, array $childFirstNames): void
     {
-        if (empty($guardians)) {
-            return;
-        }
-        $centre = DB::table('centres')->where('id', $centreId)->first();
-        if (! $centre) {
-            return;
-        }
-        $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
-        $s = ($agency && $agency->settings) ? (json_decode($agency->settings, true) ?: []) : [];
-        $brand = $s['branding'] ?? [];
-        $abs = fn ($u) => $u ? (preg_match('#^https?://#', (string) $u) ? $u : ('https://api.kiddietrac.com' . $u)) : null;
-        $childName = $childFirstNames[0] ?? '';
-        $providerAddress = trim(($centre->address_line1 ? $centre->address_line1 . "\n" : '')
-            . trim(($centre->city ?? '') . ' ' . ($centre->province ?? '') . ' ' . ($centre->postal_code ?? ''))) ?: null;
-
-        // CC the agency admin, this centre's director(s) and educator(s) so the
-        // whole care team sees the welcome that went to the family.
-        $ccEmails = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
-            ->where('ra.active', 1)->whereNotNull('u.email')
-            ->where(function ($q) use ($agencyId, $centreId) {
-                $q->where(function ($x) use ($agencyId) { $x->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId); })
-                  ->orWhere(function ($x) use ($centreId) { $x->whereIn('ra.role', ['centre_director', 'educator'])->where('ra.centre_id', $centreId); });
-            })->distinct()->pluck('u.email')->filter()->values()->all();
-
-        foreach ($guardians as $g) {
-            if (empty($g['email'])) {
-                continue;
-            }
-            $view = [
-                'agencyName'      => $s['name'] ?? ($agency->name ?? 'Your childcare agency'),
-                'agencyLogoUrl'   => $abs($brand['logo_url'] ?? null),
-                'agencyPhone'     => $s['phone'] ?? null,
-                'agencyEmail'     => $s['data_contact_email'] ?? ($agency->email ?? null),
-                'providerName'    => $centre->name,
-                'providerPhotoUrl'=> $abs($centre->logo_url ?? null),
-                'providerBio'     => $centre->provider_bio ?: 'Your provider will share a little about themselves here soon.',
-                'providerPhone'   => $centre->phone ?? null,
-                'providerEmail'   => $centre->email ?? null,
-                'parentFirstName' => $g['first_name'] ?: 'there',
-                'childName'       => $childName,
-                'portalUrl'       => 'https://app.kiddietrac.com',
-                'primaryColor'    => $brand['primary_color'] ?? '#081C41',
-                'accentColor'     => $brand['accent_color'] ?? '#2EA9AC',
-                'privacyUrl'      => $s['brand_privacy_url'] ?? null,
-                'termsUrl'        => $s['brand_terms_url'] ?? null,
-                'agencyAddress'   => $s['brand_address'] ?? null,
-                'agencyOwnerName' => $s['owner']['name'] ?? null,
-                'providerAddress' => $providerAddress,
-                'websiteUrl'      => $s['brand_website_url'] ?? ($s['website'] ?? null),
-            ];
-            // Inject the agency-editable narrative blocks (subject + intro/care/
-            // expect/closing), merge-tags filled from $view.
-            $view = \App\Support\ProviderWelcomeTemplate::viewData($view, $s);
-            try {
-                $html = view('emails.provider-welcome', $view)->render();
-                Mail::html($html, function ($m) use ($g, $centre, $ccEmails) {
-                    $m->to($g['email'])->subject('Welcome to ' . $centre->name . " \u{2014} meet your child's provider");
-                    if (! empty($ccEmails)) {
-                        $m->cc($ccEmails);
-                    }
-                    $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
-                });
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Provider welcome send failed for ' . $g['email'] . ': ' . $e->getMessage());
-            }
-        }
+        // The body of this lives in ProviderWelcomeMailer now, because the parent
+        // invite in FamilyController sends the same email and a private method on
+        // a controller cannot be shared. Kept as a thin call so the three existing
+        // callers here did not have to change.
+        \App\Support\ProviderWelcomeMailer::sendToFamily($centreId, $agencyId, $guardians, $childFirstNames);
     }
 
     /** POST /admin/families/{family}/provider-welcome — manually (re)send the provider welcome. */
