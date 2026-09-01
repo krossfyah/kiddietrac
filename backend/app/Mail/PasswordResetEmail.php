@@ -25,6 +25,30 @@ final class PasswordResetEmail extends Mailable
         return new Envelope(subject: 'Reset your Kiddietrac password');
     }
 
+    /**
+     * Exempt from the unclaimed-account gate.
+     *
+     * SuppressAgencyMail withholds everything except the invite from an account
+     * still marked 'invited' or 'not_invited' — a deliberate product decision, and
+     * its comment says to fix the mail rather than widen the gate. This is that fix.
+     *
+     * A password reset to an unclaimed account IS part of claiming it. Without this
+     * the gate closes a loop with no way out: you cannot sign in, which is why you
+     * asked for a reset, and the reset is withheld because you have not signed in.
+     * That is what happened to a parent on 2026-09-01 — five failed sign-ins, a
+     * reset request, and the email suppressed as "Digest/summary withheld". She got
+     * in by finding an earlier welcome email; without it she was locked out.
+     *
+     * X-KT-Invite is the existing exemption and the listener strips it before the
+     * message leaves, so nothing about the sent mail changes.
+     */
+    public function headers(): \Illuminate\Mail\Mailables\Headers
+    {
+        return new \Illuminate\Mail\Mailables\Headers(
+            text: ['X-KT-Invite' => '1'],
+        );
+    }
+
     public function content(): Content
     {
         // Use the shared branded header/footer (EmailTemplate::wrap) — the same
