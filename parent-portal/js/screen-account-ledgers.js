@@ -457,7 +457,19 @@
       + '<button type="button" id="al-toggle" style="padding:8px 14px;border:1px solid '
       + (inList ? C.accent : '#CBD5E1') + ';background:' + (inList ? C.accent : '#fff') + ';color:'
       + (inList ? '#fff' : '#334155') + ';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">'
-      + (inList ? '‹ Back to the ledger' : '⊞ All accounts') + '</button>'
+      /* NEVER the word "back" here, and never a bare arrow.
+
+         kt-icon-buttons.js rewrites any label matching /back/ to '⬅️', and
+         app-v2-shell.js then treats BOTH the word and that glyph as a browser-back
+         control — with a CAPTURE-phase listener that calls stopPropagation() before
+         this screen's own handler ever runs. The label "‹ Back to the ledger" was
+         therefore navigating to #dashboard instead of switching views.
+
+         The pair is named for where each one goes, which dodges the whole mechanism:
+         "All accounts" and "One account". Also avoided: view / open / preview /
+         details / search / manage — kt-icon-buttons claims each of those too and
+         would replace the label with a mystery glyph. */
+      + (inList ? '📄 One account' : '⊞ All accounts') + '</button>'
       + '</div>';
 
     var role = host.querySelector('#al-prole');
@@ -921,7 +933,7 @@
 
     // ── outstanding ───────────────────────────────────────────────────
     var openTable = openItems.length
-      ? table(['Invoice', 'Issued', 'Due', 'Invoiced', 'Outstanding'], openItems.map(function (o) {
+      ? table(['Invoice', 'Issued', 'Due', 'Invoiced', 'Outstanding', ''], openItems.map(function (o) {
         var late = o.days_overdue > 0
           ? '<div style="color:' + C.bad + ';font-weight:700;font-size:11.5px;">' + o.days_overdue + ' days late</div>' : '';
         return [
@@ -930,9 +942,10 @@
           fmtDate(o.issued_at),
           fmtDate(o.due_at) + late,
           money(o.total),
-          '<strong>' + money(o.outstanding) + '</strong>'
+          '<strong>' + money(o.outstanding) + '</strong>',
+          rowActions(o)
         ];
-      }), [0, 0, 0, 1, 1], ['auto', '14%', '18%', '13%', '14%'])
+      }), [0, 0, 0, 1, 1, 1], ['auto', '13%', '16%', '12%', '13%', '52px'])
       : empty('Nothing outstanding on this account.');
 
     // ── coming up ─────────────────────────────────────────────────────
@@ -1005,6 +1018,12 @@
 
     drawHistory(host, entries);
 
+    /* The same document action the history rows carry — Still outstanding is where
+       someone is most likely to want the invoice in front of them. Bound here because
+       that table is painted by paintAccount, not by drawHistory. */
+    bindDocButtons(host);
+    try { if (KT.sweepRowActions) KT.sweepRowActions(); } catch (err) {}
+
     /* Emailing and downloading now live behind "Generate statement" in the picker
        bar, where the period is chosen first. */
   }
@@ -1028,11 +1047,27 @@
 
      Plain buttons in the LAST cell — kt-row-actions.js collapses them into the house
      kebab by itself. */
+  /* The URL is signed and belongs to the source host — opened verbatim. Rewriting a
+     signed URL's host is how every form download here once 404'd. */
+  function bindDocButtons(root) {
+    root.querySelectorAll('.al-doc').forEach(function (b) {
+      if (b.dataset.bound) { return; }
+      b.dataset.bound = '1';
+      b.addEventListener('click', function () {
+        var w = window.open(b.getAttribute('data-url'), '_blank', 'noopener');
+        if (!w && Dom.toast) { Dom.toast('Your browser blocked the pop-up — allow pop-ups for this site.', 'error'); }
+      });
+    });
+  }
+
   function rowActions(e) {
     if (!e.doc_url) { return ''; }
 
+    /* "Invoice document", not "View document": kt-icon-buttons rewrites /view/
+       to 'ℹ️', and inside a kebab a button whose text became a bare glyph renders as a
+       blank menu row. */
     return '<button type="button" class="al-doc" data-url="' + esc(e.doc_url)
-      + '" title="View document">👁 View document</button>';
+      + '" title="Open the invoice document">📄 Invoice document</button>';
   }
 
   /* History is redrawn on its own so the filter does not rebuild the charts —
@@ -1115,14 +1150,7 @@
       });
     });
 
-    /* The URL is signed and belongs to the source host — opened verbatim. Rewriting a
-       signed URL's host is how every form download here once 404'd. */
-    host.querySelectorAll('.al-doc').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var w = window.open(b.getAttribute('data-url'), '_blank', 'noopener');
-        if (!w && Dom.toast) { Dom.toast('Your browser blocked the pop-up — allow pop-ups for this site.', 'error'); }
-      });
-    });
+    bindDocButtons(host);
 
     // Collapse them into the ⋮ now rather than on the next sweep.
     try { if (KT.sweepRowActions) KT.sweepRowActions(); } catch (err) {}
