@@ -98,12 +98,24 @@
       // Staff are authorised against their ACTIVE agency, so this has to travel.
       try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; } catch (e) {}
       var r = await fetch(base + '/invoices/external/' + id + '/document', { headers: h });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) {
+        /* Say what actually happened. A 410 means the billing system DELETED the
+           document — nothing here is broken and retrying will never help — and the
+           server sends the sentence to show. Swallowing it left "Could not open that
+           invoice" standing in for a deleted invoice, a network fault and a
+           permission problem alike. */
+        var why = '';
+        try { why = ((await r.clone().json()) || {}).message || ''; } catch (e) {}
+        throw new Error(why || ('HTTP ' + r.status));
+      }
       var url = URL.createObjectURL(await r.blob());
       window.open(url, '_blank');
       setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
     } catch (e) {
-      if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open that invoice', 'error');
+      var msg = (e && e.message && ! /^HTTP \d+$/.test(e.message))
+        ? e.message
+        : 'Could not open that invoice';
+      if (KT.Dom && KT.Dom.toast) KT.Dom.toast(msg, 'error');
     }
     btn.disabled = false; btn.textContent = label;
   }
@@ -158,6 +170,25 @@
       body.innerHTML = '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No synced invoices' + (state.search || state.family_id ? ' match this filter.' : ' yet. Invoices appear here automatically as the external platform pushes them.') + '</div>';
       return;
     }
+    /* One pill per role the billed family's guardians hold. Almost every row reads
+       just "Parent"; the point of the column is the row that also reads Educator or
+       Admin, so a staff role is tinted and Parent is left plain — the exception is
+       what should catch the eye, not the rule. */
+    function roleCell(role) {
+      var raw = String(role || '').trim();
+      if (raw === '') { return '<span style="color:#94A3B8;">—</span>'; }
+      return raw.split('·').map(function (r) {
+        r = r.trim();
+        if (r === '') { return ''; }
+        var staff = r.toLowerCase() !== 'parent';
+        var bg = staff ? '#EEF2FF' : '#F1F5F9';
+        var fg = staff ? '#4338CA' : '#475569';
+        return '<span style="display:inline-block;background:' + bg + ';color:' + fg
+          + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;'
+          + 'margin:1px 3px 1px 0;white-space:nowrap;">' + esc(r) + '</span>';
+      }).join('');
+    }
+
     var th = 'text-align:left;padding:10px 12px;font-size:10.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;';
     var td = 'padding:10px 12px;font-size:13px;color:#334155;border-top:1px solid #F1F5F9;vertical-align:middle;';
     var rows = invoices.map(function (i) {
@@ -169,6 +200,7 @@
       acts += '<button type="button" class="xb-act" data-act="edit" data-id="' + i.id + '" style="border:none;background:none;cursor:pointer;color:#334155;font-weight:600;font-size:12.5px;padding:3px 7px;">✏️ Edit</button>';
       return '<tr>'
         + '<td style="' + td + 'font-weight:700;color:#0F172A;">' + esc(i.family || '—') + '</td>'
+        + '<td style="' + td + '">' + roleCell(i.role) + '</td>'
         + '<td style="' + td + 'font-variant-numeric:tabular-nums;">' + esc(i.number || '—') + '</td>'
         + '<td style="' + td + '">' + statusBadge(i.status, i.is_open) + '</td>'
         + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.issued_at) + '</td>'
@@ -190,6 +222,9 @@
       + '<thead><tr style="background:#F8FAFC;">'
       + [
           { h: 'Family', k: 'family', a: '' },
+          /* Not sortable: it is a property of the family, not of the invoice, and
+             sorting a page of mostly-"Parent" by role sorts nothing. */
+          { h: 'Role', k: '', a: '' },
           { h: 'Invoice #', k: 'number', a: '' },
           { h: 'Status', k: 'status', a: '' },
           { h: 'Issued', k: 'issued', a: '' },

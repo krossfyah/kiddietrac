@@ -372,6 +372,20 @@ final class InvoiceController extends Controller
             \Illuminate\Support\Facades\Log::warning('[invoices] source document refused', [
                 'invoice' => $id, 'status' => $res->status(),
             ]);
+
+            /* A 404 from the source is not "could not be reached" — the document is
+               GONE. iLearn soft-deletes invoices, and /pinv/{invoice} binds the model
+               without trashed rows, so a deleted invoice 404s before the signature is
+               even checked. Saying 502 for that sent everyone looking at the network.
+
+               410 Gone, with a message the screen can show, because the row is still
+               listed here while the document behind it no longer exists. */
+            if ($res->status() === 404) {
+                abort(410, 'This invoice was removed in the billing system, so the '
+                    . 'official document no longer exists. The row here is a copy taken '
+                    . 'before it was deleted.');
+            }
+
             abort(502, 'The official invoice could not be loaded.');
         }
 
@@ -475,6 +489,45 @@ final class InvoiceController extends Controller
         }
         $rows = $rowsQ->forPage($page, $perPage)->get(['ei.*', 'a.name as agency_name']);
 
+        /* WHOSE invoice, in role terms.
+
+           The family name says who; this says what they are to the agency. A guardian
+           who is only a guardian reads "Parent"; one who also holds a staff role reads
+           both, which is the case worth seeing — Natasha Satnarine is a guardian and an
+           educator, and every agency has a few. Resolved once for the page, not per
+           row, so the list stays at two queries however long it is. */
+        $roleLabels = [
+            'guardian' => 'Parent', 'educator' => 'Educator', 'centre_director' => 'Director',
+            'agency_admin' => 'Admin', 'platform_admin' => 'Platform admin',
+            'home_visitor' => 'Home visitor', 'auditor' => 'Auditor', 'sales_rep' => 'Sales',
+        ];
+        $famRoles = [];
+        foreach (DB::table('guardians as g')
+            ->join('role_assignments as ra', 'ra.user_id', '=', 'g.user_id')
+            ->whereIn('g.family_id', $familyIds ?: [0])
+            ->where('ra.active', 1)
+            ->get(['g.family_id', 'ra.role']) as $r) {
+            $fid = (int) $r->family_id;
+            $label = $roleLabels[$r->role] ?? ucfirst(str_replace('_', ' ', (string) $r->role));
+            $famRoles[$fid][$label] = true;
+        }
+
+        /* No ACTIVE role is not "unknown" — on every one of these it means the
+           guardian's account has been closed, and an invoice addressed to a closed
+           account is the thing somebody chasing payment most needs to notice. Say so
+           rather than printing a dash. */
+        $noRole = array_values(array_diff(array_map('intval', $familyIds), array_keys($famRoles)));
+        if ($noRole) {
+            foreach (DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                ->whereIn('g.family_id', $noRole)
+                ->get(['g.family_id', 'u.status']) as $r) {
+                $fid = (int) $r->family_id;
+                if (isset($famRoles[$fid])) { continue; }
+                $st = strtolower((string) $r->status);
+                $famRoles[$fid]['Parent (' . ($st !== '' ? $st : 'no role') . ')'] = true;
+            }
+        }
+
         $families = [];
         foreach ($familyIds as $fid) {
             $families[] = ['id' => (int) $fid, 'label' => $famLabel[(int) $fid] ?? ('Family #' . (int) $fid)];
@@ -486,6 +539,10 @@ final class InvoiceController extends Controller
                 'id'           => (int) $r->id,
                 'family_id'    => (int) $r->family_id,
                 'family'       => $famLabel[(int) $r->family_id] ?? ('Family #' . (int) $r->family_id),
+                /* Parent, or Parent · Educator where the person being billed also works
+                   here. Empty when the family has no guardian with an active role — the
+                   column then shows a dash rather than inventing one. */
+                'role'         => implode(' · ', array_keys($famRoles[(int) $r->family_id] ?? [])),
                 'source'       => $r->external_source,
                 'source_label' => $r->agency_name ?: ($r->source_label ?: ucfirst((string) $r->external_source)),
                 'number'       => $r->number,
