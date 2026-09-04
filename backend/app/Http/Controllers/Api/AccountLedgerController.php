@@ -613,7 +613,36 @@ class AccountLedgerController extends Controller
                      'brand_logo_url', 'brand_primary_color', 'timezone']);
 
         $families = DB::table('families as f')->leftJoin('centres as c', 'c.id', '=', 'f.centre_id')
-            ->whereIn('f.id', $famIds)->get(['f.id', 'f.family_name', 'c.name as centre']);
+            ->whereIn('f.id', $famIds)
+            ->get(['f.id', 'f.family_name', 'c.name as centre', 'f.primary_phone', 'f.primary_email',
+                   'f.address_line1', 'f.address_line2', 'f.city', 'f.province', 'f.postal_code']);
+
+        /* HOW TO REACH THIS PERSON.
+
+           The users table holds a name, an email and a phone that is usually null; a
+           guardian's real phone and their address live on the FAMILY, which is also
+           where a billing address belongs on a statement. So the person's own details
+           win where they exist and the family's fill the gaps.
+
+           Nothing is invented: a field nobody entered is left out entirely, so the
+           document omits the line rather than printing an empty label. */
+        $fam = $families->first();
+        $addr = [];
+        if ($fam) {
+            foreach ([$fam->address_line1, $fam->address_line2] as $line) {
+                $line = trim((string) $line);
+                if ($line !== '' && strtolower($line) !== 'null') { $addr[] = $line; }
+            }
+            $cityLine = trim(implode(' ', array_filter([
+                trim((string) $fam->city), trim((string) $fam->province), trim((string) $fam->postal_code),
+            ], fn ($v) => $v !== '' && strtolower($v) !== 'null')));
+            if ($cityLine !== '') { $addr[] = $cityLine; }
+        }
+        $contact = array_filter([
+            'email'   => $user->email ?: ($fam->primary_email ?? null),
+            'phone'   => $user->phone ?: ($fam->primary_phone ?? null),
+            'address' => $addr ?: null,
+        ], fn ($v) => $v !== null && $v !== '');
 
         $children = DB::table('children')->whereIn('family_id', $famIds)->whereNull('deleted_at')
             ->get(['id', 'first_name', 'last_name', 'enrollment_status'])
@@ -634,6 +663,7 @@ class AccountLedgerController extends Controller
                 'agency_id'  => $agencyId,
                 'timezone'   => $agency->timezone ?: config('app.timezone', 'UTC'),
                 'family_ids' => array_values(array_filter($famIds)),
+                'contact'    => $contact,
                 'families'   => $families,
                 'children'   => $children,
             ],
@@ -860,12 +890,16 @@ class AccountLedgerController extends Controller
     }
 
     /**
-     * The statement as email HTML.
+     * The covering note. Deliberately short.
      *
-     * Tables and inline styles only — no flexbox, no grid, no classes the wrapper
-     * does not define. Outlook's Word rendering engine ignores most of what the
-     * screen version uses, and a statement that arrives as a stack of unaligned
-     * numbers is worse than no statement.
+     * This used to reproduce the whole statement in the message — summary, every open
+     * invoice, everything scheduled, forty lines of history — which on a phone is a
+     * wall of numbers nobody scrolls, and which the attachment already says better and
+     * in full. So the email answers one question, points at the document for the rest,
+     * and gets out of the way.
+     *
+     * The balance stays, because a statement that does not say what is owed is a
+     * covering note for nothing. Three lines is not a list.
      */
     private function statementEmailBody(array $st, string $agencyName, string $note, string $tz): string
     {
@@ -882,19 +916,33 @@ class AccountLedgerController extends Controller
             if (! $v) { return '—'; }
             try {
                 $raw = (string) $v;
-                $hasTime = (bool) preg_match('/\d{2}:\d{2}/', $raw);
 
-                return $hasTime
-                    ? Carbon::parse($raw, 'UTC')->setTimezone($tz)->format('j M Y')
-                    : Carbon::parse(substr($raw, 0, 10))->format('j M Y');
+                return preg_match('/\d{2}:\d{2}/', $raw)
+                    ? Carbon::parse($raw, 'UTC')->setTimezone($tz)->format('j F Y')
+                    : Carbon::parse(substr($raw, 0, 10))->format('j F Y');
             } catch (\Throwable $x) {
                 return (string) $v;
             }
         };
 
-        $h = '<p style="margin:0 0 14px;">Hello ' . $e($st['account']['name']) . ',</p>'
-            . '<p style="margin:0 0 18px;">Here is your account statement with <strong>' . $e($agencyName)
-            . '</strong>, as at ' . $e(Carbon::parse($s['as_at'])->format('j F Y')) . '.</p>';
+        $bal = (float) $s['balance'];
+        $asAt = $d($s['as_at']);
+
+        $h = '<p style="margin:0 0 14px;">Hello ' . $e($st['account']['name']) . ',</p>';
+
+        if ($bal > 0.005) {
+            $h .= '<p style="margin:0 0 16px;">Your account statement with <strong>' . $e($agencyName)
+                . '</strong> is attached. It sets out everything on your account as at ' . $e($asAt)
+                . ' — what has been invoiced, what has been received, and what is still outstanding.</p>';
+        } elseif ($bal < -0.005) {
+            $h .= '<p style="margin:0 0 16px;">Your account statement with <strong>' . $e($agencyName)
+                . '</strong> is attached. As at ' . $e($asAt) . ' your account is in credit, and the '
+                . 'statement sets out how that stands.</p>';
+        } else {
+            $h .= '<p style="margin:0 0 16px;">Your account statement with <strong>' . $e($agencyName)
+                . '</strong> is attached. As at ' . $e($asAt) . ' there is nothing outstanding — thank you. '
+                . 'The statement is enclosed for your records.</p>';
+        }
 
         if ($note !== '') {
             $h .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
@@ -903,130 +951,45 @@ class AccountLedgerController extends Controller
                 . nl2br($e($note)) . '</td></tr></table>';
         }
 
-        // ── the position, as a panel rather than a row of tiles: one number is the
-        //    answer and the rest are context, so they are not given equal weight.
-        $balTint = $s['balance'] > 0.005 ? '#B45309' : '#16A34A';
-        $balWord = $s['balance'] > 0.005 ? 'Balance outstanding' : ($s['balance'] < -0.005 ? 'Credit on account' : 'Nothing outstanding');
-        $h .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;">'
+        /* The one number, and only the context that changes what someone does about it:
+           whether any of it is late, and when the next amount falls due. */
+        $balTint = $bal > 0.005 ? '#B45309' : '#16A34A';
+        $balWord = $bal > 0.005 ? 'Balance outstanding' : ($bal < -0.005 ? 'Credit on account' : 'Nothing outstanding');
+        $h .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">'
             . '<tr><td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:20px 22px;">'
             . '<div style="font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#64748B;">'
             . $e($balWord) . '</div>'
             . '<div style="font-size:30px;font-weight:800;color:' . $balTint . ';margin:4px 0 0;">'
-            . $m(abs($s['balance'])) . '</div>';
+            . $m(abs($bal)) . '</div>';
 
         if ($s['overdue'] > 0.005) {
             $h .= '<div style="margin-top:10px;font-size:13.5px;color:#B91C1C;font-weight:700;">'
                 . $m($s['overdue']) . ' of this is past its due date.</div>';
         }
-        if ($s['last_payment']) {
-            $h .= '<div style="margin-top:10px;font-size:13px;color:#475569;">Last payment received: '
-                . $m($s['last_payment']['amount']) . ' on ' . $e($d($s['last_payment']['date'])) . '.</div>';
-        }
         if ($s['next_due']) {
-            $h .= '<div style="margin-top:6px;font-size:13px;color:#475569;">Next due: '
-                . ($s['next_due']['amount'] !== null ? $m($s['next_due']['amount']) . ' on ' : '')
+            $h .= '<div style="margin-top:8px;font-size:13px;color:#475569;">Next due: '
+                . ($s['next_due']['amount'] !== null ? '<strong>' . $m($s['next_due']['amount']) . '</strong> on ' : '')
                 . $e($d($s['next_due']['date'])) . '.</div>';
+        }
+        if ($s['last_payment']) {
+            $h .= '<div style="margin-top:4px;font-size:13px;color:#475569;">Last payment received: '
+                . $m($s['last_payment']['amount']) . ' on ' . $e($d($s['last_payment']['date'])) . '.</div>';
         }
         $h .= '</td></tr></table>';
 
-        // ── running totals ───────────────────────────────────────────────────
-        $rows = [
-            ['Invoiced', $m($s['billed'])],
-            ['Payments received', $m($s['credited'])],
-        ];
-        if ($s['refunded'] > 0.005) { $rows[] = ['Refunded to you', $m($s['refunded'])]; }
-        if ($s['voided'] > 0.005)   { $rows[] = ['Voided (no longer owed)', $m($s['voided'])]; }
-        $rows[] = ['<strong>Balance</strong>', '<strong>' . $m($s['balance']) . '</strong>'];
+        $h .= '<p style="margin:0 0 16px;font-size:14px;color:#334155;">'
+            . 'The attached PDF has the full detail — every invoice, payment and adjustment on the '
+            . 'account, with a running balance.</p>';
 
-        $h .= '<h2 style="font-size:16px;margin:0 0 10px;color:#0F172A;">Summary</h2>'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;font-size:14px;">';
-        foreach ($rows as $r) {
-            $h .= '<tr><td style="padding:8px 0;border-bottom:1px solid #EEF2F6;color:#334155;">' . $r[0]
-                . '</td><td style="padding:8px 0;border-bottom:1px solid #EEF2F6;text-align:right;color:#0F172A;">'
-                . $r[1] . '</td></tr>';
-        }
-        $h .= '</table>';
-
-        // ── what is still owed ───────────────────────────────────────────────
-        if ($st['open_items']) {
-            $h .= '<h2 style="font-size:16px;margin:0 0 10px;color:#0F172A;">Still outstanding</h2>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;font-size:13.5px;">'
-                . '<tr><td style="padding:6px 0;color:#64748B;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Invoice</td>'
-                . '<td style="padding:6px 0;color:#64748B;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Due</td>'
-                . '<td style="padding:6px 0;text-align:right;color:#64748B;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Amount</td></tr>';
-            foreach ($st['open_items'] as $o) {
-                $late = $o['days_overdue'] > 0
-                    ? ' <span style="color:#B91C1C;font-weight:700;">' . (int) $o['days_overdue'] . 'd late</span>' : '';
-                $h .= '<tr><td style="padding:9px 0;border-top:1px solid #EEF2F6;color:#0F172A;">' . $e($o['reference']) . '</td>'
-                    . '<td style="padding:9px 0;border-top:1px solid #EEF2F6;color:#475569;">' . $e($d($o['due_at'])) . $late . '</td>'
-                    . '<td style="padding:9px 0;border-top:1px solid #EEF2F6;text-align:right;color:#0F172A;font-weight:700;">'
-                    . $m($o['outstanding']) . '</td></tr>';
-            }
-            $h .= '</table>';
-        }
-
-        // ── what is coming ───────────────────────────────────────────────────
-        if ($st['upcoming']) {
-            $h .= '<h2 style="font-size:16px;margin:0 0 10px;color:#0F172A;">Coming up</h2>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;font-size:13.5px;">';
-            foreach (array_slice($st['upcoming'], 0, 12) as $u) {
-                $when = $u['overdue']
-                    ? '<span style="color:#B91C1C;font-weight:700;">' . $e($d($u['date'])) . ' — missed</span>'
-                    : $e($d($u['date']));
-                $h .= '<tr><td style="padding:9px 0;border-top:1px solid #EEF2F6;color:#0F172A;">'
-                    . $e($u['description']) . '<div style="color:#64748B;font-size:12px;">' . $when . '</div></td>'
-                    . '<td style="padding:9px 0;border-top:1px solid #EEF2F6;text-align:right;color:#0F172A;font-weight:700;">'
-                    . ($u['amount'] !== null ? $m($u['amount']) : '—') . '</td></tr>';
-            }
-            if (count($st['upcoming']) > 12) {
-                $h .= '<tr><td colspan="2" style="padding:9px 0;border-top:1px solid #EEF2F6;color:#64748B;font-size:12.5px;">and '
-                    . (count($st['upcoming']) - 12) . ' more scheduled — the full plan is in your portal.</td></tr>';
-            }
-            $h .= '</table>';
-        }
-
-        // ── the history ──────────────────────────────────────────────────────
-        $hist = array_reverse(array_values(array_filter($st['entries'], fn ($x) => ($x['direction'] ?? '') === 'owed')));
-        $shown = array_slice($hist, 0, 40);
-        if ($shown) {
-            $h .= '<h2 style="font-size:16px;margin:0 0 10px;color:#0F172A;">Account history</h2>'
-                . '<p style="margin:0 0 10px;font-size:12.5px;color:#64748B;">Most recent first.</p>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:13px;">';
-            foreach ($shown as $x) {
-                $amount = $x['kind'] === 'void'
-                    ? '<span style="color:#94A3B8;text-decoration:line-through;">' . $m($x['original'] ?? 0) . '</span>'
-                    : (($x['credit'] ?? 0) > 0.005
-                        ? '<span style="color:#16A34A;">−' . $m($x['credit']) . '</span>'
-                        : (($x['debit'] ?? 0) > 0.005 ? $m($x['debit']) : '—'));
-                $h .= '<tr><td style="padding:9px 0;border-top:1px solid #EEF2F6;color:#475569;white-space:nowrap;vertical-align:top;">'
-                    . $e($d($x['date'])) . '</td>'
-                    . '<td style="padding:9px 0 9px 12px;border-top:1px solid #EEF2F6;color:#0F172A;">'
-                    . $e($x['description'])
-                    . (! empty($x['note']) ? '<div style="color:#64748B;font-size:12px;margin-top:2px;">' . $e($x['note']) . '</div>' : '')
-                    . '</td>'
-                    . '<td style="padding:9px 0;border-top:1px solid #EEF2F6;text-align:right;white-space:nowrap;vertical-align:top;">'
-                    . $amount . '</td></tr>';
-            }
-            $h .= '</table>';
-            if (count($hist) > 40) {
-                $h .= '<p style="margin:12px 0 0;font-size:12.5px;color:#64748B;">Showing the 40 most recent of '
-                    . count($hist) . ' entries. The complete history is in your portal.</p>';
-            }
-        }
-
-        // ── the other direction, only when there is one ──────────────────────
         if ($s['paid_out'] > 0.005) {
-            $h .= '<h2 style="font-size:16px;margin:26px 0 8px;color:#0F172A;">Paid to you</h2>'
-                . '<p style="margin:0 0 6px;font-size:13.5px;color:#334155;">'
-                . $m($s['paid_out']) . ' across ' . (int) $s['payslips'] . ' payroll document(s).</p>'
-                . '<p style="margin:0 0 20px;font-size:12.5px;color:#64748B;">Kept separate from the balance above '
-                . '— money paid to you is not a credit against fees.</p>';
+            $h .= '<p style="margin:0 0 16px;font-size:13.5px;color:#475569;">'
+                . 'It also lists the ' . $m($s['paid_out']) . ' paid to you across '
+                . (int) $s['payslips'] . ' payroll document(s), kept separate from the balance above — '
+                . 'money paid to you is not a credit against fees.</p>';
         }
 
-        $h .= '<p style="margin:24px 0 6px;font-size:13px;color:#475569;">'
-            . 'A PDF copy of this statement is attached, with the complete account history.</p>'
-            . '<p style="margin:0;font-size:13px;color:#475569;">'
-            . 'If anything here looks wrong, reply to this email or contact ' . $e($agencyName) . ' directly.</p>';
+        $h .= '<p style="margin:20px 0 0;font-size:13.5px;color:#475569;">'
+            . 'If anything looks wrong, reply to this email or contact ' . $e($agencyName) . ' directly.</p>';
 
         return $h;
     }

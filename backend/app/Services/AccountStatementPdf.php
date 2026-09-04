@@ -66,7 +66,9 @@ final class AccountStatementPdf
         try {
             $agency = DB::table('agencies')->where('id', $a['agency_id'])
                 ->first(['name', 'legal_name', 'brand_logo_url', 'logo_url', 'brand_primary_color',
-                         'contact_email', 'contact_phone', 'address_line1', 'address_line2', 'settings']);
+                         'contact_email', 'contact_phone', 'address_line1', 'address_line2',
+                         'city', 'province', 'postal_code', 'country', 'website',
+                         'tax_label', 'tax_registration', 'settings']);
         } catch (Throwable $e) { /* the document is still worth producing without it */ }
 
         $brand = $this->safeColour($agency->brand_primary_color ?? null);
@@ -98,6 +100,10 @@ final class AccountStatementPdf
       .late { color: #B91C1C; font-weight: bold; }
       .cred { color: #15803D; }
       .note { color: #64748B; font-size: 8pt; }
+      .lh { font-size: 8.5pt; color: #475569; line-height: 1.45; }
+      .lhname { font-size: 10.5pt; font-weight: bold; color: #0F172A; }
+      .label { font-size: 7pt; letter-spacing: .9px; text-transform: uppercase; color: #94A3B8; }
+      .card { border: 1px solid #E2E8F0; padding: 11px 13px; }
     ';
 
         // ── running header, repeated on every page ──────────────────────
@@ -113,32 +119,87 @@ final class AccountStatementPdf
             . '</td>'
             . '</tr></table></div>';
 
-        $contact = [];
-        foreach ([$agency->address_line1 ?? null, $agency->address_line2 ?? null,
-                  $agency->contact_phone ?? null, $agency->contact_email ?? null] as $line) {
-            $line = trim((string) $line);
-            if ($line !== '') { $contact[] = $e($line); }
+        /* ── the issuer, in full ────────────────────────────────────────
+           Every line printed only when the field has a value. A business address or
+           tax number nobody entered would be a fabricated detail on a financial
+           document, which is worse than an absent one. */
+        $agencyLines = [];
+        foreach ([$agency->address_line1 ?? null, $agency->address_line2 ?? null] as $line) {
+            $line = $this->clean($line);
+            if ($line !== null) { $agencyLines[] = $e($line); }
         }
+        $cityLine = trim(implode(' ', array_filter([
+            $this->clean($agency->city ?? null),
+            $this->clean($agency->province ?? null),
+            $this->clean($agency->postal_code ?? null),
+        ])));
+        if ($cityLine !== '') { $agencyLines[] = $e($cityLine); }
+        if ($this->clean($agency->country ?? null)) { $agencyLines[] = $e($agency->country); }
+
+        $agencyMeta = [];
+        if ($this->clean($agency->contact_phone ?? null)) { $agencyMeta[] = $e($this->phone($agency->contact_phone)); }
+        if ($this->clean($agency->contact_email ?? null)) { $agencyMeta[] = $e($agency->contact_email); }
+        if ($this->clean($agency->website ?? null)) { $agencyMeta[] = $e($agency->website); }
+        if ($this->clean($agency->tax_registration ?? null)) {
+            $agencyMeta[] = $e(($this->clean($agency->tax_label ?? null) ?: 'Tax reg.') . ' ' . $agency->tax_registration);
+        }
+
+        $footBits = array_filter([
+            $this->clean($agency->contact_phone ?? null) ? $this->phone($agency->contact_phone) : null,
+            $this->clean($agency->contact_email ?? null),
+        ]);
         $foot = '<div class="foot">'
-            . ($contact ? implode(' · ', $contact) . '<br>' : '')
+            . ($footBits ? $e($agencyName . ' · ' . implode(' · ', $footBits)) . '<br>' : '')
             . 'Generated ' . $e(Carbon::now($tz)->format('j M Y, g:ia')) . ' · KiddieTrac'
             . '</div>';
 
-        // ── who and when ────────────────────────────────────────────────
-        $body = '<table style="margin-top:4px;"><tr>'
-            . '<td style="border:0;padding:0;width:60%;">'
-            . '<div class="muted">Statement for</div>'
-            . '<div style="font-size:12pt;font-weight:bold;color:#0F172A;">' . $e($a['name']) . '</div>'
-            . ($a['email'] ? '<div class="muted">' . $e($a['email']) . '</div>' : '')
-            . ((($a['roles'] ?? []) !== []) ? '<div class="muted">' . $e(implode(' · ', $a['roles'])) . '</div>' : '')
-            . ((($a['children'] ?? []) !== [])
-                ? '<div class="muted">Children: ' . $e(implode(', ', array_column($a['children'], 'name'))) . '</div>' : '')
+        // ── the letterhead: who issued this, and when ───────────────────
+        $body = '<table style="margin-top:2px;"><tr>'
+            . '<td style="border:0;padding:0;width:64%;">'
+            . '<div class="lhname">' . $e($this->clean($agency->legal_name ?? null) ?: $agencyName) . '</div>'
+            . ($agencyLines ? '<div class="lh">' . implode('<br>', $agencyLines) . '</div>' : '')
+            . ($agencyMeta ? '<div class="lh" style="margin-top:3px;">' . implode('<br>', $agencyMeta) . '</div>' : '')
             . '</td>'
-            . '<td style="border:0;padding:0;width:40%;text-align:right;">'
-            . '<div class="muted">As at</div>'
-            . '<div style="font-size:11pt;font-weight:bold;">' . $e($d($s['as_at'])) . '</div>'
+            . '<td style="border:0;padding:0;width:36%;text-align:right;vertical-align:top;">'
+            . '<div class="label">Statement date</div>'
+            . '<div style="font-size:11pt;font-weight:bold;color:#0F172A;">' . $e($d($s['as_at'])) . '</div>'
+            . '<div class="label" style="margin-top:8px;">Account</div>'
+            . '<div class="lh">#' . (int) $a['user_id'] . '</div>'
             . '</td>'
             . '</tr></table>';
+
+        // ── and who it is for, in full ──────────────────────────────────
+        $accLines = [];
+        $c = $a['contact'] ?? [];
+        foreach (($c['address'] ?? []) as $line) { $accLines[] = $e($line); }
+        $reach = [];
+        if (! empty($c['email'])) { $reach[] = $e($c['email']); }
+        if (! empty($c['phone'])) { $reach[] = $e($this->phone($c['phone'])); }
+
+        $body .= '<div class="card" style="margin-top:14px;"><table><tr>'
+            . '<td style="border:0;padding:0;width:62%;">'
+            . '<div class="label">Statement for</div>'
+            . '<div style="font-size:12pt;font-weight:bold;color:#0F172A;margin-top:2px;">' . $e($a['name']) . '</div>'
+            . ($accLines ? '<div class="lh" style="margin-top:3px;">' . implode('<br>', $accLines) . '</div>' : '')
+            . ($reach ? '<div class="lh" style="margin-top:3px;">' . implode('<br>', $reach) . '</div>' : '')
+            . '</td>'
+            . '<td style="border:0;padding:0;width:38%;vertical-align:top;">'
+            . ((($a['roles'] ?? []) !== [])
+                ? '<div class="label">Role</div><div class="lh">' . $e(implode(', ', $a['roles'])) . '</div>' : '')
+            . ((($a['children'] ?? []) !== [])
+                ? '<div class="label" style="margin-top:7px;">Children</div><div class="lh">'
+                  . $e(implode(', ', array_column($a['children'], 'name'))) . '</div>' : '')
+            /* Only an ADVERSE state is red. "Invited" means the person has not signed
+               in yet, which is ordinary, and colouring it like a suspension puts a
+               warning on a statement that has nothing wrong with it. */
+            . ((! empty($a['status']) && strtolower((string) $a['status']) !== 'active')
+                ? '<div class="label" style="margin-top:7px;">Account status</div>'
+                  . '<div class="lh"'
+                  . (in_array(strtolower((string) $a['status']), ['suspended', 'closed', 'inactive', 'deactivated'], true)
+                      ? ' style="color:#B91C1C;font-weight:bold;"' : '')
+                  . '>' . $e(ucfirst((string) $a['status'])) . '</div>' : '')
+            . '</td>'
+            . '</tr></table></div>';
 
         // ── the position ────────────────────────────────────────────────
         $bal = (float) $s['balance'];
@@ -273,6 +334,37 @@ final class AccountStatementPdf
                 return (string) $v;
             }
         };
+    }
+
+    /**
+     * The house phone mask, matching what the portal shows everywhere else.
+     *
+     * Never destructive: a plain 10- or 11-digit North American number is formatted,
+     * and ANYTHING else — an extension, an international number, a note somebody typed
+     * into the field — is returned exactly as entered. Reformatting what we do not
+     * understand loses information on a document people rely on.
+     */
+    private function phone(?string $v): string
+    {
+        $raw = trim((string) $v);
+        $digits = preg_replace('/\D+/', '', $raw);
+
+        if (strlen($digits) === 11 && $digits[0] === '1') {
+            $digits = substr($digits, 1);
+        }
+        if (strlen($digits) !== 10) {
+            return $raw;
+        }
+
+        return '(' . substr($digits, 0, 3) . ') ' . substr($digits, 3, 3) . '-' . substr($digits, 6);
+    }
+
+    /** A stored value that is present and meaningful, or null. */
+    private function clean($v): ?string
+    {
+        $v = trim((string) $v);
+
+        return ($v === '' || strtolower($v) === 'null') ? null : $v;
     }
 
     /** Never let a stored value become a CSS injection, and never render an empty colour. */
