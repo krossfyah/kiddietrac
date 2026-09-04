@@ -39,11 +39,29 @@ final class PlatformController extends Controller
             ->count('user_id');
         $guardians = DB::table('guardians')->distinct()->count('user_id');
 
-        // Plan MRR — sum each active agency's plan_amount_cents (in cents).
-        $mrrCents = (int) DB::table('agencies')
+        /* Plan MRR — each active agency's plan NORMALISED TO A MONTHLY amount.
+           A raw sum of plan_amount_cents counts an annual plan as twelve times its real
+           monthly contribution, and a quarterly plan as three times. Grouped by currency
+           because CAD and USD cannot be added together, and we hold no FX rates to
+           convert with — so the base currency is the headline and the rest is reported
+           beside it rather than being folded in or dropped. */
+        $mrrByCurrency = [];
+        foreach (DB::table('agencies')
             ->whereNull('deleted_at')
             ->where('billing_status', 'active')
-            ->sum('plan_amount_cents');
+            ->get(['plan_amount_cents', 'plan_currency', 'billing_interval']) as $a) {
+            $cur = \App\Support\PlatformBilling::normaliseCurrency($a->plan_currency ?? null);
+            $mrrByCurrency[$cur] = ($mrrByCurrency[$cur] ?? 0)
+                + \App\Support\PlatformBilling::monthlyCents(
+                    (int) ($a->plan_amount_cents ?? 0),
+                    $a->billing_interval ?? null
+                );
+        }
+        ksort($mrrByCurrency);
+
+        /* CAD is the platform base currency; the single headline number stays in it so
+           ARR/ARPA/ARPU below remain expressed in one unit. */
+        $mrrCents = (int) ($mrrByCurrency['CAD'] ?? 0);
 
         // Recent agency signups + churn — last 30 days
         $thirtyDaysAgo = now()->subDays(30);
@@ -81,14 +99,26 @@ final class PlatformController extends Controller
         $mrrTrend = [];
         for ($i = 5; $i >= 0; $i--) {
             $monthEnd = now()->startOfMonth()->subMonths($i)->endOfMonth();
-            $rows = DB::table('agencies')
+            /* Same normalisation as the headline. If the trend summed raw amounts
+               while the headline did not, month-on-month growth would be measured against
+               a differently-computed baseline and read as a jump that never happened. */
+            $rows = 0;
+            foreach (DB::table('agencies')
                 ->where('created_at', '<=', $monthEnd)
                 ->where(function ($q) use ($monthEnd) {
                     $q->whereNull('cancelled_at')->orWhere('cancelled_at', '>', $monthEnd);
                 })
                 ->whereNull('deleted_at')
                 ->where('billing_status', 'active')
-                ->sum('plan_amount_cents');
+                ->get(['plan_amount_cents', 'plan_currency', 'billing_interval']) as $a) {
+                if (\App\Support\PlatformBilling::normaliseCurrency($a->plan_currency ?? null) !== 'CAD') {
+                    continue;   // base currency only, matching mrr_cents
+                }
+                $rows += \App\Support\PlatformBilling::monthlyCents(
+                    (int) ($a->plan_amount_cents ?? 0),
+                    $a->billing_interval ?? null
+                );
+            }
             $mrrTrend[] = [
                 'label' => $monthEnd->format('M'),
                 'period' => $monthEnd->format('Y-m'),
@@ -147,6 +177,8 @@ final class PlatformController extends Controller
                 'guardians' => $guardians,
                 'mrr_cents' => $mrrCents,
                 'mrr_dollars' => $mrrCents / 100,
+                /* Every currency, so a USD customer is never invisible in the total. */
+                'mrr_by_currency' => $mrrByCurrency,
                 'active_sessions_24h' => $sessionsToday,
             ],
             'recent_30d' => [
@@ -171,7 +203,15 @@ final class PlatformController extends Controller
     {
         $now = now();
         $sevenDaysAgo = $now->copy()->subDays(7);
-        $today = $now->copy()->startOfDay();
+        /* "Today" is a DISPLAY concept and must be the reader's day, not UTC's.
+           app.timezone is UTC, so at 8pm in Toronto the UTC day has already rolled
+           over and `now()->startOfDay()` pointed at tomorrow — the Logins-today card
+           reset itself to 0 every evening while people were still signing in.
+           Measured: 589 logins in audit_logs, latest 23:45 UTC, card showing 0 at
+           00:29 UTC. The 7d / 24h figures are rolling windows and were never wrong,
+           which is exactly why only this one card looked broken. (2026-08-25) */
+        $displayTz = \App\Support\AgencyTime::tz(null);
+        $today = $now->copy()->setTimezone($displayTz)->startOfDay()->utc();
         $dayAgo = $now->copy()->subDay();
 
         // ── Email deliverability (last 7 days) ──
@@ -352,11 +392,28 @@ final class PlatformController extends Controller
                 'locale' => $a->locale ?? null,
                 // v22p92: address + residence country + default language (Edit-all-fields)
                 'brand_address' => $set['brand_address'] ?? null,
+                /* The parts, so the editor can show them as fields. brand_address stays
+                   for the invoice PDF and the branding endpoint, which read that string. */
+                'address_line1' => $a->address_line1,
+                'address_line2' => $a->address_line2,
+                'city' => $a->city,
+                'province' => $a->province,
+                'postal_code' => $a->postal_code,
+                'legal_name' => $a->legal_name,
+                'website' => $a->website,
                 'country' => $set['country'] ?? null,
                 'default_locale' => $set['default_locale'] ?? ($a->locale ?? null),
                 // Explicit agency owner (super-admin editable) for the Edit modal.
                 'owner_name' => $set['owner']['name'] ?? null,
+                /* Split for the form. Falls back to splitting the stored string, so an
+                   agency saved before the fields existed still shows two populated boxes
+                   rather than two empty ones. */
+                'owner_first_name' => $set['owner']['first_name']
+                    ?? (($set['owner']['name'] ?? null) ? preg_split('/\s+/', trim($set['owner']['name']), 2)[0] : null),
+                'owner_last_name' => $set['owner']['last_name']
+                    ?? (($set['owner']['name'] ?? null) ? (preg_split('/\s+/', trim($set['owner']['name']), 2)[1] ?? null) : null),
                 'owner_email' => $set['owner']['email'] ?? null,
+                'schedule_autofill' => (bool) ($set['schedule_autofill'] ?? false),
                 'centre_count' => (int) ($centresPerAgency[$a->id] ?? 0),
                 'family_count' => $familyCount,
                 'child_count' => $childCount,
@@ -691,7 +748,7 @@ final class PlatformController extends Controller
         ], $link);
 
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => $request->user()->id ?? null, 'action' => 'agency.invite_resent',
                 'entity_type' => 'agency', 'entity_id' => $agencyId,
                 'payload' => json_encode(['to' => $user->email]), 'ip_address' => $request->ip(), 'created_at' => now(),
@@ -746,8 +803,19 @@ final class PlatformController extends Controller
             });
         }
 
+        /* `status=problems` is the Email errors tab: every message that did NOT reach
+           the person it was addressed to, whatever the reason. Grouping them matters —
+           asking "did this parent get told?" should not require knowing whether the
+           failure was a bounce, a hard send error, a retryable defer, or our own
+           suppression rules quietly dropping it. Suppressed belongs here: from the
+           family's side, a message that was deliberately withheld and one that bounced
+           are the same event — they were not told. */
         $status = trim((string) $request->query('status', ''));
-        if ($status !== '' && $status !== 'all') $q->where('status', $status);
+        if ($status === 'problems') {
+            $q->whereIn('status', ['bounced', 'failed', 'deferred', 'suppressed']);
+        } elseif ($status !== '' && $status !== 'all') {
+            $q->where('status', $status);
+        }
 
         // Date bounds arrive as agency-local YYYY-MM-DD; created_at is stored UTC,
         // so convert the local day boundaries rather than comparing raw strings
@@ -907,6 +975,13 @@ final class PlatformController extends Controller
             // Explicit agency owner (super-admin editable) — corrects the derived
             // "earliest admin" owner when it's wrong. Stored in the settings JSON.
             'owner_name' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'owner_first_name' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'owner_last_name' => ['sometimes', 'nullable', 'string', 'max:80'],
+            // The nightly staff-schedule fill. Accepted by the agency-admin editor since
+            // 2026-09-02 and never by this one, which is the editor a super admin uses.
+            'schedule_autofill' => ['sometimes', 'boolean'],
+            // The price is a number; this says what it is a number OF.
+            'plan_currency' => ['sometimes', 'nullable', 'string', 'in:CAD,USD,GBP,AUD,NZD,EUR'],
             'owner_email' => ['sometimes', 'nullable', 'email', 'max:180'],
             // The agency's timezone drives every displayed time and every daily
             // bucket (care logs, reports, the end-of-day parent summary). It was
@@ -926,6 +1001,15 @@ final class PlatformController extends Controller
             // v22p92: agency address + residence country + default language
             // (so Edit shows/saves every field the create wizard collected).
             'brand_address' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            /* The address as its parts. The columns existed; only the blob was editable,
+               so a postcode could not be corrected without retyping the paragraph. */
+            'address_line1' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'address_line2' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'city' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'province' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'postal_code' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'legal_name' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'website' => ['sometimes', 'nullable', 'string', 'max:200'],
             'country' => ['sometimes', 'nullable', 'string', 'size:2'],
             'default_locale' => ['sometimes', 'nullable', 'string', 'max:8'],
             // v22p36: per-agency email settings
@@ -952,15 +1036,50 @@ final class PlatformController extends Controller
 
         // Explicit owner → settings.owner (name/email). Empty clears it (falls back
         // to the derived owner, which now excludes super admins).
-        if (array_key_exists('owner_name', $data) || array_key_exists('owner_email', $data)) {
+        // The nightly autofill switch lives in settings alongside the other flags.
+        if (array_key_exists('schedule_autofill', $data)) {
+            $rowA = DB::table('agencies')->where('id', $agencyId)->first();
+            $setA = json_decode(($data['settings'] ?? $rowA->settings) ?? '{}', true) ?: [];
+            $setA['schedule_autofill'] = (bool) $data['schedule_autofill'];
+            $data['settings'] = json_encode($setA);
+            unset($data['schedule_autofill']);
+        }
+
+        if (array_key_exists('owner_name', $data) || array_key_exists('owner_email', $data)
+            || array_key_exists('owner_first_name', $data) || array_key_exists('owner_last_name', $data)) {
             $row = DB::table('agencies')->where('id', $agencyId)->first(['settings']);
             $settings = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
             $owner = is_array($settings['owner'] ?? null) ? $settings['owner'] : [];
-            if (array_key_exists('owner_name', $data))  $owner['name']  = trim((string) $data['owner_name']) ?: null;
+            /* First and last are the fields now; `name` is kept as the composed string
+               because the platform list and the owner-invite mailer both read it. Parts
+               are the source of truth, `name` the derived copy. */
+            if (array_key_exists('owner_first_name', $data)) {
+                $owner['first_name'] = trim((string) $data['owner_first_name']) ?: null;
+            }
+            if (array_key_exists('owner_last_name', $data)) {
+                $owner['last_name'] = trim((string) $data['owner_last_name']) ?: null;
+            }
+            if (array_key_exists('owner_first_name', $data) || array_key_exists('owner_last_name', $data)) {
+                $composed = trim(($owner['first_name'] ?? '') . ' ' . ($owner['last_name'] ?? ''));
+                $owner['name'] = $composed !== '' ? $composed : null;
+            } elseif (array_key_exists('owner_name', $data)) {
+                // A caller still sending one string: keep it, and split it so the fields
+                // have something sensible to show next time.
+                $whole = trim((string) $data['owner_name']);
+                $owner['name'] = $whole ?: null;
+                if ($whole !== '' && empty($owner['first_name']) && empty($owner['last_name'])) {
+                    $bits = preg_split('/\s+/', $whole, 2);
+                    $owner['first_name'] = $bits[0] ?? null;
+                    $owner['last_name'] = $bits[1] ?? null;
+                }
+            }
             if (array_key_exists('owner_email', $data)) $owner['email'] = trim((string) $data['owner_email']) ?: null;
             $settings['owner'] = $owner;
             DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings)]);
-            unset($data['owner_name'], $data['owner_email']);
+            // Every owner_* key is a settings key. Miss one and it reaches the column
+            // UPDATE, which fails the entire save.
+            unset($data['owner_name'], $data['owner_email'],
+                  $data['owner_first_name'], $data['owner_last_name']);
         }
 
 
@@ -998,18 +1117,82 @@ final class PlatformController extends Controller
             unset($data['brand_address'], $data['country'], $data['default_locale']);
         }
 
+        /* Keep settings.brand_address in step with the parts.
+
+           It is not dead weight: the invoice PDF and the branding endpoint both read that
+           string, so leaving it behind once the parts became editable would take the
+           agency's address off its own invoices. Rebuilt from whatever the columns now
+           hold — the parts are the source of truth and this is the derived copy. */
+        if (\App\Support\AgencyAddress::touches($data)) {
+            $current = DB::table('agencies')->where('id', $agencyId)->first();
+            $data['settings'] = \App\Support\AgencyAddress::applyToSettings(
+                $data, $current, $data['settings'] ?? null
+            );
+        }
+
+        // Read before the write, so the audit can say what each field changed FROM.
+        $before = DB::table('agencies')->where('id', $agencyId)->first();
+
         $data['updated_at'] = now();
         DB::table('agencies')->where('id', $agencyId)->update($data);
 
-        // Audit the change (best-effort).
+        /* A field-level diff. The old row logged array_keys($data) — the names of the
+           fields posted, whether or not they differed — which cannot answer "changed from
+           what?" a month later.
+
+           Credentials are excluded by name, not by trusting the caller: an SMTP password
+           must never be written to an audit row, and it travels in this same payload. */
         try {
-            DB::table('audit_logs')->insert([
-                'user_id' => $request->user()->id ?? null, 'action' => 'agency.updated',
-                'entity_type' => 'agency', 'entity_id' => $agencyId,
-                'payload' => json_encode(['changes' => array_keys($data)]),
-                'ip_address' => $request->ip(), 'created_at' => now(),
-            ]);
-        } catch (\Throwable $e) { /* audit best-effort */ }
+            $secret = '/pass|secret|token|key$/i';
+            $changes = [];
+            foreach ($data as $col => $val) {
+                if ($col === 'updated_at' || preg_match($secret, $col)) {
+                    continue;
+                }
+                if ($col === 'settings') {
+                    // Expanded into the keys that moved, rather than an opaque blob.
+                    $wasSet = json_decode($before->settings ?? '{}', true) ?: [];
+                    $nowSet = json_decode((string) $val, true) ?: [];
+                    foreach ($nowSet as $sk => $sv) {
+                        if (preg_match($secret, (string) $sk)) { continue; }
+                        $wasV = $wasSet[$sk] ?? null;
+                        if (! is_scalar($sv) && $sv !== null) { continue; }
+                        if ((string) $wasV !== (string) $sv) {
+                            $changes[$sk] = ['from' => $wasV, 'to' => $sv];
+                        }
+                    }
+                    continue;
+                }
+                $was = $before->$col ?? null;
+                if ((string) $was !== (string) $val) {
+                    $changes[$col] = ['from' => $was, 'to' => $val];
+                }
+            }
+
+            // Credentials still deserve a trace — that they changed, never what to.
+            foreach (array_keys($data) as $col) {
+                if (preg_match($secret, $col)) {
+                    $changes[$col] = ['from' => '(hidden)', 'to' => '(changed)'];
+                }
+            }
+
+            if ($changes) {
+                \App\Support\Audit::write([
+                    'user_id' => $request->user()->id ?? null,
+                    'agency_id' => $agencyId,
+                    'action' => 'agency.updated',
+                    'entity_type' => 'agency',
+                    'entity_id' => $agencyId,
+                    'payload' => json_encode([
+                        'agency' => $before->name ?? null,
+                        'fields' => array_keys($changes),
+                        'changes' => $changes,
+                    ]),
+                    'ip_address' => $request->ip(),
+                    'created_at' => now(),
+                ]);
+            }
+        } catch (\Throwable $e) { /* audit best-effort — never fail the save over it */ }
 
         return response()->json([
             'agency' => DB::table('agencies')->where('id', $agencyId)->first(),

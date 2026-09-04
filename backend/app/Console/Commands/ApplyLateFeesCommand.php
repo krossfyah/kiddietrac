@@ -80,8 +80,18 @@ final class ApplyLateFeesCommand extends Command
                 if ($inv->status === 'sent') { $update['status'] = 'overdue'; $promoted++; }
                 DB::table('invoices')->where('id', $inv->id)->update($update);
 
-                DB::table('audit_logs')->insert([
+                // The invoice knows its family, the family its centre, the centre its
+                // agency — resolved here because a console row is stamped by nobody else,
+                // and a late fee is exactly the kind of money event an agency needs to be
+                // able to find afterwards.
+                $feeAgencyId = DB::table('families as f')
+                    ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                    ->where('f.id', $inv->family_id)
+                    ->value('c.agency_id');
+
+                \App\Support\Audit::write([
                     'user_id' => null,
+                    'agency_id' => $feeAgencyId ? (int) $feeAgencyId : null,
                     'action' => 'invoice.late_fee_applied',
                     'entity_type' => 'invoice',
                     'entity_id' => $inv->id,

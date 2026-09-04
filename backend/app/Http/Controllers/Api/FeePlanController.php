@@ -156,7 +156,7 @@ final class FeePlanController extends Controller
             $created++;
         }
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $r->user()->id,
             'action' => 'fee_plan.invoices_generated',
             'entity_type' => 'fee_plan',

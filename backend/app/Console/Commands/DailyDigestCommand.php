@@ -56,15 +56,28 @@ final class DailyDigestCommand extends Command
             $mailer = AgencyMailer::forAgency((int) $a->id);
             foreach ($recipients as $rcpt) {
                 try {
-                    $mailer->mailer()->html($body, function ($m) use ($subject, $rcpt) {
+                    $mailer->mailer()->html($body, function ($m) use ($subject, $rcpt, $a) {
+                        // Engagement mail: withheld from accounts nobody has claimed.
+                        try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); }
+                        catch (\Throwable $e) {}
+                        // Say which agency this belongs to. Without it the mail layer falls
+                        // back to resolving a tenant from the recipient's ADDRESS, and an
+                        // address that exists in two agencies then resolves to whichever was
+                        // found first — which is how one agency's send was logged under
+                        // another's audit trail. A sender that knows its agency must say so.
+                        try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) (int) $a->id); }
+                        catch (\Throwable $e) {}
                         $m->to($rcpt->email, ($rcpt->first_name . ' ' . $rcpt->last_name))->subject($subject);
                     });
                 } catch (\Throwable $e) {
                     $this->warn('Send failed for ' . $rcpt->email . ': ' . $e->getMessage());
                 }
             }
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => null,
+                // Written outside a request, so nothing else will stamp this. Without
+                // it the row is invisible in every agency's audit log.
+                'agency_id' => (int) $a->id,
                 'action' => 'digest.daily_sent',
                 'entity_type' => 'agency',
                 'entity_id' => (int) $a->id,

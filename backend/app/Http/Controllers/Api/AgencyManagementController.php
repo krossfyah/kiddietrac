@@ -71,6 +71,31 @@ final class AgencyManagementController extends Controller
                 'user_count' => $userCount,
                 'contact_email' => $a->contact_email,
                 'logo_url' => $a->logo_url,
+                // The modal renders a timezone picker from this; without it every agency
+                // showed America/Toronto and saving would have moved them to it.
+                'timezone' => $a->timezone,
+                // The address, as separate parts — the form edits them separately and an
+                // invoice prints them separately.
+                'legal_name' => $a->legal_name,
+                'website' => $a->website,
+                'address_line1' => $a->address_line1,
+                'address_line2' => $a->address_line2,
+                'city' => $a->city,
+                'province' => $a->province,
+                'postal_code' => $a->postal_code,
+                'country' => $a->country,
+                'contact_phone' => $a->contact_phone,
+                // Mail identity only. NOT the SMTP credentials, which live in the same
+                // table and must never reach a browser.
+                'email_from_name' => $a->email_from_name,
+                'email_from_address' => $a->email_from_address,
+                /* ONLY the two flags the modal draws. Never the stored blob: it holds
+                   email_config, which carries SMTP credentials, and the list endpoint is
+                   read by every agency admin. */
+                'settings' => [
+                    'notifications_enabled' => ($settings['notifications_enabled'] ?? true) !== false,
+                    'schedule_autofill' => (bool) ($settings['schedule_autofill'] ?? false),
+                ],
                 'created_at' => $a->created_at,
             ];
         });
@@ -205,7 +230,7 @@ final class AgencyManagementController extends Controller
                     'created_at' => now(),
                 ]);
 
-                DB::table('audit_logs')->insert([
+                \App\Support\Audit::write([
                     'user_id' => $userId,
                     'action' => 'agency.provisioned',
                     'entity_type' => 'agency',
@@ -265,37 +290,119 @@ final class AgencyManagementController extends Controller
             'custom_domain' => ['nullable', 'string', 'max:200'],
             'contact_email' => ['nullable', 'email'],
             'contact_phone' => ['nullable', 'string', 'max:40'],
+            // Sent by the edit form all along and never accepted, so the picker did
+            // nothing. Everything an agency schedules hangs off this.
+            'timezone' => ['nullable', 'string', 'max:64'],
+            'locale' => ['nullable', 'string', 'max:12'],
+            // The registered entity, which is not always the trading name.
+            'legal_name' => ['nullable', 'string', 'max:200'],
+            'website' => ['nullable', 'string', 'max:200'],
+            // Separate columns, not one blob: an address is searched, sorted and printed
+            // on invoices by its parts.
+            'address_line1' => ['nullable', 'string', 'max:200'],
+            'address_line2' => ['nullable', 'string', 'max:200'],
+            'city' => ['nullable', 'string', 'max:120'],
+            'province' => ['nullable', 'string', 'max:120'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'country' => ['nullable', 'string', 'max:80'],
+            'email_from_name' => ['nullable', 'string', 'max:120'],
+            'email_from_address' => ['nullable', 'email', 'max:190'],
             'billing_status' => ['nullable', 'in:trial,active,past_due,suspended'],
             'trial_ends_at' => ['nullable', 'date'],
             'plan' => ['nullable', 'in:starter,centre,agency'],
             'notifications_enabled' => ['sometimes', 'boolean'],
+            // Nightly staff-schedule autofill; read by schedule:autofill.
+            'schedule_autofill' => ['sometimes', 'boolean'],
         ]);
 
+        // Read BEFORE the write, so the audit can say what each field changed from.
+        $before = DB::table('agencies')->where('id', $id)->first();
+
+        $columns = [
+            'name', 'subdomain', 'custom_domain', 'contact_email', 'contact_phone',
+            'timezone', 'locale', 'legal_name', 'website',
+            'address_line1', 'address_line2', 'city', 'province', 'postal_code', 'country',
+            'email_from_name', 'email_from_address',
+            'billing_status', 'trial_ends_at',
+        ];
         $update = [];
-        foreach (['name', 'subdomain', 'custom_domain', 'contact_email', 'contact_phone', 'billing_status', 'trial_ends_at'] as $k) {
+        foreach ($columns as $k) {
             if (array_key_exists($k, $data)) $update[$k] = $data[$k];
         }
 
-        if (isset($data['plan']) || array_key_exists('notifications_enabled', $data)) {
+        if (isset($data['plan']) || array_key_exists('notifications_enabled', $data)
+            || array_key_exists('schedule_autofill', $data)) {
             $agency = DB::table('agencies')->where('id', $id)->first();
             $settings = json_decode($agency->settings ?? '{}', true) ?: [];
             if (isset($data['plan'])) $settings['plan'] = $data['plan'];
             if (array_key_exists('notifications_enabled', $data)) $settings['notifications_enabled'] = (bool) $data['notifications_enabled'];
+            if (array_key_exists('schedule_autofill', $data)) $settings['schedule_autofill'] = (bool) $data['schedule_autofill'];
             $update['settings'] = json_encode($settings);
             \Illuminate\Support\Facades\Cache::forget('kt.agency_notifications:' . $id);
         }
 
+        /* Keep the printed address in step — AFTER $update is built and after the settings
+           branch, so it composes on top of whatever that branch decided to write. Placed
+           above them it was assigning into an $update that had not been created yet. */
+        if (\App\Support\AgencyAddress::touches($data)) {
+            $update['settings'] = \App\Support\AgencyAddress::applyToSettings(
+                $data, $before, $update['settings'] ?? null
+            );
+        }
+
         if (!empty($update)) {
+            /* What actually changed, before the write goes in. Compared loosely on
+               purpose: a form posts "" where the column holds null, and logging that as a
+               change would fill the audit with saves that changed nothing. */
+            $changes = [];
+            foreach ($update as $col => $val) {
+                if ($col === 'settings' || $col === 'updated_at') {
+                    continue;   // handled below, in terms a reader understands
+                }
+                $was = $before->$col ?? null;
+                if ((string) $was !== (string) $val) {
+                    $changes[$col] = ['from' => $was, 'to' => $val];
+                }
+            }
+
+            // The settings blob, named as the switches people recognise — and only the
+            // ones this request touched, so unrelated settings are not implied to have moved.
+            if (array_key_exists('settings', $update)) {
+                $wasSettings = json_decode($before->settings ?? '{}', true) ?: [];
+                foreach (['plan' => 'plan',
+                          'notifications_enabled' => 'notifications_enabled',
+                          'schedule_autofill' => 'schedule_autofill'] as $key => $field) {
+                    if (! array_key_exists($field, $data)) {
+                        continue;
+                    }
+                    $wasVal = $wasSettings[$key] ?? ($key === 'notifications_enabled' ? true : null);
+                    $nowVal = $key === 'plan' ? $data[$field] : (bool) $data[$field];
+                    if ((string) $wasVal !== (string) $nowVal) {
+                        $changes[$key] = ['from' => $wasVal, 'to' => $nowVal];
+                    }
+                }
+            }
+
             $update['updated_at'] = now();
             DB::table('agencies')->where('id', $id)->update($update);
-            DB::table('audit_logs')->insert([
-                'user_id' => $user->id,
-                'action' => 'agency.updated',
-                'entity_type' => 'agency',
-                'entity_id' => $id,
-                'payload' => json_encode(array_keys($update)),
-                'created_at' => now(),
-            ]);
+
+            // Nothing genuinely different: no row. An audit full of empty saves is an
+            // audit nobody reads.
+            if ($changes) {
+                \App\Support\Audit::write([
+                    'user_id' => $user->id,
+                    'agency_id' => $id,
+                    'action' => 'agency.updated',
+                    'entity_type' => 'agency',
+                    'entity_id' => $id,
+                    'payload' => json_encode([
+                        'agency' => $before->name ?? null,
+                        'fields' => array_keys($changes),
+                        'changes' => $changes,
+                    ]),
+                    'created_at' => now(),
+                ]);
+            }
         }
 
         return response()->json(['success' => true]);
@@ -320,7 +427,7 @@ final class AgencyManagementController extends Controller
             'billing_status' => 'suspended',
         ]);
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $user->id,
             'action' => 'agency.deleted',
             'entity_type' => 'agency',

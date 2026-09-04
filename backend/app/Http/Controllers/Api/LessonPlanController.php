@@ -93,6 +93,8 @@ final class LessonPlanController extends Controller
             'centre_id' => $centreId,
             'week_starting' => $week,
             'theme' => $plan->theme ?? null,
+            'status' => $plan->status ?? 'published',
+            'published_at' => $plan->published_at ?? null,
             'plan' => $data,
             'inherited_from_centre' => $inheritedFromCentre,
             'updated_at' => $plan->updated_at ?? null,
@@ -111,6 +113,9 @@ final class LessonPlanController extends Controller
             'centre_id' => ['nullable', 'integer', 'required_without:room_id'],
             'week_starting' => ['required', 'date'],
             'theme' => ['nullable', 'string', 'max:160'],
+            /* Absent means published, so existing clients that know nothing about
+               draft mode keep behaving exactly as they did. */
+            'status' => ['nullable', 'string', 'in:draft,published'],
             'plan' => ['required', 'array'],
             'plan.days' => ['required', 'array'],
         ]);
@@ -161,6 +166,12 @@ final class LessonPlanController extends Controller
 
         if ($existing) {
             DB::table('lesson_plans')->where('id', $existing->id)->update([
+                'status' => $data['status'] ?? 'published',
+                /* Stamp the FIRST time it goes live and leave it alone after that,
+                   so re-saving a published plan does not keep moving the date. */
+                'published_at' => ($data['status'] ?? 'published') === 'published'
+                    ? ($existing->published_at ?? now())
+                    : null,
                 'theme' => $data['theme'] ?? null,
                 'plan_data' => $planJson,
                 'updated_at' => now(),
@@ -173,13 +184,15 @@ final class LessonPlanController extends Controller
                 'week_starting' => $data['week_starting'],
                 'theme' => $data['theme'] ?? null,
                 'plan_data' => $planJson,
+                'status' => $data['status'] ?? 'published',
+                'published_at' => ($data['status'] ?? 'published') === 'published' ? now() : null,
                 'created_by_id' => $user->id,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $user->id,
             'action' => 'lesson_plan.saved',
             'entity_type' => 'lesson_plan',
@@ -245,7 +258,10 @@ final class LessonPlanController extends Controller
 
         $week = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
         $plan = DB::table('lesson_plans')
-            ->where('room_id', $enrollment->room_id)
+            /* Families see PUBLISHED plans only. Older rows predate the column and are
+                   treated as published, because they have been visible all along. */
+                ->where(function ($q) { $q->where('status', 'published')->orWhereNull('status'); })
+                ->where('room_id', $enrollment->room_id)
             ->where('week_starting', $week)
             ->first();
 

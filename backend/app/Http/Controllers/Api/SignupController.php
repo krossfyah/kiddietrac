@@ -133,7 +133,7 @@ final class SignupController extends Controller
 
             // Audit
             try {
-                DB::table('audit_logs')->insert([
+                \App\Support\Audit::write([
                     'user_id' => $userId,
                     'entity_type' => 'centre', 'entity_id' => $centreId,
                     'action' => 'centre_signup',
@@ -312,7 +312,7 @@ final class SignupController extends Controller
 
             // Audit
             try {
-                DB::table('audit_logs')->insert([
+                \App\Support\Audit::write([
                     'user_id'     => $userId,
                     'entity_type' => 'invitation_code',
                     'entity_id'   => $invite->id,

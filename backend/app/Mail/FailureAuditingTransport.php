@@ -28,6 +28,26 @@ final class FailureAuditingTransport implements TransportInterface
     {
     }
 
+    /**
+     * Wrap a transport, once.
+     *
+     * This class existed since 2026-07-09 and had never recorded a single failure:
+     * it was applied with $app->resolving('mailer'), which decorates the container's
+     * default Mailer, while every real send goes through the 'agency_router' driver
+     * built by the MailManager or through a per-agency Mailer constructed by hand.
+     * Neither resolves that binding, so the decorator sat on a mailer nothing used —
+     * email_logs held 0 rows with status 'failed' across the entire history, and a
+     * send that threw left no trace anywhere except the log file.
+     *
+     * Applied at the transport factories instead. Idempotent, because more than one
+     * of those paths can touch the same transport and a double wrap would file each
+     * failure twice.
+     */
+    public static function wrap(TransportInterface $inner): TransportInterface
+    {
+        return $inner instanceof self ? $inner : new self($inner);
+    }
+
     public function send(RawMessage $message, ?Envelope $envelope = null): ?SentMessage
     {
         try {
@@ -56,7 +76,16 @@ final class FailureAuditingTransport implements TransportInterface
 
             if (Schema::hasTable('email_logs')) {
                 $failAgency = null;
-                try { if (Schema::hasColumn('email_logs', 'agency_id') && $to) { $ft = trim(explode(',', (string) $to)[0]); if ($ft !== '') $failAgency = \App\Support\AgencyMail::agencyOfEmail($ft); } } catch (\Throwable $e) {}
+                /* Prefer what the SENDER stamped on the message (X-KT-Agency-Id) and
+                   fall back to the recipient only when it said nothing — the same order
+                   the success path uses. Resolving a tenant from the recipient alone is
+                   what filed one agency's mail under another's trail. */
+                try {
+                    if (Schema::hasColumn('email_logs', 'agency_id')) {
+                        $ft = $to ? trim(explode(',', (string) $to)[0]) : null;
+                        $failAgency = \App\Support\AgencyMail::agencyForMessage($message, $ft ?: null);
+                    }
+                } catch (\Throwable $ignore) {}
                 DB::table('email_logs')->insert([
                     'agency_id'  => $failAgency,
                     'to_email'   => $to ?: null,
@@ -74,7 +103,7 @@ final class FailureAuditingTransport implements TransportInterface
                 ]);
             }
             if (Schema::hasTable('audit_logs')) {
-                DB::table('audit_logs')->insert([
+                \App\Support\Audit::write([
                     'user_id'     => optional(auth()->user())->id,
                     'action'      => 'email.failed',
                     'entity_type' => 'email',

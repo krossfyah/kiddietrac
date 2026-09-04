@@ -139,7 +139,7 @@ final class BillingRemindersController extends Controller
         ]);
 
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => $request->user()->id ?? null,
                 'action'      => 'billing_reminders_updated',
                 'entity_type' => 'agency',

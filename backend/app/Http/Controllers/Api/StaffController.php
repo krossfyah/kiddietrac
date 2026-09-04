@@ -36,7 +36,7 @@ final class StaffController extends Controller
             ->whereIn('role_assignments.role', ['educator', 'centre_director', 'agency_admin'])
             ->select(
                 'users.id', 'users.first_name', 'users.last_name', 'users.email',
-                'users.status', 'users.photo_url',
+                'users.status', 'users.photo_url', 'users.is_contractor',
                 'role_assignments.role',
             )
             ->distinct()
@@ -61,6 +61,7 @@ final class StaffController extends Controller
                 'role' => $s->role,
                 'status' => $s->status ?? 'active',
                 'photo_url' => $s->photo_url,
+                'is_contractor' => (bool) ($s->is_contractor ?? false),
                 'certifications' => ($certifications->get($s->id, collect()))->map(fn ($c) => [
                     'cert_type' => $c->cert_type,
                     'certifier' => $c->certifier,
@@ -139,6 +140,45 @@ final class StaffController extends Controller
             'temp_password' => $tempPassword,
             'email_sent' => $emailSent,
         ], 201);
+    }
+
+    /**
+     * PATCH /staff/{user}/contractor — mark somebody a contractor, or stop.
+     *
+     * Only meaningful as an announcement audience today: there is no role that means
+     * "contractor" and no employment field to infer it from, so it is stated explicitly
+     * per person rather than guessed.
+     *
+     * Scoped like everything else here — you can only change staff at a centre you
+     * administer, so an admin at one agency can never touch another agency's people.
+     */
+    public function setContractor(Request $request, int $userId): JsonResponse
+    {
+        $data = $request->validate(['is_contractor' => ['required', 'boolean']]);
+
+        $centreId = $this->resolveCentreId($request->user());
+        abort_unless($centreId, 403, 'No centre for this account.');
+
+        $inScope = DB::table('role_assignments')
+            ->where('user_id', $userId)
+            ->where('centre_id', $centreId)
+            ->where('active', true)
+            ->exists();
+        abort_unless($inScope, 403, 'That person is not staff at your centre.');
+
+        DB::table('users')->where('id', $userId)
+            ->update(['is_contractor' => $data['is_contractor'] ? 1 : 0]);
+
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id,
+            'action' => 'staff.contractor_flag',
+            'entity_type' => 'user',
+            'entity_id' => $userId,
+            'payload' => json_encode(['is_contractor' => (bool) $data['is_contractor']]),
+            'created_at' => now(),
+        ]);
+
+        return response()->json(['ok' => true, 'is_contractor' => (bool) $data['is_contractor']]);
     }
 
     public function certifications(Request $request, int $userId): JsonResponse

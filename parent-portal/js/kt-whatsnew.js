@@ -54,6 +54,30 @@
   function fmtDate(s) { return (window.KT && KT.dayLabel) ? KT.dayLabel(s) : s; }
   function newest(d) { var ns = forMe(d.entries).filter(function (e) { return e.type === 'new' && e.date; }).map(function (e) { return e.date; }).sort(); return ns.length ? ns[ns.length - 1] : ''; }
   function seenDate() { try { return localStorage.getItem('kt_whatsnew_seen') || ''; } catch (e) { return ''; } }
+  function todayISO() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+
+  /* Mark it read — and never with an empty string.
+
+     This used to store newest(d) directly, and newest() returns '' whenever
+     forMe() matches nothing, which happens whenever myRoles() finds no kt_user in
+     storage: during boot, across a role switch, or for a moment after a hard
+     reload. Storing '' means every later tick compares a real date against '' and
+     shows the dot again — the badge coming back after it had been read, however
+     many times it was read.
+
+     So: fall back to today, and never move the marker backwards. */
+  function markSeen(d) {
+    try {
+      var n = d ? newest(d) : '';
+      var cur = seenDate();
+      var v = n || cur || todayISO();
+      if (cur && v < cur) { v = cur; }
+      localStorage.setItem('kt_whatsnew_seen', v);
+    } catch (e) { /* private mode — the dot is not worth an exception */ }
+  }
 
   function load(cb) {
     if (DATA) { cb(DATA); return; }
@@ -62,8 +86,12 @@
   function badge(show) { var b = document.getElementById('kt-tb-wn-badge'); if (b) b.hidden = !show; }
 
   function openWhatsNew() {
+    /* Cleared the moment it is opened. It used to clear only after the JSON came
+       back, so a failed or slow fetch left the dot sitting there on a panel the
+       user had just read. */
+    badge(false);
     load(function (d) {
-      if (!d) return;
+      if (!d) { markSeen(null); return; }
       var news = forMe(d.entries).filter(function (e) { return e.type === 'new' && within3mo(e.date); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
       var up = forMe(d.entries).filter(function (e) { return e.type === 'upcoming'; });
       var entry = function (e) {
@@ -92,7 +120,7 @@
       var close = function () { overlay.remove(); };
       modal.querySelector('#kt-wn-x').onclick = close;
       overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-      try { localStorage.setItem('kt_whatsnew_seen', newest(d)); } catch (e) {}
+      markSeen(d);
       badge(false);
     });
   }

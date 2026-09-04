@@ -345,7 +345,7 @@ final class FormsController extends Controller
             }
         }
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $request->user()->id,
             'action' => 'form.emailed',
             'entity_type' => 'custom_form',
@@ -406,7 +406,7 @@ final class FormsController extends Controller
                 }
             }
         }
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $request->user()->id,
             'action' => 'form.submitted',
             'entity_type' => 'custom_form',

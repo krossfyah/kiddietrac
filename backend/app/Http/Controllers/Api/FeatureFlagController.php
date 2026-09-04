@@ -255,7 +255,7 @@ final class FeatureFlagController extends Controller
 
         // Audit trail (if audit_logs table exists)
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'    => $user->id,
                 'centre_id'  => null,
                 'event'      => 'agency_settings_updated',

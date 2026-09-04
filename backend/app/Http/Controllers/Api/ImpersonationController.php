@@ -101,7 +101,7 @@ class ImpersonationController extends Controller
 
         // Audit (best-effort — never block the action on a logging hiccup).
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => $admin->id,
                 'action'      => 'impersonate.start',
                 'entity_type' => 'user',

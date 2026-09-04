@@ -254,7 +254,7 @@ class EducatorRoomsController extends Controller
         ]);
 
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => $actor->id,
                 'action'      => 'timepunch.corrected',
                 'entity_type' => 'time_punch',

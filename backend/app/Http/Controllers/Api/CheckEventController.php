@@ -13,6 +13,14 @@ use Illuminate\Support\Facades\DB;
 
 final class CheckEventController extends Controller
 {
+    /* SECURITY (2026-08-25): check-in and check-out took child_id from the request and
+       only asked "is this child real?" and "are you clocked in?" — never "is this child
+       yours?". A clocked-in educator at any agency could therefore check another
+       agency's child in or out, and CheckEventNotifier would mail that other agency's
+       parents about it. Guarded at doCheckIn() (covering checkIn + checkInBatch) and in
+       checkOut(). Found by the re-parenting sweep after enr#66. */
+    use \App\Http\Controllers\Concerns\AuthorizesTenantAccess;
+
     /** Display timezone (Eastern for Ontario) resolved from a room → centre → agency. */
     private function tzForRoom(int $roomId): string
     {
@@ -55,6 +63,10 @@ final class CheckEventController extends Controller
             'mood' => ['nullable', 'in:happy,calm,tired,upset,sick'],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
+
+        // Before the check_events lookup: otherwise the 422 below reports whether a
+        // child at another agency is currently checked in.
+        $this->assertChild((int) $request->user()->id, (int) $data['child_id']);
 
         $today = now()->toDateString();
         $existing = DB::table('check_events')
@@ -151,6 +163,14 @@ final class CheckEventController extends Controller
     {
         $child = DB::table('children')->where('id', $childId)->first();
         if (!$child) {
+            return ['error' => 'Child not found'];
+        }
+
+        /* A child outside this user's reach is reported exactly as a missing one —
+           same string, same shape. Distinguishing them would confirm that a given id
+           exists somewhere else. Returned rather than aborted so that one bad id in
+           checkInBatch cannot throw away the whole room's check-in. */
+        if (! $this->mayAccessChild($userId, $childId)) {
             return ['error' => 'Child not found'];
         }
 
@@ -255,7 +275,7 @@ final class CheckEventController extends Controller
                 : ('User #'.$userId);
             $childName = $child->preferred_name ?: $child->first_name;
 
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => $userId,
                 'action'      => 'child.'.$eventType.($isGuardian ? '' : '_by_staff'),
                 'entity_type' => 'child',

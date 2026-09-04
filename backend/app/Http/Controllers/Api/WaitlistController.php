@@ -137,7 +137,7 @@ final class WaitlistController extends Controller
 
             $this->reindexWaitlist($family->centre_id);
 
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => $request->user()->id,
                 'action' => 'waitlist.promoted',
                 'entity_type' => 'child',
@@ -203,7 +203,7 @@ final class WaitlistController extends Controller
 
         $this->reindexWaitlist($family->centre_id);
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $request->user()->id,
             'action' => 'waitlist.declined',
             'entity_type' => 'child',
@@ -260,7 +260,7 @@ final class WaitlistController extends Controller
             return response()->json(['message' => 'Could not send the email — please try again.'], 500);
         }
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $request->user()->id,
             'action' => 'waitlist.reminded',
             'entity_type' => 'child',
@@ -354,7 +354,7 @@ final class WaitlistController extends Controller
                 'updated_at' => now(),
             ]);
 
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => $request->user()->id,
                 'action' => 'waitlist.added',
                 'entity_type' => 'child',

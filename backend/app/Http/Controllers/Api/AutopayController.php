@@ -183,7 +183,7 @@ final class AutopayController extends Controller
             'updated_at' => now(),
         ]);
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $user->id,
             'action' => 'autopay.enabled',
             'entity_type' => 'family',
@@ -218,7 +218,7 @@ final class AutopayController extends Controller
             'updated_at' => now(),
         ]);
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $user->id,
             'action' => 'autopay.disabled',
             'entity_type' => 'family',

@@ -393,7 +393,7 @@ class IntegrationController extends Controller
            log to explain it, and the obvious reading — that an admin had added them and
            skipped a step — was wrong. */
         try {
-            \Illuminate\Support\Facades\DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => optional($request->user())->id,
                 'agency_id'   => $agencyId,
                 'action'      => $created ? 'integration.child_created' : 'integration.child_updated',

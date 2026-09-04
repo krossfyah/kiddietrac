@@ -148,6 +148,107 @@ final class CareController extends Controller
         ], 201);
     }
 
+    /**
+     * GET /care/logs/recent?child_ids=1,2,3 — the whole roster in one request.
+     *
+     * The per-child endpoint below is correct and stays; what was wrong was calling
+     * it ninety-six times. screen-care.js fired one request per child in parallel,
+     * which is what saturates the box at drop-off: the 508 "resource limit reached"
+     * responses cluster at 08:00–09:00 and name this exact path.
+     *
+     * Two queries for the whole list rather than two per child, and one framework
+     * boot instead of twenty.
+     */
+    public function recentLogsBatch(Request $request): JsonResponse
+    {
+        $since = $request->query('since')
+            ? \Carbon\Carbon::parse($request->query('since'))
+            : now()->subDays(7);
+
+        $asked = collect(explode(',', (string) $request->query('child_ids', '')))
+            ->map(fn ($v) => (int) trim($v))->filter()->unique()->values();
+
+        /* Intersected with what this person may see, never trusted. A roster is a
+           bulk read, so an id they cannot see simply returns nothing for that child
+           rather than failing the whole screen. */
+        $allowed = collect($this->visibleChildIds($request));
+        $ids = $asked->isEmpty()
+            ? $allowed->all()
+            : $asked->intersect($allowed)->values()->all();
+
+        if (empty($ids)) {
+            return response()->json(['logs' => [], 'by_child' => new \stdClass()]);
+        }
+
+        $care = DB::table('daily_care_logs as l')
+            ->leftJoin('users as u', 'u.id', '=', 'l.recorded_by_id')
+            ->whereIn('l.child_id', $ids)
+            ->where('l.occurred_at', '>=', $since)
+            ->orderByDesc('l.occurred_at')
+            ->limit(2000)
+            ->get([
+                'l.id', 'l.child_id', 'l.log_type', 'l.occurred_at', 'l.ended_at',
+                'l.details', 'l.notes', 'l.amount_ml', 'l.amount_oz',
+                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'staff') as logged_by"),
+            ])
+            ->map(function ($r) { $r->source = 'care_log'; return $r; });
+
+        /* The same second table the per-child endpoint merges: a nappy logged from
+           the room roster lands in daily_events, not daily_care_logs, and reading
+           only one of them is how entries looked lost. */
+        $events = DB::table('daily_events as e')
+            ->leftJoin('users as u', 'u.id', '=', 'e.recorded_by_id')
+            ->whereIn('e.child_id', $ids)
+            ->whereNull('e.deleted_at')
+            ->where('e.occurred_at', '>=', $since)
+            ->whereIn('e.event_type', ['diaper', 'bathroom', 'nap', 'meal', 'snack', 'bottle', 'sunscreen', 'mood', 'outdoor'])
+            ->orderByDesc('e.occurred_at')
+            ->limit(2000)
+            ->get([
+                'e.id', 'e.child_id', 'e.event_type', 'e.occurred_at', 'e.payload', 'e.notes',
+                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), 'staff') as logged_by"),
+            ])
+            ->map(function ($e) {
+                $details = null;
+                if (! empty($e->payload)) {
+                    $p = json_decode($e->payload, true);
+                    if (is_array($p)) {
+                        $parts = [];
+                        foreach ($p as $v) {
+                            if (is_scalar($v) && trim((string) $v) !== '') { $parts[] = (string) $v; }
+                        }
+                        $details = $parts ? implode(', ', $parts) : null;
+                    } elseif (is_string($p) && trim($p) !== '') {
+                        $details = $p;
+                    }
+                }
+
+                return (object) [
+                    'id' => $e->id, 'child_id' => $e->child_id, 'log_type' => $e->event_type,
+                    'occurred_at' => $e->occurred_at, 'ended_at' => null, 'details' => $details,
+                    'notes' => $e->notes, 'amount_ml' => null, 'amount_oz' => null,
+                    'logged_by' => $e->logged_by, 'source' => 'event',
+                ];
+            });
+
+        $all = $care->concat($events)->sortByDesc('occurred_at')->values();
+
+        /* Grouped as well as flat: the roster wants "this child's latest", the
+           activity feed wants one merged list, and doing it here saves the browser
+           re-sorting the same rows twice. */
+        $byChild = [];
+        foreach ($all as $r) {
+            $cid = (string) $r->child_id;
+            if (! isset($byChild[$cid])) { $byChild[$cid] = []; }
+            if (count($byChild[$cid]) < 300) { $byChild[$cid][] = $r; }
+        }
+
+        return response()->json([
+            'logs' => $all->take(600)->values(),
+            'by_child' => $byChild ?: new \stdClass(),
+        ]);
+    }
+
     public function logsForChild(Request $request, int $child): JsonResponse
     {
         // Parent-or-staff access check — guardian on the child's family, or
@@ -584,7 +685,7 @@ final class CareController extends Controller
                 $payload['duration'] = intdiv($minutes, 60) . 'h ' . ($minutes % 60) . 'm';
                 $payload['summary'] = $summary . ' · shift ' . $payload['duration'];
             }
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => $userId,
                 'action'      => 'staff.clock_' . $action,
                 'entity_type' => 'time_punch',

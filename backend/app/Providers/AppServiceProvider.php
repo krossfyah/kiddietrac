@@ -19,6 +19,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Throttled last_used_at — see App\Models\PersonalAccessToken.
+        \Laravel\Sanctum\Sanctum::usePersonalAccessTokenModel(
+            \App\Models\PersonalAccessToken::class
+        );
+
         // ── Outbound mail routing (superadmin-managed, DB-configured) ──────────
         // Register the Microsoft Graph transport and apply platform_settings, so a
         // superadmin can switch KiddieTrac between sendmail and Microsoft Graph from
@@ -28,13 +33,17 @@ class AppServiceProvider extends ServiceProvider
         // never goes down. Wrapped so a bad/absent settings row can't break booting.
         try {
             \Illuminate\Support\Facades\Mail::extend('graph', function (array $config) {
-                return new \App\Mail\GraphTransport($config);
+                return \App\Mail\FailureAuditingTransport::wrap(new \App\Mail\GraphTransport($config));
             });
             // Per-agency (white-label) router: an agency can send from their OWN
             // Microsoft 365 / Google; everyone else falls through to the platform
             // Graph → sendmail failover. Selected as the default in applyMail().
+            /* Wrapped here rather than only at $app->resolving('mailer'): this is the
+               driver the platform actually sends on, and the factory runs for every
+               mailer the MailManager builds — web request, queue worker, scheduled
+               command alike. That is why failures were never being recorded. */
             \Illuminate\Support\Facades\Mail::extend('agency_router', function (array $config) {
-                return new \App\Mail\AgencyRouterTransport();
+                return \App\Mail\FailureAuditingTransport::wrap(new \App\Mail\AgencyRouterTransport());
             });
             \App\Support\PlatformSettings::applyMail();
         } catch (\Throwable $e) {
@@ -96,16 +105,24 @@ class AppServiceProvider extends ServiceProvider
                         // SENDING agency is authoritative, the recipient is a last resort.
                         // These audit rows are the twin of the email_logs rows, so they had
                         // the twin of the bug — 979 of them carried no agency at all.
-                        $emailAgency = \App\Support\AgencyMail::agencyForMessage($msg, null)
-                            ?: \App\Services\AgencyMailer::$lastAgencyId;
+                        /* Recipient BEFORE the static. $lastAgencyId is never cleared,
+                           so in a long-lived queue worker it holds whichever agency sent
+                           last — and stamped this message with someone else's tenant.
+                           The recipient is a fact about THIS email; the static is a fact
+                           about a previous one. It stays as a final fallback so nothing
+                           that resolves today stops resolving. */
+                        $emailAgency = \App\Support\AgencyMail::agencyForMessage($msg, null);
                         if (! $emailAgency && $firstTo) {
                             $emailAgency = \App\Support\AgencyMail::agencyForMessage($msg, $firstTo);
+                        }
+                        if (! $emailAgency) {
+                            $emailAgency = \App\Services\AgencyMailer::$lastAgencyId;
                         }
                         if (! $emailAgency && auth()->id()) {
                             $emailAgency = \App\Support\AuditScope::resolve((int) auth()->id());
                         }
                     } catch (\Throwable $e) {}
-                    DB::table('audit_logs')->insert([
+                    \App\Support\Audit::write([
                         'user_id'     => optional(auth()->user())->id,
                         'agency_id'   => $emailAgency,
                         'action'      => 'email.sent',
@@ -184,7 +201,7 @@ class AppServiceProvider extends ServiceProvider
         // rather than constructing a new one, so sending can never break.
         $this->app->resolving('mailer', function ($mailer) {
             try {
-                $mailer->setSymfonyTransport(new \App\Mail\FailureAuditingTransport($mailer->getSymfonyTransport()));
+                $mailer->setSymfonyTransport(\App\Mail\FailureAuditingTransport::wrap($mailer->getSymfonyTransport()));
             } catch (\Throwable $e) {
                 // leave the default transport intact on any incompatibility
             }

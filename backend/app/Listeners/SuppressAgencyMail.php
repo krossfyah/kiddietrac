@@ -71,15 +71,42 @@ class SuppressAgencyMail
         // invite IS the pre-boarding step) — while still respecting the agency's
         // master toggle below.
         $isInvite = false;
+        $isEngagement = false;
         try {
             $hdrs2 = $event->message->getHeaders();
             $isInvite = (bool) ($hdrs2 && $hdrs2->has('X-KT-Invite'));
+            /* Engagement mail = digests, summaries, chat round-ups: the
+               "come and use the portal" family. Only THIS is withheld from
+               someone who has not accepted their invite. Everything else is
+               transactional and must reach them. */
+            $isEngagement = (bool) ($hdrs2 && $hdrs2->has('X-KT-Engagement'));
+            if ($isEngagement && $hdrs2) {
+                $hdrs2->remove('X-KT-Engagement');
+            }
             if ($isInvite && $hdrs2) {
                 $hdrs2->remove('X-KT-Invite');
             }
         } catch (\Throwable $e) {
         }
 
+        /* DO NOT WEAKEN THIS. Product decision, 2026-08-24: an account that has not
+           been claimed receives NOTHING except its invite. Full stop.
+
+           I inverted it earlier the same day so it blocked only mail tagged as
+           engagement, because an NDA receipt was being cancelled for someone whose
+           status still read 'invited'. That was the wrong fix for a real bug: the
+           defect was that users.status never advanced when somebody actually
+           claimed their account. AccountStatus::markClaimed() now promotes
+           invited -> active at every login path, so anyone doing anything in the
+           portal is 'active' before they do it and is not in scope here.
+
+           If mail ever appears to need an exemption from this gate, fix the mail or
+           ask -- do not widen the gate. Superseded reasoning follows:
+
+           This used to read `if (! $isInvite)`, i.e. cancel
+           everything that was not an invite -- which cancelled password resets,
+           NDA receipts and "your child arrived" notices for anyone still marked
+           'invited'. It now cancels only what is explicitly engagement mail. */
         if (! $isInvite) {
             try {
                 $pending = DB::table('users')
@@ -93,12 +120,45 @@ class SuppressAgencyMail
                     ->map(fn ($e) => mb_strtolower(trim((string) $e)))
                     ->values()->all();
                 if ($pending) {
-                    $this->cancel($event, $pending, 'Recipient has not accepted their invite yet (not onboarded).');
+                    $this->cancel($event, $pending, 'Digest/summary withheld: recipient has not accepted their invite yet.');
                     return false;
                 }
             } catch (\Throwable $e) {
                 // never let this gate break the mail layer
             }
+        }
+
+        /* 0a) FIRST-PASSWORD INVARIANT.
+
+           A message tagged X-KT-Onboarding-Invite exists to hand someone a link to
+           set their password for the first time. That is only ever right for an
+           account nobody has claimed yet. Sending it to an active user tells them
+           to set a password they already have, and mints them a live reset token
+           they never asked for.
+
+           Enforced here rather than in each command on purpose: thirteen senders
+           write their own audience queries, and one of them getting it wrong is
+           how five people were mailed today. A sender may still choose its
+           recipients badly -- it just can no longer reach the wrong ones. */
+        try {
+            $hdrsInv = $event->message->getHeaders();
+            if ($hdrsInv && $hdrsInv->has('X-KT-Onboarding-Invite')) {
+                $hdrsInv->remove('X-KT-Onboarding-Invite');
+                $claimed = DB::table('users')
+                    ->whereNotIn('status', ['invited', 'not_invited'])
+                    ->whereNotNull('email')
+                    ->whereIn(DB::raw('LOWER(TRIM(email))'), $recipients)
+                    ->pluck('email')
+                    ->map(fn ($e) => mb_strtolower(trim((string) $e)))
+                    ->values()->all();
+                if ($claimed) {
+                    $this->cancel($event, $claimed,
+                        'Set-password invite withheld: this account has already been claimed.');
+                    return false;
+                }
+            }
+        } catch (\Throwable $e) {
+            // A guard must never be the reason mail stops working.
         }
 
         // 0b) SUSPENDED / DEACTIVATED gate. Suspending a family blocks its guardians
@@ -127,13 +187,30 @@ class SuppressAgencyMail
 
         if (! $isAccountNotice) {
             try {
-                $barred = DB::table('users')
-                    ->whereIn('status', ['suspended', 'deactivated'])
-                    ->whereNotNull('email')
+                $seenAddr = [];
+                /* Block an address only when EVERY account on it is switched off.
+                   Several accounts may share one email — the product allows it, told
+                   apart at login by username — so the presence of one deactivated
+                   namesake says nothing about who the message is for. Matching on the
+                   address alone silenced a live person's invite for a full day. */
+                $barred = [];
+                foreach (DB::table('users')->whereNotNull('email')
                     ->whereIn(DB::raw('LOWER(TRIM(email))'), $recipients)
-                    ->pluck('email')
-                    ->map(fn ($e) => mb_strtolower(trim((string) $e)))
-                    ->values()->all();
+                    ->get(['email', 'status', 'deleted_at']) as $cand) {
+                    $addr = mb_strtolower(trim((string) $cand->email));
+                    if (isset($seenAddr[$addr])) {
+                        continue;
+                    }
+                    $onAddr = DB::table('users')->whereRaw('LOWER(TRIM(email)) = ?', [$addr])->get(['status', 'deleted_at']);
+                    $allOff = $onAddr->isNotEmpty() && $onAddr->every(
+                        fn ($u) => $u->deleted_at !== null
+                            || in_array((string) $u->status, ['suspended', 'deactivated'], true)
+                    );
+                    $seenAddr[$addr] = true;
+                    if ($allOff) {
+                        $barred[] = $addr;
+                    }
+                }
                 if ($barred) {
                     $this->cancel($event, $barred,
                         'Recipient\'s access is suspended or deactivated — notifications are paused.');
@@ -148,7 +225,12 @@ class SuppressAgencyMail
         //    ABSOLUTE — off means off, even for allowlisted addresses. This is
         //    what the Settings switch strictly controls.
         foreach ($recipients as $addr) {
-            $uid = DB::table('users')->where('email', $addr)->value('id');
+            /* Every account on the address, not whichever row came back first —
+               the third gate in this file to have made that mistake today. */
+            $uidsHere = DB::table('users')->where('email', $addr)->pluck('id');
+            $uid = $uidsHere->every(fn ($id) => \App\Support\Suppression::isUser((int) $id))
+                ? $uidsHere->first()
+                : null;
             if (! $uid) {
                 continue;
             }
@@ -187,8 +269,15 @@ class SuppressAgencyMail
             if (in_array($addr, $this->allowlist(), true)) {
                 continue;
             }
-            $uid = DB::table('users')->where('email', $addr)->value('id');
-            if ($uid && \App\Support\Suppression::isUser((int) $uid)) {
+            /* Several accounts can share one address — the product allows it, told
+               apart at login by username. ->value('id') returned whichever row came
+               first, so a deactivated namesake could cancel a live person's mail.
+               Block only when EVERY account on the address is switched off. */
+            $uids = DB::table('users')->where('email', $addr)->pluck('id');
+            $allOff = $uids->isNotEmpty() && $uids->every(
+                fn ($id) => \App\Support\Suppression::isUser((int) $id)
+            );
+            if ($allOff) {
                 $this->cancel($event, [$addr],
                     'Recipient belongs to an agency listed in MAIL_SUPPRESS_AGENCIES (.env kill-switch).');
                 return false;
@@ -237,10 +326,16 @@ class SuppressAgencyMail
                 // log just as surely as a delivered one does.
                 try {
                     if (Schema::hasColumn('email_logs', 'agency_id')) {
-                        $supAgency = \App\Support\AgencyMail::agencyForMessage($event->message, null)
-                            ?: \App\Services\AgencyMailer::$lastAgencyId;
+                        // Same ordering fix as the sent-mail logger: the recipient is
+                        // about THIS message, the static is about a previous one.
+                        $supAgency = \App\Support\AgencyMail::agencyForMessage($event->message, null);
                         if (! $supAgency && ! empty($hits[0])) {
                             $supAgency = \App\Support\AgencyMail::agencyOfEmail($hits[0]);
+                        }
+                        if (! $supAgency) {
+                            // Last resort only. An unstamped row is invisible to EVERY
+                            // agency, which is worse than one stamped from context.
+                            $supAgency = \App\Services\AgencyMailer::$lastAgencyId;
                         }
                     }
                 } catch (\Throwable $e) {}
@@ -267,7 +362,13 @@ class SuppressAgencyMail
                     'cc' => \Illuminate\Support\Facades\Schema::hasColumn('email_logs', 'cc') ? $supCc : null,
                     'bcc' => \Illuminate\Support\Facades\Schema::hasColumn('email_logs', 'bcc') ? $supBcc : null,
                     'to_email' => implode(', ', array_slice($hits, 0, 3)),
-                    'to_name' => 'SUPPRESSED (live agency)',
+                    // Name the agency — "(live agency)" told the reader nothing about
+                    // WHICH tenant the blocked message belonged to.
+                    'to_name' => 'SUPPRESSED ('.(
+                        $supAgency
+                            ? (DB::table('agencies')->where('id', $supAgency)->value('name') ?: ('agency '.$supAgency))
+                            : 'no agency'
+                    ).')',
                     'from_email' => 'noreply@kiddietrac.com',
                     'subject' => '[SUPPRESSED] ' . $subject,
                     'mailer' => config('mail.default'),
@@ -276,6 +377,26 @@ class SuppressAgencyMail
                     'body_html' => $supBody,
                     'tracking_token' => \Illuminate\Support\Str::random(32),
                     'opens' => 0,
+                    'created_at' => now(),
+                ]);
+            }
+
+            /* The audit log records "email.sent" when the sender dispatches, and never
+               learned that the gate cancelled it — 380 sent rows against 132 real
+               suppressions. Both halves are recorded now, so the trail reads as what
+               actually happened: dispatched, then stopped, and why. */
+            if (Schema::hasTable('audit_logs')) {
+                \App\Support\Audit::write([
+                    'user_id' => null,
+                    'agency_id' => $supAgency,
+                    'action' => 'email.suppressed',
+                    'entity_type' => 'email',
+                    'entity_id' => null,
+                    'payload' => json_encode([
+                        'to' => array_slice($hits, 0, 5),
+                        'subject' => $subject,
+                        'reason' => $reason,
+                    ]),
                     'created_at' => now(),
                 ]);
             }

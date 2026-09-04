@@ -56,7 +56,12 @@ final class EmailMissedMessagesCommand extends Command
             ->get();
 
         if ($candidates->isEmpty()) {
-            $this->info('No unread messages awaiting email notification.');
+            // Family threads are quiet — but team chat is a separate table and may not
+            // be, so it still gets its sweep before we finish.
+            $teamOnly = $this->sweepTeamChat($now, $defaultDelay, $dry);
+            $this->info('No unread family messages awaiting email notification.'
+                .($teamOnly ? '  Team chat: '.$teamOnly.' email(s).' : ''));
+
             return self::SUCCESS;
         }
 
@@ -65,8 +70,11 @@ final class EmailMissedMessagesCommand extends Command
         // Group by conversation so we resolve recipients once per thread
         $byConv = $candidates->groupBy('conversation_id');
 
-        // Per (recipient, conversation) we'll send ONE summary email
-        $emailQueue = []; // key: $recipientId.':'.$convId  => [recipient, conv, messages[], senders[]]
+        /* ONE email per person per run — not one per conversation.
+           Keyed by email address rather than user id: Safia has two active accounts on
+           info@ilearnhcc.com, and a per-user key still delivered that inbox two of
+           everything. */
+        $byRecipient = []; // key: lower(email) => [recipient, conversation, messages[], senders[], convIds{}]
 
         foreach ($byConv as $convId => $msgs) {
             $conv = DB::table('conversations')->where('id', $convId)->first();
@@ -81,30 +89,47 @@ final class EmailMissedMessagesCommand extends Command
                 // Skip senders so they don't email themselves about their own messages
                 $unreadFromOthers = $msgs->reject(function ($m) use ($r) { return (int) $m->sender_id === (int) $r->id; });
                 if ($unreadFromOthers->isEmpty()) continue;
+                // An integration mailbox is not a person waiting to be told about a chat.
+                if ($this->isServiceAccount($r)) continue;
 
-                $key = $r->id . ':' . $convId;
-                $emailQueue[$key] = [
-                    'recipient' => $r,
-                    'conversation' => $conv,
-                    'messages' => $unreadFromOthers->all(),
-                    'senders' => $senders,
-                ];
+                $key = mb_strtolower(trim((string) $r->email));
+                if ($key === '') continue;
+                if (! isset($byRecipient[$key])) {
+                    $byRecipient[$key] = [
+                        'recipient' => $r,
+                        // Whichever thread came first — used only for the email's header
+                        // and link. The message cards below carry the real content.
+                        'conversation' => $conv,
+                        'messages' => [],
+                        'senders' => [],
+                        'convIds' => [],
+                    ];
+                }
+                // Keyed by message id: two accounts on one inbox merge into a single
+                // digest, and without this their overlapping messages appear twice in it.
+                foreach ($unreadFromOthers as $m) { $byRecipient[$key]['messages'][$m->id] = $m; }
+                foreach ($senders as $sid => $su) { $byRecipient[$key]['senders'][$sid] = $su; }
+                $byRecipient[$key]['convIds'][$convId] = true;
             }
         }
 
         $sent = 0; $failed = 0; $stampedIds = [];
-        foreach ($emailQueue as $job) {
+        foreach ($byRecipient as $job) {
             $r = $job['recipient'];
             $conv = $job['conversation'];
-            $msgs = $job['messages'];
-            $senders = $job['senders'];
+            // Oldest first, so the digest reads in the order things were said.
+            $msgs = array_values($job['messages']);
+            usort($msgs, fn ($a, $b) => strcmp((string) $a->created_at, (string) $b->created_at));
+            // subjectFor()/renderEmail() index this by sender id, so it stays a collection.
+            $senders = collect($job['senders']);
 
             $agency = $this->agencyForConversation($conv);
             $subject = $this->subjectFor($msgs, $senders, $agency);
             $body    = $this->renderEmail($r, $conv, $msgs, $senders, $agency);
 
             if ($dry) {
-                $this->line("--- to {$r->email} | conv #{$conv->id} | " . count($msgs) . " unread msg(s) ---");
+                $this->line("--- to {$r->email} | " . count($job['convIds']) . " thread(s) | "
+                    . count($msgs) . " unread msg(s) ---");
                 $this->line('subject: ' . $subject);
                 continue;
             }
@@ -126,8 +151,12 @@ final class EmailMissedMessagesCommand extends Command
         if (!$dry && !empty($stampedIds)) {
             $stampedIds = array_values(array_unique($stampedIds));
             DB::table('messages')->whereIn('id', $stampedIds)->update(['email_notified_at' => $now]);
-            DB::table('audit_logs')->insert([
+            // DELIBERATELY UNSTAMPED: one summary row for a sweep across all agencies'
+            // conversations. Splitting it per agency would mean re-counting the batch by
+            // owner, which is a different change; guessing an owner would misfile it.
+            \App\Support\Audit::write([
                 'user_id' => null,
+                'agency_id' => null,
                 'action' => 'chat.email_notified',
                 'entity_type' => 'message',
                 'entity_id' => null,
@@ -140,7 +169,10 @@ final class EmailMissedMessagesCommand extends Command
             ]);
         }
 
-        $this->info("Done. sent=$sent failed=$failed stamped=" . count($stampedIds));
+        $teamSent = $this->sweepTeamChat($now, $defaultDelay, $dry);
+
+        $this->info("Done. family sent=$sent failed=$failed stamped=" . count($stampedIds)
+            . "  team chat sent=$teamSent");
         return self::SUCCESS;
     }
 
@@ -174,6 +206,22 @@ final class EmailMissedMessagesCommand extends Command
             ->whereNotNull('email')
             ->get(['id', 'email', 'first_name', 'last_name'])
             ->all();
+    }
+
+    /**
+     * Integration and no-reply mailboxes are not people.
+     *
+     * integration+ilearn@kiddietrac.com is an agency_admin, so resolveRecipients()
+     * attached it to every conversation and it collected 33 emails per run.
+     */
+    private function isServiceAccount(object $r): bool
+    {
+        $e = mb_strtolower(trim((string) ($r->email ?? '')));
+
+        return $e === ''
+            || str_contains($e, 'integration+')
+            || str_starts_with($e, 'noreply@')
+            || str_starts_with($e, 'no-reply@');
     }
 
     private function agencyForConversation(object $conv): ?object
@@ -236,4 +284,181 @@ final class EmailMissedMessagesCommand extends Command
             'footer_note' => 'We waited about 30 minutes before sending this nudge. You will not get another email about these same messages — opening the chat or replying clears them.',
         ]);
     }
+
+    /**
+     * The same treatment for team chat.
+     *
+     * `messages` (family threads) has been covered since this command was written;
+     * `staff_messages` never was, so a staff-to-staff message left unread produced an
+     * in-app bell and nothing more. Same rules: older than the delay, nobody has read it,
+     * not already emailed about.
+     *
+     * "Unread" is per participant here rather than per message — a team thread records
+     * last_read_at on the participant, not read_at on the row — so a message counts as
+     * missed for anyone whose last_read_at is older than it.
+     *
+     * @return int how many people were emailed
+     */
+    private function sweepTeamChat(\Illuminate\Support\Carbon $now, int $delayMinutes, bool $dry): int
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('staff_messages', 'email_notified_at')) {
+            return 0;   // migration not applied yet — do nothing rather than fail
+        }
+
+        $cutoff = $now->copy()->subMinutes($delayMinutes);
+
+        $msgs = DB::table('staff_messages')
+            ->whereNull('email_notified_at')
+            ->where('created_at', '<=', $cutoff)
+            ->orderBy('created_at')
+            ->limit(200)
+            ->get(['id', 'thread_id', 'sender_id', 'body', 'created_at']);
+
+        if ($msgs->isEmpty()) {
+            return 0;
+        }
+
+        $sent = 0;
+        $stamped = [];
+        // email address => everything that person missed, across every thread.
+        $byPerson = [];
+
+        foreach ($msgs->groupBy('thread_id') as $threadId => $threadMsgs) {
+            $thread = DB::table('staff_threads')->where('id', $threadId)->first();
+            if (! $thread) {
+                // Nothing to send, but stamp them so they are not reconsidered forever.
+                foreach ($threadMsgs as $m) { $stamped[] = $m->id; }
+                continue;
+            }
+
+            $senderIds = $threadMsgs->pluck('sender_id')->unique()->all();
+
+            foreach (DB::table('staff_thread_participants as p')
+                ->join('users as u', 'u.id', '=', 'p.user_id')
+                ->where('p.thread_id', $threadId)
+                ->whereNotIn('p.user_id', $senderIds)      // not back to whoever wrote it
+                ->whereNull('u.deleted_at')
+                ->whereNotNull('u.email')
+                ->get(['p.user_id', 'p.last_read_at', 'u.email', 'u.first_name']) as $p) {
+
+                // Only the messages this person has actually missed.
+                $missed = $threadMsgs->filter(fn ($m) => ! $p->last_read_at
+                    || \Illuminate\Support\Carbon::parse($m->created_at)->gt(\Illuminate\Support\Carbon::parse($p->last_read_at)));
+                if ($missed->isEmpty()) {
+                    continue;
+                }
+                if (\App\Support\Suppression::isUser((int) $p->user_id)) {
+                    continue;
+                }
+
+                $pKey = mb_strtolower(trim((string) $p->email));
+                if ($pKey === '') { continue; }
+                // Integration mailboxes are not people — same rule as the family path.
+                if (str_contains($pKey, 'integration+')
+                    || str_starts_with($pKey, 'noreply@') || str_starts_with($pKey, 'no-reply@')) {
+                    continue;
+                }
+
+                /* Collected, not sent. This loop runs per THREAD, so sending here gave
+                   somebody in 39 threads 39 emails from one run. Everything a person
+                   missed is gathered across every thread and sent once, below.
+                   Keyed by message id so two threads cannot list the same message twice. */
+                if (! isset($byPerson[$pKey])) {
+                    $byPerson[$pKey] = ['p' => $p, 'agency_id' => (int) $thread->agency_id,
+                                        'missed' => [], 'threads' => []];
+                }
+                foreach ($missed as $mm) { $byPerson[$pKey]['missed'][$mm->id] = $mm; }
+                $byPerson[$pKey]['threads'][$threadId] = true;
+                /* Collected only. The send happens once per PERSON after every thread
+                   has contributed — see the loop below. Sending here is what gave
+                   somebody in 39 threads 39 emails from a single run. */
+                continue;
+            }
+
+            foreach ($threadMsgs as $m) { $stamped[] = $m->id; }
+        }
+
+        /* One email each, now that every thread has contributed. Stamping below is
+           unchanged and still covers every message considered this run, which is only
+           safe because nobody is skipped above any more. */
+        foreach ($byPerson as $job) {
+            $p = $job['p'];
+            $missed = collect(array_values($job['missed']))
+                ->sortBy(fn ($m) => (string) $m->created_at)->values();
+            $count = $missed->count();
+            $threadCount = count($job['threads']);
+            if ($count === 0) { continue; }
+
+            $names = DB::table('users')->whereIn('id', $missed->pluck('sender_id')->unique()->all())
+                ->selectRaw("id, TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) as n")
+                ->pluck('n', 'id')->all();
+            $firstName = $names[$missed->first()->sender_id] ?? 'A colleague';
+            $uniqueSenders = $missed->pluck('sender_id')->unique()->count();
+
+            $subject = $count === 1
+                ? 'New message from '.$firstName
+                : $count.' new messages'.($uniqueSenders > 1
+                    ? ' from '.$uniqueSenders.' colleagues'
+                    : ' from '.$firstName);
+
+            if ($dry) {
+                $this->line('  [dry] team chat -> '.$p->email.'  ('.$count.' message(s) across '
+                    .$threadCount.' thread(s))');
+                $sent++;
+                continue;
+            }
+
+            try {
+                $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+                // Each line names its sender — a digest spanning threads is unreadable
+                // without it, unlike the old one-thread-per-email version.
+                $lines = $missed->take(8)->map(fn ($m) =>
+                    '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;'
+                    .'padding:10px 12px;margin-bottom:8px;font-size:14px;line-height:1.55;'
+                    .'color:#1E293B;white-space:pre-wrap;">'
+                    .'<div style="font-size:12px;font-weight:700;color:#1F6080;margin-bottom:4px;">'
+                    .$e($names[$m->sender_id] ?? 'A colleague').'</div>'
+                    .$e($m->body).'</div>')->implode('');
+
+                /* "Team chat" means nothing to a parent. Broadcast now delivers to
+                   parents through the same private threads, so the label follows who is
+                   being written to rather than which table the message sits in. */
+                $isParent = DB::table('guardians')->where('user_id', $p->user_id)->exists();
+                $where = $isParent ? 'Messages' : 'Team chat';
+
+                $htmlBody = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+                    .'<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
+                    .'You have '.$count.' unread message'.($count === 1 ? '' : 's').' in '.$e($where)
+                    .($threadCount > 1 ? ' across '.$threadCount.' conversations' : '')
+                    .($count > 8 ? ' — the first eight are below' : '').'.</td></tr>'
+                    .'<tr><td>'.$lines.'</td></tr>'
+                    .'<tr><td style="padding:14px 0 0;font-size:14px;color:#64748B;">'
+                    .'Open <strong>'.$e($where).'</strong> in KiddieTrac to reply.</td></tr></table>';
+
+                $html = \App\Services\EmailTemplate::wrap((int) $job['agency_id'], $htmlBody, [
+                    'eyebrow' => $isParent ? 'MESSAGES' : 'TEAM CHAT',
+                    'title' => $subject,
+                    'preheader' => $count.' unread message'.($count === 1 ? '' : 's').' in Team chat.',
+                ]);
+
+                \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($p, $subject) {
+                    try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); } catch (\Throwable $e) {}
+                    $m->to($p->email)->subject($subject);
+                });
+                $sent++;
+            } catch (\Throwable $ex) {
+                Log::warning('Team-chat digest email failed', [
+                    'to' => $p->email, 'error' => $ex->getMessage(),
+                ]);
+            }
+        }
+
+        if (! $dry && $stamped) {
+            DB::table('staff_messages')->whereIn('id', $stamped)
+                ->update(['email_notified_at' => $now]);
+        }
+
+        return $sent;
+    }
+
 }

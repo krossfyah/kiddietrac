@@ -95,6 +95,9 @@ final class InvoiceController extends Controller
         $all = array_merge($native, $extFormatted);
         usort($all, fn ($a, $b) => strcmp((string) ($b['issue_date'] ?? ''), (string) ($a['issue_date'] ?? '')));
         $all = array_slice($all, 0, $limit);
+        // What happened to each one — instalments and refunds — so a part-paid invoice
+        // can explain itself instead of just showing a smaller number.
+        $all = $this->withPaymentHistory($all);
 
         // Only fall back to the synthetic estimate when there's genuinely nothing.
         if (empty($all) && $statusFilter === 'current') {
@@ -566,11 +569,22 @@ final class InvoiceController extends Controller
 
         $family = DB::table('families')->where('id', $invoice->family_id)->first();
 
+        /* Refunds were never returned here, so a refunded invoice looked simply
+           unpaid with nothing on it to say why. */
+        $refunds = DB::table('payment_refunds as r')
+            ->join('payments as p', 'p.id', '=', 'r.payment_id')
+            ->where('p.invoice_id', $invoiceId)
+            ->orderBy('r.refunded_at')
+            ->get(['r.id', 'r.amount', 'r.refund_method', 'r.status', 'r.reason', 'r.refunded_at']);
+
+        $withHistory = $this->withPaymentHistory([$this->formatInvoice($invoice)])[0];
+
         return response()->json([
-            'invoice' => $this->formatInvoice($invoice),
+            'invoice' => $withHistory,
             'family' => $family,
             'lines' => $lines,
             'payments' => $payments,
+            'refunds' => $refunds,
         ]);
     }
 
@@ -798,6 +812,8 @@ final class InvoiceController extends Controller
 
         $generated = 0;
         $skipped = 0;
+        // Invoices to email once every transaction has committed — see below.
+        $emailQueue = [];
 
         foreach ($enrollments as $familyId => $childEnrollments) {
             // Skip if invoice already exists for this family for this month
@@ -954,11 +970,30 @@ final class InvoiceController extends Controller
                     try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, $invTitle, $invBody, '#billing'); } catch (\Throwable $e) {}
                 }
 
+                // …and email it, so a family without the app still hears about it.
+                $emailQueue[] = (int) $invoiceId;
+
                 $generated++;
             });
         }
 
+        /* Sent after the transactions have committed, never inside them: a mail
+           attempt that hangs would otherwise hold a write lock on the invoice it is
+           announcing. Each one is isolated — one bad address must not cost the rest
+           of the run their email. */
+        $emailed = 0;
+        foreach ($emailQueue as $invId) {
+            try {
+                if ($this->emailInvoiceToFamily($invId)) {
+                    $emailed++;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('invoice email failed', ['invoice' => $invId, 'error' => $e->getMessage()]);
+            }
+        }
+
         return response()->json([
+            'emailed' => $emailed,
             'generated' => $generated,
             'skipped' => $skipped,
             'message' => "Generated {$generated} invoices for ".$issueDate->format('F Y'),
@@ -966,9 +1001,228 @@ final class InvoiceController extends Controller
     }
 
     /**
+     * Email one invoice to its family, with a button that opens it in the app.
+     *
+     * Returns false when there is nobody to send to or nothing to render, so the
+     * caller can count what actually went out rather than what it attempted.
+     *
+     * Deliberately a deep link and not a pay-without-signing-in link: an email is
+     * forwarded, quoted, and left open on shared screens, and a URL that can settle
+     * somebody's invoice has no business living in one.
+     */
+    private function emailInvoiceToFamily(int $invoiceId): bool
+    {
+        $inv = DB::table('invoices')->where('id', $invoiceId)->first();
+        if (! $inv) {
+            return false;
+        }
+
+        $emails = DB::table('guardians as g')
+            ->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $inv->family_id)
+            ->whereNotNull('u.email')->where('u.email', '!=', '')
+            ->pluck('u.email')->unique()->values()->all();
+        if (! $emails) {
+            return false;
+        }
+
+        $agencyName = DB::table('centres as c')
+            ->join('agencies as a', 'a.id', '=', 'c.agency_id')
+            ->where('c.id', $inv->centre_id)
+            ->value('a.name');
+
+        $num = (string) ($inv->invoice_number ?: ('#' . $inv->id));
+        $bal = (float) ($inv->balance_due ?? 0);
+
+        $appUrl = rtrim((string) (config('app.portal_url') ?: 'https://app.kiddietrac.com'), '/');
+        $payLink = $appUrl . '/dashboard.html#billing';
+
+        $due = $bal > 0.005
+            ? '<p style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">Balance due: <strong>$'
+                . number_format($bal, 2) . '</strong>' . ($inv->due_at ? ' &middot; due ' . e($inv->due_at) : '') . '</p>'
+            : '<p style="background:#ECFDF5;color:#047857;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">This invoice is paid in full. Thank you! 🎉</p>';
+
+        $button = $bal > 0.005
+            ? '<p style="margin:20px 0;"><a href="' . e($payLink) . '" style="display:inline-block;background:#1F6FB2;color:#ffffff;'
+                . 'text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px;">Pay this invoice</a></p>'
+                . '<p style="color:#64748B;font-size:12.5px;margin-top:-6px;">Opens KiddieTrac and takes you to your billing page. '
+                . 'You can pay the full amount or part of it.</p>'
+            : '';
+
+        $content = '<h1>🧾 Your invoice ' . e($num) . '</h1>'
+            . '<p>Hello,</p>'
+            . '<p>Your invoice from <strong>' . e($agencyName ?: 'your childcare provider') . '</strong> is attached as a PDF.</p>'
+            . $due
+            . $button;
+
+        $html = view('emails.layout', [
+            'slot' => $content,
+            'title' => 'Your invoice ' . $num,
+            'preheader' => 'Your invoice ' . $num . ' is ready.',
+        ])->render();
+
+        // The PDF, when it renders. A missing PDF must not stop the email: the balance
+        // and the button are the useful part, and the invoice is in the app regardless.
+        $pdf = null;
+        try {
+            $rendered = app(\App\Services\InvoicePdfRenderer::class)->renderFromInvoiceId($invoiceId);
+            if ($rendered !== null) {
+                $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+                $dompdf->loadHtml($rendered, 'UTF-8');
+                $dompdf->setPaper('letter', 'portrait');
+                $dompdf->render();
+                $pdf = $dompdf->output();
+            }
+        } catch (\Throwable $e) {
+            Log::warning('invoice PDF failed for email', ['invoice' => $invoiceId, 'error' => $e->getMessage()]);
+        }
+
+        Mail::html($html, function ($m) use ($emails, $num, $pdf) {
+            $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
+            $first = array_shift($emails);
+            $m->to($first)->subject('Your invoice ' . $num);
+            foreach ($emails as $cc) {
+                $m->cc($cc);
+            }
+            if ($pdf !== null) {
+                $m->attachData($pdf, 'Invoice-' . $num . '.pdf', ['mime' => 'application/pdf']);
+            }
+        });
+
+        return true;
+    }
+
+    /**
      * POST /api/v1/director/invoices/{invoice}/payments
      * Record an offline payment (e-transfer, cheque, cash).
      */
+    /**
+     * POST /invoices/{id}/void — cancel an invoice raised in error.
+     *
+     * Refuses while money is held against it. See the class note: a void that leaves
+     * $300 attached to a cancelled document makes the family's balance right by
+     * accident and wrong as soon as anyone asks where the money went. Refund first.
+     */
+    public function void(Request $request, int $invoiceId): JsonResponse
+    {
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:300'],
+        ]);
+
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+        abort_unless($invoice, 404);
+        $this->assertStaffForFamily($request, (int) $invoice->family_id);
+
+        if ($invoice->status === 'void') {
+            return response()->json(['message' => 'That invoice is already void.'], 422);
+        }
+
+        /* NET of refunds. An invoice that was paid and then fully refunded holds
+           nothing, so it can be voided — the money is already back with the family. */
+        $paid = (float) DB::table('payments')
+            ->where('invoice_id', $invoiceId)
+            ->where('status', 'succeeded')
+            ->sum('amount');
+        $refunded = (float) DB::table('payment_refunds')
+            ->join('payments', 'payments.id', '=', 'payment_refunds.payment_id')
+            ->where('payments.invoice_id', $invoiceId)
+            ->whereIn('payment_refunds.status', ['succeeded', 'pending', 'manual'])
+            ->sum('payment_refunds.amount');
+        $held = round($paid - $refunded, 2);
+
+        if ($held > 0.005) {
+            return response()->json([
+                'message' => 'This invoice has $' . number_format($held, 2)
+                    . ' paid against it. Refund that first, then void the invoice.',
+                'amount_held' => $held,
+            ], 422);
+        }
+
+        /* A payment still on its way would land against a cancelled invoice and credit
+           it, so an in-flight instruction blocks the void too. */
+        $inFlight = DB::table('zum_transactions')
+            ->where('invoice_id', $invoiceId)
+            ->whereIn('status', ['pending', 'submitted', 'in_review'])
+            ->count();
+        if ($inFlight > 0) {
+            return response()->json([
+                'message' => 'A payment is still in progress on this invoice. Wait for it to settle or fail, then void.',
+            ], 422);
+        }
+
+        DB::table('invoices')->where('id', $invoiceId)->update([
+            // Owed by nobody. The row and its number stay, so the history is intact.
+            'balance_due' => 0,
+            'status' => 'void',
+            'notes' => trim((string) ($invoice->notes ?? '')
+                . ' [voided ' . now()->toDateString()
+                . (($data['reason'] ?? '') !== '' ? ': ' . $data['reason'] : '') . ']'),
+            'updated_at' => now(),
+        ]);
+
+        $this->auditVoid($request, $invoice, (string) ($data['reason'] ?? ''));
+
+        return response()->json([
+            'message' => 'Invoice ' . ($invoice->invoice_number ?: ('#' . $invoiceId)) . ' has been voided.',
+            'status' => 'void',
+        ]);
+    }
+
+    private function auditVoid(Request $request, $invoice, string $reason): void
+    {
+        try {
+            $fam = DB::table('families')->where('id', $invoice->family_id)->value('family_name');
+            $agencyId = DB::table('centres')->where('id', $invoice->centre_id)->value('agency_id');
+            \App\Support\Audit::write([
+                'user_id' => $request->user()->id ?? null,
+                'agency_id' => $agencyId,
+                'action' => 'invoice.voided',
+                'entity_type' => 'invoice',
+                'entity_id' => $invoice->id,
+                /* Named, not counted. "Voided INV-1042 for the Osei family, $800.00"
+                   is answerable months later; "voided 1 invoice" is not. */
+                'payload' => json_encode([
+                    'invoice_number' => $invoice->invoice_number,
+                    'family' => $fam,
+                    'total' => (float) $invoice->total,
+                    'reason' => $reason !== '' ? $reason : null,
+                    'summary' => 'Voided invoice ' . ($invoice->invoice_number ?: ('#' . $invoice->id))
+                        . ' for ' . ($fam ?: 'a family') . ', $' . number_format((float) $invoice->total, 2)
+                        . ($reason !== '' ? ' — ' . $reason : ''),
+                ]),
+                'ip_address' => substr((string) $request->ip(), 0, 45),
+                'user_agent' => mb_substr((string) $request->userAgent(), 0, 500),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Auditing must never be the reason a void fails.
+        }
+    }
+
+    /** Staff of this family's centre only — never any active role anywhere. */
+    private function assertStaffForFamily(Request $request, int $familyId): void
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+
+        $centreId = DB::table('families')->where('id', $familyId)->value('centre_id');
+        abort_unless($centreId, 404);
+        $agencyId = DB::table('centres')->where('id', $centreId)->value('agency_id');
+
+        $ok = DB::table('role_assignments')
+            ->where('user_id', $user->id)
+            ->where('active', true)
+            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
+            ->where(function ($q) use ($centreId, $agencyId) {
+                $q->where('centre_id', $centreId)
+                  ->orWhereIn('centre_id', DB::table('centres')->where('agency_id', $agencyId)->pluck('id'))
+                  ->orWhereNull('centre_id');
+            })
+            ->exists();
+
+        abort_unless($ok, 403);
+    }
+
     public function recordPayment(Request $request, int $invoiceId): JsonResponse
     {
         $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
@@ -995,10 +1249,14 @@ final class InvoiceController extends Controller
                 'amount' => $data['amount'],
                 'method' => $data['method'],
                 'paid_at' => $data['paid_at'] ?? now(),
-                'reference' => $data['reference'] ?? null,
+                // The column is reference_number; `reference` never existed, so every
+                // manually recorded payment threw SQLSTATE[42S22] instead of saving.
+                'reference_number' => $data['reference'] ?? null,
                 'notes' => $data['notes'] ?? null,
                 'recorded_by_id' => $request->user()->id,
+                'status' => 'succeeded',
                 'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
             $totalPaid = (float) DB::table('payments')
@@ -1095,6 +1353,89 @@ final class InvoiceController extends Controller
             'status_label' => 'Estimate',
             'is_estimate' => true,
         ];
+    }
+
+    /**
+     * Attach what actually happened to each invoice: instalments and refunds.
+     *
+     * Two queries for the whole list, not two per invoice. Amounts are recomputed
+     * here rather than read from invoices.amount_paid so the history and the totals
+     * on screen can never disagree — if they ever drift, the ledger wins, because
+     * the ledger is the record.
+     *
+     * @param  array  $formatted  rows from formatInvoice()
+     */
+    private function withPaymentHistory(array $formatted): array
+    {
+        $ids = [];
+        foreach ($formatted as $row) {
+            // External rows carry an 'ext-123' id and have no ledger here.
+            if (isset($row['id']) && is_numeric($row['id'])) {
+                $ids[] = (int) $row['id'];
+            }
+        }
+        if (! $ids) {
+            return $formatted;
+        }
+
+        $payments = DB::table('payments')
+            ->whereIn('invoice_id', $ids)
+            ->orderBy('paid_at')
+            ->get(['id', 'invoice_id', 'amount', 'method', 'status', 'reference_number', 'paid_at']);
+
+        $refunds = DB::table('payment_refunds as r')
+            ->join('payments as p', 'p.id', '=', 'r.payment_id')
+            ->whereIn('p.invoice_id', $ids)
+            ->orderBy('r.refunded_at')
+            ->get(['r.id', 'p.invoice_id', 'r.amount', 'r.refund_method', 'r.status', 'r.reason', 'r.refunded_at']);
+
+        $payByInv = [];
+        $paidByInv = [];
+        foreach ($payments as $p) {
+            $payByInv[$p->invoice_id][] = [
+                'id' => (int) $p->id,
+                'date' => $p->paid_at,
+                'amount' => (float) $p->amount,
+                'method' => $p->method,
+                'status' => $p->status,
+                'reference' => $p->reference_number,
+            ];
+            if ($p->status === 'succeeded') {
+                $paidByInv[$p->invoice_id] = ($paidByInv[$p->invoice_id] ?? 0) + (float) $p->amount;
+            }
+        }
+
+        $refByInv = [];
+        $refundedByInv = [];
+        foreach ($refunds as $r) {
+            $refByInv[$r->invoice_id][] = [
+                'id' => (int) $r->id,
+                'date' => $r->refunded_at,
+                'amount' => (float) $r->amount,
+                'method' => $r->refund_method,
+                'status' => $r->status,
+                'reason' => $r->reason,
+            ];
+            if (in_array($r->status, ['succeeded', 'pending', 'manual'], true)) {
+                $refundedByInv[$r->invoice_id] = ($refundedByInv[$r->invoice_id] ?? 0) + (float) $r->amount;
+            }
+        }
+
+        foreach ($formatted as &$row) {
+            if (! isset($row['id']) || ! is_numeric($row['id'])) {
+                continue;
+            }
+            $id = (int) $row['id'];
+            $row['payments'] = $payByInv[$id] ?? [];
+            $row['refunds'] = $refByInv[$id] ?? [];
+            $row['amount_paid'] = round((float) ($paidByInv[$id] ?? 0), 2);
+            $row['amount_refunded'] = round((float) ($refundedByInv[$id] ?? 0), 2);
+            // What the family has actually parted with, after anything given back.
+            $row['net_paid'] = round($row['amount_paid'] - $row['amount_refunded'], 2);
+        }
+        unset($row);
+
+        return $formatted;
     }
 
     private function formatInvoice(object $i): array

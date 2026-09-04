@@ -31,6 +31,10 @@ final class AnnouncementController extends Controller
         $data = $request->validate([
             'scope_type' => ['required', 'in:agency,centre,room'],
             'scope_id' => ['required', 'integer'],
+            // WHO, as opposed to where. Defaults to parents because that is who every
+            // announcement written before this went to.
+            'audience' => ['nullable', 'in:parents,educators,contractors,admins,all'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
             'title' => ['required', 'string', 'max:200'],
             'body' => ['required', 'string', 'max:5000'],
             'send_email' => ['nullable', 'boolean'],
@@ -49,9 +53,27 @@ final class AnnouncementController extends Controller
             return response()->json(['message' => 'You don\'t have permission to broadcast to that scope.'], 403);
         }
 
+        $data['audience'] = $data['audience'] ?? 'parents';
+
+        // Re-encoded to something a carrier will actually forward — see
+        // AnnouncementImage for why the original file is never sent as-is.
+        $image = null;
+        if ($request->hasFile('image')) {
+            $image = \App\Support\AnnouncementImage::store($request->file('image'));
+            if (! $image) {
+                return response()->json([
+                    'message' => 'That image could not be prepared for sending. Use a JPEG, PNG or GIF '
+                        .'under 5 MB — an animated GIF also has to be under about 1 MB.',
+                ], 422);
+            }
+        }
+        $data['image'] = $image;
+
         $announcementId = DB::table('announcements')->insertGetId([
             'scope_type' => $data['scope_type'],
             'scope_id' => $data['scope_id'],
+            'audience' => $data['audience'],
+            'image_path' => $image['path'] ?? null,
             'title' => $data['title'],
             'body' => $data['body'],
             'send_email' => $data['send_email'] ?? 1,
@@ -68,7 +90,7 @@ final class AnnouncementController extends Controller
             $delivered = $this->deliver((int) $announcementId, $data, $user);
         }
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $user->id,
             'action' => 'announcement.sent',
             'entity_type' => 'announcement',
@@ -76,6 +98,8 @@ final class AnnouncementController extends Controller
             'payload' => json_encode([
                 'scope_type' => $data['scope_type'],
                 'scope_id' => $data['scope_id'],
+                'audience' => $data['audience'],
+                'has_image' => (bool) $image,
                 'delivered_to' => $delivered,
                 'scheduled' => !empty($data['scheduled_at']),
             ]),
@@ -300,7 +324,8 @@ final class AnnouncementController extends Controller
 
     private function deliver(int $announcementId, array $data, $sender): int
     {
-        $userIds = $this->recipientUserIds($data['scope_type'], (int) $data['scope_id']);
+        $userIds = $this->recipientUserIds($data['scope_type'], (int) $data['scope_id'],
+            $data['audience'] ?? 'parents');
         // v22p88: body is now rich HTML. Keep a plain-text version for the
         // in-app notification and SMS.
         $plain = trim(html_entity_decode(strip_tags(str_replace(
@@ -330,7 +355,11 @@ final class AnnouncementController extends Controller
 
         // Best-effort email — rich HTML, white-labelled via the agency's mailer.
         if (! empty($data['send_email']) || $data['send_email'] === null) {
-            $emails = DB::table('users')->whereIn('id', $userIds)->whereNotNull('email')->pluck('email')->all();
+            // Deactivated and suspended accounts get nothing — this path never asked.
+            $emails = DB::table('users')->whereIn('id', $userIds)->whereNotNull('email')
+                ->whereNull('deleted_at')
+                ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+                ->pluck('email')->all();
             // Subject mirrors the in-app notification: "📢 Announcement · <Centre> — <title>".
             $emailSubject = $notifTitle . (($data['title'] ?? '') !== '' ? ' — ' . $data['title'] : '');
             $eyebrow = '<div style="font-size:12px;font-weight:700;color:#8EC73C;letter-spacing:.06em;text-transform:uppercase;margin:0 0 6px;">📢 Announcement · ' . e($scopeName) . '</div>';
@@ -367,15 +396,30 @@ final class AnnouncementController extends Controller
             }
         }
 
-        // Best-effort SMS — plain text via Twilio (SmsController).
+        // Best-effort SMS — plain text via Twilio, with the picture where it will go.
         if (! empty($data['send_sms']) && $agencyId) {
+            $img = $data['image'] ?? null;
             $sms = ($data['title'] ? $data['title'] . ': ' : '') . $plain;
-            if (mb_strlen($sms) > 600) $sms = mb_substr($sms, 0, 597) . '…';
+
+            // Room for the link, when there is one to add. Trimming after appending
+            // would cut the link off, which is the one part that has to survive.
+            $tail = ($img && ! $img['mms_ok']) ? "\n" . $img['url'] : '';
+            $room = 600 - mb_strlen($tail);
+            if (mb_strlen($sms) > $room) $sms = mb_substr($sms, 0, max(1, $room - 1)) . '…';
+            $sms .= $tail;
+
             $recips = DB::table('users')->whereIn('id', $userIds)->whereNotNull('phone')->where('phone', '!=', '')->get(['id', 'phone']);
             $smsCtl = app(SmsController::class);
             foreach ($recips as $r) {
-                try { $smsCtl->sendOne($agencyId, (int) $r->id, (string) $r->phone, $sms, 'announcement'); }
-                catch (\Throwable $e) { Log::warning('Announcement SMS failed', ['user' => $r->id, 'error' => $e->getMessage()]); }
+                try {
+                    // Attempted as a picture message first. Whether a given number takes
+                    // MMS is not knowable in advance — you find out from the send — so
+                    // sendOne falls back to the same text with the link on failure.
+                    $smsCtl->sendOne($agencyId, (int) $r->id, (string) $r->phone, $sms, 'announcement',
+                        ($img && $img['mms_ok']) ? $img['url'] : null);
+                } catch (\Throwable $e) {
+                    Log::warning('Announcement SMS failed', ['user' => $r->id, 'error' => $e->getMessage()]);
+                }
             }
         }
 
@@ -437,8 +481,74 @@ final class AnnouncementController extends Controller
         return null;
     }
 
-    private function recipientUserIds(string $scopeType, int $scopeId): array
+    /**
+     * Which staff roles each audience means.
+     *
+     * 'contractors' is not a role — there was no such concept, and no role in use meant
+     * it — so it is a per-person flag on the user instead of something guessed at.
+     */
+    private const AUDIENCE_ROLES = [
+        'educators' => ['educator'],
+        'admins' => ['agency_admin', 'centre_director'],
+    ];
+
+    /**
+     * Staff in scope for an audience.
+     *
+     * Scoped to the agency the announcement belongs to; when the announcement is aimed at
+     * one centre, staff attached to a DIFFERENT centre of the same agency are left out —
+     * a notice about one centre's closure is not news at another.
+     */
+    private function staffUserIds(string $scopeType, int $scopeId, string $audience): array
     {
+        $agencyId = $this->resolveAgencyForScope($scopeType, $scopeId);
+        if (! $agencyId) {
+            return [];
+        }
+
+        $q = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1);
+
+        // Contractors are a per-person flag, not a role — App\Support\Audience holds
+        // the single definition now that Messenger needs the same answer.
+        if ($audience === 'contractors') {
+            return \App\Support\Audience::staff('contractors', $agencyId,
+                $scopeType === 'centre' ? (int) $scopeId : null);
+        }
+
+        $roles = self::AUDIENCE_ROLES[$audience] ?? [];
+        if (! $roles) {
+            return [];
+        }
+        $q->whereIn('role', $roles);
+
+        // A centre-scoped announcement reaches that centre's staff, plus agency-wide
+        // staff who carry no centre of their own.
+        if ($scopeType === 'centre') {
+            $q->where(fn ($w) => $w->where('centre_id', $scopeId)->orWhereNull('centre_id'));
+        }
+
+        return $q->pluck('user_id')->unique()->all();
+    }
+
+    private function recipientUserIds(string $scopeType, int $scopeId, string $audience = 'parents'): array
+    {
+        // Everything below this line resolves PARENTS. Staff are a different query
+        // entirely, because they hang off role_assignments rather than off a family.
+        if ($audience === 'all') {
+            $ids = array_merge(
+                $this->recipientUserIds($scopeType, $scopeId, 'parents'),
+                $this->staffUserIds($scopeType, $scopeId, 'educators'),
+                $this->staffUserIds($scopeType, $scopeId, 'admins'),
+                $this->staffUserIds($scopeType, $scopeId, 'contractors'),
+            );
+
+            return array_values(array_unique(array_map('intval', $ids)));
+        }
+        if ($audience !== 'parents') {
+            return array_values(array_unique(array_map('intval',
+                $this->staffUserIds($scopeType, $scopeId, $audience))));
+        }
+
         // Find all guardian user_ids in the scope
         if ($scopeType === 'centre') {
             $familyIds = DB::table('families')->where('centre_id', $scopeId)->whereNull('deleted_at')->pluck('id')->all();

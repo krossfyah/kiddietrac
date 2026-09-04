@@ -307,7 +307,12 @@ class ParentDailySummaryCommand extends Command
                         'date' => $date->format('l, j F Y'),
                         'centre' => $child->centre_name,
                         'signed_in' => $checkIn ? Carbon::parse($checkIn->occurred_at)->timezone($tz)->format('g:i A') : null,
-                        'signed_out' => $checkOut ? Carbon::parse($checkOut->occurred_at)->timezone($tz)->format('g:i A') : null,
+                        /* " (auto)" when the nightly job closed the day rather than
+                           a person signing the child out. */
+                        'signed_out' => $checkOut
+                            ? Carbon::parse($checkOut->occurred_at)->timezone($tz)->format('g:i A')
+                              . \App\Support\SystemAction::label($checkOut->notes ?? null)
+                            : null,
                         'care_logs' => $logs->map(fn ($l) => [
                             'what' => $l->type,
                             'detail' => $l->detail,
@@ -408,7 +413,14 @@ class ParentDailySummaryCommand extends Command
         $para1 = [];
         if ($checkIn) {
             $para1[] = "{$name} arrived at " . $t($checkIn->occurred_at)
-                . ($checkOut ? ' and went home at ' . $t($checkOut->occurred_at) . '.' : ' and is still with us.');
+                . ($checkOut
+                    ? (\App\Support\SystemAction::isAuto($checkOut->notes ?? null)
+                        /* Never tell a parent their child "went home" when nobody
+                           recorded a pickup — say what actually happened. */
+                        ? ' and the day was closed automatically at ' . $t($checkOut->occurred_at)
+                          . ' because no sign-out was recorded.'
+                        : ' and went home at ' . $t($checkOut->occurred_at) . '.')
+                    : ' and is still with us.');
         } else {
             $para1[] = "Here is how {$name}'s day went.";
         }
@@ -503,7 +515,17 @@ class ParentDailySummaryCommand extends Command
     private function send(int $agencyId, string $email, string $name, string $subject, string $html): void
     {
         dispatch(function () use ($agencyId, $email, $name, $subject, $html) {
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($email, $name, $subject) {
+            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($email, $name, $subject, $agencyId) {
+                // Engagement mail: withheld from anyone who has not accepted
+                // their invite. Transactional mail carries no such tag.
+                try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); } catch (\Throwable $e) {}
+                // Say which agency this belongs to. Without it the mail layer falls
+                // back to resolving a tenant from the recipient's ADDRESS, and an
+                // address that exists in two agencies then resolves to whichever was
+                // found first — which is how one agency's send was logged under
+                // another's audit trail. A sender that knows its agency must say so.
+                try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); }
+                catch (\Throwable $e) {}
                 $m->to($email, $name)
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
@@ -629,6 +651,7 @@ class ParentDailySummaryCommand extends Command
             // "Still at the centre" about a child who was never there.
             $out = $day['check_out']
                 ? $t($day['check_out']->occurred_at)
+                  . \App\Support\SystemAction::label($day['check_out']->notes ?? null)
                 : ($day['check_in'] ? 'Still at the centre' : 'Not signed out');
             $inBy = $day['check_in']->by_name ?? null;
             $outBy = $day['check_out']->by_name ?? null;
@@ -874,6 +897,35 @@ class ParentDailySummaryCommand extends Command
             \Illuminate\Support\Facades\Log::warning('Daily summary: lesson plan block failed', ['error' => $e->getMessage()]);
         }
 
+        /* ── "How was their day?" ─────────────────────────────────────────────
+           A signed, login-free link to a four-question form. Asking a parent to sign
+           in at 7pm on a phone to answer four questions produces almost no responses,
+           and feedback nobody leaves is worth less than the security it buys. The link
+           is write-only, scoped to THIS child and THIS date, and expires in 14 days.
+           Placed before the closing quote so it is the last thing they act on.
+           (Anthony, 2026-08-26) */
+        try {
+            $fbUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                'parent.feedback.form',
+                now()->addDays(\App\Http\Controllers\Api\ParentFeedbackController::LINK_DAYS),
+                ['child' => (int) $child->id, 'd' => $day['date']->toDateString()]
+            );
+            $body .= '<div style="background:#F0FDFA;border:1px solid #99F6E4;border-radius:14px;'
+                . 'padding:16px 18px;margin:18px 0;text-align:center;">'
+                . '<div style="font-size:15px;font-weight:800;color:#0F766E;margin-bottom:4px;">'
+                . 'How was ' . $name . '\'s day?</div>'
+                . '<div style="font-size:13.5px;color:#115E59;line-height:1.55;margin-bottom:12px;">'
+                . 'Tell the team in under a minute — no sign-in needed. Kind words are passed '
+                . 'straight to your educator.</div>'
+                . EmailTemplate::button('Leave feedback', $fbUrl, '#0E7C90')
+                . '</div>';
+        } catch (\Throwable $e) {
+            // A missing route or key must never cost the family their daily summary.
+            \Illuminate\Support\Facades\Log::warning('Feedback link could not be built', [
+                'child' => $child->id ?? null, 'error' => $e->getMessage(),
+            ]);
+        }
+
         // A warm daily inspirational quote (same for everyone that day, rotates daily).
         $body .= EmailTemplate::dailyQuote((int) $day['date']->format('Ymd'));
 
@@ -914,7 +966,12 @@ class ParentDailySummaryCommand extends Command
             && (bool) preg_match('~(\.(png|jpe?g|webp|gif)($|\?)|pravatar|gravatar)~i', $url);
 
         if ($isRaster) {
-            if (! preg_match('~^https?://~i', $url)) {
+            /* A protected upload is refused without a signature now. Signed for 30
+               days, because this email is read tomorrow and a short-lived link
+               would simply be a broken face by then. */
+            if (\App\Support\ProtectedMedia::isProtected($url)) {
+                $url = (string) \App\Support\ProtectedMedia::signForEmail($url);
+            } elseif (! preg_match('~^https?://~i', $url)) {
                 $url = 'https://app.kiddietrac.com/' . ltrim($url, '/');
             }
             return '<img src="' . e($url) . '" alt="' . e($name) . '" width="' . $size . '" height="' . $size . '"'

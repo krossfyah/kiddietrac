@@ -153,15 +153,50 @@ final class ChatController extends Controller
         $centreIds = $this->providerCentreIds($user->id);
         if (empty($centreIds)) return response()->json(['conversations' => []]);
 
-        $conversations = DB::table('conversations')
+        $perPage = min(100, max(5, (int) $request->query('per_page', 25)));
+        $page = max(1, (int) $request->query('page', 1));
+
+        $base = DB::table('conversations')
             ->whereNull('deleted_at')                 // hide deleted conversations
-            ->whereIn('centre_id', $centreIds)
-            ->orderByDesc('last_message_at')
-            ->limit(100)
+            ->whereIn('centre_id', $centreIds);
+
+        // Searching has to run over the whole set, not the page — otherwise it only
+        // finds what was already on screen, which is not searching.
+        if ($q = trim((string) $request->query('q', ''))) {
+            $famIds = DB::table('families')->whereIn('centre_id', $centreIds)
+                ->where('family_name', 'like', '%'.$q.'%')->pluck('id');
+            $kidIds = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->whereIn('f.centre_id', $centreIds)
+                ->where(function ($w) use ($q) {
+                    $w->where('ch.first_name', 'like', '%'.$q.'%')
+                      ->orWhere('ch.last_name', 'like', '%'.$q.'%');
+                })->pluck('ch.id');
+            $base->where(function ($w) use ($famIds, $kidIds, $q) {
+                $w->whereIn('family_id', $famIds->all() ?: [0])
+                  ->orWhereIn('child_id', $kidIds->all() ?: [0])
+                  ->orWhere('subject', 'like', '%'.$q.'%');
+            });
+        }
+
+        $total = (clone $base)->count();
+
+        // id as a tiebreaker, or paging is not stable. A broadcast stamps every
+        // conversation with the same last_message_at, and tied rows have no guaranteed
+        // order between two queries — page 2 was repeating rows from page 1 and hiding
+        // an equal number that nobody would ever see.
+        $conversations = $base->orderByDesc('last_message_at')
+            ->orderByDesc('id')
+            ->forPage($page, $perPage)
             ->get();
 
         return response()->json([
             'conversations' => $this->enrichConversations($conversations, $user->id),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'pages' => (int) ceil($total / $perPage),
+            ],
         ]);
     }
 
@@ -330,20 +365,73 @@ final class ChatController extends Controller
             ->pluck('cnt', 'conversation_id')
             ->all();
 
-        // Last message preview per conversation
+        // Last message preview per conversation. delivered_at and read_at come with
+        // it now: after sending to 41 families the question is who has actually seen
+        // it, and previously the only way to find out was to open all 41.
         $lastMsg = DB::table('messages')
             ->whereIn('conversation_id', $ids)
             ->orderBy('conversation_id')
             ->orderByDesc('created_at')
-            ->get()
+            ->get(['id', 'conversation_id', 'sender_id', 'body', 'created_at',
+                   'delivered_at', 'read_at', 'family_read_at', 'is_system'])
             ->groupBy('conversation_id')
             ->map(fn ($msgs) => $msgs->first())
             ->all();
 
         // Family + child + centre meta
+        // Which users are guardians of these families — so "did the family read it"
+        // can be answered for a message ANY staff member sent, not only my own. A
+        // director asking whether a broadcast landed is the main case, and they did not
+        // send it.
         $familyIds = $conversations->pluck('family_id')->unique()->all();
+        $guardianByFamily = DB::table('guardians')->whereIn('family_id', $familyIds)
+            ->get(['family_id', 'user_id'])
+            ->groupBy('family_id')
+            ->map(fn ($rows) => $rows->pluck('user_id')->map(fn ($v) => (int) $v)->all())
+            ->all();
+        /* Presence for a family thread: the most recently seen guardian on that
+           family. Several guardians share one thread, so what an educator wants to
+           know is whether ANYONE on the family is reachable. Built from the guardian
+           ids already gathered above -- one extra query for the whole page. */
+        $presence = [];
+        try {
+            $guardianIds = collect($guardianByFamily)->flatten()->unique()->filter()->all();
+            $seenById = ! empty($guardianIds)
+                ? DB::table('users')->whereIn('id', $guardianIds)->whereNull('deleted_at')
+                    ->pluck('last_seen_at', 'id')->all()
+                : [];
+            foreach ($guardianByFamily as $famId => $uids) {
+                $newest = null;
+                foreach ($uids as $uid) {
+                    $seen = $seenById[$uid] ?? null;
+                    if ($seen && ($newest === null || $seen > $newest)) {
+                        $newest = $seen;
+                    }
+                }
+                $presence[$famId] = \App\Support\Presence::state($newest);
+            }
+        } catch (\Throwable $e) {
+            // Presence is decoration; the list must still render without it.
+        }
+
         $childIds  = $conversations->pluck('child_id')->filter()->unique()->all();
         $centreIds = $conversations->pluck('centre_id')->unique()->all();
+
+        /* Which conversations the FAMILY has ever spoken in. Independent of who spoke
+           last: a reply is a fact about the thread, and hiding it whenever staff sent
+           something afterwards is what made the Status column look inconsistent. */
+        $senderPairs = DB::table('messages')->whereIn('conversation_id', $ids)
+            ->select('conversation_id', 'sender_id', DB::raw('MAX(created_at) as last_at'))
+            ->groupBy('conversation_id', 'sender_id')->get()->groupBy('conversation_id');
+
+        // Names for whoever sent the newest message in each thread, so the preview can
+        // attribute it. One lookup for the page, not one per row.
+        $lastSenderIds = collect($lastMsg)->pluck('sender_id')->filter()->unique()->all();
+        $senderNames = ! empty($lastSenderIds)
+            ? DB::table('users')->whereIn('id', $lastSenderIds)
+                ->selectRaw("id, TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) as n")
+                ->pluck('n', 'id')->all()
+            : [];
 
         $families = DB::table('families')->whereIn('id', $familyIds)->pluck('family_name', 'id')->all();
         $children = !empty($childIds)
@@ -351,15 +439,51 @@ final class ChatController extends Controller
             : collect();
         $centres = DB::table('centres')->whereIn('id', $centreIds)->pluck('name', 'id')->all();
 
-        return $conversations->map(function ($c) use ($unread, $lastMsg, $families, $children, $centres) {
+        return $conversations->map(function ($c) use ($unread, $lastMsg, $families, $children, $centres, $userId, $guardianByFamily, $senderPairs, $senderNames, $presence) {
             $last = $lastMsg[$c->id] ?? null;
+
+            /* Status of the last message, when the CENTRE sent it — not only when I did.
+               A director checking whether a broadcast was read did not send it
+               themselves, and that is the case this exists for. No tick on a message the
+               family sent us: "read" there is just the unread count restated, and a tick
+               would imply we had told them something we had not. */
+            $lastStatus = null;
+            $lastFrom = null;
+            if ($last) {
+                $famGuardians = $guardianByFamily[$c->family_id] ?? [];
+                $fromStaff = ! in_array((int) $last->sender_id, $famGuardians, true);
+                $lastFrom = $fromStaff ? 'centre' : 'family';
+                if ($fromStaff) {
+                    /* A reply is the strongest read receipt there is — they answered.
+                       Checked FIRST, and derived from timestamps rather than a stamp,
+                       so every historical thread reports correctly without backfilling
+                       the old read_at (which was contaminated by staff opening threads).
+                       family_read_at still covers the case where they read without
+                       replying. */
+                    $famReplyAfter = collect($senderPairs[$c->id] ?? [])
+                        ->filter(fn ($r) => in_array((int) $r->sender_id, $famGuardians, true))
+                        ->contains(fn ($r) => strtotime((string) $r->last_at) >= strtotime((string) $last->created_at));
+
+                    $lastStatus = ($famReplyAfter || ($last->family_read_at ?? null)) ? 'read'
+                        : ($last->delivered_at ? 'delivered' : 'sent');
+                }
+            }
             $child = ($c->child_id && isset($children[$c->child_id])) ? $children[$c->child_id] : null;
             return [
+                'last_status' => $lastStatus,
+                'last_from' => $lastFrom,     // 'centre' | 'family' — so the column is never blank
+                // True if anyone on the family's side has ever replied in this thread.
+                'has_replied' => collect($senderPairs[$c->id] ?? [])->contains(
+                    fn ($r) => in_array((int) $r->sender_id, $guardianByFamily[$c->family_id] ?? [], true)
+                ),
+                'last_read_at' => $last->read_at ?? null,
+                'last_delivered_at' => $last->delivered_at ?? null,
                 'id' => $c->id,
                 'centre_id' => $c->centre_id,
                 'centre_name' => $centres[$c->centre_id] ?? 'Centre',
                 'family_id' => $c->family_id,
                 'family_name' => $families[$c->family_id] ?? 'Family',
+                'presence' => $presence[$c->family_id] ?? 'offline',
                 'child_id' => $c->child_id,
                 'child_name' => $child ? trim(($child->first_name ?? '').' '.($child->last_name ?? '')) : null,
                 'child_photo_url' => $child->photo_url ?? null,
@@ -368,6 +492,13 @@ final class ChatController extends Controller
                 'unread_count' => (int) ($unread[$c->id] ?? 0),
                 'preview' => $last ? mb_substr($last->body, 0, 120) : null,
                 'last_sender_id' => $last->sender_id ?? null,
+                /* Who said it. Null when the sender is a guardian of this family —
+                   the row is already labelled with the family name, so repeating it
+                   adds nothing. Set for a colleague posting into a family thread,
+                   which otherwise looked exactly like the family replying. */
+                'last_sender_name' => ($last && $lastFrom === 'centre'
+                    && (int) $last->sender_id !== (int) $userId)
+                    ? ($senderNames[$last->sender_id] ?? null) : null,
             ];
         })->toArray();
     }
@@ -656,7 +787,7 @@ final class ChatController extends Controller
                     try {
                         $fcm = app(\App\Services\FcmService::class);
                         foreach ($recipients as $rid) {
-                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true, true);   // urgent + forceUrgent → full-screen takeover for staff AND parents
+                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true, true, false);   // false: web push already sent above; urgent+forceUrgent = takeover for staff AND parents
                         }
                     } catch (\Throwable $fe) {
                         \Illuminate\Support\Facades\Log::warning('FCM push from chat failed', ['error' => $fe->getMessage()]);
@@ -737,11 +868,31 @@ final class ChatController extends Controller
 
     private function markRead(int $conversationId, int $userId): void
     {
+        // Clears THIS viewer's unread badge — every viewer, staff included.
         DB::table('messages')
             ->where('conversation_id', $conversationId)
             ->where('sender_id', '!=', $userId)
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
+
+        /* The receipt shown to the centre is a different claim — "the family has seen
+           this" — and only a guardian of this family can make it true. read_at cannot
+           carry both meanings: it also drives each viewer's unread badge, so narrowing
+           it would leave staff with permanently unread threads. */
+        $isGuardian = DB::table('conversations')
+            ->join('guardians', 'guardians.family_id', '=', 'conversations.family_id')
+            ->where('conversations.id', $conversationId)
+            ->where('guardians.user_id', $userId)
+            ->exists();
+        if (! $isGuardian) {
+            return;
+        }
+
+        DB::table('messages')
+            ->where('conversation_id', $conversationId)
+            ->where('sender_id', '!=', $userId)
+            ->whereNull('family_read_at')
+            ->update(['family_read_at' => now()]);
     }
 
     private function parentCanAccess(int $userId, int $conversationId): bool
@@ -781,7 +932,21 @@ final class ChatController extends Controller
             if ($active && DB::table('agencies')->where('id', $active)->whereNull('deleted_at')->exists()) {
                 return DB::table('centres')->where('agency_id', $active)->pluck('id')->all();
             }
-            return [];
+
+            // No agency selected. Rather than showing nothing, fall back to the agencies
+            // this person actually administers in their own right — someone who is both a
+            // platform admin AND an agency admin was getting an empty Messenger whenever
+            // the header was missing, which includes the moment before the agency
+            // switcher initialises. Strictly narrower than the branch above: it grants
+            // only what they already hold, and never a tenant they have no role in.
+            $ownAgencies = DB::table('role_assignments')
+                ->where('user_id', $userId)->where('role', 'agency_admin')
+                ->where('active', true)->whereNotNull('agency_id')
+                ->pluck('agency_id')->all();
+
+            return $ownAgencies
+                ? DB::table('centres')->whereIn('agency_id', $ownAgencies)->pluck('id')->all()
+                : [];
         }
 
         $directIds = DB::table('role_assignments')
@@ -844,4 +1009,247 @@ final class ChatController extends Controller
             ->whereNull('read_at')
             ->count();
     }
+
+    /**
+     * POST /provider/chats/broadcast — one message, a whole audience.
+     *
+     * Admins and directors only. Everything is resolved through App\Support\Audience, the
+     * same definition Announcements uses, so "all educators" cannot come to mean two
+     * different things in two places.
+     */
+    public function broadcast(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $roles = DB::table('role_assignments')->where('user_id', $user->id)
+            ->where('active', true)->pluck('role')->all();
+        $mayBroadcast = (bool) array_intersect($roles, ['agency_admin', 'centre_director', 'platform_admin']);
+        abort_unless($mayBroadcast, 403, 'Only admins and directors can send to everyone.');
+
+        $data = $request->validate([
+            'audience' => ['required', 'in:'.implode(',', \App\Support\Audience::KEYS)],
+            'centre_id' => ['nullable', 'integer'],
+            'subject' => ['nullable', 'string', 'max:200'],
+            'body' => ['required', 'string', 'max:5000'],
+            // Sending to every family is not undoable, so the client has to mean it.
+            'confirm' => ['nullable', 'boolean'],
+        ]);
+
+        $agencyId = $this->broadcastAgencyId($request, $roles);
+        abort_unless($agencyId, 403, 'No agency for this account.');
+
+        // A director may only address their own centre; an agency admin the whole agency.
+        $centreId = $data['centre_id'] ?? null;
+        if (! array_intersect($roles, ['agency_admin', 'platform_admin'])) {
+            $own = DB::table('role_assignments')->where('user_id', $user->id)
+                ->where('role', 'centre_director')->where('active', true)
+                ->whereNotNull('centre_id')->pluck('centre_id')->all();
+            abort_unless($own, 403, 'No centre for this account.');
+            if ($centreId) {
+                abort_unless(in_array((int) $centreId, array_map('intval', $own), true), 403,
+                    'That is not your centre.');
+            } elseif (count($own) === 1) {
+                $centreId = (int) $own[0];
+            }
+        }
+        if ($centreId) {
+            $ok = DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists();
+            abort_unless($ok, 403, 'That centre is not in your agency.');
+        }
+
+        $audience = $data['audience'];
+        $body = trim($data['body']);
+        $subject = ($data['subject'] ?? null) ?: null;
+
+        // A dry count first, so the UI can say "this goes to 36 families" BEFORE it goes.
+        if (empty($data['confirm'])) {
+            return response()->json([
+                'preview' => true,
+                'audience' => $audience,
+                'label' => \App\Support\Audience::label($audience),
+                'families' => in_array($audience, ['parents', 'all'], true)
+                    ? count(\App\Support\Audience::families($agencyId, $centreId)) : 0,
+                'staff' => $audience === 'parents' ? 0
+                    : count(\App\Support\Audience::resolve(
+                        $audience === 'all' ? 'staff' : $audience, $agencyId, $centreId)),
+            ]);
+        }
+
+        $familyCount = 0;
+        $staffCount = 0;
+        // Gathered as we go and pushed once at the end. Parents and staff land on
+        // different screens, so they are kept apart.
+        $pushParents = [];
+        $pushStaff = [];
+
+        // ── parents ─────────────────────────────────────────────────────
+        if (in_array($audience, ['parents', 'all'], true)) {
+            /* ONE PRIVATE THREAD PER PARENT — not one message into each family's shared
+               thread.
+
+               A `conversations` row is a centre-to-family thread: every colleague at
+               that centre can read it and post in it. Broadcasting into 43 of those
+               meant an educator could answer in families that were not hers, and the
+               replies came back into shared threads rather than to the sender. A
+               broadcast is from one person to another, so it belongs where only those
+               two can see it — which is exactly what the staff half below already does.
+
+               Existing family conversations are untouched; this only changes where a
+               BROADCAST lands. */
+            foreach (\App\Support\Audience::resolve('parents', $agencyId, $centreId) as $gid) {
+                $gid = (int) $gid;
+                if (! $gid || $gid === (int) $user->id) {
+                    continue;
+                }
+                try {
+                    $threadId = \App\Support\PrivateThreads::findOrCreate((int) $user->id, $gid, $agencyId);
+                    \App\Support\PrivateThreads::post((int) $user->id, $threadId, $body);
+
+                    $pushParents[] = $gid;
+                    DB::table('notifications')->insert([
+                        'user_id' => $gid,
+                        'type' => 'message',
+                        'title' => 'Message from your centre',
+                        'body' => mb_substr($body, 0, 200),
+                        // A thread now, not a shared conversation.
+                        'data' => json_encode(['link' => '#messages', 'thread_id' => $threadId]),
+                        'created_at' => now(),
+                    ]);
+                    $familyCount++;
+                } catch (\Throwable $e) {
+                    // One parent failing must not stop the other forty-three.
+                    Log::warning('Broadcast to parent failed', [
+                        'user' => $gid, 'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        // ── staff ───────────────────────────────────────────────────────
+        if ($audience !== 'parents') {
+            $key = $audience === 'all' ? 'staff' : $audience;
+            $ids = \App\Support\Audience::resolve($key, $agencyId, $centreId);
+            $ids = array_values(array_diff($ids, [(int) $user->id]));   // not back to yourself
+
+            foreach ($ids as $uid) {
+                try {
+                    // A REAL message in a 1:1 team thread, not just a bell. A bell is
+                    // invisible to the missed-message emailer and has nothing to reply
+                    // to — the parent half of this broadcast lands in a real thread, and
+                    // the staff half should behave the same way.
+                    /* Same helper the parent half uses. The old copy here also
+                       filtered on t.agency_id, which split one pair's history across
+                       agencies; a 1:1 conversation is one conversation. */
+                    $threadId = \App\Support\PrivateThreads::findOrCreate((int) $user->id, (int) $uid, $agencyId);
+                    \App\Support\PrivateThreads::post((int) $user->id, $threadId, $body);
+
+                    DB::table('notifications')->insert([
+                        'user_id' => $uid,
+                        'type' => 'message',
+                        'title' => $subject ?: 'Message from '.trim(($user->first_name ?? '').' '.($user->last_name ?? '')),
+                        'body' => mb_substr($body, 0, 200),
+                        'data' => json_encode(['link' => '#team-chat', 'thread_id' => $threadId]),
+                        'created_at' => now(),
+                    ]);
+                    $pushStaff[] = (int) $uid;
+                    $staffCount++;
+                } catch (\Throwable $e) {
+                    Log::warning('Broadcast to staff failed', ['user' => $uid, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        /* Push it to their phones.
+           The message and the bell were being written and nothing else — so a broadcast
+           to 56 people showed up in the portal and never buzzed a single handset. Both
+           transports, the same pair the announcement path uses: FCM for the Android app,
+           web push for the browser PWA. Deep-linked per audience, because a parent's copy
+           is in #messages and a staff copy is in #team-chat.
+
+           Best-effort throughout: a phone that cannot be reached must never cost the
+           message, which is already delivered by this point. */
+        $pushTitle = $subject ?: ('Message from '.(trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: 'your centre'));
+        $pushBody = mb_substr($body, 0, 180);
+
+        foreach ([['#messages', array_unique($pushParents)], ['#team-chat', array_unique($pushStaff)]] as [$link, $ids]) {
+            if (! $ids) {
+                continue;
+            }
+            try {
+                $fcm = app(\App\Services\FcmService::class);
+                foreach ($ids as $uid) {
+                    $fcm->sendToUser((int) $uid, $pushTitle, $pushBody, $link, true);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Broadcast FCM push failed', ['error' => $e->getMessage()]);
+            }
+            try {
+                app(\App\Services\WebPushService::class)->sendToUsers(array_values($ids), [
+                    'title' => $pushTitle,
+                    'body' => $pushBody,
+                    'icon' => '/icon-192.png',
+                    'url' => '/dashboard.html'.$link,
+                    'tag' => 'kt-message',
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Broadcast web push failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        \App\Support\Audit::write([
+            'user_id' => $user->id,
+            'agency_id' => $agencyId,
+            'action' => 'chat.broadcast',
+            'entity_type' => 'conversation',
+            'payload' => json_encode([
+                'summary' => trim(($user->first_name ?? '').' '.($user->last_name ?? ''))
+                    .' messaged '.\App\Support\Audience::label($audience)
+                    .' — '.$familyCount.' family thread(s), '.$staffCount.' staff',
+                'audience' => $audience,
+                'centre_id' => $centreId,
+                'families' => $familyCount,
+                'staff' => $staffCount,
+                'pushed' => count(array_unique(array_merge($pushParents, $pushStaff))),
+            ]),
+            'ip_address' => substr((string) $request->ip(), 0, 45),
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'sent' => true,
+            'families' => $familyCount,
+            'staff' => $staffCount,
+            'pushed' => count(array_unique(array_merge($pushParents, $pushStaff))),
+            'label' => \App\Support\Audience::label($audience),
+        ]);
+    }
+
+    /** The agency this broadcast belongs to — never a header taken on trust. */
+    private function broadcastAgencyId(Request $request, array $roles): ?int
+    {
+        $userId = $request->user()->id;
+        $header = (int) $request->header('X-Active-Agency-Id');
+
+        if ($header) {
+            $allowed = in_array('platform_admin', $roles, true)
+                || DB::table('role_assignments')->where('user_id', $userId)
+                    ->where('agency_id', $header)->where('active', true)->exists();
+            if ($allowed && DB::table('agencies')->where('id', $header)->exists()) {
+                return $header;
+            }
+        }
+
+        $own = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->whereNotNull('agency_id')->value('agency_id');
+        if ($own) {
+            return (int) $own;
+        }
+
+        // A director attached only to a centre still has an agency, through it.
+        $viaCentre = DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $userId)->where('ra.active', true)->value('c.agency_id');
+
+        return $viaCentre ? (int) $viaCentre : null;
+    }
+
 }

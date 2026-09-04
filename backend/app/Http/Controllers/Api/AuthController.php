@@ -72,7 +72,24 @@ final class AuthController extends Controller
             ], 422);
         }
 
-        if (in_array($user->status, ['suspended', 'inactive'], true)) {
+        /* SECURITY (2026-08-25): this listed 'suspended' and 'inactive'. There is no
+           'inactive' — users.status is
+           enum('active','invited','not_invited','suspended','deactivated') — so that
+           arm never matched anything, and 'deactivated', the status every off-boarding
+           path actually writes, was absent. A deactivated educator, director or
+           de-enrolled guardian could therefore still sign in and be issued a fresh
+           token. RevokeOffTokensCommand dutifully killed their token every fifteen
+           minutes and they simply logged in again.
+
+           Proven on this host before the fix: status=deactivated returned HTTP 200 with
+           a token; status=suspended correctly returned 403. Three live accounts were in
+           that state, including a departed centre director.
+
+           Uses Audience::OFF_STATUSES so there is ONE definition of "this account is
+           switched off". The mail layer has always filtered on that constant; the front
+           door was the only place still keeping its own list — which is exactly how the
+           two drifted apart without anyone noticing. */
+        if (in_array($user->status, \App\Support\Audience::OFF_STATUSES, true)) {
             return response()->json(['message' => 'Account is not active.'], 403);
         }
 
@@ -131,6 +148,11 @@ final class AuthController extends Controller
             ['*'],
             now()->addDays(30)
         );
+
+        /* Signing in proves the invite was accepted. Without this the account
+           stays 'invited' for ever unless the onboarding wizard is finished --
+           and the mail gate keys off status, so real users got no email. */
+        \App\Support\AccountStatus::markClaimed((int) $user->id);
 
         // v22p39: stamp last login so the admin Users tab can surface
         // 'last seen' next to each user.
@@ -472,6 +494,8 @@ final class AuthController extends Controller
         });
         \App\Services\PasswordPolicy::record($user->id, $newHash);
 
+        // Setting a password from the invite link IS accepting the invite.
+        \App\Support\AccountStatus::markClaimed((int) $user->id);
         $tokenObj = $user->createToken('set-password', ['*'], now()->addDays(30));
         DB::table('users')->where('id', $user->id)->update([
             'last_login_at' => now(), 'last_login_ip' => $request->ip(), 'updated_at' => now(),
@@ -699,6 +723,11 @@ final class AuthController extends Controller
             // email and sign in to the right one. Letters/numbers/._- only.
             'username'        => ['nullable', 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/'],
 
+            // How far through the wizard they got. Onboarding is saved after every
+            // step now (complete=false), so an interrupted run resumes at this step
+            // instead of starting over with everything typed so far thrown away.
+            'onboarding_step' => ['nullable', 'integer', 'min:0', 'max:30'],
+
             // Mark as done (default true)
             'complete'        => ['nullable', 'boolean'],
         ]);
@@ -752,6 +781,7 @@ final class AuthController extends Controller
                 ? array_values(array_filter($data['extra_contacts'], fn ($c) => !empty($c['name']) || !empty($c['phone']) || !empty($c['email'])))
                 : null,
             'role_extras'             => $data['role_extras']     ?? null,
+            'onboarding_step'         => $data['onboarding_step'] ?? null,
         ], fn ($v) => $v !== null && $v !== ''));
 
         $userUpdate = array_filter([
@@ -767,12 +797,24 @@ final class AuthController extends Controller
         if (! empty($data['username'])) {
             $userUpdate['username'] = trim($data['username']);
         }
-        $userUpdate['profile_extras'] = json_encode($extras);
-        $userUpdate['updated_at']     = now();
         $wasOnboarded = ! empty($user->onboarded_at);
         $isCompleting = ($data['complete'] ?? true) === true;
+        // Done — drop the resume point, so that if an admin later reopens
+        // onboarding the wizard starts at the beginning rather than dropping the
+        // user on the final step of the run they are being asked to redo.
+        if ($isCompleting) { unset($extras['onboarding_step']); }
+        $userUpdate['profile_extras'] = json_encode($extras);
+        $userUpdate['updated_at']     = now();
         if ($isCompleting) {
             $userUpdate['onboarded_at'] = now();
+            /* And make the account active. Setting onboarded_at alone left status at
+               'invited', and the mail gate blocks every routine email to an invited
+               account — so people who had finished onboarding and were working daily
+               silently received no email for days. Only ever a promotion: a suspended
+               or deactivated account must not be revived by finishing a form. */
+            if (in_array((string) ($user->status ?? ''), ['invited', 'not_invited'], true)) {
+                $userUpdate['status'] = 'active';
+            }
         }
 
         // Provider bio — a home-daycare provider (a centre matched by email) must
@@ -874,7 +916,7 @@ final class AuthController extends Controller
     private function audit(Request $request, ?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, ?string $details = null): void
     {
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => $userId,
                 // Stamp the acting agency so login/mfa events are agency-scoped in
                 // the per-agency audit log + activity feed (no cross-tenant bleed).

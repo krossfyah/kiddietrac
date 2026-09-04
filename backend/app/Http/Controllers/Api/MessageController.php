@@ -457,7 +457,7 @@ final class MessageController extends Controller
                     ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])->pluck('user_id')->all();
                 $participants = array_values(array_unique(array_merge($guardianIds, $staffIds)));
             }
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => $request->user()->id,
                 'action' => $action,
                 'entity_type' => 'conversation',
@@ -508,6 +508,26 @@ final class MessageController extends Controller
             ->get()
             ->keyBy('id');
 
+        /* Presence for a FAMILY thread is the most recently seen guardian on that
+           family: several people share the thread, and the educator wants to know
+           whether anyone is reachable, not which particular guardian. One grouped
+           query for the whole page rather than one per conversation. */
+        $presence = [];
+        try {
+            $presenceRows = DB::table('guardians as g')
+                ->join('users as u', 'u.id', '=', 'g.user_id')
+                ->whereIn('g.family_id', $conversations->pluck('family_id')->filter()->all())
+                ->whereNull('u.deleted_at')
+                ->groupBy('g.family_id')
+                ->select('g.family_id', DB::raw('MAX(u.last_seen_at) as seen'))
+                ->get();
+            foreach ($presenceRows as $row) {
+                $presence[$row->family_id] = \App\Support\Presence::state($row->seen);
+            }
+        } catch (\Throwable $e) {
+            // Presence is decoration; the list must still render without it.
+        }
+
         $families = DB::table('families')
             ->whereIn('id', $conversations->pluck('family_id')->filter()->all())
             ->select('id', 'family_name')
@@ -515,7 +535,7 @@ final class MessageController extends Controller
             ->keyBy('id');
 
         return response()->json([
-            'conversations' => $conversations->map(function ($c) use ($unreadCounts, $children, $families) {
+            'conversations' => $conversations->map(function ($c) use ($unreadCounts, $children, $families, $presence) {
                 $child = $c->child_id ? ($children[$c->child_id] ?? null) : null;
                 $family = $c->family_id ? ($families[$c->family_id] ?? null) : null;
                 return [
@@ -524,6 +544,7 @@ final class MessageController extends Controller
                     'child_id' => $c->child_id,
                     'child_name' => $child ? ($child->preferred_name ?: $child->first_name) : null,
                     'family_name' => $family->family_name ?? null,
+                    'presence' => $c->family_id ? ($presence[$c->family_id] ?? 'offline') : 'offline',
                     'last_message_at' => $c->last_message_at,
                     'last_message_display' => $c->last_message_at ? Carbon::parse($c->last_message_at)->diffForHumans() : null,
                     'unread_count' => (int) ($unreadCounts[$c->id] ?? 0),
@@ -561,11 +582,21 @@ final class MessageController extends Controller
 
         DB::table('conversations')->where('id', $convo->id)->update(['last_message_at' => now()]);
 
-        // Notify the family's guardians of the reply (in-app + push).
+        /* Notify the family's guardians of the reply (in-app + push).
+           BOTH push transports, not just FCM. FcmService only ever queries
+           device_tokens WHERE platform IN ('android','ios') — it cannot reach a web
+           subscriber by design. Measured 2026-08-26: of 57 guardians, every single
+           registered token is `web`, so this block was sending an FCM message that
+           always found no device and NOTHING else. Parents got an in-app row they had
+           to already be looking at, and no notification at all.
+           ChatController has done both since v23 and says why in its own comment; the
+           fix simply never reached this second backend. (Anthony, 2026-08-26) */
         if ($convo->family_id) {
             $preview = mb_substr($data['body'], 0, 120);
+            $guardianIds = [];
             foreach (DB::table('guardians')->where('family_id', $convo->family_id)->pluck('user_id') as $gid) {
                 if ((int) $gid === (int) $user->id) continue;
+                $guardianIds[] = (int) $gid;
                 DB::table('notifications')->insert([
                     'user_id' => $gid, 'type' => 'message',
                     'title' => 'New message from your centre',
@@ -573,7 +604,26 @@ final class MessageController extends Controller
                     'data' => json_encode(['link' => '#messages', 'conversation_id' => $convo->id]),
                     'created_at' => now(),
                 ]);
-                try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New message from your centre 💬', $preview, '#messages', true, true); } catch (\Throwable $e) {}
+                /* false: web push for these guardians is sent as a batch below. */
+                try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New message from your centre 💬', $preview, '#messages', true, true, false); } catch (\Throwable $e) {}
+            }
+
+            // Web push — the transport the parents on this platform actually have.
+            // Separate try so an FCM fault cannot suppress it, and vice versa.
+            if ($guardianIds) {
+                try {
+                    app(\App\Services\WebPushService::class)->sendToUsers($guardianIds, [
+                        'title' => '💬 New message from your centre',
+                        'body'  => $preview,
+                        'icon'  => '/icon-192.png',
+                        'url'   => '/dashboard.html#messages',
+                        'tag'   => 'msg-' . $convo->id,
+                    ]);
+                } catch (\Throwable $we) {
+                    \Illuminate\Support\Facades\Log::warning('Web push from messages failed', [
+                        'conversation' => $convo->id, 'error' => $we->getMessage(),
+                    ]);
+                }
             }
         }
 

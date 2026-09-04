@@ -139,8 +139,14 @@ final class AutoChargeInvoices extends Command
             }
         }
 
-        DB::table('audit_logs')->insert([
+        // DELIBERATELY UNSTAMPED. This is one row summarising a run across EVERY
+        // agency — attempted/charged/failed totals for the whole batch — so there is no
+        // single agency it belongs to, and inventing one would file another tenant's
+        // numbers under somebody's log. It is a platform-level event and only visible
+        // as one. The per-invoice charges are audited separately, in context.
+        \App\Support\Audit::write([
             'user_id' => null,
+            'agency_id' => null,
             'action' => 'autopay.batch_run',
             'entity_type' => 'system',
             'entity_id' => null,

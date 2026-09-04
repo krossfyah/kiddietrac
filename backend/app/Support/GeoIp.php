@@ -30,6 +30,12 @@ final class GeoIp
             return '—';
         }
 
+        // Written by a cron, the scheduler or a queue worker -- there is no address
+        // to place, and it is not an unknown either. See App\Support\Audit.
+        if ($ip === 'system') {
+            return 'Scheduled task';
+        }
+
         if (self::isPrivate($ip)) {
             return 'Internal network';
         }
@@ -69,6 +75,74 @@ final class GeoIp
         $place = $hit['city'] ? ($hit['city'] . ', ' . $hit['country']) : $hit['country'];
 
         return trim($place . ' ' . $flag);
+    }
+
+    /**
+     * Resolve many addresses in ONE request, before anything asks for them.
+     *
+     * locate() makes a blocking HTTP call per uncached address. That is fine for a
+     * single row and ruinous for a page of them: the audit log resolved its IPs
+     * inside a map() over 50 rows and took 10.7 seconds doing it, against SQL that
+     * runs in under 4 ms.
+     *
+     * ip-api.com takes up to 100 addresses per POST. Everything here writes the same
+     * cache keys locate() reads, so callers do not change -- they just stop waiting.
+     */
+    public static function warm(array $ips): void
+    {
+        $want = [];
+        foreach ($ips as $ip) {
+            $ip = trim((string) $ip);
+            if ($ip === '' || $ip === 'system' || self::isPrivate($ip)) {
+                continue;
+            }
+            if (Cache::has('geoip:' . $ip)) {
+                continue;
+            }
+            $want[$ip] = true;
+        }
+
+        $want = array_keys($want);
+        if ($want === []) {
+            return;
+        }
+
+        foreach (array_chunk($want, 100) as $chunk) {
+            try {
+                $res = Http::timeout(5)->post(
+                    'http://ip-api.com/batch?fields=status,country,countryCode,city,query',
+                    array_values($chunk)
+                );
+
+                if (! $res->ok()) {
+                    continue;
+                }
+
+                $seen = [];
+                foreach ((array) $res->json() as $d) {
+                    $q = $d['query'] ?? null;
+                    if (! $q) {
+                        continue;
+                    }
+                    $seen[$q] = true;
+                    Cache::put('geoip:' . $q, ($d['status'] ?? '') === 'success' ? [
+                        'city' => $d['city'] ?? null,
+                        'country' => $d['country'] ?? null,
+                        'code' => $d['countryCode'] ?? null,
+                    ] : null, self::TTL);
+                }
+
+                // Anything the service skipped is cached as a miss too, so the page
+                // does not fall back to a per-row lookup for it a moment later.
+                foreach ($chunk as $ip) {
+                    if (! isset($seen[$ip])) {
+                        Cache::put('geoip:' . $ip, null, self::TTL);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Never let a location lookup break the page it decorates.
+            }
+        }
     }
 
     private static function isPrivate(string $ip): bool

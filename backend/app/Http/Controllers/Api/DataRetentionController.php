@@ -138,7 +138,7 @@ final class DataRetentionController extends Controller
 
         // Audit the change (payload JSON — audit_logs.payload has a json_valid CHECK).
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => $request->user()->id ?? null,
                 'action'      => 'compliance_settings_updated',
                 'entity_type' => 'agency',

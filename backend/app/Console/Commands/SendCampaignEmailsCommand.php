@@ -117,8 +117,11 @@ final class SendCampaignEmailsCommand extends Command
                 'updated_at' => $now,
             ]);
 
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => null,
+                // The campaign carries its own agency; a console row gets no stamp
+                // from anywhere else.
+                'agency_id' => (int) ($c->agency_id ?? 0) ?: null,
                 'action' => 'campaign.email_sent',
                 'entity_type' => 'marketing_campaign',
                 'entity_id' => (int) $c->id,

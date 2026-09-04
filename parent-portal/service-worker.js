@@ -21,13 +21,20 @@
         cache (STATIC) that survives deploys — instant launches, zero staleness
         (the old staleness came from cache-first on UNVERSIONED urls). HTML + any
         unversioned asset stay network-first. Net: near-instant repeat launches.
+   v21 (2026-09-01): design tokens consolidated into kt-tokens.css. Eight
+        stylesheets had their :root removed, changing their CONTENT without
+        changing their ?v= — and versioned assets are cache-first from STATIC,
+        which survives deploys. A client holding the old copies would be fine
+        (they are self-consistent) but a partial refresh would leave it with a
+        tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
+        values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = "kt-20260831frz2";
+const CACHE = "kt-202609031940";
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
 // changed file, which used to freeze that file forever under cache-first).
-const STATIC = "kt-static-v2";
+const STATIC = "kt-static-v3";
 const ASSETS = ['/', '/index.html', '/dashboard.html', '/manifest.json'];
 
 self.addEventListener('install', (e) => {

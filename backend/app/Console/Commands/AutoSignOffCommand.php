@@ -89,7 +89,7 @@ class AutoSignOffCommand extends Command
     private function auditAuto(int $agencyId, string $action, string $entityType, $entityId, array $extra = []): void
     {
         try {
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id' => null,
                 'agency_id' => $agencyId,
                 'action' => $action,

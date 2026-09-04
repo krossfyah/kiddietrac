@@ -50,14 +50,18 @@ final class WeeklyDigestCommand extends Command
             foreach ($rcpts as $r) {
                 try {
                     $mailer->mailer()->html($body, function ($m) use ($subject, $r) {
+                        // Engagement mail: withheld from accounts nobody has claimed.
+                        try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); }
+                        catch (\Throwable $e) {}
                         $m->to($r->email, ($r->first_name . ' ' . $r->last_name))->subject($subject);
                     });
                 } catch (\Throwable $e) {
                     $this->warn('Send failed for ' . $r->email . ': ' . $e->getMessage());
                 }
             }
-            DB::table('audit_logs')->insert([
-                'user_id' => null, 'action' => 'digest.weekly_sent',
+            \App\Support\Audit::write([
+                'user_id' => null, 'agency_id' => (int) $a->id,
+                'action' => 'digest.weekly_sent',
                 'entity_type' => 'agency', 'entity_id' => (int) $a->id,
                 'payload' => json_encode(['recipients' => count($rcpts), 'week_of' => $lastWeekStart->toDateString()]),
                 'created_at' => now(),

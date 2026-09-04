@@ -165,7 +165,7 @@ class SalesController extends Controller
                 $l->value ? 'value ' . $l->value : null,
             ]));
 
-            \Illuminate\Support\Facades\DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'   => $uid ?: null,
                 /* Leads are a single shared pipeline rather than an agency's, but the
                    audit viewer filters strictly on agency_id and shows NOTHING for a null

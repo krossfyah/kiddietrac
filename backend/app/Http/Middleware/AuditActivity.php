@@ -17,7 +17,7 @@ use Throwable;
  * Records EVERY state-changing API request (POST/PUT/PATCH/DELETE) — by any
  * signed-in user — into audit_logs, so the audit trail captures the whole
  * portal (chats/messages, billing, enrolments, settings, etc.) without having
- * to instrument each controller by hand. Reads (GET/HEAD) and a small denylist
+ * to instrument each controller by hand. Successful reads and a small denylist
  * of high-frequency/noise endpoints are skipped. Both successes AND failures
  * are recorded (the HTTP status is stored), so failed attempts are visible too.
  *
@@ -49,11 +49,74 @@ class AuditActivity
         'cvv', 'cvc', 'ssn', 'sin', 'kiosk_pin', 'pin',
     ];
 
+    /**
+     * Claim any audit row this request wrote without an agency stamp.
+     *
+     * The audit view matches al.agency_id exactly, so an unstamped row is invisible to
+     * everyone. Most controllers write their own richer audit entries — staff.clock_in,
+     * child.check_in_by_staff, chat.email_notified — and almost none of them stamp.
+     * Rather than patching 27 call sites and hoping the 28th remembers, the middleware
+     * that already knows the agency adopts whatever the request left behind.
+     *
+     * Bounded to rows written by THIS actor during THIS request, so it can never reach
+     * across to another tenant's row: same actor, same agency, same few seconds.
+     */
+    /**
+     * Set by a DB listener when this request really does INSERT into audit_logs.
+     *
+     * Without it, claimUnstamped ran AuditScope::resolve() plus an UPDATE on every
+     * request in the system — including the reads that make up the overwhelming
+     * majority of traffic and never write an audit row at all. Three writes per read
+     * was what pinned throughput at ~28 req/s with the CPU idle. (2026-08-29)
+     */
+    private bool $auditRowWritten = false;
+
+    private function claimUnstamped(Request $request, $user, ?string $startedAt): void
+    {
+        if (! $user || ! $startedAt) {
+            return;
+        }
+        // Nothing was written, so there is nothing unstamped to adopt.
+        if (! $this->auditRowWritten) {
+            return;
+        }
+        try {
+            $agencyId = \App\Support\AuditScope::resolve((int) $user->id, $request);
+            if (! $agencyId) {
+                return;
+            }
+            DB::table('audit_logs')
+                ->whereNull('agency_id')
+                ->where('user_id', $user->id)
+                ->where('created_at', '>=', $startedAt)
+                ->update(['agency_id' => $agencyId]);
+        } catch (\Throwable $e) {
+            // An audit stamp is worth having, never worth failing a request over.
+        }
+    }
+
     public function handle(Request $request, Closure $next): Response
     {
+        /* Watch for a real audit insert. Cheaper than the UPDATE it avoids, and exact:
+           whatever writes an audit row — controller, observer, service — trips this. */
+        \Illuminate\Support\Facades\DB::listen(function ($q) {
+            if (! $this->auditRowWritten
+                && stripos($q->sql, 'insert into `audit_logs`') !== false) {
+                $this->auditRowWritten = true;
+            }
+        });
+
+        // Taken BEFORE anything runs, so the window covers every row this request
+        // goes on to write.
+        $startedAt = now()->toDateTimeString();
+
         $response = $next($request);
         try {
             $this->record($request, $response);
+            // Controllers write their own richer entries — staff.clock_in,
+            // child.check_in_by_staff — and almost none of them stamp the agency.
+            // Adopt whatever this request left unstamped, here, once.
+            $this->claimUnstamped($request, $request->user(), $startedAt);
         } catch (Throwable $e) {
             // Auditing must never break the actual request.
         }
@@ -63,8 +126,37 @@ class AuditActivity
     private function record(Request $request, Response $response): void
     {
         $method = strtoupper($request->method());
-        if (! in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
-            return;
+        $isWrite = in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+
+        /* A read that FAILS is worth keeping; a read that works is not.
+
+           Educators could not download the Daily Supervision Check for a whole day
+           and nothing anywhere recorded it, because a download is a GET and this
+           returned before writing a row. The cause (a signed URL having its host
+           rewritten to the portal's, so every request 404'd) was invisible until
+           somebody complained.
+
+           Auditing all reads would drown the table — reads are most of the traffic.
+           Auditing the ones that come back 4xx/5xx costs almost nothing and is the
+           signal somebody actually needs. */
+        if (! $isWrite) {
+            if ($method !== 'GET') {
+                return;
+            }
+            $st = $response->getStatusCode();
+            if ($st < 400) {
+                return;                 // a working read
+            }
+            if (in_array($st, [401, 429], true)) {
+                // Ordinary traffic: an expired token in somebody's pocket, or a rate
+                // limit doing its job. Real login failures are audited by AuthController.
+                return;
+            }
+            if ($st === 404 && $request->route() === null) {
+                // No such route at all — scanners and stale bookmarks. Only a 404
+                // from a route we do serve says something about us.
+                return;
+            }
         }
         $user = $request->user();
         if (! $user) {
@@ -83,8 +175,18 @@ class AuditActivity
         $status = $response->getStatusCode();
         $ok = $status >= 200 && $status < 300;
 
-        // action = "post:admin/centres" (route name if present), capped at 80 chars.
+        /* action = "post:admin/centres" (route name if present), capped at 80 chars.
+
+           getName() returns null for an unnamed route only while the route cache is cold.
+           `artisan route:cache` gives every unnamed route a placeholder name --
+           "generated::" plus sixteen random characters -- so on a cached production app
+           this was never null, the readable fallback never ran, and the log filled with
+           strings that mean nothing and CHANGE on every cache rebuild. A placeholder is
+           the absence of a name, so treat it as one. */
         $routeName = optional($request->route())->getName();
+        if ($routeName !== null && str_starts_with($routeName, 'generated::')) {
+            $routeName = null;
+        }
         $action = $routeName ?: (strtolower($method) . ':' . $path);
         if (! $ok) {
             $action .= ' [fail]';
@@ -97,7 +199,12 @@ class AuditActivity
         foreach ((array) optional($request->route())->parameters() as $k => $v) {
             if (is_numeric($v)) {
                 $entityId = (int) $v;
-                $entityType = substr((string) $k, 0, 80);
+                /* A parameter literally called "id" names nothing -- "id#10" tells a
+                   reader less than the path does. Keep the number, take the type from
+                   the path instead by leaving $entityType null for the block below. */
+                $entityType = in_array(strtolower((string) $k), ['id', 'i', 'n'], true)
+                    ? null
+                    : substr((string) $k, 0, 80);
                 break;
             }
         }
@@ -125,7 +232,7 @@ class AuditActivity
         // tagged to the agency they've switched into; everyone else to their own.
         $agencyId = \App\Support\AuditScope::resolve((int) ($user->id ?? 0), $request);
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id'     => $user->id ?? null,
             'agency_id'   => $agencyId,
             'action'      => $action,

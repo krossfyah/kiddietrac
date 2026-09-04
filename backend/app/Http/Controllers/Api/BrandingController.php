@@ -133,7 +133,7 @@ final class BrandingController extends Controller
             'updated_at' => now(),
         ]);
 
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $request->user()->id,
             'action' => 'branding.updated',
             'entity_type' => 'agency',
@@ -154,18 +154,37 @@ final class BrandingController extends Controller
      */
     public function uploadLogo(Request $request): JsonResponse
     {
-        $agencyId = DB::table('role_assignments')
-            ->where('user_id', $request->user()->id)
-            ->where('role', 'agency_admin')
-            ->where('active', true)
-            ->value('agency_id');
-
-        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
-
         $request->validate([
             'logo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'kind' => ['nullable', 'in:logo,favicon'],
+            // Which tenant this logo belongs to. Honoured for a platform admin only.
+            'agency_id' => ['nullable', 'integer'],
         ]);
+
+        $isPlatform = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')->where('active', true)->exists();
+
+        /* A platform admin is editing somebody else's tenant, so they must be able to name
+           it. Without this the upload resolved to the UPLOADER's agency — a 403 for a pure
+           platform admin, or silently branding the wrong agency for one who also holds an
+           agency_admin row. An agency admin still gets their own and cannot pass an id. */
+        $agencyId = null;
+        if ($isPlatform && $request->filled('agency_id')) {
+            $agencyId = (int) $request->input('agency_id');
+            if (! DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists()) {
+                return response()->json(['message' => 'Agency not found'], 404);
+            }
+        }
+        if (! $agencyId) {
+            $agencyId = DB::table('role_assignments')
+                ->where('user_id', $request->user()->id)
+                ->where('role', 'agency_admin')
+                ->where('active', true)
+                ->value('agency_id');
+        }
+
+        if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $file = $request->file('logo');
         $kind = $request->input('kind', 'logo');
@@ -183,11 +202,36 @@ final class BrandingController extends Controller
         $settings['branding'] = $settings['branding'] ?? [];
         $settings['branding'][$kind === 'favicon' ? 'favicon_url' : 'logo_url'] = $url;
 
-        DB::table('agencies')->where('id', $agencyId)->update([
+        $write = [
             'settings' => json_encode($settings),
             'logo_url' => $kind === 'logo' ? $url : ($agency->logo_url ?? null),
             'updated_at' => now(),
-        ]);
+        ];
+        /* brand_logo_url is the column the white-label header and the platform editor
+           read. Only settings.branding.logo_url and the legacy logo_url were being
+           written, so a logo uploaded here never showed up in the branded header. */
+        if ($kind === 'logo') {
+            $write['brand_logo_url'] = $url;
+        }
+        DB::table('agencies')->where('id', $agencyId)->update($write);
+
+        // Uploading a logo is a change to the agency; it belongs in the same trail.
+        try {
+            \App\Support\Audit::write([
+                'user_id' => $request->user()->id,
+                'agency_id' => $agencyId,
+                'action' => 'agency.' . $kind . '_uploaded',
+                'entity_type' => 'agency',
+                'entity_id' => $agencyId,
+                'payload' => json_encode([
+                    'agency' => $agency->name ?? null,
+                    'kind' => $kind,
+                    'url' => $url,
+                    'from' => $kind === 'logo' ? ($agency->brand_logo_url ?? null) : null,
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail an upload over its audit row */ }
 
         return response()->json([
             'message' => ucfirst($kind) . ' uploaded',

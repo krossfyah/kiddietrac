@@ -70,7 +70,7 @@ final class TrackSlowRequests
             } catch (\Throwable $e) { /* context is a bonus */ }
 
             $seconds = number_format($ms / 1000, 1);
-            DB::table('audit_logs')->insert([
+            \App\Support\Audit::write([
                 'user_id'     => $userId,
                 // Unstamped rows are invisible in EVERY agency, so a perf row with no
                 // agency would be written and never seen — the exact trap the auto

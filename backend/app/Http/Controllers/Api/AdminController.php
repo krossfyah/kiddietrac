@@ -89,7 +89,7 @@ final class AdminController extends Controller
 
     private function audit(int $userId, string $action, ?string $entityType, ?int $entityId, array $payload = []): void
     {
-        DB::table('audit_logs')->insert([
+        \App\Support\Audit::write([
             'user_id' => $userId,
             'agency_id' => \App\Support\AuditScope::resolve($userId),
             'action' => $action,
@@ -326,6 +326,9 @@ final class AdminController extends Controller
                 'city' => $c->city,
                 'province' => $c->province,
                 'postal_code' => $c->postal_code,
+                /* Was missing, so the edit form showed Country blank on a record that
+                   has one — and would have saved that blank straight back over it. */
+                'country' => $c->country ?? null,
                 // Persisted map coordinates — lets the provider map plot instantly
                 // instead of geocoding every address on each load.
                 'latitude'  => isset($c->latitude) ? (float) $c->latitude : null,
@@ -409,9 +412,15 @@ final class AdminController extends Controller
             'license_capacity' => ['nullable', 'integer', 'min:0', 'max:500'],
             'max_concurrent_children' => ['nullable', 'integer', 'min:0', 'max:500'],
             'address_line1' => ['nullable', 'string', 'max:200'],
+            // The column existed and was never accepted, so a unit number had nowhere to
+            // go but the end of line 1.
+            'address_line2' => ['nullable', 'string', 'max:200'],
             'city' => ['nullable', 'string', 'max:80'],
             'province' => ['nullable', 'string', 'max:40'],
             'postal_code' => ['nullable', 'string', 'max:12'],
+            // Was hardcoded to CA on insert. It decides the holiday calendar, the currency
+            // and whether the form says "Postal code" or "ZIP".
+            'country' => ['nullable', 'string', 'max:80'],
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:180'],
             'cwelcc_enrolled' => ['nullable', 'boolean'],
@@ -438,10 +447,12 @@ final class AdminController extends Controller
             'license_number' => $data['license_number'] ?? null,
             'license_capacity' => $data['license_capacity'] ?? 0,
             'address_line1' => $data['address_line1'] ?? null,
+            'address_line2' => $data['address_line2'] ?? null,
             'city' => $data['city'] ?? null,
             'province' => $data['province'] ?? 'ON',
             'postal_code' => $data['postal_code'] ?? null,
-            'country' => 'CA',
+            // Was the literal 'CA'. A US agency's centres were all created as Canadian.
+            'country' => $data['country'] ?? 'CA',
             'phone' => $data['phone'] ?? null,
             'email' => $data['email'] ?? null,
             'cwelcc_enrolled' => !empty($data['cwelcc_enrolled']) ? 1 : 0,
@@ -466,6 +477,11 @@ final class AdminController extends Controller
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:180'],
+            // Settable on create and not correctable afterwards, until now.
+            'supervisor_first_name' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'supervisor_last_name' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'address_line2' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'country' => ['sometimes', 'nullable', 'string', 'max:80'],
             'license_number' => ['sometimes', 'nullable', 'string', 'max:60'],
             'license_capacity' => ['sometimes', 'integer', 'min:0', 'max:500'],
             'max_concurrent_children' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:500'],
@@ -1046,6 +1062,10 @@ final class AdminController extends Controller
         $since      = $request->input('since');
         $until      = $request->input('until');
         $q          = trim((string) $request->input('q', ''));
+        /* Which half of the split to serve. 'payments' is the Payment integrations
+           tab; anything else is the main log, which now excludes those rows. One
+           definition drives both, so nothing is listed twice or lost between them. */
+        $channel    = strtolower(trim((string) $request->input('channel', '')));
         $limit      = min(200, max(1, (int) $request->input('limit', 50)));
         $offset     = max(0, (int) $request->input('offset', 0));
 
@@ -1142,6 +1162,11 @@ final class AdminController extends Controller
                 $base->whereIn('al.user_id', $scopedUserIds ?: [0]);
             }
         }
+        if ($channel === 'payments') {
+            \App\Support\PaymentAuditActions::only($base, 'al.action');
+        } else {
+            \App\Support\PaymentAuditActions::except($base, 'al.action');
+        }
         if ($entityType) $base->where('al.entity_type', $entityType);
         if ($action)     $base->where('al.action', $action);
         if ($userId)     $base->where('al.user_id', $userId);
@@ -1174,6 +1199,12 @@ final class AdminController extends Controller
         // payloads are rendered in it so they agree with the "When" column.
         $auditTz = 'UTC';
         try { $auditTz = \App\Support\AgencyTime::tz($activeAgencyId ?: null) ?: 'UTC'; } catch (\Throwable $e) {}
+
+        /* Every address on this page in ONE request.
+           locate() blocks for ~1.15 s per uncached address and the map() below calls
+           it per row -- that is why this endpoint recorded 10.7 s against itself
+           while its SQL runs in under 4 ms. */
+        \App\Support\GeoIp::warm($rows->pluck('ip_address')->all());
 
         $rows = $rows->map(function ($r) use ($auditTz) {
             $r->action_label = $this->humanizeAuditAction($r->action);
@@ -1626,10 +1657,21 @@ final class AdminController extends Controller
             ->get()
             ->groupBy('user_id');
 
+        /* families.deleted_at is pulled deliberately. Without it this join treated a
+           departed family exactly like a current one, so a de-boarded guardian was still
+           given a 'guardian' role below and read, in User management, as a current
+           guardian of a family that had already left. */
         $allGuardianLinks = DB::table('guardians')
             ->join('families', 'families.id', '=', 'guardians.family_id')
             ->whereIn('guardians.user_id', $users->pluck('id'))
-            ->select('guardians.user_id', 'families.centre_id', 'families.family_name')
+            ->select(
+                'guardians.user_id',
+                'families.centre_id',
+                'families.family_name',
+                'families.deleted_at as family_deleted_at',
+                'families.departure_date as family_departure_date',
+                'families.suspended_at as family_suspended_at'
+            )
             ->get()
             ->groupBy('user_id');
 
@@ -1673,8 +1715,25 @@ final class AdminController extends Controller
         $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy) {
             $roles = ($allAssignments[$u->id] ?? collect())->pluck('role')->unique()->values()->all();
             $guardianLinks = $allGuardianLinks[$u->id] ?? collect();
-            if ($guardianLinks->isNotEmpty() && !in_array('guardian', $roles)) {
+            // Only a family that is still here makes someone a current guardian.
+            $liveLinks = $guardianLinks->filter(fn ($l) => empty($l->family_deleted_at));
+            if ($liveLinks->isNotEmpty() && !in_array('guardian', $roles)) {
                 $roles[] = 'guardian';
+            }
+            /* The most recent departure, for the status badge. Someone can appear in more
+               than one family (a separated household keeps two), so a single stale link
+               must not be allowed to label an account that is still active elsewhere. */
+            $departed = null;
+            if ($liveLinks->isEmpty()) {
+                foreach ($guardianLinks as $l) {
+                    if (empty($l->family_deleted_at)) {
+                        continue;
+                    }
+                    $when = $l->family_departure_date ?: $l->family_deleted_at;
+                    if ($departed === null || (string) $when > (string) $departed['on']) {
+                        $departed = ['on' => $when, 'family' => $l->family_name];
+                    }
+                }
             }
 
             // v22p3.4: surface profile_extras (incl. role_extras) so the
@@ -1695,6 +1754,11 @@ final class AdminController extends Controller
                 'phone' => $u->phone,
                 'photo_url' => $u->photo_url,
                 'status' => $u->status,
+                /* Why the account is closed, when the reason is a family that left.
+                   The badge reads 'De-boarded' rather than the bare enum word, so an
+                   administrator can tell a departure from a manual switch-off. */
+                'departed_on' => $departed['on'] ?? null,
+                'departed_from' => $departed['family'] ?? null,
                 'deactivated' => ! empty($u->deleted_at),
                 'deactivated_at' => $u->deleted_at ?? null,
                 /* When they were last ACTIVE. last_login_at freezes for anyone who
@@ -2080,6 +2144,17 @@ final class AdminController extends Controller
 
         $data['updated_at'] = now();
         DB::table('users')->where('id', $userId)->update($data);
+
+        // Keep the roles in step with the account. closeRoles() stamps what it took so
+        // reopenRoles() can put back exactly that and nothing an admin had revoked on
+        // purpose -- which is why 'Reactivate' does not simply switch every row back on.
+        if (array_key_exists('status', $data)) {
+            if (in_array($data['status'], \App\Support\AccountStatus::CLOSED, true)) {
+                \App\Support\AccountStatus::closeRoles([$userId]);
+            } elseif ($data['status'] === 'active') {
+                \App\Support\AccountStatus::reopenRoles([$userId]);
+            }
+        }
 
         $this->audit($request->user()->id, 'user.updated', 'user', $userId, $data);
         return response()->json(['message' => 'User updated']);
@@ -3326,6 +3401,9 @@ final class AdminController extends Controller
 
         if ($guardianIds) {
             DB::table('users')->whereIn('id', $guardianIds)->update(['status' => 'deactivated']);
+            // ...and the guardian roles those accounts hold. Closing the account without
+            // this left them listed as active guardians of an agency they had left.
+            \App\Support\AccountStatus::closeRoles($guardianIds);
         }
 
         DB::table('families')->where('id', $familyId)->update([
@@ -3418,6 +3496,7 @@ final class AdminController extends Controller
         $userIds = DB::table('guardians')->where('family_id', $familyId)->whereNotNull('user_id')->pluck('user_id')->all();
         if ($userIds) {
             DB::table('users')->whereIn('id', $userIds)->update(['status' => 'suspended']);
+            \App\Support\AccountStatus::closeRoles($userIds);
         }
         // Stamp the family itself, so the suspension is visible to the rosters the
         // educators work from and not only to the guardians' own logins. It also
@@ -3502,6 +3581,9 @@ final class AdminController extends Controller
         if ($userIds) {
             $restored['accounts'] = DB::table('users')->whereIn('id', $userIds)
                 ->where('status', 'deactivated')->update(['status' => 'active', 'updated_at' => now()]);
+            // Only the assignments the de-boarding closed come back. One an administrator
+            // had revoked before that has no stamp, and stays revoked.
+            $restored['roles'] = \App\Support\AccountStatus::reopenRoles($userIds);
         }
 
         $this->audit($request->user()->id, 'family.restored', 'family', $familyId, [
@@ -3530,6 +3612,7 @@ final class AdminController extends Controller
         $userIds = DB::table('guardians')->where('family_id', $familyId)->whereNotNull('user_id')->pluck('user_id')->all();
         if ($userIds) {
             DB::table('users')->whereIn('id', $userIds)->where('status', 'suspended')->update(['status' => 'active']);
+            \App\Support\AccountStatus::reopenRoles($userIds);
         }
         DB::table('families')->where('id', $familyId)->update(['suspended_at' => null, 'updated_at' => now()]);
         $notified = $this->notifyFamilyAccess($family, $userIds, $request, true);
@@ -4687,6 +4770,7 @@ final class AdminController extends Controller
                 'deleted_at' => now(),
                 'updated_at' => now(),
             ]);
+            \App\Support\AccountStatus::closeRoles([$userId]);
         });
 
         /* Of the rooms they covered, which now have NOBODY active on them. This is the
@@ -5113,9 +5197,16 @@ final class AdminController extends Controller
         if (!$this->userBelongsToAgency($userId, $agencyId)) {
             return response()->json(['message' => 'User not in your agency'], 403);
         }
+        // Clear the saved resume point too. The wizard remembers the step a user
+        // stopped on; leaving it behind would drop them at the end of the very run
+        // the admin is reopening for them to do again.
+        $extras = json_decode((string) DB::table('users')->where('id', $userId)->value('profile_extras'), true);
+        $keep = is_array($extras) ? $extras : null;
+        if ($keep !== null) { unset($keep['onboarding_step']); }
         DB::table('users')->where('id', $userId)->update([
-            'onboarded_at' => null,
-            'updated_at'   => now(),
+            'onboarded_at'   => null,
+            'profile_extras' => $keep === null ? null : json_encode($keep),
+            'updated_at'     => now(),
         ]);
         $this->audit($request->user()->id, 'user.onboarding_reopened', 'user', $userId);
         return response()->json(['message' => 'Onboarding reopened — the user will see the wizard on their next sign-in.']);
@@ -5374,48 +5465,37 @@ final class AdminController extends Controller
         if (! $to) {
             return response()->json(['message' => 'No email address to send to.'], 422);
         }
-        $ag = DB::table('agencies')->where('id', $agencyId)->first();
-        $s = ($ag && $ag->settings) ? (json_decode($ag->settings, true) ?: []) : [];
-        $brand = $s['branding'] ?? [];
-        $abs = fn ($u) => $u ? (preg_match('#^https?://#', (string) $u) ? $u : ('https://api.kiddietrac.com' . $u)) : null;
+        /* Send the REAL email to one address rather than rebuilding the view here.
+
+           This endpoint used to assemble its own copy of the template data, and the
+           copy drifted: it still read settings.data_contact_email and agencies.email
+           for the contact block (neither exists, so the block came out empty) and
+           still took the provider photo from centres.logo_url, which is empty for
+           every home provider. So the preview showed something no parent ever
+           received — the exact opposite of what a test send is for. It now runs the
+           same code path as a live send, addressed to the tester, with no BCC. */
         $centre = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
-        $view = [
-            'agencyName'      => $s['name'] ?? ($ag->name ?? 'Your agency'),
-            'agencyLogoUrl'   => $abs($brand['logo_url'] ?? null),
-            'agencyPhone'     => $s['phone'] ?? null,
-            'agencyEmail'     => $s['data_contact_email'] ?? ($ag->email ?? null),
-            'providerName'    => $centre->name ?? 'Your provider',
-            'providerPhotoUrl'=> $abs($centre->logo_url ?? null),
-            'providerBio'     => ($centre->provider_bio ?? null) ?: "Hi! I'm your provider — I can't wait to care for your little one.",
-            'providerPhone'   => $centre->phone ?? null,
-            'providerEmail'   => $centre->email ?? null,
-            'providerAddress' => null,
-            'parentFirstName' => $request->user()->first_name ?: 'there',
-            'childName'       => 'Ava',
-            'portalUrl'       => 'https://app.kiddietrac.com',
-            'primaryColor'    => $brand['primary_color'] ?? '#081C41',
-            'accentColor'     => $brand['accent_color'] ?? '#2EA9AC',
-            'privacyUrl'      => $s['brand_privacy_url'] ?? null,
-            'termsUrl'        => $s['brand_terms_url'] ?? null,
-            'agencyAddress'   => $s['brand_address'] ?? null,
-            'agencyOwnerName' => $s['owner']['name'] ?? null,
-            'websiteUrl'      => $s['brand_website_url'] ?? ($s['website'] ?? null),
-        ];
-        // Use the DRAFT blocks from the request (live, unsaved) if provided.
-        if ($request->filled('blocks') && is_array($request->input('blocks'))) {
-            $s['provider_welcome'] = array_map(fn ($v) => (string) $v, $request->input('blocks'));
+        if (! $centre) {
+            return response()->json(['message' => 'This agency has no centre to preview with.'], 422);
         }
-        $view = \App\Support\ProviderWelcomeTemplate::viewData($view, $s);
-        try {
-            $html = view('emails.provider-welcome', $view)->render();
-            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $view) {
-                $m->to($to)->subject('[Test] ' . $view['subject']);
-                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
-            });
-            return response()->json(['message' => 'Test sent to ' . $to]);
-        } catch (\Throwable $e) {
-            return response()->json(['message' => 'Send failed: ' . $e->getMessage()], 500);
-        }
+
+        // Unsaved blocks from the editor, so the test reflects the screen.
+        $drafts = ($request->filled('blocks') && is_array($request->input('blocks')))
+            ? array_map(fn ($v) => (string) $v, $request->input('blocks'))
+            : [];
+
+        $sent = \App\Support\ProviderWelcomeMailer::sendToFamily(
+            (int) $centre->id,
+            (int) $agencyId,
+            [['email' => $to, 'first_name' => $request->user()->first_name ?: 'there']],
+            ['Ava'],
+            $to,
+            $drafts
+        );
+
+        return $sent
+            ? response()->json(['message' => 'Test sent to ' . $to])
+            : response()->json(['message' => 'Send failed — see the mail log for the reason.'], 500);
     }
 
     // ── Generic multi-template editor (#77) ─────────────────────────────
