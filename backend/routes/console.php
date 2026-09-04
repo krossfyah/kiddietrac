@@ -25,7 +25,21 @@ Artisan::command('inspire', function () {
 // timezone inside the command, so this schedule only picks the wall-clock hour.
 // Closures: announced once when entered, which for a holiday added months ahead is
 // long forgotten by the time it matters. Reminds a week out and the day before.
+/* Generate statutory holiday closures ahead of the reminder pass, so a holiday added by
+   the rules today can still be announced by closures:remind at 11:30. Weekly is plenty --
+   the rules change once a year, not once a day -- but it runs cheaply and idempotently. */
+Schedule::command('holidays:sync --months=14')
+    ->weeklyOn(1, '03:30')->timezone('America/Toronto')->withoutOverlapping();
+
 Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
+
+/* Chases every incident that is still open until somebody closes it. An incident
+   report nobody actions is the failure this exists to prevent, and until now
+   nothing in the platform noticed. Silent when there is nothing open. */
+Schedule::command('incidents:remind')
+    ->dailyAt('08:00')
+    ->timezone('America/Toronto')
+    ->withoutOverlapping();
 
 Schedule::command("kiddietrac:educator-summary")->dailyAt("19:00")->timezone("America/Toronto");
 Schedule::command('kiddietrac:parent-summary')
@@ -55,6 +69,14 @@ Schedule::command('kiddietrac:checkin-reminders --window=evening')
     ->onOneServer();
 
 // Daily morning digest — 07:00 in the agency's timezone (Toronto default).
+/* Ask Zum whether our record of every in-flight payment still matches theirs, and check
+   the invoices against the payments ledger. Settlement is asynchronous, so a webhook that
+   stops being delivered is invisible by design — on 2026-09-02 a transaction read Completed
+   at Zum and 'submitted' here with nothing to notice it. Read-only: it reports, it does not
+   settle. Run --fix by hand after looking at what it found. */
+Schedule::command('payments:reconcile --days=45')
+    ->dailyAt('05:15')->timezone('America/Toronto')->withoutOverlapping();
+
 Schedule::command('kiddietrac:apply-withdrawals')->dailyAt('01:00');
 
 /* Complete family de-enrolments whose agreed last day has passed. Just after the child
@@ -67,6 +89,14 @@ Schedule::command('families:apply-departures')->dailyAt('01:15')->timezone('Amer
    is with one provider Mon-Thu and another on Friday it has to be refreshed daily.
    Early enough to be done before the first check-in, and idempotent. */
 Schedule::command('care:sync-rooms')->dailyAt('04:15')->timezone('America/Toronto')->withoutOverlapping();
+
+/* Keep each centre's rota filled a rolling four weeks ahead. Runs after care:sync-rooms so
+   room placement is settled first -- an educator_rooms row written at 04:15 decides which
+   room the 04:30 fill puts them in. Opt-in per agency (settings.schedule_autofill): an
+   agency that builds its rota by hand must not find it built for them. It never touches a
+   day that already has a shift, so a hand-edited or hand-deleted day survives the night. */
+Schedule::command('schedule:autofill --days=28')
+    ->dailyAt('04:30')->timezone('America/Toronto')->withoutOverlapping();
 
 // RETIRED 18 Aug 2026 — replaced by kiddietrac:admin-digest below, which covers the
 // same audience (agency admins and centre directors) with the decisions-to-make
@@ -149,6 +179,24 @@ Schedule::command('invoices:apply-late-fees')
 // v22p51 — append these inside the closure in routes/console.php
 
 Schedule::command('invoices:autopay-charge')->dailyAt('03:00');
+
+/* Payment-schedule invoices become live on the first of their own month.
+
+   PaymentPlanController raises one DRAFT invoice per instalment when the schedule is
+   agreed, dated to the first of the month it falls due in. This flips each to 'sent'
+   once that day arrives, so a schedule agreed in September does not drop six debts
+   into a family's account today for months that have not started.
+
+   NOT gated behind a config flag, unlike late fees. A late fee adds money nobody
+   agreed to; these instalments were entered and reviewed line by line by an admin
+   before saving, and issuing them on the agreed date is the thing they asked for.
+
+   06:00 so the invoice exists before the morning's billing reminders read it. The
+   condition is "the issue date has passed", not "is today", so a missed day catches
+   up on the next run instead of skipping the month. */
+Schedule::command('invoices:issue-scheduled')
+    ->dailyAt('06:00')
+    ->withoutOverlapping();
 Schedule::command('expiry:warn')->dailyAt('08:00');
 Schedule::command('demo:seed-daily')->dailyAt('05:00')->withoutOverlapping();
 
@@ -191,6 +239,10 @@ Schedule::command('db:backup')->dailyAt('03:30')->withoutOverlapping();
 // Invoice/payment reminders — hourly; gated by config('billing.reminders_enabled')
 // (OFF) + per-agency settings; only fires in each agency's send-time hour.
 Schedule::command('billing:reminders')->hourly()->withoutOverlapping();
+/* Hourly for the same reason billing reminders are: each agency picks its own
+   weekday and local send time, so the command decides whether this is the hour.
+   Every agency is opted out until they turn it on in Settings -> Email. */
+Schedule::command('immunization:reminders')->hourly()->withoutOverlapping();
 
 // Async email/queue worker — drains queued jobs (invite emails, announcements,
 // bulk sends) in the background so admin actions return instantly instead of

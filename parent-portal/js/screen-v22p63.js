@@ -50,7 +50,7 @@
             ['rash', 'Rash 🟥', '#F59E0B'],
             ['exposure', 'Sick contact 🦠', '#EF4444'],
           ].map(([k, lbl, c]) => `<label style="position:relative;display:flex;align-items:center;gap:11px;padding:13px 14px;background:#FAFCFE;border:2px solid #E2E8F0;border-radius:12px;cursor:pointer;transition:background .12s,border-color .12s;" data-sym-wrap="${k}">
-            <input type="checkbox" data-sym="${k}" data-color="${c}" ${today[k] ? 'checked' : ''} style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
+            <input type="checkbox" class="kt-sw-none" data-sym="${k}" data-color="${c}" ${today[k] ? 'checked' : ''} style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
             <span class="ws-dot" style="flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:2px solid #CBD5E1;background:#fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;line-height:1;transition:background .12s,border-color .12s;"></span>
             <span style="font-weight:600;">${lbl}</span></label>`).join('')}
         </div>
@@ -136,7 +136,7 @@
     </div>`;
   }
 
-  // ============================ Payment plans ============================
+  // ============================ Payment schedules ============================
   async function renderPaymentPlans(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
@@ -180,15 +180,15 @@
     const plans = r.data || [];
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
-        <h2>📅 Payment plans</h2>
-        <p>${isStaff && !fid ? 'Choose a family to see their payment plans.' : plans.length + ' plan(s). Split a large balance into manageable installments.'}</p>
-        ${isStaff ? '<div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="pp-new">+ New payment plan</button></div>' : ''}
+        <h2>📅 Payment schedules</h2>
+        <p>${isStaff && !fid ? 'Choose a family to see their payment schedules.' : plans.length + ' schedule(s). Dated instalments, each raising its own invoice on the first of its month.'}</p>
+        ${isStaff ? '<div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="pp-new">+ New payment schedule</button></div>' : ''}
       </div>
       ${picker}
       ${plans.map(p => `<div class="kt-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
-            <h3 style="margin:0;color:#0F172A;">${fmtMoney(p.total_amount)} over ${p.installment_count} installments</h3>
+            <h3 style="margin:0;color:#0F172A;">${fmtMoney(p.total_amount)} over ${p.installment_count} instalments</h3>
             <div style="color:#475569;font-size:13px;margin-top:4px;">Status: <span class="kt-pill ${p.status === 'active' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(p.status)}</span> · created ${fmtDate(p.created_at)}</div>
           </div>
           ${isStaff && p.status === 'active' ? `<button class="kt-btn kt-btn-danger" data-cancel-plan="${p.id}">Cancel plan</button>` : ''}
@@ -202,7 +202,7 @@
             <td><span class="kt-pill ${i.status === 'paid' ? 'kt-pill-success' : i.status === 'cancelled' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(i.status)}</span></td>
           </tr>`).join('')}</tbody>
         </table>
-      </div>`).join('') || `<div class="kt-card" style="text-align:center;padding:60px;color:#64748B;">${isStaff && !fid ? 'Select a family above to view their payment plans.' : 'No payment plans on file.'}</div>`}
+      </div>`).join('') || `<div class="kt-card" style="text-align:center;padding:60px;color:#64748B;">${isStaff && !fid ? 'Select a family above to see their payment schedules.' : 'No payment schedules on file.'}</div>`}
     </div>`;
     if (isStaff) {
       const sel = document.getElementById('pp-family');
@@ -212,37 +212,233 @@
         renderPaymentPlans(main);
       };
       const newBtn = document.getElementById('pp-new');
-      if (newBtn) newBtn.onclick = () => openPaymentPlanModal();
+      if (newBtn) newBtn.onclick = () => openPaymentPlanModal(families);
       main.querySelectorAll('button[data-cancel-plan]').forEach(b => b.onclick = async () => {
-        if (!await KT.confirm({ title: 'Cancel this payment plan?', description: 'All pending installments will be cancelled. Paid installments remain.', tone: 'danger' })) return;
+        if (!await KT.confirm({ title: 'Cancel this payment schedule?', description: 'Every pending instalment is cancelled, and any invoice it raised that has NOT yet been issued is withdrawn. Instalments already paid, and invoices already issued, are left alone.', tone: 'danger' })) return;
         await Api.post(`/payment-plans/${b.dataset.cancelPlan}/cancel`, {});
         renderPaymentPlans(main);
       });
     }
   }
-  async function openPaymentPlanModal() {
-    const r = await KT.prompt({
-      title: 'New payment plan',
-      fields: [
-        { key: 'family_id', label: 'Family ID', type: 'number' },
-        { key: 'total_amount', label: 'Total amount ($)', type: 'number', step: '0.01' },
-        { key: 'installment_count', label: '# of installments (2-24)', type: 'number', min: 2, max: 24, value: 4 },
-        { key: 'first_due_date', label: 'First due date', type: 'date' },
-        { key: 'cadence', label: 'Cadence (weekly / biweekly / monthly)', value: 'monthly' },
-        { key: 'notes', label: 'Notes (optional)' },
-      ],
-      okLabel: 'Create plan',
+  /* ── STEP 1: what the schedule is ──────────────────────────────────
+     The family is picked by NAME. It used to be a raw "Family ID" number field, and
+     there is nowhere in the app to look that number up, so the form was unusable by
+     the people it was for.
+
+     The instalment COUNT is not asked for: it falls out of the range and the cadence,
+     and asking for both invites the two to disagree. */
+  function openPaymentPlanModal(families) {
+    const fld = 'width:100%;padding:8px 12px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:inherit;';
+    const lbl = 'display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748B;margin-bottom:5px;';
+    const wrap = document.createElement('div');
+    const famName = (f) => esc(f.name || f.family_name || ('Family #' + f.id));
+    const today = new Date();
+    const firstDefault = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const lastDefault = new Date(today.getFullYear(), today.getMonth() + 6, 1);
+    const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
+    wrap.innerHTML = `
+      <label for="ps-fam" style="${lbl}">Family</label>
+      <input id="ps-famq" type="search" placeholder="Search families…" style="${fld}margin-bottom:6px;">
+      <select id="ps-fam" size="1" style="${fld}">
+        <option value="">Select a family…</option>
+        ${(families || []).map(f => `<option value="${f.id}">${famName(f)}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:10px;margin-top:12px;">
+        <div style="flex:1;"><label for="ps-total" style="${lbl}">Total amount ($)</label>
+          <input id="ps-total" type="number" step="0.01" min="0.01" style="${fld}"></div>
+        <div style="flex:1;"><label for="ps-cadence" style="${lbl}">Every</label>
+          <select id="ps-cadence" style="${fld}">
+            <option value="monthly">Month</option><option value="biweekly">2 weeks</option><option value="weekly">Week</option>
+          </select></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px;">
+        <div style="flex:1;"><label for="ps-first" style="${lbl}">First due</label>
+          <input id="ps-first" type="date" value="${ymd(firstDefault)}" style="${fld}"></div>
+        <div style="flex:1;"><label for="ps-last" style="${lbl}">Last due</label>
+          <input id="ps-last" type="date" value="${ymd(lastDefault)}" style="${fld}"></div>
+      </div>
+      <label for="ps-notes" style="${lbl}margin-top:12px;">Notes (optional)</label>
+      <input id="ps-notes" style="${fld}">
+      <div id="ps-msg" style="margin-top:10px;font-size:12.5px;color:#B91C1C;"></div>`;
+
+    /* Narrowing the list as you type is fine here — it only shortens a <select>,
+       nothing is fetched and nothing on the page is replaced. */
+    const sel = wrap.querySelector('#ps-fam');
+    const all = (families || []).slice();
+    wrap.querySelector('#ps-famq').addEventListener('input', function () {
+      const q = this.value.trim().toLowerCase();
+      const hits = q ? all.filter(f => famName(f).toLowerCase().indexOf(q) !== -1) : all;
+      sel.innerHTML = '<option value="">Select a family…</option>'
+        + hits.map(f => `<option value="${f.id}">${famName(f)}</option>`).join('');
     });
-    if (!r) return;
-    try {
-      await Api.post('/payment-plans', {
-        family_id: +r.family_id, total_amount: parseFloat(r.total_amount),
-        installment_count: +r.installment_count, first_due_date: r.first_due_date,
-        cadence: r.cadence, notes: r.notes,
+
+    KT.Shell.Modal.open({
+      title: 'New payment schedule',
+      body: wrap,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Build the schedule', style: 'btn-primary',
+          handler: function () {
+            const msg = wrap.querySelector('#ps-msg');
+            const familyId = +sel.value;
+            const total = parseFloat(wrap.querySelector('#ps-total').value);
+            const first = wrap.querySelector('#ps-first').value;
+            const last = wrap.querySelector('#ps-last').value;
+            const cadence = wrap.querySelector('#ps-cadence').value;
+            const notes = wrap.querySelector('#ps-notes').value.trim();
+
+            if (!familyId) { msg.textContent = 'Choose a family.'; return false; }
+            if (!(total > 0)) { msg.textContent = 'Enter the total amount.'; return false; }
+            if (!first || !last) { msg.textContent = 'Both a first and a last due date are needed.'; return false; }
+            if (last < first) { msg.textContent = 'The last due date is before the first.'; return false; }
+
+            const rows = buildSchedule(first, last, cadence, total);
+            if (!rows.length) { msg.textContent = 'That range does not contain a single due date.'; return false; }
+
+            const fam = all.filter(f => +f.id === familyId)[0];
+            setTimeout(() => openScheduleReview(familyId, famName(fam || { id: familyId }), total, notes, rows), 60);
+
+            return true;
+          },
+        },
+      ],
+    });
+    setTimeout(() => { const q = wrap.querySelector('#ps-famq'); if (q) q.focus(); }, 60);
+  }
+
+  /* Dates are stepped on their own numbers, never through a timezone: these are
+     wall-clock DAYS, and a Date parsed from a string comes back the day before in any
+     zone behind UTC. */
+  function buildSchedule(firstYmd, lastYmd, cadence, total) {
+    const p = firstYmd.split('-').map(Number);
+    const end = lastYmd;
+    const out = [];
+    let d = new Date(p[0], p[1] - 1, p[2]);
+    const ymd = (x) => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+
+    for (let guard = 0; guard < 120 && ymd(d) <= end; guard++) {
+      out.push({ due_date: ymd(d), amount: 0 });
+      if (cadence === 'weekly') d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7);
+      else if (cadence === 'biweekly') d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14);
+      else d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    }
+    // Even split, with the remainder on the last line so the rows sum to the total.
+    const per = Math.round((total / out.length) * 100) / 100;
+    out.forEach((r, i) => {
+      r.amount = i === out.length - 1
+        ? Math.round((total - per * (out.length - 1)) * 100) / 100
+        : per;
+    });
+
+    return out;
+  }
+
+  /* ── STEP 2: check it before it exists ─────────────────────────────
+     Every date and amount is editable, rows can be added or removed, and the running
+     total is compared with what was asked for. Nothing has been persisted — the draft
+     lives here until Save, so abandoning it leaves nothing behind. */
+  function openScheduleReview(familyId, familyLabel, intendedTotal, notes, rows) {
+    const wrap = document.createElement('div');
+    const money = (n) => '$' + (Number(n) || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function paint() {
+      const sum = rows.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+      const diff = Math.round((sum - intendedTotal) * 100) / 100;
+      wrap.innerHTML = `
+        <p style="margin:0 0 12px;font-size:13.5px;color:#334155;line-height:1.6;">
+          <strong>${esc(familyLabel)}</strong> — ${rows.length} instalment(s). Correct any date or
+          amount before saving. Each line raises its own invoice, issued on the first of the
+          month it falls due in.</p>
+        <div style="max-height:46vh;overflow:auto;border:1px solid #E2E8F0;border-radius:10px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#F8FAFC;">
+            <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;">#</th>
+            <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;">Due date</th>
+            <th style="text-align:right;padding:8px 10px;font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;">Amount</th>
+            <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;">Invoice issues</th>
+            <th></th></tr></thead>
+          <tbody>${rows.map((r, i) => `<tr>
+            <td style="padding:6px 10px;border-top:1px solid #F1F5F9;color:#64748B;">${i + 1}</td>
+            <td style="padding:6px 10px;border-top:1px solid #F1F5F9;">
+              <input data-d="${i}" type="date" value="${r.due_date}" style="padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-size:13px;font-family:inherit;"></td>
+            <td style="padding:6px 10px;border-top:1px solid #F1F5F9;text-align:right;">
+              <input data-a="${i}" type="number" step="0.01" min="0" value="${r.amount}" style="width:110px;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-size:13px;text-align:right;font-family:inherit;"></td>
+            <td style="padding:6px 10px;border-top:1px solid #F1F5F9;color:#64748B;font-size:12px;">${issueLabel(r.due_date)}</td>
+            <td style="padding:6px 10px;border-top:1px solid #F1F5F9;text-align:right;">
+              <button type="button" data-x="${i}" title="Remove this instalment" style="border:1px solid #FECACA;background:#fff;color:#B91C1C;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;">Remove</button></td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
+          <button type="button" id="ps-add" style="border:1px solid #CBD5E1;background:#fff;color:#334155;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;">+ Add instalment</button>
+          <span style="margin-left:auto;font-size:13px;color:#334155;">Schedule total <strong>${money(sum)}</strong>
+          ${Math.abs(diff) > 0.005
+            ? `<span style="color:#B45309;"> — ${diff > 0 ? money(diff) + ' over' : money(-diff) + ' under'} the ${money(intendedTotal)} entered</span>`
+            : '<span style="color:#16A34A;"> — matches</span>'}</span>
+        </div>
+        <div id="ps-rmsg" style="margin-top:10px;font-size:13px;color:#B91C1C;"></div>`;
+
+      wrap.querySelectorAll('input[data-d]').forEach(el => el.addEventListener('change', function () {
+        rows[+this.dataset.d].due_date = this.value; paint();
+      }));
+      wrap.querySelectorAll('input[data-a]').forEach(el => el.addEventListener('change', function () {
+        rows[+this.dataset.a].amount = Math.round((parseFloat(this.value) || 0) * 100) / 100; paint();
+      }));
+      wrap.querySelectorAll('button[data-x]').forEach(el => el.addEventListener('click', function () {
+        rows.splice(+this.dataset.x, 1); paint();
+      }));
+      const add = wrap.querySelector('#ps-add');
+      if (add) add.addEventListener('click', function () {
+        const last = rows[rows.length - 1];
+        const base = last ? last.due_date.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth() + 1, 1];
+        const nd = new Date(base[0], base[1], base[2]);
+        rows.push({ due_date: nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0'), amount: 0 });
+        paint();
       });
-      toast('Plan created', 'success');
-      renderPaymentPlans(document.querySelector('main'));
-    } catch (e) { toast(e.message || 'Failed', 'error'); }
+    }
+
+    function issueLabel(ymdStr) {
+      const p = String(ymdStr).split('-');
+      if (p.length !== 3) return '—';
+      const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '1 ' + (MON[Number(p[1]) - 1] || '?') + ' ' + p[0];
+    }
+
+    paint();
+
+    KT.Shell.Modal.open({
+      title: 'Check the schedule before saving',
+      body: wrap,
+      large: true,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save schedule', style: 'btn-primary', busyLabel: 'Saving…',
+          handler: function () {
+            const msg = wrap.querySelector('#ps-rmsg');
+            if (!rows.length) { msg.textContent = 'A schedule needs at least one instalment.'; return false; }
+            if (rows.some(r => !r.due_date)) { msg.textContent = 'Every instalment needs a due date.'; return false; }
+            if (rows.some(r => !(Number(r.amount) > 0))) { msg.textContent = 'Every instalment needs an amount above zero.'; return false; }
+
+            return Api.post('/payment-plans', {
+              family_id: familyId,
+              notes: notes || null,
+              installments: rows.map(r => ({ due_date: r.due_date, amount: Number(r.amount) })),
+            }).then(function () {
+              toast(rows.length + ' instalment(s) scheduled', 'success');
+              renderPaymentPlans(document.querySelector('#appMain') || document.querySelector('main'));
+
+              return true;
+            }).catch(function (e) {
+              const why = (e && e.data && e.data.message) || (e && e.message) || 'It could not be saved.';
+              msg.textContent = why;
+              throw new Error(why);
+            });
+          },
+        },
+      ],
+    });
   }
 
   // ============================ Document workflows ============================

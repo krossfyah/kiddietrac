@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class PaymentPlanController extends Controller
 {
+    use \App\Http\Controllers\Concerns\AuthorizesTenantAccess;
+
     use ResolvesCentreContext;
 
     public function listForFamily(Request $request, int $familyId): JsonResponse
@@ -40,22 +42,73 @@ final class PaymentPlanController extends Controller
 
     public function create(Request $request): JsonResponse
     {
+        /* Two shapes, on purpose.
+
+           installments[] is what the schedule builder sends: the exact dates and
+           amounts somebody reviewed and corrected. The older total/count/cadence trio
+           still works for callers that have not moved, and is simply expanded into the
+           same list below. */
         $data = $request->validate([
             'family_id' => 'required|integer',
-            'total_amount' => 'required|numeric|min:0.01',
-            'installment_count' => 'required|integer|min:2|max:24',
-            'first_due_date' => 'required|date',
-            'cadence' => 'required|in:weekly,biweekly,monthly',
             'notes' => 'nullable|string|max:1000',
+
+            'installments' => 'nullable|array|min:1|max:60',
+            'installments.*.due_date' => 'required_with:installments|date_format:Y-m-d',
+            'installments.*.amount' => 'required_with:installments|numeric|min:0.01',
+
+            'total_amount' => 'required_without:installments|numeric|min:0.01',
+            'installment_count' => 'required_without:installments|integer|min:2|max:24',
+            'first_due_date' => 'required_without:installments|date',
+            'cadence' => 'required_without:installments|in:weekly,biweekly,monthly',
         ]);
         $this->assertStaff($request);
 
-        $per = round((float) $data['total_amount'] / (int) $data['installment_count'], 2);
+        /* SECURITY (2026-08-25): assertStaff() only proves the caller is staff SOMEWHERE
+           — it never looked at family_id. Any director of any agency could therefore
+           raise a payment plan, and its installments, against another agency's family
+           and notify that family's guardians. Ownership of the family is the question
+           this endpoint actually has to answer. Found by the re-parenting sweep. */
+        $this->assertFamily((int) $request->user()->id, (int) $data['family_id']);
+
+        /* One list either way, so everything below has a single shape to handle. */
+        $lines = [];
+        if (! empty($data['installments'])) {
+            foreach ($data['installments'] as $row) {
+                $lines[] = [
+                    'due_date' => substr((string) $row['due_date'], 0, 10),
+                    'amount' => round((float) $row['amount'], 2),
+                ];
+            }
+            usort($lines, fn ($a, $b) => strcmp($a['due_date'], $b['due_date']));
+        } else {
+            $count = (int) $data['installment_count'];
+            $per = round((float) $data['total_amount'] / $count, 2);
+            $cursor = Carbon::parse($data['first_due_date']);
+            for ($i = 1; $i <= $count; $i++) {
+                // Last installment carries any rounding remainder.
+                $lines[] = [
+                    'due_date' => $cursor->toDateString(),
+                    'amount' => $i === $count
+                        ? round((float) $data['total_amount'] - $per * ($count - 1), 2)
+                        : $per,
+                ];
+                $cursor = $cursor->copy()->add(match ($data['cadence']) {
+                    'weekly' => '1 week', 'biweekly' => '2 weeks', 'monthly' => '1 month',
+                });
+            }
+        }
+
+        /* DERIVED, never accepted. A stated total that disagrees with the sum of its
+           own instalments is a discrepancy waiting to be found by an accountant. */
+        $total = round(array_sum(array_column($lines, 'amount')), 2);
+
+        $family = DB::table('families')->where('id', $data['family_id'])->first(['id', 'centre_id']);
+        abort_unless($family, 404, 'No such family.');
 
         $planId = DB::table('payment_plans')->insertGetId([
             'family_id' => $data['family_id'],
-            'total_amount' => $data['total_amount'],
-            'installment_count' => $data['installment_count'],
+            'total_amount' => $total,
+            'installment_count' => count($lines),
             'status' => 'active',
             'notes' => $data['notes'] ?? null,
             'created_by_user_id' => $request->user()->id,
@@ -63,23 +116,23 @@ final class PaymentPlanController extends Controller
             'updated_at' => now(),
         ]);
 
-        $cursor = Carbon::parse($data['first_due_date']);
-        for ($i = 1; $i <= (int) $data['installment_count']; $i++) {
-            // Last installment carries any rounding remainder
-            $amt = ($i === (int) $data['installment_count'])
-                ? round((float) $data['total_amount'] - $per * ((int) $data['installment_count'] - 1), 2)
-                : $per;
+        foreach ($lines as $n => $line) {
+            $invoiceId = $this->raiseScheduledInvoice(
+                (int) $family->id, (int) $family->centre_id, $line, $planId, $n + 1, count($lines)
+            );
             DB::table('payment_plan_installments')->insert([
                 'payment_plan_id' => $planId,
-                'due_date' => $cursor->toDateString(),
-                'amount' => $amt,
+                'due_date' => $line['due_date'],
+                'amount' => $line['amount'],
+                'invoice_id' => $invoiceId,
                 'status' => 'pending',
                 'created_at' => now(),
             ]);
-            $cursor = $cursor->copy()->add(match ($data['cadence']) {
-                'weekly' => '1 week', 'biweekly' => '2 weeks', 'monthly' => '1 month',
-            });
         }
+
+        $data['total_amount'] = $total;
+        $data['installment_count'] = count($lines);
+        $data['cadence'] = $data['cadence'] ?? 'scheduled';
 
         // Notify guardians
         $gids = DB::table('guardians')->where('family_id', $data['family_id'])->pluck('user_id');
@@ -96,15 +149,87 @@ final class PaymentPlanController extends Controller
         return response()->json(['id' => $planId], 201);
     }
 
+    /**
+     * One instalment becomes one invoice, held as a DRAFT until the 1st of its month.
+     *
+     * A schedule that produces nothing is a note; the money has to become a document
+     * the family can be sent and a payment can be matched against. But raising six
+     * invoices the moment a schedule is agreed would drop six debts into an account
+     * today for months that have not started — so issued_at is the first day of the
+     * month the instalment falls due in, and the invoice waits at 'draft' until
+     * invoices:issue-scheduled reaches that date.
+     */
+    private function raiseScheduledInvoice(int $familyId, int $centreId, array $line, int $planId, int $n, int $of): ?int
+    {
+        try {
+            $due = Carbon::parse($line['due_date']);
+            $issueOn = $due->copy()->startOfMonth();
+
+            $number = 'INV-' . $issueOn->format('Ym') . '-' . str_pad((string) $familyId, 4, '0', STR_PAD_LEFT)
+                . '-' . str_pad((string) $n, 2, '0', STR_PAD_LEFT);
+
+            $invoiceId = DB::table('invoices')->insertGetId([
+                'centre_id' => $centreId,
+                'family_id' => $familyId,
+                'invoice_number' => $number,
+                // period_start/period_end are NOT NULL; the billed month is the period.
+                'period_start' => $issueOn->toDateString(),
+                'period_end' => $due->copy()->endOfMonth()->toDateString(),
+                'issued_at' => $issueOn->toDateString(),
+                'due_at' => $due->toDateString(),
+                'subtotal' => $line['amount'],
+                'total' => $line['amount'],
+                'balance_due' => $line['amount'],
+                /* DRAFT until its month begins. Nothing reads a draft as owed — the
+                   ledger's isOpen() excludes it — so the family's balance does not move
+                   until the invoice is actually issued. */
+                'status' => 'draft',
+                'notes' => 'Payment schedule #' . $planId . ' — instalment ' . $n . ' of ' . $of,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('invoice_lines')->insert([
+                'invoice_id' => $invoiceId,
+                'description' => 'Payment schedule instalment ' . $n . ' of ' . $of,
+                'line_type' => 'tuition',
+                'quantity' => 1,
+                'unit_amount' => $line['amount'],
+                'amount' => $line['amount'],
+            ]);
+
+            return $invoiceId;
+        } catch (\Throwable $e) {
+            /* The schedule is still worth having if one invoice could not be raised —
+               the instalment records the obligation either way, and a null invoice_id
+               is visible rather than silent. */
+            report($e);
+
+            return null;
+        }
+    }
+
     public function cancel(Request $request, int $id): JsonResponse
     {
         $this->assertStaff($request);
         DB::table('payment_plans')->where('id', $id)->update([
             'status' => 'cancelled', 'updated_at' => now(),
         ]);
+        /* The invoices it raised go with it — but only the ones still in DRAFT.
+           An invoice already issued has been seen by the family and may have been paid
+           against; withdrawing that silently is the kind of thing that makes a ledger
+           stop reconciling. Those are left alone and can be voided deliberately. */
+        $invoiceIds = DB::table('payment_plan_installments')->where('payment_plan_id', $id)
+            ->where('status', 'pending')->whereNotNull('invoice_id')->pluck('invoice_id');
+
+        $withdrawn = $invoiceIds->isEmpty() ? 0 : DB::table('invoices')
+            ->whereIn('id', $invoiceIds)->where('status', 'draft')
+            ->update(['status' => 'void', 'balance_due' => 0, 'updated_at' => now()]);
+
         DB::table('payment_plan_installments')->where('payment_plan_id', $id)
             ->where('status', 'pending')->update(['status' => 'cancelled']);
-        return response()->json(['status' => 'cancelled']);
+
+        return response()->json(['status' => 'cancelled', 'invoices_withdrawn' => $withdrawn]);
     }
 
     public function myPlans(Request $request): JsonResponse
