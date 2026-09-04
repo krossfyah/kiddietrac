@@ -46,6 +46,14 @@
     return '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
   }
 
+  /* An empty cell says so. A dash reads as "none", "unknown" or "not applicable"
+     depending on who is looking; the honest answer is that nobody recorded one. */
+  function orNone(v) {
+    return (v === null || v === undefined || String(v).trim() === '')
+      ? '<span style="color:' + C.faint + ';font-style:italic;">Not available</span>'
+      : v;
+  }
+
   function chip(text, bg, fg) {
     return '<span style="display:inline-block;background:' + bg + ';color:' + fg
       + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin:1px 5px 1px 0;white-space:nowrap;">'
@@ -125,8 +133,8 @@
       /* The company IS the display name when nobody is named on the card, so
          repeating it underneath produced "Dufferin Food Safety / Dufferin Food
          Safety". */
-      var sub = [r.job_title, r.company === r.display_name ? null : r.company]
-        .filter(Boolean).map(esc).join(' · ');
+      // Company has its own column now; only a job title remains under the name.
+      var sub = [r.job_title].filter(Boolean).map(esc).join(' · ');
       /* Their own columns. Stacked together neither could be scanned down a page —
          a column of phone numbers is read at a glance, a column of mixed contact
          details is read one row at a time. */
@@ -135,7 +143,7 @@
       if (r.mobile) phones.push('<a href="tel:' + esc(r.mobile) + '" style="color:' + C.accent + ';text-decoration:none;">' + esc(phone(r.mobile)) + ' <span style="color:' + C.faint + ';font-size:11px;">mob</span></a>');
       var mail = r.email
         ? '<a href="mailto:' + esc(r.email) + '" style="color:' + C.accent + ';text-decoration:none;word-break:break-all;">' + esc(r.email) + '</a>'
-        : '<span style="color:' + C.faint + ';">—</span>';
+        : orNone('');
 
       /* A real address, not a rough location — an address column that cannot be
          copied onto an envelope is missing the point. Street on one line, then town,
@@ -156,13 +164,17 @@
         + (r.category
           ? chip(r.category, r.source === 'staff' ? '#EDE9FE' : r.source === 'parent' ? '#F1F5F9' : '#EEF2FF',
                  r.source === 'staff' ? '#5B21B6' : r.source === 'parent' ? '#475569' : '#4338CA')
-          : '<span style="color:' + C.faint + ';">—</span>') + '</td>'
+          : orNone('')) + '</td>'
+      /* Company on its own. It used to sit under the name, which worked for a card
+         with a person on it and vanished for one without. */
+      + '<td style="' + td + '">' + orNone(r.company ? esc(r.company) : '') + '</td>'
         + '<td style="' + td + 'line-height:1.7;white-space:nowrap;">'
-        + (phones.join('<br>') || '<span style="color:' + C.faint + ';">—</span>') + '</td>'
+        + orNone(phones.join('<br>')) + '</td>'
       + '<td style="' + td + '">' + mail + '</td>'
-        + '<td style="' + td + 'color:' + C.muted + ';line-height:1.6;">' + (where || '—') + '</td>'
+        + '<td style="' + td + 'color:' + C.muted + ';line-height:1.6;">' + orNone(where) + '</td>'
         + '<td style="' + td + 'color:' + C.muted + ';max-width:280px;">'
-        + (r.notes ? esc(String(r.notes).slice(0, 160)) + (String(r.notes).length > 160 ? '…' : '') : '—') + '</td>'
+        + orNone(r.notes ? esc(String(r.notes).slice(0, 160)) + (String(r.notes).length > 160 ? '…' : '') : '')
+        + '</td>'
         /* Plain buttons in the LAST cell — kt-row-actions.js collapses them into the
            house kebab. No word that kt-icon-buttons claims (view/open/back/manage…),
            or the label becomes a bare glyph and the menu row renders blank. */
@@ -178,7 +190,7 @@
           : '<span style="font-size:11px;color:' + C.faint + ';white-space:nowrap;">from their '
             + (r.source === 'staff' ? 'staff record' : 'family record') + '</span>')
         + '</td></tr>';
-    }).join('') || '<tr><td colspan="7" style="' + td + 'text-align:center;color:' + C.faint + ';padding:40px;">'
+    }).join('') || '<tr><td colspan="8" style="' + td + 'text-align:center;color:' + C.faint + ';padding:40px;">'
       + (state.search || state.category || state.emergency || state.centre
         ? 'No contact matches that.'
         : 'No contacts yet. Add the first one, or scan a business card.') + '</td></tr>';
@@ -194,7 +206,7 @@
       + '<div class="kt-card" style="padding:0;overflow:hidden;">'
       + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:900px;">'
       + '<thead><tr>'
-      + ['Contact', 'Category', 'Phone', 'Email', 'Address', 'Notes', ''].map(function (h) {
+      + ['Contact', 'Category', 'Company', 'Phone', 'Email', 'Address', 'Notes', ''].map(function (h) {
         return '<th style="' + th + '">' + h + '</th>';
       }).join('')
       + '</tr></thead><tbody>' + tbody + '</tbody></table></div>' + pager + '</div>';
