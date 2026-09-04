@@ -27,6 +27,11 @@
       .sort((a, b) => String(b.decided_at || '').localeCompare(String(a.decided_at || ''))).slice(0, 50) };
     main.innerHTML = '';
     main.appendChild(html(`
+      <!-- padding stays 24px. kt-consistency-polish.css normalises every wrapper
+           matching [style*="padding:24px"] to "14px 24px !important" portal-wide, so
+           this inset is the house treatment for this wrapper family, not a quirk of
+           this screen -- and the substring match means "24px 0" would not escape it
+           anyway. -->
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 16px;color:#1F6080;">Time off</h2>
         <button id="tor-new" class="btn btn-primary" style="margin-top:6px;${isMobile() ? 'width:100%;' : ''}">🌴 Request time off</button>
@@ -168,8 +173,17 @@
     if (!rows.length) { host.innerHTML = '<div style="color:#64748B;padding:16px;background:#fff;border:1px solid #EDF1F6;border-radius:14px;text-align:center;font-size:13.5px;">No requests yet.</div>'; return; }
     host.innerHTML = '';
     if (isMobile()) { rows.forEach(function (r) { host.appendChild(torCard(r, isApprover)); }); return; }
+    /* The table gets a card, like every other data table in the portal
+       (`<div class="kt-card"><table>` -- #late-pickups does exactly this).
+       It used to sit bare on the page background, which also made this screen
+       disagree with itself: the EMPTY state below draws its own white rounded
+       box, so "no requests" looked finished and "some requests" looked unstyled. */
+    const card = document.createElement('div');
+    card.className = 'kt-card';
+    card.style.cssText = 'margin-top:8px;padding:6px 10px;';
+
     const tbl = document.createElement('table');
-    tbl.style.cssText = 'width:100%;border-collapse:collapse;margin-top:8px;';
+    tbl.style.cssText = 'width:100%;border-collapse:collapse;';
     tbl.innerHTML = '<thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Who</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Type</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Dates</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Decided by</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Status</th><th></th></tr></thead><tbody></tbody>';
     const tb = tbl.querySelector('tbody');
     rows.forEach(r => {
@@ -187,7 +201,8 @@
             ? `<button data-withdraw="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Withdraw</button>` : '')}</td>`;
       tb.appendChild(tr);
     });
-    host.appendChild(tbl);
+    card.appendChild(tbl);
+    host.appendChild(card);
     host.querySelectorAll('button[data-withdraw]').forEach(b => {
       b.onclick = function () {
         var row = rows.filter(function (x) { return String(x.id) === b.dataset.withdraw; })[0];
