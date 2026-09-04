@@ -39,7 +39,7 @@ class MailLogReconcileCommand extends Command
             return self::SUCCESS;
         }
 
-        $q = DB::table('audit_logs')->where('action', 'email.sent')->orderBy('created_at');
+        $q = DB::table('audit_logs')->where('action', 'email.sent')->orderBy('created_at')->orderBy('id');
         if (! $this->option('all')) {
             $q->where('created_at', '>=', now()->subDays((int) $this->option('days')));
         }

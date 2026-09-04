@@ -19,6 +19,19 @@
     'logout': 'Signed out',
     'email.sent': 'Email sent',
     'email.failed': 'Email failed',
+    /* Zum Rails. The fallback would render these as "Zum settled", which is not wrong
+       but tells a reader nothing about what actually happened to the money. */
+    'zum.settled': '💳 Payment settled',
+    'zum.failed': '💳 Payment failed',
+    'zum.cancelled': '💳 Payment cancelled',
+    'zum.cancelling': '💳 Payment being cancelled',
+    'zum.submitted': '💳 Payment submitted to the bank',
+    'zum.in_review': '💳 Payment held for review',
+    'zum.requested': '💳 Payment requested from a family',
+    'zum.sent': '💳 Money sent out',
+    'zum.bank_account_saved': '🏦 Bank account saved for payments',
+    'attendance.backdated': '⏱ Attendance corrected',
+    'attendance.entry_removed': '⏱ Attendance entry removed',
     'chat.email_notified': 'Missed-message email sent',
     'message.sent': 'Message sent',
     'message.edited': 'Message edited',
@@ -40,6 +53,26 @@
   // Known endpoints, said plainly. Anything not listed still gets a sensible
   // fallback below rather than being dumped raw on screen.
   var PATH_LABELS = [
+    /* Payment providers. These are route audits, so without a rule here they render
+       as "Created zum pay" — which is the least useful possible description of a
+       parent trying to pay an invoice. */
+    [/parent\/zum\/pay/, 'Parent paid an invoice (Zūm)'],
+    [/parent\/zum\/bank-account/, 'Parent saved a bank account (Zūm)'],
+    [/director\/zum\/send/, 'Sent money out (Zūm)'],
+    [/director\/zum\/request/, 'Requested money from a family (Zūm)'],
+    [/zumrails\/webhook/, 'Zūm settlement callback'],
+    [/payment-providers\/zumrails/, 'Changed Zūm Rails settings'],
+    [/payment-providers\/stripe/, 'Changed Stripe settings'],
+    [/payment-providers/, 'Changed payment provider settings'],
+    [/billing\/setup-intent/, 'Started adding a card (Stripe)'],
+    [/billing\/save-card/, 'Saved a card (Stripe)'],
+    [/billing\/ach-/, 'Set up bank debit (Stripe)'],
+    [/billing\/autopay/, 'Changed autopay'],
+    [/wallet\/setup-intent/, 'Started adding a payment method'],
+    [/wallet\/\d+\/default/, 'Changed the default payment method'],
+    [/wallet/, 'Changed saved payment methods'],
+    [/invoices\/\d+\/charge/, 'Charged a saved payment method'],
+
     [/notifications\/mark-read/, 'Marked notifications read'],
     [/notifications\/delete/, 'Deleted notifications'],
     [/push\/subscribe/, 'Enabled push notifications'],
@@ -192,8 +225,13 @@
     try {
       var d = parseTs(t);
       if (isNaN(d)) return t;
+      /* SECONDS, not 'short'. One request writes several rows in the same second —
+         a login and its device row, a send and its suppression note — and at minute
+         precision they all read as the same moment, which made a correctly ordered
+         list look arbitrary. The list itself now tie-breaks on id; this is what makes
+         that visible. */
       return new Intl.DateTimeFormat('en-CA', {
-        timeZone: auditTz(), dateStyle: 'medium', timeStyle: 'short',
+        timeZone: auditTz(), dateStyle: 'medium', timeStyle: 'medium',
       }).format(d);
     } catch (e) { return t; }
   }
@@ -262,13 +300,18 @@
       var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
       isPlatform = (u.roles && u.roles.indexOf('platform_admin') > -1) || sessionStorage.getItem('kt_is_platform_admin') === '1';
     } catch (e) {}
+    /* The bar used to appear only for platform admins, because the email log was the
+       only other tab and only they can load it. Payment integrations is for whoever
+       runs the agency's money, so the bar now appears whenever there is more than one
+       tab to show — an agency admin gets Audit log + Payments, a platform admin gets
+       all four. */
     var hasEmail = isPlatform && window.KT && KT.EmailLog && KT.EmailLog.render;
-    if (!hasEmail) { renderAudit(container); return; }
 
     var tabsRow = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;padding:16px 24px 0;max-width:1800px;margin:0 auto;' });
     var pane = Dom.el('div', {});
     var mkTab = function (label) { return Dom.el('button', { style: 'background:none;border:none;border-bottom:3px solid transparent;color:#64748B;font-weight:700;font-size:14px;padding:10px 16px;cursor:pointer;margin-bottom:-1px;' }, label); };
     var tA = mkTab('📜 Audit log');
+    var tP = mkTab('💳 Payment integrations');
     var tE = mkTab('📧 Email log');
     // A dedicated home for mail that did not arrive. It was findable before only by
     // knowing to set the Email log's status filter, so a bounce nobody went looking
@@ -276,6 +319,7 @@
     var tX = mkTab('⚠️ Email errors');
     var activate = function (which) {
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
+      tP.style.borderBottomColor = which === 'payments' ? '#12805F' : 'transparent'; tP.style.color = which === 'payments' ? '#12805F' : '#64748B';
       tE.style.borderBottomColor = which === 'email' ? '#1F6080' : 'transparent'; tE.style.color = which === 'email' ? '#1F6080' : '#64748B';
       tX.style.borderBottomColor = which === 'errors' ? '#B91C1C' : 'transparent'; tX.style.color = which === 'errors' ? '#B91C1C' : '#64748B';
       Dom.clear(pane);
@@ -307,6 +351,7 @@
         pane.appendChild(inner);
         KT.EmailLog.render(eBody);
       }
+      else if (which === 'payments') { renderAudit(pane, { channel: 'payments' }); }
       else { renderAudit(pane); }
 
       // Re-run the banner normaliser by hand. It observes #appMain with
@@ -326,9 +371,14 @@
       activate(which);
     };
     tA.addEventListener('click', function () { pick('audit'); });
+    tP.addEventListener('click', function () { pick('payments'); });
     tE.addEventListener('click', function () { pick('email'); });
     tX.addEventListener('click', function () { pick('errors'); });
-    tabsRow.appendChild(tA); tabsRow.appendChild(tE); tabsRow.appendChild(tX);
+    tabsRow.appendChild(tA);
+    tabsRow.appendChild(tP);
+    // The email tabs read /platform/* and would 403 for anybody else, so they are
+    // only built for the people who can actually load them.
+    if (hasEmail) { tabsRow.appendChild(tE); tabsRow.appendChild(tX); }
     container.appendChild(tabsRow);
     container.appendChild(pane);
 
@@ -349,18 +399,36 @@
     }
     // Never trust it blindly — a stored value from an older build, or one whose tab
     // this user cannot see, must fall back rather than render nothing.
-    activate(/^(audit|email|errors)$/.test(remembered) ? remembered : 'audit');
+    if (! hasEmail && /^(email|errors)$/.test(remembered)) { remembered = ''; }
+    activate(/^(audit|payments|email|errors)$/.test(remembered) ? remembered : 'audit');
   }
 
-  function renderAudit(container) {
+  /* One renderer, two views. The payments channel is the same table with a different
+     server-side filter, so the filters, search, pager and CSV export all work there
+     without a second implementation to keep in step. */
+  function renderAudit(container, opts) {
+    opts = opts || {};
+    var isPayments = opts.channel === 'payments';
     Dom.clear(container);
     var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
 
-    var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#0F172A 0%,#1F6080 60%,#16637A 100%);' });
-    hero.innerHTML = '<div class="kt-hero-greet">📜 ADMIN</div><h1>Audit log</h1>'
-      + '<div class="kt-hero-sub">Every meaningful action on your agency — who did what, when, and from where. '
-      + 'All times are shown in your agency timezone (' + auditTz() + ').</div>';
+    var hero = Dom.el('div', {
+      class: 'kt-hero',
+      style: isPayments
+        ? 'background:linear-gradient(135deg,#0B2E1F 0%,#116149 60%,#12805F 100%);'
+        : 'background:linear-gradient(135deg,#0F172A 0%,#1F6080 60%,#16637A 100%);',
+    });
+    hero.innerHTML = isPayments
+      ? '<div class="kt-hero-greet">💳 ADMIN</div><h1>Payment integrations</h1>'
+        + '<div class="kt-hero-sub">Everything that passed between this portal and your payment '
+        + 'providers — Zūm Rails and Stripe. Money instructed, settled, refused or refunded, plus '
+        + 'the cards and bank accounts behind it. All times in your agency timezone ('
+        + auditTz() + ').</div>'
+      : '<div class="kt-hero-greet">📜 ADMIN</div><h1>Audit log</h1>'
+        + '<div class="kt-hero-sub">Every meaningful action on your agency — who did what, when, and from where. '
+        + 'Payment-provider activity has its own tab. '
+        + 'All times are shown in your agency timezone (' + auditTz() + ').</div>';
     wrap.appendChild(hero);
 
     var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
@@ -410,6 +478,8 @@
       Object.keys(state.filters).forEach(function (k) { if (state.filters[k]) qs.set(k, state.filters[k]); });
       qs.set('limit', String(state.limit));
       qs.set('offset', String(state.offset));
+      // The server owns the split; this only says which half is wanted.
+      if (isPayments) { qs.set('channel', 'payments'); }
 
       Api.get('/admin/audit-logs?' + qs.toString()).then(function (data) {
         state.total = data.total || 0;
@@ -487,12 +557,33 @@
       });
       resetWrap.appendChild(resetBtn);
 
+      /* The periodic refresh now holds off while somebody is scrolled into the log —
+         a rebuild every 45 seconds was taking their place away, and new entries
+         arrive at the top where a reader deep in the page cannot see them anyway. So
+         give them the button instead: it reloads the table in place, without the
+         screen teardown, and keeps the scroll position exactly where it is. */
+      var refreshBtn = Dom.el('button', {
+        style: 'background:white;border:1px solid #D1D5DB;color:#374151;padding:8px 12px;'
+          + 'border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;',
+        title: 'Reload the entries without losing your place',
+      }, '↻');
+      refreshBtn.addEventListener('click', function () {
+        refreshBtn.disabled = true;
+        var was = refreshBtn.textContent;
+        refreshBtn.textContent = '…';
+        state.offset = 0;
+        reload();
+        setTimeout(function () { refreshBtn.disabled = false; refreshBtn.textContent = was; }, 900);
+      });
+      resetWrap.appendChild(refreshBtn);
+
       // v22p46: CSV download — same filters apply to the export
       var csvBtn = Dom.el('button', { style: 'background:white;border:1px solid #16A34A;color:#16A34A;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;', title: 'Export filtered audit log to CSV' }, '⤓ CSV');
       csvBtn.addEventListener('click', function () {
         var qs = new URLSearchParams();
         Object.keys(state.filters).forEach(function (k) { if (state.filters[k]) qs.set(k, state.filters[k]); });
         qs.set('format', 'csv');
+        if (isPayments) { qs.set('channel', 'payments'); }
         var apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
         var token = sessionStorage.getItem('kt_token');
         var activeAgencyId = sessionStorage.getItem('kt_active_agency_id') || '';

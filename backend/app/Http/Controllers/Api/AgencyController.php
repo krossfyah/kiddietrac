@@ -44,7 +44,16 @@ final class AgencyController extends Controller
         $totalPresentNow = 0;
         $totalReceivables = 0;
         $totalStaffOnFloor = 0;
-        $today = Carbon::today()->toDateString();
+        /* The agency's day, not UTC's. app.timezone is UTC, so from early evening
+           onward Carbon::today() already names TOMORROW — the overview's "here now"
+           and today's check-in counts silently switched to an empty new day while the
+           centre was still open. Same bug as the platform Logins-today card.
+           Bounds rather than whereDate: occurred_at stores UTC, so a local calendar
+           day is a RANGE in that column, never a date equality. (2026-08-25) */
+        $displayTz = \App\Support\AgencyTime::tz($agencyId);
+        $today = Carbon::now($displayTz)->toDateString();
+        $dayStartUtc = Carbon::now($displayTz)->startOfDay()->utc();
+        $dayEndUtc = Carbon::now($displayTz)->endOfDay()->utc();
 
         // -- BATCH pre-fetch for ALL in-scope centres (was ~8 queries PER centre =
         //    an N+1). Everything in the loop below now reads from these maps. --
@@ -61,7 +70,7 @@ final class AgencyController extends Controller
         $eventsByCentre = [];
         foreach (DB::table("check_events as ci")->join("rooms", "rooms.id", "=", "ci.room_id")
             ->whereIn("rooms.centre_id", $__cids)->whereIn("ci.event_type", ["check_in", "check_out"])
-            ->whereDate("ci.occurred_at", $today)
+            ->whereBetween("ci.occurred_at", [$dayStartUtc, $dayEndUtc])
             ->select("rooms.centre_id as _cid", "ci.child_id", "ci.event_type", "ci.occurred_at")->get() as $__e) {
             $eventsByCentre[$__e->_cid][] = $__e;
         }
@@ -222,7 +231,22 @@ final class AgencyController extends Controller
                 "room_count" => $roomCount,
                 "rooms_in_breach" => $breach ? 1 : 0,
                 "license_capacity" => $c->license_capacity,
+                /* TWO DIFFERENT QUESTIONS, deliberately kept apart.
+
+                   capacity_pct  — how full the ROSTER is: enrolled ÷ licensed. An
+                   enrolment-planning number that barely moves week to week. The admin
+                   Centres list wants this one.
+
+                   occupancy_pct — how full the ROOM is RIGHT NOW: children currently
+                   checked in ÷ the maximum allowed at one time. This is the live
+                   number the overview cards need.
+
+                   The provider cards were drawing their donut from capacity_pct, so a
+                   provider with nobody on site still read 83%. Same denominator, wrong
+                   numerator — and because both are "a percentage of capacity" the card
+                   looked plausible. (2026-08-25) */
                 "capacity_pct" => $c->license_capacity ? round(($enrolled / max(1, $c->license_capacity)) * 100) : 0,
+                "occupancy_pct" => $c->license_capacity ? round(($presentNow / max(1, $c->license_capacity)) * 100) : 0,
                 // v22p3.4: per-centre branding for the agency dashboard cards
                 "logo_url"     => $c->logo_url ?? null,
                 "provider_photo_url" => $provPhotoByCentre[$c->id] ?? null,
@@ -265,7 +289,7 @@ final class AgencyController extends Controller
         $roleLbl = function ($uid) use ($roleLabelMap, $__labelFor) { $r = $roleLabelMap[$uid] ?? null; return $r ? ($__labelFor[$r] ?? ucfirst(str_replace("_", " ", $r))) : null; };
 
         $loginQ = DB::table("audit_logs as a")->leftJoin("users as u", "u.id", "=", "a.user_id")
-            ->whereIn("a.action", ["login", "logout"])->orderByDesc("a.created_at")->limit(25)
+            ->whereIn("a.action", ["login", "logout"])->orderByDesc("a.created_at")->orderByDesc("a.id")->limit(25)
             ->select("a.action", "a.user_id", "a.created_at", "u.first_name", "u.last_name", "u.photo_url");
         if (! $allMode) $loginQ->whereIn("a.user_id", $userIdsInAgency ?: [0]);
         foreach ($loginQ->get() as $r) {
@@ -386,7 +410,7 @@ final class AgencyController extends Controller
                 "brand_color" => $agency->brand_primary_color ?? null,
                 "owner" => $owner,
             ],
-            "totals" => [
+            "totals" => array_merge($this->overviewExtras($allMode ? null : ($agency->id ?? null), $centres), [
                 "enrolled" => $totalEnrolled,
                 "present_now" => $totalPresentNow,
                 "staff_on_floor" => $totalStaffOnFloor,
@@ -394,7 +418,37 @@ final class AgencyController extends Controller
                 "families" => $totalFamilies,
                 "staff_total" => $totalStaff,
                 "overdue_invoices" => $overdueInvoices,
-            ],
+            ]),
+            /* The AGENCY's revenue — what families owe them — as distinct from the
+               platform MRR widgets, which show what the agency pays KiddieTrac. */
+            "revenue" => (function () use ($agency) {
+                try {
+                    $aid = $agency->id ?? null;
+                    if (! $aid || ! \Illuminate\Support\Facades\Schema::hasTable("external_invoices")) {
+                        return null;
+                    }
+                    $base = DB::table("external_invoices")->where("agency_id", $aid)
+                        /* Voided invoices keep a non-zero balance_due, so counting them
+                           overstates what is owed. They are cancelled, not outstanding. */
+                        ->where("status", "!=", "void");
+                    $monthStart = Carbon::now()->startOfMonth()->toDateTimeString();
+                    $overdue = (clone $base)->where("balance_due", ">", 0)
+                        ->whereNotNull("due_at")->where("due_at", "<", Carbon::now());
+
+                    return [
+                        "collected_this_month" => round((float) (clone $base)
+                            ->where("external_updated_at", ">=", $monthStart)->sum("amount_paid"), 2),
+                        "outstanding"    => round((float) (clone $base)->sum("balance_due"), 2),
+                        "overdue"        => round((float) (clone $overdue)->sum("balance_due"), 2),
+                        "overdue_count"  => (int) (clone $overdue)->count(),
+                        "billed_total"   => round((float) (clone $base)->sum("total"), 2),
+                        "currency"       => (clone $base)->value("currency") ?: "CAD",
+                    ];
+                } catch (\Throwable $e) {
+                    // The dashboard must render even if billing cannot be read.
+                    return null;
+                }
+            })(),
             "centres" => $centreStats,
             "archived_centres" => DB::table("centres")
                 ->whereNotNull("deleted_at")
@@ -491,8 +545,11 @@ final class AgencyController extends Controller
         }
 
         $events = collect();
-        $push = fn ($type, $icon, $text, $when, $link = null, $avatar = null) => $events->push([
+        $push = fn ($type, $icon, $text, $when, $link = null, $avatar = null, $device = null) => $events->push([
             "type" => $type, "icon" => $icon, "text" => $text, "when" => (string) $when, "link" => $link, "avatar" => $avatar,
+            // Only sign-in/out events set this. Kept as its own field, not just glued into
+            // the sentence, so the UI can render it as a muted second line.
+            "device" => $device,
         ]);
 
         // New families (scoped via centre → agency).
@@ -519,14 +576,19 @@ final class AgencyController extends Controller
         // An activity feed should show the activity, so events are listed individually
         // and simply capped.
         $liQ = DB::table("audit_logs as al")->join("users as u", "u.id", "=", "al.user_id")
-            ->whereIn("al.action", ["login", "logout"])->orderByDesc("al.created_at")->limit(40)
-            ->select("al.user_id", "al.action", "u.first_name", "u.last_name", "u.photo_url", "al.created_at");
+            ->whereIn("al.action", ["login", "logout"])->orderByDesc("al.created_at")->orderByDesc("al.id")->limit(40)
+            // user_agent has been recorded on every sign-in all along and never read.
+            ->select("al.user_id", "al.action", "u.first_name", "u.last_name", "u.photo_url", "al.created_at", "al.user_agent");
         if (! $unscoped) $liQ->whereIn("al.user_id", $agencyUserIds ?: [0]);
         foreach ($liQ->get() as $r) {
             $nm = trim(($r->first_name ?? "") . " " . ($r->last_name ?? "")) ?: "A user";
             $out = $r->action === "logout";
+            /* Phone / tablet / desktop, and whether it was the app. Blank for anything the
+               classifier cannot place, because a wrong guess here is worse than silence. */
+            $dev = \App\Support\DeviceType::shortLabel($r->user_agent ?? null);
             $push($out ? "logout" : "login", $out ? "\u{1F6AA}" : "\u{1F511}",
-                $nm . ($out ? " signed out" : " signed in"), $r->created_at, "#audit-logs", $r->photo_url);
+                $nm . ($out ? " signed out" : " signed in") . ($dev !== "" ? " \u{00B7} " . $dev : ""),
+                $r->created_at, "#audit-logs", $r->photo_url, $dev !== "" ? $dev : null);
         }
 
         // Inspection reports (hcc_inspection_forms — agency_id direct).
@@ -671,5 +733,62 @@ final class AgencyController extends Controller
             "devices"   => $shape($devCounts),
             "scope"     => "agency",
         ]);
+    }
+
+    /**
+     * Onboarding, payroll paid out, and the next payday.
+     *
+     * Kept apart from the main dashboard query because each answers a different
+     * question and none of them belongs in the enrolment counts.
+     *
+     * Everything is scoped through the agency's own centres. In "all agencies" mode
+     * there is no single pay schedule to speak of, so the payday is simply omitted
+     * rather than picking one arbitrarily.
+     */
+    private function overviewExtras(?int $agencyId, $centres): array
+    {
+        $centreIds = collect($centres)->pluck("id")->filter()->all();
+        $out = [
+            "parents_onboarded" => 0,
+            "parents_pending" => 0,
+            "payroll_paid_ytd" => 0.0,
+            "payroll_paid_count" => 0,
+            "next_payday" => null,
+        ];
+
+        if ($centreIds) {
+            // A guardian who never finished onboarding has no working login, so
+            // everything the portal sends them lands nowhere. onboarded_at is the
+            // honest marker — users.status can read "active" on an account that was
+            // created for somebody who has never once signed in.
+            $familyIds = DB::table("families")->whereIn("centre_id", $centreIds)
+                ->whereNull("deleted_at")->pluck("id");
+            $guardianUserIds = DB::table("guardians")->whereIn("family_id", $familyIds)
+                ->pluck("user_id")->unique()->filter()->all();
+
+            if ($guardianUserIds) {
+                $base = DB::table("users")->whereIn("id", $guardianUserIds)->whereNull("deleted_at");
+                $out["parents_onboarded"] = (clone $base)->whereNotNull("onboarded_at")->count();
+                $out["parents_pending"] = (clone $base)->whereNull("onboarded_at")->count();
+            }
+        }
+
+        if ($agencyId) {
+            // What actually left the account this year. `paid` is the only status
+            // that means money moved — `issued` is a payslip that exists.
+            $paid = DB::table("payroll_documents")->where("agency_id", $agencyId)
+                ->where("status", "paid")
+                ->whereYear(DB::raw("COALESCE(paid_at, issued_at, created_at)"), now()->year);
+            $out["payroll_paid_ytd"] = (float) (clone $paid)->sum("net");
+            $out["payroll_paid_count"] = (clone $paid)->count();
+
+            try {
+                $out["next_payday"] = \App\Http\Controllers\Api\PayrollSettingsController::nextPayday($agencyId);
+            } catch (\Throwable $e) {
+                $out["next_payday"] = null;   // unconfigured is not an error
+            }
+        }
+
+        return $out;
     }
 }

@@ -148,7 +148,7 @@ final class PlatformController extends Controller
         // the affected entity (e.g. WHICH user was deleted) so the feed isn't generic.
         $recentEvents = DB::table('audit_logs as al')
             ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
-            ->orderByDesc('al.created_at')
+            ->orderByDesc('al.created_at')->orderByDesc('al.id')
             ->limit(12)
             ->get([
                 'al.id', 'al.action', 'al.entity_type', 'al.entity_id', 'al.created_at', 'al.payload',

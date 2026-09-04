@@ -1110,7 +1110,11 @@ final class AdminController extends Controller
 
         $base = DB::table('audit_logs as al')
             ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
-            ->orderByDesc('al.created_at');
+            /* id is the tie-break, and it is not decoration: created_at is a TIMESTAMP
+                (whole seconds), and one request routinely writes several rows sharing
+                the same value. Without this MySQL may return them in any order, so a
+                cause can appear below its own effect — differently on each refresh. */
+            ->orderByDesc('al.created_at')->orderByDesc('al.id');
 
         if ($scopedUserIds !== null) {
             // Primary, LEAK-PROOF filter: rows stamped with THIS agency's id only.

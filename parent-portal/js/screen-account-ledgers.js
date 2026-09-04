@@ -313,7 +313,12 @@
     var thS = 'text-align:left;padding:8px 10px;font-size:10px;font-weight:800;color:' + C.muted
       + ';text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;background:#F8FAFC;';
     var tdS = 'padding:9px 10px;font-size:12.5px;color:#334155;border-top:1px solid ' + C.line + ';vertical-align:top;';
-    return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">'
+    /* data-kt-no-filter: kt-table-filter.js attaches to EVERY #appMain table, adding
+       its own search box and pagination and re-rendering from rows it captured. On a
+       table this screen redraws itself — on every chip, every account — that is two
+       engines fighting over one tbody. The shared control is right for a static list
+       and wrong here, and this is the opt-out it provides. */
+    return '<div style="overflow-x:auto;"><table data-kt-no-filter style="width:100%;border-collapse:collapse;">'
       + '<thead><tr>' + headers.map(function (h, i) {
         return '<th style="' + thS + (right[i] ? 'text-align:right;' : '')
           + (widths && widths[i] ? 'width:' + widths[i] + ';' : '') + '">' + h + '</th>';
@@ -1012,12 +1017,30 @@
       return e.kind === f;
     }).slice().reverse();                          // newest first, the way it is read
 
+    /* Each tab carries its own count, and a tab with nothing behind it is not
+       offered at all. Without this, "Refunds" and "Voids" sat there on every account
+       looking like they should show something — clicking one produced an empty table
+       and read as a broken filter rather than as an account with no refunds. */
+    function countFor(k) {
+      return entries.filter(function (e) {
+        if (k === 'all') return true;
+        if (k === 'paid_out') return e.direction === 'paid_out';
+        return e.kind === k;
+      }).length;
+    }
     var chips = HIST_FILTERS.map(function (x) {
+      var n = countFor(x.k);
+      if (!n && x.k !== 'all') { return ''; }
       var on = state.histFilter === x.k;
       return '<button type="button" data-hf="' + x.k + '" style="border:1px solid '
         + (on ? C.accent : C.rule) + ';background:' + (on ? C.accent : '#fff') + ';color:' + (on ? '#fff' : '#475569')
-        + ';padding:5px 11px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">' + x.label + '</button>';
+        + ';padding:5px 11px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">'
+        + x.label + ' <span style="opacity:.6;font-weight:600;">' + n + '</span></button>';
     }).join('');
+
+    /* A filter that has been emptied by the data — not by the person — resets rather
+       than showing a blank table under a tab that is no longer on screen. */
+    if (state.histFilter !== 'all' && !countFor(state.histFilter)) { state.histFilter = 'all'; }
 
     var body = rows.length
       ? table(['Date', 'Type', 'Detail', 'Charge', 'Payment', 'Balance'], rows.map(function (e) {
