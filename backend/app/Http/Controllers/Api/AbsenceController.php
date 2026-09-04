@@ -58,6 +58,34 @@ class AbsenceController extends Controller
 
         if (! $child) return response()->json(['message' => 'Not found'], 404);
 
+        /* WHO HAS THIS CHILD TODAY.
+
+           The join above resolves the family's HOME centre, and a child can be with a
+           different provider depending on the day -- that is what enrollments.schedule
+           is for, and App\Support\CareSchedule is the one place that reads it. Without
+           this a Friday absence for Mylah Rappit named Cassandra Schnarr (Mon-Thu) and
+           went to Cassandra's staff, while the child was actually in Amna's home.
+
+           Only the CENTRE is overlaid: the family, the agency and the timezone are
+           properties of the child, not of who happens to have them today. The overlay
+           is refused across an agency boundary -- a schedule must never move a
+           notification between tenants. */
+        try {
+            $roomToday = \App\Support\CareSchedule::roomToday((int) $child->id, $child->tz ?: null);
+            if ($roomToday) {
+                $todays = DB::table('rooms as r')
+                    ->join('centres as ce2', 'ce2.id', '=', 'r.centre_id')
+                    ->where('r.id', $roomToday)
+                    ->first(['ce2.id as centre_id', 'ce2.name as centre_name', 'ce2.agency_id']);
+                if ($todays && (int) $todays->agency_id === (int) $child->agency_id) {
+                    $child->centre_id   = $todays->centre_id;
+                    $child->centre_name = $todays->centre_name;
+                }
+            }
+        } catch (\Throwable $e) {
+            // A schedule we cannot read must not stop an absence being recorded.
+        }
+
         // A nullable rule doesn't put the key in $data when it wasn't sent at all.
         $tz = $child->tz ?: 'America/Toronto';
         $date = !empty($data['date'])
