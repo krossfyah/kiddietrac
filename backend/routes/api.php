@@ -744,6 +744,19 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Agency-wide accounting view of externally-synced (iLearn) invoices —
             // admins + directors (+ platform_admin in tenant context). Parents use
             // /parent/external-invoices, scoped to their own family.
+            /* One ledger per ACCOUNT, both directions — what a person owes the agency
+               (through their family) and what the agency paid them (through their user
+               id). Nested tighter than the group it sits in: this exposes payroll, so
+               agency_admin / platform_admin only, never centre_director. */
+            Route::middleware('role:agency_admin,platform_admin')->group(function () {
+                Route::get('/admin/account-ledgers',        [\App\Http\Controllers\Api\AccountLedgerController::class, 'index']);
+                Route::get('/admin/account-ledgers/{user}', [\App\Http\Controllers\Api\AccountLedgerController::class, 'show'])->where('user', '[0-9]+');
+                // The same statement, in the agency's own branding, to the account
+                // holder or an address the admin names. Audited with the address.
+                Route::get('/admin/account-ledgers/{user}/statement.pdf', [\App\Http\Controllers\Api\AccountLedgerController::class, 'statementPdf'])->where('user', '[0-9]+');
+                Route::post('/admin/account-ledgers/{user}/email', [\App\Http\Controllers\Api\AccountLedgerController::class, 'emailStatement'])->where('user', '[0-9]+');
+            });
+
             Route::get   ('/agency/external-invoices',       [\App\Http\Controllers\Api\InvoiceController::class, 'externalForAgency']);
             Route::patch ('/agency/external-invoices/{id}', [\App\Http\Controllers\Api\InvoiceController::class, 'updateExternalInvoice'])->where('id','[0-9]+');
             Route::get   ('/agency/waitlist',      [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'index']);

@@ -161,6 +161,7 @@
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
+          { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Administration', items: [
@@ -311,6 +312,7 @@
           { hash: 'refunds',          label: 'Refunds',          icon: '↩' },
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
+          { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
           { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
