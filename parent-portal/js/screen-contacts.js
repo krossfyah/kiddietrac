@@ -19,7 +19,8 @@
     accent: '#2563EB', good: '#16A34A', warn: '#B45309', bad: '#B91C1C'
   };
 
-  var state = { search: '', category: '', emergency: '', centre: '', page: 1, per_page: 50, busy: false, data: null };
+  var state = { search: '', category: '', emergency: '', centre: '', bookOnly: false,
+                page: 1, per_page: 50, busy: false, data: null };
 
   /* Offered, never enforced. The column is free text because every agency keeps a
      different drawer, and a schema change to add "window cleaner" is a schema change
@@ -61,7 +62,8 @@
       '<div class="kt-hero" style="background:linear-gradient(135deg,#334155 0%,#1F6080 60%,#0E7490 100%);">'
       + '<div class="kt-hero-greet">📇 OPERATIONS</div><h1>All contacts</h1>'
       + '<div class="kt-hero-sub">The agency’s contact book — suppliers, trades, inspectors, insurers. '
-      + 'Everyone the business deals with, in one place instead of one person’s phone.</div></div>'
+      + 'Everyone the business deals with — plus the staff and families already on the '
+      + 'system — in one place instead of one person’s phone.</div></div>'
       + '<div id="ct-body"><div style="padding:40px;text-align:center;color:' + C.faint + ';">Loading…</div></div>';
 
     load(container);
@@ -75,7 +77,8 @@
       + (state.search ? '&search=' + encodeURIComponent(state.search) : '')
       + (state.category ? '&category=' + encodeURIComponent(state.category) : '')
       + (state.emergency ? '&emergency=1' : '')
-      + (state.centre ? '&centre_id=' + state.centre : '');
+      + (state.centre ? '&centre_id=' + state.centre : '')
+      + (state.bookOnly ? '&only=book' : '');
 
     Api.get('/contacts' + qs).then(function (d) {
       state.busy = false;
@@ -110,6 +113,9 @@
       + '<select id="ct-centre" style="padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">' + centreOpts + '</select>'
       + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#334155;cursor:pointer;">'
       + '<input id="ct-emg" type="checkbox"' + (state.emergency ? ' checked' : '') + ' style="width:16px;height:16px;"> Emergency only</label>'
+      + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#334155;cursor:pointer;">'
+      + '<input id="ct-bookonly" type="checkbox"' + (state.bookOnly ? ' checked' : '') + ' style="width:16px;height:16px;"> '
+      + 'Added contacts only</label>'
       + '<span style="font-size:12.5px;color:' + C.muted + ';">' + (meta.total || 0) + ' contact(s)</span>'
       + '<button type="button" id="ct-new" style="margin-left:auto;padding:8px 14px;border:1px solid ' + C.accent
       + ';background:' + C.accent + ';color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add contact</button>'
@@ -140,7 +146,11 @@
         + (sub ? '<div style="font-size:11.5px;color:' + C.muted + ';">' + sub + '</div>' : '')
         + ((r.tags || []).length ? '<div style="margin-top:3px;">' + r.tags.map(function (t) { return chip(t, '#F1F5F9', '#475569'); }).join('') + '</div>' : '')
         + '</td>'
-        + '<td style="' + td + '">' + (r.category ? chip(r.category, '#EEF2FF', '#4338CA') : '<span style="color:' + C.faint + ';">—</span>') + '</td>'
+        + '<td style="' + td + '">'
+        + (r.category
+          ? chip(r.category, r.source === 'staff' ? '#EDE9FE' : r.source === 'parent' ? '#F1F5F9' : '#EEF2FF',
+                 r.source === 'staff' ? '#5B21B6' : r.source === 'parent' ? '#475569' : '#4338CA')
+          : '<span style="color:' + C.faint + ';">—</span>') + '</td>'
         + '<td style="' + td + 'line-height:1.7;">' + (reach.join('<br>') || '<span style="color:' + C.faint + ';">—</span>') + '</td>'
         + '<td style="' + td + 'color:' + C.muted + ';">' + (where || '—') + '</td>'
         + '<td style="' + td + 'color:' + C.muted + ';max-width:280px;">'
@@ -148,10 +158,17 @@
         /* Plain buttons in the LAST cell — kt-row-actions.js collapses them into the
            house kebab. No word that kt-icon-buttons claims (view/open/back/manage…),
            or the label becomes a bare glyph and the menu row renders blank. */
+        /* Only the book's own rows can be edited here. A staff or parent row is a
+           view of their account, and editing a copy would leave two versions of a
+           phone number with no way to tell which is current — so the row says where it
+           comes from instead of offering an action that cannot work. */
         + '<td style="' + td + 'text-align:right;white-space:nowrap;">'
-        + '<button type="button" class="ct-edit" data-id="' + r.id + '">✏️ Edit contact</button>'
-        + (r.card_image_url ? '<button type="button" class="ct-card" data-url="' + esc(r.card_image_url) + '">🪪 Business card</button>' : '')
-        + '<button type="button" class="ct-del" data-id="' + r.id + '" data-name="' + who + '">🗑 Delete contact</button>'
+        + (r.editable
+          ? '<button type="button" class="ct-edit" data-id="' + r.id + '">✏️ Edit contact</button>'
+            + (r.card_image_url ? '<button type="button" class="ct-card" data-url="' + esc(r.card_image_url) + '">🪪 Business card</button>' : '')
+            + '<button type="button" class="ct-del" data-id="' + r.id + '" data-name="' + who + '">🗑 Delete contact</button>'
+          : '<span style="font-size:11px;color:' + C.faint + ';white-space:nowrap;">from their '
+            + (r.source === 'staff' ? 'staff record' : 'family record') + '</span>')
         + '</td></tr>';
     }).join('') || '<tr><td colspan="6" style="' + td + 'text-align:center;color:' + C.faint + ';padding:40px;">'
       + (state.search || state.category || state.emergency || state.centre
@@ -195,6 +212,8 @@
     if (cen) cen.addEventListener('change', function () { state.centre = cen.value; state.page = 1; load(container); });
     var emg = body.querySelector('#ct-emg');
     if (emg) emg.addEventListener('change', function () { state.emergency = emg.checked ? '1' : ''; state.page = 1; load(container); });
+    var bo = body.querySelector('#ct-bookonly');
+    if (bo) bo.addEventListener('change', function () { state.bookOnly = bo.checked; state.page = 1; load(container); });
 
     var prev = body.querySelector('#ct-prev');
     if (prev) prev.addEventListener('click', function () { if (state.page > 1) { state.page--; load(container); } });

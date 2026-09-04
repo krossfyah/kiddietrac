@@ -45,6 +45,46 @@ final class PaymentPlanController extends Controller
                 'i.issued_at as invoice_issues_on', 'i.balance_due as invoice_balance',
             ])
             ->groupBy('payment_plan_id');
+
+        /* AN IMPORTED INSTALMENT FINDS ITS INVOICE BY DUE DATE.
+
+           iLearn raises the invoice and the schedule separately and nothing ties them
+           together on this side, so invoice_id is null for every imported instalment —
+           399 of them — while the invoice itself exists and matches on (family, due
+           date) in every single case.
+
+           Resolved here rather than written: storing a guessed link would turn a good
+           guess into a fact the next sync knows nothing about. Where several share a
+           date the one matching the amount wins, but a DIFFERENCE does not reject the
+           match — 32 are invoices iLearn adjusted after the schedule was agreed, and
+           that gap is precisely what somebody reading this screen needs to see. */
+        $external = DB::table('external_invoices')->where('family_id', $familyId)
+            ->get(['id', 'number', 'status', 'due_at', 'total', 'balance_due'])
+            ->groupBy(fn ($r) => substr((string) $r->due_at, 0, 10));
+
+        $installments = $installments->map(function ($group) use ($external) {
+            return $group->map(function ($i) use ($external) {
+                if ($i->invoice_number) { return $i; }          // raised here; already linked
+                $day = substr((string) $i->due_date, 0, 10);
+                $candidates = $external->get($day);
+                if (! $candidates || $candidates->isEmpty()) { return $i; }
+
+                $exact = $candidates->first(fn ($c) => abs((float) $c->total - (float) $i->amount) < 0.005);
+                $hit = $exact ?: $candidates->first();
+
+                $i->invoice_number = $hit->number;
+                $i->invoice_status = $hit->status;
+                $i->invoice_balance = $hit->balance_due;
+                $i->invoice_total = (float) $hit->total;
+                // Said out loud so a $189 instalment against a $207.90 invoice is
+                // visible rather than quietly mismatched.
+                $i->invoice_differs = abs((float) $hit->total - (float) $i->amount) >= 0.005;
+                $i->invoice_matched_by = 'due date';
+
+                return $i;
+            });
+        });
+
         $plans->transform(function ($p) use ($installments) {
             $p->installments = $installments->get($p->id, collect());
             return $p;

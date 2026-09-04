@@ -81,6 +81,9 @@ final class ContactController extends Controller
             return response()->json(['contacts' => [], 'categories' => [], 'meta' => ['total' => 0, 'page' => 1, 'pages' => 1]]);
         }
 
+        // The agency's centres — the guardian lookup below is scoped through them.
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
+
         $q = DB::table('contacts')->where('agency_id', $agencyId)->whereNull('deleted_at');
 
         if ($cat = trim((string) $request->query('category', ''))) {
@@ -106,30 +109,127 @@ final class ContactController extends Controller
             });
         }
 
-        $total = (clone $q)->count();
         $perPage = max(1, min(200, (int) $request->query('per_page', 50)));
         $page = max(1, (int) $request->query('page', 1));
 
-        /* Emergency contacts first, then favourites, then by name — the order somebody
-           needs them in, not the order they were typed. */
-        $rows = $q->orderByDesc('is_emergency')->orderByDesc('is_favourite')
-            ->orderByRaw('COALESCE(NULLIF(company, ""), last_name, first_name) ASC')
-            ->offset(($page - 1) * $perPage)->limit($perPage)->get();
-
-        $rows->transform(function ($r) {
+        $book = $q->get()->map(function ($r) {
             $r->tags = $r->tags ? (json_decode($r->tags, true) ?: []) : [];
             $r->display_name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
             if ($r->display_name === '') { $r->display_name = $r->company ?: '(unnamed contact)'; }
+            $r->source = 'book';
+            $r->editable = true;
 
             return $r;
         });
 
+        /* THE PEOPLE ALREADY IN THE SYSTEM.
+
+           A directory that only knows the plumber is half a directory. Staff hold role
+           assignments here and parents are guardians of families at these centres —
+           they were simply never gathered in one place, so finding an educator's number
+           meant a different screen.
+
+           READ-ONLY, and the rows say so. Their record lives on their own account, and
+           editing a copy here would create two versions of a phone number with no way
+           to tell which is current. */
+        $people = collect();
+        if ($request->query('only') !== 'book') {
+            $staffRows = DB::table('role_assignments as ra')
+                ->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.agency_id', $agencyId)->where('ra.active', 1)
+                /* STAFF roles only. A guardian holds a role_assignment too, so without
+                   this every parent was listed as Staff — and then won the de-duplication
+                   against their own parent row, which is how Amarachi Ihenekwe appeared
+                   as an employee. */
+                ->whereIn('ra.role', ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor', 'platform_admin', 'sales_rep'])
+                ->whereNull('u.deleted_at')
+                ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone', 'ra.role', 'ra.centre_id']);
+
+            foreach ($staffRows as $r) {
+                $people->push((object) [
+                    'id' => 'u' . $r->id, 'user_id' => (int) $r->id,
+                    'display_name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: '(no name)',
+                    'first_name' => $r->first_name, 'last_name' => $r->last_name,
+                    'company' => null, 'job_title' => ucfirst(str_replace('_', ' ', $r->role)),
+                    'category' => 'Staff', 'email' => $r->email, 'phone' => $r->phone, 'mobile' => null,
+                    'city' => null, 'province' => null, 'notes' => null, 'tags' => [],
+                    'centre_id' => $r->centre_id, 'is_emergency' => false, 'card_image_url' => null,
+                    'source' => 'staff', 'editable' => false,
+                ]);
+            }
+
+            $famPhones = DB::table('guardians as g')
+                ->join('users as u', 'u.id', '=', 'g.user_id')
+                ->join('families as f', 'f.id', '=', 'g.family_id')
+                ->whereIn('f.centre_id', $centreIds)
+                ->whereNull('u.deleted_at')
+                ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone',
+                       'f.primary_phone', 'f.family_name', 'f.city', 'f.province', 'f.centre_id']);
+
+            foreach ($famPhones as $r) {
+                $people->push((object) [
+                    'id' => 'u' . $r->id, 'user_id' => (int) $r->id,
+                    'display_name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: '(no name)',
+                    'first_name' => $r->first_name, 'last_name' => $r->last_name,
+                    'company' => $r->family_name, 'job_title' => null,
+                    'category' => 'Parent', 'email' => $r->email,
+                    'phone' => $r->phone ?: $r->primary_phone, 'mobile' => null,
+                    'city' => $r->city, 'province' => $r->province, 'notes' => null, 'tags' => [],
+                    'centre_id' => $r->centre_id, 'is_emergency' => false, 'card_image_url' => null,
+                    'source' => 'parent', 'editable' => false,
+                ]);
+            }
+
+            /* The same person can be a guardian AND an educator — a parent who also
+               works here is one of this platform's recurring realities, and appearing
+               twice is how somebody rings the wrong number. Staff wins: that role
+               carries the work number. */
+            $seen = [];
+            $people = $people->sortBy(fn ($x) => $x->source === 'staff' ? 0 : 1)
+                ->filter(function ($x) use (&$seen) {
+                    $key = $x->user_id;
+                    if (isset($seen[$key])) { return false; }
+                    $seen[$key] = true;
+
+                    return true;
+                })->values();
+
+            // The same filters the book obeys, applied to the people.
+            if ($cat) { $people = $people->filter(fn ($x) => $x->category === $cat)->values(); }
+            if ($request->query('emergency') === '1') { $people = collect(); }
+            if ($centre) { $people = $people->filter(fn ($x) => (int) $x->centre_id === $centre)->values(); }
+            if ($search) {
+                $needle = mb_strtolower($search);
+                $people = $people->filter(function ($x) use ($needle) {
+                    foreach ([$x->display_name, $x->company, $x->job_title, $x->email, $x->phone, $x->category] as $v) {
+                        if ($v !== null && str_contains(mb_strtolower((string) $v), $needle)) { return true; }
+                    }
+
+                    return false;
+                })->values();
+            }
+        }
+
+        /* Emergency first, then the book's favourites, then everybody by name — the
+           order somebody needs them in, not the order they were typed. */
+        $all = $book->concat($people)
+            ->sortBy([
+                fn ($a, $b) => ((int) ($b->is_emergency ?? 0)) <=> ((int) ($a->is_emergency ?? 0)),
+                fn ($a, $b) => ((int) ($b->is_favourite ?? 0)) <=> ((int) ($a->is_favourite ?? 0)),
+                fn ($a, $b) => strcasecmp((string) ($a->company ?: $a->display_name), (string) ($b->company ?: $b->display_name)),
+            ])->values();
+
+        $total = $all->count();
+        $rows = $all->slice(($page - 1) * $perPage, $perPage)->values();
+
         return response()->json([
             'contacts' => $rows,
-            // What this agency actually uses, so the picker proposes their words.
+            /* What this agency actually uses, so the picker proposes their own words —
+               plus the two the system supplies for the people it already knows. */
             'categories' => DB::table('contacts')->where('agency_id', $agencyId)->whereNull('deleted_at')
                 ->whereNotNull('category')->where('category', '!=', '')
-                ->distinct()->orderBy('category')->pluck('category'),
+                ->distinct()->orderBy('category')->pluck('category')
+                ->concat(['Staff', 'Parent'])->unique()->sort()->values(),
             'centres' => DB::table('centres')->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name']),
             'meta' => ['total' => $total, 'page' => $page, 'per_page' => $perPage,
                        'pages' => max(1, (int) ceil($total / $perPage))],

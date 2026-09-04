@@ -250,8 +250,14 @@
     const tint = st === 'draft' ? '#64748B' : st === 'void' ? '#94A3B8' : '#166534';
     const when = st === 'draft' && i.invoice_issues_on ? ' \u00b7 issues ' + fmtDate(i.invoice_issues_on) : '';
 
+    /* An imported instalment is matched to its invoice by due date, and iLearn
+       sometimes adjusted the invoice afterwards. Where the two disagree the
+       invoiced figure is shown — that gap is the useful part of the match. */
+    const differs = i.invoice_differs
+      ? `<div style="font-size:11.5px;color:#B45309;">invoiced ${fmtMoney(i.invoice_total)}</div>` : '';
+
     return `<span style="font-weight:600;">${esc(i.invoice_number)}</span>`
-      + `<div style="font-size:11.5px;color:${tint};">${esc(st)}${esc(when)}</div>`;
+      + `<div style="font-size:11.5px;color:${tint};">${esc(st)}${esc(when)}</div>` + differs;
   }
 
   function openPaymentPlanModal(families) {

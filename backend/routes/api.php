@@ -744,6 +744,18 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Agency-wide accounting view of externally-synced (iLearn) invoices —
             // admins + directors (+ platform_admin in tenant context). Parents use
             // /parent/external-invoices, scoped to their own family.
+            /* MANUAL PAYROLL — pay several people for one period, in one pass.
+
+               Payroll has only ever arrived from outside (iLearn pushes documents in
+               through the integration); this is how an agency pays somebody the
+               platform itself knows about. It writes payslips and therefore moves
+               money, so agency_admin / platform_admin only — a centre director runs a
+               site, not the payroll. */
+            Route::middleware('role:agency_admin,platform_admin')->group(function () {
+                Route::get ('/admin/payroll/manual/prepare', [\App\Http\Controllers\Api\ManualPayrollController::class, 'prepare']);
+                Route::post('/admin/payroll/manual',         [\App\Http\Controllers\Api\ManualPayrollController::class, 'commit']);
+            });
+
             /* THE AGENCY CONTACT BOOK — the drawer of business cards, digitised.
 
                Not emergency_contacts, which belongs to a CHILD ("who to call about
