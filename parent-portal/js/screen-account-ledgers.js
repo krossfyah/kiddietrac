@@ -34,6 +34,7 @@
     viewingName: null,        // carried from the row, so the banner has words at once
     allAccounts: null,        // every account, fetched once, filtered in the browser
     pickRole: '',             // the role the picker is narrowed to
+    pickSearch: '',           // free text narrowing the same list
     histFilter: 'all'
   };
 
@@ -386,15 +387,40 @@
 
   /** Accounts that HAVE a ledger — a contractor has no login to open one for. */
   function pickable() {
+    var q = state.pickSearch.trim().toLowerCase();
     return (state.allAccounts || []).filter(function (a) {
-      return a.user_id && (!state.pickRole || (a.roles || []).indexOf(state.pickRole) !== -1);
+      if (!a.user_id) { return false; }
+      if (state.pickRole && (a.roles || []).indexOf(state.pickRole) === -1) { return false; }
+      if (!q) { return true; }
+
+      /* Name and email both, because half the time the thing someone has in front of
+         them is an address off an invoice rather than a name. */
+      return (a.name || '').toLowerCase().indexOf(q) !== -1
+        || (a.email || '').toLowerCase().indexOf(q) !== -1;
     });
+  }
+
+  /** The account <select>'s options, on their own — see the note on focus below. */
+  function accountOptionsHtml() {
+    var opts = pickable();
+    if (!opts.length) {
+      return '<option value="">No account matches that</option>';
+    }
+
+    /* Each option carries its balance, so the choice is informed before it is made
+       rather than after the ledger loads. */
+    return opts.map(function (a) {
+      var owed = Number(a.outstanding) || 0;
+      var tail = owed > 0.005 ? ' — ' + money(owed) + ' owed'
+        : (Number(a.paid_out) > 0.005 ? ' — ' + money(a.paid_out) + ' paid out' : ' — nothing owed');
+      return '<option value="' + a.user_id + '"' + (String(state.viewing) === String(a.user_id) ? ' selected' : '') + '>'
+        + esc(a.name) + tail + '</option>';
+    }).join('');
   }
 
   function paintPicker(container, wrap) {
     var host = wrap.querySelector('#al-pick');
     if (!host) return;
-    var opts = pickable();
     var inList = state.mode === 'list';
 
     var roleOpts = ['<option value="">All roles (' + (state.allAccounts || []).filter(function (a) { return a.user_id; }).length + ')</option>']
@@ -412,23 +438,14 @@
           + esc(r) + ' (' + n + ')</option>';
       })).join('');
 
-    /* Each option carries its balance, so the choice is informed before it is made
-       rather than after the ledger loads. */
-    var acctOpts = opts.length
-      ? opts.map(function (a) {
-        var owed = Number(a.outstanding) || 0;
-        var tail = owed > 0.005 ? ' — ' + money(owed) + ' owed'
-          : (Number(a.paid_out) > 0.005 ? ' — ' + money(a.paid_out) + ' paid out' : ' — nothing owed');
-        return '<option value="' + a.user_id + '"' + (String(state.viewing) === String(a.user_id) ? ' selected' : '') + '>'
-          + esc(a.name) + tail + '</option>';
-      }).join('')
-      : '<option value="">No accounts with that role</option>';
-
     host.innerHTML = '<div class="kt-card" style="padding:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 12px;">'
       + '<label for="al-prole" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + C.muted + ';">Role</label>'
       + '<select id="al-prole" style="padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;min-width:150px;">' + roleOpts + '</select>'
+      + '<input id="al-psearch" type="search" placeholder="Search name or email…" value="' + esc(state.pickSearch) + '" '
+      + 'style="flex:0 1 220px;min-width:150px;padding:8px 12px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">'
       + '<label for="al-pacct" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + C.muted + ';margin-left:6px;">Account</label>'
-      + '<select id="al-pacct" style="flex:1 1 280px;min-width:220px;padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">' + acctOpts + '</select>'
+      + '<select id="al-pacct" style="flex:1 1 260px;min-width:200px;padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">'
+      + accountOptionsHtml() + '</select>'
       + '<button type="button" id="al-toggle" style="margin-left:auto;padding:8px 14px;border:1px solid '
       + (inList ? C.accent : '#CBD5E1') + ';background:' + (inList ? C.accent : '#fff') + ';color:'
       + (inList ? '#fff' : '#334155') + ';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">'
@@ -449,6 +466,37 @@
       state.mode = 'account';
       paintPicker(container, wrap);
       paintBody(container, wrap);
+    });
+
+    /* SEARCH REWRITES ONLY THE OPTIONS.
+
+       paintPicker() rebuilds this whole bar with innerHTML; running it on a keystroke
+       would destroy the input being typed into and drop the caret. So this path
+       touches the <select> and nothing else, and the 350ms pause keeps a surname from
+       firing one request and four chart redraws per letter. */
+    var search = host.querySelector('#al-psearch');
+    var searchTimer = null;
+    search.addEventListener('input', function () {
+      state.pickSearch = search.value;
+      var sel = host.querySelector('#al-pacct');
+      sel.innerHTML = accountOptionsHtml();
+
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        if (!host.isConnected) { return; }
+        /* Leave the selection alone while it still matches — only jump when what is
+           on screen has been filtered away, which is the rule the role filter uses. */
+        var still = pickable().some(function (a) { return String(a.user_id) === String(state.viewing); });
+        if (still) { return; }
+        var first = pickable()[0];
+        if (!first) { return; }
+        state.viewing = first.user_id;
+        state.viewingName = first.name;
+        state.histFilter = 'all';
+        state.mode = 'account';
+        sel.innerHTML = accountOptionsHtml();
+        paintBody(container, wrap);
+      }, 350);
     });
 
     var acct = host.querySelector('#al-pacct');
