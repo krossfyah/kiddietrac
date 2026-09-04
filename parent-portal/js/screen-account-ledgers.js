@@ -29,8 +29,11 @@
   var state = {
     page: 1, per_page: 25, search: '', role: '', only: '',
     sort: 'outstanding', dir: 'desc', busy: false,
-    viewing: null,            // user id when drilled into one account
+    mode: 'account',          // 'account' (the default) or 'list'
+    viewing: null,            // user id of the ledger on screen
     viewingName: null,        // carried from the row, so the banner has words at once
+    allAccounts: null,        // every account, fetched once, filtered in the browser
+    pickRole: '',             // the role the picker is narrowed to
     histFilter: 'all'
   };
 
@@ -332,46 +335,167 @@
     var wrap = Dom.el('div', {});
     container.appendChild(wrap);
 
-    if (state.viewing) {
-      /* The list's auto table furniture must NOT follow us in here. data-kt-pretty
-         gives every table on the container a filter box and a select column, which is
-         right for one list and wrong for four tables on a page that brings its own
-         controls — the history table ended up with two filters and a checkbox column
-         no bulk action reads. The attribute is set on the container, not the table,
-         so leaving the list does not clear it. */
-      try { container.removeAttribute('data-kt-pretty'); } catch (e) {}
+    /* The banner is a constant now, painted before anything is fetched. It used to be
+       the account view's job, after its own request returned — and the shell, which
+       adds a page header to any screen with no .kt-hero when it sweeps, filled the
+       gap with a second one. */
+    wrap.innerHTML =
+      '<div class="kt-hero" style="background:linear-gradient(135deg,#1F6080 0%,#155E75 60%,#0E7490 100%);">'
+      + '<div class="kt-hero-greet">💰 FINANCE</div><h1>Account ledgers</h1>'
+      + '<div class="kt-hero-sub">Every account and its position — what each person owes, '
+      + 'and what the agency has paid them.</div></div>'
+      + '<div id="al-pick"></div>'
+      + '<div id="al-main"><div style="padding:40px;text-align:center;color:' + C.faint + ';">Loading…</div></div>';
 
-      /* The banner is painted NOW, not after the fetch. The shell adds a page header
-         of its own to any screen that has no .kt-hero when it sweeps, so a view that
-         renders its hero asynchronously gets a second banner above its first — which
-         is exactly what happened here. The name comes from the row that was clicked,
-         so there is something real on screen while the ledger loads. */
-      wrap.innerHTML = accountHero(state.viewingName, null)
-        + '<div id="al-detail"><div style="padding:40px;text-align:center;color:' + C.faint + ';">Loading ledger…</div></div>';
-      var backEarly = wrap.querySelector('#al-back');
-      if (backEarly) backEarly.addEventListener('click', function () { backToList(container); });
+    ensureAccounts(container, wrap);
+  }
 
-      loadAccount(container, wrap);
+  /* Every account, once. 67 here; capped so a large agency cannot turn one dropdown
+     into a five-thousand-row fetch. Filtered in the browser afterwards, because
+     re-querying on every change of a select would make the picker feel slower than
+     the table it replaces. */
+  function ensureAccounts(container, wrap) {
+    if (state.allAccounts) { chooseDefault(); paintPicker(container, wrap); paintBody(container, wrap); return; }
+
+    Api.get('/admin/account-ledgers?per_page=500&sort=outstanding&dir=desc').then(function (d) {
+      if (!wrap.isConnected) return;
+      state.allAccounts = (d && d.accounts) || [];
+      state.allRoles = (d && d.roles) || [];
+      chooseDefault();
+      paintPicker(container, wrap);
+      paintBody(container, wrap);
+    }).catch(function (e) {
+      if (!wrap.isConnected) return;
+      wrap.querySelector('#al-main').innerHTML =
+        '<div class="kt-card" style="padding:24px;color:' + C.bad + ';">Could not load the ledgers: '
+        + esc((e && e.message) || 'error') + '</div>';
+    });
+  }
+
+  /* Open on the account that most needs attention — the reason to come here is
+     almost always a balance, and the list arrives sorted by what is outstanding.
+
+     Runs on BOTH paths. It used to sit inside the fetch callback only, so coming back
+     to the screen with the list already cached left state.viewing null and the page
+     said "pick an account above" instead of showing one. */
+  function chooseDefault() {
+    if (state.viewing) { return; }
+    var first = pickable()[0];
+    if (first) { state.viewing = first.user_id; state.viewingName = first.name; }
+  }
+
+  /** Accounts that HAVE a ledger — a contractor has no login to open one for. */
+  function pickable() {
+    return (state.allAccounts || []).filter(function (a) {
+      return a.user_id && (!state.pickRole || (a.roles || []).indexOf(state.pickRole) !== -1);
+    });
+  }
+
+  function paintPicker(container, wrap) {
+    var host = wrap.querySelector('#al-pick');
+    if (!host) return;
+    var opts = pickable();
+    var inList = state.mode === 'list';
+
+    var roleOpts = ['<option value="">All roles (' + (state.allAccounts || []).filter(function (a) { return a.user_id; }).length + ')</option>']
+      /* A role with nothing to pick is not offered. "Contractor (0)" was on the list
+         because contractors are paid by name and have no login — they appear in the
+         table, which says "no account", and there is no ledger for this picker to
+         open. Choosing it would only ever empty the page. */
+      .concat((state.allRoles || []).map(function (r) {
+        var n = (state.allAccounts || []).filter(function (a) {
+          return a.user_id && (a.roles || []).indexOf(r) !== -1;
+        }).length;
+        if (!n) { return ''; }
+
+        return '<option value="' + esc(r) + '"' + (state.pickRole === r ? ' selected' : '') + '>'
+          + esc(r) + ' (' + n + ')</option>';
+      })).join('');
+
+    /* Each option carries its balance, so the choice is informed before it is made
+       rather than after the ledger loads. */
+    var acctOpts = opts.length
+      ? opts.map(function (a) {
+        var owed = Number(a.outstanding) || 0;
+        var tail = owed > 0.005 ? ' — ' + money(owed) + ' owed'
+          : (Number(a.paid_out) > 0.005 ? ' — ' + money(a.paid_out) + ' paid out' : ' — nothing owed');
+        return '<option value="' + a.user_id + '"' + (String(state.viewing) === String(a.user_id) ? ' selected' : '') + '>'
+          + esc(a.name) + tail + '</option>';
+      }).join('')
+      : '<option value="">No accounts with that role</option>';
+
+    host.innerHTML = '<div class="kt-card" style="padding:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 12px;">'
+      + '<label for="al-prole" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + C.muted + ';">Role</label>'
+      + '<select id="al-prole" style="padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;min-width:150px;">' + roleOpts + '</select>'
+      + '<label for="al-pacct" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + C.muted + ';margin-left:6px;">Account</label>'
+      + '<select id="al-pacct" style="flex:1 1 280px;min-width:220px;padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">' + acctOpts + '</select>'
+      + '<button type="button" id="al-toggle" style="margin-left:auto;padding:8px 14px;border:1px solid '
+      + (inList ? C.accent : '#CBD5E1') + ';background:' + (inList ? C.accent : '#fff') + ';color:'
+      + (inList ? '#fff' : '#334155') + ';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">'
+      + (inList ? '‹ Back to the ledger' : '⊞ All accounts') + '</button>'
+      + '</div>';
+
+    var role = host.querySelector('#al-prole');
+    role.addEventListener('change', function () {
+      state.pickRole = role.value;
+      /* Narrowing the role can orphan the selection — jump to the first account that
+         does match rather than leaving a ledger on screen the picker no longer offers. */
+      var still = pickable().some(function (a) { return String(a.user_id) === String(state.viewing); });
+      if (!still) {
+        var first = pickable()[0];
+        state.viewing = first ? first.user_id : null;
+        state.viewingName = first ? first.name : null;
+      }
+      state.mode = 'account';
+      paintPicker(container, wrap);
+      paintBody(container, wrap);
+    });
+
+    var acct = host.querySelector('#al-pacct');
+    acct.addEventListener('change', function () {
+      if (!acct.value) return;
+      state.viewing = acct.value;
+      var hit = (state.allAccounts || []).filter(function (a) { return String(a.user_id) === String(acct.value); })[0];
+      state.viewingName = hit ? hit.name : null;
+      state.mode = 'account';
+      state.histFilter = 'all';
+      paintPicker(container, wrap);
+      paintBody(container, wrap);
+    });
+
+    host.querySelector('#al-toggle').addEventListener('click', function () {
+      state.mode = state.mode === 'list' ? 'account' : 'list';
+      paintPicker(container, wrap);
+      paintBody(container, wrap);
+    });
+  }
+
+  function paintBody(container, wrap) {
+    var main = wrap.querySelector('#al-main');
+    if (!main) return;
+
+    if (state.mode === 'list') {
+      /* The list wants the house table furniture; the ledger brings its own controls
+         and would otherwise get a filter box over each of its four tables. The
+         attribute lives on the CONTAINER, so it has to be set and cleared per mode. */
+      try { container.setAttribute('data-kt-pretty', '1'); } catch (e) {}
+      main.innerHTML = '<div id="al-body"><div style="padding:40px;text-align:center;color:'
+        + C.faint + ';">Loading…</div></div>';
+      load(container);
       return;
     }
 
-    /* The house table treatment — card, sortable headers, filter bar, row count —
-       comes from data-kt-pretty plus a plain table in a .kt-card. Only the LIST wants
-       it; the account view brings its own controls and would end up with a search box
-       over every one of its four tables. */
-    try { container.setAttribute('data-kt-pretty', '1'); } catch (e) {}
-
-    var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1F6080 0%,#155E75 60%,#0E7490 100%);' });
-    hero.innerHTML = '<div class="kt-hero-greet">💰 FINANCE</div><h1>Account ledgers</h1>'
-      + '<div class="kt-hero-sub">Every account and its position — what each person owes, and what the agency has paid them.</div>';
-    wrap.appendChild(hero);
-
-    var body = Dom.el('div', { id: 'al-body' });
-    wrap.appendChild(body);
-    body.innerHTML = '<div style="padding:40px;text-align:center;color:' + C.faint + ';">Loading…</div>';
-
-    load(container);
+    try { container.removeAttribute('data-kt-pretty'); } catch (e) {}
+    if (!state.viewing) {
+      main.innerHTML = '<div class="kt-card" style="padding:34px;text-align:center;color:' + C.faint
+        + ';">Pick an account above to see its ledger.</div>';
+      return;
+    }
+    main.innerHTML = '<div id="al-detail"><div style="padding:40px;text-align:center;color:'
+      + C.faint + ';">Loading ledger…</div></div>';
+    loadAccount(container, main);
   }
+
 
   function load(container) {
     if (state.busy) return;
@@ -554,28 +678,15 @@
   // ═════════════════════════════════════════════════════════════════════
   //  ONE ACCOUNT, IN FULL
   // ═════════════════════════════════════════════════════════════════════
-  /* align-self:flex-start — .kt-hero is a flex COLUMN, so a bare button stretches to
-     the full width of the banner and reads as a title bar rather than a way back. */
-  function accountHero(name, sub) {
-    return '<div class="kt-hero" style="background:linear-gradient(135deg,#1F6080 0%,#155E75 60%,#0E7490 100%);">'
-      + '<button type="button" id="al-back" style="align-self:flex-start;border:0;background:rgba(255,255,255,.16);color:#fff;'
-      + 'padding:5px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px;">‹ All accounts</button>'
-      + '<h1 style="margin:0;">' + esc(name || 'Account ledger') + '</h1>'
-      + '<div class="kt-hero-sub">' + esc(sub || 'Loading this account…') + '</div>'
-      + '</div>';
-  }
-
+  /* Opening a ledger from a row in the table — the picker above follows it, so the
+     two ways in never disagree about which account is on screen. */
   function openAccount(container, userId, name) {
     state.viewing = userId;
     state.viewingName = name || null;
     state.histFilter = 'all';
+    state.mode = 'account';
     render(container);
     try { window.scrollTo(0, 0); } catch (e) {}
-  }
-
-  function backToList(container) {
-    state.viewing = null;
-    render(container);
   }
 
   function loadAccount(container, wrap) {
@@ -748,17 +859,17 @@
         }), [0, 0, 0, 1, 1], ['15%', 'auto', '18%', '12%', '12%']))
       : '';
 
-    /* The banner is already on the page; only its words were not known until now. */
-    var h1 = wrap.querySelector('.kt-hero h1');
-    if (h1) h1.textContent = a.name || '';
-    var hsub = wrap.querySelector('.kt-hero .kt-hero-sub');
-    if (hsub) {
-      hsub.textContent = ((a.roles || []).join(' · ') || 'No role on file')
-        + ' · ' + (a.agency || '') + ' · account #' + a.user_id;
-    }
+    /* The banner names the SCREEN, so the ledger has to name the person. Stated
+       once, at the top, rather than left to be inferred from the contact card. */
+    var title = '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px;">'
+      + '<h2 style="margin:0;font-size:20px;font-weight:800;color:' + C.ink + ';">' + esc(a.name || '') + '</h2>'
+      + '<span style="font-size:12.5px;color:' + C.muted + ';">'
+      + esc(((a.roles || []).join(' · ') || 'No role on file') + ' · ' + (a.agency || '') + ' · account #' + a.user_id)
+      + '</span></div>';
 
     var host = wrap.querySelector('#al-detail') || wrap;
-    host.innerHTML = '<div style="display:grid;gap:12px;margin-top:14px;min-width:0;">'
+    host.innerHTML = '<div style="display:grid;gap:12px;min-width:0;">'
+      + title
       + '<div style="display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,2fr);gap:12px;" id="al-top">'
       + position + identity + '</div>'
       + kpis
