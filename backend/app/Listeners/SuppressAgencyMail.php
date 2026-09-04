@@ -226,24 +226,56 @@ class SuppressAgencyMail
         //    what the Settings switch strictly controls.
         foreach ($recipients as $addr) {
             /* Every account on the address, not whichever row came back first —
-               the third gate in this file to have made that mistake today. */
+               one address can carry accounts in two agencies.
+
+               THE SENSE OF THIS USED TO BE INVERTED, and it silently disabled both
+               switches below. It read:
+
+                   $uid = $uidsHere->every(fn ($id) => Suppression::isUser($id))
+                       ? $uidsHere->first() : null;
+                   if (! $uid) { continue; }
+
+               but isUser() answers "is this user at a SUPPRESSED agency" — TRUE means
+               hold. So $uid was only resolved when every account on the address was
+               ALREADY suppressed by something else, and for everyone else the loop
+               continued straight past agencyOff() and blockedByCentreRoom(). The two
+               switches Settings actually controls therefore never ran for the people
+               they were meant to stop: Test Agency's centres were all switched off and
+               its mail kept sending.
+
+               Now each account is asked in its own right and ANY account that says
+               hold, holds. For a suppression gate, failing closed is the only safe
+               direction. */
             $uidsHere = DB::table('users')->where('email', $addr)->pluck('id');
-            $uid = $uidsHere->every(fn ($id) => \App\Support\Suppression::isUser((int) $id))
-                ? $uidsHere->first()
-                : null;
-            if (! $uid) {
+            if ($uidsHere->isEmpty()) {
                 continue;
             }
-            if (\App\Support\Suppression::agencyOff((int) $uid)) {
-                // Name the ACTUAL switch. Falling through to cancel()'s default
-                // blamed MAIL_SUPPRESS_AGENCIES, so the log said the env kill-switch
-                // stopped mail that the env kill-switch had nothing to do with —
-                // which is why 857 suppressed emails looked inexplicable against an
-                // empty suppression list.
-                $this->cancel($event, [$addr],
-                    'The agency master switch for notifications and emails is OFF (Settings).');
-                return false;
-            }
+
+            /* allowlist() lowercases its entries; comparing the raw address under a
+               strict in_array meant a capitalised recipient missed its own exemption. */
+            $isAllowlisted = in_array(mb_strtolower($addr), $this->allowlist(), true);
+
+            foreach ($uidsHere as $uidOnAddr) {
+                $uid = (int) $uidOnAddr;
+
+                // The account itself is deactivated or suspended — the most absolute of
+                // the three, and not exempted by anything.
+                if (\App\Support\Suppression::accountOff($uid)) {
+                    $this->cancel($event, [$addr],
+                        'This account is deactivated or suspended, so nothing is sent to it.');
+                    return false;
+                }
+
+                if (\App\Support\Suppression::agencyOff($uid)) {
+                    // Name the ACTUAL switch. Falling through to cancel()'s default
+                    // blamed MAIL_SUPPRESS_AGENCIES, so the log said the env kill-switch
+                    // stopped mail that the env kill-switch had nothing to do with —
+                    // which is why 857 suppressed emails looked inexplicable against an
+                    // empty suppression list.
+                    $this->cancel($event, [$addr],
+                        'The agency master switch for notifications and emails is OFF (Settings).');
+                    return false;
+                }
             // 1a) Centre / room switch (pre-boarding). A recipient whose every
             //     centre / room is switched off for email is held back even while
             //     the agency master switch is on. SKIPPED for invites — an invite
@@ -253,12 +285,13 @@ class SuppressAgencyMail
             // back because the ADMIN doing the testing happens to belong to centres
             // whose email is switched off. A send you explicitly asked for should
             // arrive; the gate still applies to everyone else.
-            if (! $isInvite && ! in_array($addr, $this->allowlist(), true)
-                && \App\Support\Suppression::blockedByCentreRoom((int) $uid)) {
-                $this->cancel($event, [$addr],
-                    'Every centre/room this recipient belongs to has email switched OFF '
-                    . '(Settings → Email settings → Centre & room email delivery).');
-                return false;
+                if (! $isInvite && ! $isAllowlisted
+                    && \App\Support\Suppression::blockedByCentreRoom($uid)) {
+                    $this->cancel($event, [$addr],
+                        'Every centre/room this recipient belongs to has email switched OFF '
+                        . '(Settings → Email settings → Centre & room email delivery).');
+                    return false;
+                }
             }
         }
 
