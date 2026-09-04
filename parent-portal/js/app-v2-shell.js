@@ -204,6 +204,16 @@
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'payment-providers',  label: 'Payment providers',       icon: '💳' },
+          /* Two-factor lives in the personal profile for EVERY role now — this entry
+             used to be the exception, kept because agency admins and centre directors
+             had no profile screen. They do as of 2026-09-01 (screen-settings registers
+             them), so the account settings and the agency settings are no longer mixed
+             together in one menu.
+
+             This item points at that profile, and says "security" out loud: the thing
+             people come here looking for is two-factor, and a bare "My profile" gives
+             them no reason to think it is inside. */
+          { hash: 'settings',           label: 'My profile & security', icon: '👤' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -215,7 +225,6 @@
 
 
           { hash: 'data-retention',     label: 'Data retention & compliance', icon: '🗄️' },
-          { hash: 'mfa',                label: 'Two-factor (MFA)',    icon: '🔐' },
           { hash: 'help',               label: 'Help & guides',       icon: '📖' },
         ].concat(isPlatformAdmin_v22p34 ? [{ hash: 'social-settings', label: 'Sign-in methods', icon: '🔑' }, { hash: 'security-alerts', label: 'Security alerts', icon: '🛡️' }] : []) },
       ];
@@ -308,11 +317,20 @@
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
+          /* Two-factor lives in the personal profile for EVERY role now — this entry
+             used to be the exception, kept because agency admins and centre directors
+             had no profile screen. They do as of 2026-09-01 (screen-settings registers
+             them), so the account settings and the agency settings are no longer mixed
+             together in one menu.
+
+             This item points at that profile, and says "security" out loud: the thing
+             people come here looking for is two-factor, and a bare "My profile" gives
+             them no reason to think it is inside. */
+          { hash: 'settings',           label: 'My profile & security', icon: '👤' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
 
 
 
-          { hash: 'mfa',              label: 'Two-factor (MFA)', icon: '🔐' },
           { hash: 'help',             label: 'Help & guides',    icon: '📖' },
         ]},
       ];
@@ -344,7 +362,6 @@
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
-          { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
           { hash: 'help',          label: 'Help',          icon: '📖' },
         ]},
       ];
@@ -361,7 +378,6 @@
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
-          { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
           { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
           { hash: 'help',          label: 'Help',          icon: '📖' },
         ]},
@@ -380,7 +396,6 @@
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
-          { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
           { hash: 'help',          label: 'Help',          icon: '❓' },
           { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
         ]},
@@ -413,11 +428,17 @@
         { hash: 'billing',            label: 'Billing',    icon: '💳' },
         { hash: 'attendance-pattern', label: 'Attendance', icon: '📅' },
         { hash: 'medications',        label: 'Health',     icon: '💊' },
+        /* The screen was registered for guardians but reachable by nobody — it was
+           in the staff nav only, so a parent had no route to it from desktop or
+           mobile. That is where the upload lives. */
+        { hash: 'immunizations',      label: 'Immunization', icon: '🩹' },
         { hash: 'announcements',      label: 'News',       icon: '📢' },
+        /* Reports the centre has shared — incident reports today. Filed copies a
+           family can come back to, rather than an email they have to keep. */
+        { hash: 'my-documents',       label: 'Documents',  icon: '📄' },
       ]},
       { label: 'Account', items: [
         { hash: 'notifications', label: 'Notifications', icon: '🔔' },
-        { hash: 'mfa',           label: 'Two-factor',    icon: '🔐' },
         { hash: 'help',          label: 'Help',          icon: '📖' },
       ]},
     ];
@@ -512,6 +533,20 @@
   // home is 'dashboard'; guardian/educator home is 'today'. Used so a role
   // always lands on a screen it actually has (not a foreign #dashboard).
   function homeHashForRole(role) {
+    /* Phones land on the launcher, which is also where the Home button goes. Without
+       this a platform_admin signed in to an agency dashboard -- primaryRoleOf() resolves
+       them to 'agency_admin', so the first nav item is one tenant's numbers -- and on a
+       phone there is no sidebar to get from there to the platform sections. The launcher
+       is built from navItemsForRole(), so a superadmin's carries Reseller and a tenant
+       admin's does not; each role lands on its own view of the portal.
+       Desktop is deliberately unchanged: the sidebar is present there. */
+    try {
+      if (!window.matchMedia('(min-width: 601px)').matches
+          && ['agency_admin', 'centre_director', 'platform_admin'].indexOf(role) !== -1) {
+        return 'home';
+      }
+    } catch (e) { /* no matchMedia — fall through to the nav-order answer below */ }
+
     var secs = navItemsForRole(role) || [];
     if (secs[0] && secs[0].items && secs[0].items[0] && secs[0].items[0].hash) {
       return secs[0].items[0].hash;
@@ -610,6 +645,7 @@
     'invitation-codes': 'Codes that let a family or educator join.',
     'synced-waitlist': 'Waitlist leads and enquiries.',
     'edocuments': 'Documents on file, and what is still outstanding.',
+    'my-documents': 'Reports your centre has shared with you, kept for you to open any time.',
     'signed-docs': 'Agreements that have been signed.',
     'doc-workflows': 'Who has to sign what, and in which order.',
     'compliance': 'Licensing obligations and the evidence for them.',
@@ -932,22 +968,95 @@
     if (_hashStack.length > 1 && _hashStack[_hashStack.length - 2] === h) { _hashStack.pop(); }
     else if (_hashStack[_hashStack.length - 1] !== h) { _hashStack.push(h); }
   }
+  /* Is the user in the middle of something a screen teardown would destroy?
+     ONE answer, shared by kt-auto-refresh and kt-live, which each had their own partial
+     selector list. Returns true to DEFER a refresh, never to cancel it. */
+  window.KT = window.KT || {};
+  window.KT.uiBusy = function () {
+    try {
+      // 1. Anything focused that holds text or a choice.
+      var a = document.activeElement;
+      if (a) {
+        var t = (a.tagName || '').toUpperCase();
+        if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || a.isContentEditable) return true;
+        /* Focus inside a dialog counts even when it is on a button: the classic way to
+           lose your work is to type, then tick a box, and have the tick move focus off
+           the input just as the timer fires. */
+        if (a.closest && a.closest('[role="dialog"], .kt-modal, .kt-modal-overlay, .modal-backdrop, .kt-scrim')) return true;
+      }
+
+      // 2. The dialog shapes this portal actually uses, by name.
+      if (document.querySelector(
+        '.kt-modal, .kt-modal-overlay, .modal-backdrop, .kt-scrim, .kt-lightbox,'
+        + ' .kt-doc-viewer, .kt-av-zoom, [role="dialog"], [data-kt-open-menu], .kt-sheet-open'
+      )) return true;
+      var mr = document.getElementById('modalRoot');
+      if (mr && mr.firstElementChild) return true;
+
+      /* 3. And by SHAPE, for the dozen dialogs built with inline position:fixed and no
+            class at all. Only body's own children are measured — dialogs are appended
+            there — so this stays a handful of getComputedStyle calls. */
+      var kids = document.body ? document.body.children : [];
+      for (var i = 0; i < kids.length; i++) {
+        var el = kids[i];
+        if (el.id === 'appMain' || el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') continue;
+        if (el.hidden) continue;
+        var cs = window.getComputedStyle(el);
+        if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') continue;
+        if (parseFloat(cs.opacity || '1') < 0.05) continue;
+        var z = parseInt(cs.zIndex, 10);
+        if (isNaN(z) || z < 900) continue;              // toasts and bars sit lower
+        var r = el.getBoundingClientRect();
+        // Big enough to be a dialog rather than a badge or a floating button.
+        if (r.width < 200 || r.height < 120) continue;
+        return true;
+      }
+
+      // 4. A screen that says it updates itself, or asks not to be refreshed.
+      if (document.querySelector('[data-kt-no-autorefresh], [data-kt-self-live]')) return true;
+    } catch (e) { /* never let this throw and block a refresh forever */ }
+    return false;
+  };
+
   window.ktBack = function () {
     if (_hashStack.length > 1) { var prev = _hashStack[_hashStack.length - 2]; window.location.hash = (prev.charAt(0) === '#' ? prev : '#' + prev); }
     else { try { window.location.hash = '#' + homeHashForRole(Roles.primaryRoleOf(Auth.user())); } catch (e) { window.location.hash = '#dashboard'; } }
   };
+  /* Is this control "go back", or something else that merely starts with an arrow?
+     Getting this wrong is expensive: the handler below captures, so a false positive
+     both cancels the control's own click AND navigates away from the screen.
+
+     The old test was "starts with an arrow and is 8 characters or shorter", which caught
+     every '‹ Prev' pager in the portal — the table pager, chat, forms, parent, care's
+     previous-day, notifications' '‹ Newer' — and '← OUT', which checks a child out.
+     kt-icon-buttons.js had already solved the same problem; this matches its reasoning. */
+  function isBackControl(el, t) {
+    if (el.hasAttribute && el.hasAttribute('data-back')) return true;
+    if (el.classList && el.classList.contains('kt-back')) return true;
+
+    var s = (t || '').toLowerCase();
+    // Paging and check-in/out are actions on the page, never navigation history.
+    if (/\b(prev|previous|next|newer|older|forward)\b/.test(s)) return false;
+    if (/\bback\b/.test(s)) return true;
+
+    /* A bare long arrow, alone — with an optional U+FE0F, because kt-icon-buttons.js
+       rewrites a back label to the emoji '⬅️' on mobile (desktop keeps the text), and
+       that is the glyph plus a variation selector.
+
+       '‹' is deliberately absent: in this codebase it is the pagination glyph — a dozen
+       pagers use it and nothing uses it to mean back. Real back controls read '← Back'
+       or '‹ Back' and are caught by the word above. */
+    return /^[←⟵⬅⭠]️?$/.test((t || '').trim());
+  }
+
   document.addEventListener('click', function (e) {
     var el = e.target && e.target.closest ? e.target.closest('a,button,[data-back]') : null;
     if (!el) return;
-    var t = (el.textContent || '').trim();
-    // Only treat a leading arrow as "back" when it's essentially the whole label
-    // (a ‹ / ← button) — not any button that happens to start with one.
-    if (el.hasAttribute('data-back') || (/^[←‹⟵⬅⭠]/.test(t) && t.length <= 8)) {
-      e.preventDefault(); e.stopPropagation();
-      // Overlay-aware: closes an open thread/compose/invoice back to the list
-      // it sits on, and only navigates the hash when nothing is stacked.
-      if (window.KT && KT.goBack) KT.goBack(); else window.ktBack();
-    }
+    if (!isBackControl(el, (el.textContent || '').trim())) return;
+    e.preventDefault(); e.stopPropagation();
+    // Overlay-aware: closes an open thread/compose/invoice back to the list
+    // it sits on, and only navigates the hash when nothing is stacked.
+    if (window.KT && KT.goBack) KT.goBack(); else window.ktBack();
   }, true);
 
   window.ktViewAs = function (role) {
@@ -992,15 +1101,30 @@
      (Anthony, 2026-08-26) */
   function __ktSettleScroll(y, releaseEl) {
     var tries = 0, aborted = false;
+    var lastSet = -1;                      // the position WE last asked for
     function abort() { aborted = true; }
     var opts = { passive: true, capture: true };
-    ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) {
-      window.addEventListener(ev, abort, opts);
-    });
+    var EVENTS = ['wheel', 'touchstart', 'touchmove', 'keydown', 'mousedown'];
+    EVENTS.forEach(function (ev) { window.addEventListener(ev, abort, opts); });
+
+    /* The input events above only catch a scroll that STARTS after the re-render.
+       A wheel or a swipe already in flight when the screen was torn down has
+       already fired, so nothing aborted and the loop below spent the next second
+       and a half dragging the reader back — which is what "it won't let me
+       scroll" is. So also watch the result: if the page reports a position that
+       is not the one we set, somebody else moved it, and they win. */
+    function onScroll() {
+      if (lastSet < 0) { return; }
+      var at = window.scrollY || (document.scrollingElement || {}).scrollTop || 0;
+      if (Math.abs(at - lastSet) > 4) { aborted = true; }
+    }
+    window.addEventListener('scroll', onScroll, opts);
+
     function release() {
-      ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (ev) {
+      EVENTS.forEach(function (ev) {
         try { window.removeEventListener(ev, abort, opts); } catch (e) {}
       });
+      try { window.removeEventListener('scroll', onScroll, opts); } catch (e) {}
       // Let the screen size itself again — the pin exists only for the blank moment.
       if (releaseEl) { try { releaseEl.style.minHeight = ''; } catch (e) {} }
     }
@@ -1008,7 +1132,9 @@
       if (aborted) { release(); return; }
       var doc = document.documentElement;
       var max = Math.max(0, (doc ? doc.scrollHeight : 0) - window.innerHeight);
-      try { window.scrollTo(0, Math.min(y, max)); } catch (e) {}
+      var target = Math.min(y, max);
+      lastSet = target;
+      try { window.scrollTo(0, target); } catch (e) {}
       // Tall enough to honour the request, or out of patience (~1.6s of async render).
       if (max >= y || ++tries > 32) { release(); return; }
       setTimeout(step, 50);
@@ -1067,6 +1193,15 @@
     ensureTopbar(hash);
 
     updateActiveNav();
+
+    /* The role's screen modules are no longer <script> tags — they are fetched for
+       the role that actually signs in. Awaited HERE, immediately before the lookup,
+       so a screen is never reported missing just because its file is still in
+       flight. Resolves immediately once loaded, and resolves anyway if the loader
+       is absent or a file 404s, which leaves the original behaviour intact. */
+    if (window.KT && KT.screenLoader) {
+      try { await KT.screenLoader.ensure(role, hash); } catch (e) {}
+    }
 
     // Route based on role + hash
     const screenKey = `${role}:${hash}`;
@@ -1427,7 +1562,16 @@
         img.src = src;
         img.alt = user.name || '';
         img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;';
-        img.onerror = () => { navAvatar.removeChild(img); navAvatar.textContent = Fmt.initials(user.name); };
+        /* Remove via img's OWN parent, never navAvatar's.
+
+         navAvatar.removeChild(img) throws NotFoundError whenever img is not a child
+         of it right then -- which happens if the pill was re-rendered since, and on
+         WebKit if error fires for an already-failed cached URL BEFORE the appendChild
+         below has run. That threw during boot on iPhone and left a dead shell. */
+      img.onerror = () => {
+        if (img.parentNode) { img.parentNode.removeChild(img); }
+        navAvatar.textContent = Fmt.initials(user && user.name);
+      };
         navAvatar.appendChild(img);
       } else {
         // Not user.name: the branch above tests `user && user.photo_url`, so reaching
@@ -1483,6 +1627,11 @@
     setBadge,
     startApp,
     homeHashForRole,
+    /* Exposed for the admin/director launcher (screen-admin-home.js), which builds its
+       tiles from the role's REAL nav rather than a second hand-written copy of the
+       menu. A copy would go stale the first time a screen was added, and could offer a
+       role a screen it cannot open. */
+    navItemsForRole,
     // Lift any action buttons out of the current screen's banner into the toolbar
     // beneath it. Screens that RE-RENDER themselves (e.g. a Refresh button that
     // rebuilds its own hero) must call this afterwards — the shell's automatic

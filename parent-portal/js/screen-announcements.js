@@ -31,7 +31,14 @@
     // "Send" silently do nothing. Match the rest of the app's header + storage key.
     var aid = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id');
     if (aid) opts.headers['X-Active-Agency-Id'] = aid;
-    if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    if (body instanceof FormData) {
+      // No Content-Type: the browser has to set it itself so the multipart
+      // boundary is right. Setting it by hand produces a body PHP cannot parse.
+      opts.body = body;
+    } else if (body !== undefined) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
     const res = await fetch(apiBase() + path, opts);
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.message || ('API ' + res.status));
@@ -466,25 +473,74 @@
     let centres = [];
     try { const r = await api('GET', '/admin/centres'); centres = r.centres || []; } catch (e) {}
 
+    /* Agency-wide is only offered to those the API will actually accept it from:
+       AnnouncementController::canBroadcast() allows scope_type 'agency' for an
+       agency_admin (or a platform_admin, anywhere). A centre_director sending
+       agency-wide would just be handed a 403, so they keep the centre list. */
+    var _annAgencyId = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id');
+    var _annRole = getRole();
+    var canSendAgencyWide = !!_annAgencyId && (_annRole === 'agency_admin' || _annRole === 'platform_admin');
+
     // If no centres came back, the account can't broadcast (wrong role, or
     // active-agency not set). Surface it instead of showing an empty dropdown.
     const noCentres = centres.length === 0;
-    const mount = $('#kt-mount', container);
+    /* `container` may be DETACHED by the time we get here.
+
+       This function awaits /admin/centres before it touches the DOM, and the shell's
+       refreshers tear down #appMain while that fetch is still in flight -- so the node
+       this was called with is no longer in the document and $('#kt-mount', container)
+       returns null. That is the crash educators hit on "+ New alert":
+       "Cannot set properties of null (setting 'innerHTML')".
+
+       KT.uiBusy() cannot help here -- it answers "is a dialog open?", and during the
+       await there is no dialog yet. So re-resolve against the LIVE document, and if the
+       screen has moved on since the click, give up quietly rather than throw. */
+    const mount = document.getElementById('kt-mount') || $('#kt-mount', container);
+    if (! mount) { return; }
+
     mount.innerHTML = `
       <div class="kt-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;">
         <div style="background:white;border-radius:14px;max-width:560px;width:100%;padding:24px;max-height:90vh;overflow-y:auto;">
           <h2 style="font-size:20px;margin:0 0 4px;">New Announcement</h2>
-          <p style="color:#6B7280;font-size:13px;margin:0 0 18px;">Sends to all families in the selected scope.</p>
+          <p style="color:#6B7280;font-size:13px;margin:0 0 18px;">Choose where it goes and who receives it.</p>
           <form id="kt-ann-form" onsubmit="return false;" style="display:grid;gap:12px;">
             <div>
-              <label style="font-size:13px;font-weight:600;">Send to *</label>
-              <select name="scope_id" required style="${inp()}">
-                <option value="">— Pick scope —</option>
-                ${centres.map(c => `<option value="centre:${c.id}">📍 Centre: ${esc(c.name)}</option>`).join('')}
+              <!-- "Where" and "Who" below were BOTH labelled "Send to", which is why
+                   picking "All educators" appeared to be blocked: the thing refusing to
+                   submit was a different question wearing the same name. -->
+              <label style="font-size:13px;font-weight:600;">Where</label>
+              <select name="scope_id" style="${inp()}">
+                ${canSendAgencyWide
+                  ? `<option value="agency:${_annAgencyId}" selected>🏢 Everywhere — all centres</option>`
+                  : `<option value="">— Pick a centre —</option>`}
+                ${centres.map(c => `<option value="centre:${c.id}"${(!canSendAgencyWide && centres.length === 1) ? ' selected' : ''}>📍 Centre: ${esc(c.name)}</option>`).join('')}
               </select>
               ${noCentres
                 ? `<div style="font-size:12px;color:#B91C1C;margin-top:4px;">⚠ No centres available for this account. Announcements can only be sent by a centre director or agency admin — check you're signed in with that role.</div>`
-                : `<div style="font-size:11px;color:#64748B;margin-top:2px;">All families with children at this centre will receive it.</div>`}
+                : ''}
+            </div>
+
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#374151;">Who</label>
+              <select name="audience" style="${inp()}">
+                <option value="parents" selected>All parents</option>
+                <option value="educators">All educators</option>
+                <option value="contractors">All contractors</option>
+                <option value="admins">All admins and directors</option>
+                <option value="all">Everyone</option>
+              </select>
+              <div id="kt-aud-hint" style="font-size:11px;color:#64748B;margin-top:2px;"></div>
+            </div>
+
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#374151;">Picture (optional)</label>
+              <input type="file" name="image" accept="image/jpeg,image/png,image/gif"
+                style="${inp()};padding:7px;font-size:13px;background:#F9FAFB;">
+              <div style="font-size:11px;color:#64748B;margin-top:2px;">
+                JPEG, PNG or GIF. Large photos are resized automatically so carriers will
+                carry them &mdash; where a phone cannot take a picture message, the text
+                arrives with a link to it instead.</div>
+              <div id="kt-img-note" style="font-size:11.5px;margin-top:5px;"></div>
             </div>
             <input name="title" required placeholder="Title *" maxlength="200" style="${inp()}">
             <div>
@@ -496,7 +552,7 @@
                 <button type="button" data-cmd="insertOrderedList" style="${rteBtn()};">1. List</button>
                 <button type="button" data-cmd="createLink" style="${rteBtn()};">🔗 Link</button>
               </div>
-              <div id="kt-rte" contenteditable="true" data-ph="Body (parents will see this)" style="border:1px solid #D1D5DB;border-radius:0 0 8px 8px;min-height:120px;max-height:280px;overflow:auto;padding:10px 12px;font-size:14px;line-height:1.5;color:#111827;outline:none;background:white;"></div>
+              <div id="kt-rte" contenteditable="true" data-ph="Body" style="border:1px solid #D1D5DB;border-radius:0 0 8px 8px;min-height:120px;max-height:280px;overflow:auto;padding:10px 12px;font-size:14px;line-height:1.5;color:#111827;outline:none;background:white;"></div>
             </div>
             <div style="display:flex;gap:16px;font-size:14px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_email" checked> 📧 Send email</label>
@@ -542,10 +598,14 @@
       const f = formEl;
       const statusEl = $('#kt-status', mount);
       const sendBtn = $('#kt-send', mount);
+      /* Still refuses to send an announcement with no destination — it just no longer
+         insists on a CENTRE when the user has already said "everywhere". Normally
+         preselected, so this only fires for a director with several centres who has
+         not picked one. */
       const scopeRaw = f.querySelector('[name="scope_id"]').value;
       if (!scopeRaw) {
         statusEl.style.color = '#DC2626';
-        statusEl.textContent = '✗ Choose who to send to first';
+        statusEl.textContent = '✗ Pick where this goes — a centre, or everywhere';
         return;
       }
       const [scope_type, scope_id] = scopeRaw.split(':');
@@ -562,17 +622,46 @@
         statusEl.textContent = '✗ Body is required';
         return;
       }
-      const data = {
-        scope_type,
-        scope_id: parseInt(scope_id, 10),
-        title: titleVal,
-        body: bodyHtml,
-        send_email: f.querySelector('[name="send_email"]').checked,
-        send_sms: f.querySelector('[name="send_sms"]').checked,
-        send_push: f.querySelector('[name="send_push"]').checked,
-      };
+      const audienceVal = (f.querySelector('[name="audience"]') || {}).value || 'parents';
+      const imgEl = f.querySelector('[name="image"]');
+      const imgFile = imgEl && imgEl.files && imgEl.files[0];
+
+      if (imgFile && imgFile.size > 5 * 1024 * 1024) {
+        statusEl.style.color = '#DC2626';
+        statusEl.textContent = '\u2717 That picture is over the 5 MB limit';
+        return;
+      }
+
       const sched = f.querySelector('[name="scheduled_at"]').value;
-      if (sched) data.scheduled_at = sched;
+
+      // A file forces multipart; without one, keep the JSON path exactly as it was.
+      let data;
+      if (imgFile) {
+        data = new FormData();
+        data.append('scope_type', scope_type);
+        data.append('scope_id', String(parseInt(scope_id, 10)));
+        data.append('audience', audienceVal);
+        data.append('title', titleVal);
+        data.append('body', bodyHtml);
+        // Booleans over multipart have to be '1'/'0' — PHP reads "false" as truthy.
+        data.append('send_email', f.querySelector('[name="send_email"]').checked ? '1' : '0');
+        data.append('send_sms', f.querySelector('[name="send_sms"]').checked ? '1' : '0');
+        data.append('send_push', f.querySelector('[name="send_push"]').checked ? '1' : '0');
+        if (sched) data.append('scheduled_at', sched);
+        data.append('image', imgFile, imgFile.name);
+      } else {
+        data = {
+          scope_type,
+          scope_id: parseInt(scope_id, 10),
+          audience: audienceVal,
+          title: titleVal,
+          body: bodyHtml,
+          send_email: f.querySelector('[name="send_email"]').checked,
+          send_sms: f.querySelector('[name="send_sms"]').checked,
+          send_push: f.querySelector('[name="send_push"]').checked,
+        };
+        if (sched) data.scheduled_at = sched;
+      }
 
       const orig = sendBtn ? sendBtn.textContent : 'Send';
       if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
@@ -593,6 +682,51 @@
     // form submission (type=submit) was silently dropped inside the app shell —
     // clicking Send fired no submit event at all — so "Send" did nothing with no
     // error. The form 'submit' handler stays as an Enter-key fallback.
+    /* One sentence covering both controls. Read separately, "All centres" and
+       "All educators" leave you working out the intersection yourself. */
+    function refreshAudienceHint() {
+      var audSel = formEl.querySelector('[name="audience"]');
+      var scopeSel = formEl.querySelector('[name="scope_id"]');
+      var hint = formEl.querySelector('#kt-aud-hint');
+      if (!audSel || !hint) return;
+      var scopeTxt = scopeSel && scopeSel.selectedIndex >= 0
+        ? (scopeSel.options[scopeSel.selectedIndex].textContent || '').trim() : '';
+      var whereBit = /all centre/i.test(scopeTxt) ? 'across the whole agency' : ('at ' + scopeTxt);
+      var who = {
+        parents: 'Every parent with a child',
+        educators: 'Every educator',
+        contractors: 'Everyone marked as a contractor',
+        admins: 'Every admin and director',
+        all: 'Everyone \u2014 parents, educators, contractors, admins',
+      }[audSel.value] || '';
+      hint.textContent = scopeTxt ? who + ' ' + whereBit + '.' : who + '.';
+    }
+    formEl.querySelector('[name="audience"]').addEventListener('change', refreshAudienceHint);
+    var scopeSelEl = formEl.querySelector('[name="scope_id"]');
+    if (scopeSelEl) scopeSelEl.addEventListener('change', refreshAudienceHint);
+    refreshAudienceHint();
+
+    /* Say the size up front. Being told after you press Send that the photo was too
+       big is the worst moment to find out. */
+    var imgInput = formEl.querySelector('[name="image"]');
+    if (imgInput) {
+      imgInput.addEventListener('change', function () {
+        var note = formEl.querySelector('#kt-img-note');
+        var f2 = imgInput.files && imgInput.files[0];
+        if (!f2) { note.textContent = ''; return; }
+        var kb = Math.round(f2.size / 1024);
+        if (f2.size > 5 * 1024 * 1024) {
+          note.style.color = '#B91C1C';
+          note.textContent = '\u2717 ' + f2.name + ' is ' + Math.round(kb / 1024 * 10) / 10
+            + ' MB \u2014 the limit is 5 MB.';
+          return;
+        }
+        note.style.color = '#475569';
+        note.textContent = '\ud83d\udcce ' + f2.name + ' (' + kb + ' KB)'
+          + (kb > 480 ? ' \u2014 will be resized for sending.' : '');
+      });
+    }
+
     $('#kt-send', mount).addEventListener('click', (e) => { e.preventDefault(); doSend(); });
     formEl.addEventListener('submit', (e) => { e.preventDefault(); doSend(); });
   }
