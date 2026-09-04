@@ -1579,6 +1579,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/admin/payroll', [\App\Http\Controllers\Api\PayrollController::class, 'summary']);
     });
 
+    /* CURRENCY AND COUNTRY ARE READ BY EVERYONE.
+
+       kt-money.js formats money on every screen and asks for the agency's currency on
+       boot, for whoever is signed in. Behind an admin role that meant an educator or a
+       parent 403'd on every page load — and the caller falls back to CAD, so an agency
+       billing in USD quietly showed its staff and families Canadian dollars.
+
+       A currency code, its symbol and the supported list are not privileged, and
+       resolveAgencyId() already confines the answer to the caller's own agency. The
+       PATCH counterparts stay in the admin group below, and both write methods call
+       assertAdmin() themselves as well. */
+    Route::get('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'show']);
+    Route::get('/admin/country',  [\App\Http\Controllers\Api\CurrencyController::class, 'showCountry']);
+
     // ---- Agency billing config (late-fee + SMS + locale) ----
     Route::middleware('role:agency_admin,platform_admin')->group(function () {
         Route::get  ('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'show']);
@@ -1591,9 +1605,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch ('/admin/fee-plans/{id}',   [\App\Http\Controllers\Api\FeePlanController::class, 'update']);
         Route::delete('/admin/fee-plans/{id}',   [\App\Http\Controllers\Api\FeePlanController::class, 'destroy']);
         Route::post  ('/admin/fee-plans/{id}/generate-invoices', [\App\Http\Controllers\Api\FeePlanController::class, 'generateInvoices']);
-        Route::get  ('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'show']);
+        /* The GETs live OUTSIDE this group — see below. Only the writes are
+           administrative. */
         Route::patch('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'update']);
-        Route::get  ('/admin/country', [\App\Http\Controllers\Api\CurrencyController::class, 'showCountry']);
         Route::patch('/admin/country', [\App\Http\Controllers\Api\CurrencyController::class, 'updateCountry']);
         Route::get('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'show']);
         Route::patch('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'update']);

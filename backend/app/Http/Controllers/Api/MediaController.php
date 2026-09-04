@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,13 @@ use Illuminate\Support\Str;
 
 final class MediaController extends Controller
 {
+    /* The ONE definition of who may see a child. This file used to carry a private
+       copy that knew only "guardian" and "staff of the family's home centre", so it
+       refused an educator a child who is in her room today under a shared-care
+       schedule — the whole photo upload failed because one of five tagged children
+       lived at another centre. */
+    use ResolvesCentreContext;
+
     public function upload(Request $request): JsonResponse
     {
         $request->validate([
@@ -34,14 +42,16 @@ final class MediaController extends Controller
         }
         // SECURITY (v22p94): the uploader must have access to EVERY tagged child.
         foreach ($childIds as $cid) {
-            abort_unless($this->canAccessChild($request->user(), (int) $cid), 403);
+            abort_unless($this->canAccessChildId($request->user(), (int) $cid), 403);
         }
 
         $roomId = $request->input('room_id');
         if (!$roomId) {
+            // The room they are in today — a photo belongs to the day it was taken.
             $roomId = DB::table('enrollments')
                 ->where('child_id', $childIds[0])
                 ->whereNull('end_date')
+                ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments'))
                 ->value('room_id');
         }
 
@@ -84,7 +94,7 @@ final class MediaController extends Controller
 
     public function forChild(Request $request, int $childId): JsonResponse
     {
-        if (!$this->canAccessChild($request->user(), $childId)) {
+        if (!$this->canAccessChildId($request->user(), $childId)) {
             abort(403);
         }
         $limit = min(50, (int) $request->input('limit', 30));
@@ -117,7 +127,7 @@ final class MediaController extends Controller
 
     public function observationsForChild(Request $request, int $childId): JsonResponse
     {
-        if (!$this->canAccessChild($request->user(), $childId)) {
+        if (!$this->canAccessChildId($request->user(), $childId)) {
             abort(403);
         }
         $observations = DB::table('observations')
@@ -152,7 +162,7 @@ final class MediaController extends Controller
             'media_id' => ['nullable', 'integer'],
             'observed_at' => ['nullable', 'date'],
         ]);
-        abort_unless($this->canAccessChild($request->user(), (int) $data['child_id']), 403); // v22p94
+        abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403); // v22p94
 
         $id = DB::table('observations')->insertGetId([
             'child_id' => $data['child_id'],
@@ -168,26 +178,6 @@ final class MediaController extends Controller
         ]);
 
         return response()->json(['id' => $id, 'message' => 'Observation recorded'], 201);
-    }
-
-    private function canAccessChild($user, int $childId): bool
-    {
-        $child = DB::table('children')->where('id', $childId)->first();
-        if (!$child) return false;
-
-        $isGuardian = DB::table('guardians')
-            ->where('user_id', $user->id)
-            ->where('family_id', $child->family_id)
-            ->exists();
-        if ($isGuardian) return true;
-
-        $family = DB::table('families')->where('id', $child->family_id)->first();
-        if (!$family) return false;
-        return DB::table('role_assignments')
-            ->where('user_id', $user->id)
-            ->where('active', true)
-            ->where('centre_id', $family->centre_id)
-            ->exists();
     }
 
     // ---------------------------------------------------------------- Authenticated media proxy
