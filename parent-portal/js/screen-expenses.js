@@ -103,8 +103,38 @@
     return sel;
   }
 
+  /* The newest render wins.
+
+     render() awaits two API calls before it paints, and a tab click calls render()
+     again -- which clears the container out from under the first one. Without this
+     the older promise resolves and paints into a node that is no longer in the
+     document: legal, silent, and it leaves the screen showing "Loading…" for good.
+     Every paint below checks it is still the current render first. */
+  var _seq = 0;
+
+  /* Suppliers and centres do not change while the screen is open, but every render
+     re-fetched both -- 24 tab clicks measured 87 requests. Held for the life of the
+     screen and dropped by anything that edits a supplier. */
+  var _refs = null;
+  function invalidateRefs() { _refs = null; }
+
+  function loadRefs() {
+    if (_refs) { return Promise.resolve(_refs); }
+    return Promise.all([
+      Api.get('/admin/suppliers').catch(function () { return { suppliers: [] }; }),
+      Api.get('/admin/centres').catch(function () { return { centres: [] }; }),
+    ]).then(function (res) {
+      _refs = {
+        suppliers: (res[0].suppliers || []).map(function (s) { return { id: s.id, name: s.name }; }),
+        centres: (res[1].centres || []).map(function (c) { return { id: c.id, name: c.name }; }),
+      };
+      return _refs;
+    });
+  }
+
   // ── main render ─────────────────────────────────────────────────────
   function render(container) {
+    var mySeq = ++_seq;
     Dom.clear(container);
     var wrap = Dom.el('div', { style: 'padding:24px;max-width:1120px;margin:0 auto;' });
     container.appendChild(wrap);
@@ -126,19 +156,20 @@
     wrap.appendChild(content);
     content.appendChild(Dom.el('div', { style: 'padding:40px;text-align:center;color:#64748B;' }, 'Loading…'));
 
-    // Load reference data (suppliers + centres) once, then draw the tab.
-    Promise.all([
-      Api.get('/admin/suppliers').catch(function () { return { suppliers: [] }; }),
-      Api.get('/admin/centres').catch(function () { return { centres: [] }; }),
-    ]).then(function (res) {
-      _suppliers = (res[0].suppliers || []).map(function (s) { return { id: s.id, name: s.name }; });
-      _centres = (res[1].centres || []).map(function (c) { return { id: c.id, name: c.name }; });
+    // Reference data (cached), then draw the tab.
+    loadRefs().then(function (refs) {
+      /* A newer render replaced us while this was in flight, or the screen is gone.
+         Painting now would fill a detached node and strand the user on "Loading…". */
+      if (mySeq !== _seq || !container.isConnected) { return; }
+      _suppliers = refs.suppliers;
+      _centres = refs.centres;
       Dom.clear(content);
       if (_tab === 'summary') return drawSummary(content, container);
       if (_tab === 'bills') return drawBills(content, container);
       if (_tab === 'pos') return drawPOs(content, container);
       if (_tab === 'suppliers') return drawSuppliers(content, container);
     }).catch(function (e) {
+      if (mySeq !== _seq || !container.isConnected) { return; }
       Dom.clear(content); content.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
     });
   }
@@ -493,9 +524,9 @@
       if (!name.value.trim()) { toast('Name is required', 'error'); return false; }
       var payload = { name: name.value.trim(), centre_id: cen.value ? parseInt(cen.value, 10) : null, contact_name: contact.value.trim() || null, email: email.value.trim() || null, phone: phone.value.trim() || null, address: addr.value.trim() || null, default_category: cat.value.trim() || null, tax_number: taxn.value.trim() || null, is_active: act.checked };
       var req = existing ? Api.patch('/admin/suppliers/' + existing.id, payload) : Api.post('/admin/suppliers', payload);
-      return req.then(function () { toast('Supplier saved'); render(container); }).catch(function (e) { toast(e.message || 'Save failed', 'error'); return false; });
+      return req.then(function () { toast('Supplier saved'); invalidateRefs(); render(container); }).catch(function (e) { toast(e.message || 'Save failed', 'error'); return false; });
     } }];
-    if (existing) actions.unshift({ label: 'Delete', style: 'btn-secondary', handler: async function () { if (!await KT.confirm('Delete supplier “' + existing.name + '”?')) return false; return Api.delete('/admin/suppliers/' + existing.id).then(function () { toast('Supplier deleted'); render(container); }).catch(function (e) { toast(e.message || 'Delete failed', 'error'); return false; }); } });
+    if (existing) actions.unshift({ label: 'Delete', style: 'btn-secondary', handler: async function () { if (!await KT.confirm('Delete supplier “' + existing.name + '”?')) return false; return Api.delete('/admin/suppliers/' + existing.id).then(function () { toast('Supplier deleted'); invalidateRefs(); render(container); }).catch(function (e) { toast(e.message || 'Delete failed', 'error'); return false; }); } });
     Shell.Modal.open({ title: existing ? 'Edit supplier' : 'New supplier', body: body, actions: actions });
   }
 
