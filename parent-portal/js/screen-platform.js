@@ -458,7 +458,7 @@
           sessionStorage.setItem('kt_active_agency_id', String(a.id));
           sessionStorage.setItem('kt_active_agency_name', a.name);
           window.location.hash = '#dashboard';
-          window.location.reload();
+          (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload());
         });
         actionsTd.appendChild(switchBtn);
         // v22p24: edit branding / plan / white-label
@@ -526,6 +526,13 @@
     modal.innerHTML =
       '<h3 style="margin:0 0 14px;font-size:18px;">' + (isEdit ? '✏️ Edit agency' : '🌐 Create new customer agency') + '</h3>' +
       (isEdit ? '' : '<p style="font-size:13px;color:#6B7280;margin:0 0 16px;">Provisions a brand-new tenant on the platform. Starts on a 30-day trial. You can invite the first agency_admin afterwards via the User management tab once you switch into the new agency.</p>') +
+      '<div id="ag-tabs" style="display:flex;gap:2px;border-bottom:1px solid #E5E7EB;margin:0 0 14px;flex-wrap:wrap;">' +
+        [['basics','Details'],['address','Address'],['email','Email'],['plan','Plan &amp; branding']].map(function (t, i) {
+          return '<button type="button" data-agtab="' + t[0] + '" style="border:none;background:none;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;'
+            + 'border-bottom:2px solid ' + (i === 0 ? '#1F6080' : 'transparent') + ';color:' + (i === 0 ? '#1F6080' : '#64748B') + ';">' + t[1] + '</button>';
+        }).join('') +
+      '</div>' +
+      '<div data-agpane="basics">' +
       '<div style="margin-bottom:12px;"><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Agency name *</label><input id="ag-name" type="text" placeholder="e.g. Tiny Steps Daycare" value="' + esc(v('name')) + '" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:14px;box-sizing:border-box;"></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">' +
         '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Contact email</label><input id="ag-email" type="email" value="' + esc(v('contact_email')) + '" style="' + agInput() + '"></div>' +
@@ -533,21 +540,40 @@
       '</div>' +
       (isEdit ?
         '<div data-kt-noautofill="1" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;">' +
-          '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Agency owner name</label><input id="ag-owner-name" type="text" placeholder="Owner full name" value="' + esc(v('owner_name')) + '" style="' + agInput() + '"></div>' +
+          '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Owner first name</label><input id="ag-owner-first" type="text" placeholder="First" value="' + esc(v('owner_first_name')) + '" style="' + agInput() + '"></div>' +
+          '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Owner last name</label><input id="ag-owner-last" type="text" placeholder="Last" value="' + esc(v('owner_last_name')) + '" style="' + agInput() + '"></div>' +
           '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Agency owner email</label><input id="ag-owner-email" type="email" placeholder="owner@agency.com" value="' + esc(v('owner_email')) + '" style="' + agInput() + '"></div>' +
         '</div>' +
         '<div style="font-size:11.5px;color:#94A3B8;margin-bottom:12px;">Leave blank to auto-detect from the agency admins (super admins are excluded).</div>'
         : '') +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">' +
-        '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan</label><select id="ag-plan" style="' + agInput() + 'background:white;">' +
+        '<div data-agmove="plan" hidden><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan</label><select id="ag-plan" style="' + agInput() + 'background:white;">' +
           [['starter','Starter — $49/mo'],['growth','Growth — $149/mo'],['enterprise','Enterprise — $349/mo']].map(function (p) { return '<option value="' + p[0] + '"' + (v('plan_code') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') +
         '</select></div>' +
-        '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Monthly</label><input id="ag-amount" type="number" min="0" step="1" placeholder="149" value="' + (existing && existing.plan_amount_cents ? Math.round(existing.plan_amount_cents / 100) : '') + '" style="' + agInput() + '"></div>' +
+        '<div data-agmove="plan" hidden><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Monthly <span id="ag-cur-label" style="font-weight:400;color:#6B7280;">(' + esc(v('plan_currency', 'CAD')) + ')</span></label>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<input id="ag-amount" type="number" min="0" step="1" placeholder="149" value="' + (existing && existing.plan_amount_cents ? Math.round(existing.plan_amount_cents / 100) : '') + '" style="' + agInput() + 'flex:1;">' +
+            '<select id="ag-currency" style="' + agInput() + 'background:white;width:auto;">' +
+              ['CAD','USD','GBP','AUD','NZD','EUR'].map(function (c) { return '<option value="' + c + '"' + (v('plan_currency','CAD') === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
+            '</select>' +
+          '</div></div>' +
+      '</div>' +
       '</div>' +
       // v22p92: agency details (address + residence country + default language)
-      '<div style="border-top:1px solid #E5E7EB;padding-top:12px;margin-bottom:12px;">' +
-        '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">🏢 Agency details</div>' +
-        '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Business address</label><textarea id="ag-address" rows="3" style="' + agInput() + 'font-family:inherit;resize:vertical;">' + esc(v('brand_address')) + '</textarea></div>' +
+      '<div data-agpane="address" hidden>' +
+        '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">🏢 Address &amp; registration</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Legal name</label><input id="ag-legal" type="text" placeholder="If different from the trading name" value="' + esc(v('legal_name')) + '" style="' + agInput() + '"></div>' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Website</label><input id="ag-website" type="text" placeholder="https://" value="' + esc(v('website')) + '" style="' + agInput() + '"></div>' +
+        '</div>' +
+        '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Address line 1</label><input id="ag-addr1" type="text" value="' + esc(v('address_line1')) + '" style="' + agInput() + '"></div>' +
+        '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Address line 2</label><input id="ag-addr2" type="text" placeholder="Unit, suite, floor" value="' + esc(v('address_line2')) + '" style="' + agInput() + '"></div>' +
+        '<div style="display:grid;grid-template-columns:2fr 1.4fr 1fr;gap:10px;">' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">City</label><input id="ag-city" type="text" value="' + esc(v('city')) + '" style="' + agInput() + '"></div>' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Province / State</label><input id="ag-province" type="text" value="' + esc(v('province')) + '" style="' + agInput() + '"></div>' +
+          '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Postal / ZIP</label><input id="ag-postal" type="text" value="' + esc(v('postal_code')) + '" style="' + agInput() + '"></div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#6B7280;margin:-2px 0 10px;">Printed on invoices and receipts. The holiday calendar uses the country below.</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
           '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Country</label><select id="ag-country" style="' + agInput() + 'background:white;">' +
             [['CA','🇨🇦 Canada'],['US','🇺🇸 United States'],['GB','🇬🇧 United Kingdom'],['AU','🇦🇺 Australia'],['NZ','🇳🇿 New Zealand'],['IE','🇮🇪 Ireland']].map(function (c) { return '<option value="' + c[0] + '"' + (v('country') === c[0] ? ' selected' : '') + '>' + c[1] + '</option>'; }).join('') +
@@ -557,8 +583,15 @@
           '</select></div>' +
         '</div>' +
       '</div>' +
+      '</div>' +
       // ── White-label section ────────────────────────────────────────
-      '<div style="border-top:1px solid #E5E7EB;padding-top:14px;margin-bottom:12px;">' +
+      '<div data-agpane="plan" hidden>' +
+
+      '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">💳 Plan &amp; pricing</div>' +
+      '<div id="ag-plan-slot" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;"></div>' +
+
+
+      '<div style="margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
           '<div><div style="font-size:14px;font-weight:700;">🎨 White-label branding</div>' +
             '<div style="font-size:11px;color:#6B7280;">Chargeable add-on. When enabled, the agency shows its own logo + colours and the "Powered by Kiddietrac" footer is hidden. Price baked into the monthly amount above (suggest +$50/mo).</div>' +
@@ -569,6 +602,14 @@
         '</div>' +
         // v22p25: stay fully visible on Edit so the fields are obvious; checkbox alone signals state.
         '<div id="ag-wl-fields" style="margin-top:10px;">' +
+          '<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;">' +
+            '<div id="ag-logo-preview" style="width:74px;height:74px;flex:none;border:1px solid #E5E7EB;border-radius:10px;background:#fff center/contain no-repeat' + (v('brand_logo_url') ? ";background-image:url('" + esc(v('brand_logo_url')) + "')" : '') + ';display:flex;align-items:center;justify-content:center;font-size:10px;color:#94A3B8;text-align:center;">' + (v('brand_logo_url') ? '' : 'No logo') + '</div>' +
+            '<div style="flex:1;">' +
+              '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Upload a logo</label>' +
+              '<input id="ag-logo-file" type="file" accept="image/png,image/jpeg,image/webp" style="font-size:12px;width:100%;">' +
+              '<div id="ag-logo-msg" style="font-size:11px;color:#6B7280;margin-top:4px;">PNG, JPG or WebP, up to 2 MB. Uploading fills the URL below.</div>' +
+            '</div>' +
+          '</div>' +
           '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">Logo URL (PNG/SVG, max 200×60)</label>' +
             '<input id="ag-logo" type="text" placeholder="https://customer.com/logo.png" value="' + esc(v('brand_logo_url')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:ui-monospace,monospace;"></div>' +
           '<div style="display:grid;grid-template-columns:120px 1fr;gap:10px;margin-bottom:10px;">' +
@@ -578,10 +619,12 @@
         '</div>' +
       '</div>' +
 
+      '</div>' +
       // v22p36 ── Email settings ─────────────────────────────────────
       // data-kt-noautofill: stop the browser filling the SMTP username/from with
       // the signed-in user's saved email (looked like a mailbox was configured
       // when nothing was entered).
+      '<div data-agpane="email" hidden>' +
       '<div data-kt-noautofill="1" style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:14px 16px;margin-bottom:16px;">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
           '<div><div style="font-size:14px;font-weight:700;">✉️ Email settings (per-agency SMTP)</div>' +
@@ -612,6 +655,15 @@
             '<input id="ag-from-name" type="text" placeholder="' + esc(v('name', 'Agency')) + '" value="' + esc(v('email_from_name')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
         '</div>' +
       '</div>' +
+        '<div style="border-top:1px solid #BBF7D0;margin-top:12px;padding-top:12px;">' +
+          '<div style="font-size:12px;color:#475569;margin-bottom:6px;">Save first, then send yourself a message through these settings to prove they work.</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+            '<input id="ag-test-to" type="email" placeholder="you@example.com" value="' + esc(v('contact_email')) + '" style="' + agInput() + 'flex:1;min-width:200px;">' +
+            '<button type="button" id="ag-test-send" style="background:white;color:#166534;border:1px solid #16A34A;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">✉️ Send test</button>' +
+          '</div>' +
+          '<div id="ag-test-msg" style="font-size:12px;margin-top:6px;min-height:16px;"></div>' +
+        '</div>' +
+      '</div>' +
       '<div id="ag-err" style="color:#DC2626;font-size:13px;min-height:18px;margin-bottom:8px;"></div>' +
       '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
         '<button id="ag-cancel" style="background:white;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>' +
@@ -625,6 +677,108 @@
     // v22p25: section stays fully visible — checkbox alone signals on/off state.
     var wlBox = modal.querySelector('#ag-wl');
 
+    /* Panes are all in the DOM and merely hidden, so the one Save below still reads
+       every field. Building a pane when its tab is opened would post only what the user
+       happened to look at. */
+    modal.querySelectorAll('[data-agtab]').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var key = tab.getAttribute('data-agtab');
+        modal.querySelectorAll('[data-agtab]').forEach(function (t) {
+          var on = t === tab;
+          t.style.borderBottomColor = on ? '#1F6080' : 'transparent';
+          t.style.color = on ? '#1F6080' : '#64748B';
+        });
+        modal.querySelectorAll('[data-agpane]').forEach(function (p) {
+          p.hidden = p.getAttribute('data-agpane') !== key;
+        });
+      });
+    });
+
+    /* Move the plan fields into the Plan tab. Moved, not copied: two inputs with the
+       same id would leave the save reading whichever came first in the DOM, which is
+       rarely the one the user typed into. */
+    (function () {
+      var slot = modal.querySelector('#ag-plan-slot');
+      if (!slot) return;
+      modal.querySelectorAll('[data-agmove="plan"]').forEach(function (el) {
+        el.hidden = false;
+        slot.appendChild(el);
+      });
+    })();
+
+    /* Upload a logo for THIS agency — the endpoint defaults to the caller's own agency, so
+       the id has to be explicit or a super admin brands the wrong tenant. */
+    (function () {
+      var file = modal.querySelector('#ag-logo-file');
+      var msg = modal.querySelector('#ag-logo-msg');
+      var prev = modal.querySelector('#ag-logo-preview');
+      var urlBox = modal.querySelector('#ag-logo');
+      if (!file || !isEdit) {
+        if (file) { file.disabled = true; if (msg) msg.textContent = 'Create the agency first, then upload its logo.'; }
+        return;
+      }
+      file.addEventListener('change', async function () {
+        var f = file.files && file.files[0];
+        if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { msg.style.color = '#BE4038'; msg.textContent = 'That file is over 2 MB.'; return; }
+        msg.style.color = '#6B7280';
+        msg.textContent = 'Uploading\u2026';
+        try {
+          var fd = new FormData();
+          fd.append('logo', f);
+          fd.append('kind', 'logo');
+          fd.append('agency_id', String(existing.id));
+          /* Built inline: this file defines no apiBase()/token() helpers — it only
+             takes Api/Dom/Shell off window.KT. Mirrors screen-admin-branding.js, which
+             posts to this same endpoint. */
+          var base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+          var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+          // No Content-Type header: the browser must set the multipart boundary itself.
+          var headers = { Authorization: 'Bearer ' + tok };
+          var active = sessionStorage.getItem('kt_active_agency_id');
+          if (active) headers['X-Active-Agency-Id'] = active;
+          var res = await fetch(base + '/admin/branding/logo', { method: 'POST', headers: headers, body: fd });
+          var j = await res.json().catch(function () { return {}; });
+          if (!res.ok) throw new Error(j.message || ('Upload failed (' + res.status + ')'));
+          // Show what the SERVER stored, never a local preview — otherwise a failed
+          // upload still looks like it worked.
+          if (urlBox) urlBox.value = j.url || '';
+          if (prev) { prev.textContent = ''; prev.style.backgroundImage = "url('" + (j.url || '') + "')"; }
+          msg.style.color = '#166534';
+          msg.textContent = 'Uploaded. Save to apply it everywhere.';
+        } catch (e) {
+          msg.style.color = '#BE4038';
+          msg.textContent = e.message || 'Could not upload.';
+        }
+      });
+    })();
+
+    /* Send a test through the agency's OWN mail settings. It tests what is stored, which
+       is why it asks you to save first rather than pretending to test unsaved boxes. */
+    (function () {
+      var btn = modal.querySelector('#ag-test-send');
+      var out = modal.querySelector('#ag-test-msg');
+      var to = modal.querySelector('#ag-test-to');
+      if (!btn) return;
+      if (!isEdit) { btn.disabled = true; btn.style.opacity = '.5'; out.textContent = 'Create the agency first.'; return; }
+      btn.addEventListener('click', async function () {
+        var addr = (to.value || '').trim();
+        if (!addr) { out.style.color = '#BE4038'; out.textContent = 'Enter an address to send to.'; return; }
+        btn.disabled = true;
+        out.style.color = '#6B7280';
+        out.textContent = 'Sending\u2026';
+        try {
+          var r = await Api.post('/admin/agency-mail/test', { to: addr, agency_id: existing.id });
+          out.style.color = r && r.ok === false ? '#B45309' : '#166534';
+          out.textContent = (r && r.message) || 'Sent \u2014 check that inbox.';
+        } catch (e) {
+          out.style.color = '#BE4038';
+          out.textContent = e.message || 'Could not send.';
+        }
+        btn.disabled = false;
+      });
+    })();
+
     modal.querySelector('#ag-save').addEventListener('click', async function () {
       // v22p36: collect per-agency email settings too. Password field empty =
       // 'keep existing' (server unsets the key in that case).
@@ -634,11 +788,21 @@
         name: modal.querySelector('#ag-name').value.trim(),
         contact_email: modal.querySelector('#ag-email').value.trim() || null,
         contact_phone: modal.querySelector('#ag-phone').value.trim() || null,
-        owner_name: (modal.querySelector('#ag-owner-name') ? modal.querySelector('#ag-owner-name').value.trim() : '') || null,
+        owner_first_name: (modal.querySelector('#ag-owner-first') ? modal.querySelector('#ag-owner-first').value.trim() : '') || null,
+        owner_last_name: (modal.querySelector('#ag-owner-last') ? modal.querySelector('#ag-owner-last').value.trim() : '') || null,
+        plan_currency: (modal.querySelector('#ag-currency') ? modal.querySelector('#ag-currency').value : null) || null,
         owner_email: (modal.querySelector('#ag-owner-email') ? modal.querySelector('#ag-owner-email').value.trim() : '') || null,
         plan_code: modal.querySelector('#ag-plan').value.trim() || null,
         plan_amount_cents: (function () { var n = parseInt(modal.querySelector('#ag-amount').value, 10); return isNaN(n) ? 0 : n * 100; })(),
-        brand_address: modal.querySelector('#ag-address').value.trim() || null,
+        /* The parts. The server rebuilds settings.brand_address from these, so the
+           invoice PDF and branding endpoint keep reading the string they always have. */
+        address_line1: modal.querySelector('#ag-addr1').value.trim() || null,
+        address_line2: modal.querySelector('#ag-addr2').value.trim() || null,
+        city: modal.querySelector('#ag-city').value.trim() || null,
+        province: modal.querySelector('#ag-province').value.trim() || null,
+        postal_code: modal.querySelector('#ag-postal').value.trim() || null,
+        legal_name: modal.querySelector('#ag-legal').value.trim() || null,
+        website: modal.querySelector('#ag-website').value.trim() || null,
         country: modal.querySelector('#ag-country').value || null,
         default_locale: modal.querySelector('#ag-locale').value || null,
         white_label_enabled: wlBox.checked,
@@ -736,7 +900,7 @@
           row('Agency name', inp('w-name', 'e.g. Tiny Steps Childcare'), true) +
           row('Address line 1', inp('w-addr1', '123 Main St'), true) +
           row('Address line 2', inp('w-addr2', 'Unit 4 (optional)')) +
-          '<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;">' +
+          '<div class="kt-addr-row" style="display:grid;gap:10px;">' +
             '<div>' + row('City', inp('w-city', 'Toronto'), true) + '</div>' +
             '<div>' + row('Province', '<select id="w-prov" style="width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;background:white;">' + provOpts + '</select>', true) + '</div>' +
             '<div>' + row('Postal code', inp('w-postal', 'M5V 1A1'), true) + '</div>' +
@@ -1048,26 +1212,36 @@
   }
   function elToast(icon, title, msg, colour) { try { if (window.KT && KT.toast) KT.toast(icon, title, msg, colour || '#0E7C90'); } catch (e) {} }
 
-  function renderEmailLogScreen(container) {
+  function renderEmailLogScreen(container, opts) {
+    // opts.status pre-filters the screen. The "Email errors" tab passes 'problems',
+    // which the API expands to bounced + failed + deferred + suppressed.
+    opts = opts || {};
     // Search, status and date filters all run SERVER-side (see PlatformController::
     // emailLogs). The screen used to pull a flat window of the newest 300 rows and
     // rely on a client-side filter box, which meant anything older than a day or two
     // of sending simply could not be found — it looked like the email had never been
     // logged. Rows are paged in on demand instead, and the count says how many
     // matches exist in total so nothing is silently cut off.
-    var state = { q: '', status: '', from: '', to: '', offset: 0, limit: 100, total: 0, rows: [] };
-    var timer = null;
+    var state = { q: '', status: (opts.status || ''), from: '', to: '', offset: 0, limit: 100, total: 0, rows: [] };
+    var errorsMode = state.status === 'problems';
 
     var inp = 'padding:8px 11px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box;font-family:inherit;';
     container.innerHTML = '<div style="margin:0 auto;">'
-      + '<div style="margin:2px 2px 14px;"><h2 style="margin:0;font-size:20px;color:#0F172A;">📧 Email log</h2>'
-      + '<div style="font-size:12.5px;color:#64748B;margin-top:3px;line-height:1.5;">Every message the system sent, with a date &amp; time stamp in your agency’s timezone. Search covers every email ever logged — not just the ones on screen. Use the row actions to open, download or resend. (Delivery still depends on DNS/SPF — this confirms the send + open tracking.)</div></div>'
+      + (errorsMode
+          ? '<div style="margin:2px 2px 14px;"><h2 style="margin:0;font-size:20px;color:#0F172A;">⚠️ Email errors</h2>'
+            + '<div style="font-size:12.5px;color:#64748B;margin-top:3px;line-height:1.5;">Messages that did <strong>not</strong> reach the person they were addressed to — bounced, failed, deferred, or held back by your own delivery settings. A suppressed message is listed here because from the family’s side it is the same event: they were not told. Use Resend once the address or the setting is fixed.</div></div>'
+          : '<div style="margin:2px 2px 14px;"><h2 style="margin:0;font-size:20px;color:#0F172A;">📧 Email log</h2>'
+            + '<div style="font-size:12.5px;color:#64748B;margin-top:3px;line-height:1.5;">Every message the system sent, with a date &amp; time stamp in your agency’s timezone. Search covers every email ever logged — not just the ones on screen. Use the row actions to open, download or resend. (Delivery still depends on DNS/SPF — this confirms the send + open tracking.)</div></div>')
       + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:0 2px 12px;">'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;flex:1;min-width:240px;max-width:380px;">Search'
           + '<input id="elf-q" type="search" placeholder="Name, email address or subject…" style="' + inp + 'width:100%;margin-top:4px;font-weight:400;text-transform:none;"></label>'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Status'
           + '<select id="elf-status" style="' + inp + 'display:block;margin-top:4px;font-weight:400;text-transform:none;">'
-            + '<option value="">All</option><option value="sent">Sent</option><option value="failed">Failed</option><option value="suppressed">Suppressed</option></select></label>'
+            + '<option value="">All</option>'
+            + '<option value="problems">⚠️ Did not arrive</option>'
+            + '<option value="sent">Sent</option><option value="bounced">Bounced</option>'
+            + '<option value="failed">Failed</option><option value="deferred">Deferred</option>'
+            + '<option value="suppressed">Suppressed</option></select></label>'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">From'
           + '<input id="elf-from" type="date" style="' + inp + 'display:block;margin-top:4px;font-weight:400;"></label>'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">To'
@@ -1089,7 +1263,9 @@
 
     function statusPill(st) {
       if (!st) return '';
-      var map = { sent: ['#16A34A', '#DCFCE7'], failed: ['#B91C1C', '#FEE2E2'], suppressed: ['#B45309', '#FEF3C7'] };
+      var map = { sent: ['#16A34A', '#DCFCE7'], failed: ['#B91C1C', '#FEE2E2'],
+                  bounced: ['#B91C1C', '#FEE2E2'], deferred: ['#8A5610', '#FEF3C7'],
+                  suppressed: ['#B45309', '#FEF3C7'] };
       var c = map[st] || ['#475569', '#F1F5F9'];
       return '<span style="font-size:10.5px;font-weight:800;color:' + c[0] + ';background:' + c[1] + ';border-radius:5px;padding:1px 6px;text-transform:uppercase;">' + esc(st) + '</span>';
     }
@@ -1180,11 +1356,11 @@
       }).catch(function (e) { body.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message || 'error') + '</div>'; });
     }
 
-    function schedule() { clearTimeout(timer); timer = setTimeout(function () { load(false); }, 350); }
-
     var qEl = container.querySelector('#elf-q');
-    qEl.addEventListener('input', function () { state.q = qEl.value.trim(); schedule(); });
-    qEl.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { clearTimeout(timer); state.q = qEl.value.trim(); load(false); } });
+    /* The Enter path was always here; what is gone is the keystroke path that sat
+       beside it and re-queried the email log while the person was still typing. Its
+       debounce (schedule() and its timer) went with it — nothing else used them. */
+    KT.onSearchCommit(qEl, function () { state.q = qEl.value.trim(); load(false); });
     container.querySelector('#elf-status').addEventListener('change', function () { state.status = this.value; load(false); });
     container.querySelector('#elf-from').addEventListener('change', function () { state.from = this.value; load(false); });
     container.querySelector('#elf-to').addEventListener('change', function () { state.to = this.value; load(false); });

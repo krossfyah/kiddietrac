@@ -468,36 +468,42 @@
       paintBody(container, wrap);
     });
 
-    /* SEARCH REWRITES ONLY THE OPTIONS.
+    /* NARROWING IS LIVE; OPENING A LEDGER IS NOT.
 
-       paintPicker() rebuilds this whole bar with innerHTML; running it on a keystroke
-       would destroy the input being typed into and drop the caret. So this path
-       touches the <select> and nothing else, and the 350ms pause keeps a surname from
-       firing one request and four chart redraws per letter. */
+       Typing still shortens the account dropdown on every keystroke — that is what
+       helps you aim, it costs nothing, and it changes only the contents of a closed
+       <select>, not the page. What used to happen 350ms after each pause, and no
+       longer does, is the ledger underneath swapping itself out from under you.
+
+       Only the options are rewritten here: paintPicker() rebuilds this whole bar with
+       innerHTML, and doing that on a keystroke would destroy the input being typed
+       into and drop the caret. */
     var search = host.querySelector('#al-psearch');
-    var searchTimer = null;
     search.addEventListener('input', function () {
+      state.pickSearch = search.value;
+      host.querySelector('#al-pacct').innerHTML = accountOptionsHtml();
+    });
+
+    /* Enter, blur, or the Search button beside it opens the top match. */
+    var commitSearch = KT.onSearchCommit(search, function () {
+      if (!host.isConnected) { return; }
       state.pickSearch = search.value;
       var sel = host.querySelector('#al-pacct');
       sel.innerHTML = accountOptionsHtml();
-
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(function () {
-        if (!host.isConnected) { return; }
-        /* Leave the selection alone while it still matches — only jump when what is
-           on screen has been filtered away, which is the rule the role filter uses. */
-        var still = pickable().some(function (a) { return String(a.user_id) === String(state.viewing); });
-        if (still) { return; }
-        var first = pickable()[0];
-        if (!first) { return; }
-        state.viewing = first.user_id;
-        state.viewingName = first.name;
-        state.histFilter = 'all';
-        state.mode = 'account';
-        sel.innerHTML = accountOptionsHtml();
-        paintBody(container, wrap);
-      }, 350);
+      /* Leave the selection alone while it still matches — only move when what is on
+         screen has been filtered away, which is the rule the role filter uses. */
+      var still = pickable().some(function (a) { return String(a.user_id) === String(state.viewing); });
+      if (still) { return; }
+      var first = pickable()[0];
+      if (!first) { return; }
+      state.viewing = first.user_id;
+      state.viewingName = first.name;
+      state.histFilter = 'all';
+      state.mode = 'account';
+      sel.innerHTML = accountOptionsHtml();
+      paintBody(container, wrap);
     });
+    search.insertAdjacentElement('afterend', KT.searchButton(commitSearch));
 
     var acct = host.querySelector('#al-pacct');
     acct.addEventListener('change', function () {
@@ -676,13 +682,16 @@
   }
 
   function wire(container, body) {
+    /* Committed, not streamed — this one re-queries the server, so a debounce still
+       meant a request per pause in typing and the table rebuilding underneath. */
     var s = body.querySelector('#al-search');
     if (s) {
-      var t = null;
-      s.addEventListener('input', function () {
-        clearTimeout(t);
-        t = setTimeout(function () { state.search = s.value.trim(); state.page = 1; load(container); }, 280);
+      var commit = KT.onSearchCommit(s, function (v) {
+        state.search = String(v).trim();
+        state.page = 1;
+        load(container);
       });
+      s.insertAdjacentElement('afterend', KT.searchButton(commit));
     }
     var r = body.querySelector('#al-role');
     if (r) r.addEventListener('change', function () { state.role = r.value; state.page = 1; load(container); });
@@ -830,8 +839,41 @@
       kpi('Overdue', money(sm.overdue), Number(sm.overdue) > 0.005 ? C.bad : C.faint,
         Number(sm.overdue) > 0.005 ? 'past the due date' : 'nothing late')
     ];
+    /* WHAT IS DUE BEFORE THE MONTH ENDS.
+
+       "Scheduled" totals everything still to come, which for a payment plan can run to
+       next spring. Useful, but not the question anyone asks first — "what lands before
+       the end of this month" is, and the answer was already in the data.
+
+       Overdue instalments are counted separately below, never folded in here: money
+       missed in August is not upcoming in September, and adding the two would bury the
+       one that needs chasing inside a figure that reads like a forecast. */
+    var monthEnd = new Date();
+    monthEnd = new Date(monthEnd.getFullYear(), monthEnd.getMonth() + 1, 0);
+    var monthEndYmd = monthEnd.getFullYear() + '-'
+      + String(monthEnd.getMonth() + 1).padStart(2, '0') + '-'
+      + String(monthEnd.getDate()).padStart(2, '0');
+    var todayYmd = sm.as_at;
+
+    var dueThisMonth = 0, dueCount = 0, missed = 0, missedCount = 0;
+    upcoming.forEach(function (u) {
+      var d = ymd(u.date);
+      if (!d) { return; }
+      if (u.overdue) { missed += Number(u.amount) || 0; missedCount++; return; }
+      if (d >= todayYmd && d <= monthEndYmd) { dueThisMonth += Number(u.amount) || 0; dueCount++; }
+    });
+
+    tiles.push(kpi('Due this month', money(dueThisMonth),
+      dueCount ? C.accent : C.faint,
+      dueCount ? dueCount + ' payment(s) by ' + fmtDate(monthEndYmd) : 'nothing left this month'));
+
+    if (missedCount) {
+      tiles.push(kpi('Missed', money(missed), C.bad,
+        missedCount + (missedCount === 1 ? ' payment past due' : ' payments past due')));
+    }
+
     if (Number(sm.upcoming_total) > 0.005 || sm.upcoming_count) {
-      tiles.push(kpi('Scheduled', money(sm.upcoming_total), C.accent, sm.upcoming_count + ' to come'));
+      tiles.push(kpi('Scheduled in total', money(sm.upcoming_total), C.muted, sm.upcoming_count + ' to come'));
     }
     if (Number(sm.refunded) > 0.005) tiles.push(kpi('Refunded', money(sm.refunded), C.warn, 'returned to them'));
     if (Number(sm.voided) > 0.005) tiles.push(kpi('Voided', money(sm.voided), C.faint, 'issued then withdrawn'));

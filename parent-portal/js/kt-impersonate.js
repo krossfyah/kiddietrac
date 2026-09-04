@@ -88,8 +88,9 @@
 
     var q = ov.querySelector('#kt-imp-q');
     var list = ov.querySelector('#kt-imp-list');
-    var timer = null;
-    q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(load, 250); });
+    /* Committed, not streamed: this asks /platform/directory, so the debounce still
+       meant a request per pause in typing and the list rebuilding underneath. */
+    KT.onSearchCommit(q, function () { load(); });
 
     function load() {
       list.innerHTML = '<div style="padding:22px;text-align:center;color:#64748B;font-size:13px;">Loading…</div>';

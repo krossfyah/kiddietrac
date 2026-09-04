@@ -282,12 +282,9 @@
     // ── wiring ──────────────────────────────────────────────────────────
     newBtn.addEventListener('click', function () { openEditor(null); });
 
-    var timer = null;
-    qEl.addEventListener('input', function () {
-      // Search as they type, but not on every keystroke.
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(function () { state.q = qEl.value.trim(); loadList(); }, 280);
-    });
+    /* Committed, not streamed. "Not on every keystroke" was still every PAUSE in
+       typing, which reloads the article list while someone is mid-word. */
+    KT.onSearchCommit(qEl, function () { state.q = qEl.value.trim(); loadList(); });
     catEl.addEventListener('change', function () { state.category = catEl.value; loadList(); });
 
     loadList();
