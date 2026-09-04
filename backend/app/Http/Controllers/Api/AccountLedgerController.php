@@ -303,7 +303,29 @@ class AccountLedgerController extends Controller
         $agencyId = (int) $this->resolveAgencyId($request);
         abort_unless($agencyId, 403);
 
-        return response()->json($this->statement($agencyId, $userId));
+        $w = $this->window($request);
+
+        return response()->json($this->statement($agencyId, $userId, $w['from'], $w['to']));
+    }
+
+    /**
+     * The requested statement window, or nulls for all time.
+     *
+     * Dates only — a statement period is a range of DAYS, and accepting a time here
+     * would invite the timezone confusion the rest of this file works to avoid. Given
+     * backwards, they are swapped rather than returning an empty document.
+     */
+    private function window(Request $request): array
+    {
+        $v = $request->validate([
+            'from' => 'nullable|date_format:Y-m-d',
+            'to'   => 'nullable|date_format:Y-m-d',
+        ]);
+        $from = $v['from'] ?? null;
+        $to   = $v['to'] ?? null;
+        if ($from && $to && $from > $to) { [$from, $to] = [$to, $from]; }
+
+        return ['from' => $from, 'to' => $to];
     }
 
     /**
@@ -316,7 +338,8 @@ class AccountLedgerController extends Controller
         $agencyId = (int) $this->resolveAgencyId($request);
         abort_unless($agencyId, 403);
 
-        $st = $this->statement($agencyId, $userId);
+        $w = $this->window($request);
+        $st = $this->statement($agencyId, $userId, $w['from'], $w['to']);
         $pdf = app(\App\Services\AccountStatementPdf::class);
 
         return response($pdf->render($st), 200, [
@@ -346,7 +369,7 @@ class AccountLedgerController extends Controller
        agree), and the credit line is whatever the difference is, described honestly
        as settled at source when that is what happened.
        ═══════════════════════════════════════════════════════════════════════ */
-    private function statement(int $agencyId, int $userId): array
+    private function statement(int $agencyId, int $userId, ?string $from = null, ?string $to = null): array
     {
         $user = DB::table('users')->where('id', $userId)
             ->first(['id', 'first_name', 'last_name', 'email', 'phone', 'status', 'created_at']);
@@ -588,6 +611,50 @@ class AccountLedgerController extends Controller
             }
         }
 
+        /* THE PERIOD, applied after the balance has been walked over everything.
+
+           A statement for a range is an opening balance, the movements, and a closing
+           balance — not a filtered list. Clipping first would restart the running
+           balance from zero and print a wrong figure on every line, and would hide
+           whether the period even started clean. */
+        $period = null;
+        if ($from || $to) {
+            $fromYmd = $from ? substr($from, 0, 10) : null;
+            $toYmd   = $to ? substr($to, 0, 10) : null;
+
+            $opening = 0.0;
+            $closing = 0.0;
+            $kept = [];
+            foreach ($entries as $e) {
+                $day = substr((string) ($e['date'] ?? ''), 0, 10);
+                $before = $fromYmd && $day < $fromYmd;
+                $after  = $toYmd && $day > $toYmd;
+
+                if ($before) {
+                    // The balance as it stood going INTO the window.
+                    if (isset($e['running_balance'])) { $opening = (float) $e['running_balance']; }
+                    continue;
+                }
+                if ($after) { continue; }
+                if (isset($e['running_balance'])) { $closing = (float) $e['running_balance']; }
+                $kept[] = $e;
+            }
+            // An empty window closes exactly where it opened.
+            if (! $kept) { $closing = $opening; }
+
+            $entries = $kept;
+            $period = [
+                'from'    => $fromYmd,
+                'to'      => $toYmd,
+                'opening' => round($opening, 2),
+                'closing' => round($closing, 2),
+                'movements' => count($kept),
+                /* Said explicitly so a document for a past window can never be read as
+                   the account's position today. */
+                'ends_in_past' => $toYmd ? ($toYmd < $today->toDateString()) : false,
+            ];
+        }
+
         $lastReceipt = null;
         foreach (array_reverse($entries) as $e) {
             if ($e['kind'] === 'receipt' && ($e['credit'] ?? 0) > 0.005) {
@@ -684,8 +751,13 @@ class AccountLedgerController extends Controller
                 'next_due'       => $nextUp,
                 'as_at'          => $today->toDateString(),
             ],
+            /* Deliberately NOT clipped to the period: both answer a question about
+               now — what is owed today, what falls due next — and a historical window
+               would turn them into something that looks like a statement and answers
+               nothing. */
             'open_items' => $openItems,
             'upcoming'   => $upcoming,
+            'period'     => $period,
             'entries'    => $entries,
         ];
     }
@@ -758,9 +830,17 @@ class AccountLedgerController extends Controller
             'to'      => 'required|email|max:180',
             'message' => 'nullable|string|max:800',
             'copy_me' => 'nullable|boolean',
+            'from'    => 'nullable|date_format:Y-m-d',
+            'to_date' => 'nullable|date_format:Y-m-d',
         ]);
 
-        $st = $this->statement($agencyId, $userId);
+        /* `to` is already the recipient here, so the window's end arrives as `to_date`
+           rather than quietly shadowing an address with a date. */
+        $wFrom = $data['from'] ?? null;
+        $wTo   = $data['to_date'] ?? null;
+        if ($wFrom && $wTo && $wFrom > $wTo) { [$wFrom, $wTo] = [$wTo, $wFrom]; }
+
+        $st = $this->statement($agencyId, $userId, $wFrom, $wTo);
         $acct = $st['account'];
         $to = $data['to'];
 
@@ -855,6 +935,7 @@ class AccountLedgerController extends Controller
                 'entity_type' => 'user',
                 'entity_id'   => $userId,
                 'payload'     => json_encode([
+                    'period'      => $st['period'] ? ($st['period']['from'] . ' to ' . $st['period']['to']) : 'all time',
                     'to'          => $to,
                     'cc'          => $copyTo,
                     'account'     => $acct['name'],

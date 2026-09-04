@@ -51,8 +51,16 @@ final class AccountStatementPdf
     public function filename(array $st): string
     {
         $who = preg_replace('/[^A-Za-z0-9]+/', '-', (string) ($st['account']['name'] ?? 'account'));
+        $who = strtolower(trim((string) $who, '-'));
 
-        return trim('statement-' . strtolower(trim((string) $who, '-')) . '-' . ($st['summary']['as_at'] ?? ''), '-') . '.pdf';
+        /* The period is in the name: four downloads called statement-hailee-harnack is
+           a filing problem of its own. */
+        $p = $st['period'] ?? null;
+        $when = $p
+            ? (($p['from'] ?: 'start') . '-to-' . ($p['to'] ?: 'today'))
+            : (string) ($st['summary']['as_at'] ?? '');
+
+        return trim('statement-' . $who . '-' . $when, '-') . '.pdf';
     }
 
     // ── rendering ───────────────────────────────────────────────────────
@@ -153,6 +161,11 @@ final class AccountStatementPdf
             . 'Generated ' . $e(Carbon::now($tz)->format('j M Y, g:ia')) . ' · KiddieTrac'
             . '</div>';
 
+        $p = $st['period'] ?? null;
+        $periodLabel = $p
+            ? (($p['from'] ? $d($p['from']) : 'the beginning') . '  to  ' . ($p['to'] ? $d($p['to']) : $d($s['as_at'])))
+            : null;
+
         // ── the letterhead: who issued this, and when ───────────────────
         $body = '<table style="margin-top:2px;"><tr>'
             . '<td style="border:0;padding:0;width:64%;">'
@@ -161,8 +174,9 @@ final class AccountStatementPdf
             . ($agencyMeta ? '<div class="lh" style="margin-top:3px;">' . implode('<br>', $agencyMeta) . '</div>' : '')
             . '</td>'
             . '<td style="border:0;padding:0;width:36%;text-align:right;vertical-align:top;">'
-            . '<div class="label">Statement date</div>'
-            . '<div style="font-size:11pt;font-weight:bold;color:#0F172A;">' . $e($d($s['as_at'])) . '</div>'
+            . '<div class="label">' . ($periodLabel ? 'Statement period' : 'Statement date') . '</div>'
+            . '<div style="font-size:' . ($periodLabel ? '9.5pt' : '11pt') . ';font-weight:bold;color:#0F172A;">'
+            . $e($periodLabel ?: $d($s['as_at'])) . '</div>'
             . '<div class="label" style="margin-top:8px;">Account</div>'
             . '<div class="lh">#' . (int) $a['user_id'] . '</div>'
             . '</td>'
@@ -233,6 +247,27 @@ final class AccountStatementPdf
         }
         $body .= '</table>';
 
+        /* A period statement has to balance: what it opened at, what moved, what it
+           closed at. Without the opening figure the closing one is just the last
+           number in a list. */
+        if ($p) {
+            $body .= '<h2>This period</h2>'
+                . '<div class="muted" style="margin-bottom:4px;">' . $e($periodLabel)
+                . ' &middot; ' . (int) $p['movements'] . ' entr' . ($p['movements'] === 1 ? 'y' : 'ies') . '</div>'
+                . '<table>'
+                . '<tr><td>Balance brought forward</td><td class="r">' . $m($p['opening']) . '</td></tr>'
+                . '<tr><td><b>Balance carried forward</b></td><td class="r"><b>' . $m($p['closing']) . '</b></td></tr>'
+                . '</table>';
+
+            /* A document headed "1 Jul to 31 Jul" must never be mistaken for what is
+               owed now. Both figures, both labelled. */
+            if (! empty($p['ends_in_past']) && abs($p['closing'] - (float) $s['balance']) > 0.005) {
+                $body .= '<div class="muted" style="margin-top:6px;">Balance today, '
+                    . $e($d($s['as_at'])) . ': <b>' . $m($s['balance'])
+                    . '</b> — this statement covers the period above, not the position now.</div>';
+            }
+        }
+
         // ── still outstanding ───────────────────────────────────────────
         if ($st['open_items']) {
             $body .= '<h2>Still outstanding</h2><table>'
@@ -272,7 +307,7 @@ final class AccountStatementPdf
         if ($owed) {
             $body .= '<h2>Account history</h2>'
                 . '<div class="muted" style="margin-bottom:4px;">Oldest first. '
-                . count($owed) . ' entries.</div>'
+                . count($owed) . ' entries' . ($periodLabel ? ' in this period' : '') . '.</div>'
                 . '<table><tr><th>Date</th><th>Detail</th><th class="r">Charge</th><th class="r">Payment</th><th class="r">Balance</th></tr>';
             foreach ($owed as $x) {
                 $charge = $x['kind'] === 'void'

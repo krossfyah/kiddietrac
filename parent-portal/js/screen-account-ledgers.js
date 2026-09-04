@@ -451,7 +451,10 @@
       + '<label for="al-pacct" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + C.muted + ';margin-left:6px;">Account</label>'
       + '<select id="al-pacct" style="flex:1 1 260px;min-width:200px;padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">'
       + accountOptionsHtml() + '</select>'
-      + '<button type="button" id="al-toggle" style="margin-left:auto;padding:8px 14px;border:1px solid '
+      + '<button type="button" id="al-generate" style="margin-left:auto;padding:8px 14px;border:1px solid ' + C.accent
+      + ';background:' + C.accent + ';color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;'
+      + 'white-space:nowrap;"' + (state.viewing ? '' : ' disabled') + '>📄 Generate statement</button>'
+      + '<button type="button" id="al-toggle" style="padding:8px 14px;border:1px solid '
       + (inList ? C.accent : '#CBD5E1') + ';background:' + (inList ? C.accent : '#fff') + ';color:'
       + (inList ? '#fff' : '#334155') + ';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">'
       + (inList ? '‹ Back to the ledger' : '⊞ All accounts') + '</button>'
@@ -521,6 +524,14 @@
       paintPicker(container, wrap);
       paintBody(container, wrap);
     });
+
+    var gen = host.querySelector('#al-generate');
+    if (gen) {
+      gen.addEventListener('click', function () {
+        var hit = (state.allAccounts || []).filter(function (a) { return String(a.user_id) === String(state.viewing); })[0];
+        openGenerate(state.viewing, hit ? hit.name : state.viewingName, hit ? hit.email : null);
+      });
+    }
 
     host.querySelector('#al-toggle').addEventListener('click', function () {
       state.mode = state.mode === 'list' ? 'account' : 'list';
@@ -974,10 +985,6 @@
       + card('Coming up', upcoming.length + ' scheduled', upTable)
       + '<div id="al-hist" style="min-width:0;"></div>'
       + outTable
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap;padding-bottom:8px;">'
-      + '<button type="button" id="al-send" style="padding:9px 16px;border:1px solid ' + C.accent + ';background:' + C.accent + ';color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✉️ Email this statement</button>'
-      + '<button type="button" id="al-pdf" style="padding:9px 16px;border:1px solid #CBD5E1;background:#fff;color:#334155;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⤓ Download PDF</button>'
-      + '</div>'
       + '</div>';
 
     /* The grid above collapses on anything narrow. Done here rather than in a media
@@ -998,10 +1005,8 @@
 
     drawHistory(host, entries);
 
-    var send = host.querySelector('#al-send');
-    if (send) send.addEventListener('click', function () { openEmailDialog(a.user_id, a.name, contact.email || a.email); });
-    var pdf = host.querySelector('#al-pdf');
-    if (pdf) pdf.addEventListener('click', function () { downloadStatementPdf(a.user_id, pdf); });
+    /* Emailing and downloading now live behind "Generate statement" in the picker
+       bar, where the period is chosen first. */
   }
 
   /* History is redrawn on its own so the filter does not rebuild the charts —
@@ -1084,10 +1089,135 @@
     });
   }
 
+  /* ── GENERATE ────────────────────────────────────────────────────────
+     Which period, and where it goes. Those are the only two things that vary, so they
+     are the only two things the dialog asks. */
+  var PERIODS = [
+    { k: '', label: 'All time' },
+    { k: 'this_month', label: 'This month' },
+    { k: 'last_month', label: 'Last month' },
+    { k: 'last_3', label: 'Last 3 months' },
+    { k: 'this_year', label: 'This year' },
+    { k: 'custom', label: 'Custom range…' }
+  ];
+
+  function ymdOf(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  /* Built from the device's calendar rather than parsed from a string: these are
+     wall-clock DAYS, and running them through a timezone is how a period comes back
+     starting the day before. */
+  function periodRange(key) {
+    var n = new Date(), y = n.getFullYear(), mo = n.getMonth();
+    if (key === 'this_month') { return { from: ymdOf(new Date(y, mo, 1)), to: ymdOf(new Date(y, mo + 1, 0)) }; }
+    if (key === 'last_month') { return { from: ymdOf(new Date(y, mo - 1, 1)), to: ymdOf(new Date(y, mo, 0)) }; }
+    if (key === 'last_3') { return { from: ymdOf(new Date(y, mo - 2, 1)), to: ymdOf(new Date(y, mo + 1, 0)) }; }
+    if (key === 'this_year') { return { from: y + '-01-01', to: ymdOf(new Date(y, 11, 31)) }; }
+
+    return { from: null, to: null };
+  }
+
+  function openGenerate(userId, name, email) {
+    var wrap = Dom.el('div', { style: 'width:100%;' });
+    var lbl = 'display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + C.muted + ';margin-bottom:5px;';
+    var fld = 'width:100%;padding:8px 12px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;box-sizing:border-box;font-family:inherit;';
+
+    wrap.innerHTML =
+      '<p style="margin:0 0 16px;font-size:13.5px;color:#334155;line-height:1.6;">'
+      + 'A statement for <strong>' + esc(name || 'this account') + '</strong> in your agency’s branding — '
+      + 'the balance, what is outstanding, what is coming up, and the account history.</p>'
+      + '<label for="al-gp" style="' + lbl + '">Period</label>'
+      + '<select id="al-gp" style="' + fld + '">'
+      + PERIODS.map(function (p) { return '<option value="' + p.k + '">' + p.label + '</option>'; }).join('')
+      + '</select>'
+      + '<div id="al-gcustom" hidden style="display:flex;gap:10px;margin-top:10px;">'
+      + '<div style="flex:1;"><label for="al-gfrom" style="' + lbl + '">From</label>'
+      + '<input id="al-gfrom" type="date" style="' + fld + '"></div>'
+      + '<div style="flex:1;"><label for="al-gto" style="' + lbl + '">To</label>'
+      + '<input id="al-gto" type="date" style="' + fld + '"></div>'
+      + '</div>'
+      + '<div id="al-gnote" style="margin-top:10px;font-size:12.5px;color:' + C.muted + ';"></div>'
+      + '<div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">'
+      + '<button type="button" id="al-gview" style="padding:9px 16px;border:1px solid #CBD5E1;background:#fff;color:#334155;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">👁 View</button>'
+      + '<button type="button" id="al-gdl" style="padding:9px 16px;border:1px solid #CBD5E1;background:#fff;color:#334155;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⤓ Download</button>'
+      + '<button type="button" id="al-gmail" style="padding:9px 16px;border:1px solid ' + C.accent + ';background:' + C.accent + ';color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✉️ Email…</button>'
+      + '</div>'
+      + '<div id="al-gmsg" style="margin-top:12px;font-size:13px;"></div>';
+
+    Shell.Modal.open({ title: 'Generate account statement', body: wrap, actions: [{ label: 'Close' }] });
+
+    var sel = wrap.querySelector('#al-gp');
+    var custom = wrap.querySelector('#al-gcustom');
+    var note = wrap.querySelector('#al-gnote');
+
+    function range() {
+      if (sel.value === 'custom') {
+        return { from: wrap.querySelector('#al-gfrom').value || null, to: wrap.querySelector('#al-gto').value || null };
+      }
+
+      return periodRange(sel.value);
+    }
+    function describe() {
+      var r = range();
+      note.textContent = (!r.from && !r.to)
+        ? 'Everything on the account, from the first entry to today.'
+        : 'Covers ' + (r.from ? fmtDate(r.from) : 'the beginning') + ' to ' + (r.to ? fmtDate(r.to) : 'today')
+          + ' — with the balance brought forward and carried forward.';
+    }
+    function qs() {
+      var r = range(), p = [];
+      if (r.from) p.push('from=' + encodeURIComponent(r.from));
+      if (r.to) p.push('to=' + encodeURIComponent(r.to));
+
+      return p.length ? ('?' + p.join('&')) : '';
+    }
+
+    sel.addEventListener('change', function () {
+      custom.hidden = sel.value !== 'custom';
+      describe();
+    });
+    ['#al-gfrom', '#al-gto'].forEach(function (id) {
+      wrap.querySelector(id).addEventListener('change', describe);
+    });
+    describe();
+
+    wrap.querySelector('#al-gview').addEventListener('click', function () {
+      fetchStatementPdf(userId, qs(), this, function (blob) {
+        /* The real document, not a preview of it: the endpoint needs an auth header so
+           a plain link would 401, and this is the same blob Download saves. */
+        var url = URL.createObjectURL(blob);
+        var w = window.open(url, '_blank');
+        if (!w) {
+          wrap.querySelector('#al-gmsg').innerHTML =
+            '<span style="color:' + C.warn + ';">Your browser blocked the pop-up — allow pop-ups for this site, or use Download.</span>';
+        }
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      });
+    });
+
+    wrap.querySelector('#al-gdl').addEventListener('click', function () {
+      var btn = this;
+      fetchStatementPdf(userId, qs(), btn, function (blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 800);
+      });
+    });
+
+    wrap.querySelector('#al-gmail').addEventListener('click', function () {
+      var r = range();
+      openEmailDialog(userId, name, email, r);
+    });
+  }
+
   /* The PDF comes back as bytes, so it cannot go through Api (which parses every
      response as JSON). Token and active agency are attached by hand — the same shape
      the invoice CSV export uses. */
-  function downloadStatementPdf(userId, btn) {
+  function fetchStatementPdf(userId, query, btn, done) {
     var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
     var headers = { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token'), Accept: 'application/pdf' };
     var agencyId = sessionStorage.getItem('kt_active_agency_id');
@@ -1096,22 +1226,16 @@
     var label = btn ? btn.textContent : null;
     if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
 
-    return fetch(base + '/admin/account-ledgers/' + userId + '/statement.pdf', { headers: headers })
+    return fetch(base + '/admin/account-ledgers/' + userId + '/statement.pdf' + (query || ''), { headers: headers })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        /* The filename the server chose — it carries the person and the date, which is
-           what makes the file findable in a downloads folder months later. */
+        /* The filename the server chose — it carries the person and the period, which
+           is what makes the file findable in a downloads folder months later. */
         var cd = r.headers.get('Content-Disposition') || '';
         var m = /filename="([^"]+)"/.exec(cd);
         return r.blob().then(function (b) { return { blob: b, name: m ? m[1] : 'account-statement.pdf' }; });
       })
-      .then(function (f) {
-        var url = URL.createObjectURL(f.blob);
-        var el = document.createElement('a');
-        el.href = url; el.download = f.name;
-        document.body.appendChild(el); el.click();
-        setTimeout(function () { URL.revokeObjectURL(url); el.remove(); }, 800);
-      })
+      .then(function (f) { done(f.blob, f.name); })
       .catch(function (e) {
         if (Dom.toast) Dom.toast('Could not build the PDF: ' + ((e && e.message) || 'error'), 'error');
       })
@@ -1130,12 +1254,17 @@
      it open AND toasts the reason. Both are used, because "you left the address
      blank" and "this agency has email switched off" are different answers and an
      admin who sees neither concludes the button is broken. */
-  function openEmailDialog(userId, name, email) {
+  function openEmailDialog(userId, name, email, range) {
     var wrap = Dom.el('div', { style: 'width:100%;' });
     wrap.innerHTML =
       '<p style="margin:0 0 14px;font-size:13.5px;color:#334155;line-height:1.65;">'
       + 'Sends <strong>' + esc(name || 'this account') + '</strong>’s statement — the balance, what is '
       + 'outstanding and what is coming up — in your agency’s branding, with the full ledger attached as a PDF.</p>'
+      + ((range && (range.from || range.to))
+        ? '<p style="margin:-6px 0 14px;font-size:12.5px;color:' + C.muted + ';">Covering '
+          + esc(range.from ? fmtDate(range.from) : 'the beginning') + ' to '
+          + esc(range.to ? fmtDate(range.to) : 'today') + '.</p>'
+        : '')
       + '<label for="al-to" style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + C.muted + ';margin-bottom:4px;">Send to</label>'
       + '<input id="al-to" type="email" value="' + esc(email || '') + '" placeholder="name@example.com" '
       + 'style="width:100%;padding:8px 12px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;box-sizing:border-box;">'
@@ -1165,10 +1294,15 @@
             }
             res.innerHTML = '<span style="color:' + C.muted + ';">Sending…</span>';
 
+            /* to_date, not `to` — the recipient already owns that name on this
+               endpoint, and a date quietly shadowing an address is not a mistake worth
+               leaving available. */
             return Api.post('/admin/account-ledgers/' + userId + '/email', {
               to: to,
               message: (wrap.querySelector('#al-note').value || '').trim(),
-              copy_me: wrap.querySelector('#al-cc').checked
+              copy_me: wrap.querySelector('#al-cc').checked,
+              from: (range && range.from) || null,
+              to_date: (range && range.to) || null
             }).then(function (r) {
               if (Dom.toast) Dom.toast('Statement emailed to ' + r.to);
               return true;                             // closes
