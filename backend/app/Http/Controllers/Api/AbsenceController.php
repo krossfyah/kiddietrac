@@ -230,8 +230,10 @@ class AbsenceController extends Controller
 
                 $to = $g->email;
                 $subject = $title . ' — ' . $d->format('j M Y');
-                dispatch(function () use ($child, $to, $html, $subject) {
-                    \App\Services\AgencyMailer::forAgency((int) $child->agency_id)->mailer()
+                // Same reason as the staff notice below — resolved before dispatch.
+                $mailAgencyId = (int) ($child->agency_id ?? 0);
+                dispatch(function () use ($mailAgencyId, $to, $html, $subject) {
+                    \App\Services\AgencyMailer::forAgency($mailAgencyId)->mailer()
                         ->html($html, function ($m) use ($to, $subject) {
                             $m->to($to)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($subject);
                         });
@@ -327,8 +329,19 @@ class AbsenceController extends Controller
                 // searched and filed. So the date goes in it, as the parent-facing absence
                 // email already does.
                 $subject = $title . ' — ' . Carbon::parse($date, $tz)->format('j M Y');
-                dispatch(function () use ($child, $emails, $html, $subject) {
-                    \App\Services\AgencyMailer::forAgency((int) $child->agency_id)->mailer()
+                /* The agency id is resolved to a plain int BEFORE dispatch.
+
+                   A queued closure that reads $child->agency_id fails at RUN time, in a
+                   worker, with no request and nobody watching — "Undefined property:
+                   stdClass::$agency_id" filed itself as support ticket #45 on
+                   2026-09-04. store() selects the field, but any caller that hands this
+                   path a bare children row (a back-fill did exactly that) poisons a job
+                   that then retries and files a ticket on each attempt.
+
+                   Captured here, the closure cannot fail that way at all. */
+                $mailAgencyId = (int) ($child->agency_id ?? 0);
+                dispatch(function () use ($mailAgencyId, $emails, $html, $subject) {
+                    \App\Services\AgencyMailer::forAgency($mailAgencyId)->mailer()
                         ->html($html, function ($m) use ($emails, $subject) {
                             $m->to($emails)
                               ->from('noreply@kiddietrac.com', 'KiddieTrac')
