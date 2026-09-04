@@ -89,7 +89,12 @@ class AiDigestService
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
-                return null;
+
+                /* THIS is the failure that actually happens — an HTTP 400 for an
+                   exhausted credit balance, returned as a response rather than thrown.
+                   It has to fall back here too; putting the fallback only in the catch
+                   below meant it never ran. */
+                return $this->saveTemplateDigest($child, $events, $date, $factSummary);
             }
 
             $body = $response->json();
@@ -113,8 +118,132 @@ class AiDigestService
                 'child_id' => $child->id,
                 'error' => $e->getMessage(),
             ]);
+
+            /* The AI is unavailable — write the day up from the facts rather than
+               send the parent nothing. The API key has been out of credit since 30
+               August and every one of those days produced no summary at all, for
+               children whose meals, naps and activities were all logged.
+
+               Marked model_used = 'template' so a templated day is obvious and can be
+               regenerated if credit returns. */
+            return $this->saveTemplateDigest($child, $events, $date, $factSummary);
+        }
+    }
+
+    /**
+     * Save the day written up from the facts, with no AI involved.
+     *
+     * Both AI failure paths land here — the thrown one and, more importantly, the
+     * HTTP-error early return, which is the one that fires in practice. Returns null
+     * only when there is genuinely nothing to say.
+     */
+    protected function saveTemplateDigest(Child $child, $events, string $date, array $factSummary): ?AiDailyDigest
+    {
+        try {
+            $text = $this->composeFromFacts($factSummary);
+            if ($text === '') {
+                return null;
+            }
+
+            return AiDailyDigest::updateOrCreate(
+                ['child_id' => $child->id, 'digest_date' => $date],
+                [
+                    'body' => $text,
+                    'source_event_ids' => $events->pluck('id')->toArray(),
+                    'model_used' => 'template',
+                    'tokens_used' => 0,
+                    'generated_at' => now(),
+                    'language' => $child->preferred_lang ?? 'en-CA',
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::error('Template digest fallback failed', [
+                'child_id' => $child->id, 'error' => $e->getMessage(),
+            ]);
+
             return null;
         }
+    }
+
+    /**
+     * The day written up from the recorded facts, with no AI involved.
+     *
+     * Plain on purpose. It reports what was logged and does not imitate the model's
+     * voice — a parent should not have to wonder which of the two they are reading.
+     * Returns '' when there is genuinely nothing to say, so the caller can fall
+     * through to null rather than send an empty digest.
+     */
+    protected function composeFromFacts(array $f): string
+    {
+        $name = $f['child_name'] ?? 'Your child';
+        $parts = [];
+
+        if (! empty($f['meals'])) {
+            $bits = [];
+            foreach ($f['meals'] as $m) {
+                $what = $m['meal'] ?? 'a meal';
+                $amount = ($m['amount'] ?? 'unknown') !== 'unknown' ? ' (' . $m['amount'] . ')' : '';
+                $bits[] = $what . ' at ' . ($m['time'] ?? '') . $amount;
+            }
+            $parts[] = $name . ' ate: ' . implode('; ', $bits) . '.';
+        }
+
+        if (! empty($f['naps'])) {
+            $bits = [];
+            foreach ($f['naps'] as $n) {
+                $mins = (int) ($n['duration_min'] ?? 0);
+                $bits[] = ($n['start'] ?? '?') . '–' . ($n['end'] ?? '?')
+                    . ($mins ? ' (' . intdiv($mins, 60) . 'h ' . ($mins % 60) . 'm)' : '');
+            }
+            $parts[] = 'Naps: ' . implode(', ', $bits) . '.';
+        }
+
+        if (! empty($f['activities'])) {
+            $bits = [];
+            foreach ($f['activities'] as $a) {
+                /* buildFactSummary() defaults a nameless activity to the literal word
+                   'activity', which reads as a stutter beside its own note
+                   ("activity — Circle time"). When the name says nothing, the note is
+                   the activity. */
+                $nm = trim((string) ($a['name'] ?? ''));
+                $note = trim((string) ($a['note'] ?? ''));
+                if ($nm === '' || strcasecmp($nm, 'activity') === 0) {
+                    $bits[] = $note !== '' ? $note : 'an activity';
+                } else {
+                    $bits[] = $nm . ($note !== '' ? ' — ' . $note : '');
+                }
+            }
+            $parts[] = 'Activities: ' . implode('; ', $bits) . '.';
+        }
+
+        if (! empty($f['diaper_or_bathroom'])) {
+            $n = (int) $f['diaper_or_bathroom'];
+            $parts[] = 'Nappy/bathroom changes: ' . $n . '.';
+        }
+
+        if (! empty($f['moods'])) {
+            $parts[] = 'Mood was recorded ' . count($f['moods']) . ' time(s) through the day.';
+        }
+
+        if (! empty($f['observations'])) {
+            $parts[] = 'Educator notes: ' . implode(' ', array_map(
+                fn ($o) => rtrim(is_array($o) ? ($o['note'] ?? '') : (string) $o, '. ') . '.',
+                $f['observations']
+            ));
+        }
+
+        /* Incidents are named but never summarised away — a parent reads the real
+           report, not a sentence about it. */
+        if (! empty($f['incidents'])) {
+            $parts[] = count($f['incidents']) . ' incident report(s) were filed today; '
+                . 'please see the report itself for the detail.';
+        }
+
+        if (! $parts) {
+            return '';
+        }
+
+        return implode(' ', $parts);
     }
 
     /**
