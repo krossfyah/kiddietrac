@@ -966,7 +966,13 @@
   // the full invoice detail.
   function openInvoiceList(centre, monthSel, yearSel) {
     var p = period(monthSel, yearSel);
-    var m = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;' });
+    /* Replace, never stack. This refreshes by calling itself (after a void), and
+       appending a second overlay left the first underneath it — still showing the
+       invoice as it was before, which is the one thing a refresh must not do. */
+    var prior = document.querySelectorAll('[data-kt-invoice-list]');
+    for (var pi = 0; pi < prior.length; pi++) { prior[pi].remove(); }
+
+    var m = Dom.el('div', { 'data-kt-invoice-list': '1', style: 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;' });
     var panel = Dom.el('div', { style: 'background:#fff;border-radius:16px;max-width:640px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px -20px rgba(0,0,0,.6);' });
     panel.appendChild(Dom.el('div', { style: 'padding:18px 20px;border-bottom:1px solid #EEF1F5;position:sticky;top:0;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:10px;' }, [
       Dom.el('div', {}, [
@@ -1002,11 +1008,82 @@
         var view = Dom.el('button', { type: 'button', class: 'kt-act-icon', title: 'View invoice', 'aria-label': 'View invoice', style: 'display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;cursor:pointer;font-size:14px;' }, ['👁️']);
         view.addEventListener('click', function () { viewInvoicePreview(inv.id); });
         r.appendChild(view);
+
+        /* Void — for an invoice raised in error. Already-void invoices show the badge
+           instead of the button; there is nothing left to do to them. */
+        if (inv.status === 'void') {
+          r.appendChild(Dom.el('span', {
+            style: 'font-size:11px;font-weight:800;color:#64748B;background:#F1F5F9;'
+              + 'border-radius:999px;padding:3px 9px;white-space:nowrap;',
+          }, 'VOID'));
+        } else if (inv.status === 'paid' || inv.status === 'partial') {
+          /* MONEY HAS ARRIVED — so there is nothing to press.
+
+             The server refuses to void an invoice that holds a payment, because
+             cancelling the document would erase the receipt while the money stays on
+             the account. It said so eight times in four minutes to someone who had
+             already confirmed the action and read each refusal as a glitch.
+
+             A blocker stated instead of a button is guidance; the same sentence after
+             a confirmed destructive action is a failure. So this slot carries the
+             marker the void rows already use, and its tooltip names the next step. */
+          r.appendChild(Dom.el('div', {
+            title: 'Paid — refund the payment first, then this invoice can be voided',
+            'aria-label': 'Paid. Refund before voiding.',
+            style: 'display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 9px;'
+              + 'border:1px solid #BBF7D0;border-radius:8px;background:#F0FDF4;color:#166534;'
+              + 'font-size:10px;font-weight:800;letter-spacing:.5px;white-space:nowrap;',
+          }, 'PAID'));
+        } else {
+          var voidBtn = Dom.el('button', {
+            type: 'button', class: 'kt-act-icon', title: 'Void this invoice',
+            'aria-label': 'Void this invoice',
+            style: 'display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;'
+              + 'border:1px solid #FECACA;border-radius:8px;background:#fff;color:#B91C1C;'
+              + 'cursor:pointer;font-size:14px;',
+          }, ['🚫']);
+          voidBtn.addEventListener('click', function () {
+            voidInvoice(inv, function () { openInvoiceList(centre, monthSel, yearSel); });
+          });
+          r.appendChild(voidBtn);
+        }
+
         listBox.appendChild(r);
       });
     }).catch(function (e) {
       Dom.clear(listBox);
       listBox.appendChild(Dom.el('div', { style: 'color:#DC2626;padding:20px;text-align:center;' }, 'Could not load invoices: ' + (e.message || 'error')));
+    });
+  }
+
+  /* Void one invoice, then re-open the list so the row reflects it.
+
+     The server owns the rules — it refuses while money is held, and while a payment
+     is still in flight — and its refusal names the amount. That message is shown
+     verbatim: replacing it with something generic would hide the one number the
+     person needs in order to act ("refund $100.00 first"). */
+  function voidInvoice(inv, onDone) {
+    var label = inv.invoice_number || ('Invoice #' + inv.id);
+    var who = inv.family_name ? (' for ' + inv.family_name) : '';
+    KT.confirm({
+      title: 'Void ' + label + '?',
+      description: 'This cancels the invoice' + who + '. It stays in the records as voided, '
+        + 'and the family will no longer owe it. This cannot be undone.',
+    }).then(function (ok) {
+      if (!ok) { return; }
+      /* No reason box. window.prompt is a native dialog that looks nothing like the
+         rest of the portal, and the audit row already records who voided what, for
+         which family, and for how much. The endpoint accepts an optional `reason`
+         when there is somewhere better to ask for one. */
+      Api.post('/director/invoices/' + inv.id + '/void', {})
+        .then(function (res) {
+          toast('✅', 'Voided', (res && res.message) || (label + ' has been voided.'), '#16A34A');
+          if (typeof onDone === 'function') { onDone(); }
+        })
+        .catch(function (e) {
+          // e.message carries the server's own sentence, including the amount to refund.
+          toast('⚠️', 'Not voided', e.message || 'That invoice could not be voided.', '#B45309');
+        });
     });
   }
 

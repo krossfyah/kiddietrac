@@ -616,9 +616,35 @@
       recent.appendChild(Dom.el('div', { style: 'padding:18px;color:#64748B;font-size:13px;text-align:center;' }, 'Loading all children…'));
       var kids = (CHILDREN || []).filter(function (c) { return c.id; });
       if (!kids.length) { Dom.clear(recent); recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'No children found.')); return; }
-      Promise.all(kids.map(function (c) {
-        return Api.get('/care/logs/child/' + c.id + sinceParam()).then(function (data) { return (data.logs || []).map(function (l) { l.__cn = c.name; return l; }); }).catch(function () { return []; });
-      })).then(function (lists) {
+      /* ONE request for the whole roster.
+
+         This fired Api.get('/care/logs/child/{id}') once per child, in parallel —
+         twenty children meant twenty simultaneous requests from one educator opening
+         one screen. That is what saturates the server at drop-off: the 508
+         "resource limit reached" responses cluster at 08:00-09:00 and name that
+         exact path. The queries are fast; there were just far too many of them.
+
+         The per-child fan-out stays as a fallback, so an app that has not picked up
+         the new backend shows a roster rather than nothing. */
+      var nameById = {};
+      kids.forEach(function (c) { nameById[String(c.id)] = c.name; });
+      var idList = kids.map(function (c) { return c.id; }).join(',');
+
+      Api.get('/care/logs/recent?child_ids=' + idList + sinceParam().replace(/^\?/, '&'))
+        .then(function (data) {
+          return [((data && data.logs) || []).map(function (l) {
+            l.__cn = nameById[String(l.child_id)] || '';
+            return l;
+          })];
+        })
+        .catch(function () {
+          return Promise.all(kids.map(function (c) {
+            return Api.get('/care/logs/child/' + c.id + sinceParam())
+              .then(function (data) { return (data.logs || []).map(function (l) { l.__cn = c.name; return l; }); })
+              .catch(function () { return []; });
+          }));
+        })
+        .then(function (lists) {
         var all = lists.reduce(function (a, b) { return a.concat(b); }, []).filter(onViewDate);
         all.sort(function (a, b) { var da = parseDt(a.occurred_at), db = parseDt(b.occurred_at); return (db ? db.getTime() : 0) - (da ? da.getTime() : 0); });
         Dom.clear(recent);
@@ -824,7 +850,12 @@
         var _poster = await ktVideoPoster(toSend);
         if (_poster) fd.append('poster', _poster);
         fd.append('caption', cap.value.trim());
-        fd.append('child_ids', JSON.stringify([childId]));
+        /* childId is an ARRAY when several children are tagged, and wrapping it again
+             sent [[92,44,48]] — which the server decoded to a list containing one
+             list, cast that inner array to the integer 1, and refused the upload as
+             access to child #1. Every photo that ever saved had exactly one child on
+             it; multi-select had never once worked. */
+          fd.append('child_ids', JSON.stringify(Array.isArray(childId) ? childId : [childId]));
         fetch(_careApiBase() + '/photos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _careToken() }, body: fd })
           .then(function (r) {
             return r.json().catch(function () { return {}; }).then(function (d) {
@@ -1021,6 +1052,14 @@
       modal.appendChild(capIn);
       modal.appendChild(mediaMsg);
 
+      /* Refusals used to be written into mediaMsg — the photo caption strip, several
+         controls above the button and easy to miss entirely when no photo is attached.
+         Pressing Save then looked like it did nothing, and the audit log shows exactly
+         what that produces: four attempts in 54 seconds. This says it where the button
+         is. */
+      var saveMsg = Dom.el('div', { style: 'font-size:12.5px;color:#B91C1C;margin-top:10px;text-align:right;line-height:1.5;' });
+      modal.appendChild(saveMsg);
+
       var actions = Dom.el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:14px;' });
       var cancel = Dom.el('button', { style: 'background:white;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;' }, 'Cancel');
       cancel.addEventListener('click', function () { overlay.remove(); });
@@ -1059,6 +1098,47 @@
           var whenIso = _careIsoAt(whenIn.value);
           if (whenIso) body.occurred_at = whenIso;
         }
+        /* THE TIME, CHECKED HERE rather than by a round trip.
+
+           A log describes what already happened, so a time later today is wrong — and
+           the server says so, in validator English, after a wait. Said here it is one
+           sentence, instantly, next to the button. Two minutes of slack absorbs a
+           device clock that runs slightly fast. */
+        saveMsg.textContent = '';
+        var _now = Date.now(), _slack = 2 * 60 * 1000;
+        var _late = null;
+        if (body.occurred_at && new Date(body.occurred_at).getTime() > _now + _slack) {
+          _late = 'That time is later today. A log records what has already happened — '
+            + 'pick a time that has passed.';
+        } else if (body.ended_at && new Date(body.ended_at).getTime() > _now + _slack) {
+          _late = 'The end time is later today. Pick the time the nap actually ended.';
+        }
+        if (_late) {
+          saveMsg.textContent = _late;
+          save.disabled = false; save.textContent = mediaFile ? 'Retry upload' : 'Log it';
+          return;
+        }
+
+        /* AN AM/PM SLIP LOOKS EXACTLY LIKE A VALID TIME. One nap was filed as
+           "9:15 AM → 9:45 PM" — twelve and a half hours — because 21:45 is a perfectly
+           good value and nothing downstream questions it. Naming the duration back is
+           enough to catch it; a genuinely long nap is confirmed and files normally. */
+        if (t.type === 'nap' && body.occurred_at && body.ended_at) {
+          var _mins = Math.round((new Date(body.ended_at) - new Date(body.occurred_at)) / 60000);
+          if (_mins < 0) {
+            saveMsg.textContent = 'The nap ends before it starts. Check the asleep and woke times.';
+            return;
+          }
+          if (_mins > 360 && !save._longNapOk) {
+            var _h = Math.floor(_mins / 60), _m = _mins % 60;
+            saveMsg.textContent = 'That is a ' + _h + 'h ' + (_m ? _m + 'm ' : '')
+              + 'nap (' + _t12(napAsleep.value) + ' to ' + _t12(napWoke.value)
+              + '). If that is right, press Log it again — otherwise check AM/PM.';
+            save._longNapOk = true;
+            return;
+          }
+        }
+
         // Media requires a description. Checked BEFORE any POST so we never file the
         // care log and then refuse the upload, which would leave the two out of step.
         if (mediaFile && !capIn.value.trim()) {
@@ -1112,7 +1192,12 @@
           // Caption priority: the dedicated description, else the note, else the
           // picked detail — the parent should never see an untitled photo.
           fd.append('caption', capIn.value.trim());
-          fd.append('child_ids', JSON.stringify([childId]));
+          /* childId is an ARRAY when several children are tagged, and wrapping it again
+             sent [[92,44,48]] — which the server decoded to a list containing one
+             list, cast that inner array to the integer 1, and refused the upload as
+             access to child #1. Every photo that ever saved had exactly one child on
+             it; multi-select had never once worked. */
+          fd.append('child_ids', JSON.stringify(Array.isArray(childId) ? childId : [childId]));
           return fetch(_careApiBase() + '/photos', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + _careToken() },
@@ -1130,9 +1215,20 @@
           });
           });
         }).catch(function (e) {
-          // Distinguish "the log didn't save" from "the log saved, the upload didn't".
-          mediaMsg.style.color = '#DC2626';
-          mediaMsg.textContent = (e && e.message) || 'Something went wrong.';
+          if (e && e.ktCancelled) {                 // they declined the catch-up prompt
+            save.disabled = false; save.textContent = mediaFile ? 'Retry upload' : 'Log it';
+            return;
+          }
+          /* Distinguish "the log didn't save" from "the log saved, the upload didn't" —
+             and put the reason next to the button either way. It used to go only into
+             the photo strip, where a message about a TIME had no business being. */
+          var _msg = (e && e.message) || 'Something went wrong.';
+          if (logSaved) {
+            mediaMsg.style.color = '#DC2626';
+            mediaMsg.textContent = _msg;
+          } else {
+            saveMsg.textContent = _msg;
+          }
           save.disabled = false; save.textContent = mediaFile ? 'Retry upload' : 'Log it';
         });
       });
