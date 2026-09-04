@@ -1009,6 +1009,32 @@
        bar, where the period is chosen first. */
   }
 
+  /* WHAT A ROW CAN ACTUALLY DO.
+
+     Offered only where the document is genuinely reachable, which is not uniform:
+
+       external invoice  a SIGNED doc_url on the source host, no auth header needed —
+                         the common case here, and it works today
+       native invoice    /parent/invoices/{id}/pdf answers 403 to an agency admin
+       payee invoice     needs a route this screen cannot reach yet
+       payslip           only a self-only /me/ route exists; no stored file
+
+     A row with nothing reachable gets NO buttons rather than one that fails — the
+     lesson from the Void button that sat on paid invoices. And there is deliberately
+     no separate Download: the signed URL is cross-origin, so the download attribute is
+     ignored and fetch() is blocked by CORS; it could only ever open the same tab View
+     opens while promising something else. The PDF viewer it opens into has its own
+     download button.
+
+     Plain buttons in the LAST cell — kt-row-actions.js collapses them into the house
+     kebab by itself. */
+  function rowActions(e) {
+    if (!e.doc_url) { return ''; }
+
+    return '<button type="button" class="al-doc" data-url="' + esc(e.doc_url)
+      + '" title="View document">👁 View document</button>';
+  }
+
   /* History is redrawn on its own so the filter does not rebuild the charts —
      re-running the whole account paint on every chip press would flash the page. */
   function drawHistory(wrap, entries) {
@@ -1048,7 +1074,7 @@
     if (state.histFilter !== 'all' && !countFor(state.histFilter)) { state.histFilter = 'all'; }
 
     var body = rows.length
-      ? table(['Date', 'Type', 'Detail', 'Charge', 'Payment', 'Balance'], rows.map(function (e) {
+      ? table(['Date', 'Type', 'Detail', 'Charge', 'Payment', 'Balance', ''], rows.map(function (e) {
         var tint = KIND_TINT[e.kind] || ['#F1F5F9', '#475569'];
         var charge, payment;
         if (e.kind === 'void') {
@@ -1071,9 +1097,10 @@
           payment,
           e.running_balance != null
             ? '<strong>' + money(e.running_balance) + '</strong>'
-            : '<span style="color:#CBD5E1;">—</span>'
+            : '<span style="color:#CBD5E1;">—</span>',
+          rowActions(e)
         ];
-      }), [0, 0, 0, 1, 1, 1], ['13%', '11%', 'auto', '12%', '12%', '13%'])
+      }), [0, 0, 0, 1, 1, 1, 1], ['12%', '10%', 'auto', '11%', '11%', '12%', '52px'])
       : empty('Nothing matches that filter.');
 
     host.innerHTML = card('Account history',
@@ -1087,6 +1114,18 @@
         drawHistory(wrap, entries);
       });
     });
+
+    /* The URL is signed and belongs to the source host — opened verbatim. Rewriting a
+       signed URL's host is how every form download here once 404'd. */
+    host.querySelectorAll('.al-doc').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var w = window.open(b.getAttribute('data-url'), '_blank', 'noopener');
+        if (!w && Dom.toast) { Dom.toast('Your browser blocked the pop-up — allow pop-ups for this site.', 'error'); }
+      });
+    });
+
+    // Collapse them into the ⋮ now rather than on the next sweep.
+    try { if (KT.sweepRowActions) KT.sweepRowActions(); } catch (err) {}
   }
 
   /* ── GENERATE ────────────────────────────────────────────────────────

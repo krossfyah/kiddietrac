@@ -12,6 +12,15 @@
   var Dom = KT.Dom;
   var Shell = KT.Shell;
 
+  /* A child can be with more than one provider across the week — Mon-Thu with one,
+     Friday with another. The list shows ONE row per child, so the room cell says how
+     many rather than the child appearing twice. */
+  function roomCellText(c) {
+    var n = c && c.rooms_count ? Number(c.rooms_count) : 0;
+    if (n > 1) { return c.room_names || (n + ' providers'); }
+    return (c && c.room_name) || '—';
+  }
+
   function esc(s) {
     return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -48,17 +57,32 @@
     var wrap = Dom.el('div', { style: 'padding: 24px; max-width: 1800px; margin: 0 auto;' });
     container.appendChild(wrap);
 
+    /* Archived children live here, in Children — not in a separate graveyard screen.
+       The switch is owned by screen-admin.js; if that file has not loaded, the section
+       renders without it rather than throwing. (2026-08-25) */
+    if (window.KT && KT.Archive && KT.Archive.switchEl) {
+      wrap.appendChild(KT.Archive.switchEl(container, 'children', renderChildren, 'active'));
+    }
+
     // Hero
     var clouds = (KT.Illustrations && KT.Illustrations.cloudsAndStars) ? KT.Illustrations.cloudsAndStars() : '';
     var heroEl = Dom.el('div', { class: 'kt-hero', style: 'padding: 24px 28px; margin-bottom: 20px;' });
     heroEl.innerHTML =
       '<h1 style="font-size:24px;margin:0 0 4px;">🧒 Children</h1>' +
-      '<div class="kt-hero-sub" style="font-size:14px;">Every enrolled child across your centres. Filter by centre or status to narrow down.</div>' +
+      '<div class="kt-hero-sub" style="font-size:14px;">Every enrolled child across your centres. Change the status filter to include withdrawn or waitlisted children.</div>' +
       '<div class="kt-hero-svg" style="width:180px;height:140px;right:16px;bottom:-4px;">' + clouds + '</div>';
     wrap.appendChild(heroEl);
 
     // Filter bar
     var filters = parseHashParams();
+
+    /* Land on the children who are actually here. Applied only when the hash says nothing
+       about status, so a link that asks for withdrawn (or for everyone) is still honoured
+       — this sets the starting point, it does not override an intent. (2026-08-27) */
+    var DEFAULT_CHILD_STATUS = 'enrolled';
+    if (filters.status === undefined || filters.status === null) {
+      filters.status = DEFAULT_CHILD_STATUS;
+    }
     var filterBar = Dom.el('div', {
       style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;background:white;border-radius:10px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.04);',
     });
@@ -160,7 +184,7 @@
         nameWrap.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:15px;' }, childName));
         nameWrap.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:1px;' },
           (c.age && c.age.human ? c.age.human : '') +
-          (c.room_name ? ' · ' + c.room_name : '')));
+          (c.room_name ? ' · ' + roomCellText(c) : '')));
         nameSide.appendChild(nameWrap);
         header.appendChild(nameSide);
         var badge = Dom.el('div');
@@ -227,7 +251,7 @@
     var table = Dom.el('table', { style: 'width:100%;background:white;border-radius:12px;overflow:hidden;border-collapse:collapse;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
     var thead = Dom.el('thead', { style: 'background:#F9FAFB;' });
     var headRow = Dom.el('tr');
-    ['Child', 'Age', 'Room', 'Family', 'Status', 'Fee', ''].forEach(function (h) {
+    ['Child', 'Age', 'Room', 'Family', 'Status', 'Last seen', 'Fee', ''].forEach(function (h) {
       headRow.appendChild(Dom.el('th', {
         style: 'text-align:left;padding:11px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;',
       }, h));
@@ -244,8 +268,10 @@
 
       var nameCell = Dom.el('td', { style: 'padding:11px 14px;' });
       var nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
-      var swatch = Dom.el('div', { style: 'width:6px;height:24px;border-radius:3px;background:' + (c.room_color || '#1F6080') + ';flex-shrink:0;' });
-      nameWrap.appendChild(swatch);
+      /* No room-colour swatch. It sat between the row edge and the avatar on this one
+         table and nowhere else in the portal, so a child record looked like it carried
+         a status no other list showed — and the room it encoded is already spelled out
+         in the Room column two cells along. */
       // v22p83: child avatar (photo or initials)
       var rowChildName = c.full_name || (c.first_name + ' ' + c.last_name);
       nameWrap.appendChild(Dom.el('span', { html: KT.avatar(rowChildName, { size: 30, photoUrl: c.photo_url }) }));
@@ -254,12 +280,49 @@
       tr.appendChild(nameCell);
 
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#374151;' }, c.age && c.age.human ? c.age.human : '—'));
-      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#6B7280;' }, c.room_name || '—'));
+      tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#6B7280;' }, roomCellText(c)));
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#6B7280;' }, c.family_name || '—'));
 
       var statusTd = Dom.el('td', { style: 'padding:11px 14px;' });
       statusTd.innerHTML = statusBadge(c.enrollment_status, c.is_at_centre);
       tr.appendChild(statusTd);
+
+      /* Between Status and Fee, matching the header order above. Relative for
+         anything recent because "2 hours ago" is read faster than a timestamp,
+         and dimmed when it has been a while so a child who stopped attending
+         stands out from one who was here this morning. */
+      var seenTd = Dom.el('td', { style: 'padding:11px 14px;font-size:13px;white-space:nowrap;' });
+      (function () {
+        if (!c.last_seen_at) {
+          seenTd.textContent = '—';
+          seenTd.style.color = '#9CA3AF';
+          seenTd.title = 'No check-in on record';
+          return;
+        }
+        var when = null;
+        try {
+          when = (window.KT && KT.Fmt && KT.Fmt.parse) ? KT.Fmt.parse(c.last_seen_at)
+            : new Date(c.last_seen_at);
+        } catch (e) { when = null; }
+        if (!when || isNaN(when.getTime())) { seenTd.textContent = '—'; return; }
+        var days = Math.floor((Date.now() - when.getTime()) / 86400000);
+        var label;
+        if (days <= 0) { label = 'Today'; }
+        else if (days === 1) { label = 'Yesterday'; }
+        else if (days < 7) { label = days + ' days ago'; }
+        else {
+          try {
+            var z = (window.KT && KT.tz) ? KT.tz() : null;
+            var o = { year: 'numeric', month: 'short', day: 'numeric' };
+            label = when.toLocaleDateString('en-CA', z ? Object.assign({ timeZone: z }, o) : o);
+          } catch (e) { label = String(c.last_seen_at).slice(0, 10); }
+        }
+        seenTd.textContent = label;
+        seenTd.style.color = days <= 1 ? '#166534' : (days < 14 ? '#374151' : '#9CA3AF');
+        if (days >= 14) { seenTd.style.fontStyle = 'italic'; }
+        seenTd.title = 'Last checked in: ' + String(c.last_seen_at);
+      })();
+      tr.appendChild(seenTd);
 
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;color:#374151;' }, c.monthly_fee ? '$' + c.monthly_fee : '—'));
 

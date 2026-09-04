@@ -403,13 +403,15 @@ class AccountLedgerController extends Controller
             ->get(['id', 'invoice_number', 'issued_at', 'due_at', 'total', 'amount_paid',
                    'balance_due', 'status', 'pdf_url']) as $r) {
             $invoiceRows[] = ['row' => $r, 'label' => 'Invoice ' . $r->invoice_number,
-                'ref' => $r->invoice_number, 'doc' => $r->pdf_url];
+                'ref' => $r->invoice_number, 'doc' => $r->pdf_url,
+                'source' => 'native_invoice', 'entity_id' => (int) $r->id];
         }
         foreach (DB::table('external_invoices')->whereIn('family_id', $famIds)
             ->get(['id', 'number', 'issued_at', 'due_at', 'total', 'amount_paid', 'balance_due',
                    'status', 'source_label', 'description', 'pdf_url', 'external_updated_at']) as $r) {
             $invoiceRows[] = ['row' => $r, 'label' => trim(($r->source_label ?: 'External') . ' invoice ' . $r->number),
-                'ref' => $r->number, 'doc' => $r->pdf_url];
+                'ref' => $r->number, 'doc' => $r->pdf_url,
+                'source' => 'external_invoice', 'entity_id' => (int) $r->id];
         }
 
         foreach ($invoiceRows as $iv) {
@@ -427,6 +429,7 @@ class AccountLedgerController extends Controller
                     'reference' => $iv['ref'], 'description' => $iv['label'] . ' — voided',
                     'status' => $status, 'debit' => 0.0, 'credit' => 0.0,
                     'original' => $total, 'voided' => true, 'doc_url' => $iv['doc'],
+                    'source' => $iv['source'], 'entity_id' => $iv['entity_id'],
                     'note' => 'Issued then voided. Carries no balance.',
                 ];
                 continue;
@@ -439,6 +442,7 @@ class AccountLedgerController extends Controller
                 'reference' => $iv['ref'], 'description' => $iv['label'],
                 'status' => $status, 'debit' => $total, 'credit' => 0.0,
                 'due_at' => $r->due_at ?? null, 'outstanding' => $due, 'doc_url' => $iv['doc'],
+                'source' => $iv['source'], 'entity_id' => $iv['entity_id'],
                 'note' => trim((string) ($r->description ?? '')) ?: null,
             ];
 
@@ -535,6 +539,7 @@ class AccountLedgerController extends Controller
             $paidOut += (float) $r->net; $payslips++;
             $entries[] = [
                 'date' => $r->period_end ?: $r->created_at, 'kind' => 'payroll', 'direction' => 'paid_out',
+                'source' => 'payroll', 'entity_id' => (int) $r->id,
                 'reference' => ucfirst((string) ($r->kind ?: 'payslip')),
                 'description' => 'Payroll' . ($r->period_start
                     ? ' ' . Carbon::parse($r->period_start)->format('j M') . '–' . Carbon::parse($r->period_end)->format('j M Y')
@@ -550,6 +555,7 @@ class AccountLedgerController extends Controller
             $entries[] = [
                 'date' => $r->paid_at ?: $r->period_end ?: $r->created_at,
                 'kind' => 'payee_invoice', 'direction' => 'paid_out',
+                'source' => 'payee_invoice', 'entity_id' => (int) $r->id,
                 'reference' => $r->reference ?: ('#' . $r->id),
                 'description' => ucfirst((string) ($r->kind ?: 'Payee invoice')),
                 'status' => $r->status, 'debit' => 0.0, 'credit' => 0.0, 'net' => (float) $r->amount,
