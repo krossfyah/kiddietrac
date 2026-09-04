@@ -720,8 +720,66 @@ class IntegrationController extends Controller
             'source_label'        => 'nullable|string|max:60',
             'pdf_url'             => 'nullable|string|max:500',
             'external_updated_at' => 'nullable|date',
+            /* The source withdrew this invoice. Stated rather than inferred — the sync
+               pushes in chunks, so an invoice missing from a batch means nothing. */
+            'deleted'             => 'nullable|boolean',
         ]);
         $source = $this->source($request);
+
+        /* WITHDRAWN UPSTREAM.
+
+           Handled before the family lookup below, which aborts 422 on an unknown
+           family: an invoice being withdrawn may belong to a family that has since
+           been de-enrolled, and a tidy-up must not need the thing it is tidying up
+           after.
+
+           Voided rather than removed — the row keeps its history, and $isOpenStatus()
+           already treats 'void' as not-open, so the balance leaves the outstanding
+           figures without anything being destroyed. Never creates: an invoice we never
+           mirrored has nothing to withdraw. */
+        if (! empty($data['deleted'])) {
+            $row = DB::table('external_invoices')
+                ->where('agency_id', $agencyId)->where('external_source', $source)
+                ->where('external_id', $data['external_id'])->first();
+
+            if (! $row) {
+                return response()->json([
+                    'ok' => true, 'entity' => 'invoice', 'withdrawn' => true,
+                    'existed' => false, 'external_id' => $data['external_id'],
+                ]);
+            }
+
+            $wasOpen = ! in_array(strtolower((string) $row->status), ['paid', 'void'], true);
+            DB::table('external_invoices')->where('id', $row->id)->update([
+                'status'      => 'void',
+                'balance_due' => 0,
+                'updated_at'  => now(),
+            ]);
+
+            try {
+                \App\Support\Audit::write([
+                    'agency_id'   => $agencyId,
+                    'action'      => 'invoice.withdrawn_upstream',
+                    'entity_type' => 'external_invoice',
+                    'entity_id'   => $row->id,
+                    'payload'     => json_encode([
+                        'external_id' => $data['external_id'],
+                        'number'      => $row->number,
+                        'family_id'   => $row->family_id,
+                        'was_status'  => $row->status,
+                        'was_balance' => (float) $row->balance_due,
+                        'summary'     => 'Voided because ' . $source . ' deleted it at source'
+                            . ($wasOpen ? ' — it was still showing as owed.' : '.'),
+                    ]),
+                    'created_at'  => now(),
+                ]);
+            } catch (\Throwable $e) { /* never fail a sync over its own audit row */ }
+
+            return response()->json([
+                'ok' => true, 'entity' => 'invoice', 'withdrawn' => true,
+                'existed' => true, 'id' => $row->id, 'external_id' => $data['external_id'],
+            ]);
+        }
 
         $agencyCentreIds = Centre::where('agency_id', $agencyId)->pluck('id');
         $family = Family::whereIn('centre_id', $agencyCentreIds)
