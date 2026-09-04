@@ -34,20 +34,25 @@
   // originals are hidden via CSS (body.kt-tb-has-selectors).
   var AGENCIES = null;
   function ctl(id) { var d = document.createElement('div'); d.id = id; d.className = 'kt-tb-ctl'; return d; }
-  function buildViewAs(host) {
-    if (document.getElementById('kt-tb-viewas')) return;
+  /* `sfx` lets a second copy live somewhere else — the admin launcher builds its own
+     with '-home', because the phone hides this bar entirely. Without a distinct id the
+     single-instance guard below would make the second call a no-op. */
+  function buildViewAs(host, sfx) {
+    sfx = sfx || '';
+    if (document.getElementById('kt-tb-viewas' + sfx)) return;
     var cur = ''; try { cur = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
     var roles = [['', 'Super admin (default)'], ['agency_admin', '🏢 Agency admin'], ['centre_director', '🏫 Centre director'], ['educator', '🎓 Educator'], ['guardian', '👪 Parent / guardian'], ['home_visitor', '🏡 Home visitor'], ['sales_rep', '💼 Sales rep'], ['auditor', '🔍 Auditor']];
-    var wrap = ctl('kt-tb-viewas'); if (cur) wrap.classList.add('kt-tb-ctl-active');
+    var wrap = ctl('kt-tb-viewas' + sfx); if (cur) wrap.classList.add('kt-tb-ctl-active');
     var lab = document.createElement('span'); lab.className = 'kt-tb-ctl-lab'; lab.textContent = cur ? '👁 Viewing as' : '👁 View as';
     var sel = document.createElement('select'); sel.className = 'kt-tb-ctl-sel'; sel.title = 'Preview the portal as another role';
     roles.forEach(function (r) { var o = document.createElement('option'); o.value = r[0]; o.textContent = r[1]; if (r[0] === cur) o.selected = true; sel.appendChild(o); });
     sel.addEventListener('change', function () { if (window.ktViewAs) window.ktViewAs(sel.value); });
     wrap.appendChild(lab); wrap.appendChild(sel); host.appendChild(wrap);
   }
-  function buildAgency(host) {
-    if (document.getElementById('kt-tb-agency')) return;
-    var wrap = ctl('kt-tb-agency'); host.appendChild(wrap);
+  function buildAgency(host, sfx) {
+    sfx = sfx || '';
+    if (document.getElementById('kt-tb-agency' + sfx)) return;
+    var wrap = ctl('kt-tb-agency' + sfx); host.appendChild(wrap);
     var render = function (list, isPlat) {
       if (!list || (!isPlat && list.length < 2)) { wrap.remove(); return; }
       var active = ''; try { active = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
@@ -126,10 +131,26 @@
     if (s < 3600) return Math.floor(s / 60) + 'm ago';
     if (s < 86400) return Math.floor(s / 3600) + 'h ago';
     if (s < 604800) return Math.floor(s / 86400) + 'd ago';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    /* Older than a week falls back to a DATE, and that date must be the agency's, not
+       the device's. The relative half above was already correct; this line was still
+       rendering in whatever zone the phone happened to be in, so a late-evening event
+       could show the wrong day. Standing rule: every displayed date/time is agency time. */
+    var _tz = (window.KT && KT.tz) ? KT.tz() : undefined;
+    return d.toLocaleDateString(undefined, _tz
+      ? { month: 'short', day: 'numeric', timeZone: _tz }
+      : { month: 'short', day: 'numeric' });
   }
   function loadFeed(cb) {
     var t = store('kt_token'); if (!t) { cb(null); return; }
+    /* ADMIN ONLY. The route is behind
+       role:agency_admin,centre_director,platform_admin, so asking as an educator or
+       a guardian earns a 403 on every poll -- 761 of them this month, about one
+       activity-feed call in ten, and one audit row each since failing GETs started
+       being recorded. ensure() already returns early for non-admins, so this should
+       be unreachable; the refusals say otherwise, so the guard sits where the
+       request is actually made. Same helper the bar builds itself with, so there is
+       one answer to "is this person an admin". */
+    if (!isAdminRole(user())) { cb(null); return; }
     fetch(API + '/admin/activity-feed', { headers: { 'Authorization': 'Bearer ' + t } })
       .then(function (r) { return r.ok ? r.json() : null; }).then(cb).catch(function () { cb(null); });
   }
@@ -148,6 +169,10 @@
   var __notifStarted = false;
   function startNotif() {
     if (__notifStarted) return; __notifStarted = true;
+    /* Immediately when the token is already there — the 1500ms wait was to let it
+       land, but the bar is built after sign-in, so it only left the bell blank.
+       The delayed attempt stays as a fallback for a bar built before storage. */
+    if (store('kt_token')) { refreshNotifBadge(); }
     setTimeout(refreshNotifBadge, 1500);
     setInterval(refreshNotifBadge, 15000);
   }
@@ -167,6 +192,7 @@
   }
   function startStaffNotif() {
     if (__staffNotifStarted) return; __staffNotifStarted = true;
+    if (store('kt_token')) { refreshStaffNotifBadge(); }
     setTimeout(refreshStaffNotifBadge, 1500);
     setInterval(refreshStaffNotifBadge, 15000);
   }
@@ -485,8 +511,8 @@
   window.KT.topbar = { ensure: ensure };
 
   setInterval(function () { var c = document.getElementById('kt-tb-clock'); if (c) c.textContent = fmtClock(); var d = document.getElementById('kt-tb-date'); if (d) d.textContent = fmtDate(); }, 15000);
-  setInterval(ensure, 1200);   // safety net; the shell now calls ensure() on every render
-  setInterval(buildSelectors, 1400);   // rebuild View-as + agency switcher in the bar after any nav
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(ensure) : setInterval(ensure, 1200);   // safety net; the shell now calls ensure() on every render
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(buildSelectors) : setInterval(buildSelectors, 1400);   // rebuild View-as + agency switcher in the bar after any nav
   setInterval(refreshUnread, 15000);   // near-real-time unread badge
   // No lag on return: refresh the bell + unread the instant the tab/app is
   // re-focused, instead of waiting up to a full poll interval.
@@ -495,4 +521,9 @@
   window.addEventListener('focus', function () { refreshBellBadge(); try { refreshUnread(); } catch (e) {} });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ensure(); refreshUser(); });
   else { ensure(); refreshUser(); }
+  /* Exposed so the admin launcher can build its own pair on a phone, where this
+     bar is hidden by kt-mobile-app.css. Same builders, so the two copies can
+     never disagree about what a role or an agency switch does. */
+  window.KT = window.KT || {};
+  window.KT.Topbar = { buildViewAs: buildViewAs, buildAgency: buildAgency };
 })();
