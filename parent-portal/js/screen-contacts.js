@@ -102,20 +102,15 @@
       return '<option value="' + esc(c) + '"' + (state.category === c ? ' selected' : '') + '>' + esc(c) + '</option>';
     })).join('');
 
-    var centreOpts = ['<option value="">Every centre</option>'].concat((d.centres || []).map(function (c) {
-      return '<option value="' + c.id + '"' + (String(state.centre) === String(c.id) ? ' selected' : '') + '>' + esc(c.name) + '</option>';
-    })).join('');
-
     var controls = '<div class="kt-card" style="padding:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0 12px;">'
       + '<input id="ct-search" type="search" placeholder="Search name, company, number…" value="' + esc(state.search) + '" '
       + 'style="flex:1 1 240px;min-width:190px;padding:8px 12px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">'
+      /* Search and category only. The three switches that used to sit here —
+         emergency-only, added-only, and a centre picker — were narrow filters
+         permanently occupying a bar most people reach for with one word. Emergency
+         contacts are still pinned to the top of the list, which is what that flag was
+         for; it never needed a switch to work. */
       + '<select id="ct-cat" style="padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">' + catOpts + '</select>'
-      + '<select id="ct-centre" style="padding:8px 10px;border:1px solid ' + C.rule + ';border-radius:8px;font-size:13px;">' + centreOpts + '</select>'
-      + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#334155;cursor:pointer;">'
-      + '<input id="ct-emg" type="checkbox"' + (state.emergency ? ' checked' : '') + ' style="width:16px;height:16px;"> Emergency only</label>'
-      + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#334155;cursor:pointer;">'
-      + '<input id="ct-bookonly" type="checkbox"' + (state.bookOnly ? ' checked' : '') + ' style="width:16px;height:16px;"> '
-      + 'Added contacts only</label>'
       + '<span style="font-size:12.5px;color:' + C.muted + ';">' + (meta.total || 0) + ' contact(s)</span>'
       + '<button type="button" id="ct-new" style="margin-left:auto;padding:8px 14px;border:1px solid ' + C.accent
       + ';background:' + C.accent + ';color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add contact</button>'
@@ -132,12 +127,23 @@
          Safety". */
       var sub = [r.job_title, r.company === r.display_name ? null : r.company]
         .filter(Boolean).map(esc).join(' · ');
-      var reach = [];
-      if (r.phone) reach.push('<a href="tel:' + esc(r.phone) + '" style="color:' + C.accent + ';text-decoration:none;">' + esc(phone(r.phone)) + '</a>');
-      if (r.mobile) reach.push('<a href="tel:' + esc(r.mobile) + '" style="color:' + C.accent + ';text-decoration:none;">' + esc(phone(r.mobile)) + ' <span style="color:' + C.faint + ';font-size:11px;">mob</span></a>');
-      if (r.email) reach.push('<a href="mailto:' + esc(r.email) + '" style="color:' + C.accent + ';text-decoration:none;">' + esc(r.email) + '</a>');
+      /* Their own columns. Stacked together neither could be scanned down a page —
+         a column of phone numbers is read at a glance, a column of mixed contact
+         details is read one row at a time. */
+      var phones = [];
+      if (r.phone) phones.push('<a href="tel:' + esc(r.phone) + '" style="color:' + C.accent + ';text-decoration:none;">' + esc(phone(r.phone)) + '</a>');
+      if (r.mobile) phones.push('<a href="tel:' + esc(r.mobile) + '" style="color:' + C.accent + ';text-decoration:none;">' + esc(phone(r.mobile)) + ' <span style="color:' + C.faint + ';font-size:11px;">mob</span></a>');
+      var mail = r.email
+        ? '<a href="mailto:' + esc(r.email) + '" style="color:' + C.accent + ';text-decoration:none;word-break:break-all;">' + esc(r.email) + '</a>'
+        : '<span style="color:' + C.faint + ';">—</span>';
 
-      var where = [r.city, r.province].filter(Boolean).map(esc).join(', ');
+      /* A real address, not a rough location — an address column that cannot be
+         copied onto an envelope is missing the point. Street on one line, then town,
+         province and postcode. */
+      var street = [r.address_line1, r.address_line2].filter(Boolean).map(esc).join(', ');
+      var town = [r.city, r.province].filter(Boolean).map(esc).join(', ');
+      if (r.postal_code) { town = (town ? town + '  ' : '') + esc(r.postal_code); }
+      var where = [street, town].filter(Boolean).join('<br>');
 
       return '<tr>'
         + '<td style="' + td + '">'
@@ -151,8 +157,10 @@
           ? chip(r.category, r.source === 'staff' ? '#EDE9FE' : r.source === 'parent' ? '#F1F5F9' : '#EEF2FF',
                  r.source === 'staff' ? '#5B21B6' : r.source === 'parent' ? '#475569' : '#4338CA')
           : '<span style="color:' + C.faint + ';">—</span>') + '</td>'
-        + '<td style="' + td + 'line-height:1.7;">' + (reach.join('<br>') || '<span style="color:' + C.faint + ';">—</span>') + '</td>'
-        + '<td style="' + td + 'color:' + C.muted + ';">' + (where || '—') + '</td>'
+        + '<td style="' + td + 'line-height:1.7;white-space:nowrap;">'
+        + (phones.join('<br>') || '<span style="color:' + C.faint + ';">—</span>') + '</td>'
+      + '<td style="' + td + '">' + mail + '</td>'
+        + '<td style="' + td + 'color:' + C.muted + ';line-height:1.6;">' + (where || '—') + '</td>'
         + '<td style="' + td + 'color:' + C.muted + ';max-width:280px;">'
         + (r.notes ? esc(String(r.notes).slice(0, 160)) + (String(r.notes).length > 160 ? '…' : '') : '—') + '</td>'
         /* Plain buttons in the LAST cell — kt-row-actions.js collapses them into the
@@ -170,7 +178,7 @@
           : '<span style="font-size:11px;color:' + C.faint + ';white-space:nowrap;">from their '
             + (r.source === 'staff' ? 'staff record' : 'family record') + '</span>')
         + '</td></tr>';
-    }).join('') || '<tr><td colspan="6" style="' + td + 'text-align:center;color:' + C.faint + ';padding:40px;">'
+    }).join('') || '<tr><td colspan="7" style="' + td + 'text-align:center;color:' + C.faint + ';padding:40px;">'
       + (state.search || state.category || state.emergency || state.centre
         ? 'No contact matches that.'
         : 'No contacts yet. Add the first one, or scan a business card.') + '</td></tr>';
@@ -186,7 +194,7 @@
       + '<div class="kt-card" style="padding:0;overflow:hidden;">'
       + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:900px;">'
       + '<thead><tr>'
-      + ['Contact', 'Category', 'How to reach them', 'Where', 'Notes', ''].map(function (h) {
+      + ['Contact', 'Category', 'Phone', 'Email', 'Address', 'Notes', ''].map(function (h) {
         return '<th style="' + th + '">' + h + '</th>';
       }).join('')
       + '</tr></thead><tbody>' + tbody + '</tbody></table></div>' + pager + '</div>';
@@ -208,12 +216,9 @@
 
     var cat = body.querySelector('#ct-cat');
     if (cat) cat.addEventListener('change', function () { state.category = cat.value; state.page = 1; load(container); });
-    var cen = body.querySelector('#ct-centre');
-    if (cen) cen.addEventListener('change', function () { state.centre = cen.value; state.page = 1; load(container); });
-    var emg = body.querySelector('#ct-emg');
-    if (emg) emg.addEventListener('change', function () { state.emergency = emg.checked ? '1' : ''; state.page = 1; load(container); });
-    var bo = body.querySelector('#ct-bookonly');
-    if (bo) bo.addEventListener('change', function () { state.bookOnly = bo.checked; state.page = 1; load(container); });
+    /* No handlers for the removed switches. The state keys and their query-string
+       parameters stay, so the server's filters remain available to any caller that
+       wants them — there is simply no permanent control for them here. */
 
     var prev = body.querySelector('#ct-prev');
     if (prev) prev.addEventListener('click', function () { if (state.page > 1) { state.page--; load(container); } });

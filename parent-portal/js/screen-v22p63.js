@@ -200,7 +200,7 @@
             <td>${fmtDate(i.due_date)}</td>
             <td style="text-align:right;font-weight:600;">${fmtMoney(i.amount)}</td>
             <td>${invoiceCell(i)}</td>
-            <td><span class="kt-pill ${i.status === 'paid' ? 'kt-pill-success' : i.status === 'cancelled' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(i.status)}</span></td>
+            <td>${statusCell(i)}</td>
           </tr>`).join('')}</tbody>
         </table>
       </div>`).join('') || `<div class="kt-card" style="text-align:center;padding:60px;color:#64748B;">${isStaff && !fid ? 'Select a family above to see their payment schedules.' : 'No payment schedules on file.'}</div>`}
@@ -242,12 +242,34 @@
       .trim();
   }
 
+  /* THE INVOICE IS THE STATUS.
+
+     payment_plan_installments.status is what the SCHEDULE thinks, and for everything
+     imported from iLearn it reads 'pending' and always will — nothing on this side ever
+     moves it. The invoice is what actually happened to the money, and the imported
+     schedules say so themselves: "Authoritative paid/unpaid status remains the invoice
+     record."
+
+     So the invoice wins, and the instalment's own status is used only where there is no
+     invoice to ask. Shown once, in one column. */
+  function statusCell(i) {
+    const st = String(i.invoice_number ? (i.invoice_status || '') : (i.status || ''));
+    const cls = /paid/.test(st) ? 'kt-pill-success'
+      : /cancel|void/.test(st) ? 'kt-pill-warning'
+      : /overdue/.test(st) ? 'kt-pill-danger'
+      : 'kt-pill-info';
+
+    return `<span class="kt-pill ${cls}">${esc(st || 'pending')}</span>`
+      + (i.invoice_number ? '' : '<div style="font-size:11px;color:#94A3B8;">scheduled only</div>');
+  }
+
   /* An imported schedule raised no invoice, and a blank cell says so more honestly
      than a placeholder would. One raised here shows its number and what it is doing. */
   function invoiceCell(i) {
     if (!i.invoice_number) return '<span style="color:#94A3B8;">\u2014</span>';
     const st = String(i.invoice_status || '');
-    const tint = st === 'draft' ? '#64748B' : st === 'void' ? '#94A3B8' : '#166534';
+    /* No status here. It lives in the Status column, which reads the same field — the
+       two used to be printed separately and could be read as disagreeing. */
     const when = st === 'draft' && i.invoice_issues_on ? ' \u00b7 issues ' + fmtDate(i.invoice_issues_on) : '';
 
     /* An imported instalment is matched to its invoice by due date, and iLearn
@@ -257,7 +279,8 @@
       ? `<div style="font-size:11.5px;color:#B45309;">invoiced ${fmtMoney(i.invoice_total)}</div>` : '';
 
     return `<span style="font-weight:600;">${esc(i.invoice_number)}</span>`
-      + `<div style="font-size:11.5px;color:${tint};">${esc(st)}${esc(when)}</div>` + differs;
+      + (when ? `<div style="font-size:11.5px;color:#64748B;">${esc(when.replace(' \u00b7 ', ''))}</div>` : '')
+      + differs;
   }
 
   function openPaymentPlanModal(families) {

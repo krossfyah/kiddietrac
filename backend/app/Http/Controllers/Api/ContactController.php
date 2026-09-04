@@ -150,9 +150,18 @@ final class ContactController extends Controller
                     'id' => 'u' . $r->id, 'user_id' => (int) $r->id,
                     'display_name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: '(no name)',
                     'first_name' => $r->first_name, 'last_name' => $r->last_name,
-                    'company' => null, 'job_title' => ucfirst(str_replace('_', ' ', $r->role)),
-                    'category' => 'Staff', 'email' => $r->email, 'phone' => $r->phone, 'mobile' => null,
-                    'city' => null, 'province' => null, 'notes' => null, 'tags' => [],
+                    /* The ROLE is the category. It used to say "Educator" under the name
+                       and "Staff" in the category column — two words for one fact,
+                       arguing with each other. Said once, in the column built for it,
+                       and the filter gains the distinction for nothing. */
+                    'company' => null, 'job_title' => null,
+                    'category' => ucfirst(str_replace('_', ' ', $r->role)),
+                    'email' => $r->email, 'phone' => $r->phone, 'mobile' => null,
+                    /* Staff addresses are not held on the user record, so this stays
+                       empty rather than showing a half-address from somewhere else. */
+                    'address_line1' => null, 'address_line2' => null,
+                    'city' => null, 'province' => null, 'postal_code' => null,
+                    'notes' => null, 'tags' => [],
                     'centre_id' => $r->centre_id, 'is_emergency' => false, 'card_image_url' => null,
                     'source' => 'staff', 'editable' => false,
                 ]);
@@ -164,7 +173,9 @@ final class ContactController extends Controller
                 ->whereIn('f.centre_id', $centreIds)
                 ->whereNull('u.deleted_at')
                 ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone',
-                       'f.primary_phone', 'f.family_name', 'f.city', 'f.province', 'f.centre_id']);
+                       'f.primary_phone', 'f.family_name', 'f.centre_id',
+                       // A household address lives on the family, not the person.
+                       'f.address_line1', 'f.address_line2', 'f.city', 'f.province', 'f.postal_code']);
 
             foreach ($famPhones as $r) {
                 $people->push((object) [
@@ -174,7 +185,9 @@ final class ContactController extends Controller
                     'company' => $r->family_name, 'job_title' => null,
                     'category' => 'Parent', 'email' => $r->email,
                     'phone' => $r->phone ?: $r->primary_phone, 'mobile' => null,
-                    'city' => $r->city, 'province' => $r->province, 'notes' => null, 'tags' => [],
+                    'address_line1' => $r->address_line1, 'address_line2' => $r->address_line2,
+                    'city' => $r->city, 'province' => $r->province, 'postal_code' => $r->postal_code,
+                    'notes' => null, 'tags' => [],
                     'centre_id' => $r->centre_id, 'is_emergency' => false, 'card_image_url' => null,
                     'source' => 'parent', 'editable' => false,
                 ]);
@@ -229,7 +242,12 @@ final class ContactController extends Controller
             'categories' => DB::table('contacts')->where('agency_id', $agencyId)->whereNull('deleted_at')
                 ->whereNotNull('category')->where('category', '!=', '')
                 ->distinct()->orderBy('category')->pluck('category')
-                ->concat(['Staff', 'Parent'])->unique()->sort()->values(),
+                /* The roles this agency actually has, plus Parent — so the filter offers
+                   the same words the rows show. */
+                ->concat(DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)
+                    ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor', 'platform_admin', 'sales_rep'])
+                    ->distinct()->pluck('role')->map(fn ($r) => ucfirst(str_replace('_', ' ', $r))))
+                ->concat(['Parent'])->unique()->sort()->values(),
             'centres' => DB::table('centres')->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name']),
             'meta' => ['total' => $total, 'page' => $page, 'per_page' => $perPage,
                        'pages' => max(1, (int) ceil($total / $perPage))],

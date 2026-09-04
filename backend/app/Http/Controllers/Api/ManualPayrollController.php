@@ -109,18 +109,31 @@ final class ManualPayrollController extends Controller
             $roleCentre[$uid] = $roleCentre[$uid] ?? $r->centre_id;
         }
 
-        /* What they were last paid, so a rate does not have to be remembered. Read
-           only — it seeds the form, and the person entering payroll confirms it. */
-        $lastRate = DB::table('payroll_documents')
+        /* NO RATE IS CARRIED FORWARD. The data cannot support it.
+
+           This field feeds a multiplication that proposes somebody's pay, so it must be
+           an hourly figure. Filtering on unit_label = 'hours' was not enough: all 13
+           rate-bearing documents here claim 'hours' while carrying an average "rate" of
+           $677.54 against 13.81 units. They are period amounts in a column labelled
+           hourly. Amna's is 1185 — against her 186.50 hours that proposes $221,102.50.
+
+           Nothing here separates a real hourly rate from a mislabelled period amount,
+           and a wrong guess is a six-figure payslip. So the box starts empty and a
+           person types it: a worse form, a much better outcome. The number that decides
+           what somebody is paid is always one a human chose for this run. */
+
+        /* What they were last paid in total, whatever shape it took. Useful context for
+           deciding what to pay now — and never multiplied by anything, which is why it
+           is a separate field with a name that cannot be mistaken for a rate. */
+        $lastPaid = DB::table('payroll_documents')
             ->whereIn('user_id', $userIds)->where('agency_id', $agencyId)
-            ->whereNotNull('rate')->where('rate', '>', 0)
             ->orderByDesc('period_end')
-            ->get(['user_id', 'rate'])->groupBy('user_id')
-            ->map(fn ($g) => (float) $g->first()->rate);
+            ->get(['user_id', 'net', 'period_end'])->groupBy('user_id')
+            ->map(fn ($g) => ['net' => (float) $g->first()->net, 'period_end' => $g->first()->period_end]);
 
         $staff = DB::table('users')->whereIn('id', $userIds)->whereNull('deleted_at')
             ->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'email'])
-            ->map(function ($u) use ($worked, $detail, $open, $roleLabel, $roleCentre, $lastRate) {
+            ->map(function ($u) use ($worked, $detail, $open, $roleLabel, $roleCentre, $lastPaid) {
                 $mins = $worked[(int) $u->id] ?? 0;
 
                 return [
@@ -133,13 +146,36 @@ final class ManualPayrollController extends Controller
                     'shifts' => count($detail[(int) $u->id] ?? []),
                     'open_punches' => $open[(int) $u->id] ?? 0,
                     'hours_detail' => $detail[(int) $u->id] ?? [],
-                    'last_rate' => $lastRate[(int) $u->id] ?? null,
+                    // Deliberately absent: see the note above the rate lookup.
+                    'last_rate' => null,
+                    'last_paid' => $lastPaid[(int) $u->id] ?? null,
                 ];
             })->values();
+
+        /* PEOPLE PAID BY NAME. The bookkeeper, the accountant, the trades — nobody
+           with a login, and nobody with a clock to read, so they carry an amount and no
+           hours. Drawn from what this agency has actually paid before, which is also
+           what stops the name field being used to invent a payee. */
+        $contractors = DB::table('payroll_documents')
+            ->where('agency_id', $agencyId)->whereNull('user_id')
+            ->whereNotNull('payee_name')->where('payee_name', '!=', '')
+            ->select('payee_name', 'payee_email', DB::raw('MAX(period_end) as last_paid'),
+                     DB::raw('COUNT(*) as documents'), DB::raw('MAX(net) as last_net'))
+            ->groupBy('payee_name', 'payee_email')
+            ->orderBy('payee_name')
+            ->get()
+            ->map(fn ($r) => [
+                'payee_name' => $r->payee_name,
+                'payee_email' => $r->payee_email,
+                'last_paid' => $r->last_paid,
+                'documents' => (int) $r->documents,
+                'last_net' => (float) $r->last_net,
+            ]);
 
         return response()->json([
             'period' => ['from' => $from, 'to' => $to],
             'staff' => $staff,
+            'contractors' => $contractors,
             'centres' => DB::table('centres')->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -161,7 +197,10 @@ final class ManualPayrollController extends Controller
             'period_end' => 'required|date_format:Y-m-d',
             'pay_frequency' => 'nullable|string|max:32',
             'rows' => 'required|array|min:1|max:200',
-            'rows.*.user_id' => 'required|integer',
+            /* Either an account or a name — a contractor has no user_id, and demanding
+               one is what kept them out of the run. */
+            'rows.*.user_id' => 'required_without:rows.*.payee_name|nullable|integer',
+            'rows.*.payee_name' => 'required_without:rows.*.user_id|nullable|string|max:120',
             'rows.*.hours' => 'nullable|numeric|min:0|max:1000',
             'rows.*.rate' => 'nullable|numeric|min:0',
             'rows.*.gross' => 'required|numeric|min:0.01',
@@ -171,6 +210,8 @@ final class ManualPayrollController extends Controller
             'rows.*.lines.*.label' => 'required_with:rows.*.lines|string|max:120',
             'rows.*.lines.*.amount' => 'required_with:rows.*.lines|numeric',
             'rows.*.hours_detail' => 'nullable|array|max:200',
+            'rows.*.staff_group' => 'nullable|string|max:16',
+            'rows.*.centre_id' => 'nullable|integer',
         ]);
         [$from, $to] = $this->window($data['period_start'], $data['period_end']);
 
@@ -181,28 +222,55 @@ final class ManualPayrollController extends Controller
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor'])
             ->pluck('user_id')->unique()->flip();
 
-        $people = DB::table('users')->whereIn('id', collect($data['rows'])->pluck('user_id'))
+        $people = DB::table('users')->whereIn('id', collect($data['rows'])->pluck('user_id')->filter())
             ->get(['id', 'first_name', 'last_name', 'email'])->keyBy('id');
+
+        /* The names this agency has paid before. A contractor row is checked against
+           this rather than trusted, so the field cannot introduce a payee nobody has
+           ever approved — paying somebody new stays a deliberate act elsewhere. */
+        $knownPayees = DB::table('payroll_documents')->where('agency_id', $agencyId)
+            ->whereNull('user_id')->whereNotNull('payee_name')
+            ->pluck('payee_email', 'payee_name');
 
         $created = [];
         $skipped = [];
 
         DB::transaction(function () use ($data, $agencyId, $from, $to, $allowed, $people, $request, &$created, &$skipped) {
             foreach ($data['rows'] as $row) {
-                $uid = (int) $row['user_id'];
-                if (! $allowed->has($uid) || ! $people->has($uid)) {
-                    $skipped[] = ['user_id' => $uid, 'why' => 'not staff in this agency'];
-                    continue;
+                $uid = isset($row['user_id']) ? (int) $row['user_id'] : 0;
+                $payeeName = trim((string) ($row['payee_name'] ?? ''));
+                $isContractor = ! $uid && $payeeName !== '';
+
+                if ($isContractor) {
+                    if (! $knownPayees->has($payeeName)) {
+                        $skipped[] = ['payee_name' => $payeeName, 'why' => 'not a payee this agency has paid before'];
+                        continue;
+                    }
+                    $u = (object) [
+                        'id' => null,
+                        'first_name' => $payeeName, 'last_name' => '',
+                        'email' => $knownPayees[$payeeName],
+                    ];
+                } else {
+                    if (! $allowed->has($uid) || ! $people->has($uid)) {
+                        $skipped[] = ['user_id' => $uid, 'why' => 'not staff in this agency'];
+                        continue;
+                    }
+                    $u = $people[$uid];
                 }
-                $u = $people[$uid];
 
                 /* One payslip per person per period. Pressing the button twice must not
                    pay somebody twice — the run is re-runnable, not duplicating. */
-                $dupe = DB::table('payroll_documents')->where('agency_id', $agencyId)
-                    ->where('user_id', $uid)->where('period_start', $from)->where('period_end', $to)
-                    ->where('source', 'manual')->exists();
-                if ($dupe) {
-                    $skipped[] = ['user_id' => $uid, 'why' => 'already has a manual payslip for this period'];
+                $dupeQ = DB::table('payroll_documents')->where('agency_id', $agencyId)
+                    ->where('period_start', $from)->where('period_end', $to)->where('source', 'manual');
+                $isContractor
+                    ? $dupeQ->whereNull('user_id')->where('payee_name', $payeeName)
+                    : $dupeQ->where('user_id', $uid);
+                if ($dupeQ->exists()) {
+                    $skipped[] = [
+                        ($isContractor ? 'payee_name' : 'user_id') => $isContractor ? $payeeName : $uid,
+                        'why' => 'already has a manual payslip for this period',
+                    ];
                     continue;
                 }
 
@@ -215,11 +283,14 @@ final class ManualPayrollController extends Controller
                 $id = DB::table('payroll_documents')->insertGetId([
                     'agency_id' => $agencyId,
                     'centre_id' => $row['centre_id'] ?? null,
-                    'user_id' => $uid,
+                    'user_id' => $isContractor ? null : $uid,
+                    'staff_group' => $isContractor ? 'contractors' : ($row['staff_group'] ?? 'other'),
                     'payee_name' => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')),
                     'payee_email' => $u->email,
-                    'kind' => 'payslip',
-                    'reference' => 'MP-' . Carbon::parse($from)->format('Ym') . '-' . str_pad((string) $uid, 4, '0', STR_PAD_LEFT),
+                    'kind' => $isContractor ? 'invoice' : 'payslip',
+                    'reference' => 'MP-' . Carbon::parse($from)->format('Ym') . '-'
+                        . ($isContractor ? strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $payeeName), 0, 6))
+                                         : str_pad((string) $uid, 4, '0', STR_PAD_LEFT)),
                     'period_start' => $from,
                     'period_end' => $to,
                     'units' => $hours,
@@ -240,7 +311,12 @@ final class ManualPayrollController extends Controller
                     'updated_at' => now(),
                 ]);
 
-                $created[] = ['id' => $id, 'user_id' => $uid, 'gross' => $gross, 'net' => $net];
+                $created[] = [
+                    'id' => $id,
+                    'user_id' => $isContractor ? null : $uid,
+                    'payee' => $isContractor ? $payeeName : ($people[$uid]->first_name ?? ''),
+                    'gross' => $gross, 'net' => $net,
+                ];
             }
 
             try {
@@ -258,7 +334,7 @@ final class ManualPayrollController extends Controller
                         'total_net' => round(array_sum(array_column($created, 'net')), 2),
                         /* Named, not counted — an audit row that says "12 payslips" cannot
                            answer "was Amna in that run". */
-                        'paid' => array_column($created, 'user_id'),
+                        'paid' => array_column($created, 'payee'),
                         'summary' => 'Manual payroll for ' . $from . ' to ' . $to . ' — '
                             . count($created) . ' payslip(s), $'
                             . number_format(array_sum(array_column($created, 'net')), 2) . ' net.',

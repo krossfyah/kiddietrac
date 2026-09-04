@@ -482,6 +482,7 @@
           <label style="font-size:13px;color:#374151;">To <input id="pr-to" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
           <button id="pr-run" style="background:#1F6080;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">Run</button>
           <button id="pr-csv" style="background:#059669;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">⤓ CSV</button>
+          <button id="pr-manual" style="background:#7C3AED;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">＋ Generate payroll</button>
         </div>
         <div id="pr-result"></div>
         <div id="pr-docs" hidden></div>
@@ -529,6 +530,13 @@
     document.getElementById('pr-from').valueAsDate = startWin;
     document.getElementById('pr-to').valueAsDate = today;
     document.getElementById('pr-run').onclick = () => runPayroll();
+    /* Manual payroll — pay several people for one period in one pass. The wizard lives
+       in its own module (screen-manual-payroll.js) rather than here: this file is large
+       already, and a payroll RUN is a different thing from the hours report. */
+    const manualBtn = document.getElementById('pr-manual');
+    if (manualBtn) manualBtn.onclick = () => {
+      if (KT.ManualPayroll) KT.ManualPayroll.open(() => renderPayrollDocs());
+    };
     // Same reason: by the time this runs the export module may already have removed it.
     const csvBtn = document.getElementById('pr-csv');
     if (csvBtn) csvBtn.onclick = () => {
