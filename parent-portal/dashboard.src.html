@@ -58,6 +58,26 @@
     // First-login default: a platform_admin sends no X-Active-Agency-Id until
     // one is chosen, which made the first screen error with "no agency access".
     // Seed it from the signed-in user's own agency so the first render works.
+    /* Drop an active agency that cannot belong to the person holding it.
+
+       Sessions opened before the seed fix are still carrying the demo agency (6),
+       and the seed below only fills a BLANK value, so without this they keep
+       sending it until the session ends. Only removed when it differs from the
+       user's own agency_id and they are not a platform_admin -- switching agencies
+       is exactly what a platform admin does, so theirs is never touched. */
+    try {
+      var _cur = sessionStorage.getItem('kt_active_agency_id');
+      if (_cur) {
+        var _cu = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+        var _cr = (_cu && _cu.roles && _cu.roles.indexOf) ? _cu.roles : [];
+        if (_cr.indexOf('platform_admin') === -1 && _cu && _cu.agency_id
+            && String(_cu.agency_id) !== String(_cur)) {
+          sessionStorage.removeItem('kt_active_agency_id');
+          sessionStorage.removeItem('kt_active_agency_name');
+        }
+      }
+    } catch (e) {}
+
     try {
       if (!sessionStorage.getItem('kt_active_agency_id')) {
         var _u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
@@ -66,7 +86,15 @@
         // admin's OWN agency_id here is what kept dropping a super admin straight
         // into the LIVE agency, looking at real families, no matter what the
         // switcher's default said.
-        var _seed = (_u && _u.default_agency_id) ? _u.default_agency_id : (_u && _u.agency_id);
+        // PLATFORM ADMINS ONLY. default_agency_id is not a per-user preference --
+        // /auth/me hands the same global DEFAULT_ADMIN_AGENCY_ID (6, the demo
+        // agency) to everyone, so preferring it unconditionally made every
+        // educator, parent and agency admin send X-Active-Agency-Id: 6 no matter
+        // which agency they belong to. Fails closed: no readable roles seeds from
+        // the user's own agency_id, which is always correct for them.
+        var _roles = (_u && _u.roles && _u.roles.indexOf) ? _u.roles : [];
+        var _isPlatformAdmin = _roles.indexOf('platform_admin') !== -1;
+        var _seed = (_isPlatformAdmin && _u && _u.default_agency_id) ? _u.default_agency_id : (_u && _u.agency_id);
         if (_seed) sessionStorage.setItem('kt_active_agency_id', String(_seed));
       }
     } catch(e){}
@@ -342,7 +370,7 @@ function showReloadGate(){
   <script src="/js/kt-closure-notice.js?v=20260814clo" defer></script>
   <script src="/js/kt-back.js?v=20260714back" defer></script>
   <script src="/js/kt-parent-chrome.js?v=20260831ui2" defer></script>
-  <script src="/js/session-timeout.js?v=20260714e" defer></script>
+  <script src="/js/session-timeout.js?v=202609040615" defer></script>
   <script src="/js/kt-illustrations.js?v=20260811greet" defer></script>
   <script src="/js/app-v2-shell.js?v=202609031949" defer></script>
   <!-- Collapses six independent badge pollers into one request. -->

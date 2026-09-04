@@ -184,6 +184,21 @@
       // over, so the unlock is over with it.
       sessionStorage.removeItem('kt_bio_session');
       sessionStorage.removeItem('kt_pin_session');
+
+      /* ...and the SAME keys in localStorage.
+
+         Auth.rememberSession() restores kt_token (and kt_user with it) from
+         localStorage on the next page load, so a session-only clear here meant a
+         reload silently put the timed-out session back. Auth.clear() already
+         purges both stores on an explicit sign-out; the automatic timeout must not
+         be weaker than the manual one.
+
+         Biometric / PIN unlock keep their own bearer token under separate
+         kt_bio_* / kt_pin_* keys, so clearing these does not disarm them. */
+      localStorage.removeItem('kt_token');
+      localStorage.removeItem('kt_user');
+      localStorage.removeItem('kt_active_agency_id');
+      localStorage.removeItem('kt_active_agency_name');
     } catch (e) {}
     var path = window.location.pathname || '';
     var qs = reason ? ('?signed_out=' + encodeURIComponent(reason)) : '';
