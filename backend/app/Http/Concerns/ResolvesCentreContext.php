@@ -209,6 +209,43 @@ trait ResolvesCentreContext
      * agency_admin of the centre's agency, OR platform_admin. Use on every
      * endpoint that takes a child id in the URL/body.
      */
+    /**
+     * Which centres may this caller SEE?
+     *
+     * Delegates to App\Support\Visibility so the rule has ONE home — controllers
+     * without this trait need the same answer, and a rule copied into two places is
+     * a rule that will disagree with itself.
+     *
+     * FAILS CLOSED: [] means nothing. Always `?: [0]` in the whereIn.
+     *
+     * @return int[]
+     */
+    protected function visibleCentreIds($request): array
+    {
+        return \App\Support\Visibility::centreIds(
+            (int) ($this->resolveAgencyId($request) ?: 0),
+            $request->user()
+        );
+    }
+
+    /**
+     * Which children may this caller see? The centre rule, followed through.
+     *
+     * A child belongs to a family and a family belongs to a centre, so this is where
+     * "which centres" becomes "which records" for every child-shaped table —
+     * incidents, care logs, observations, media. Same fail-closed contract: [] means
+     * nothing.
+     *
+     * @return int[]
+     */
+    protected function visibleChildIds($request): array
+    {
+        return \App\Support\Visibility::childIds(
+            (int) ($this->resolveAgencyId($request) ?: 0),
+            $request->user()
+        );
+    }
+
     protected function canAccessChildId($user, int $childId): bool
     {
         if (! $user || ! $childId) return false;
@@ -220,7 +257,44 @@ trait ResolvesCentreContext
         }
         // Staff of the child's centre (or agency_admin of its agency)
         $family = DB::table('families')->where('id', $child->family_id)->first();
-        return $family ? $this->authorizeCentreAccess($user, (int) $family->centre_id) : false;
+        if ($family && $this->authorizeCentreAccess($user, (int) $family->centre_id)) {
+            return true;
+        }
+
+        /* SHARED CARE — the child is with this person TODAY.
+
+           A child can be with a different provider on different days: Mylah Rappit is
+           with Cassandra Monday to Thursday and with Amna on Friday, which is what
+           enrollments.schedule exists to say. The two checks above only know the
+           family's HOME centre, so on a Friday they refused Amna for a child sitting
+           in her own home — she tried to file an absence twice and was 403'd twice.
+
+           Narrow on purpose. It requires an EXPLICIT room assignment (somebody put
+           this person in that room), the child to be in that room TODAY, and the room
+           to belong to the same agency as the child — a schedule must never reach
+           across tenants. It only ever grants; every refusal above still refuses. */
+        if (! $family) {
+            return false;
+        }
+        try {
+            $todayRoom = \App\Support\CareSchedule::roomToday($childId) ?: ($child->primary_room_id ?? null);
+            if (! $todayRoom) {
+                return false;
+            }
+            $assigned = DB::table('educator_rooms')
+                ->where('user_id', $user->id)->where('room_id', $todayRoom)->exists();
+            if (! $assigned) {
+                return false;
+            }
+            $roomAgency = DB::table('rooms as r')
+                ->join('centres as ce', 'ce.id', '=', 'r.centre_id')
+                ->where('r.id', $todayRoom)->value('ce.agency_id');
+            $childAgency = DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
+
+            return $roomAgency && $childAgency && (int) $roomAgency === (int) $childAgency;
+        } catch (\Throwable $e) {
+            return false;   // fail closed
+        }
     }
 
     /** v22p94 — Can this user access this FAMILY? (guardian member, or staff of its centre.) */
