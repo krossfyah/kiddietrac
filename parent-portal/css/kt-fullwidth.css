@@ -37,6 +37,45 @@
   max-width: 100% !important;
 }
 
+/* ── ...and the ones capped by a GENERIC stylesheet rule (2026-09-04) ──────
+   The two selectors above match a max-width written INLINE, or by a known class.
+   A wrapper capped by a generic rule in another stylesheet escapes both.
+
+   kt-consistency-v22p71.css caps `[data-kt-pretty] > div:not([style*="max-width"])`
+   at 1800px and centres it. That rule dates from when #appMain was itself capped at
+   1800px; this file uncaps #appMain, and the cap simply moved down to its children.
+   Note what it matches: divs WITHOUT an inline max-width -- precisely the ones the
+   first selector in this file skips. The two rules partition the page between them,
+   which is why this half was never reached.
+
+   Visible in the parent view as a banner narrower than the content beneath it: the
+   hero measured 1800px centred with 32.5px margins while the block below it filled
+   1865px. Screens whose hero sits inside their own padded wrapper were narrower
+   again (1837px and 1817px), so the same banner had three widths depending on which
+   screen you were on. All 26 parent screens now measure 1865 @ 20.
+
+   Desktop only: mobile hides the parent hero outright and owns <=768px by
+   convention, the same line kt-desktop-fluid.css draws. */
+@media (min-width: 769px) {
+  body.role-guardian #appMain[data-kt-pretty] > div:not([style*="max-width"]),
+  body.role-educator #appMain[data-kt-pretty] > div:not([style*="max-width"]) {
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* A hero nested in the screen's own wrapper inherits that wrapper's horizontal
+     padding, which differs per screen. Zero it for the wrapper that HOLDS a hero
+     only -- :has() keeps this off every other container on the page. */
+  body.role-guardian #appMain > div:has(> .kt-hero),
+  body.role-guardian #appMain > div:has(> .kt-page-hero),
+  body.role-educator #appMain > div:has(> .kt-hero),
+  body.role-educator #appMain > div:has(> .kt-page-hero) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
 /* Tables + their headers always span their (now full-width) container. */
 #appMain table { width: 100% !important; }
 
