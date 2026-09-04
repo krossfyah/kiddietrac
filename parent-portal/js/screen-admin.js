@@ -151,6 +151,203 @@
     }
   }
 
+  /* The provider actions, as plain buttons for a row's action cell.
+
+     They were a "Danger zone" at the bottom of the centre EDIT form, which meant
+     closing a provider required opening the record and scrolling past every field
+     to reach it. These are actions ON a provider, not properties of one.
+
+     Deliberately plain buttons with word labels: kt-row-actions.js collapses the
+     last cell into the ⋮ kebab and forwards a real click back here, and inside that
+     menu the button's TEXT is the menu item — so a bare glyph would render a blank
+     row, and "Archive"/"Delete" earn the red destructive styling for free. */
+  /* A true read-only view of a provider: no inputs, no Save, nothing to change.
+     Reading a record should not mean opening the form that can overwrite it.
+
+     Renders from the row the list already has, so it opens without a request. */
+  function showCentreView(c, content) {
+    var body = Dom.el('div', {});
+
+    var INK = 'var(--ink-500,#64748B)';
+    var dash = '—';
+    function val(v) {
+      if (v === null || v === undefined || String(v).trim() === '') return dash;
+      return String(v);
+    }
+
+    /* A heading for each group. Grouping matters more here than in the form: the
+       form has an order you tab through, a view has an order you SCAN. */
+    function section(title) {
+      body.appendChild(Dom.el('div', {
+        style: 'font-size:11px;font-weight:800;color:' + INK + ';letter-spacing:.7px;'
+          + 'text-transform:uppercase;margin:18px 0 6px;padding-top:10px;'
+          + 'border-top:1px solid var(--ink-100,#E5E7EB);',
+      }, title));
+    }
+
+    /* Two columns on a desktop dialog, one on a phone — the label column is fixed
+       so the values line up and can be read down rather than hunted for. */
+    var grid = null;
+    function startGrid() {
+      grid = Dom.el('div', { style: 'display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:7px 16px;align-items:start;' });
+      body.appendChild(grid);
+    }
+    function row(label, value, opts) {
+      if (!grid) startGrid();
+      grid.appendChild(Dom.el('div', {
+        style: 'font-size:12.5px;color:' + INK + ';font-weight:600;padding-top:1px;',
+      }, label));
+      var style = 'font-size:13.5px;color:var(--ink-900,#0F172A);word-break:break-word;';
+      if (opts && opts.muted) style += 'color:' + INK + ';';
+      grid.appendChild(Dom.el('div', { style: style }, val(value)));
+    }
+    function endGrid() { grid = null; }
+
+    // ── header: who this is ──────────────────────────────────────────────
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:13px;margin-bottom:4px;' });
+    var accent = (window.KT && KT.providerBand) ? KT.providerBand(c) : (c.brand_color || '#1F6080');
+    var logo = Dom.el('div', {
+      style: 'flex-shrink:0;width:52px;height:52px;border-radius:11px;overflow:hidden;background:' + accent
+        + ';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;',
+    });
+    try { provAvatarInto(logo, c); } catch (e) {}
+    head.appendChild(logo);
+    var stack = Dom.el('div', { style: 'min-width:0;' });
+    stack.appendChild(Dom.el('div', { style: 'font-size:17px;font-weight:800;line-height:1.2;' }, c.name || dash));
+    if (c.tagline) stack.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:' + INK + ';margin-top:2px;' }, c.tagline));
+    head.appendChild(stack);
+    body.appendChild(head);
+
+    var badges = Dom.el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px;' });
+    try { badges.appendChild(statusBadge(c.status)); } catch (e) {}
+    try { badges.appendChild(emailBadgeEl(c.email_enabled !== false)); } catch (e) {}
+    if (c.cwelcc_enrolled) {
+      badges.appendChild(Dom.el('span', {
+        style: 'font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#EFF6FF;color:#1D4ED8;',
+      }, 'CWELCC enrolled'));
+    }
+    body.appendChild(badges);
+
+    // ── at a glance ──────────────────────────────────────────────────────
+    section('At a glance');
+    startGrid();
+    var cap = c.license_capacity ? (val(c.enrolled_count || 0) + ' of ' + c.license_capacity
+      + '  (' + (c.capacity_pct || 0) + '%)') : val(c.enrolled_count || 0);
+    row('Children enrolled', cap);
+    if (c.max_concurrent_children) {
+      row('At one time', val(c.children_present || 0) + ' of ' + c.max_concurrent_children);
+    }
+    row('Families', val(c.family_count || 0));
+    row('Staff', val(c.staff_count || 0));
+    endGrid();
+
+    // ── the provider ─────────────────────────────────────────────────────
+    section('Provider');
+    startGrid();
+    var owner = [c.supervisor_first_name, c.supervisor_last_name].filter(Boolean).join(' ');
+    row('Owner / supervisor', owner);
+    row('Licence number', c.license_number);
+    row('Phone', (window.KT && KT.Phone) ? KT.Phone.format(c.phone) || c.phone : c.phone);
+    row('Email', c.email);
+    endGrid();
+
+    // ── address ──────────────────────────────────────────────────────────
+    section('Address');
+    startGrid();
+    row('Street', c.address_line1);
+    if (c.address_line2) row('Unit / suite', c.address_line2);
+    row('City', c.city);
+    row('Province / State', c.province);
+    row('Postal / ZIP', c.postal_code);
+    row('Country', c.country);
+    endGrid();
+
+    // ── hours ────────────────────────────────────────────────────────────
+    section('Hours');
+    startGrid();
+    var hrs = (c.open_time && c.close_time)
+      ? (fmtTime(c.open_time) + ' – ' + fmtTime(c.close_time))
+      : (c.open_time ? fmtTime(c.open_time) + ' onwards' : '');
+    row('Opens – closes', hrs);
+    row('Open days', daysLabel(c.open_days));
+    endGrid();
+
+    // ── rooms, when there are any ────────────────────────────────────────
+    if (c.rooms && c.rooms.length) {
+      section('Rooms');
+      startGrid();
+      c.rooms.forEach(function (r) {
+        var detail = [r.age_group, r.capacity ? ('capacity ' + r.capacity) : null].filter(Boolean).join(' · ');
+        row(r.name || dash, detail || dash);
+      });
+      endGrid();
+    }
+
+    if (c.provider_bio) {
+      section('About');
+      body.appendChild(Dom.el('div', {
+        style: 'font-size:13.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink-800,#1E293B);',
+      }, c.provider_bio));
+    }
+
+    Shell.Modal.open({
+      title: c.name,
+      body: body,
+      /* One button, and it only closes. No Save, and deliberately no Edit either:
+         a view that can turn into a form is not a view, and Edit is one item away
+         in the same kebab this was opened from. */
+      actions: [{ label: 'Close', primary: true }],
+    });
+  }
+
+  /* 07:00:00 -> 7:00 AM. The stored value is a wall-clock time, never converted. */
+  function fmtTime(t) {
+    var m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return String(t || '');
+    var h = parseInt(m[1], 10);
+    var ap = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ':' + m[2] + ' ' + ap;
+  }
+
+  /* ISO weekdays (1 = Monday) as the short names the rest of the portal uses. */
+  function daysLabel(days) {
+    if (!days || !days.length) return '';
+    var NAMES = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+    return days.slice().sort(function (a, b) { return a - b; })
+      .map(function (d) { return NAMES[d] || d; }).join(', ');
+  }
+
+  function centreActionButtons(c, content) {
+    var PLAIN = 'background:transparent;border:1px solid var(--ink-300);padding:6px 12px;'
+      + 'border-radius:6px;cursor:pointer;font-size:13px;';
+    function mk(label) { return Dom.el('button', { type: 'button', style: PLAIN }, label); }
+
+    function toast(msg, kind) {
+      if (window.KT && window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast(msg, kind);
+    }
+
+    /* View first: reading a provider is the common case, and it should not mean
+       opening the form that can overwrite it. */
+    var viewBtn = mk('View');
+    viewBtn.addEventListener('click', function (e) { e.stopPropagation(); showCentreView(c, content); });
+
+    var editBtn = mk('Edit');
+    editBtn.addEventListener('click', function (e) { e.stopPropagation(); showCentreModal(c, content); });
+
+    /* The one way a provider leaves: decide where every family goes, clock the staff
+       out, email the parents, then archive. It is the whole job, not a first step. */
+    var offboardBtn = mk('\ud83d\udeaa Close this provider\u2026');
+    offboardBtn.addEventListener('click', function (e) { e.stopPropagation(); openCentreOffboard(c, content); });
+
+    /* Archive is the LAST STEP of "Close this provider", not a button beside it:
+       that flow transfers or withdraws every family and clocks staff out first, and
+       the archive endpoint refuses while children are still enrolled. Permanent
+       delete lives on Agency overview -> Archived centres, on records that have
+       already been archived. */
+    return [viewBtn, editBtn, offboardBtn];
+  }
+
   async function renderCentresTab(content) {
     Dom.clear(content);
     content.appendChild(loading('Loading centres...'));
@@ -218,11 +415,23 @@
     table.appendChild(thead);
 
     const tbody = Dom.el('tbody', {});
+    /* Position-assigned colours, same as the cards view -- see providerBand(). */
+    buildProviderBands(data.centres);
     data.centres.forEach(c => {
-      // v22p3.4: tint the row's left edge with the centre's brand colour, render
-      // the logo (or initial) inline with the name.
-      const accent = c.brand_color || '#1F6080';
-      const row = Dom.el('tr', { style: 'border-top: 1px solid var(--ink-100, #E5E7EB);box-shadow:inset 4px 0 0 ' + accent + ';' });
+      /* NO ROW BAND.
+
+         This used to draw the centre's brand colour down the row's left edge
+         (box-shadow:inset 4px 0 0). It was the only table in the portal that did --
+         every other list renders a plain row -- and it encoded nothing anyway: it
+         read `c.brand_color || '#1F6080'` while 10 of the 12 providers still carry
+         the seeded default, so ten rows drew an identical navy stripe and two drew
+         an arbitrary one. A band that marks everything marks nothing.
+
+         The colour still appears where it can actually be told apart: the avatar
+         tile in the Name column, via providerBand() -- the same helper the cards
+         view and the detail dialog use, so one provider is one colour everywhere. */
+      const accent = providerBand(c);
+      const row = Dom.el('tr', { style: 'border-top: 1px solid var(--ink-100, #E5E7EB);' });
       const nameCell = Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' });
       const nameWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
       // smaller 32px logo for the row
@@ -256,9 +465,11 @@
       const emailCell = Dom.el('td', { style: 'padding: 14px 16px;' });
       emailCell.appendChild(emailBadgeEl(c.email_enabled !== false));
       row.appendChild(emailCell);
-      const editBtn = Dom.el('button', { style: 'background: transparent; border: 1px solid var(--ink-300); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;' }, 'Edit');
-      editBtn.addEventListener('click', () => showCentreModal(c, content));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, editBtn));
+      /* Edit plus the three provider actions. kt-row-actions collapses this last
+         cell into the \u22ee kebab on desktop; phones keep them as plain buttons. */
+      const actCell = Dom.el('td', { style: 'padding: 14px 16px; text-align: right; white-space: nowrap;' });
+      centreActionButtons(c, content).forEach(function (b) { b.style.marginLeft = '6px'; actCell.appendChild(b); });
+      row.appendChild(actCell);
       tbody.appendChild(row);
     });
     table.appendChild(tbody);
@@ -329,21 +540,26 @@
 
   function renderCentresCards(centres, content) {
     buildProviderBands(centres);
-    var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;' });
+    /* data-kt-list is what gets a NON-table list the same \u22ee kebab from
+       kt-row-actions. data-kt-no-controls comes with it because that attribute also
+       grants a search + A\u2013Z bar from kt-list-controls, and this screen already
+       has its own toolbar directly above. */
+    var grid = Dom.el('div', {
+      'data-kt-list': '1',
+      'data-kt-no-controls': '1',
+      style: 'display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;',
+    });
     centres.forEach(function (c) {
       /* Was a flat #1F6080 for everyone, since no provider has a brand_color set —
          nine identical navy cards. */
       var accent = providerBand(c);
       var card = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;cursor:pointer;border-left:6px solid ' + accent + ';position:relative;' });
 
-      var editBtn = Dom.el('button', {
-        style: 'position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--ink-300);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--ink-700);z-index:2;',
-      }, 'Edit');
-      editBtn.addEventListener('click', function (e) { e.stopPropagation(); showCentreModal(c, content); });
-      card.appendChild(editBtn);
+      // Edit moved into the action bar at the foot of the card, with the rest.
 
       // header — logo + name + city
-      var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:16px 16px 10px;padding-right:70px;' });
+      // The right padding was reserving space for the floating Edit button, now gone.
+      var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:16px 16px 10px;' });
       var logo = Dom.el('div', {
         style: 'flex-shrink:0;width:44px;height:44px;border-radius:10px;overflow:hidden;background:' + accent + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;',
       });
@@ -392,6 +608,17 @@
       stats.appendChild(statCell('Staff', c.staff_count || 0, staffZero ? '#B91C1C' : '#15803D', staffZero ? '#FEF2F2' : '#F0FDF4'));
       card.appendChild(stats);
 
+      /* The card's LAST element child, containing nothing but buttons — that is the
+         exact shape kt-row-actions looks for on a [data-kt-list] card, and what it
+         collapses into the \u22ee. Anything else here (a stat, a note) and it would
+         correctly refuse to treat the row as actions. */
+      var actions = Dom.el('div', {
+        style: 'display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;padding:10px 16px;'
+          + 'border-top:1px solid var(--ink-100,#E5E7EB);',
+      });
+      centreActionButtons(c, content).forEach(function (b) { actions.appendChild(b); });
+      card.appendChild(actions);
+
       card.addEventListener('click', function () { showCentreModal(c, content); });
       grid.appendChild(card);
     });
@@ -403,23 +630,131 @@
     const body = Dom.el('div', {});
     const form = Dom.el('form', {});
 
+    /* Required only when creating. An existing centre may predate these fields, and
+       demanding them before somebody can fix a phone number would block the wrong person
+       from doing the right thing. */
+    const req = !isEdit;
+
     const fields = [
       { key: 'name', label: 'Centre name', required: true },
+      // Inherited from the duplicate "Add centre" form on Agency overview, now retired.
+      { key: 'supervisor_first_name', label: 'Owner / supervisor first name', required: req },
+      { key: 'supervisor_last_name', label: 'Owner / supervisor last name', required: req },
       { key: 'license_number', label: 'License number' },
       { key: 'license_capacity', label: 'Maximum children enrolled (capacity)', type: 'number' },
       /* Deliberately the next line down: the contrast with the enrolment cap above
          is the whole point. Enrolment may exceed this; attendance may not. */
       { key: 'max_concurrent_children', label: 'Maximum children at one time', type: 'number' },
-      { key: 'address_line1', label: 'Address' },
-      { key: 'city', label: 'City' },
-      { key: 'province', label: 'Province', default: 'ON' },
-      { key: 'postal_code', label: 'Postal code' },
+      { key: 'address_line1', label: 'Address', required: req },
+      { key: 'address_line2', label: 'Address line 2 (unit, suite, floor)' },
+      { key: 'city', label: 'City', required: req },
+      { key: 'province', label: 'Province / State', default: 'ON', required: req },
+      { key: 'postal_code', label: 'Postal / ZIP code', required: req },
+      /* Was hardcoded to 'CA' server-side, so a US agency's centres were all created as
+         Canadian — which decides the statutory-holiday calendar and the currency. */
+      { key: 'country', label: 'Country', default: 'Canada', required: req },
       { key: 'phone', label: 'Phone' },
       { key: 'email', label: 'Email', type: 'email' },
     ];
 
     const inputs = {};
     const edited = {};   // last value typed per field, immune to a re-render
+
+    /* Address lookup. Fills the address fields from one chosen result so a postcode is
+       not typed from memory — it is the field most often wrong and the one the holiday
+       calendar, invoices and the provider map all trust.
+
+       Photon: open data, no key, no per-request cost, and already used elsewhere here.
+       Advisory only — every field stays editable and a provider saves fine without it,
+       because a rural address a geocoder does not know is still a real address. */
+    const lookupWrap = Dom.el('div', { style: 'margin-bottom:14px;' });
+    lookupWrap.appendChild(Dom.el('label', {
+      style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;',
+    }, 'Find the address'));
+    const lookupInput = Dom.el('input', {
+      type: 'text',
+      placeholder: 'Start typing an address\u2026',
+      style: 'width:100%;padding:8px 12px;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;',
+    });
+    const lookupList = Dom.el('div', {
+      style: 'border:1px solid var(--ink-200,#E2E8F0);border-top:none;border-radius:0 0 6px 6px;display:none;max-height:190px;overflow:auto;background:#fff;',
+    });
+    const lookupHint = Dom.el('div', {
+      style: 'font-size:11.5px;color:var(--ink-500,#64748B);margin-top:4px;',
+    }, 'Optional \u2014 it just fills the fields below. You can always type them yourself.');
+    lookupWrap.appendChild(lookupInput);
+    lookupWrap.appendChild(lookupList);
+    lookupWrap.appendChild(lookupHint);
+    form.appendChild(lookupWrap);
+
+    (function () {
+      var timer = null;
+      var lastQuery = '';
+
+      function hide() { lookupList.style.display = 'none'; lookupList.innerHTML = ''; }
+
+      function choose(p) {
+        // Photon splits the street from the number; the form wants one line.
+        var line1 = [p.housenumber, p.street || p.name].filter(Boolean).join(' ');
+        var set = {
+          address_line1: line1 || p.name || '',
+          city: p.city || p.town || p.village || p.county || '',
+          province: p.state || '',
+          postal_code: p.postcode || '',
+          country: p.country || '',
+        };
+        Object.keys(set).forEach(function (k) {
+          if (!inputs[k] || !set[k]) return;
+          inputs[k].value = set[k];
+          edited[k] = set[k];          // the form reads `edited` on save
+        });
+        hide();
+        lookupHint.textContent = 'Filled from the lookup \u2014 check it and correct anything that is wrong.';
+      }
+
+      lookupInput.addEventListener('input', function () {
+        var q = lookupInput.value.trim();
+        if (timer) { clearTimeout(timer); }
+        if (q.length < 4) { hide(); return; }
+        // Typed slowly enough to be a search, not a keystroke-per-request.
+        timer = setTimeout(async function () {
+          if (q === lastQuery) return;
+          lastQuery = q;
+          try {
+            var r = await fetch('https://photon.komoot.io/api/?limit=5&q=' + encodeURIComponent(q));
+            var j = await r.json();
+            var feats = (j && j.features) || [];
+            if (!feats.length) { hide(); return; }
+            lookupList.innerHTML = '';
+            feats.forEach(function (f) {
+              var p = f.properties || {};
+              var line = [
+                [p.housenumber, p.street || p.name].filter(Boolean).join(' '),
+                p.city || p.town || p.village,
+                p.state,
+                p.postcode,
+                p.country,
+              ].filter(Boolean).join(', ');
+              var row = Dom.el('div', {
+                style: 'padding:8px 11px;font-size:13px;cursor:pointer;border-top:1px solid var(--ink-100,#F1F5F9);',
+              }, line);
+              row.addEventListener('mouseenter', function () { row.style.background = '#F1F5F9'; });
+              row.addEventListener('mouseleave', function () { row.style.background = ''; });
+              row.addEventListener('click', function () { choose(p); });
+              lookupList.appendChild(row);
+            });
+            lookupList.style.display = 'block';
+          } catch (e) {
+            // The lookup is a convenience; losing it must not stop the form working.
+            hide();
+            lookupHint.textContent = 'Address lookup is unavailable \u2014 type the address below.';
+          }
+        }, 350);
+      });
+
+      lookupInput.addEventListener('blur', function () { setTimeout(hide, 180); });
+    })();
+
     fields.forEach(f => {
       const wrap = Dom.el('div', { style: 'margin-bottom: 12px;' });
       wrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, f.label + (f.required ? ' *' : '')));
@@ -754,37 +1089,10 @@
       form.appendChild(statusWrap);
     }
 
-    // Danger zone — archive / permanently delete this centre (edit only).
-    if (isEdit) {
-      form.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#B91C1C;letter-spacing:1px;text-transform:uppercase;margin:18px 0 8px;padding-top:14px;border-top:1px solid var(--ink-100,#E5E7EB);' }, '⚠ Danger zone'));
-      const dz = Dom.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;' });
-      const dzMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);' });
-      const archiveBtn = Dom.el('button', { type: 'button', style: 'padding:8px 14px;background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;' }, 'Archive centre');
-      const delBtn = Dom.el('button', { type: 'button', style: 'padding:8px 14px;background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;' }, 'Delete permanently');
-      archiveBtn.addEventListener('click', async () => {
-        if (!(window.KT && window.KT.confirm) || !await window.KT.confirm({ title: 'Archive “' + centre.name + '”?', description: 'It will be hidden from active centres but can be restored anytime from the Agency overview.' })) return;
-        try { await Api.delete('/admin/centres/' + centre.id); if (typeof onSaved === 'function') { await onSaved(); } else { await renderCentresTab(content); } Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre archived', 'success'); }
-        catch (e) { dzMsg.textContent = 'Could not archive: ' + (e.message || 'error'); dzMsg.style.color = '#DC2626'; }
-      });
-      delBtn.addEventListener('click', async () => {
-        if (!(window.KT && window.KT.confirm) || !await window.KT.confirm({ title: 'Permanently delete “' + centre.name + '”?', description: 'This cannot be undone. Archive instead if you might need it back.', tone: 'danger' })) return;
-        try { await Api.delete('/admin/centres/' + centre.id + '/permanent'); if (typeof onSaved === 'function') { await onSaved(); } else { await renderCentresTab(content); } Shell.Modal.close(); if (window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast('Centre permanently deleted', 'success'); }
-        catch (e) { dzMsg.textContent = (e.message || 'Could not delete'); dzMsg.style.color = '#DC2626'; }
-      });
-      /* Closing a provider properly, which is what somebody reaching for Archive
-         usually actually means. Archive refuses while children are still enrolled, so
-         this sits immediately before it: decide where every family goes, then archive.
-         (2026-08-25) */
-      const offboardBtn = Dom.el('button', {
-        type: 'button',
-        style: 'padding:8px 14px;background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;'
-          + 'border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;',
-      }, 'Close this provider\u2026');
-      offboardBtn.addEventListener('click', () => openCentreOffboard(centre, content));
-      dz.appendChild(offboardBtn);
-      dz.appendChild(archiveBtn); dz.appendChild(delBtn); dz.appendChild(dzMsg);
-      form.appendChild(dz);
-    }
+    /* The Danger zone that stood here — Close provider / Archive centre / Delete
+       permanently — moved to the provider's row, where kt-row-actions turns it into
+       the ⋮ kebab. Reaching them meant opening the record and scrolling past every
+       field to the bottom of the form, which is a long way to go to close a provider. */
 
     const status = Dom.el('div', { style: 'min-height: 20px; color: #DC2626; font-size: 13px; margin: 8px 0;' });
     form.appendChild(status);
@@ -829,10 +1137,24 @@
               } else {
                 try { status.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
               }
+              /* false keeps the modal open — Shell.Modal closes on anything else. Without
+                 it a refusal threw away everything typed, so fixing one field meant
+                 filling the whole provider in again. */
+              return false;
             };
             if (!data.name) {
-              refuse('Name is required.', 'name');
-              return;
+              return refuse('Name is required.', 'name');
+            }
+            /* Everything marked * must be present when CREATING. Refused one at a time,
+               naming and focusing the field, because a list of eight complaints is read
+               as a wall and fixed as a guess. */
+            if (!isEdit) {
+              const mustHave = fields.filter(f => f.required && f.key !== 'name');
+              for (const f of mustHave) {
+                if (!String(data[f.key] || '').trim()) {
+                  return refuse(f.label + ' is required.', f.key);
+                }
+              }
             }
             // Only REMOVING an existing bio is refused. Requiring one before any
             // other field can be saved blocked ordinary edits — a capacity change on
@@ -840,8 +1162,7 @@
             const bioExisted = !!(centre && String(centre.provider_bio || '').trim());
             const bioNowEmpty = inputs.provider_bio && (!data.provider_bio || !data.provider_bio.trim());
             if (bioExisted && bioNowEmpty) {
-              refuse('The provider bio cannot be removed — families are sent it when they join.', 'provider_bio');
-              return;
+              return refuse('The provider bio cannot be removed — families are sent it when they join.', 'provider_bio');
             }
             if (data.license_capacity) data.license_capacity = parseInt(data.license_capacity, 10);
             data.open_days = Array.from(selectedDays).sort(function (a, b) { return a - b; });
@@ -1091,7 +1412,7 @@
     headCheck.appendChild(selectAll);
     headRow.appendChild(headCheck);
 
-    ['Name', 'Username', 'Email', 'Roles', 'Status', 'Last seen', ''].forEach(h => {
+    ['Name', 'Username', 'Email', 'Roles', 'Status', 'Onboarding', 'Last seen', ''].forEach(h => {
       headRow.appendChild(Dom.el('th', { style: 'text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.5px;' }, h));
     });
     thead.appendChild(headRow);
@@ -1154,7 +1475,8 @@
       });
       row.appendChild(rolesCell);
 
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(u.status, inviteTip(u))));
+      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(u, inviteTip(u))));
+      row.appendChild(userOnboardingCell(u));
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px; white-space: nowrap;' }, fmtLoginStamp(u.last_seen_at || u.last_login_at)));
 
       let actionEl;
@@ -1459,7 +1781,7 @@
     head.appendChild(avatarCircle(u, 52, { user: true }));
     head.appendChild(Dom.el('div', {}, [
       Dom.el('div', { style: 'font-size:18px;font-weight:800;color:#0f172a;' }, u.name || u.email),
-      Dom.el('div', { style: 'margin-top:4px;' }, statusBadge(u.status)),
+      Dom.el('div', { style: 'margin-top:4px;' }, statusBadge(u)),
     ]));
     body.appendChild(head);
     // What the list row already knows — shown immediately so the dialog is never
@@ -1744,7 +2066,7 @@
       // Identity first — name, status and role are the questions an admin opens
       // this modal to answer.
       glanceGrid.appendChild(glanceItem('Full name', fullName));
-      glanceGrid.appendChild(glanceItem('Status', statusBadge(u.status || 'active')));
+      glanceGrid.appendChild(glanceItem('Status', statusBadge(u)));
       glanceGrid.appendChild(glanceItem('Role', roles));
 
       // First name / Last name are already shown as Full name above, and Status
@@ -3253,6 +3575,11 @@
       stats.appendChild(Dom.el('span', {}, '👤 ' + f.guardian_count + ' guardians'));
       card.appendChild(stats);
 
+      // Same answer the table column gives, on the card layout.
+      var onbWrap = Dom.el('div', { style: 'margin-top:10px;' });
+      onbWrap.appendChild(familyOnboardingBadge(f));
+      card.appendChild(onbWrap);
+
       if (f.outstanding_balance > 0) {
         card.appendChild(Dom.el('div', { style: 'margin-top: 10px; color: #DC2626; font-weight: 600; font-size: 13px;' },
           '⚠ $' + f.outstanding_balance.toFixed(2) + ' outstanding'));
@@ -3928,7 +4255,7 @@
     headCheck.appendChild(selectAll);
     headRow.appendChild(headCheck);
 
-    ['Family', 'Centre', 'Children', 'Guardians', 'Outstanding', 'Enrolled', ''].forEach(function (h) {
+    ['Family', 'Centre', 'Children', 'Guardians', 'Onboarding', 'Outstanding', 'Enrolled', ''].forEach(function (h) {
       headRow.appendChild(Dom.el('th', {
         style: 'text-align:left;padding:11px 14px;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;',
       }, h));
@@ -3966,6 +4293,9 @@
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;color:#6B7280;font-size:13px;' }, f.centre_name || '—'));
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' }, '👶 ' + f.child_count));
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' }, '👤 ' + f.guardian_count));
+      var onbTd = Dom.el('td', { style: 'padding:11px 14px;' });
+      onbTd.appendChild(familyOnboardingBadge(f));
+      tr.appendChild(onbTd);
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;font-size:13px;' + (f.outstanding_balance > 0 ? 'color:#DC2626;font-weight:600;' : 'color:#6B7280;') },
         f.outstanding_balance > 0 ? ('$' + f.outstanding_balance.toFixed(2)) : '—'));
 
@@ -4080,16 +4410,15 @@
     // Phone as separate area code + number (stored combined so the backend is unchanged).
     function _pdig(s) { return (s == null ? '' : String(s)).replace(/[^0-9]/g, ''); }
     function _psplit(v) { var d = _pdig(v); if (d.length === 11 && d[0] === '1') d = d.slice(1); if (d.length >= 10) return { a: d.slice(0, 3), n: d.slice(3, 10) }; if (d.length > 3) return { a: d.slice(0, 3), n: d.slice(3) }; return { a: '', n: v || '' }; }
-    function _pcombine(a, n) { a = _pdig(a); var nd = _pdig(n); if (!a && !nd) return ''; if (a && nd) return '(' + a + ') ' + (nd.length >= 7 ? nd.slice(0, 3) + '-' + nd.slice(3, 7) : nd); return (a ? '(' + a + ') ' : '') + (n || ''); }
+    function _pcombine(a, n) { a = _pdig(a); var nd = _pdig(n); if (!a && !nd) return n ? String(n) : ''; if (a && nd) return '(' + a + ') ' + (nd.length >= 7 ? nd.slice(0, 3) + '-' + nd.slice(3, 7) : nd); return (a ? '(' + a + ') ' : '') + (n || ''); }
+    /* One field, formatted by KT.Phone as you type. Still writes obj[key] on every
+       keystroke, so the wizard's step state behaves exactly as before. */
     function bindPhone(obj, key) {
-      var p = _psplit(obj[key]);
-      var box = Dom.el('div', { style: 'display:grid;grid-template-columns:78px 1fr;gap:8px;' });
-      var area = Dom.el('input', { type: 'text', maxlength: '3', placeholder: 'Area', style: inStyle + 'text-align:center;' }); area.value = p.a;
-      var num = Dom.el('input', { type: 'tel', placeholder: 'Phone number', style: inStyle }); num.value = p.n;
-      function upd() { obj[key] = _pcombine(area.value, num.value); }
-      area.addEventListener('input', upd); num.addEventListener('input', upd);
-      box.appendChild(area); box.appendChild(num);
-      return box;
+      var num = Dom.el('input', { type: 'tel', placeholder: '(416) 555-0199', style: inStyle });
+      num.value = KT.Phone ? KT.Phone.format(obj[key]) : (obj[key] || '');
+      if (KT.Phone) KT.Phone.attach(num);
+      num.addEventListener('input', function () { obj[key] = num.value.trim(); });
+      return num;
     }
     var RELATIONSHIP_OPTS = ['Mother', 'Father', 'Guardian', 'Grandmother', 'Grandfather', 'Grandparent', 'Aunt', 'Uncle', 'Sibling', 'Stepparent', 'Family friend', 'Neighbour', 'Nanny / caregiver', 'Other'].map(function (r) { return { value: r, label: r }; });
 
@@ -4588,13 +4917,20 @@
     const EREL = ['Mother', 'Father', 'Guardian', 'Grandmother', 'Grandfather', 'Grandparent', 'Aunt', 'Uncle', 'Sibling', 'Family friend', 'Neighbour', 'Other'];
     function _dig(s) { return (s == null ? '' : String(s)).replace(/[^0-9]/g, ''); }
     function _psplit(v) { var d = _dig(v); if (d.length === 11 && d[0] === '1') d = d.slice(1); if (d.length >= 10) return { a: d.slice(0, 3), n: d.slice(3, 10) }; if (d.length > 3) return { a: d.slice(0, 3), n: d.slice(3) }; return { a: '', n: v || '' }; }
-    function _pcomb(a, n) { a = _dig(a); var nd = _dig(n); if (!a && !nd) return ''; if (a && nd) return '(' + a + ') ' + (nd.length >= 7 ? nd.slice(0, 3) + '-' + nd.slice(3, 7) : nd); return (a ? '(' + a + ') ' : '') + (n || ''); }
+    function _pcomb(a, n) { a = _dig(a); var nd = _dig(n); if (!a && !nd) return n ? String(n) : ''; if (a && nd) return '(' + a + ') ' + (nd.length >= 7 ? nd.slice(0, 3) + '-' + nd.slice(3, 7) : nd); return (a ? '(' + a + ') ' : '') + (n || ''); }
     var IN = 'width:100%;padding:8px 11px;border:1px solid #D1D5DB;border-radius:7px;font-size:14px;box-sizing:border-box;';
     function inp(val, ph, type) { var e = Dom.el('input', { type: type || 'text', style: IN }); if (ph) e.placeholder = ph; e.value = val == null ? '' : val; return e; }
     function selEl(val, opts) { var s = Dom.el('select', { style: IN + 'background:#fff;' }); opts.forEach(function (o) { var op = Dom.el('option', { value: o.value }, o.label); if (String(val) === String(o.value)) op.selected = true; s.appendChild(op); }); return s; }
     function fwrap(l, e) { var d = Dom.el('div', { style: 'margin-bottom:12px;' }); d.appendChild(Dom.el('label', { style: 'display:block;font-size:12.5px;font-weight:600;color:#334155;margin-bottom:4px;' }, l)); d.appendChild(e); return d; }
     function grid(cols) { return Dom.el('div', { style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;' }); }
-    function phoneField(label, val) { var p = _psplit(val); var box = Dom.el('div', { style: 'display:grid;grid-template-columns:74px 1fr;gap:8px;' }); var a = inp(p.a, 'Area'); a.maxLength = 3; a.style.textAlign = 'center'; var n = inp(p.n, 'Phone number', 'tel'); box.appendChild(a); box.appendChild(n); return { wrap: fwrap(label, box), get: function () { return _pcomb(a.value, n.value); } }; }
+    /* One field, formatted as you type by KT.Phone — the separate "Area" box was the
+       last place in the portal still splitting a phone across two inputs. Same
+       { wrap, get } contract, so every caller is untouched. */
+    function phoneField(label, val) {
+      var n = inp(KT.Phone ? KT.Phone.format(val) : (val || ''), '(416) 555-0199', 'tel');
+      if (KT.Phone) KT.Phone.attach(n);
+      return { wrap: fwrap(label, n), get: function () { return n.value.trim(); } };
+    }
 
     var root = Dom.el('div', {});
     var tabBar = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:14px;' });
@@ -5236,6 +5572,172 @@
      opening a different family is read-only again by construction. (2026-08-27) */
   var famEditFor = null;
 
+  /* Incidents across every child in a family.
+     Fetched after the modal is up and allowed to fail quietly: a director who
+     cannot read incidents, or a slow query, should still get the family record. */
+  function renderFamilyIncidents(host, familyId, archived) {
+    Dom.clear(host);
+    host.appendChild(Dom.el('div', {
+      style: 'font-size:13px;color:var(--ink-500);',
+    }, 'Loading…'));
+
+    Api.get('/director/incidents?family_id=' + encodeURIComponent(familyId) + '&per_page=100')
+      .then(function (res) {
+        var rows = (res && (res.data || res.incidents)) || [];
+        Dom.clear(host);
+        if (!rows.length) {
+          host.appendChild(Dom.el('div', {
+            style: 'font-size:13px;color:var(--ink-500);',
+          }, 'No incidents recorded for this family.'));
+          return;
+        }
+
+        /* A count worth reading at a glance: three minor incidents across three
+           children look like nothing on three separate screens. */
+        var openN = 0, seriousN = 0;
+        rows.forEach(function (i) {
+          if (String(i.status || '') !== 'closed') { openN++; }
+          if (i.is_serious_occurrence) { seriousN++; }
+        });
+        var bits = [rows.length + (rows.length === 1 ? ' incident' : ' incidents')];
+        if (openN) { bits.push(openN + ' still open'); }
+        if (seriousN) { bits.push(seriousN + ' serious occurrence' + (seriousN === 1 ? '' : 's')); }
+        host.appendChild(Dom.el('div', {
+          style: 'font-size:12.5px;color:' + (seriousN ? '#B3261E' : 'var(--ink-500)')
+               + ';margin-bottom:8px;font-weight:' + (seriousN ? '700' : '400') + ';',
+        }, bits.join('  ·  ')));
+
+        var SEV = { low: '#15803D', medium: '#B45309', high: '#B3261E' };
+        rows.forEach(function (inc) {
+          /* occurred_at is a WALL CLOCK time typed by an educator -- printed as
+             stored. Handing it to Date() lets kt-tz-global read it as UTC and
+             shift it, which is how 08:15 once became 04:15 on a record of when a
+             child was hurt. */
+          var when = String(inc.occurred_at || '').replace('T', ' ').slice(0, 16);
+          var kid = [inc.child && inc.child.first_name, inc.child && inc.child.last_name]
+            .filter(Boolean).join(' ');
+          var who = [inc.recorded_by && inc.recorded_by.first_name, inc.recorded_by && inc.recorded_by.last_name]
+            .filter(Boolean).join(' ');
+
+          var row = Dom.el('div', {
+            style: 'display:flex;gap:12px;align-items:baseline;padding:9px 0;'
+                 + 'border-top:1px solid var(--ink-100, #F1F5F9);cursor:pointer;',
+          });
+          row.appendChild(Dom.el('div', {
+            style: 'flex:0 0 106px;font-size:12.5px;color:var(--ink-500);white-space:nowrap;',
+          }, when || '—'));
+
+          var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
+          mid.appendChild(Dom.el('div', { style: 'font-weight:700;color:var(--ink-900, #0F172A);' },
+            (kid ? kid + ' · ' : '')
+            + String(inc.incident_type || '').replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); })
+            + (inc.is_serious_occurrence ? ' · Serious occurrence' : '')));
+          if (who || inc.location) {
+            mid.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-top:1px;' },
+              [inc.location, who ? 'recorded by ' + who : ''].filter(Boolean).join('  ·  ')));
+          }
+          row.appendChild(mid);
+
+          row.appendChild(Dom.el('div', {
+            style: 'flex:0 0 auto;font-size:11px;font-weight:800;text-transform:uppercase;'
+                 + 'letter-spacing:.4px;color:' + (SEV[inc.severity] || 'var(--ink-500)') + ';',
+          }, String(inc.severity || '')));
+          row.appendChild(Dom.el('div', {
+            style: 'flex:0 0 auto;font-size:11px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.4px;',
+          }, String(inc.status || '').replace(/_/g, ' ')));
+
+          // view-only -- a record screen shows history, it does not act on it.
+          row.addEventListener('click', function () {
+            if (window.KT && KT.openIncidentDialog) {
+              Shell.Modal.close();
+              setTimeout(function () {
+                KT.openIncidentDialog(inc.id, null, true, function () {
+                  setTimeout(function () { showFamilyDetail(familyId, archived); }, 60);
+                });
+              }, 60);
+              return;
+            }
+            Shell.Modal.close();
+            window.location.hash = '#incident-detail?id=' + inc.id + '&view=1';
+          });
+          host.appendChild(row);
+        });
+      })
+      .catch(function () {
+        // Never let this take the family record down with it.
+        Dom.clear(host);
+        host.appendChild(Dom.el('div', {
+          style: 'font-size:13px;color:var(--ink-500);',
+        }, 'Incidents could not be loaded.'));
+      });
+  }
+
+  /* Every filed document across this family's children, newest first.
+     One request per child — a family has a handful, and there is no endpoint that
+     takes a family. Fails quietly: a document list is not worth the record. */
+  function renderFamilyDocuments(host, children) {
+    Dom.clear(host);
+    var kids = (children || []).filter(function (c) { return c && c.id; });
+    if (!kids.length) {
+      host.appendChild(Dom.el('div', {
+        style: 'font-size:13px;color:var(--ink-500);',
+      }, 'No children on this family, so no documents.'));
+      return;
+    }
+
+    host.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' }, 'Loading…'));
+
+    Promise.all(kids.map(function (c) {
+      return Api.get('/director/children/' + c.id + '/documents')
+        .then(function (r) {
+          return ((r && r.documents) || []).map(function (d) { d.__child = c; return d; });
+        })
+        .catch(function () { return []; });   // one child's failure is not the family's
+    })).then(function (lists) {
+      var docs = [].concat.apply([], lists);
+      docs.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+
+      Dom.clear(host);
+      if (!docs.length) {
+        host.appendChild(Dom.el('div', {
+          style: 'font-size:13px;color:var(--ink-500);',
+        }, 'No documents filed for this family.'));
+        return;
+      }
+
+      var ICON = { incident_report: '🩹', agreement: '✍️', medical: '💊' };
+      docs.forEach(function (d) {
+        var kid = [d.__child.first_name, d.__child.last_name].filter(Boolean).join(' ');
+        var row = Dom.el('div', {
+          style: 'display:flex;gap:11px;align-items:center;padding:9px 0;'
+               + 'border-top:1px solid var(--ink-100, #F1F5F9);',
+        });
+        row.appendChild(Dom.el('div', { style: 'flex:0 0 auto;font-size:17px;' },
+          ICON[d.category] || '📄'));
+
+        var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
+        mid.appendChild(Dom.el('div', {
+          style: 'font-weight:600;color:var(--ink-900, #0F172A);font-size:13.5px;',
+        }, d.title || 'Document'));
+        mid.appendChild(Dom.el('div', {
+          style: 'font-size:12px;color:var(--ink-500);margin-top:1px;',
+        }, [kid, String(d.created_at || '').slice(0, 10)].filter(Boolean).join('  ·  ')));
+        row.appendChild(mid);
+
+        /* file_url arrives already signed — SignProtectedMedia rewrites protected
+           /storage paths on the way out, so this link works and expires. */
+        if (d.file_url) {
+          var a = Dom.el('a', {
+            href: d.file_url, target: '_blank', rel: 'noopener',
+            style: 'flex:0 0 auto;font-size:12.5px;font-weight:700;color:#1F6080;text-decoration:none;',
+          }, 'Open');
+          row.appendChild(a);
+        }
+        host.appendChild(row);
+      });
+    });
+  }
+
   async function showFamilyDetail(familyId, archived) {
     Shell.Modal.open({
       title: archived ? 'Family details (archived)' : 'Family details',
@@ -5544,6 +6046,21 @@
           body.appendChild(er);
         });
       }
+
+      /* Every incident across this family's children, newest first. Read-only --
+         a row opens the incident in view mode, where the actions live. */
+      body.appendChild(famSectionHead('INCIDENTS', null, null));
+      var _incHost = Dom.el('div', {});
+      body.appendChild(_incHost);
+      renderFamilyIncidents(_incHost, familyId, data.is_archived);
+
+      /* Filed documents, gathered from this family's children. Read from the
+         child records rather than duplicated onto the family, so there is one
+         copy of each file and nothing to keep in step. */
+      body.appendChild(famSectionHead('DOCUMENTS', null, null));
+      var _docHost = Dom.el('div', {});
+      body.appendChild(_docHost);
+      renderFamilyDocuments(_docHost, (data.children || []).map(function (c) { return c; }));
 
       /* Notes, with who wrote them and when. `families.notes` is still shown above as a
          single field, but anything written from here is attributed and kept. */
@@ -6271,6 +6788,78 @@
 
   /** Human sentence describing what happened to someone's invite.
       Returns '' when there is nothing useful to say, so the badge stays plain. */
+  /* Onboarding + welcome-email state as one small badge.
+
+     Two questions get asked about every new account and neither had an answer on
+     the list: did this person actually finish onboarding, and did the welcome
+     email reach them? Status answers neither — an account reads "active" from the
+     moment it is claimed, finished wizard or not, which is exactly how someone can
+     sit at "active" for a week having never completed it. The hover carries the
+     delivery detail so the badge itself can stay short. */
+  function onbBadge(label, bg, fg, tip) {
+    return Dom.el('span', {
+      title: tip || '',
+      style: 'display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;'
+        + 'font-weight:700;white-space:nowrap;background:' + bg + ';color:' + fg + ';'
+        + (tip ? 'cursor:help;' : ''),
+    }, label);
+  }
+
+  function onbWhen(v) {
+    if (!v) { return ''; }
+    try {
+      if (window.KT && KT.Fmt && KT.Fmt.dateTime) { return KT.Fmt.dateTime(v); }
+    } catch (e) {}
+    return String(v).replace('T', ' ').slice(0, 16);
+  }
+
+  /** One user's onboarding state, as a table cell. */
+  function userOnboardingCell(u) {
+    var td = Dom.el('td', { style: 'padding: 14px 16px;' });
+    var i = (u && u.invite) || {};
+    var tip = inviteTip(u);
+    if (u && u.onboarded_at) {
+      td.appendChild(onbBadge('Onboarded', '#DCFCE7', '#166534',
+        'Finished onboarding ' + onbWhen(u.onboarded_at) + (tip ? '\n\n' + tip : '')));
+      return td;
+    }
+    if (i.state === 'blocked') {
+      td.appendChild(onbBadge('Email blocked', '#FEE2E2', '#991B1B', tip));
+    } else if (i.state === 'never_sent') {
+      td.appendChild(onbBadge('No invite sent', '#F1F5F9', '#64748B', tip));
+    } else if (i.state === 'opened') {
+      td.appendChild(onbBadge('Invite opened', '#FEF3C7', '#92400E', tip));
+    } else {
+      td.appendChild(onbBadge('Not onboarded', '#E0F2FE', '#075985', tip));
+    }
+    return td;
+  }
+
+  /** A family's onboarding state — counted across its guardians. */
+  function familyOnboardingBadge(f) {
+    var o = (f && f.onboarding) || null;
+    if (!o || !o.guardians) {
+      return onbBadge('No guardians', '#F1F5F9', '#64748B', 'This family has nobody to invite yet.');
+    }
+    var tip = o.onboarded + ' of ' + o.guardians + ' guardian'
+      + (o.guardians === 1 ? '' : 's') + ' finished onboarding.';
+    if (o.welcome_issue === 'suppressed') { tip += '\nThe welcome email was blocked before it was delivered.'; }
+    else if (o.welcome_issue === 'failed') { tip += '\nThe welcome email failed to send.'; }
+    else if (o.welcome_issue === 'never_sent') { tip += '\nNo welcome email has been sent to this family.'; }
+    else if (o.welcome_at) { tip += '\nWelcome email sent ' + onbWhen(o.welcome_at) + '.'; }
+
+    if (o.onboarded >= o.guardians) {
+      return onbBadge('Onboarded', '#DCFCE7', '#166534', tip);
+    }
+    if (o.welcome_issue === 'suppressed' || o.welcome_issue === 'failed') {
+      return onbBadge(o.welcome_issue === 'failed' ? 'Email failed' : 'Email blocked', '#FEE2E2', '#991B1B', tip);
+    }
+    if (o.welcome_issue === 'never_sent') {
+      return onbBadge('No welcome sent', '#F1F5F9', '#64748B', tip);
+    }
+    return onbBadge(o.onboarded + ' of ' + o.guardians + ' onboarded', '#FEF3C7', '#92400E', tip);
+  }
+
   function inviteTip(u) {
     var i = u && u.invite;
     if (!i) { return ''; }
@@ -6312,6 +6901,12 @@
   }
 
   function statusBadge(status, tip) {
+    /* Accepts a status string OR a whole user row. Handing it the row lets the badge say
+       WHY an account is closed: 'deactivated' reads the same for an admin switching
+       someone off and for a family that left in August, and those need different
+       follow-up. Centre lists still pass a bare string and are unaffected. */
+    var u = null;
+    if (status && typeof status === 'object') { u = status; status = u.status || 'active'; }
     const colors = {
       active: ['#DCFCE7', '#166534'],
       onboarding: ['#FEF3C7', '#92400E'],
@@ -6325,11 +6920,29 @@
       deactivated: ['#F3F4F6', '#374151'],
     };
     const labels = { not_invited: 'Not invited' };
-    const c = colors[status] || ['#F3F4F6', '#374151'];
-    if (tip) { return badgeWithTip(c, labels[status] || status, tip); }
+    var c = colors[status] || ['#F3F4F6', '#374151'];
+    var label = labels[status] || status;
+
+    /* A departure outranks the generic word. Rose rather than grey, because a de-boarded
+       account is a record of something that happened rather than a switch someone can
+       flip back -- restoring it means restoring the family. */
+    if (u && u.departed_on && (status === 'deactivated' || status === 'suspended')) {
+      label = 'De-boarded';
+      c = ['#FFE4E6', '#9F1239'];
+      /* Date-only strings must be split into numeric parts. new Date('2026-08-30') is
+         parsed as UTC and, west of Greenwich, prints the day before. */
+      var d = String(u.departed_on).slice(0, 10).split('-');
+      var when = (d.length === 3 && d[0].length === 4)
+        ? new Date(+d[0], +d[1] - 1, +d[2]).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+        : String(u.departed_on).slice(0, 10);
+      tip = (u.departed_from ? ('The ' + u.departed_from + ' family') : 'Their family')
+        + ' left on ' + when + '. The account was closed with the de-boarding.';
+    }
+
+    if (tip) { return badgeWithTip(c, label, tip); }
     return Dom.el('span', {
       style: 'display: inline-block; background: ' + c[0] + '; color: ' + c[1] + '; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;',
-    }, labels[status] || status);
+    }, label);
   }
   function billingStat(label, value) {
     const w = Dom.el('div', { style: 'background: var(--ink-50, #F9FAFB); padding: 14px; border-radius: 8px;' });
