@@ -30,9 +30,21 @@ final class PaymentPlanController extends Controller
         $plans = DB::table('payment_plans')->where('family_id', $familyId)
             ->orderByDesc('created_at')->get();
         $planIds = $plans->pluck('id');
-        $installments = DB::table('payment_plan_installments')
-            ->whereIn('payment_plan_id', $planIds)
-            ->orderBy('due_date')->get()->groupBy('payment_plan_id');
+        /* The invoice each instalment raised travels with it, so the table can show a
+           number and the cancel dialog can list exactly what it would withdraw —
+           neither needing a second round trip. A LEFT join: an imported schedule
+           raised no invoice, and null is the honest answer for it. */
+        $installments = DB::table('payment_plan_installments as pi')
+            ->leftJoin('invoices as i', 'i.id', '=', 'pi.invoice_id')
+            ->whereIn('pi.payment_plan_id', $planIds)
+            ->orderBy('pi.due_date')
+            ->get([
+                'pi.id', 'pi.payment_plan_id', 'pi.due_date', 'pi.amount', 'pi.status',
+                'pi.invoice_id', 'pi.paid_at',
+                'i.invoice_number', 'i.status as invoice_status',
+                'i.issued_at as invoice_issues_on', 'i.balance_due as invoice_balance',
+            ])
+            ->groupBy('payment_plan_id');
         $plans->transform(function ($p) use ($installments) {
             $p->installments = $installments->get($p->id, collect());
             return $p;
@@ -212,22 +224,55 @@ final class PaymentPlanController extends Controller
     public function cancel(Request $request, int $id): JsonResponse
     {
         $this->assertStaff($request);
+
+        /* WHICH invoices to withdraw is the caller's decision, not this method's.
+
+           It used to void every unissued invoice on the schedule. A family who has
+           already promised October's payment should not have October's invoice vanish
+           because the schedule after it was cancelled — so nothing is voided that was
+           not named. An absent key voids nothing, the safe default for a caller that
+           has not been updated. */
+        $data = $request->validate([
+            'void_invoice_ids' => 'nullable|array',
+            'void_invoice_ids.*' => 'integer',
+        ]);
+        $asked = collect($data['void_invoice_ids'] ?? [])->map(fn ($v) => (int) $v)->filter()->unique();
+
         DB::table('payment_plans')->where('id', $id)->update([
             'status' => 'cancelled', 'updated_at' => now(),
         ]);
-        /* The invoices it raised go with it — but only the ones still in DRAFT.
-           An invoice already issued has been seen by the family and may have been paid
-           against; withdrawing that silently is the kind of thing that makes a ledger
-           stop reconciling. Those are left alone and can be voided deliberately. */
-        $invoiceIds = DB::table('payment_plan_installments')->where('payment_plan_id', $id)
-            ->where('status', 'pending')->whereNotNull('invoice_id')->pluck('invoice_id');
 
-        $withdrawn = $invoiceIds->isEmpty() ? 0 : DB::table('invoices')
-            ->whereIn('id', $invoiceIds)->where('status', 'draft')
+        /* Confined to invoices THIS schedule raised — an id from anywhere else is
+           ignored rather than trusted — and to DRAFTS, because an issued invoice has
+           been seen by the family and may have been paid against. Withdrawing one of
+           those as a side effect of cancelling a schedule is how a ledger stops
+           reconciling; it needs the deliberate void on the invoice itself. */
+        $mine = DB::table('payment_plan_installments')->where('payment_plan_id', $id)
+            ->whereNotNull('invoice_id')->pluck('invoice_id');
+        $toVoid = $asked->intersect($mine);
+
+        $withdrawn = $toVoid->isEmpty() ? 0 : DB::table('invoices')
+            ->whereIn('id', $toVoid)->where('status', 'draft')
             ->update(['status' => 'void', 'balance_due' => 0, 'updated_at' => now()]);
 
+        // The schedule is over either way; an invoice kept open outlives it.
         DB::table('payment_plan_installments')->where('payment_plan_id', $id)
             ->where('status', 'pending')->update(['status' => 'cancelled']);
+
+        try {
+            \App\Support\Audit::write([
+                'user_id' => $request->user()->id,
+                'action' => 'payment_schedule.cancelled',
+                'entity_type' => 'payment_plan',
+                'entity_id' => $id,
+                'payload' => json_encode([
+                    'invoices_withdrawn' => $withdrawn,
+                    'summary' => 'Cancelled payment schedule #' . $id . ' — withdrew ' . $withdrawn
+                        . ' unissued invoice(s); any not named were left standing.',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail a cancel over its own audit row */ }
 
         return response()->json(['status' => 'cancelled', 'invoices_withdrawn' => $withdrawn]);
     }

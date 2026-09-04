@@ -193,12 +193,13 @@
           </div>
           ${isStaff && p.status === 'active' ? `<button class="kt-btn kt-btn-danger" data-cancel-plan="${p.id}">Cancel plan</button>` : ''}
         </div>
-        ${p.notes ? `<p style="color:#475569;margin:10px 0 0;font-size:13px;">${esc(p.notes)}</p>` : ''}
+        ${scheduleNote(p.notes) ? `<p style="color:#475569;margin:10px 0 0;font-size:13px;">${esc(scheduleNote(p.notes))}</p>` : ''}
         <table style="margin-top:14px;">
-          <thead><tr><th>Due date</th><th style="text-align:right;">Amount</th><th>Status</th></tr></thead>
+          <thead><tr><th>Due date</th><th style="text-align:right;">Amount</th><th>Invoice</th><th>Status</th></tr></thead>
           <tbody>${(p.installments || []).map(i => `<tr>
             <td>${fmtDate(i.due_date)}</td>
             <td style="text-align:right;font-weight:600;">${fmtMoney(i.amount)}</td>
+            <td>${invoiceCell(i)}</td>
             <td><span class="kt-pill ${i.status === 'paid' ? 'kt-pill-success' : i.status === 'cancelled' ? 'kt-pill-warning' : 'kt-pill-info'}">${esc(i.status)}</span></td>
           </tr>`).join('')}</tbody>
         </table>
@@ -213,10 +214,9 @@
       };
       const newBtn = document.getElementById('pp-new');
       if (newBtn) newBtn.onclick = () => openPaymentPlanModal(families);
-      main.querySelectorAll('button[data-cancel-plan]').forEach(b => b.onclick = async () => {
-        if (!await KT.confirm({ title: 'Cancel this payment schedule?', description: 'Every pending instalment is cancelled, and any invoice it raised that has NOT yet been issued is withdrawn. Instalments already paid, and invoices already issued, are left alone.', tone: 'danger' })) return;
-        await Api.post(`/payment-plans/${b.dataset.cancelPlan}/cancel`, {});
-        renderPaymentPlans(main);
+      main.querySelectorAll('button[data-cancel-plan]').forEach(b => b.onclick = () => {
+        const plan = plans.filter(p => String(p.id) === String(b.dataset.cancelPlan))[0];
+        if (plan) openCancelSchedule(main, plan);
       });
     }
   }
@@ -227,6 +227,33 @@
 
      The instalment COUNT is not asked for: it falls out of the range and the cadence,
      and asking for both invites the two to disagree. */
+  /* The note on an imported schedule is machine plumbing, not something a person
+     wrote. The [ilearn:...] token is the key the sync matches on, so it stays in the
+     DATA and is only removed from what a human reads — along with the boilerplate
+     around it. Anything actually typed by somebody survives. */
+  function scheduleNote(notes) {
+    if (!notes) return '';
+
+    return String(notes)
+      .replace(/\[ilearn:[^\]]*\]/gi, '')
+      .replace(/Imported from iLearn[^.]*\.?/gi, '')
+      .replace(/Authoritative paid\/unpaid status remains the invoice record\.?/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /* An imported schedule raised no invoice, and a blank cell says so more honestly
+     than a placeholder would. One raised here shows its number and what it is doing. */
+  function invoiceCell(i) {
+    if (!i.invoice_number) return '<span style="color:#94A3B8;">\u2014</span>';
+    const st = String(i.invoice_status || '');
+    const tint = st === 'draft' ? '#64748B' : st === 'void' ? '#94A3B8' : '#166534';
+    const when = st === 'draft' && i.invoice_issues_on ? ' \u00b7 issues ' + fmtDate(i.invoice_issues_on) : '';
+
+    return `<span style="font-weight:600;">${esc(i.invoice_number)}</span>`
+      + `<div style="font-size:11.5px;color:${tint};">${esc(st)}${esc(when)}</div>`;
+  }
+
   function openPaymentPlanModal(families) {
     const fld = 'width:100%;padding:8px 12px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:inherit;';
     const lbl = 'display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748B;margin-bottom:5px;';
@@ -435,6 +462,87 @@
               msg.textContent = why;
               throw new Error(why);
             });
+          },
+        },
+      ],
+    });
+  }
+
+  /* ── CANCELLING: what goes, and what stays ─────────────────────────
+     It used to withdraw every unissued invoice on the schedule. A family may have
+     already promised October's payment, and that invoice should not vanish because the
+     schedule after it was cancelled — so each one is listed and chosen.
+
+     Drafts are ticked by default, because withdrawing them is the usual intent. An
+     ISSUED invoice is listed but cannot be ticked: it has been seen by the family and
+     may have been paid against, and undoing that is a deliberate void on the invoice
+     itself, never a side effect of cancelling a schedule. */
+  function openCancelSchedule(main, plan) {
+    const inst = ((plan && plan.installments) || []).filter(i => i.invoice_number && i.status !== 'cancelled');
+    const drafts = inst.filter(i => i.invoice_status === 'draft');
+    const issued = inst.filter(i => i.invoice_status && i.invoice_status !== 'draft' && i.invoice_status !== 'void');
+    const th = 'padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;';
+    const td = 'padding:7px 10px;border-top:1px solid #F1F5F9;';
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<p style="margin:0 0 12px;font-size:13.5px;color:#334155;line-height:1.6;">'
+      + 'Cancelling ends the schedule and stops every pending instalment. Choose what should '
+      + 'happen to the invoices it raised.</p>'
+      + (inst.length
+        ? '<div style="max-height:40vh;overflow:auto;border:1px solid #E2E8F0;border-radius:10px;">'
+          + '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#F8FAFC;">'
+          + `<th style="${th}">Withdraw</th><th style="${th}">Invoice</th><th style="${th}">Due</th>`
+          + `<th style="${th}text-align:right;">Amount</th><th style="${th}">State</th></tr></thead><tbody>`
+          + inst.map(i => {
+            const isDraft = i.invoice_status === 'draft';
+            return '<tr>'
+              + `<td style="${td}"><input type="checkbox" data-inv="${i.invoice_id}" `
+              + (isDraft ? 'checked' : 'disabled') + ' style="width:16px;height:16px;"></td>'
+              + `<td style="${td}">${esc(i.invoice_number)}</td>`
+              + `<td style="${td}">${fmtDate(i.due_date)}</td>`
+              + `<td style="${td}text-align:right;font-weight:600;">${fmtMoney(i.amount)}</td>`
+              + `<td style="${td}color:${isDraft ? '#64748B' : '#166534'};">${esc(i.invoice_status || '')}`
+              + (isDraft ? '' : ' \u2014 already with the family') + '</td></tr>';
+          }).join('')
+          + '</tbody></table></div>'
+          + (issued.length
+            ? '<p style="margin:10px 0 0;font-size:12.5px;color:#B45309;">' + issued.length
+              + ' invoice(s) have already been issued and cannot be withdrawn here \u2014 a payment may '
+              + 'already be on its way. Void one deliberately from Accounting if that is really intended.</p>'
+            : '')
+          + (drafts.length ? ''
+            : '<p style="margin:10px 0 0;font-size:12.5px;color:#64748B;">Nothing here is still unissued, '
+              + 'so nothing will be withdrawn.</p>')
+        : '<p style="margin:0;font-size:13px;color:#64748B;">This schedule raised no invoices, so there is '
+          + 'nothing to withdraw.</p>')
+      + '<div id="ps-cmsg" style="margin-top:10px;font-size:13px;color:#B91C1C;"></div>';
+
+    KT.Shell.Modal.open({
+      title: 'Cancel this payment schedule?',
+      body: wrap,
+      large: true,
+      actions: [
+        { label: 'Keep the schedule' },
+        {
+          label: 'Cancel the schedule', style: 'btn-danger', busyLabel: 'Cancelling\u2026',
+          handler: function () {
+            const ids = Array.prototype.slice
+              .call(wrap.querySelectorAll('input[data-inv]:checked'))
+              .map(el => +el.getAttribute('data-inv'));
+
+            return Api.post('/payment-plans/' + plan.id + '/cancel', { void_invoice_ids: ids })
+              .then(function (r) {
+                toast('Schedule cancelled \u2014 ' + ((r && r.invoices_withdrawn) || 0) + ' invoice(s) withdrawn', 'success');
+                renderPaymentPlans(main);
+
+                return true;
+              })
+              .catch(function (e) {
+                const why = (e && e.data && e.data.message) || (e && e.message) || 'It could not be cancelled.';
+                wrap.querySelector('#ps-cmsg').textContent = why;
+                throw new Error(why);
+              });
           },
         },
       ],

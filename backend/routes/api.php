@@ -744,6 +744,25 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Agency-wide accounting view of externally-synced (iLearn) invoices —
             // admins + directors (+ platform_admin in tenant context). Parents use
             // /parent/external-invoices, scoped to their own family.
+            /* THE AGENCY CONTACT BOOK — the drawer of business cards, digitised.
+
+               Not emergency_contacts, which belongs to a CHILD ("who to call about
+               Aria"). This is the agency's own directory: the plumber, the food
+               inspector, the insurance broker, the landlord — people who currently
+               live in one person's phone and leave with them.
+
+               Centre directors are IN this group on purpose, and that is why it is not
+               folded into the payroll-bearing one below: a director is the person who
+               actually deals with the plumber, and a directory only they cannot edit is
+               a directory that goes stale. Nothing here exposes pay or family money. */
+            Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+                Route::get   ('/contacts',           [\App\Http\Controllers\Api\ContactController::class, 'index']);
+                Route::post  ('/contacts',           [\App\Http\Controllers\Api\ContactController::class, 'store']);
+                Route::patch ('/contacts/{id}',      [\App\Http\Controllers\Api\ContactController::class, 'update'])->where('id', '[0-9]+');
+                Route::delete('/contacts/{id}',      [\App\Http\Controllers\Api\ContactController::class, 'destroy'])->where('id', '[0-9]+');
+                Route::post  ('/contacts/scan-card', [\App\Http\Controllers\Api\ContactController::class, 'scanCard']);
+            });
+
             /* One ledger per ACCOUNT, both directions — what a person owes the agency
                (through their family) and what the agency paid them (through their user
                id). Nested tighter than the group it sits in: this exposes payroll, so

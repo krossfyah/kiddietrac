@@ -84,6 +84,7 @@
         { label: 'Overview', items: overviewItems },
         { label: 'Operations', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
@@ -246,6 +247,7 @@
         ]},
         { label: 'Operations', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'closures',       label: 'Closures',         icon: '🗓' },
           { hash: 'today',          label: 'Today',            icon: '✨' },
