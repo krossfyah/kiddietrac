@@ -40,6 +40,55 @@
   var SLEEP_MS   = 600000;
   var MAX_REPORTS = 3;        // per session — a struggling device must not spam
 
+  /* WHAT was blocking, not just that something was.
+
+     Every task over 50ms is reported here with an attribution naming the script
+     responsible, and a freeze is simply a very long one (or a run of them). Holding
+     the worst dozen means the report can name the file instead of leaving whoever
+     reads the ticket to guess. Anything under 200ms is ordinary rendering and is
+     ignored, so this costs nothing on a healthy session. */
+  var BLOCK_MS = 200;
+  var KEEP = 12;
+  var blockers = [];
+
+  function noteTask(e) {
+    var who = '';
+    try {
+      var a = (e.attribution || [])[0];
+      if (a) {
+        who = String(a.containerType || a.name || '');
+        var src = String(a.containerSrc || a.containerName || '');
+        if (src) { who += ' ' + src.split('/').pop(); }
+      }
+    } catch (x) {}
+    blockers.push({ ms: Math.round(e.duration), who: who, at: Date.now() });
+    if (blockers.length > KEEP) { blockers.shift(); }
+  }
+
+  try {
+    if (typeof PerformanceObserver === 'function') {
+      new PerformanceObserver(function (list) {
+        var es = list.getEntries();
+        for (var i = 0; i < es.length; i++) {
+          if (es[i].duration >= BLOCK_MS) { noteTask(es[i]); }
+        }
+      }).observe({ entryTypes: ['longtask'] });
+    }
+  } catch (e) { /* not supported (Safari) — the report is just less specific */ }
+
+  /* The worst offenders from the last two minutes, newest first, as one line. */
+  function blockerSummary() {
+    try {
+      var cut = Date.now() - 120000;
+      var recent = blockers.filter(function (b) { return b.at >= cut; })
+        .sort(function (a, b) { return b.ms - a.ms; }).slice(0, 5);
+      if (! recent.length) { return ''; }
+      return recent.map(function (b) {
+        return b.ms + 'ms' + (b.who ? ' ' + b.who : '');
+      }).join(', ');
+    } catch (x) { return ''; }
+  }
+
   var last = Date.now();
   var visibleSince = d.hidden ? 0 : Date.now();
   var reports = 0;
@@ -96,7 +145,8 @@
 
     // Always leave a trail: if a crash follows, the report now carries the fact that
     // the interface had already locked up beforehand.
-    try { if (w.KT && w.KT.crumb) w.KT.crumb('freeze', secs + 's on ' + where); } catch (e) {}
+    var blocking = blockerSummary();
+    try { if (w.KT && w.KT.crumb) w.KT.crumb('freeze', secs + 's on ' + where + (blocking ? ' [' + blocking + ']' : '')); } catch (e) {}
 
     if (gap < REPORT_MS) return;
     if (reports >= MAX_REPORTS) return;
@@ -119,8 +169,12 @@
               ? 'Longer than ' + (LONG_MS / 1000) + 's, so a suspended device cannot be ruled '
                 + 'out — but the page reported itself visible for the whole gap.\n'
               : '')
-          + 'Detected by the freeze watchdog, not by an exception.',
-          { quiet: true }   // nothing broke visibly; a notice would be the only thing they saw
+          + 'Detected by the freeze watchdog, not by an exception.\n'
+          + (blocking
+              ? 'Worst blocking tasks in the two minutes before this: ' + blocking + '\n'
+              : 'No long task was recorded — either the browser does not report them '
+                + '(Safari), or the block happened outside scripting.\n'),
+          { quiet: true, longTasks: blocking }   // nothing broke visibly; a notice would be the only thing they saw
         );
       }
     } catch (e) {}

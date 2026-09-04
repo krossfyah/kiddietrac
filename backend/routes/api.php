@@ -113,9 +113,48 @@ Route::prefix('v1')->group(function () {
                died; this says how it got there. Added after ticket #18 filed with
                "Last action: not captured". (2026-08-26) */
             'breadcrumbs' => mb_substr((string) $r->input('breadcrumbs'), 0, 2400),
+            /* Which script blocked the main thread, and for how long. The freeze
+               watchdog collects this from PerformanceObserver('longtask') at the
+               moment it decides to report, so a freeze ticket names a file instead
+               of leaving the reader to guess. (2026-09-04) */
+            'long_tasks'  => mb_substr((string) $r->input('long_tasks'), 0, 600),
             'ip'          => $r->ip(),
         ];
         try { \Illuminate\Support\Facades\Storage::append('crash-reports.log', json_encode($data)); } catch (\Throwable $e) {}
+
+        /* A FREEZE also goes in the audit log, next to perf.slow_request.
+           The ticket is for acting on; this is for asking whether it is getting
+           better -- which screen, how long, how often, and whether a fix moved the
+           number. Everything here is guarded: this endpoint exists to survive a bad
+           client, so a freeze that cannot be summarised must still be stored above. */
+        try {
+            $trace = (string) $data['trace'];
+            if (preg_match('/UI (FROZE|LONG STALL)/', $trace, $kind)) {
+                $secs = null;
+                if (preg_match('/responding for ([0-9.]+)s/', $trace, $m)) { $secs = (float) $m[1]; }
+                \App\Support\Audit::write([
+                    'user_id'     => $data['user_id'],
+                    'agency_id'   => $agencyId,
+                    'action'      => 'perf.ui_freeze',
+                    'entity_type' => 'screen',
+                    'user_agent'  => mb_substr((string) $data['device'], 0, 500),
+                    'payload'     => json_encode([
+                        'kind'        => $kind[1] === 'FROZE' ? 'freeze' : 'long_stall',
+                        'seconds'     => $secs,
+                        'screen'      => $data['screen'] ?: $data['url'],
+                        'long_tasks'  => $data['long_tasks'],
+                        'app_version' => $data['app_version'],
+                        'sw'          => $data['sw'],
+                        'native'      => $data['native'],
+                        'summary'     => trim(($kind[1] === 'FROZE' ? 'Interface froze' : 'Interface stalled')
+                                         . ($secs ? ' for ' . $secs . 's' : '')
+                                         . ' on ' . ($data['screen'] ?: 'unknown screen')
+                                         . ($data['long_tasks'] ? ' — blocked by ' . $data['long_tasks'] : '')),
+                    ]),
+                    'created_at'  => now(),
+                ]);
+            }
+        } catch (\Throwable $e) { /* never break the crash sink */ }
 
         // The first line of the trace is the error itself; the rest is where it came
         // from. That first line is what makes two reports "the same crash".
@@ -344,6 +383,14 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->mid
 // PUBLIC — Zum Rails settlement callbacks. No auth: Zum calls this, not a user. Guarded
 // by a shared secret compared inside the controller. This is the ONLY thing that marks a
 // Zum payment settled; the create response means "instruction accepted" and nothing more.
+/* An uploaded file, served only against a signature we issued. Public in the
+   sense that it carries no bearer token — these URLs go in <img src> and
+   window.open, which cannot send a header — but useless without the signature,
+   and dead once it expires. See App\Support\ProtectedMedia. */
+Route::get('/media/f', [\App\Http\Controllers\Api\MediaFileController::class, 'show'])
+    ->name('media.file')
+    ->middleware('signed');
+
 Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle'])->middleware('throttle:600,1');
 
 // PUBLIC — Twilio inbound SMS: STOP, START and HELP. No auth (Twilio holds no session);
@@ -641,6 +688,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         // v22p49 — Daily care logs, milestones, portfolio, time clock
         Route::post  ('/care/logs',                 [\App\Http\Controllers\Api\CareController::class, 'logCare']);
+        /* One request for a whole roster. The per-child route below is fine; calling
+           it once per child is what saturates the box at drop-off — the 508s cluster
+           at 08:00–09:00 and name that exact path. */
+        Route::get   ('/care/logs/recent',          [\App\Http\Controllers\Api\CareController::class, 'recentLogsBatch']);
         Route::get   ('/care/logs/child/{child}',   [\App\Http\Controllers\Api\CareController::class, 'logsForChild']);
         Route::get   ('/care/milestones/catalog',   [\App\Http\Controllers\Api\CareController::class, 'milestoneCatalog']);
         Route::get   ('/care/milestones/child/{child}', [\App\Http\Controllers\Api\CareController::class, 'milestonesForChild']);
@@ -733,6 +784,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/incidents',                       [IncidentController::class, 'index']);
             Route::get('/incidents/{id}',                  [IncidentController::class, 'show']);
             Route::post('/incidents/{id}/acknowledge',     [IncidentController::class, 'acknowledge']);
+            // The family's own words, and a request to meet — both on the record.
+            Route::post('/incidents/{id}/feedback',        [IncidentController::class, 'parentFeedback']);
 
             // Child awards (parent view)
             Route::get('/awards',                          [\App\Http\Controllers\Api\AwardController::class, 'forParent']);
@@ -742,7 +795,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/children/{child}/medications',    [MedicationController::class, 'parentList']);
             Route::get('/children/{child}/immunizations',  [ImmunizationController::class, 'parentList']);
 
+            /* A parent handing over their child's immunization RECORD — the card, the
+               clinic printout, the health-unit PDF. Distinct from the line above, which
+               reads the structured per-vaccine rows staff enter. The upload files itself
+               on the child's record, so it shows on the Documents tab that directors and
+               admins already use; no parent DELETE, because a submitted health record is
+               something the centre relies on for compliance. */
+            Route::get ('/children/{child}/immunization-records',
+                [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'index'])->whereNumber('child');
+            Route::post('/children/{child}/immunization-records',
+                [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'store'])->whereNumber('child');
+            Route::get ('/children/{child}/immunization-records/{doc}/download',
+                [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'download'])
+                ->whereNumber('child')->whereNumber('doc');
+
             // v22p2.2: eDocuments (parent inbox + e-sign)
+            /* Documents published to this family — currently incident reports.
+               An ALLOWLIST lives in the controller: a child's record holds plenty
+               that is not the family's to read. */
+            Route::get('/documents',                        [\App\Http\Controllers\Api\ParentDocumentController::class, 'index']);
+            Route::get('/documents/{id}/download',          [\App\Http\Controllers\Api\ParentDocumentController::class, 'download'])->where('id', '[0-9]+');
+
             Route::get('/edocuments',                       [EDocumentController::class, 'parentIndex']);
             Route::get('/edocuments/{id}/link',             [EDocumentController::class, 'parentLink']);
             Route::post('/edocuments/{id}/sign',            [EDocumentController::class, 'sign']);
@@ -783,6 +856,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/incidents/{id}/submit',          [IncidentController::class, 'submit']);
             Route::post('/incidents/{id}/notes',           [IncidentController::class, 'addNote']);
             Route::post('/incidents/{id}/email',           [IncidentController::class, 'emailReport']);
+            // Move an incident deliberately; every move records why as a note.
+            Route::patch('/incidents/{id}/status',         [IncidentController::class, 'setStatus']);
+            // The incident as a document, on the agency's own branding.
+            Route::get('/incidents/{id}/report.pdf',       [IncidentController::class, 'reportPdf']);
 
             // Child awards (educator/director: issue + list + delete)
             Route::get('/awards',                          [\App\Http\Controllers\Api\AwardController::class, 'index']);
@@ -845,6 +922,21 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/children/{child}/history', [\App\Http\Controllers\Api\RecordHistoryController::class, 'child'])->whereNumber('child');
             /* Attachments on a child record were read-only until 2026-08-25 - the tab
                listed files that nobody had any way to put there. Mirrors the per-user set. */
+            /* Immunization records for staff. The same three endpoints the parent
+               group has, and deliberately the same controller: its guard is
+               assertChild(), which a director and an educator at the child's centre
+               already satisfy, and the alert it fires excludes whoever uploaded. A
+               second staff-only copy would have been two implementations of one rule.
+               Directors and admins asked to be able to file these themselves — a
+               record still arrives at the door on paper. */
+            Route::get ('/children/{child}/immunization-records',
+                [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'index'])->whereNumber('child');
+            Route::post('/children/{child}/immunization-records',
+                [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'store'])->whereNumber('child');
+            Route::get ('/children/{child}/immunization-records/{doc}/download',
+                [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'download'])
+                ->whereNumber('child')->whereNumber('doc');
+
             Route::post  ('/children/{child}/documents',                [ChildController::class, 'uploadDocument'])->where('child', '[0-9]+');
             Route::get   ('/children/{child}/documents/{doc}/download', [ChildController::class, 'downloadDocument'])->where(['child' => '[0-9]+', 'doc' => '[0-9]+']);
             Route::delete('/children/{child}/documents/{doc}',          [ChildController::class, 'deleteDocument'])->where(['child' => '[0-9]+', 'doc' => '[0-9]+']);
@@ -883,6 +975,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/invoices/generate', [InvoiceController::class, 'generateBatch']);
             Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
             Route::post('/invoices/{invoice}/payments', [InvoiceController::class, 'recordPayment']);
+            // Cancel an invoice raised in error. Refuses while money is held against it.
+            Route::post('/invoices/{invoice}/void', [InvoiceController::class, 'void']);
 
             Route::get('/incidents', [IncidentController::class, 'index']);
             Route::patch('/incidents/{incident}/review', [IncidentController::class, 'review']);
@@ -892,6 +986,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/incidents/{id}/notify-parent',        [IncidentController::class, 'notifyParent']);
             Route::post('/incidents/{id}/email',                [IncidentController::class, 'emailReport']);
             Route::post('/incidents/{id}/notes',                [IncidentController::class, 'addNote']);
+            /* The printable report. Registered here as well as under `provider`
+               because a director's screen base is `/director` -- the button 404'd
+               for every director and admin. */
+            Route::get('/incidents/{id}/report.pdf',            [IncidentController::class, 'reportPdf']);
 
             // v21: AI Lesson Plan Generator
             Route::get('/lesson-plans-ai',                       [AiLessonPlanController::class, 'index']);
@@ -1278,6 +1376,21 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     
     // Shared: unread badge (any authenticated user)
     Route::get('/chats/unread-count',          [ChatController::class, 'unreadCount']);
+
+    /* Archiving a conversation — ANY authenticated user, including a guardian.
+       This lived only under /provider, whose group excludes guardians, so a parent
+       pressing the x on a conversation got a 403 and was told it could not be removed.
+       The controller has always handled guardians (inFamilyConversation checks the
+       guardians table) and scopes every read and write to the caller's own user id, so
+       it needs no role gate of its own: membership of the thread IS the gate, and it
+       returns 404 for anything the caller is not part of.
+
+       Deliberately NOT fixed by adding guardian to the provider group — that group also
+       carries payee invoices, late events and payroll, none of which a parent should be
+       able to reach. The /provider paths below stay registered so a client still running
+       cached JS keeps working. */
+    Route::get ('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'index']);
+    Route::post('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'store']);
     
     // AGENCY management (agency_admin)
     Route::middleware('role:agency_admin')->prefix('admin')->group(function () {
@@ -1341,6 +1454,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/schedule/range',            [SchedulingController::class, 'range']);
         Route::get('/schedule/staff',            [SchedulingController::class, 'staffList']);
         Route::post('/schedule/shift',           [SchedulingController::class, 'createShift']);
+        // Fill a range from the centre's own opening hours, skipping closures.
+        Route::post('/schedule/autofill',        [SchedulingController::class, 'autofill']);
+        // The nightly-autofill switch. Agency-wide, so agency admins only to change it.
+        Route::get  ('/schedule/settings',       [SchedulingController::class, 'scheduleSettings']);
+        Route::patch('/schedule/settings',       [SchedulingController::class, 'saveScheduleSettings']);
         Route::patch('/schedule/shift/{id}',     [SchedulingController::class, 'updateShift']);
         Route::delete('/schedule/shift/{id}',    [SchedulingController::class, 'deleteShift']);
         Route::get('/timesheets',                [SchedulingController::class, 'timesheets']);
@@ -1512,11 +1630,40 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
     // Billing reminders — agency admins AND centre directors.
     Route::middleware('role:agency_admin,platform_admin,centre_director')->group(function () {
+        /* Immunization reminders: the schedule lives in Settings -> Email, and the
+           records subtab reads the agency-wide list. */
+        /* Money out (a refund, or paying a home provider) and money asked for. Both
+           guarded so staff can only act on somebody inside their own agency. */
+        /* Correcting attendance an educator missed. Directors and admins only — the
+           controller checks the role again rather than trusting the group it sits in. */
+        Route::get   ('/director/attendance/day',      [\App\Http\Controllers\Api\AttendanceCorrectionController::class, 'day']);
+        Route::post  ('/director/attendance/manual',   [\App\Http\Controllers\Api\AttendanceCorrectionController::class, 'store']);
+        Route::delete('/director/attendance/{event}',  [\App\Http\Controllers\Api\AttendanceCorrectionController::class, 'destroy'])->whereNumber('event');
+
+        Route::post('/director/zum/send',    [\App\Http\Controllers\Api\ZumPaymentController::class, 'sendOut']);
+        Route::post('/director/zum/request', [\App\Http\Controllers\Api\ZumPaymentController::class, 'requestFromFamily']);
+
+        Route::get ('/admin/immunization-reminders', [\App\Http\Controllers\Api\ImmunizationRemindersController::class, 'show']);
+        Route::post('/admin/immunization-reminders', [\App\Http\Controllers\Api\ImmunizationRemindersController::class, 'update']);
+        Route::get ('/admin/immunization-records',   [\App\Http\Controllers\Api\ImmunizationRemindersController::class, 'records']);
+
         Route::get('/admin/billing-reminders', [\App\Http\Controllers\Api\BillingRemindersController::class, 'show']);
         Route::post('/admin/billing-reminders', [\App\Http\Controllers\Api\BillingRemindersController::class, 'update']);
     });
 
     // ---- Stripe parent-pay (family-facing) ----
+    /* Zūm Rails: EFT and Interac. Cards are NOT here — they stay on Stripe, which
+       tokenises in the browser, whereas Zum's Canadian card API would take a raw card
+       number server-side and pull this application into PCI scope. */
+    /* Zum Connect — the parent adds a card or bank profile in Zum's own SDK, so the
+       card number never reaches this server. Unblocked by Zum on 2026-09-02; before
+       that every attempt came back "Card Onboarding is not available". */
+    Route::get ('/parent/zum/connect-token',    [\App\Http\Controllers\Api\ZumPaymentController::class, 'connectToken']);
+    Route::post('/parent/zum/connect-complete', [\App\Http\Controllers\Api\ZumPaymentController::class, 'connectComplete']);
+    Route::get ('/parent/zum/status',        [\App\Http\Controllers\Api\ZumPaymentController::class, 'status']);
+    Route::post('/parent/zum/bank-account',  [\App\Http\Controllers\Api\ZumPaymentController::class, 'saveBankAccount']);
+    Route::post('/parent/zum/pay',           [\App\Http\Controllers\Api\ZumPaymentController::class, 'pay']);
+
     Route::get  ('/parent/billing/status',         [\App\Http\Controllers\Api\StripeParentPayController::class, 'status']);
     Route::post ('/parent/billing/setup-intent',   [\App\Http\Controllers\Api\StripeParentPayController::class, 'setupIntent']);
     Route::post ('/parent/billing/save-card',      [\App\Http\Controllers\Api\StripeParentPayController::class, 'saveCard']);
@@ -1811,6 +1958,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // which educator, where they set off from and where they are now.
         Route::get ('/provider/walks/tracker',       [\App\Http\Controllers\Api\WalkController::class, 'tracker']);
         Route::get ('/provider/walks/tracker-dates', [\App\Http\Controllers\Api\WalkController::class, 'trackerDates']);
+        /* Where home is, so the phone can notice it has left. The device compares its
+           own position; it never sends one back. */
+        Route::get ('/provider/walks/geofence',    [\App\Http\Controllers\Api\WalkController::class, 'geofence']);
         Route::get ('/provider/walks/eligible-children', [\App\Http\Controllers\Api\WalkController::class, 'eligibleChildren']);
         Route::post('/provider/walks/start',       [\App\Http\Controllers\Api\WalkController::class, 'start']);
         Route::post('/provider/walks/{id}/end',    [\App\Http\Controllers\Api\WalkController::class, 'end']);

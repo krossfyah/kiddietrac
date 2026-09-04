@@ -188,6 +188,8 @@
       if (sentCount >= SEND_MAX) return;         // something is looping; stop adding to it
       sentTraces[key] = 1;
       sentCount++;
+      /* opts is forwarded so the freeze watchdog's long-task summary reaches the
+         server as its own field, not only as prose inside the trace. */
       sendReport(trace, function (ok) {
         if (ok) {
           // It is on the server; nothing to offer at next launch.
@@ -198,7 +200,7 @@
           sentTraces[key] = 0;
           sentCount--;
         }
-      });
+      }, opts);
     } catch (x) {}
   }
 
@@ -228,8 +230,33 @@
   // the freeze watchdog uses this.
   try { (window.KT = window.KT || {}).reportProblem = autoSend; } catch (x) {}
 
-  function sendReport(trace, onDone) {
+  /* Reports that have been built but not yet acknowledged. If the page goes away
+     with anything in here it is beaconed out on the way -- see the pagehide handler
+     below. A frozen tab gets CLOSED, and a report sent by fetch dies with it. */
+  var pending = [];
+
+  /* sendBeacon survives the document. It cannot report success, so it is used only
+     where fetch cannot be trusted to finish: the page is already hidden, or it is
+     actively going away. */
+  function beacon(body) {
+    try {
+      if (! navigator.sendBeacon) { return false; }
+      var blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
+      return navigator.sendBeacon(apiBase() + '/diag/crash', blob);
+    } catch (x) { return false; }
+  }
+
+  try {
+    window.addEventListener('pagehide', function () {
+      while (pending.length) { beacon(pending.pop()); }
+    });
+  } catch (x) {}
+
+  function sendReport(trace, onDone, extra) {
     var body = { device: navigator.userAgent, os: (navigator.platform || 'web'), app: 'webview', trace: trace, email: 1 };
+    /* The watchdog's long-task summary: which script blocked the thread, and for how
+       long. Stored as its own field so freezes can be grouped by cause, not only read. */
+    try { if (extra && extra.longTasks) { body.long_tasks = String(extra.longTasks).slice(0, 600); } } catch (x) {}
     try {
       var u = currentUser();
       for (var k in u) if (Object.prototype.hasOwnProperty.call(u, k)) body[k] = u[k];
@@ -254,11 +281,26 @@
         body.sw = reg ? String(reg.scriptURL || '').split('/').pop() : 'none';
       } catch (x) {}
     } catch (x) {}
+    /* Already hidden? fetch may never finish. Beacon it and stop. */
+    try {
+      if (document.visibilityState === 'hidden') {
+        var ok = beacon(body);
+        onDone && onDone(ok);
+        return;
+      }
+    } catch (x) {}
+
+    pending.push(body);
+    function settle(ok) {
+      var i = pending.indexOf(body);
+      if (i !== -1) { pending.splice(i, 1); }
+      onDone && onDone(ok);
+    }
     try {
       fetch(apiBase() + '/diag/crash', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-        .then(function (r) { onDone && onDone(r && r.ok); })
-        .catch(function () { onDone && onDone(false); });
-    } catch (e) { onDone && onDone(false); }
+        .then(function (r) { settle(r && r.ok); })
+        .catch(function () { settle(beacon(body)); });   // network refused it — try the beacon
+    } catch (e) { settle(beacon(body)); }
   }
 
   /* promptSend() lived here: a modal asking "Send a quick error report?" before
