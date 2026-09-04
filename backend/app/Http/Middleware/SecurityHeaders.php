@@ -30,7 +30,28 @@ class SecurityHeaders
 
         $h = $response->headers;
         $h->set('X-Content-Type-Options', 'nosniff');
-        $h->set('X-Frame-Options', 'DENY');                                  // JSON API is never framed
+        /* Framing: DENY for the JSON API, an explicit allowlist for DOCUMENTS.
+
+           This was an unconditional DENY, on the comment "JSON API is never framed".
+           But this host also STREAMS DOCUMENTS -- /api/v1/media/f serves the signed
+           PDFs and images that the forms library, the document viewer and the
+           e-signature screens open in an <iframe>. DENY made the browser refuse
+           them, which is the "api refused to connect" error on the forms library.
+
+           SAMEORIGIN would not help: app.kiddietrac.com framing api.kiddietrac.com
+           is cross-ORIGIN (same site, different origin), so it blocks too, and
+           X-Frame-Options has no way to name an allowed origin. CSP frame-ancestors
+           does, so documents get that instead and X-Frame-Options is dropped for
+           them -- sending both invites disagreement between browsers.
+
+           Origins come from config('cors.allowed_origins'): ONE list decides which
+           front-ends are ours. */
+        if ($this->servesDocument($response)) {
+            $h->remove('X-Frame-Options');
+            $h->set('Content-Security-Policy', "frame-ancestors 'self' " . $this->frameAncestors());
+        } else {
+            $h->set('X-Frame-Options', 'DENY');                              // JSON API is never framed
+        }
         $h->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $h->set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
         $h->set('Cross-Origin-Resource-Policy', 'same-site');
@@ -43,5 +64,47 @@ class SecurityHeaders
         }
 
         return $response;
+    }
+
+    /**
+     * Is this response a document a browser would legitimately embed?
+     *
+     * Keyed on the Content-Type rather than a route list, so a PDF or image added
+     * by any future endpoint is covered without anyone remembering to register it.
+     * Deliberately excludes text/html: an HTML body from this host is an error page
+     * or a redirect, never something the portal frames on purpose.
+     */
+    private function servesDocument(Response $response): bool
+    {
+        $type = strtolower(trim((string) $response->headers->get('Content-Type')));
+        if ($type === '' || str_contains($type, 'json')) {
+            return false;
+        }
+
+        foreach (['application/pdf', 'image/', 'video/', 'audio/', 'officedocument', 'application/msword'] as $needle) {
+            if (str_contains($type, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** The front-ends allowed to frame our documents, space separated. */
+    private function frameAncestors(): string
+    {
+        $origins = (array) config('cors.allowed_origins', []);
+        $clean = [];
+
+        foreach ($origins as $o) {
+            $o = trim((string) $o);
+            // '*' would make the allowlist meaningless -- skip it rather than honour it.
+            if ($o === '' || $o === '*') {
+                continue;
+            }
+            $clean[$o] = true;
+        }
+
+        return implode(' ', array_keys($clean));
     }
 }
