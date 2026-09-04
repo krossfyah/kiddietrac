@@ -27,7 +27,17 @@
      not generous: on a phone the common gap is a backgrounded web view, and anything
      approaching half a minute is far more likely to be that than a main thread genuinely
      blocked — a freeze that long would have to survive the watchdog itself being frozen. */
-  var SLEEP_MS   = 25000;
+  /* Above this a stall is reported as a LONG STALL rather than dropped. It used to
+     be a hard 25s ceiling that returned early, which discarded every serious freeze:
+     a tab frozen for minutes produced a gap far over it and was written off as a
+     sleeping device, which is why this watchdog had filed nothing while freezes were
+     being reported by hand. The visibility guard below is the real discriminator --
+     the page must have been on screen for the entire gap -- so the ceiling now only
+     decides how a stall is LABELLED. */
+  var LONG_MS    = 25000;
+  /* Past this a closed lid or a suspended device genuinely is the better explanation
+     than a main thread blocked that long, so it is still dropped. */
+  var SLEEP_MS   = 600000;
   var MAX_REPORTS = 3;        // per session — a struggling device must not spam
 
   var last = Date.now();
@@ -76,10 +86,13 @@
     if (gap <= TICK_MS + FREEZE_MS) return;              // normal jitter
     if (d.hidden || !visibleSince) return;               // not on screen; not our story
     if (now - visibleSince < gap) return;                // it was hidden during the gap
-    if (gap > SLEEP_MS) return;                          // the device slept
+    if (gap > SLEEP_MS) return;                          // beyond plausible: a sleeping device
 
     var secs = (gap / 1000).toFixed(1);
     var where = screenName();
+    /* A stall past the ceiling is still real enough to record -- it is just less
+       certain, so it is labelled and counted separately rather than thrown away. */
+    var isLong = gap > LONG_MS;
 
     // Always leave a trail: if a crash follows, the report now carries the fact that
     // the interface had already locked up beforehand.
@@ -98,10 +111,14 @@
     try {
       if (w.KT && w.KT.reportProblem) {
         w.KT.reportProblem(
-          new Date().toISOString() + '  UI FROZE  The interface stopped responding for '
-          + secs + 's on ' + where + '\n'
+          new Date().toISOString() + (isLong ? '  UI LONG STALL  ' : '  UI FROZE  ')
+          + 'The interface stopped responding for ' + secs + 's on ' + where + '\n'
           + 'No error was thrown — the main thread was blocked, so nothing on screen '
           + 'responded for that time.\n'
+          + (isLong
+              ? 'Longer than ' + (LONG_MS / 1000) + 's, so a suspended device cannot be ruled '
+                + 'out — but the page reported itself visible for the whole gap.\n'
+              : '')
           + 'Detected by the freeze watchdog, not by an exception.',
           { quiet: true }   // nothing broke visibly; a notice would be the only thing they saw
         );
