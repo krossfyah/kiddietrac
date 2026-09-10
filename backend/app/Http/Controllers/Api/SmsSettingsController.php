@@ -173,7 +173,88 @@ class SmsSettingsController extends Controller
             // Sends per carrier over the last 30 days -- the first question anybody has
             // after switching carrier is whether the new one is actually working.
             'recent_by_provider' => SmsGateway::recentByProvider($agencyId),
+
+            /* THE TEST LOG. A connection test that only flashes a line of green text
+               answers "is it working NOW" and nothing else. What an admin actually
+               needs, halfway through pasting four credentials, is "what did it say the
+               last three times, and has it ever passed" -- so every attempt is kept and
+               handed back with the screen. */
+            'recent_tests' => self::recentTests($agencyId),
         ]);
+    }
+
+    /**
+     * The last few connection tests for this agency, newest first.
+     *
+     * Read back out of the audit log rather than from a table of its own: a credential
+     * test is exactly the kind of administrative act the audit log exists for, it is
+     * already agency-scoped and already retained, and a second store would be a second
+     * thing to purge.
+     */
+    private static function recentTests(int $agencyId, int $limit = 12): array
+    {
+        $rows = DB::table('audit_logs as al')
+            ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
+            ->where('al.agency_id', $agencyId)
+            ->where('al.action', 'sms.settings.test')
+            ->orderByDesc('al.created_at')->orderByDesc('al.id')
+            ->limit($limit)
+            ->get(['al.payload', 'al.created_at', 'u.first_name', 'u.last_name']);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $p = json_decode((string) $r->payload, true) ?: [];
+            $out[] = [
+                'at' => $r->created_at,
+                'by' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: 'system',
+                'provider' => $p['provider'] ?? '',
+                'ok' => (bool) ($p['ok'] ?? false),
+                'message' => $p['message'] ?? '',
+                'checks' => $p['checks'] ?? [],
+                'ms' => $p['ms'] ?? null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Record one test attempt, and hand the caller back exactly what the screen renders.
+     *
+     * Auditing is wrapped because a failure to write history must never be the reason a
+     * test appears to fail -- the same rule the settings save follows.
+     */
+    private function recordTest(Request $request, int $agencyId, string $provider, bool $ok, string $message, array $checks, float $ms): array
+    {
+        try {
+            \App\Support\Audit::write([
+                'user_id' => optional($request->user())->id,
+                'agency_id' => $agencyId,
+                'action' => 'sms.settings.test',
+                'entity_type' => 'agency',
+                'entity_id' => $agencyId,
+                'payload' => json_encode([
+                    'summary' => 'Tested ' . $provider . ' credentials — ' . ($ok ? 'passed' : 'failed')
+                        . ($message !== '' ? ': ' . $message : ''),
+                    'provider' => $provider,
+                    'ok' => $ok,
+                    'message' => $message,
+                    'checks' => $checks,
+                    'ms' => (int) round($ms),
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            // History is worth having, not worth failing a test over.
+        }
+
+        return [
+            'ok' => $ok,
+            'provider' => $provider,
+            'message' => $message,
+            'checks' => $checks,
+            'ms' => (int) round($ms),
+            'recent_tests' => self::recentTests($agencyId),
+        ];
     }
 
     /** PATCH /admin/sms-settings */
@@ -354,6 +435,12 @@ class SmsSettingsController extends Controller
      * Which carrier is checked comes from the request, defaulting to the one the agency
      * has chosen to send on. Checking the wrong one is exactly the sort of test that
      * passes while sending fails.
+     *
+     * ── ALWAYS ANSWERS 200 ──
+     * Even when the credentials are refused. This is a DIAGNOSTIC: the interesting
+     * payload is the list of which checks passed and which did not, and a 4xx throws
+     * that away at every HTTP client that treats non-2xx as "no body worth reading".
+     * `ok` carries the verdict.
      */
     public function test(Request $request): JsonResponse
     {
@@ -365,48 +452,68 @@ class SmsSettingsController extends Controller
             $provider = SmsGateway::preference($agencyId)['primary'];
         }
 
-        return $provider === 'telnyx'
-            ? $this->testTelnyx($agencyId)
-            : $this->testTwilio($agencyId);
+        $t0 = microtime(true);
+        [$ok, $message, $checks] = $provider === 'telnyx'
+            ? $this->probeTelnyx($agencyId)
+            : $this->probeTwilio($agencyId);
+        $ms = (microtime(true) - $t0) * 1000;
+
+        return response()->json(
+            $this->recordTest($request, $agencyId, $provider, $ok, $message, $checks, $ms)
+        );
     }
 
-    private function testTwilio(int $agencyId): JsonResponse
+    /** One line of the report. */
+    private static function check(string $label, bool $ok, string $detail): array
     {
+        return ['label' => $label, 'ok' => $ok, 'detail' => $detail];
+    }
+
+    /**
+     * @return array{0:bool,1:string,2:array}
+     */
+    private function probeTwilio(int $agencyId): array
+    {
+        $saved = self::readConfig($agencyId);
+        $checks = [];
+
+        $sidOk = (bool) preg_match(self::SID_RE, (string) ($saved['account_sid'] ?? ''));
+        $checks[] = self::check('Account SID', $sidOk,
+            $sidOk ? 'Looks like an Account SID.' : 'Missing, or not in the AC… form.');
+
+        $hasKey = ! empty($saved['api_key_sid']) && ! empty($saved['api_key_secret']);
+        $hasTok = ! empty($saved['auth_token']);
+        $checks[] = self::check('Credential', $hasKey || $hasTok,
+            $hasKey ? 'API key stored — used in preference to the auth token.'
+                : ($hasTok ? 'Auth token stored.' : 'Neither an API key nor an auth token is stored.'));
+
+        $fromOk = (bool) preg_match(self::FROM_RE, (string) ($saved['from'] ?? ''));
+        $checks[] = self::check('Sending number', $fromOk,
+            $fromOk ? (string) $saved['from'] : 'Missing, or not E.164 / a Messaging Service SID.');
+
         /* Resolved by the SAME code the send path uses. A test that builds its own
            credentials can pass while sending still fails, which is worse than no test. */
         $cfg = SmsController::twilioConfig($agencyId);
         if (! $cfg) {
-            $saved = self::readConfig($agencyId);
-            $missing = [];
-            if (! preg_match(self::SID_RE, (string) ($saved['account_sid'] ?? ''))) { $missing[] = 'an Account SID'; }
-            if (empty($saved['auth_token']) && empty($saved['api_key_secret'])) { $missing[] = 'an auth token or API key'; }
-            if (! preg_match(self::FROM_RE, (string) ($saved['from'] ?? ''))) { $missing[] = 'a sending number'; }
+            $checks[] = self::check('Twilio account', false, 'Not attempted — fill in the fields above first.');
 
-            return response()->json([
-                'ok' => false,
-                'message' => $missing
-                    ? ('Twilio still needs ' . implode(', ', $missing) . '.')
-                    : 'Those Twilio credentials are not usable yet.',
-            ], 422);
+            return [false, 'Twilio is not fully configured yet.', $checks];
         }
 
         try {
             $account = (new Client($cfg['user'], $cfg['pass'], $cfg['account']))
                 ->api->v2010->accounts($cfg['account'])->fetch();
+            $checks[] = self::check('Twilio account', true,
+                '"' . $account->friendlyName . '" (' . $account->status . ')');
 
-            return response()->json([
-                'ok' => true,
-                'message' => 'Connected to Twilio as "' . $account->friendlyName . '" (' . $account->status . ').',
-            ]);
+            return [true, 'Connected to Twilio as "' . $account->friendlyName . '".', $checks];
         } catch (\Throwable $e) {
             Log::warning('Twilio credential check failed', ['agency' => $agencyId, 'msg' => $e->getMessage()]);
+            // Twilio's own wording is the useful part -- it distinguishes a bad token
+            // from a suspended account.
+            $checks[] = self::check('Twilio account', false, $e->getMessage());
 
-            return response()->json([
-                'ok' => false,
-                // Twilio's own wording is the useful part -- it distinguishes a bad token
-                // from a suspended account.
-                'message' => 'Twilio refused those credentials: ' . $e->getMessage(),
-            ], 422);
+            return [false, 'Twilio refused those credentials.', $checks];
         }
     }
 
@@ -417,51 +524,62 @@ class SmsSettingsController extends Controller
      * Reports on the VOICE side too, because one key covers both and an admin who has
      * filled in the messaging half has no other way to find out that the call control
      * connection id is still missing.
+     *
+     * @return array{0:bool,1:string,2:array}
      */
-    private function testTelnyx(int $agencyId): JsonResponse
+    private function probeTelnyx(int $agencyId): array
     {
+        $checks = [];
         $key = Telnyx::apiKey($agencyId);
+
         if ($key === '') {
-            return response()->json([
-                'ok' => false,
-                'message' => 'Telnyx still needs an API key.',
-            ], 422);
+            $checks[] = self::check('API key', false, 'No API key stored.');
+
+            return [false, 'Telnyx still needs an API key.', $checks];
         }
 
         $r = Telnyx::whoami($key);
         if (! $r['ok']) {
             Log::warning('Telnyx credential check failed', ['agency' => $agencyId, 'msg' => $r['error']]);
+            $checks[] = self::check('API key', false, (string) $r['error']);
 
-            return response()->json([
-                'ok' => false,
-                'message' => 'Telnyx refused that API key: ' . $r['error'],
-            ], 422);
+            return [false, 'Telnyx refused that API key.', $checks];
         }
 
         $bal = $r['body']['data'] ?? [];
-        $line = 'Connected to Telnyx.';
-        if (isset($bal['balance'])) {
-            $line .= ' Balance ' . $bal['balance'] . ' ' . (string) ($bal['currency'] ?? '') . '.';
-        }
+        $checks[] = self::check('API key', true, isset($bal['balance'])
+            ? ('Accepted. Balance ' . $bal['balance'] . ' ' . (string) ($bal['currency'] ?? '') . '.')
+            : 'Accepted.');
 
-        /* Named individually rather than as "not configured", because "which box is
+        /* Named individually rather than as one "not configured", because "which box is
            still empty" is the actual question and the screen cannot answer it: the API
-           key is write-only, so it cannot tell whether the failure is the key or the
+           key is write-only, so it cannot tell whether a failure is the key or the
            number. */
-        $gaps = [];
-        if (Telnyx::smsConfig($agencyId) === null) {
-            $gaps[] = 'texts need a sending number or a messaging profile id';
-        }
-        if (Telnyx::voiceConfig($agencyId) === null) {
-            $gaps[] = 'calls need a Call Control connection id and a caller number';
-        }
-        if (Telnyx::publicKey($agencyId) === '') {
-            $gaps[] = 'replies and call events need the webhook public key';
-        }
+        $sms = Telnyx::smsConfig($agencyId);
+        $checks[] = self::check('Text messages', $sms !== null, $sms
+            ? ($sms['from'] !== '' ? ('Sending from ' . $sms['from'] . '.') : 'Sending via the messaging profile.')
+            : 'Needs a sending number or a messaging profile id.');
 
-        return response()->json([
-            'ok' => true,
-            'message' => $line . ($gaps ? ' Still to do: ' . implode('; ', $gaps) . '.' : ''),
-        ]);
+        $voice = Telnyx::voiceConfig($agencyId);
+        $checks[] = self::check('Voice calls', $voice !== null, $voice
+            ? ('Calling from ' . $voice['from'] . ' on connection ' . $voice['connection_id'] . '.')
+            : 'Needs a Call Control connection id and a caller number.');
+
+        $pub = Telnyx::publicKey($agencyId) !== '';
+        $checks[] = self::check('Webhook signing key', $pub, $pub
+            ? 'Stored — replies and call events will be verified.'
+            : 'Missing. Without it every inbound reply and call event is refused.');
+
+        /* The API key alone is a pass: it is the credential being tested. The rest are
+           reported so the gaps are visible, but a missing voice connection is not a
+           reason to call a working messaging setup broken. */
+        $gaps = count(array_filter($checks, fn ($c) => ! $c['ok']));
+
+        return [
+            true,
+            $gaps === 0 ? 'Connected to Telnyx. Everything is set up.'
+                : ('Connected to Telnyx. ' . $gaps . ' thing' . ($gaps === 1 ? '' : 's') . ' still to finish.'),
+            $checks,
+        ];
     }
 }

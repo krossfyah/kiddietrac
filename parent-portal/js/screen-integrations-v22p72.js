@@ -67,7 +67,8 @@
       // (which made this section look pre-filled though nothing was entered).
       + '<div data-kt-noautofill="1">'
       + field('Client ID', 'qc-id', cfg.client_id || '', 'ABxxxxxxxxxxxxxxxxxxxx')
-      + field('Client Secret', 'qc-secret', '', cfg.has_secret ? '•••••••• (saved — leave blank to keep)' : 'Enter client secret', 'password')
+      + KT.secretField({ id: 'qc-secret', label: 'Client Secret', stored: !!cfg.has_secret,
+          whatItIs: 'client secret', labelStyle: 'display:block;font-size:13px;font-weight:600;margin:14px 0 4px;', inputStyle: 'width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;box-sizing:border-box;' })
       + '</div>'
       + '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Environment</label>'
       + '<select id="qc-env" style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;">'
@@ -343,7 +344,9 @@
       + ['tls', 'ssl', 'none'].map(function (o) { return '<option value="' + o + '"' + ((s.smtp_encryption || 'tls') === o ? ' selected' : '') + '>' + o.toUpperCase() + '</option>'; }).join('')
       + '</select></div></div>'
       + field('Username', 'es-user', s.smtp_username || '', 'you@gmail.com')
-      + field('Password' + (s.has_smtp_password ? ' (leave blank to keep)' : ''), 'es-pass', '', s.has_smtp_password ? '••••••••' : 'app password', 'password')
+      + KT.secretField({ id: 'es-pass', label: 'Password', stored: !!s.has_smtp_password,
+          whatItIs: 'password', placeholder: s.has_smtp_password ? '' : 'app password',
+          labelStyle: 'display:block;font-size:13px;font-weight:600;margin:14px 0 4px;', inputStyle: 'width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;box-sizing:border-box;' })
       + '<p style="color:#64748B;font-size:12px;margin:8px 0 0;">Gmail &amp; Microsoft with 2-factor on need an <strong>app password</strong>, not your normal password.</p>'
       + '</div>'
       + '</div>'
@@ -353,7 +356,8 @@
       + '<p style="color:#64748B;font-size:13px;margin:0 0 12px;">Connects the in-portal <strong>Email</strong> client to your Microsoft 365 mailboxes. Create an <strong>Azure AD app registration</strong> with Microsoft Graph Mail permissions, then paste its details here.</p>'
       + field('Directory (tenant) ID', 'es-gt', s.graph_tenant_id || '', '00000000-0000-0000-0000-000000000000')
       + field('Application (client) ID', 'es-gc', s.graph_client_id || '', '00000000-0000-0000-0000-000000000000')
-      + field('Client secret' + (s.has_graph_secret ? ' (leave blank to keep)' : ''), 'es-gs', '', s.has_graph_secret ? '••••••••' : 'secret value', 'password')
+      + KT.secretField({ id: 'es-gs', label: 'Client secret', stored: !!s.has_graph_secret,
+          whatItIs: 'client secret', labelStyle: 'display:block;font-size:13px;font-weight:600;margin:14px 0 4px;', inputStyle: 'width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;box-sizing:border-box;' })
       + '<p style="color:#64748B;font-size:12px;margin:8px 0 0;">Azure Portal → App registrations → Certificates &amp; secrets. Needs Graph <em>Mail.Read</em> / <em>Mail.Send</em>.</p>'
       + '</div>'
       + '</div>';
@@ -828,7 +832,7 @@
   /* Bumped by hand whenever this screen changes shape. It is printed under the hero so
      "which version am I looking at" is answerable from the screen instead of from
      devtools — a stale cached copy is otherwise indistinguishable from a bug. */
-  var SCREEN_BUILD = '2026-09-10 carrier-subtabs';
+  var SCREEN_BUILD = '2026-09-10 carrier-subtabs + test-log';
 
   async function renderSmsSettings(main) {
     main.setAttribute('data-kt-pretty', '1');
@@ -988,11 +992,11 @@
       +           '<input id="sms-sid" style="' + fld + '" placeholder="AC…" value="' + esc(s.account_sid || '') + '">'
       +           '<div style="' + hint + '">Starts with <b>AC</b>. An OAuth client id (OQ…) is a different '
       +             'credential and will not work.</div></div>'
-      +         '<div style="margin-top:14px;"><label style="' + lbl + '">Auth token</label>'
-      +           '<input id="sms-token" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
-      +             (s.has_auth_token ? 'Saved — leave blank to keep it' : 'Paste the auth token') + '">'
-      +           '<div style="' + hint + '">Stored encrypted. It is never sent back to this screen, so leaving '
-      +             'this blank keeps the one already saved.</div></div>'
+      +         '<div style="margin-top:14px;">'
+      +           KT.secretField({ id: 'sms-token', label: 'Auth token',
+                    stored: !!s.has_auth_token, whatItIs: 'auth token',
+                    labelStyle: lbl, inputStyle: fld })
+      +         '</div>'
       +         '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
       +           '<div style="font-size:13px;font-weight:800;color:#0F172A;">API key <span style="font-weight:600;'
       +             'color:#64748B;">— recommended, and used in preference to the auth token above</span></div>'
@@ -1001,9 +1005,11 @@
       +             'only once — copy it before closing the dialog.</div>'
       +           '<div style="margin-top:12px;"><label style="' + lbl + '">API key SID</label>'
       +             '<input id="sms-keysid" style="' + fld + '" placeholder="SK…" value="' + esc(s.api_key_sid || '') + '"></div>'
-      +           '<div style="margin-top:12px;"><label style="' + lbl + '">API key secret</label>'
-      +             '<input id="sms-keysecret" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
-      +               (s.has_api_key_secret ? 'Saved — leave blank to keep it' : 'Paste the secret') + '"></div>'
+      +           '<div style="margin-top:12px;">'
+      +             KT.secretField({ id: 'sms-keysecret', label: 'API key secret',
+                      stored: !!s.has_api_key_secret, whatItIs: 'secret',
+                      labelStyle: lbl, inputStyle: fld })
+      +           '</div>'
       +         '</div>'
       +         '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
       +           '<input id="sms-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(s.from || '') + '">'
@@ -1022,11 +1028,14 @@
       +         '<div style="' + hint + 'margin:0 0 12px;">Telnyx Mission Control → API Keys. The same key covers '
       +           'text messages and voice calls, so it is only asked for here — the Voice calls tab reads it '
       +           'from this page.</div>'
-      +         '<div><label style="' + lbl + '">API key</label>'
-      +           '<input id="tx-key" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
-      +             (t.has_api_key ? 'Saved — leave blank to keep it' : 'KEY…') + '">'
-      +           '<div style="' + hint + '">Starts with <b>KEY</b>. Stored encrypted and never sent back to this '
-      +             'screen. The <i>public</i> key below is a different credential.</div></div>'
+      +         KT.secretField({ id: 'tx-key', label: 'API key', stored: !!t.has_api_key,
+                  whatItIs: 'API key',
+                  placeholder: t.has_api_key ? '' : 'KEY…',
+                  hint: (t.has_api_key
+                    ? 'An API key is saved and encrypted. It is never shown again — leave this blank to keep it, and type here only to replace it. '
+                    : 'Starts with <b>KEY</b>. Stored encrypted and never sent back to this screen. ')
+                    + 'The <i>public</i> key below is a different credential.',
+                  labelStyle: lbl, inputStyle: fld })
       +         '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
       +           '<input id="tx-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(t.sms_from || '') + '">'
       +           '<div style="' + hint + '">In full international form.</div></div>'
@@ -1058,7 +1067,13 @@
       +         'font-size:13px;cursor:pointer;">Test Twilio</button>'
       +       '<span id="sms-msg" style="font-size:13px;font-weight:700;"></span>'
       +     '</div>'
-      +     '<div style="' + hint + 'margin-top:8px;">Save stores both carriers at once, whichever page you are on.</div>'
+      +     '<div style="' + hint + 'margin-top:8px;">Save stores both carriers at once, whichever page you are on. '
+      +       'Test checks the carrier whose page is open.</div>'
+      /* THE TEST LOG. A test that only flashes a line of green text answers "is it
+         working right now" and nothing else. Halfway through pasting four credentials
+         the useful question is "what did it say the last three times, and has it ever
+         passed" — so every attempt is kept server-side and drawn here. */
+      +     '<div id="sms-testlog" style="margin-top:16px;"></div>'
       +   '</div>'
 
       /* ══════════════════════ VOICE ══════════════════════ */
@@ -1251,15 +1266,77 @@
        recipient. It tests the carrier whose PAGE is open, which is the one whose boxes
        you were just typing in — testing the other one is exactly the sort of test that
        passes while sending fails. */
+    /* One entry. The newest keeps its per-check breakdown open, because that is the one
+       being read; older entries collapse to a single line so the panel stays a history
+       rather than a wall. */
+    function testEntry(t, expanded) {
+      var ok = !!t.ok;
+      var when = t.at ? (window.KT && KT.Fmt && KT.Fmt.time ? KT.Fmt.time(t.at) : String(t.at)) : '';
+      var head = '<div style="display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;">'
+        + '<span style="font-weight:800;color:' + (ok ? '#047857' : '#B91C1C') + ';">'
+        +   (ok ? '✓' : '✗') + '</span>'
+        + '<span style="font-weight:800;text-transform:capitalize;">' + esc(t.provider || '') + '</span>'
+        + '<span style="color:#334155;">' + esc(t.message || '') + '</span>'
+        + '<span style="margin-left:auto;font-size:11.5px;color:#94A3B8;white-space:nowrap;">'
+        +   esc(when) + (t.by ? ' · ' + esc(t.by) : '') + (t.ms ? ' · ' + t.ms + 'ms' : '') + '</span>'
+        + '</div>';
+
+      var body = '';
+      if (expanded && t.checks && t.checks.length) {
+        body = '<div style="margin:8px 0 0 22px;">' + t.checks.map(function (c) {
+          return '<div style="display:flex;gap:8px;font-size:12.5px;margin:3px 0;">'
+            + '<span style="color:' + (c.ok ? '#047857' : '#B45309') + ';font-weight:800;">'
+            +   (c.ok ? '✓' : '○') + '</span>'
+            + '<span style="font-weight:700;color:#334155;min-width:150px;">' + esc(c.label) + '</span>'
+            + '<span style="color:#64748B;">' + esc(c.detail) + '</span></div>';
+        }).join('') + '</div>';
+      }
+
+      return '<div style="padding:10px 0;border-bottom:1px solid #F1F5F9;">' + head + body + '</div>';
+    }
+
+    function renderTestLog(list) {
+      var host = document.getElementById('sms-testlog');
+      if (!host) { return; }
+      list = list || [];
+
+      if (!list.length) {
+        host.innerHTML = '<div class="kt-card" style="color:#94A3B8;font-size:12.5px;padding:14px 16px;">'
+          + 'No connection tests yet. Press <b>Test</b> above — it reads the carrier\'s account '
+          + 'rather than sending anything, so it costs nothing and needs no consenting recipient.</div>';
+        return;
+      }
+
+      host.innerHTML = '<div class="kt-card" style="padding:6px 16px 10px;">'
+        + '<div style="font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;'
+        +   'letter-spacing:.5px;padding:10px 0 2px;">Test log</div>'
+        + list.map(function (t, i) { return testEntry(t, i === 0); }).join('')
+        + '<div style="font-size:11px;color:#94A3B8;padding:8px 0 0;">Kept in the audit log, so it '
+        +   'survives a reload and shows who ran each test.</div>'
+        + '</div>';
+    }
+
+    renderTestLog(s.recent_tests);
+
+    /* Reads the carrier's account rather than sending a message: it proves the
+       credentials are accepted without costing anything or needing a consenting
+       recipient. It tests the carrier whose PAGE is open, which is the one whose boxes
+       you were just typing in — testing the other one is exactly the sort of test that
+       passes while sending fails.
+
+       The endpoint answers 200 even when the credentials are refused; `ok` carries the
+       verdict. A 4xx would have thrown away the per-check breakdown, which is the part
+       worth reading. */
     document.getElementById('sms-test').addEventListener('click', async function () {
       var btn = this;
       var which = openCarrier;
       btn.disabled = true; say('sms-msg', 'Checking ' + which + '…', true);
       try {
         var r = await api().post('/admin/sms-settings/test', { provider: which });
-        say('sms-msg', (r && r.message) || 'Connected.', true);
+        say('sms-msg', (r && r.message) || '', !!(r && r.ok));
+        renderTestLog((r && r.recent_tests) || []);
       } catch (e) {
-        say('sms-msg', (e && e.message) || 'Those credentials were refused.', false);
+        say('sms-msg', (e && e.message) || 'The test could not be run.', false);
       }
       btn.disabled = false;
     });
