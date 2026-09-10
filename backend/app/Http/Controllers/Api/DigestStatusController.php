@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Models\AiDailyDigest;
 use App\Models\Child;
@@ -26,6 +27,14 @@ use Illuminate\Support\Facades\DB;
  */
 class DigestStatusController extends Controller
 {
+    /* THE SAME TENANT HELPERS THE REST OF THE PORTAL USES.
+
+       Found 2026-09-10 by probing every read endpoint with two agencies' tokens: this
+       was the ONLY one of 325 that returned another tenant's records, and it did it in
+       both directions — an iLearn admin listing Test Agency's children and a Test
+       Agency admin listing iLearn's. See index() and regenerate() for the two holes. */
+    use ResolvesCentreContext;
+
     public function __construct(protected AiDigestService $ai)
     {
     }
@@ -45,18 +54,39 @@ class DigestStatusController extends Controller
             return response()->json(['error' => 'Invalid date format. Expected YYYY-MM-DD.'], 422);
         }
 
-        // Scope children: if centre_id provided, filter to that centre.
-        // Otherwise return all children visible to this user (delegated to model scopes).
-        $childrenQuery = Child::query()
-            ->select(['children.id', 'children.first_name', 'children.last_name'])
-            ->orderBy('children.last_name');
+        /* SCOPED TO THE CALLER'S OWN CENTRES.
+
+           This read `Child::query()` with no scope at all when centre_id was absent —
+           EVERY child on the platform, every agency — under a comment claiming the
+           children were "visible to this user (delegated to model scopes)". There is no
+           such scope on the model. A comment asserting a guard that does not exist is
+           worse than no comment: it is why this survived the tenant-isolation audit that
+           hardened ~33 other controllers.
+
+           And when centre_id WAS supplied it was trusted verbatim, so passing another
+           agency's centre id read that centre's children out directly.
+
+           Both answered by the portal's own helper, which fails closed: no resolvable
+           agency means no centres, and `?: [0]` means no centres matches nobody rather
+           than everybody. */
+        $visibleCentreIds = $this->visibleCentreIds($request);
 
         if ($centreId) {
-            // Children currently enrolled in a room belonging to this centre
-            $childrenQuery->whereHas('currentEnrollment.room', function ($q) use ($centreId) {
-                $q->where('centre_id', $centreId);
-            });
+            if (! in_array((int) $centreId, array_map('intval', $visibleCentreIds), true)) {
+                // Not "forbidden" — this agency has no business knowing the centre exists.
+                return response()->json(['error' => 'Centre not found'], 404);
+            }
+            $scopeCentreIds = [(int) $centreId];
+        } else {
+            $scopeCentreIds = array_map('intval', $visibleCentreIds);
         }
+
+        $childrenQuery = Child::query()
+            ->select(['children.id', 'children.first_name', 'children.last_name'])
+            ->orderBy('children.last_name')
+            ->whereHas('currentEnrollment.room', function ($q) use ($scopeCentreIds) {
+                $q->whereIn('centre_id', $scopeCentreIds ?: [0]);
+            });
 
         $children = $childrenQuery->get();
         if ($children->isEmpty()) {
@@ -77,9 +107,11 @@ class DigestStatusController extends Controller
             ->get()
             ->keyBy('child_id');
 
+        // Agency-day instants. $childIds share a centre here, so one range serves all.
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForChild((int) ($childIds[0] ?? 0), $date);
         $eventCounts = DB::table('daily_events')
             ->whereIn('child_id', $childIds)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->select('child_id', DB::raw('COUNT(*) as cnt'))
             ->groupBy('child_id')
             ->pluck('cnt', 'child_id');
@@ -142,6 +174,19 @@ class DigestStatusController extends Controller
 
         $child = Child::find($childId);
         if (! $child) {
+            return response()->json(['error' => 'Child not found'], 404);
+        }
+
+        /* THE WRITE PATH BESIDE THE READ — and it was the worse of the two.
+
+           `exists:children,id` proves a row exists SOMEWHERE. This then generated an AI
+           daily digest for it and returned the narrative, so any director could ask for
+           any child on the platform by id and be handed a written account of that
+           child's day. Validation is not authorisation.
+
+           404, not 403: a director in another agency should not learn that this child
+           exists. Same answer as a genuinely missing id, which is the point. */
+        if (! $this->canAccessChildScoped($request, $childId)) {
             return response()->json(['error' => 'Child not found'], 404);
         }
 

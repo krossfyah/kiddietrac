@@ -840,6 +840,11 @@ final class AdminController extends Controller
     /** Per-request cache of resolved id→name lookups so the audit list isn't N+1 heavy. */
     private array $auditRefCache = [];
 
+    /* The agency whose audit log is being READ. Names are resolved only for records
+       inside it - see auditRefName(). Null means "not established", which resolves
+       nothing at all rather than everything. */
+    private ?int $auditRefAgencyId = null;
+
     /**
      * If a payload key is a reference to another record (child_id, family_id,
      * user_id, centre_id, agency_id, assigned_to, …), return a readable
@@ -1017,30 +1022,71 @@ final class AdminController extends Controller
     /** Cached id→display-name lookup for the audit reference tables. */
     private function auditRefName(string $table, int $id): ?string
     {
-        $cacheKey = $table . ':' . $id;
+        /* NAMES ONLY FOR RECORDS INSIDE THE AGENCY WHOSE LOG THIS IS.
+
+           This looked every id up by primary key alone. An audit payload is written
+           from whatever a request CONTAINED, so an id from another tenant lands in the
+           log routinely - a mistyped filter, a stale bookmark, a refused request - and
+           this then rendered that tenant's real name back into the summary. Found
+           2026-09-10 while probing: an iLearn admin's own audit log displayed
+           "centre: Little Explorers Academy", a Test Agency centre, because a request
+           carrying centre_id=19 had been refused and logged.
+
+           It reads as trivial - one name on one line - but it is a directory. An admin
+           can issue failing requests across a range of ids and then read their own
+           audit log back to harvest the name of every centre, child, family and user on
+           the platform. The log is the disclosure channel, not the request.
+
+           Scoped at THIS choke point on purpose: every entity type the narrator can
+           name passes through here, so one guard covers child, family, centre, room,
+           user and agency rather than six that can drift apart. Fails closed - an
+           unresolvable agency names nothing, and an id outside the agency returns null,
+           which makes the summary omit the clause rather than print a foreign name. */
+        $agencyId = $this->auditRefAgencyId;
+        $cacheKey = ($agencyId ?: 0) . ':' . $table . ':' . $id;
         if (array_key_exists($cacheKey, $this->auditRefCache)) return $this->auditRefCache[$cacheKey];
+        if (! $agencyId) return $this->auditRefCache[$cacheKey] = null;
+
         $name = null;
         try {
+            $centreIds = fn () => DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
+
             switch ($table) {
                 case 'users':
+                    // In this agency by a role, or as a guardian of one of its families.
+                    $inAgency = DB::table('role_assignments')->where('user_id', $id)
+                            ->where('agency_id', $agencyId)->exists()
+                        || DB::table('role_assignments')->where('user_id', $id)
+                            ->whereIn('centre_id', $centreIds())->exists()
+                        || DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                            ->where('g.user_id', $id)->whereIn('f.centre_id', $centreIds())->exists();
+                    if (! $inAgency) break;
                     $r = DB::table('users')->where('id', $id)->first(['first_name', 'last_name', 'email']);
                     if ($r) { $n = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')); $name = $n !== '' ? $n : $r->email; }
                     break;
                 case 'children':
-                    $r = DB::table('children')->where('id', $id)->first(['first_name', 'last_name']);
+                    $r = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+                        ->where('ch.id', $id)->whereIn('f.centre_id', $centreIds())
+                        ->first(['ch.first_name', 'ch.last_name']);
                     if ($r) $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: null;
                     break;
                 case 'families':
-                    $name = DB::table('families')->where('id', $id)->value('family_name') ?: null;
+                    $name = DB::table('families')->where('id', $id)
+                        ->whereIn('centre_id', $centreIds())->value('family_name') ?: null;
                     break;
                 case 'centres':
-                    $name = DB::table('centres')->where('id', $id)->value('name') ?: null;
+                    $name = DB::table('centres')->where('id', $id)
+                        ->where('agency_id', $agencyId)->value('name') ?: null;
                     break;
                 case 'agencies':
-                    $name = DB::table('agencies')->where('id', $id)->value('name') ?: null;
+                    // Only the one being viewed. Naming any other is the same disclosure.
+                    $name = $id === $agencyId
+                        ? (DB::table('agencies')->where('id', $id)->value('name') ?: null)
+                        : null;
                     break;
                 case 'rooms':
-                    $name = DB::table('rooms')->where('id', $id)->value('name') ?: null;
+                    $name = DB::table('rooms')->where('id', $id)
+                        ->whereIn('centre_id', $centreIds())->value('name') ?: null;
                     break;
             }
         } catch (\Throwable $e) { $name = null; }
@@ -1215,6 +1261,11 @@ final class AdminController extends Controller
            it per row -- that is why this endpoint recorded 10.7 s against itself
            while its SQL runs in under 4 ms. */
         \App\Support\GeoIp::warm($rows->pluck('ip_address')->all());
+
+        /* Establish whose audit log this is BEFORE a single row is narrated, so the
+           id-to-name resolver knows which agency's records it may name. */
+        $this->auditRefAgencyId = $this->getAgencyId($request);
+        $this->auditRefCache = [];
 
         $rows = $rows->map(function ($r) use ($auditTz) {
             $r->action_label = $this->humanizeAuditAction($r->action);
