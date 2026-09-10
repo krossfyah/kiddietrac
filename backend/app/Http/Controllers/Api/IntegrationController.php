@@ -243,9 +243,16 @@ class IntegrationController extends Controller
                    roster filtering start_date <= today would then skip the child for a
                    day. Prefer the date the child was actually enrolled, and fall back to
                    the centre's own clock rather than the server's. */
-                $tz = \Illuminate\Support\Facades\DB::table('centres as ce')
-                    ->join('families as f', 'f.centre_id', '=', 'ce.id')
-                    ->where('f.id', $child->family_id)->value('ce.timezone') ?: 'America/Toronto';
+                /* BUG (fixed 2026-09-09): this used to read ce.timezone. There is no such
+                   column on centres — the timezone lives on the AGENCY — so every call
+                   threw a QueryException that the catch below swallowed as "could not
+                   place". primary_room_id had already been written by then, so the child
+                   looked half-placed: visible to the educator, absent from every roster
+                   that INNER JOINs enrollments. CareSchedule::tzForChild has carried the
+                   correct lookup (and a comment about this exact mistake) all along. */
+                $centreId = \Illuminate\Support\Facades\DB::table('families')
+                    ->where('id', $child->family_id)->value('centre_id');
+                $tz = \App\Support\AgencyTime::tzForCentre($centreId ? (int) $centreId : null) ?: 'America/Toronto';
 
                 $start = $child->enrolled_at
                     ? substr((string) $child->enrolled_at, 0, 10)
@@ -264,7 +271,24 @@ class IntegrationController extends Controller
 
             return $roomId;
         } catch (\Throwable $e) {
-            // never fail a sync over placement
+            /* Still never fail a sync over placement — but never again lose the reason.
+               A silent null here is indistinguishable from "no room to place them in",
+               which is how a broken column reference ran unnoticed for weeks. */
+            \Illuminate\Support\Facades\Log::error('placeChildInRoom failed for child ' . $childId
+                . ' into room ' . $roomId . ': ' . $e->getMessage());
+            try {
+                \App\Support\Audit::write([
+                    'action'      => 'integration.child_placement_failed',
+                    'entity_type' => 'child',
+                    'entity_id'   => $childId,
+                    'payload'     => json_encode([
+                        'room_id' => $roomId,
+                        'reason'  => substr($e->getMessage(), 0, 400),
+                    ]),
+                ]);
+            } catch (\Throwable $ignored) {
+            }
+
             return null;
         }
     }
@@ -306,6 +330,13 @@ class IntegrationController extends Controller
         $attrs['centre_id'] = $centre->id;
         $attrs['external_id'] = $data['external_id'];
         $attrs['external_source'] = $source;
+
+        if ($created && ! $this->inboundCreateAllowed($agencyId, $source, 'family', $data['external_id'], [
+            'family_name' => $data['family_name'] ?? null,
+            'centre_external_id' => $data['centre_external_id'] ?? null,
+        ])) {
+            return $this->declinedCreate('family', $data['external_id']);
+        }
 
         if ($created) {
             $family = Family::create($attrs);
@@ -357,6 +388,14 @@ class IntegrationController extends Controller
         $attrs['family_id'] = $family->id;
         $attrs['external_id'] = $data['external_id'];
         $attrs['external_source'] = $source;
+
+        if ($created && ! $this->inboundCreateAllowed($agencyId, $source, 'child', $data['external_id'], [
+            'first_name' => $data['first_name'] ?? null,
+            'last_name' => $data['last_name'] ?? null,
+            'family_external_id' => $data['family_external_id'] ?? null,
+        ])) {
+            return $this->declinedCreate('child', $data['external_id']);
+        }
 
         if ($created) {
             $child = Child::create($attrs);
@@ -654,6 +693,19 @@ class IntegrationController extends Controller
 
         $existing = DB::table('users')->where('email', $data['email'])->whereNull('deleted_at')->first();
         $createdUser = ! $existing;
+
+        /* A parent LOGIN is a user account, and creating one here is the third way the
+           other system could invent a household member. Declined on the same rule as
+           families and children; an existing account still gets its guardian row and
+           role kept in step below. */
+        if ($createdUser && ! $this->inboundCreateAllowed($agencyId, $source, 'guardian', $data['family_external_id'] ?? null, [
+            'email' => $data['email'],
+            'first_name' => $data['first_name'] ?? null,
+            'last_name' => $data['last_name'] ?? null,
+        ])) {
+            return $this->declinedCreate('guardian', $data['family_external_id'] ?? null);
+        }
+
         if ($existing) {
             $userId = (int) $existing->id;
         } else {
@@ -1446,6 +1498,78 @@ class IntegrationController extends Controller
         }
 
         return response()->json(['ok' => true, 'agency_id' => $agencyId, 'results' => $results]);
+    }
+
+    /**
+     * MAY AN INBOUND PUSH CREATE A HOUSEHOLD HERE? By default, no.
+     *
+     * KiddieTrac became the source of record for NEW families and children on
+     * 2026-08-19 — they are pulled INTO the connected platform from here. That change
+     * did not close the old door: the other side could still push a family, a child or
+     * a parent login of its own, so both systems could invent the same household
+     * independently, each believing it was the origin. One direction is a feed; two
+     * directions of creation is a race.
+     *
+     * CREATION ONLY. A record KiddieTrac already knows keeps taking updates, so a
+     * rename, a date of birth or a withdrawal raised on the other side still lands —
+     * stopping those would break the reason the integration exists.
+     *
+     * Recorded when it declines, because a feed that silently drops records is
+     * indistinguishable from a broken one, and the first question will be "did it
+     * arrive". `integration.inbound_create_declined` in the audit log answers it.
+     *
+     * @return bool true when creation is permitted (config switch, default false)
+     */
+    private function inboundCreateAllowed(int $agencyId, string $source, string $entity, ?string $externalId, array $context = []): bool
+    {
+        if ((bool) config('integration.inbound_create', false)) {
+            return true;
+        }
+
+        try {
+            \App\Support\Audit::write([
+                'user_id'     => optional(request()->user())->id,
+                'agency_id'   => $agencyId,
+                'action'      => 'integration.inbound_create_declined',
+                'entity_type' => $entity,
+                'entity_id'   => null,
+                'payload'     => json_encode($context + [
+                    'entity'      => $entity,
+                    'source'      => $source,
+                    'external_id' => $externalId,
+                    'reason'      => 'KiddieTrac is the source of record for new families, '
+                        . 'children and parent logins. Inbound creation is closed; updates '
+                        . 'to records that already exist still apply. '
+                        . 'Set INTEGRATION_INBOUND_CREATE=true to reopen.',
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            // Never let the record of a refusal turn the refusal into an error.
+        }
+
+        return false;
+    }
+
+    /**
+     * The answer a declined create returns.
+     *
+     * 200, not an error. The sender is a scheduled job doing what it was built to do,
+     * and a 4xx would have it retry, alarm, or halt a batch that still has legitimate
+     * updates in it. `created:false` with a reason is the honest, quiet answer: nothing
+     * was written, nothing is wrong, stop sending this one.
+     */
+    private function declinedCreate(string $entity, ?string $externalId): JsonResponse
+    {
+        return response()->json([
+            'ok'          => true,
+            'entity'      => $entity,
+            'created'     => false,
+            'skipped'     => 'inbound_create_disabled',
+            'external_id' => $externalId,
+            'message'     => 'KiddieTrac is the source of record for new families, children '
+                . 'and parent logins. This record does not exist here and was not created; '
+                . 'updates to existing records are still applied.',
+        ], 200);
     }
 
     // ── helpers (mirror ImportController's agency scoping) ──────────────────
