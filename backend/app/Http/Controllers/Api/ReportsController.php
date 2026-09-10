@@ -351,6 +351,7 @@ final class ReportsController extends Controller
             'incidents'   => ['title' => 'Incidents & injuries',  'icon' => '🩹', 'desc' => 'Logged incidents / injuries in the period.',        'dated' => true],
             'observations'=> ['title' => 'Observations',          'icon' => '🔭', 'desc' => 'Learning-story observations recorded.',            'dated' => true],
             'tours'       => ['title' => 'Tour bookings',         'icon' => '🚪', 'desc' => 'Prospective-family tour requests.',                 'dated' => true],
+            'compliance'  => ['title' => 'Out of compliance',     'icon' => '⚠️', 'desc' => 'Children not signed in or out, staff who never clocked out, and the records the system had to close itself.', 'dated' => true],
         ];
     }
 
@@ -471,6 +472,211 @@ final class ReportsController extends Controller
     }
 
     /**
+     * Attendance and timekeeping records that nobody completed.
+     *
+     * Five findings, all evidence from records that EXIST — this deliberately does not
+     * try to infer who was "expected" and never turned up. A child booked for Tuesday who
+     * simply stayed home is not a compliance failure, and a report that cannot tell those
+     * apart would cry wolf until it was ignored.
+     *
+     *   1. a child signed out by the nightly job, because no educator did it
+     *   2. a child signed IN and never signed out (past days only)
+     *   3. a child signed OUT with no sign-in on record
+     *   4. a staff punch the nightly job had to close
+     *   5. a staff punch still open from an earlier day
+     *
+     * WHO IS NAMED. For rows 1 and 4 the "recorded by" is the SYSTEM, never a person.
+     * AutoSignOffCommand has to put a real user id in by_user_id/recorded_by_id because
+     * the column is NOT NULL, so those rows carry the id of whichever educator last
+     * touched the room — naming them here would accuse somebody of a sign-out they did
+     * not do, which is the exact confusion App\Support\SystemAction exists to end.
+     *
+     * PAIRING BY TIME, NOT BY DATE. A day is matched with an 18-hour window from the
+     * sign-in rather than by calendar date, because timestamps are stored UTC while the
+     * agency runs on its own clock: a 7pm Toronto sign-out is already tomorrow in UTC, so
+     * a DATE() comparison would report a properly signed-out child as never collected.
+     *
+     * Times render in the AGENCY's timezone.
+     */
+    /**
+     * The clock a report is written in.
+     *
+     * Not the server's. app.timezone is UTC and the timestamps are stored UTC, but a
+     * report is read by people standing in the centre — and by an inspector asking what
+     * time a child left. Printing 1:38 PM for a 9:38 AM sign-in is not a formatting
+     * nicety, it is a wrong record.
+     */
+    private function tzFor(int $agencyId): string
+    {
+        return \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
+    }
+
+    /** A stored UTC datetime in the agency's zone. */
+    private function local(?string $utc, string $tz): ?\Illuminate\Support\Carbon
+    {
+        return $utc ? \Illuminate\Support\Carbon::parse((string) $utc, 'UTC')->setTimezone($tz) : null;
+    }
+
+    /**
+     * The agency-local DATE of a stored UTC datetime.
+     *
+     * Only ever call this on a datetime column. A column that is genuinely DATE
+     * (invoices.issued_at, children.date_of_birth) carries no time and no zone — parsing
+     * one as UTC and converting west of Greenwich moves it to the day before, which is
+     * the bug this project has already been bitten by more than once.
+     */
+    private function localDate(?string $utc, string $tz): string
+    {
+        $c = $this->local($utc, $tz);
+
+        return $c ? $c->toDateString() : '—';
+    }
+
+    /** The agency-local time of a stored UTC datetime. */
+    private function localTime(?string $utc, string $tz): string
+    {
+        $c = $this->local($utc, $tz);
+
+        return $c ? $c->format('g:i A') : '—';
+    }
+
+    /**
+     * The UTC instants bounding an agency-local date range.
+     *
+     * The picker hands over local dates; the columns are UTC. Comparing them directly
+     * shifts the window by the offset — four hours for Toronto — so a report headed
+     * "1st to 7th" included part of the 8th and omitted part of the 1st.
+     */
+    private function utcBounds(?string $from, ?string $to, string $tz): array
+    {
+        return [
+            $from ? \Illuminate\Support\Carbon::parse($from . ' 00:00:00', $tz)->utc()->toDateTimeString() : null,
+            $to ? \Illuminate\Support\Carbon::parse($to . ' 23:59:59', $tz)->utc()->toDateTimeString() : null,
+        ];
+    }
+
+    private function complianceRows(int $agencyId, ?int $centreId, ?string $from, ?string $to): array
+    {
+        $tz = \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
+        $todayStart = \Illuminate\Support\Carbon::now($tz)->startOfDay()->utc()->toDateTimeString();
+
+        $fmt = function ($utc) use ($tz) {
+            return $utc ? \Illuminate\Support\Carbon::parse((string) $utc, 'UTC')->setTimezone($tz) : null;
+        };
+        $rows = [];
+        $push = function (array $r) use (&$rows) { $rows[] = $r; };
+
+        // Applies the centre + date window every branch shares.
+        $window = function ($q, string $col) use ($centreId, $from, $to, $tz) {
+            if ($centreId) { $q->where('c.id', $centreId); }
+            /* The range the user picked is agency-local; the column is UTC. Converting the
+               EDGES keeps a report that says "1st to 7th" from quietly including four hours
+               of the 8th. */
+            if ($from) { $q->where($col, '>=', \Illuminate\Support\Carbon::parse($from . ' 00:00:00', $tz)->utc()->toDateTimeString()); }
+            if ($to) { $q->where($col, '<=', \Illuminate\Support\Carbon::parse($to . ' 23:59:59', $tz)->utc()->toDateTimeString()); }
+
+            return $q;
+        };
+
+        $childBase = fn () => DB::table('check_events as ce')
+            ->join('rooms as r', 'r.id', '=', 'ce.room_id')
+            ->join('centres as c', 'c.id', '=', 'r.centre_id')
+            ->join('children as ch', 'ch.id', '=', 'ce.child_id')
+            ->where('c.agency_id', $agencyId);
+
+        $childCols = ['ce.occurred_at', 'ce.notes', 'ce.is_automatic', 'r.name as room', 'c.name as centre',
+            DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child")];
+
+        // ── 1. signed out by the nightly job ──────────────────────────────────
+        $q = $window($childBase()->where('ce.event_type', 'check_out'), 'ce.occurred_at')
+            ->where(function ($w) { $w->where('ce.is_automatic', 1)->orWhere('ce.notes', 'like', '%auto sign-off%'); });
+        foreach ($q->orderByDesc('ce.occurred_at')->limit(2000)->get($childCols) as $e) {
+            $at = $fmt($e->occurred_at);
+            $push([
+                'Date' => $at->toDateString(), 'Centre' => $e->centre, 'Room' => $e->room,
+                'Category' => 'Child sign-out', 'Person' => $e->child,
+                'What happened' => 'Signed out automatically at ' . $at->format('g:i A') . ' — no educator recorded a sign-out',
+                'Recorded by' => 'System (auto sign-off)', 'Closed by system' => 'Yes',
+                '_sort' => (string) $e->occurred_at,
+            ]);
+        }
+
+        // ── 2. signed in, never signed out ────────────────────────────────────
+        $q = $window($childBase()->where('ce.event_type', 'check_in'), 'ce.occurred_at')
+            ->where('ce.occurred_at', '<', $todayStart)   // today's children are simply still here
+            ->whereRaw("NOT EXISTS (SELECT 1 FROM check_events co WHERE co.child_id = ce.child_id
+                 AND co.event_type = 'check_out' AND co.occurred_at >= ce.occurred_at
+                 AND co.occurred_at < DATE_ADD(ce.occurred_at, INTERVAL 18 HOUR))")
+            ->leftJoin('users as ru', 'ru.id', '=', DB::raw('COALESCE(ce.recorded_by_id, ce.by_user_id)'));
+        foreach ($q->orderByDesc('ce.occurred_at')->limit(2000)->get(array_merge($childCols,
+            [DB::raw("TRIM(CONCAT(COALESCE(ru.first_name,''),' ',COALESCE(ru.last_name,''))) as recorder")])) as $e) {
+            $at = $fmt($e->occurred_at);
+            $push([
+                'Date' => $at->toDateString(), 'Centre' => $e->centre, 'Room' => $e->room,
+                'Category' => 'Child sign-out', 'Person' => $e->child,
+                'What happened' => 'Signed in at ' . $at->format('g:i A') . ' and never signed out',
+                'Recorded by' => trim((string) $e->recorder) ?: '—', 'Closed by system' => 'No',
+                '_sort' => (string) $e->occurred_at,
+            ]);
+        }
+
+        // ── 3. signed out with no sign-in ─────────────────────────────────────
+        $q = $window($childBase()->where('ce.event_type', 'check_out'), 'ce.occurred_at')
+            ->where(function ($w) { $w->whereNull('ce.is_automatic')->orWhere('ce.is_automatic', 0); })
+            ->whereRaw("NOT EXISTS (SELECT 1 FROM check_events ci WHERE ci.child_id = ce.child_id
+                 AND ci.event_type = 'check_in' AND ci.occurred_at <= ce.occurred_at
+                 AND ci.occurred_at > DATE_SUB(ce.occurred_at, INTERVAL 18 HOUR))")
+            ->leftJoin('users as ru', 'ru.id', '=', DB::raw('COALESCE(ce.recorded_by_id, ce.by_user_id)'));
+        foreach ($q->orderByDesc('ce.occurred_at')->limit(2000)->get(array_merge($childCols,
+            [DB::raw("TRIM(CONCAT(COALESCE(ru.first_name,''),' ',COALESCE(ru.last_name,''))) as recorder")])) as $e) {
+            $at = $fmt($e->occurred_at);
+            $push([
+                'Date' => $at->toDateString(), 'Centre' => $e->centre, 'Room' => $e->room,
+                'Category' => 'Child sign-in', 'Person' => $e->child,
+                'What happened' => 'Signed out at ' . $at->format('g:i A') . ' with no sign-in on record',
+                'Recorded by' => trim((string) $e->recorder) ?: '—', 'Closed by system' => 'No',
+                '_sort' => (string) $e->occurred_at,
+            ]);
+        }
+
+        // ── 4 & 5. staff punches ──────────────────────────────────────────────
+        // time_punches has no is_automatic column, so the job's marker in `notes` is the
+        // only signal here — SystemAction::isAutoRow() falls back to it for exactly this.
+        $q = $window(DB::table('time_punches as t')
+            ->join('users as u', 'u.id', '=', 't.user_id')
+            ->join('centres as c', 'c.id', '=', 't.centre_id')
+            ->where('c.agency_id', $agencyId), 't.punched_in_at')
+            ->where(function ($w) use ($todayStart) {
+                $w->where('t.notes', 'like', '%auto sign-off%')
+                  ->orWhere(function ($o) use ($todayStart) {
+                      $o->whereNull('t.punched_out_at')->where('t.punched_in_at', '<', $todayStart);
+                  });
+            });
+        foreach ($q->orderByDesc('t.punched_in_at')->limit(2000)->get(['t.punched_in_at', 't.punched_out_at',
+            't.notes', 'c.name as centre', DB::raw("TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) as staff")]) as $p) {
+            $in = $fmt($p->punched_in_at);
+            $auto = \App\Support\SystemAction::isAutoRow($p);
+            $out = $fmt($p->punched_out_at);
+            $push([
+                'Date' => $in->toDateString(), 'Centre' => $p->centre, 'Room' => '—',
+                'Category' => 'Staff clock-out', 'Person' => $p->staff,
+                'What happened' => $auto
+                    ? 'Clocked in at ' . $in->format('g:i A') . ' — never clocked out, closed automatically'
+                        . ($out ? ' at ' . $out->format('g:i A') : '')
+                    : 'Clocked in at ' . $in->format('g:i A') . ' and is still shown as on the floor',
+                'Recorded by' => $auto ? 'System (auto sign-off)' : '—',
+                'Closed by system' => $auto ? 'Yes' : 'No',
+                '_sort' => (string) $p->punched_in_at,
+            ]);
+        }
+
+        usort($rows, fn ($a, $b) => strcmp($b['_sort'], $a['_sort']));
+        foreach ($rows as &$r) { unset($r['_sort']); }
+
+        return [['Date', 'Centre', 'Room', 'Category', 'Person', 'What happened', 'Recorded by', 'Closed by system'], $rows];
+    }
+
+    /**
      * The span of dates this report has records for, ignoring the requested window.
      *
      * Deliberately narrow: a map of the dated reports to the table and column their date
@@ -581,6 +787,10 @@ final class ReportsController extends Controller
             $q->from('enrollments')->select('child_id')->whereIn('room_id', $scopeRooms);
         };
 
+        /* Reports print the AGENCY's clock, and filter on it too. See tzFor(). */
+        $tz = $this->tzFor($agencyId);
+        [$fromUtc, $toUtc] = $this->utcBounds($from, $to, $tz);
+
         switch ($type) {
             case 'attendance':
                 $q = DB::table('check_events as ce')
@@ -594,8 +804,8 @@ final class ReportsController extends Controller
                 // and historical - no "who is enrolled today" guesswork.
                 if ($scopeRooms !== null) $q->whereIn('ce.room_id', $scopeRooms);
                 if ($centreId) $q->where('c.id', $centreId);
-                if ($from) $q->whereDate('ce.occurred_at', '>=', $from);
-                if ($to) $q->whereDate('ce.occurred_at', '<=', $to);
+                if ($from) $q->where('ce.occurred_at', '>=', $fromUtc);
+                if ($to) $q->where('ce.occurred_at', '<=', $toUtc);
                 $events = $q->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'r.name as room', 'c.name as centre', 'ce.kiosk_source',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"),
                         DB::raw("TRIM(CONCAT(COALESCE(bu.first_name,''),' ',COALESCE(bu.last_name,''))) as by_user"),
@@ -603,10 +813,10 @@ final class ReportsController extends Controller
                     ->orderBy('ce.occurred_at')->limit(4000)->get();
                 $byDay = [];
                 foreach ($events as $e) {
-                    $d = substr((string) $e->occurred_at, 0, 10);
+                    $d = $this->localDate($e->occurred_at, $tz);
                     $key = $e->child_id . '|' . $d;
                     if (! isset($byDay[$key])) $byDay[$key] = ['Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Status' => 'Present', 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—', 'Absence reason' => '—', 'Reported by' => '—', 'Note' => ''];
-                    $t = date('g:i A', strtotime((string) $e->occurred_at));
+                    $t = $this->localTime($e->occurred_at, $tz);
                     /* An automatic overnight close is not a person. by_user_id holds
                        a borrowed id, so without this the report attributes the
                        sign-out to an educator who had already gone home. */
@@ -692,12 +902,12 @@ final class ReportsController extends Controller
                 $q = DB::table('payments as p')->join('families as f', 'f.id', '=', 'p.family_id')
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')->where('c.agency_id', $agencyId);
                 if ($centreId) $q->where('c.id', $centreId);
-                if ($from) $q->whereDate('p.paid_at', '>=', $from);
-                if ($to) $q->whereDate('p.paid_at', '<=', $to);
+                if ($from) $q->where('p.paid_at', '>=', $fromUtc);
+                if ($to) $q->where('p.paid_at', '<=', $toUtc);
                 $data = $q->select('p.paid_at', 'p.amount', 'p.method', 'p.reference_number', 'f.family_name', 'c.name as centre')
                     ->orderByDesc('p.paid_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Date' => $r->paid_at ? substr((string) $r->paid_at, 0, 10) : '—', 'Family' => $r->family_name, 'Centre' => $r->centre,
+                    'Date' => $this->localDate($r->paid_at, $tz), 'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Amount' => '$' . number_format((float) $r->amount, 2), 'Method' => ucfirst((string) $r->method), 'Reference' => $r->reference_number ?: '—',
                     'Source' => 'KiddieTrac',
                 ], $data->all());
@@ -809,7 +1019,7 @@ final class ReportsController extends Controller
                         $status = (string) $r->status;
                         if (! in_array(strtolower($status), ['paid', 'void'], true)
                             && (float) $r->balance_due > 0
-                            && $r->due_at && substr((string) $r->due_at, 0, 10) < now()->toDateString()) {
+                            && $r->due_at && substr((string) $r->due_at, 0, 10) < now($tz)->toDateString()) {
                             $status = 'overdue';
                         }
                         $rows[] = [
@@ -845,6 +1055,9 @@ final class ReportsController extends Controller
                 ], $data->all());
                 return [['Family', 'Email', 'Phone', 'City', 'Centre', 'Autopay'], $rows];
 
+            case 'compliance':
+                return $this->complianceRows($agencyId, $centreId, $from, $to);
+
             case 'staff_hours':
                 // Educator clock-in/out lives in `time_punches` (the live clock
                 // system) — NOT the legacy `time_entries` table, which is why this
@@ -855,12 +1068,12 @@ final class ReportsController extends Controller
                 // beside the point here - a colleague's pay is not classroom business.
                 if ($scope !== null) $q->where('t.user_id', $scope['user_id']);
                 if ($centreId) $q->where('c.id', $centreId);
-                if ($from) $q->whereDate('t.punched_in_at', '>=', $from);
-                if ($to) $q->whereDate('t.punched_in_at', '<=', $to);
+                if ($from) $q->where('t.punched_in_at', '>=', $fromUtc);
+                if ($to) $q->where('t.punched_in_at', '<=', $toUtc);
                 $data = $q->select('t.punched_in_at', 't.punched_out_at', 'c.name as centre',
                         DB::raw("TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) as staff"))
                     ->orderByDesc('t.punched_in_at')->limit(5000)->get();
-                $rows = array_map(function ($r) {
+                $rows = array_map(function ($r) use ($tz) {
                     if ($r->punched_out_at) {
                         $mins = (strtotime((string) $r->punched_out_at) - strtotime((string) $r->punched_in_at)) / 60;
                         $hrs = number_format(max(0, $mins) / 60, 2) . ' h';
@@ -868,9 +1081,9 @@ final class ReportsController extends Controller
                         $hrs = 'On floor';
                     }
                     return [
-                        'Staff' => $r->staff, 'Centre' => $r->centre, 'Date' => substr((string) $r->punched_in_at, 0, 10),
-                        'Clock in' => date('g:i A', strtotime((string) $r->punched_in_at)),
-                        'Clock out' => $r->punched_out_at ? date('g:i A', strtotime((string) $r->punched_out_at)) : '—',
+                        'Staff' => $r->staff, 'Centre' => $r->centre, 'Date' => $this->localDate($r->punched_in_at, $tz),
+                        'Clock in' => $this->localTime($r->punched_in_at, $tz),
+                        'Clock out' => $this->localTime($r->punched_out_at, $tz),
                         'Hours' => $hrs,
                     ];
                 }, $data->all());
@@ -885,8 +1098,8 @@ final class ReportsController extends Controller
                     ->join('children as ch', 'ch.id', '=', 'ce.child_id')
                     ->where('c.agency_id', $agencyId);
                 if ($centreId) $ceq->where('c.id', $centreId);
-                if ($from) $ceq->whereDate('ce.occurred_at', '>=', $from);
-                if ($to) $ceq->whereDate('ce.occurred_at', '<=', $to);
+                if ($from) $ceq->where('ce.occurred_at', '>=', $fromUtc);
+                if ($to) $ceq->where('ce.occurred_at', '<=', $toUtc);
                 $ceRows = $ceq->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'c.name as centre',
                         'ce.notes',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"))
@@ -894,13 +1107,13 @@ final class ReportsController extends Controller
 
                 $days = [];
                 foreach ($ceRows as $e) {
-                    $d = substr((string) $e->occurred_at, 0, 10);
+                    $d = $this->localDate($e->occurred_at, $tz);
                     $key = $e->child_id . '|' . $d;
                     if (! isset($days[$key])) {
                         $days[$key] = ['Date' => $d, 'Child' => $e->child, 'Centre' => $e->centre, '_cid' => $e->child_id,
                             'Check in' => '—', 'Check out' => '—', 'Meals' => 0, 'Naps' => 0, 'Diapers' => 0, 'Activities' => 0];
                     }
-                    $t = date('g:i A', strtotime((string) $e->occurred_at));
+                    $t = $this->localTime($e->occurred_at, $tz);
                     if ($e->event_type === 'check_in') { if ($days[$key]['Check in'] === '—') $days[$key]['Check in'] = $t; }
                     else {
                         /* Mark it, or a midnight row reads as though the child was
@@ -917,11 +1130,11 @@ final class ReportsController extends Controller
                     ->where('c.agency_id', $agencyId)
                     ->whereNull('de.deleted_at');
                 if ($centreId) $deq->where('c.id', $centreId);
-                if ($from) $deq->whereDate('de.occurred_at', '>=', $from);
-                if ($to) $deq->whereDate('de.occurred_at', '<=', $to);
+                if ($from) $deq->where('de.occurred_at', '>=', $fromUtc);
+                if ($to) $deq->where('de.occurred_at', '<=', $toUtc);
                 $deRows = $deq->select('de.child_id', 'de.event_type', 'de.occurred_at')->limit(20000)->get();
                 foreach ($deRows as $e) {
-                    $key = $e->child_id . '|' . substr((string) $e->occurred_at, 0, 10);
+                    $key = $e->child_id . '|' . $this->localDate($e->occurred_at, $tz);
                     if (! isset($days[$key])) continue; // only annotate days the child was present
                     switch ($e->event_type) {
                         case 'meal': case 'snack': $days[$key]['Meals']++; break;
@@ -941,11 +1154,11 @@ final class ReportsController extends Controller
                         ->join('centres as c', 'c.id', '=', 'f.centre_id')
                         ->where('c.agency_id', $agencyId);
                     if ($centreId) $clq->where('c.id', $centreId);
-                    if ($from) $clq->whereDate('cl.occurred_at', '>=', $from);
-                    if ($to) $clq->whereDate('cl.occurred_at', '<=', $to);
+                    if ($from) $clq->where('cl.occurred_at', '>=', $fromUtc);
+                    if ($to) $clq->where('cl.occurred_at', '<=', $toUtc);
                     $clRows = $clq->select('cl.child_id', 'cl.log_type', 'cl.occurred_at')->limit(20000)->get();
                     foreach ($clRows as $e) {
-                        $key = $e->child_id . '|' . substr((string) $e->occurred_at, 0, 10);
+                        $key = $e->child_id . '|' . $this->localDate($e->occurred_at, $tz);
                         if (! isset($days[$key])) continue;   // same rule: only days the child was present
                         switch ($e->log_type) {
                             case 'meal': case 'snack': case 'bottle': $days[$key]['Meals']++; break;
@@ -1110,13 +1323,13 @@ final class ReportsController extends Controller
                     ->where('c.agency_id', $agencyId);
                 if ($scopeRooms !== null) $q->whereIn('ch.id', $scopedChildIds);
                 if ($centreId) $q->where('c.id', $centreId);
-                if ($from) $q->whereDate('inc.occurred_at', '>=', $from);
-                if ($to) $q->whereDate('inc.occurred_at', '<=', $to);
+                if ($from) $q->where('inc.occurred_at', '>=', $fromUtc);
+                if ($to) $q->where('inc.occurred_at', '<=', $toUtc);
                 $data = $q->select('inc.occurred_at', 'inc.incident_type', 'inc.severity', 'inc.location', 'inc.status',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"), 'c.name as centre')
                     ->orderByDesc('inc.occurred_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Date' => $r->occurred_at ? substr((string) $r->occurred_at, 0, 10) : '—', 'Child' => $r->child, 'Centre' => $r->centre,
+                    'Date' => $this->localDate($r->occurred_at, $tz), 'Child' => $r->child, 'Centre' => $r->centre,
                     'Type' => ucfirst(str_replace('_', ' ', (string) $r->incident_type)), 'Severity' => ucfirst((string) $r->severity),
                     'Location' => $r->location ?: '—', 'Status' => ucfirst((string) ($r->status ?: 'open')),
                 ], $data->all());
@@ -1128,14 +1341,14 @@ final class ReportsController extends Controller
                     ->leftJoin('users as u', 'u.id', '=', 'o.recorded_by_id')->where('c.agency_id', $agencyId);
                 if ($scopeRooms !== null) $q->whereIn('ch.id', $scopedChildIds);
                 if ($centreId) $q->where('c.id', $centreId);
-                if ($from) $q->whereDate('o.observed_at', '>=', $from);
-                if ($to) $q->whereDate('o.observed_at', '<=', $to);
+                if ($from) $q->where('o.observed_at', '>=', $fromUtc);
+                if ($to) $q->where('o.observed_at', '<=', $toUtc);
                 $data = $q->select('o.observed_at', 'o.domain', 'o.title', 'c.name as centre',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"),
                         DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as educator"))
                     ->orderByDesc('o.observed_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Date' => $r->observed_at ? substr((string) $r->observed_at, 0, 10) : '—', 'Child' => $r->child,
+                    'Date' => $this->localDate($r->observed_at, $tz), 'Child' => $r->child,
                     'Domain' => ucfirst(str_replace('_', ' ', (string) $r->domain)), 'Title' => $r->title,
                     'Centre' => $r->centre, 'Educator' => trim((string) $r->educator) ?: '—',
                 ], $data->all());
@@ -1145,12 +1358,12 @@ final class ReportsController extends Controller
                 $q = DB::table('tour_bookings as t')->leftJoin('centres as c', 'c.id', '=', 't.centre_id')
                     ->where('t.agency_id', $agencyId);
                 if ($centreId) $q->where('t.centre_id', $centreId);
-                if ($from) $q->whereDate('t.tour_at', '>=', $from);
-                if ($to) $q->whereDate('t.tour_at', '<=', $to);
+                if ($from) $q->where('t.tour_at', '>=', $fromUtc);
+                if ($to) $q->where('t.tour_at', '<=', $toUtc);
                 $data = $q->select('t.tour_at', 't.parent_name', 't.parent_email', 't.parent_phone', 't.child_age_months', 't.status', 'c.name as centre')
                     ->orderByDesc('t.tour_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Tour date' => $r->tour_at ? substr((string) $r->tour_at, 0, 10) : '—', 'Parent' => $r->parent_name ?: '—',
+                    'Tour date' => $this->localDate($r->tour_at, $tz), 'Parent' => $r->parent_name ?: '—',
                     'Email' => $r->parent_email ?: '—', 'Phone' => $r->parent_phone ?: '—',
                     'Child age (mo)' => $r->child_age_months ?: '—', 'Centre' => $r->centre ?: '—',
                     'Status' => ucfirst((string) ($r->status ?: 'requested')),
