@@ -110,19 +110,15 @@ final class FormSubmissionNotice
             $roles[] = 'guardian';
         }
 
-        $named = DB::table('managed_form_recipients')->where('user_id', $userId)
-            ->pluck('managed_form_id')->map(fn ($v) => (int) $v)->all();
-
-        $forms = DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
-            ->get(['id', 'title', 'audiences'])
-            ->filter(function ($f) use ($roles, $named) {
-                if (in_array((int) $f->id, $named, true)) {
-                    return true;
-                }
-                $aud = $f->audiences ? (json_decode($f->audiences, true) ?: []) : [];
-
-                return (bool) array_intersect($aud, $roles);
-            });
+        /* Exactly the set the portal would show them — App\Support\FormAudience, the
+           one rule. This listed "named OR role" before, which put forms in the
+           "still outstanding" section of an email that the reader could not open. */
+        $forms = collect(\App\Support\FormAudience::filter(
+            DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
+                ->get(['id', 'title', 'audiences']),
+            $userId,
+            $roles
+        ));
 
         $signed = DB::table('managed_form_signoffs')->where('user_id', $userId)
             ->whereNotNull('signed_at')

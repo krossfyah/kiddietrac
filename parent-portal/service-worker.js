@@ -29,7 +29,7 @@
         tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
         values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = "kt-v22p69-contacts-company";
+const CACHE = "kt-kt-202609100616";
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -44,23 +44,31 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    var hadController = false;
     try {
       var keys = await caches.keys();
-      hadController = keys.some(function (k) { return k !== CACHE && k !== STATIC; });   // an OLD shell cache existed → this is an update
       // Delete old SHELL caches, but KEEP the persistent versioned-asset cache so
       // immutable ?v= assets survive the deploy (that's what makes launches fast).
       await Promise.all(keys.filter(function (k) { return k !== CACHE && k !== STATIC; }).map(function (k) { return caches.delete(k); }));
     } catch (e) {}
+    /* claim() is the whole update mechanism. It hands every open page the new
+       worker, which fires `controllerchange` in each of them — and kt-native-ui.js
+       has been listening for that since 2026-08-27, reloading only once the page is
+       idle: no dialog open, nobody typing, tab actually on screen.
+
+       THIS IS WHERE c.navigate(c.url) USED TO BE, AND IT MUST NOT COME BACK.
+
+       It reloaded every open window the instant a deploy landed — through open
+       dialogs, through half-typed forms, in tabs nobody was looking at, all at the
+       same moment. Each of those reloads re-parses 5.01 MB across 193 scripts, so
+       several windows at once contend for the same core and every one of them stops
+       responding. From the outside that is a frozen tab that loses your work and
+       comes back on a different screen, once per deploy. It is the answer to "my
+       browser tab froze", reported three times on 2026-09-04 and once before that.
+
+       It was never needed to DELIVER the update, only to deliver it rudely: claim()
+       already did the delivering. The polite path was written for this exact problem
+       and simply never got to run, because this call always won the race. */
     try { await self.clients.claim(); } catch (e) {}
-    // Only reload on a genuine UPDATE (old cache was present), never on the very
-    // first install — otherwise a fresh sign-in would double-load.
-    if (hadController) {
-      try {
-        var cs = await self.clients.matchAll({ type: 'window' });
-        cs.forEach(function (c) { try { c.navigate(c.url); } catch (e) {} });
-      } catch (e) {}
-    }
   })());
 });
 
@@ -169,15 +177,34 @@ self.addEventListener('push', (event) => {
   );
 });
 
+/* TAPPING A NOTIFICATION MUST LAND ON THE THING IT ANNOUNCED.
+
+   The old version focused an existing window ONLY when its URL already ended with the
+   target, and otherwise called openWindow(). But when the app is already open, openWindow
+   generally just focuses the window that exists and does NOT navigate it — so tapping a
+   chat notification brought the app forward on whatever screen it was last on and looked
+   like the tap had done nothing. Reported as "I click open and it just goes into the
+   portal".
+
+   Now an open window is always TOLD where to go: a postMessage the page acts on (which is
+   what actually works for a '#chat?c=8' hash change, where navigate() to the same document
+   may be a no-op), with client.navigate() as the fallback, and openWindow only when there
+   is genuinely no window to reuse. includeUncontrolled matters — a freshly loaded page may
+   not be controlled by this worker yet and would otherwise be invisible here.
+   (Anthony, 2026-09-09) */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/dashboard.html';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
-      for (const c of clients) {
-        if (c.url.endsWith(url) && 'focus' in c) return c.focus();
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of clients) {
+      if (!('focus' in c)) continue;
+      try { c.postMessage({ type: 'kt-notification-click', url: url }); } catch (e) {}
+      if (!c.url.endsWith(url) && 'navigate' in c) {
+        try { await c.navigate(url); } catch (e) { /* cross-origin or blocked; the message above still routes it */ }
       }
-      if (self.clients.openWindow) return self.clients.openWindow(url);
-    })
-  );
+      return c.focus();
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(url);
+  })());
 });

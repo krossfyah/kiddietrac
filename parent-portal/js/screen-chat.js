@@ -62,6 +62,38 @@
     try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); }
     catch (e) { return {}; }
   }
+  /* WHO THIS PERSON IS — resolvable at any moment, not only once a screen mounts.
+
+     `myRole` is declared 'guardian' at the top of this file and was assigned in exactly
+     ONE place: mount(), which runs when the Messenger screen renders. Everything else in
+     here branches on it, including the two functions that choose an ENDPOINT:
+
+         endpointBase() -> /parent/chats   vs /provider/chats
+         threadBase()   -> /parent/threads vs /provider/team-threads
+
+     The chat dock restores its remembered conversation at LOGIN, from a module-scope
+     opener, long before any screen has mounted. At that moment myRole is still the
+     declared default, so a director's colleague thread was fetched from
+     /parent/threads/<id> — an endpoint that has never heard of it. Hence, on every single
+     login: "Could not load this conversation: API 404". The thread was fine; we asked the
+     wrong door. The dock then FORGOT it, so the restore was lost as well as broken.
+
+     Resolved from storage on demand, so any entry point gets the right answer.
+     kt_view_as first, because impersonation must win over the account's own role — it is
+     the same order mount() uses. (Anthony, 2026-09-09) */
+  function syncRole(explicit) {
+    try {
+      if (explicit) { myRole = String(explicit); return myRole; }
+      var va = sessionStorage.getItem('kt_view_as');
+      if (va) { myRole = String(va); return myRole; }
+      var u = getUser();
+      myRole = u.primary_role || (Array.isArray(u.roles) && u.roles[0]) || 'guardian';
+    } catch (e) {}
+    return myRole;
+  }
+  // Module load: the dock can open a thread before any screen renders.
+  syncRole();
+
   function token() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
   function apiBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
   // Make a photo path absolute against the API host (relative /storage/... paths
@@ -287,30 +319,73 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  /* ── Times are the AGENCY's, never the device's ──────────────────────────────
+     These all parsed UTC correctly and then formatted with the device's zone, so a
+     director in Alberta read a Toronto centre's messages two hours out. "Today" was
+     decided by the device calendar too, which could file a late-evening message under
+     the wrong day.
+
+     kt-tz.js owns the zone (from the signed-in user's agency_timezone) and loads before
+     this file. The fallbacks keep the old behaviour if it is ever missing — a message
+     with a slightly wrong time still beats a message with no time. */
+  function _chatTz() {
+    try { return (window.KT && KT.tz) ? KT.tz() : undefined; } catch (e) { return undefined; }
+  }
+  function _chatParse(iso) {
+    try { if (window.KT && KT.parseTs) { return KT.parseTs(iso); } } catch (e) {}
+    return new Date(String(iso).replace(' ', 'T') + 'Z');
+  }
+  function _chatIsToday(d) {
+    try {
+      if (window.KT && KT.agencyToday && KT.agencyDateOf) {
+        return KT.agencyDateOf(d) === KT.agencyToday();
+      }
+    } catch (e) {}
+    return new Date().toDateString() === d.toDateString();
+  }
+  function _chatClock(d) {
+    return d.toLocaleTimeString([], { timeZone: _chatTz(), hour: 'numeric', minute: '2-digit' });
+  }
+  function _chatDay(d) {
+    return d.toLocaleDateString([], { timeZone: _chatTz(), month: 'short', day: 'numeric' });
+  }
+
+  /* The time if it happened today, the date if it did not — the messaging-app
+     convention, and what the phone conversation card shows. */
   function formatTime(iso) {
     if (!iso) return '';
-    const d = new Date(iso.replace(' ', 'T') + 'Z');
-    const now = new Date();
-    const today = now.toDateString() === d.toDateString();
-    if (today) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const d = _chatParse(iso);
+    if (!d || isNaN(d)) return '';
+
+    return _chatIsToday(d) ? _chatClock(d) : _chatDay(d);
   }
   // Date AND time together, for the inbox Date column.
   function formatDateTime(iso) {
     if (!iso) return '';
-    const d = new Date(iso.replace(' ', 'T') + 'Z');
-    const today = new Date().toDateString() === d.toDateString();
-    const day = today ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    return day + ', ' + time;
+    const d = _chatParse(iso);
+    if (!d || isNaN(d)) return '';
+    const day = _chatIsToday(d) ? 'Today' : _chatDay(d);
+
+    return day + ', ' + _chatClock(d);
   }
 
   /* ─── List view ─────────────────────────────────────────────── */
   // A notification can deep-link straight to a thread: #chat?c=8. Without this,
   // tapping "new message from Anthony" dropped you on the conversation LIST and
   // you had to find the thread again — which is the one thing the tap was for.
+  /* #chat?c=<id> for a family conversation, #chat?c=staff:<id> for a colleague thread.
+
+     Only the digits form existed, which is why a colleague notification could not link
+     to its own thread — and why TeamChatController had settled for '#team-messages', a
+     screen that is HIDDEN (the colleague UI lives here, in Messenger). Tapping a team
+     message therefore landed nowhere. The id shape mirrors the conversation list, where
+     a staff row is already 'staff:' + id so that conversation 7 and thread 7 stay
+     distinct. (Anthony, 2026-09-09) */
   function deepLinkedConversationId() {
-    var m = (window.location.hash || '').match(/[?&]c=(\d+)/);
+    var h = window.location.hash || '';
+    var st = h.match(/[?&]c=staff:(\d+)/);
+    if (st) { return 'staff:' + st[1]; }
+    var m = h.match(/[?&]c=(\d+)/);
     return m ? parseInt(m[1], 10) : null;
   }
 
@@ -327,7 +402,10 @@
     if (deepId) {
       // Strip the parameter so a later re-render doesn't re-open it on top.
       try { history.replaceState(null, '', location.pathname + location.search + '#chat'); } catch (e) {}
-      return openThread(deepId, container);   // openThread(cid, container)
+      // openThread() handles a family conversation; a colleague thread has its own opener.
+      return (typeof deepId === 'string' && deepId.indexOf('staff:') === 0)
+        ? openStaffThread(parseInt(deepId.slice(6), 10), container)
+        : openThread(deepId, container);
     }
 
     /* The list endpoint pages at 25 and reports `meta.pages`. This screen filters and
@@ -362,7 +440,7 @@
         api('GET', threadBase()).catch(function () { return null; }),
         // Archived is per person, so it travels with the list rather than being baked
         // into it. A failure here must not hide the inbox — it just shows everything.
-        api('GET', '/provider/chat-archive').catch(function () { return null; }),
+        api('GET', '/chat-archive').catch(function () { return null; }),
       ]);
       const archived = {
         family: ((both[2] && both[2].family) || []).map(String),
@@ -524,10 +602,23 @@
 
       const kebabBtn = (c) => `<button class="kt-conv-kebab" data-cid="${c.id}" type="button" title="More" aria-label="More actions" style="background:none;border:none;cursor:pointer;color:#64748B;font-size:17px;line-height:1;padding:5px 7px;border-radius:6px;">⋮</button>`;
 
-      // MOBILE ONLY. The desktop table gets its kebab from kt-row-actions.js, which
-      // collapses the last cell's buttons automatically — building one there produces a
-      // kebab inside a kebab. The card list is not a table, so nothing collapses it and
-      // this menu is the only way to reach these actions on a phone. See CONVENTIONS.md.
+      /* MOBILE ONLY. The desktop table gets its kebab from kt-row-actions.js, which
+         collapses the last cell's buttons automatically — building one there produces
+         a kebab inside a kebab. See CONVENTIONS.md.
+
+         KEPT DELIBERATELY, 2026-09-03. The old note here said a card list "is not a
+         table, so nothing collapses it". That is no longer true: [data-kt-list] gets
+         a card list the same shared kebab, and screen-reports.js was converted to it.
+         This one was left alone on purpose, and the reasons are worth stating:
+           - the whole card is a click target that opens the conversation, so every
+             action button needs to stop propagation or a mis-tap opens a thread;
+           - the menu contents depend on the conversation (staff vs family, archived
+             or not), so the row must emit different buttons per state;
+           - it is the most-used screen in the portal and has a history of subtle
+             regressions (chat dock identity, archived threads swallowing replies).
+         The gain would be styling consistency on a phone card list. Not worth it as
+         part of a cosmetic sweep — but if this file is being reworked anyway, convert
+         it then. */
       function openKebab(anchor, c) {
         document.querySelectorAll('.kt-conv-menu').forEach(m => m.remove());
         const staff = c.kind === 'staff';
@@ -566,7 +657,7 @@
         const bucket = c.kind === 'staff' ? archived.staff : archived.family;
         const raw = String(c.id).replace('staff:', '');
         try {
-          await api('POST', '/provider/chat-archive', { kind: c.kind === 'staff' ? 'staff' : 'family', id: parseInt(raw, 10), archived: want });
+          await api('POST', '/chat-archive', { kind: c.kind === 'staff' ? 'staff' : 'family', id: parseInt(raw, 10), archived: want });
           if (want) { bucket.push(raw); } else { bucket.splice(bucket.indexOf(raw), 1); }
           repaint();
           if (window.KT && KT.toast) KT.toast(want ? '📥' : '↩️', want ? 'Archived' : 'Restored');
@@ -596,7 +687,19 @@
       // The desktop <table> below stacks its From/Message/Date columns into an
       // ugly label:value block on a phone; the parent inbox uses clean cards, so
       // the two chats looked like different products. Render cards ≤600px wide.
-      if (window.innerWidth <= 600) {
+      /* PHONE-SHAPED, not "under 600 CSS pixels".
+
+         The APK WebView reports an inflated width — 601-768px on the devices we see —
+         so a bare `<= 600` is false in the app and the DESKTOP TABLE rendered on a
+         phone. Measured at 700px: the MESSAGE column gets 153px with nowrap +
+         ellipsis, so the newest message is cut to a few characters and an ellipsis.
+         That is the "Messenger doesn't show the last message received" report: the
+         message was there, clipped to nothing, in a five-column table on a phone.
+
+         kt-native is set by dashboard.html for native AND phone-sized, which is the
+         test screen-announcements / screen-incidents / v22p51 / v22p58 already use.
+         (Anthony, 2026-09-09) */
+      if (window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native')) {
         const sortValM = (c) => new Date(String(c.last_message_at || '').replace(' ', 'T')).getTime() || 0;
         container.innerHTML = `
           <div style="padding:12px 12px 4px;">
@@ -615,7 +718,7 @@
             <span style="flex:1;min-width:0;">
               <span style="display:flex;align-items:center;gap:8px;">
                 <span style="font-weight:${unread ? '800' : '700'};font-size:14.5px;color:#0D1B2A;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}${c.child_name ? ` · <span style="color:#64748B;font-weight:600;">${escapeHtml(c.child_name)}</span>` : ''}</span>
-                <span style="font-size:11px;color:#64748B;flex-shrink:0;display:inline-flex;align-items:center;gap:8px;">${statusChip(c)}${formatDateTime(c.last_message_at)}</span>
+                <span style="font-size:11px;color:#64748B;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">${statusChip(c)}${formatTime(c.last_message_at)}</span>
               </span>
               <span style="display:flex;align-items:center;gap:6px;margin-top:3px;">
                 <span style="flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${unread ? 'color:#0D1B2A;font-weight:600;' : 'color:#64748B;'}">${c.last_sender_id == myId ? '<span style="color:#64748B;">You: </span>' : (c.last_sender_name ? `<span style="color:#1F6080;font-weight:700;" title="${escapeHtml(String(c.last_sender_name))} is staff, not a member of this family">${escapeHtml(String(c.last_sender_name).split(' ')[0])} <span style="font-weight:600;color:#94A3B8;font-size:.92em;">(staff)</span>: </span>` : '')}${escapeHtml(c.preview || '(no messages yet)')}</span>
@@ -632,10 +735,17 @@
           listx.sort((a, b) => sortValM(b) - sortValM(a));
           listx = pageSlice(listx);
           const n = archivedCount();
-          cardsWrap.innerHTML = (listx.length ? listx.map(cardHtml).join('')
+          /* The way OUT, at the top. Appended after the list it is below 44 archived
+             conversations — measured at 1634px past the fold on a phone, which is why
+             it read as missing. data-kt-iconized keeps kt-icon-buttons.js from
+             rewriting the label into a bare ⬅️. */
+          cardsWrap.innerHTML = (state.showArchived ? `<div id="kt-arch-head" style="display:flex;align-items:center;gap:10px;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:12px;padding:8px 10px;margin:0 0 10px;">`
+            + `<button id="kt-arch-back" type="button" data-kt-iconized="1" data-kt-inpage="1" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:8px;padding:0 12px;height:34px;font-size:13px;font-weight:700;color:#1F6080;cursor:pointer;">&larr; Back to Active</button>`
+            + `<div style="min-width:0;font-size:12.5px;font-weight:700;color:#475569;">&#128229; Archived &middot; ${n}</div></div>` : '')
+            + (listx.length ? listx.map(cardHtml).join('')
             : `<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</div>`)
             + pagerHtml()
-            + ((n || state.showArchived) ? `<button id="kt-arch-toggle" style="width:100%;margin-top:4px;background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:10px;">${state.showArchived ? '← Back to inbox' : '📥 Archived (' + n + ')'}</button>` : '');
+            + ((n || state.showArchived) ? `<button id="kt-arch-toggle" data-kt-iconized="1" data-kt-inpage="1" style="width:100%;margin-top:4px;background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:10px;">${state.showArchived ? '← Back to Active' : '📥 Archived (' + n + ')'}</button>` : '');
           wirePager(cardsWrap, paintM);
           cardsWrap.querySelectorAll('.kt-msg-card').forEach(row => row.addEventListener('click', () => openThread(row.dataset.cid, container)));
           cardsWrap.querySelectorAll('.kt-conv-kebab').forEach(b => b.addEventListener('click', (e) => {
@@ -645,6 +755,8 @@
           }));
           const at = cardsWrap.querySelector('#kt-arch-toggle');
           if (at) at.addEventListener('click', () => { state.showArchived = !state.showArchived; state.page = 1; paintM(); });
+          const ab = cardsWrap.querySelector('#kt-arch-back');
+          if (ab) ab.addEventListener('click', () => { state.showArchived = false; state.page = 1; paintM(); });
         };
         repaint = paintM;
         const fiM = $('#kt-msg-filter', container);
@@ -722,9 +834,16 @@
         list.sort((a, b) => { const va = sortVal(a), vb = sortVal(b); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
         list = pageSlice(list);
         const n = archivedCount();
-        tbody.innerHTML = (list.length ? list.map(rowHtml).join('')
+        tbody.innerHTML = (state.showArchived
+          ? `<tr><td colspan="5" style="padding:8px 10px;background:#F1F5F9;">`
+            + `<div style="display:flex;align-items:center;gap:10px;">`
+            + `<button id="kt-arch-back" type="button" data-kt-iconized="1" data-kt-inpage="1" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:8px;padding:0 12px;height:32px;font-size:13px;font-weight:700;color:#1F6080;cursor:pointer;">&larr; Back to Active</button>`
+            + `<div style="font-size:12.5px;font-weight:700;color:#475569;">&#128229; Archived &middot; ${n}</div>`
+            + `</div></td></tr>`
+          : '')
+          + (list.length ? list.map(rowHtml).join('')
           : `<tr><td colspan="5" style="padding:26px;text-align:center;color:#64748B;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</td></tr>`)
-          + ((n || state.showArchived) ? `<tr><td colspan="5" style="padding:10px;text-align:center;"><button id="kt-arch-toggle" style="background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:6px 10px;">${state.showArchived ? '← Back to inbox' : '📥 Archived (' + n + ')'}</button></td></tr>` : '');
+          + ((n || state.showArchived) ? `<tr><td colspan="5" style="padding:10px;text-align:center;"><button id="kt-arch-toggle" data-kt-iconized="1" data-kt-inpage="1" style="background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:6px 10px;">${state.showArchived ? '← Back to Active' : '📥 Archived (' + n + ')'}</button></td></tr>` : '');
         let z = 0;
         tbody.querySelectorAll('.kt-msg-row').forEach(row => {
           const base = (z++ % 2) ? '#F7F9FB' : '#FFFFFF';
@@ -747,6 +866,8 @@
         }));
         const at = tbody.querySelector('#kt-arch-toggle');
         if (at) at.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = !state.showArchived; state.page = 1; paint(); });
+        const ab = tbody.querySelector('#kt-arch-back');
+        if (ab) ab.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = false; state.page = 1; paint(); });
         // Drawn after the slice, because the slice is what sets state.total.
         const pgBox = $('#kt-msg-pager', container);
         if (pgBox) { pgBox.innerHTML = pagerHtml(); wirePager(pgBox, paint); }
@@ -1230,7 +1351,16 @@
      reactions, no attachments and no delete, so this offers none of them. An affordance
      that 404s is worse than an absent one. */
   var staffPoll = null;
-  function stopStaffPoll() { if (staffPoll) { clearInterval(staffPoll); staffPoll = null; } }
+  /* The visibility listener for the OPEN colleague thread. Module scope so re-opening a
+     thread replaces it instead of stacking another one on every open. */
+  var staffWakeFn = null;
+  function stopStaffWake() {
+    if (staffWakeFn) { document.removeEventListener('visibilitychange', staffWakeFn); staffWakeFn = null; }
+  }
+  function stopStaffPoll() {
+    if (staffPoll) { clearInterval(staffPoll); staffPoll = null; }
+    stopStaffWake();
+  }
 
   var staffOtherReadAt = null;   // when the colleague last opened this thread
 
@@ -1242,12 +1372,30 @@
     var target = threadDocked ? KT.ChatDock.contentEl() : container;
     target.innerHTML = '<div style="text-align:center;padding:32px;color:#6B7280;">Loading…</div>';
     var cleanup = function () { stopStaffPoll(); closeThreadCleanup(); };
+
+    /* Tell kt-back a full-screen thread is open, so Android's hardware/gesture back
+       returns to the conversation LIST instead of leaving Messenger. kt-back's own
+       header lists "chat thread" as the case it exists for; the family thread registers
+       and this one never did.
+
+       The CONTAINER is registered, not the thread root: paint() rewrites the markup on
+       every poll tick, so a root would be replaced and then pruned, and back would stop
+       working after the first poll. The container survives every re-paint, and when the
+       screen itself is re-rendered it leaves the DOM and kt-back prunes this entry.
+
+       Not when docked: the dock owns its own close, and the header carrying the ←
+       button is not rendered at all. */
+    if (!threadDocked && window.KT && KT.pushOverlay) {
+      staffBackEl = container;
+      KT.pushOverlay(container, staffLeaveThread);
+    }
     if (threadDocked) {
       KT.ChatDock.show('Chat', cleanup);
       if (KT.ChatDock.rememberThread) { KT.ChatDock.rememberThread('staff:' + tid, 'Chat'); }
     }
 
     var lastCount = -1;
+    var lastSeenId = -1;
 
     /* Reactions on a COLLEAGUE thread (2026-08-25).
        Emoji were only ever built for family conversations. When broadcasts moved to 1:1
@@ -1260,7 +1408,7 @@
       return '<button type="button" class="kt-st-chip" data-react-mid="' + mid + '" data-emoji="'
         + escapeHtml(rx.emoji) + '" style="border:1px solid ' + (rx.mine ? '#1F6080' : '#E2E8F0')
         + ';background:' + (rx.mine ? '#EFF6FF' : '#fff')
-        + ';border-radius:12px;padding:1px 7px;font-size:12.5px;cursor:pointer;line-height:1.6;">'
+        + ';border-radius:10px;padding:0 6px;font-size:11.5px;cursor:pointer;line-height:1.55;display:inline-flex;align-items:center;white-space:nowrap;">'
         + escapeHtml(rx.emoji) + ' ' + rx.count + '</button>';
     }
 
@@ -1345,11 +1493,12 @@
           ? ' <span title="Seen" style="color:#7DD3FC;font-weight:700;">✓✓</span>'
           : ' <span title="Sent — not read yet" style="opacity:.85;">✓</span>';
       }
-      var rBtn = '<button type="button" class="kt-st-react" data-react-mid="' + m.id + '" title="React" aria-label="React" style="background:none;border:none;cursor:pointer;color:#94A3B8;font-size:12.5px;line-height:1;padding:0 2px;margin-left:6px;">\u{1F60A}</button>';
-      var rHtml = (m.reactions && m.reactions.length)
-        ? '<div class="kt-st-reactions" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';">'
-          + m.reactions.map(function (rx) { return staffChip(m.id, rx); }).join('') + '</div>'
-        : '<div class="kt-st-reactions" style="display:none;"></div>';
+      // '+' and inline chips - same reasoning as the family bubble.
+      var rBtn = '<button type="button" class="kt-st-react" data-react-mid="' + m.id + '" title="Add a reaction" aria-label="Add a reaction" style="background:none;border:none;cursor:pointer;color:#94A3B8;font-size:15px;font-weight:700;line-height:1;padding:0 2px;margin-left:6px;">\uFF0B</button>';
+      var rHtml = '<span class="kt-st-reactions" style="display:contents;">'
+        + ((m.reactions && m.reactions.length)
+            ? m.reactions.map(function (rx) { return staffChip(m.id, rx); }).join('') : '')
+        + '</span>';
       return '<div data-mid="' + m.id + '" style="display:flex;align-items:flex-end;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin-bottom:10px;">' +
         pic +
         '<div style="max-width:78%;">' +
@@ -1373,8 +1522,9 @@
                 return '<div style="margin-top:6px;"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">📎 ' + escapeHtml(a.name || 'Attachment') + '</a></div>';
               }).join('');
             })() + '</div>' +
-          '<div style="font-size:10.5px;color:#94A3B8;margin:3px 4px 0;text-align:' + (mine ? 'right' : 'left') + ';">' + formatDateTime(m.at) + tick + rBtn + '</div>' +
-          rHtml +
+          '<div style="font-size:10.5px;color:#94A3B8;margin:3px 4px 0;display:flex;flex-wrap:wrap;align-items:center;gap:3px;justify-content:'
+            + (mine ? 'flex-end' : 'flex-start') + ';">'
+            + '<span style="white-space:nowrap;">' + formatDateTime(m.at) + tick + '</span>' + rHtml + rBtn + '</div>' +
         '</div></div>';
     }
 
@@ -1403,10 +1553,27 @@
          Checked after every await, not only before the fetch. */
       if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
 
+      /* IS THE THING WE ARE ABOUT TO PAINT INTO STILL ON SCREEN?
+
+         `target` is captured once when the thread opens. A global re-render that replaces
+         #appMain leaves this reference pointing at a detached node, and every later paint
+         then writes the new messages into a node nobody can see — the thread appears
+         frozen on the message it had when the swap happened, forever, while the poll
+         happily keeps working. Same shape as the detached-container bug in the sweep.
+         Nothing to repair from here: the screen that owns the container has gone, so stop
+         burning a request every 2.5s. */
+      if (!document.contains(target)) { stopStaffPoll(); return; }
+
       var msgs = data.messages || [];
-      // Only repaint when something actually arrived — a blind repaint every few seconds
-      // would wipe whatever the person is part-way through typing.
-      if (!force && msgs.length === lastCount) { return; }
+      /* Only repaint when something actually arrived — a blind repaint every few seconds
+         would wipe whatever the person is part-way through typing.
+
+         Compared on the LAST ID as well as the count: a count alone cannot see an edit,
+         or a delete and an arrival landing between two ticks, and if a render ever throws
+         after lastCount was assigned the thread would be wedged on a stale view for good. */
+      var lastId = msgs.length ? msgs[msgs.length - 1].id : 0;
+      if (!force && msgs.length === lastCount && lastId === lastSeenId) { return; }
+      lastSeenId = lastId;
       var draft = '';
       var oldBox = target.querySelector('#kt-st-input');
       if (oldBox) { draft = oldBox.value; }
@@ -1448,11 +1615,19 @@
               '<button id="kt-st-addppl" type="button" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:700;color:#1F6080;cursor:pointer;white-space:nowrap;">\uFF0B Add people</button>' +
             '</div>';
           })() +
-          '<div id="kt-st-body" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px;">' +
+          /* kt-thread-body: the same class the family thread uses, so the phone rules
+             that make THIS the scroller (rather than the page) apply here too. */
+          /* data-kt-scroll: this is a REAL inner scroller and must stay one. kt-mobile-app.css
+             flattens inline overflow on phones to stop cards scrolling inside themselves,
+             and it matches on the inline style string — which silently included this. */
+          '<div id="kt-st-body" class="kt-thread-body" data-kt-scroll="1" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px;">' +
             (msgs.length ? msgs.map(bubble).join('')
               : '<div style="text-align:center;color:#64748B;padding:26px;font-size:13px;">No messages yet. Say hello.</div>') +
           '</div>' +
-          '<div style="flex:0 0 auto;position:relative;background:#fff;border-top:1px solid #E5E7EB;">' +
+          /* kt-thread-compose is what every mobile chat rule keys on — the full-screen
+             takeover, hiding the bottom bar so it stops covering this composer, and the
+             safe-area padding. Without the class a staff thread got none of it. */
+          '<div class="kt-thread-compose" style="flex:0 0 auto;position:relative;background:#fff;border-top:1px solid #E5E7EB;">' +
             '<div id="kt-st-pending" style="display:none;align-items:center;gap:8px;padding:8px 10px 0;font-size:12.5px;color:#475569;"></div>' +
             '<div id="kt-st-emoji" style="display:none;position:absolute;bottom:56px;left:8px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;width:264px;max-height:170px;overflow-y:auto;z-index:40;font-size:22px;line-height:1.5;"></div>' +
             '<div style="display:flex;align-items:flex-end;gap:6px;padding:8px 10px 10px;">' +
@@ -1467,12 +1642,22 @@
         '</div>';
 
       var body = target.querySelector('#kt-st-body');
-      if (body) { body.scrollTop = body.scrollHeight; }
+      pinToBottom(body);        // colleague threads carry photos too
       var input = target.querySelector('#kt-st-input');
       if (input) { input.value = draft; }
 
       var back = target.querySelector('#kt-st-back');
-      if (back) { back.addEventListener('click', function () { stopStaffPoll(); closeThreadCleanup(); }); }
+      if (back) {
+        back.addEventListener('click', function () {
+          /* Leave through kt-back when we registered, so the entry is WITHDRAWN as well
+             as dismissed. Closing directly would leave a stale registration against a
+             container that is still in the DOM — prune() would never drop it, and the
+             next back press would be swallowed dismissing a thread already closed.
+             popOverlay() pops the entry and calls the same staffLeaveThread. */
+          if (staffBackEl && window.KT && KT.popOverlay) { KT.popOverlay(staffBackEl); return; }
+          staffLeaveThread();
+        });
+      }
 
       var detailsBtn = target.querySelector('#kt-st-details');
       if (detailsBtn) {
@@ -1544,34 +1729,20 @@
       });
 
       // ── voice notes ───────────────────────────────────────────────────────
+      /* Same recorder as the family composer above — one microphone experience
+         for the whole portal. This one ATTACHES rather than sends: the colleague
+         composer lets you put a line of text with the note, so the send button
+         stays the thing that sends. It also had no way to hear the recording
+         before staging it, which is half of why the shared recorder exists. */
       var micBtn = target.querySelector('#kt-st-mic-btn');
-      var recorder = null, chunks = [];
       micBtn.addEventListener('click', async function () {
-        if (recorder && recorder.state === 'recording') {
-          recorder.stop();
-          return;
-        }
-        if (!navigator.mediaDevices || !window.MediaRecorder) {
-          if (window.KT && KT.toast) { KT.toast('⚠️', 'Recording is not available on this device'); }
-          return;
-        }
+        if (!(window.KT && KT.recordVoiceNote)) { return; }
+        micBtn.disabled = true;
         try {
-          var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          chunks = [];
-          recorder = new MediaRecorder(stream);
-          recorder.ondataavailable = function (e) { if (e.data && e.data.size) { chunks.push(e.data); } };
-          recorder.onstop = function () {
-            // Always release the microphone — leaving the track live keeps the
-            // browser's recording indicator on long after the thread is closed.
-            try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e2) {}
-            micBtn.textContent = '🎤';
-            var blob = new Blob(chunks, { type: 'audio/webm' });
-            if (blob.size) { setPending(new File([blob], 'voice-note.webm', { type: 'audio/webm' }), '🎤 Voice note'); }
-          };
-          recorder.start();
-          micBtn.textContent = '⏹️';
-        } catch (e) {
-          if (window.KT && KT.toast) { KT.toast('⚠️', 'Microphone blocked', 'Allow microphone access to record.', '#DC2626'); }
+          var file = await KT.recordVoiceNote({ acceptLabel: 'Attach' });
+          if (file) { setPending(file, '🎤 Voice note'); }
+        } finally {
+          micBtn.disabled = false;
         }
       });
 
@@ -1637,11 +1808,40 @@
        the user had opened somebody else — one person's name over another's words. */
     staffPoll = setInterval(function () {
       if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
-      /* Skip a backgrounded tab: nobody is reading it, and openStaffThread's
-         visibility handling catches up when it returns. */
+      // Skip a backgrounded tab: nobody is reading it, and the wake below catches up.
       if (document.hidden) { return; }
       paint(false);
     }, 2500);
+
+    /* CATCH UP THE MOMENT THE APP COMES BACK.
+
+       The tick above skips while hidden, and the comment beside it used to promise that
+       "openStaffThread's visibility handling catches up when it returns" — there was no
+       such handling. The family thread has had a threadWake() on visibilitychange all
+       along; the colleague thread never got one.
+
+       On a phone that gap is constant, not rare: the screen locks, you answer a call, you
+       swap apps, you pull down the notification shade — each one hides the document, and
+       a backgrounded WebView has its timers frozen or throttled to a crawl rather than
+       merely slowed. You come back to a thread sitting exactly where you left it, with
+       the reply already delivered and invisible. Reported as "the message screen doesn't
+       update with the last message sent or received" — on a thread with Safia Ali, which
+       is a colleague thread, which is this code path. (Anthony, 2026-09-09) */
+    stopStaffWake();
+    staffWakeFn = function () {
+      if (document.hidden) { return; }
+      if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
+      // A frozen interval may also have been dropped outright — put it back.
+      if (!staffPoll) {
+        staffPoll = setInterval(function () {
+          if (openThreadId !== 'staff:' + tid) { stopStaffPoll(); return; }
+          if (document.hidden) { return; }
+          paint(false);
+        }, 2500);
+      }
+      paint(false);
+    };
+    document.addEventListener('visibilitychange', staffWakeFn);
   }
 
   /* ─── Thread view ───────────────────────────────────────────── */
@@ -1653,6 +1853,9 @@
   (function registerDockOpener() {
     if (!(window.KT && KT.ChatDock && KT.ChatDock.setOpener)) { return; }
     KT.ChatDock.setOpener(function (key) {
+      // The dock opens threads without the screen; resolve the role first or this asks
+      // the guardian endpoints on a staff account and 404s. See syncRole().
+      syncRole();
       var host = document.getElementById('appMain') || document.createElement('div');
       return openThread(key, host);
     });
@@ -1665,6 +1868,7 @@
      screen's rows when they happen to be there. */
   KT.Chat = KT.Chat || {};
   KT.Chat.conversationsForSwitcher = async function () {
+    syncRole();          // module-scope entry point — same reason as the opener above
     var rows = [];
     try {
       var both = await Promise.all([
@@ -1674,7 +1878,7 @@
           : api('GET', '/provider/team-threads').catch(function () { return null; }),
         /* Archived conversations, so the dock can leave them out. A failure here
            must not hide the inbox -- it just means everything shows. */
-        api('GET', '/provider/chat-archive').catch(function () { return null; }),
+        api('GET', '/chat-archive').catch(function () { return null; }),
       ]);
       ((both[0] && both[0].conversations) || []).forEach(function (c) {
         rows.push({
@@ -1775,10 +1979,141 @@
 
   // Stop the open thread's poll + clear state. The dock's × runs this via onClose;
   // it must NOT re-close the dock (the dock is already closing) to avoid recursion.
+  /* The element registered with kt-back for the OPEN colleague thread, or null.
+     It is the screen CONTAINER, not the thread root: paint() rewrites the thread's
+     markup on every poll tick, so a root registered here would be replaced seconds
+     later and pruned, and hardware back would quietly stop working. */
+  var staffBackEl = null;
+
+  /* The one way out of a colleague thread — used by the ← button AND by Android's
+     hardware/gesture back, so the two can never drift apart. */
+  function staffLeaveThread() {
+    staffBackEl = null;
+    stopStaffPoll();
+    /* Read BEFORE cleanup: closeThreadCleanup() sets threadDocked = false, so asking
+       afterwards always answers "not docked". */
+    var wasDocked = threadDocked;
+    closeThreadCleanup();
+    /* And put the list back. closeThreadCleanup() only resets state; on a phone there
+       is no dock, so the thread REPLACED the list in this container and clearing state
+       leaves the markup exactly where it was. */
+    if (!wasDocked && threadListContainer) { renderList(threadListContainer); }
+  }
+
   function closeThreadCleanup() {
     openThreadId = null;
     if (threadPollTimer) { clearTimeout(threadPollTimer); threadPollTimer = null; }
     threadDocked = false;
+  }
+
+  /* KEEP THE NEWEST MESSAGE IN VIEW WHILE THE THREAD IS STILL GROWING.
+
+     `body.scrollTop = body.scrollHeight` once, immediately after innerHTML, is not
+     enough. Attachment images are rendered as `<img style="max-width:100%;
+     max-height:280px">` with NO width/height attributes, so each one is ZERO pixels
+     tall at that moment and expands to as much as 280px when it decodes. A thread with
+     three photos therefore grows by up to ~840px AFTER we pinned — and the thread body
+     is only about 480px tall on a phone, so the message we were pinning to ends up well
+     below the fold.
+
+     That is the second half of "I get the notification but opening the chat the message
+     does not appear": it was on screen in a thread of plain text, and pushed under the
+     fold in a thread with photos. Flaky by nature — it depends entirely on whether the
+     images were already in cache.
+
+     So we re-pin as each image settles, and stop the moment the reader scrolls up:
+     yanking somebody back to the bottom while they are reading history would be its own
+     bug. NEAR_BOTTOM_PX is the "they are still at the end" tolerance.
+     (Anthony, 2026-09-09) */
+  var NEAR_BOTTOM_PX = 80;
+  function atBottom(el) {
+    return (el.scrollHeight - el.clientHeight - el.scrollTop) <= NEAR_BOTTOM_PX;
+  }
+
+  /* "STICK TO THE BOTTOM" IS A USER INTENT, NOT A MEASUREMENT.
+
+     My first attempt re-pinned only when the body still measured as near the bottom,
+     which sounds right and is exactly wrong. The image decodes ABOVE the newest message,
+     so the instant it takes up space the distance-from-bottom jumps by its full height —
+     280px here, far past any sane tolerance — and the guard then concludes the reader has
+     scrolled away and declines to re-pin. Measured: the listener fired, and the last
+     message still sat 280px below the fold. The growth is what we are compensating for,
+     so it cannot also be the thing that vetoes the compensation.
+
+     So the flag is only ever cleared by a real gesture — wheel, touch drag, or a
+     navigation key. Content growing never clears it; a reader scrolling up to read
+     history always does, and they are then left alone. */
+  function stickOn(el) { try { el.dataset.ktStick = '1'; } catch (e) {} }
+  function sticking(el) { return el.dataset.ktStick !== '0'; }
+  function wireStick(el) {
+    if (el.dataset.ktStickWired === '1') { return; }
+    el.dataset.ktStickWired = '1';
+    var reassess = function () {
+      // After the gesture settles: at the end still means "follow along".
+      setTimeout(function () { el.dataset.ktStick = atBottom(el) ? '1' : '0'; }, 80);
+    };
+    el.addEventListener('wheel', reassess, { passive: true });
+    el.addEventListener('touchmove', reassess, { passive: true });
+    el.addEventListener('keydown', reassess);
+  }
+
+  /* PIN, THEN KEEP PINNING UNTIL THE BOX STOPS CHANGING SIZE.
+
+     One synchronous `scrollTop = scrollHeight` right after innerHTML is not enough on a
+     phone, and this is why the thread opened at the TOP there while desktop was fine.
+
+     On a phone the thread is turned into a full-screen panel by a CSS rule keyed on
+     `body:has(.kt-thread-compose)` — position:fixed, height:100dvh — and `:has()`
+     restyling is invalidated lazily. At the instant we pin, the container can still be
+     auto-height, which means the message body is exactly as tall as its content and has
+     NO overflow at all: scrollHeight === clientHeight, so `scrollTop = scrollHeight`
+     clamps to 0 and is silently a no-op. A beat later the rule lands, the container
+     becomes 100dvh, the body is suddenly 500px tall holding 4000px of messages — and the
+     scroll is still sitting at 0. You open a 52-message thread and read the messages from
+     August, with today's replies far below the fold. Reported as "the chat doesn't update
+     and doesn't show Safia's replies": everything was there, just 4000px down.
+
+     So the pin repeats while the geometry is still moving — a ResizeObserver for the
+     container finally getting its height, a few bounded frames for everything else, and
+     the image listeners below for attachments that decode late. All of it defers to
+     `sticking`, so a reader who scrolls up is never dragged back. (Anthony, 2026-09-09) */
+  function pinToBottom(el) {
+    if (!el) { return; }
+    wireStick(el);
+    stickOn(el);
+
+    var settle = function () {
+      if (!el.isConnected || !sticking(el)) { return; }
+      el.scrollTop = el.scrollHeight;
+    };
+    settle();
+
+    /* The container gaining its real height changes THIS element's box, which is exactly
+       what a ResizeObserver on it reports. One per element, kept for the element's life. */
+    if (!el.__ktRO && typeof ResizeObserver === 'function') {
+      try {
+        el.__ktRO = new ResizeObserver(function () { settle(); });
+        el.__ktRO.observe(el);
+      } catch (e) {}
+    }
+
+    /* Belt and braces for engines where the restyle lands without a resize we observe.
+       Bounded and short — this is only about the first moments after a render.
+       rAF is paired with timers deliberately: rAF does not fire in a background tab. */
+    try { requestAnimationFrame(function () { settle(); requestAnimationFrame(settle); }); } catch (e) {}
+    setTimeout(settle, 0);
+    setTimeout(settle, 60);
+    setTimeout(settle, 200);
+    setTimeout(settle, 500);
+
+    var imgs = el.querySelectorAll('img');
+    for (var i = 0; i < imgs.length; i++) {
+      var im = imgs[i];
+      if (im.complete || im.dataset.ktPinned === '1') { continue; }
+      im.dataset.ktPinned = '1';
+      im.addEventListener('load', settle, { once: true });
+      im.addEventListener('error', settle, { once: true });
+    }
   }
 
   function renderThread(data, container) {
@@ -1798,7 +2133,7 @@
           </div>
           ${myRole !== 'guardian' ? `<button class="kt-nudge" type="button" title="Nudge the family for a reply" style="background:rgba(31,96,128,.12);border:none;width:40px;height:40px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;line-height:1;">👋</button>` : ''}
         </div>
-        <div class="kt-thread-body" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;">
+        <div class="kt-thread-body" data-kt-scroll="1" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;">
           ${messages.map(m => bubble(m)).join('')}
         </div>
         <div class="kt-attach-preview" style="display:none;padding:8px 12px;border-top:1px solid #E5E7EB;background:#F9FAFB;flex-shrink:0;">
@@ -1821,7 +2156,7 @@
       </div>
     `;
     const body = $('.kt-thread-body', container);
-    body.scrollTop = body.scrollHeight;
+    pinToBottom(body);          // survives images that decode after this line
 
     // Delete own messages — delegated so it also catches poll-appended bubbles.
     body.addEventListener('click', async function (e) {
@@ -1846,18 +2181,21 @@
       var row = body.querySelector('[data-mid="' + mid + '"]');
       if (!row) return;
       var html = (reactions && reactions.length) ? reactions.map(function (rx) {
-        return '<button type="button" class="kt-msg-react-chip" data-react-mid="' + mid + '" data-emoji="' + escapeHtml(rx.emoji) + '" style="border:1px solid ' + (rx.mine ? '#1F6080' : '#E2E8F0') + ';background:' + (rx.mine ? '#EFF6FF' : '#fff') + ';border-radius:12px;padding:1px 7px;font-size:12.5px;cursor:pointer;line-height:1.6;">' + escapeHtml(rx.emoji) + ' ' + rx.count + '</button>';
+        return '<button type="button" class="kt-msg-react-chip" data-react-mid="' + mid + '" data-emoji="' + escapeHtml(rx.emoji) + '" style="border:1px solid ' + (rx.mine ? '#1F6080' : '#E2E8F0') + ';background:' + (rx.mine ? '#EFF6FF' : '#fff') + ';border-radius:10px;padding:0 6px;font-size:11.5px;cursor:pointer;line-height:1.55;display:inline-flex;align-items:center;white-space:nowrap;">' + escapeHtml(rx.emoji) + ' ' + rx.count + '</button>';
       }).join('') : '';
+      /* The span already sits in the meta row of every rendered bubble, so the normal
+         path is simply to fill it. Reacting must never move the message. */
       var existing = row.querySelector('.kt-msg-reactions');
-      if (existing) { existing.innerHTML = html; existing.style.display = html ? 'flex' : 'none'; return; }
+      if (existing) { existing.innerHTML = html; return; }
       if (!html) return;
-      var bubble = row.querySelector('div[style*="border-radius:16px"]');
-      if (!bubble) return;
-      var wrap = document.createElement('div');
+      // Older markup with no span: put it in the meta row, still inline - never
+      // appended underneath the bubble.
+      var meta = row.querySelector('div[style*="font-size:10.5px"]');
+      if (!meta) return;
+      var wrap = document.createElement('span');
       wrap.className = 'kt-msg-reactions';
-      wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;';
       wrap.innerHTML = html;
-      bubble.appendChild(wrap);
+      meta.appendChild(wrap);
     }
     function toggleReaction(mid, emoji) {
       api('POST', endpointBase() + '/' + c.id + '/messages/' + mid + '/react', { emoji: emoji })
@@ -2045,7 +2383,7 @@
           is_me: true,
           created_at: msg.created_at,
         }));
-        bodyEl.scrollTop = bodyEl.scrollHeight;
+        pinToBottom(bodyEl);   // a photo you just sent has no height yet either
         if (msg && msg.id) lastThreadMsgId = Math.max(lastThreadMsgId, msg.id); // don't let the poll re-append
       } catch (e) {
         alert('Could not send: ' + e.message);
@@ -2070,36 +2408,28 @@
       document.addEventListener('click', (ev) => { if (emojiPanel.style.display === 'block' && !ev.target.closest('.kt-emoji-panel') && !ev.target.closest('.kt-emoji-btn')) emojiPanel.style.display = 'none'; });
     }
 
-    // ── Voice note recording (MediaRecorder → uploaded as an audio attachment) ──
+    /* ── Voice notes ──────────────────────────────────────────────────────
+       Handed to KT.recordVoiceNote (kt-voice-recorder.js), which owns the
+       microphone, the level meter and the review step for every composer in the
+       portal.
+
+       This used to run its own MediaRecorder inline, and pressing stop called
+       doSend() immediately — the recording was gone before the person who made
+       it had heard a second of it. A cough, a false start or a silent microphone
+       went to a parent with no way to catch it. Now nothing leaves until they
+       have played it back and pressed Send; the promise resolves to null when
+       they cancel, and this sends nothing. */
     const micBtn = $('.kt-mic-btn', container);
-    let mediaRec = null, recChunks = [], recStream = null, recording = false;
     if (micBtn) {
       micBtn.addEventListener('click', async () => {
-        if (recording) { try { mediaRec && mediaRec.stop(); } catch (e) {} return; }
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-          alert('Voice recording is not supported on this device/browser.'); return;
+        if (!KT.recordVoiceNote) return;
+        micBtn.disabled = true;
+        try {
+          const file = await KT.recordVoiceNote({ acceptLabel: 'Send' });
+          if (file) { setPending(file); doSend(); }
+        } finally {
+          micBtn.disabled = false;
         }
-        try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-        catch (e) { alert('Microphone permission was denied.'); return; }
-        recChunks = [];
-        const pref = (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm'
-                   : ((window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/mp4')) ? 'audio/mp4' : '');
-        try { mediaRec = pref ? new MediaRecorder(recStream, { mimeType: pref }) : new MediaRecorder(recStream); }
-        catch (e) { mediaRec = new MediaRecorder(recStream); }
-        mediaRec.ondataavailable = (ev) => { if (ev.data && ev.data.size) recChunks.push(ev.data); };
-        mediaRec.onstop = () => {
-          recording = false; micBtn.textContent = '🎤'; micBtn.style.color = ''; micBtn.title = 'Record a voice note';
-          try { recStream.getTracks().forEach(t => t.stop()); } catch (e) {}
-          const type = (recChunks[0] && recChunks[0].type) || pref || 'audio/webm';
-          const blob = new Blob(recChunks, { type });
-          if (blob.size > 800) {
-            const ext = type.indexOf('mp4') >= 0 ? 'm4a' : 'webm';
-            setPending(new File([blob], 'voice-' + Date.now() + '.' + ext, { type }));
-            doSend(); // voice notes auto-send
-          }
-        };
-        mediaRec.start();
-        recording = true; micBtn.textContent = '⏹'; micBtn.style.color = '#DC2626'; micBtn.title = 'Tap to stop & send';
       });
     }
 
@@ -2133,7 +2463,7 @@
             if (!m.is_me) gotIncoming = true;
           }
         });
-        if (added) bodyEl.scrollTop = bodyEl.scrollHeight;
+        if (added) pinToBottom(bodyEl);
         if (added) { lastThreadActivity = Date.now(); }
         if (gotIncoming) {
           playPing();
@@ -2284,12 +2614,19 @@
     const delBtn = (mine && m.can_delete)
       ? `<button type="button" class="kt-msg-del" data-del-mid="${m.id}" title="Delete message" style="background:none;border:none;cursor:pointer;color:rgba(13,27,42,.4);font-size:12.5px;line-height:1;padding:0 2px;margin-left:6px;">🗑</button>`
       : '';
-    // Any message can be reacted to; 😊 opens a quick emoji picker.
-    const reactBtn = `<button type="button" class="kt-msg-react" data-react-mid="${m.id}" title="React" aria-label="React" style="background:none;border:none;cursor:pointer;color:rgba(13,27,42,.4);font-size:12.5px;line-height:1;padding:0 2px;margin-left:6px;">😊</button>`;
+    /* '+' rather than a smiley. A smiley reads as "send a smiley", which is not what
+       the control does - it OFFERS a choice. A plus is the universal "add one of
+       these", and it stops the button competing with the reactions beside it, which
+       are themselves emoji. (Anthony, 2026-09-09) */
+    const reactBtn = `<button type="button" class="kt-msg-react" data-react-mid="${m.id}" title="Add a reaction" aria-label="Add a reaction" style="background:none;border:none;cursor:pointer;color:rgba(13,27,42,.45);font-size:15px;font-weight:700;line-height:1;padding:0 2px;margin-left:6px;">＋</button>`;
+    /* Reactions live IN the meta row, beside the time - not in a block of their own
+       underneath. A separate row cost a whole line of height per reacted message and
+       read as a reply to the bubble rather than a mark ON it. Inline, a reaction
+       belongs to the message the way a read tick does. */
     const reactionsHtml = (m.reactions && m.reactions.length)
-      ? `<div class="kt-msg-reactions" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">` + m.reactions.map(function (rx) {
-          return `<button type="button" class="kt-msg-react-chip" data-react-mid="${m.id}" data-emoji="${escapeHtml(rx.emoji)}" style="border:1px solid ${rx.mine ? '#1F6080' : '#E2E8F0'};background:${rx.mine ? '#EFF6FF' : '#fff'};border-radius:12px;padding:1px 7px;font-size:12.5px;cursor:pointer;line-height:1.6;">${escapeHtml(rx.emoji)} ${rx.count}</button>`;
-        }).join('') + `</div>`
+      ? m.reactions.map(function (rx) {
+          return `<button type="button" class="kt-msg-react-chip" data-react-mid="${m.id}" data-emoji="${escapeHtml(rx.emoji)}" style="border:1px solid ${rx.mine ? '#1F6080' : '#E2E8F0'};background:${rx.mine ? '#EFF6FF' : '#fff'};border-radius:10px;padding:0 6px;font-size:11.5px;cursor:pointer;line-height:1.55;display:inline-flex;align-items:center;white-space:nowrap;">${escapeHtml(rx.emoji)} ${rx.count}</button>`;
+        }).join('')
       : '';
     return `
       <div data-mid="${m.id}" style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};gap:8px;align-items:flex-end;">
@@ -2298,8 +2635,10 @@
           ${!mine ? `<div style="font-size:11px;font-weight:800;color:${col};margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
           ${attachmentsHtml}
           ${m.body ? `<div style="font-size:15px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;">${escapeHtml(m.body)}</div>` : ''}
-          <div style="font-size:10.5px;color:rgba(13,27,42,.5);margin-top:4px;text-align:${mine ? 'right' : 'left'};">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}${reactBtn}${delBtn}</div>
-          ${reactionsHtml}
+          <!-- One flex line: time, ticks, reactions, +. It WRAPS rather than stacks -
+               a short bubble is only ~116px wide, and letting inline content wrap there
+               produced a 100px tower of one item per line. -->
+          <div style="font-size:10.5px;color:rgba(13,27,42,.5);margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:3px;justify-content:${mine ? 'flex-end' : 'flex-start'};"><span style="white-space:nowrap;">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}</span><span class="kt-msg-reactions" style="display:contents;">${reactionsHtml}</span>${reactBtn}${delBtn}</div>
         </div>
       </div>
     `;
@@ -2349,7 +2688,7 @@
   /* ─── Public mount API ─────────────────────────────────────── */
   function mount(container, options) {
     options = options || {};
-    myRole = options.role || (getUser().primary_role || 'guardian');
+    syncRole(options.role);   // options.role wins, then view-as, then the account
 
     /* Do NOT clear openThreadId while a thread is live in the DOCK.
        On desktop an open conversation lives in the floating dock, which deliberately

@@ -39,12 +39,29 @@
     ? KT.agencyToday()
     : ymd(new Date());
   // Format a Date as YYYY-MM-DD from its LOCAL parts. Never use toISOString() for
-  // this: `new Date('2026-08-11T00:00:00')` is local midnight, and converting that
-  // to UTC lands on the previous day for any timezone ahead of UTC — which made the
-  // day-navigator arrows appear stuck for European agencies.
+  // this: it converts to UTC first, which lands on the previous day for any timezone
+  // ahead of UTC.
   function ymd(d) {
     const p = (n) => String(n).padStart(2, '0');
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  /* Build a Date for a YYYY-MM-DD day from its NUMERIC PARTS. Never parse the string.
+     The line above used to claim `new Date('2026-08-11T00:00:00')` is local midnight.
+     It is not — it is parsed as UTC, so in Toronto it lands at 8pm on the 10th, and
+     screen-admin.js and screen-dashboard-widgets.js both carry comments saying so.
+     That single wrong assumption produced BOTH day-navigator bugs, because the parse
+     was UTC while getDate()/ymd() around it were local:
+       back  — new Date('2026-09-08T00:00:00') is Sep 7 locally, minus 1 = Sep 6,
+               so one press moved TWO days ("it skips days");
+       fwd   — from Sep 6 the same parse gives Sep 5, plus 1 = Sep 6, the date it
+               started on, so the screen re-rendered unchanged and forward looked dead
+               ("it won't let me move forward once I'm in a past date").
+     Numeric parts have no parsing rules to get wrong. (Anthony, 2026-09-08) */
+  function parseYmd(s) {
+    const p = String(s || '').split('-');
+    if (p.length !== 3) return new Date();
+    return new Date(+p[0], +p[1] - 1, +p[2]);   // local midnight, always
   }
 
   let state = {
@@ -82,7 +99,19 @@
   function bust(path) { delete apiCache[path]; }
 
   // Mark a notification category read so the bottom-nav badge clears (fire-and-forget).
+  /* Called from the render path, so it must be safe to call on EVERY render.
+     It was not: each render POSTed, and a POST is a data change, so the screen
+     re-rendered, which POSTed again. kt-live's IGNORE list is fixed too, but the
+     real rule is the one that file states in its own comment — a screen must not
+     write while it renders. Throttled per category so a re-render costs nothing,
+     while a genuinely new notification arriving later still clears the badge.
+     (Anthony, 2026-09-08) */
+  var _readAt = {};
+  var READ_THROTTLE_MS = 60000;
   function markCategoryRead(category) {
+    var now = Date.now();
+    if (_readAt[category] && (now - _readAt[category]) < READ_THROTTLE_MS) return;
+    _readAt[category] = now;
     try { if (window.KT && KT.Api && KT.Api.post) KT.Api.post('/notifications/mark-read', { category: category }).catch(function () {}); } catch (e) {}
   }
 
@@ -191,13 +220,13 @@
   function buildDateNav() {
     const todayStr = localToday();
     const isToday = state.date === todayStr;
-    const dObj = new Date(state.date + 'T00:00:00');
+    const dObj = parseYmd(state.date);
     const label = dObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
     const nav = Dom.el('div', { style: 'display:flex; align-items:center; gap:10px; margin:0 0 18px; flex-wrap:wrap;' });
     const rerender = () => { setTimeout(() => { try { Shell.renderScreen(); } catch (e) {} }, 0); };
     const shift = (days, ev) => {
       if (ev) { ev.preventDefault(); ev.stopPropagation(); }
-      const d = new Date(state.date + 'T00:00:00'); d.setDate(d.getDate() + days);
+      const d = parseYmd(state.date); d.setDate(d.getDate() + days);
       const ns = ymd(d);
       if (ns > todayStr) return;               // never go past today
       state.date = ns; rerender();
@@ -211,6 +240,9 @@
     nav.appendChild(next);
     if (!isToday) {
       const t = Dom.el('button', { type: 'button', style: 'background:#EEF2FF;border:0;border-radius:9px;padding:7px 14px;font-size:13px;font-weight:700;color:#4338CA;cursor:pointer;' }, 'Back to today');
+      /* stopPropagation here was never enough: the shell's listener CAPTURES, so it
+         ran first and cancelled this one. The attribute is what actually keeps it. */
+      t.dataset.ktInpage = '1';
       t.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); state.date = todayStr; rerender(); });
       nav.appendChild(t);
     }
@@ -435,11 +467,125 @@
       + section('Enrolment', row('Room', d.room && d.room.name) + row((KT.centreWord ? KT.centreWord(false) : 'Centre'), d.centre && d.centre.name) + row('Schedule', sched) + row('Start date', d.enrollment && d.enrollment.start_date) + row('CWELCC', d.enrollment && d.enrollment.cwelcc_eligible ? 'Eligible' : ''))
       + section('Guardians', guardians)
       + section('Health & dietary', healthHtml)
+      /* Filled in after the card paints — a slow fetch must not hold up the profile. */
+      + section('Medications', '<div id="kt-pmeds"><div style="color:#64748B;font-size:13px;padding:6px 0;">Loading…</div></div>')
       + section('Family', row('Household', fam.family_name) + row('Address', addr) + row('Phone', fam.primary_phone) + row('Email', fam.primary_email))
       + '<div style="padding:14px 24px 22px;color:#64748B;font-size:12px;">Need a change? Contact your childcare centre — these records are maintained by the agency.</div>';
 
     var cl = card.querySelector('#kt-cr-close');
     if (cl) cl.addEventListener('click', function () { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); });
+
+    /* ── MEDICATIONS: what is on file, and a way to ask for a new one ──────────
+       A parent ASKS; a director authorises. Nothing submitted here can be given to a
+       child until the centre says so, which is why every new request shows as
+       "Waiting for the centre to authorise". (Anthony, 2026-09-08) */
+    (function () {
+      var box = card.querySelector('#kt-pmeds');
+      if (!box || !d || !d.id) { return; }
+
+      var STATUS = {
+        pending_auth: ['Waiting for the centre to authorise', '#92400E', '#FEF3C7'],
+        active:       ['Active', '#166534', '#DCFCE7'],
+        discontinued: ['Stopped', '#475569', '#F1F5F9'],
+        expired:      ['Expired', '#475569', '#F1F5F9'],
+      };
+
+      function medRow(m) {
+        var st = STATUS[m.status] || [m.status, '#475569', '#F1F5F9'];
+        var detail = [m.dosage, m.frequency].filter(Boolean).join(' · ');
+        return '<div style="padding:9px 0;border-bottom:1px solid #F1F5F9;">'
+          + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+          + '<span style="color:#0F172A;font-size:14px;font-weight:600;">' + esc(m.name || '') + (m.strength ? ' ' + esc(m.strength) : '') + '</span>'
+          + '<span style="flex:0 0 auto;background:' + st[2] + ';color:' + st[1] + ';font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:20px;">' + esc(st[0]) + '</span>'
+          + '</div>'
+          + (detail ? '<div style="color:#64748B;font-size:12.5px;margin-top:2px;">' + esc(detail) + '</div>' : '')
+          + (m.reason ? '<div style="color:#94A3B8;font-size:12px;margin-top:1px;">For ' + esc(m.reason) + '</div>' : '')
+          + '</div>';
+      }
+
+      function askBtn() {
+        return '<button type="button" id="kt-pmed-add" style="margin-top:10px;background:#EFF6FF;'
+          + 'border:1px solid #BFDBFE;border-radius:10px;padding:9px 14px;font:inherit;font-size:13px;'
+          + 'font-weight:700;color:#1E40AF;cursor:pointer;">\uD83D\uDC8A Ask the centre to administer a medication</button>';
+      }
+
+      function paint(list, err) {
+        if (err) {
+          box.innerHTML = '<div style="color:#B91C1C;font-size:13px;padding:6px 0;">Could not load medications.</div>' + askBtn();
+        } else if (!list.length) {
+          box.innerHTML = '<div style="color:#64748B;font-size:13px;padding:6px 0;">None on file.</div>' + askBtn();
+        } else {
+          box.innerHTML = list.map(medRow).join('') + askBtn();
+        }
+        /* One form, and it lives on the Health screen (#medications) — the screen the
+           parent's own "Health" nav item opens. This card used to render a second copy
+           inline, which is exactly the duplicate-form trap that produced two different
+           "add provider" screens. Link, do not clone. */
+        var b = box.querySelector('#kt-pmed-add');
+        if (b) { b.addEventListener('click', function () { window.location.hash = '#medications'; }); }
+      }
+
+      function field(label, id, attrs) {
+        return '<label style="display:block;margin-top:9px;">'
+          + '<span style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:3px;">' + esc(label) + '</span>'
+          + '<input id="' + id + '" ' + (attrs || '') + ' style="width:100%;box-sizing:border-box;padding:9px 11px;'
+          + 'border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;"></label>';
+      }
+
+      function form(list) {
+        box.innerHTML =
+          '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:13px;">'
+          + '<div style="font-size:12.5px;color:#475569;">The centre has to authorise a medication before an educator can give it. Fill this in and they will be notified.</div>'
+          + field('Medication *', 'kt-pm-name', 'placeholder="e.g. Amoxicillin"')
+          + field('Strength', 'kt-pm-strength', 'placeholder="e.g. 250 mg/5 ml"')
+          + field('Dose *', 'kt-pm-dosage', 'placeholder="e.g. 5 ml"')
+          + field('How often *', 'kt-pm-freq', 'placeholder="e.g. twice daily, after meals"')
+          + field('Starts *', 'kt-pm-start', 'type="date" value="' + esc(localToday()) + '"')
+          + field('Ends', 'kt-pm-end', 'type="date"')
+          + field('Reason', 'kt-pm-reason', 'placeholder="e.g. ear infection"')
+          + field('Prescribed by', 'kt-pm-doc', 'placeholder="Doctor\'s name, if prescribed"')
+          + '<label style="display:block;margin-top:9px;"><span style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:3px;">Anything the educator should know</span>'
+          + '<textarea id="kt-pm-notes" rows="2" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;"></textarea></label>'
+          + '<div id="kt-pm-err" style="color:#B91C1C;font-size:12.5px;margin-top:8px;"></div>'
+          + '<div style="display:flex;gap:8px;margin-top:11px;">'
+          + '<button type="button" id="kt-pm-save" style="flex:1;background:#159FB4;border:0;border-radius:10px;padding:11px;font:inherit;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">Send request</button>'
+          + '<button type="button" id="kt-pm-cancel" style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:11px 16px;font:inherit;font-size:14px;color:#475569;cursor:pointer;">Cancel</button>'
+          + '</div></div>';
+
+        box.querySelector('#kt-pm-cancel').addEventListener('click', function () { paint(list); });
+        box.querySelector('#kt-pm-save').addEventListener('click', async function () {
+          var g = function (id) { var e = box.querySelector('#' + id); return e ? e.value.trim() : ''; };
+          var err = box.querySelector('#kt-pm-err');
+          var payload = {
+            name: g('kt-pm-name'), strength: g('kt-pm-strength'), dosage: g('kt-pm-dosage'),
+            frequency: g('kt-pm-freq'), starts_on: g('kt-pm-start'), expires_on: g('kt-pm-end') || null,
+            reason: g('kt-pm-reason'), prescribing_physician: g('kt-pm-doc'),
+            special_instructions: g('kt-pm-notes'),
+            is_prescription: !!g('kt-pm-doc'),
+          };
+          if (!payload.name || !payload.dosage || !payload.frequency || !payload.starts_on) {
+            err.textContent = 'Medication, dose, how often and the start date are all needed.';
+            return;
+          }
+          var btn = box.querySelector('#kt-pm-save');
+          btn.disabled = true; btn.textContent = 'Sending…'; err.textContent = '';
+          try {
+            await Api.post('/parent/children/' + d.id + '/medications', payload);
+            var fresh = [];
+            try { var r2 = await Api.get('/parent/children/' + d.id + '/medications'); fresh = (r2 && (r2.medications || r2.data)) || []; } catch (e2) {}
+            paint(fresh);
+            if (window.KT && KT.Dom && KT.Dom.toast) { KT.Dom.toast('Request sent — the centre has been notified', 'success'); }
+          } catch (e) {
+            btn.disabled = false; btn.textContent = 'Send request';
+            err.textContent = (e && e.message) || 'Could not send that request.';
+          }
+        });
+      }
+
+      Api.get('/parent/children/' + d.id + '/medications')
+        .then(function (r) { paint((r && (r.medications || r.data)) || []); })
+        .catch(function () { paint([], true); });
+    }());
   }
 
   // ─── Walks + new-media helpers (shared by the desktop and mobile Today) ──────
@@ -1010,7 +1156,17 @@
   // they're billed and paid in iLearn, so there's no in-app "pay" action. Rendered
   // alongside any native KiddieTrac invoices. Returns true if it rendered any.
   var _extMoney = (n) => '$' + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  var _extStatusColor = (s) => s === 'paid' ? '#16a34a' : (s === 'overdue' ? '#c0392b' : (s === 'partial' ? '#B45309' : '#1F6FB2'));
+  var _extStatusColor = (s) => s === 'paid' ? '#16a34a' : (s === 'overdue' ? '#c0392b' : (s === 'partial' ? '#B45309' : (s === 'scheduled' ? '#4F46E5' : '#1F6FB2')));
+
+  /* An invoice that is not due yet reads "scheduled", not "open" — for a parent that is
+     the difference between next month's fees and a demand for money. Derived at display
+     time; see KT.invoiceStatus in kt-polish.js. */
+  var _extStatusOf = (inv) => {
+    if (!inv) return '';
+    return (window.KT && KT.invoiceStatus)
+      ? KT.invoiceStatus(inv.status, inv.due_at)
+      : String(inv.status || '');
+  };
 
   // Build + open a clean, printable invoice (Save-as-PDF via the browser).
   // iLearn doesn't produce a PDF file, so we render one from the invoice data.
@@ -1032,10 +1188,10 @@
       + 'th,td{padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;color:#64748b}'
       + '.r{text-align:right}.c{text-align:center}.sub{color:#64748B;font-size:11px;margin-top:2px}'
       + '.tot{margin-top:14px;width:100%;max-width:280px;margin-left:auto}.tot td{border:0;padding:4px 6px}.tot .g td{font-weight:800;font-size:15px;border-top:2px solid #cbd5e1;padding-top:8px}'
-      + '.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:800;text-transform:uppercase;color:#fff;background:' + _extStatusColor(inv.status) + '}'
+      + '.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:800;text-transform:uppercase;color:#fff;background:' + _extStatusColor(_extStatusOf(inv)) + '}'
       + '@media print{body{margin:12mm}}</style></head><body>'
       + '<div class="hd"><div><div class="ag">' + esc(agency || 'Invoice') + '</div><div style="color:#64748b;font-size:12px;margin-top:2px">Childcare invoice</div></div>'
-      + '<div class="meta"><h1>Invoice ' + esc(inv.number || '') + '</h1><div>Issued: ' + esc(inv.issued_at || '—') + '</div><div>Due: ' + esc(inv.due_at || '—') + '</div><div style="margin-top:6px"><span class="badge">' + esc(inv.status || '') + '</span></div></div></div>'
+      + '<div class="meta"><h1>Invoice ' + esc(inv.number || '') + '</h1><div>Issued: ' + esc(inv.issued_at || '—') + '</div><div>Due: ' + esc(inv.due_at || '—') + '</div><div style="margin-top:6px"><span class="badge">' + esc(_extStatusOf(inv)) + '</span></div></div></div>'
       + (parentName ? '<div style="margin-bottom:12px"><div style="font-size:11px;text-transform:uppercase;color:#64748b">Bill to</div><div style="font-weight:700">' + esc(parentName) + '</div></div>' : '')
       + (inv.description ? '<div style="margin-bottom:8px;color:#475569">' + esc(inv.description) + '</div>' : '')
       + '<table><thead><tr><th>Description</th><th class="c">Qty</th><th class="r">Unit</th><th class="r">Amount</th></tr></thead><tbody>' + (rows || '<tr><td colspan="4" style="color:#64748B">No line items</td></tr>') + '</tbody></table>'
@@ -1067,7 +1223,7 @@
     var body = Dom.el('div', { style: 'padding:18px 20px 26px;' });
     // status + dates
     body.appendChild(Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;' }, [
-      Dom.el('span', { style: 'background:' + _extStatusColor(inv.status) + ';color:#fff;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;' }, inv.status),
+      Dom.el('span', { style: 'background:' + _extStatusColor(_extStatusOf(inv)) + ';color:#fff;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;' }, _extStatusOf(inv)),
       inv.due_at ? Dom.el('span', { style: 'font-size:13px;color:var(--ink-600,#475569);' }, 'Due ' + inv.due_at) : Dom.el('span', {}),
       inv.issued_at ? Dom.el('span', { style: 'font-size:13px;color:var(--ink-500,#64748b);' }, '· Issued ' + inv.issued_at) : Dom.el('span', {}),
     ]));
@@ -1276,7 +1432,7 @@
           tr.appendChild(td(inv.due_at || '—', 'left', 'color:' + (inv.status === 'overdue' ? '#c0392b' : '#334155') + ';'));
           tr.appendChild(td(_extMoney(inv.balance_due), 'right', 'font-weight:800;color:' + (paid ? '#16a34a' : '#1F6FB2') + ';'));
           const stTd = Dom.el('td', { style: 'padding:11px 14px;' });
-          stTd.appendChild(Dom.el('span', { style: 'background:' + _extStatusColor(inv.status) + ';color:#fff;padding:3px 9px;border-radius:10px;font-size:10.5px;font-weight:800;text-transform:uppercase;' }, inv.status));
+          stTd.appendChild(Dom.el('span', { style: 'background:' + _extStatusColor(_extStatusOf(inv)) + ';color:#fff;padding:3px 9px;border-radius:10px;font-size:10.5px;font-weight:800;text-transform:uppercase;' }, _extStatusOf(inv)));
           tr.appendChild(stTd);
           tr.appendChild(Dom.el('td', { style: 'padding:11px 8px;color:#cbd5e1;' }, '›'));
           tb.appendChild(tr);
@@ -1289,7 +1445,7 @@
           const paid = inv.status === 'paid';
           const row = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;' + (i ? 'border-top:1px solid var(--ink-100,#f1f5f9);' : '') });
           row.addEventListener('click', () => openExternalInvoice(inv, agency, detailOpts));
-          row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:' + _extStatusColor(inv.status) + ';' }));
+          row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:' + _extStatusColor(_extStatusOf(inv)) + ';' }));
           row.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;' }, [
             Dom.el('div', { style: 'font-weight:800;font-size:14px;color:var(--ink-900,#0f172a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, inv.number || 'Invoice'),
             Dom.el('div', { style: 'font-size:12px;color:var(--ink-500,#64748b);margin-top:1px;' }, (inv.due_at ? 'Due ' + inv.due_at : (inv.issued_at || '')) + (paid ? ' · paid' : (inv.status === 'overdue' ? ' · overdue' : ''))),
@@ -1323,6 +1479,430 @@
     return true;
   }
 
+
+  /* What has actually happened to this invoice: instalments, and anything given
+     back. Returns null when there is nothing to say, so a plain unpaid invoice is
+     not padded with an empty box.
+
+     Shared by both billing renderers on purpose — see the note on each. */
+  function ktPaymentHistory(inv) {
+    var pays = (inv.payments || []).filter(function (p) { return p.status !== 'failed'; });
+    var refs = inv.refunds || [];
+    if (!pays.length && !refs.length) { return null; }
+
+    var wrap = Dom.el('div', {
+      style: 'margin-top:12px;border-top:1px solid var(--ink-200,#E2E8F0);padding-top:10px;',
+    });
+    wrap.appendChild(Dom.el('div', {
+      style: 'font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;'
+        + 'color:var(--ink-500,#64748B);margin-bottom:7px;',
+    }, pays.length > 1 ? 'Payments (' + pays.length + ')' : 'Payment history'));
+
+    function money(n) { return '$' + (Number(n) || 0).toFixed(2); }
+    function when(d) {
+      if (!d) { return ''; }
+      // Date-only strings must not be parsed as UTC, or they name the day before.
+      var m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) { return String(d); }
+      var dt = new Date(+m[1], +m[2] - 1, +m[3]);
+      return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    var LABEL = {
+      interac: 'Interac e-Transfer', eft: 'Direct debit', card: 'Card',
+      stripe_card: 'Card', stripe_ach: 'Bank transfer', cash: 'Cash',
+      cheque: 'Cheque', manual: 'Recorded by your centre',
+    };
+
+    function line(icon, title, sub, amount, colour, faded) {
+      var row = Dom.el('div', {
+        style: 'display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:12.5px;'
+          + (faded ? 'opacity:.65;' : ''),
+      });
+      row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;' }, icon));
+      var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      mid.appendChild(Dom.el('div', { style: 'color:var(--ink-800,#1E293B);' }, title));
+      if (sub) {
+        mid.appendChild(Dom.el('div', { style: 'font-size:11px;color:var(--ink-500,#64748B);' }, sub));
+      }
+      row.appendChild(mid);
+      row.appendChild(Dom.el('div', {
+        style: 'font-weight:700;white-space:nowrap;color:' + colour + ';',
+      }, amount));
+      return row;
+    }
+
+    pays.forEach(function (p) {
+      /* Sent, not received. An Interac request sitting in somebody's online banking
+         is not money in the centre's account, and counting it as paid is how a
+         family concludes they are square when they are not. */
+      var settled = p.status === 'succeeded';
+      wrap.appendChild(line(
+        settled ? '✅' : '⏳',
+        when(p.date) + ' · ' + (LABEL[p.method] || p.method || 'Payment'),
+        settled ? null : 'Waiting for this to clear — not counted yet',
+        money(p.amount),
+        settled ? '#166534' : 'var(--ink-500,#64748B)',
+        !settled
+      ));
+    });
+
+    refs.forEach(function (r) {
+      var sent = r.status === 'succeeded';
+      wrap.appendChild(line(
+        '↩',
+        when(r.date) + ' · Refund' + (r.reason ? ' — ' + r.reason : ''),
+        sent ? null : 'Approved — your centre will arrange the payment with you',
+        '−' + money(r.amount),
+        '#B45309',
+        false
+      ));
+    });
+
+    // The arithmetic, so nobody has to do it from the lines above.
+    var paid = Number(inv.net_paid != null ? inv.net_paid : inv.amount_paid || 0);
+    if (paid > 0.005 && Number(inv.balance_due || 0) > 0.005) {
+      wrap.appendChild(Dom.el('div', {
+        style: 'margin-top:7px;padding-top:7px;border-top:1px dashed var(--ink-200,#E2E8F0);'
+          + 'font-size:12.5px;display:flex;justify-content:space-between;font-weight:700;',
+      }, [
+        Dom.el('span', { style: 'color:var(--ink-600,#475569);' }, 'Paid so far'),
+        Dom.el('span', { style: 'color:#166534;' }, money(paid) + ' of ' + money(inv.total)),
+      ]));
+    }
+
+    return wrap;
+  }
+
+  /* Paying by bank — Zūm Rails EFT and Interac e-Transfer.
+
+     Built as one block used by BOTH billing renderers. They are separate functions by
+     design (desktop and mobile lay out differently) but the payment rules are not a
+     layout concern, and two copies of "how much may I pay against this invoice" is
+     exactly the kind of thing that drifts.
+
+     Cards ARE here now, via Zum Connect (2026-09-03). The old note said they had to
+     stay on Stripe because "Zum's Canadian card API would take the card number
+     through our own server" — true of their DIRECT card API, and exactly what
+     Connect avoids: the card is typed into Zum's frame and we get back an id.
+     Zum enabled card onboarding on our account on 2026-09-02; until then every
+     attempt returned "Card Onboarding is not available".
+
+     The manual bank form below stays. It is the path for a parent working from a
+     cheque, and Connect is the one that also does cards, Interac and Visa Direct —
+     dropping either takes away somebody's way to pay. */
+  async function ktZumSection(container, invoices) {
+    var st = null;
+    try { st = await Api.get('/parent/zum/status'); } catch (e) { return; }
+    if (!st || !st.configured) { return; }   // agency has not enabled it — say nothing
+
+    var outstanding = (invoices || []).filter(function (i) {
+      return Number(i.balance_due || i.balance || 0) > 0;
+    });
+
+    var box = Dom.el('div', {
+      style: 'background:white;border:1px solid ' + (st.sandbox ? '#F59E0B' : '#E2E8F0')
+        + ';border-radius:14px;padding:18px;margin:0 0 18px;',
+    });
+
+    /* Sandbox credentials behave exactly like real ones right up to the point where no
+       money moves. Unlabelled, that is a parent believing an invoice is settled. */
+    if (st.sandbox) {
+      box.appendChild(Dom.el('div', {
+        style: 'background:#FEF3C7;color:#92400E;border-radius:9px;padding:9px 12px;'
+          + 'font-size:12.5px;font-weight:700;margin-bottom:12px;',
+      }, '⚠ TEST MODE — this centre is set up against the payment provider’s sandbox. '
+       + 'Nothing you do here moves real money and no invoice will actually be paid.'));
+    }
+
+    box.appendChild(Dom.el('div', {
+      style: 'font-weight:800;font-size:15px;color:var(--ink-900);margin-bottom:2px;',
+    }, 'Ways to pay'));
+    box.appendChild(Dom.el('div', {
+      style: 'color:var(--ink-500);font-size:12.5px;margin-bottom:12px;',
+    }, 'Add a card or bank account, or pay by Interac e-Transfer.'));
+
+    var msg = Dom.el('div', { style: 'font-size:12.5px;margin-top:10px;min-height:16px;' });
+
+    function say(text, good) {
+      msg.style.color = good ? '#166534' : '#B91C1C';
+      msg.textContent = text;
+    }
+
+    /* ── add a method through Zum's own form ──────────────────────────────────
+       The card never touches this portal: Connect collects it in Zum's frame and
+       hands back an id, which the server verifies before attaching. */
+    var connectWrap = Dom.el('div', { style: 'margin-bottom:12px;' });
+    var connectBtn = Dom.el('button', {
+      type: 'button',
+      style: 'padding:9px 16px;border-radius:9px;border:0;background:#1F6080;color:#fff;'
+        + 'font-size:13.5px;font-weight:700;cursor:pointer;',
+    }, '💳 Add a card or bank account');
+    connectBtn.addEventListener('click', async function () {
+      if (!(window.KT && KT.zumConnect)) {
+        say('The secure payment form is unavailable. Please reload and try again.', false);
+        return;
+      }
+      connectBtn.disabled = true;
+      var was = connectBtn.textContent;
+      connectBtn.textContent = 'Opening…';
+      try {
+        var saved = await KT.zumConnect({
+          onSaved: function (r) { say((r && r.message) || 'Your payment method is saved.', true); },
+          onError: function (m) { say(m, false); },
+        });
+        if (saved) {
+          // Re-read rather than assume: the server decides what is on file.
+          try { st = await Api.get('/parent/zum/status'); } catch (e) {}
+          paintCard();
+          paintBank();
+          paintPay();
+        }
+      } finally {
+        connectBtn.disabled = false;
+        connectBtn.textContent = was;
+      }
+    });
+    connectWrap.appendChild(connectBtn);
+    connectWrap.appendChild(Dom.el('div', {
+      style: 'font-size:11.5px;color:var(--ink-500);margin-top:6px;line-height:1.5;',
+    }, 'Card, bank account or Interac, entered on our payment provider\u2019s secure form. '
+      + 'KiddieTrac never sees your card number.'));
+    box.appendChild(connectWrap);
+
+    /* ── the card on file ─────────────────────────────────────────────────────
+       There was no card row at all before: a parent could save a card and pay with
+       it while the screen still only said "No bank account saved yet". */
+    var cardRow = Dom.el('div', { style: 'margin-bottom:10px;' });
+    function paintCard() {
+      Dom.clear(cardRow);
+      if (!(st.on_file && st.on_file.card)) { return; }
+      var row = Dom.el('div', {
+        style: 'display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-700);',
+      });
+      if (window.KT && KT.cardMark) {
+        row.appendChild(Dom.el('span', { html: KT.cardMark(st.on_file.card_brand, { width: 34 }) }));
+      }
+      var name = (window.KT && KT.cardBrandName)
+        ? KT.cardBrandName(st.on_file.card_brand) : 'Card';
+      var kind = st.on_file.card_kind === 'debit' ? ' debit' : '';
+      row.appendChild(Dom.el('span', {},
+        name + kind + ' ending ' + (st.on_file.card_hint || '••••') + ' is on file.'));
+      var swap = Dom.el('button', {
+        type: 'button',
+        style: 'background:none;border:0;padding:0;color:#1F6080;font-weight:700;'
+             + 'font-size:13px;cursor:pointer;text-decoration:underline;',
+      }, 'Use a different card');
+      swap.addEventListener('click', function () { connectBtn.click(); });
+      row.appendChild(swap);
+      cardRow.appendChild(row);
+    }
+    box.appendChild(cardRow);
+
+    // ── the account on file ───────────────────────────────────────────────────
+    var bankRow = Dom.el('div', { style: 'margin-bottom:12px;font-size:13px;color:var(--ink-700);' });
+    function paintBank() {
+      Dom.clear(bankRow);
+      if (st.on_file && st.on_file.bank) {
+        bankRow.appendChild(Dom.el('span', {}, '🏦 Account ending ' + (st.on_file.bank_hint || '•••') + ' is on file. '));
+      } else {
+        bankRow.appendChild(Dom.el('span', {}, 'No bank account saved yet — needed for direct debit, but not for Interac. '));
+      }
+      var link = Dom.el('button', {
+        type: 'button',
+        style: 'background:none;border:0;padding:0;color:#1F6080;font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;',
+      }, st.on_file && st.on_file.bank ? 'Replace it' : 'Or type it from a cheque');
+      link.addEventListener('click', function () { form.hidden = !form.hidden; });
+      bankRow.appendChild(link);
+    }
+
+    var form = Dom.el('div', {
+      style: 'background:#F8FAFC;border-radius:10px;padding:14px;margin-bottom:12px;',
+    });
+    form.hidden = true;
+    var inputStyle = 'width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #CBD5E1;'
+      + 'border-radius:8px;font-size:14px;margin-top:4px;';
+    form.innerHTML =
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">' +
+        '<label style="font-size:12px;font-weight:700;color:#475569;">Institution (3 digits)' +
+          '<input id="kt-zum-inst" inputmode="numeric" maxlength="3" style="' + inputStyle + '"></label>' +
+        '<label style="font-size:12px;font-weight:700;color:#475569;">Transit (5 digits)' +
+          '<input id="kt-zum-transit" inputmode="numeric" maxlength="5" style="' + inputStyle + '"></label>' +
+        '<label style="font-size:12px;font-weight:700;color:#475569;">Account number' +
+          '<input id="kt-zum-acct" inputmode="numeric" maxlength="12" style="' + inputStyle + '"></label>' +
+      '</div>' +
+      '<div style="font-size:11.5px;color:#64748B;margin-top:8px;">' +
+        'These are the three numbers along the bottom of a cheque. They are sent straight to ' +
+        'our payment provider — KiddieTrac does not keep them.</div>';
+    var saveBtn = Dom.el('button', {
+      type: 'button',
+      style: 'margin-top:10px;padding:8px 14px;border-radius:9px;border:0;background:#1F6080;'
+        + 'color:white;font-size:13px;font-weight:700;cursor:pointer;',
+    }, 'Save account');
+    saveBtn.addEventListener('click', async function () {
+      saveBtn.disabled = true;
+      var was = saveBtn.textContent;
+      saveBtn.textContent = 'Saving…';
+      try {
+        await Api.post('/parent/zum/bank-account', {
+          institution_number: form.querySelector('#kt-zum-inst').value,
+          transit_number: form.querySelector('#kt-zum-transit').value,
+          account_number: form.querySelector('#kt-zum-acct').value,
+        });
+        st = await Api.get('/parent/zum/status');
+        form.hidden = true;
+        paintBank();
+        paintPay();
+        say('Your bank account is on file.', true);
+      } catch (e) {
+        say(e.message || 'That could not be saved.', false);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = was;
+      }
+    });
+    form.appendChild(saveBtn);
+
+    // ── paying ────────────────────────────────────────────────────────────────
+    var payWrap = Dom.el('div');
+    function paintPay() {
+      Dom.clear(payWrap);
+      if (!outstanding.length) {
+        payWrap.appendChild(Dom.el('div', {
+          style: 'font-size:13px;color:var(--ink-500);',
+        }, 'Nothing outstanding to pay.'));
+        return;
+      }
+      outstanding.forEach(function (inv) {
+        var due = Number(inv.balance_due || inv.balance || 0);
+        var row = Dom.el('div', {
+          style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0;border-top:1px solid #F1F5F9;',
+        });
+        row.appendChild(Dom.el('div', { style: 'flex:1;min-width:150px;font-size:13px;' }, [
+          Dom.el('div', { style: 'font-weight:700;color:var(--ink-900);' }, inv.invoice_number || ('Invoice ' + inv.id)),
+          Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, '$' + due.toFixed(2) + ' outstanding'),
+        ]));
+
+        /* Pay some of it. Defaults to the whole balance so the ordinary case is still
+           one tap, but a family who can find part of it this week can say so — and
+           paying part of an invoice is a great deal better than paying none of it,
+           which is what "pay the full balance or nothing" left them with. */
+        var amtWrap = Dom.el('label', {
+          style: 'display:flex;align-items:center;gap:5px;font-size:12.5px;color:#475569;font-weight:600;',
+        });
+        amtWrap.appendChild(Dom.el('span', {}, '$'));
+        var amt = Dom.el('input', {
+          type: 'text',
+          inputmode: 'decimal',
+          'aria-label': 'Amount to pay',
+          style: 'width:88px;padding:6px 8px;border:1px solid #CBD5E1;border-radius:7px;'
+            + 'font-size:13px;text-align:right;font-family:inherit;',
+        });
+        amt.value = due.toFixed(2);
+        amtWrap.appendChild(amt);
+        row.appendChild(amtWrap);
+
+        /* What they actually typed, clamped. Returns null when it is not a payable
+           number so the caller can refuse with a reason instead of sending NaN. */
+        function chosen() {
+          var v = parseFloat(String(amt.value).replace(/[^0-9.]/g, ''));
+          if (!isFinite(v) || v <= 0) { return null; }
+          return Math.round(v * 100) / 100;
+        }
+
+        var amtNote = Dom.el('div', {
+          style: 'width:100%;font-size:11.5px;color:#64748B;',
+        });
+        function paintNote() {
+          var v = chosen();
+          if (v === null) { amtNote.textContent = ''; return; }
+          amtNote.textContent = v < due - 0.005
+            ? 'Part payment \u2014 $' + (due - v).toFixed(2) + ' would still be outstanding.'
+            : '';
+        }
+        amt.addEventListener('input', paintNote);
+        paintNote();
+
+        /* Keyed, not "Interac or else". The card button was labelled "Direct debit"
+           the moment a third rail appeared. Server label is the fallback so a new
+           rail needs no change here. */
+        var SHORT = { card: 'Card', interac: 'Interac', eft: 'Direct debit' };
+        var LONG = { card: 'card', interac: 'Interac e-Transfer', eft: 'direct debit' };
+        var NEEDS = { card: 'Add a card first', eft: 'Save a bank account first' };
+
+        (st.methods || []).forEach(function (m) {
+          var b = Dom.el('button', {
+            type: 'button',
+            title: m.ready ? '' : (NEEDS[m.key] || 'Not available yet'),
+            style: 'padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:'
+              + (m.ready ? 'pointer' : 'not-allowed') + ';border:1px solid '
+              + (m.ready ? '#1F6080' : '#CBD5E1') + ';background:white;color:'
+              + (m.ready ? '#1F6080' : '#94A3B8') + ';',
+          }, SHORT[m.key] || m.label || m.key);
+          /* The button that spends the money shows which card it will spend. */
+          if (m.key === 'card' && m.ready && window.KT && KT.cardMark
+              && st.on_file && st.on_file.card_brand) {
+            b.innerHTML = KT.cardMark(st.on_file.card_brand, { width: 24 })
+              + '<span style="margin-left:6px;vertical-align:middle;">'
+              + (SHORT[m.key] || 'Card') + '</span>';
+            b.style.display = 'inline-flex';
+            b.style.alignItems = 'center';
+          }
+          if (!m.ready) { b.disabled = true; }
+          b.addEventListener('click', async function () {
+            var pay = chosen();
+            if (pay === null) {
+              say('Enter an amount to pay.', false);
+              try { amt.focus(); } catch (e) {}
+              return;
+            }
+            /* Refused here as well as on the server. The server is the authority, but
+               a round trip to be told the obvious is a worse way to learn it. */
+            if (pay > due + 0.005) {
+              say('That is more than the $' + due.toFixed(2) + ' outstanding.', false);
+              try { amt.focus(); } catch (e) {}
+              return;
+            }
+            /* Confirmed before it is sent. This is somebody's money and the request
+               reaches their bank immediately — a mis-tap should not start one. The
+               confirm names the amount ACTUALLY being sent, which is the whole point
+               of letting it differ from the balance. */
+            var rest = pay < due - 0.005
+              ? ' This leaves $' + (due - pay).toFixed(2) + ' outstanding.'
+              : '';
+            if (!window.confirm('Pay $' + pay.toFixed(2) + ' by '
+                + (LONG[m.key] || m.label || m.key) + '?' + rest)) { return; }
+            b.disabled = true;
+            var was = b.textContent;
+            b.textContent = 'Sending…';
+            try {
+              var r = await Api.post('/parent/zum/pay', { invoice_id: inv.id, method: m.key, amount: pay });
+              /* Deliberately not "Paid". Zum has accepted an instruction; the money
+                 arrives later, and the invoice is only marked paid when it does. */
+              say(r.message || 'Submitted.', true);
+            } catch (e) {
+              say(e.message || 'That could not be submitted.', false);
+            } finally {
+              b.disabled = !m.ready;
+              b.textContent = was;
+            }
+          });
+          row.appendChild(b);
+        });
+        row.appendChild(amtNote);
+        payWrap.appendChild(row);
+      });
+    }
+
+    paintCard();
+    paintBank();
+    paintPay();
+    box.appendChild(bankRow);
+    box.appendChild(form);
+    box.appendChild(payWrap);
+    box.appendChild(msg);
+    container.appendChild(box);
+  }
+
   async function renderBillingTab(wrap) {
     // (Sub-nav removed — the Today/Photos/Messages/Billing pill bar duplicated the
     // shell's own navigation and looked out of place; matches the Messages fix.)
@@ -1338,6 +1918,9 @@
     try {
       const data = await Api.get(`/parent/children/${child.id}/invoices`);
       Dom.clear(container);
+
+      // Above the list: the thing you came here to do.
+      try { await ktZumSection(container, data.invoices || []); } catch (e) { /* never block the invoices */ }
 
       (data.invoices || []).forEach(inv => {
         const _payable = (inv.balance_due || 0) > 0 && inv.status !== 'paid';
@@ -1362,6 +1945,10 @@
         breakdown.appendChild(Dom.el('div', { style: 'font-weight: 700; font-size: 16px; border-top: 1px solid var(--ink-200); padding-top: 8px;' }, 'Your portion'));
         breakdown.appendChild(Dom.el('div', { style: 'text-align: right; font-weight: 700; font-size: 16px; border-top: 1px solid var(--ink-200); padding-top: 8px; color: var(--brand-blue);' }, '$' + inv.total.toFixed(2)));
         card.appendChild(breakdown);
+
+        // Instalments and refunds — see ktPaymentHistory. Shared with the mobile renderer.
+        var _hist = ktPaymentHistory(inv);
+        if (_hist) { card.appendChild(_hist); }
 
         if (inv.balance_due > 0) {
           const payRow = Dom.el('div', { style: 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background: #FEF3C7; border-left: 3px solid #F59E0B; padding: 12px 14px; margin-top: 12px; font-size: 13px; border-radius: 4px;' });
@@ -1817,6 +2404,7 @@
     try {
       const data = await cget(`/parent/children/${child.id}/invoices`);
       Dom.clear(cont);
+      try { await ktZumSection(cont, data.invoices || []); } catch (e) { /* never block the invoices */ }
       (data.invoices || []).forEach(inv => {
         const c = Dom.el('div', { style: card('padding:15px;margin-bottom:12px;cursor:pointer;') });
         c.addEventListener('click', () => openInvoiceDetail(inv, child));
@@ -1838,6 +2426,11 @@
         bd.appendChild(Dom.el('div', { style: 'font-weight:800;border-top:1px solid var(--ink-200);padding-top:7px;' }, 'Your portion'));
         bd.appendChild(Dom.el('div', { style: 'text-align:right;font-weight:800;border-top:1px solid var(--ink-200);padding-top:7px;color:var(--brand-blue);' }, '$' + inv.total.toFixed(2)));
         c.appendChild(bd);
+
+        // The SAME block as the desktop renderer — these two lay out differently, but
+        // what a payment history says is not a layout decision.
+        var _h = ktPaymentHistory(inv);
+        if (_h) { c.appendChild(_h); }
         if (inv.balance_due > 0) {
           c.appendChild(Dom.el('div', { style: 'background:#FEF3C7;border-left:3px solid #F59E0B;padding:11px;margin-top:10px;font-size:12.5px;border-radius:6px;color:#92400e;' },
             `Balance $${inv.balance_due.toFixed(2)} · please pay by ${inv.due_date}.`));
@@ -1863,7 +2456,7 @@
     if (!appMain) return;
     const tw = Dom.el('div', { class: 'kt-invoice-sheet', style: 'position:fixed;inset:0;z-index:9600;background:var(--ink-50,#F4F7FA);display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
 
-    const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;border-bottom:1px solid var(--ink-100);background:#fff;flex-shrink:0;' });
+    const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 10px) 12px 12px;border-bottom:1px solid var(--ink-100);background:#fff;flex-shrink:0;' });
     const back = Dom.el('button', { style: 'background:none;border:none;font-size:26px;color:var(--brand-blue);cursor:pointer;padding:0 6px;line-height:1;flex-shrink:0;' }, '‹');
     back.addEventListener('click', () => { if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove(); });
     header.appendChild(back);
@@ -2097,7 +2690,6 @@
       updateAction();
     }
 
-    let recorder = null, recStream = null, recChunks = [], recTimer = null;
     let editingId = null;               // when set, the composer edits an existing message
     const editBanner = Dom.el('div', { style: 'display:none;align-items:center;gap:8px;padding:7px 12px;background:#FEF3C7;border-top:1px solid #FDE68A;font-size:12.5px;color:#92400E;font-weight:600;' });
     const editBannerX = Dom.el('button', { type: 'button', style: 'margin-left:auto;background:none;border:none;color:#92400E;font-size:16px;cursor:pointer;font-weight:800;' }, '✕');
@@ -2105,7 +2697,6 @@
     editBanner.appendChild(editBannerX);
     tw.insertBefore(editBanner, compose);   // sits just above the composer
     function updateAction() {
-      if (recorder && recorder.state === 'recording') { action.textContent = '⏹'; action.style.background = '#EF4444'; return; }
       if (editingId) { action.textContent = '✓'; action.style.background = '#159FB4'; return; }
       if (input.value.trim()) { action.textContent = '➤'; action.style.background = '#159FB4'; action.style.paddingLeft = '2px'; return; }
       action.textContent = '🎤'; action.style.background = '#159FB4'; action.style.paddingLeft = '0';
@@ -2133,46 +2724,29 @@
       try { await Api.delete('/parent/messages/' + m.id); bust('/parent/messages'); await load(); ktToast('🗑', 'Message deleted'); }
       catch (e) { ktToast('⚠️', (e && e.message) || 'Could not delete'); }
     }
-    async function startRec() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { ktToast('⚠️', 'Voice messages aren’t supported on this device'); return; }
-      try { recStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-      catch (e) { ktToast('🎤', 'Microphone permission is needed for voice messages'); return; }
-      recChunks = [];
-      try { recorder = new MediaRecorder(recStream); } catch (e) { recorder = new MediaRecorder(recStream, {}); }
-      recorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
-      recorder.onstop = () => {
-        try { recStream.getTracks().forEach(t => t.stop()); } catch (e) {}
-        clearInterval(recTimer); recTimer = null;
-        const type = (recorder && recorder.mimeType) || 'audio/webm';
-        const blob = new Blob(recChunks, { type });
-        input.placeholder = 'Message…';
-        recorder = null; updateAction();
-        // Do NOT auto-send — let the user review, then Send or Delete.
-        if (blob.size > 800) voicePreview(blob, type);
-      };
-      recorder.start(); updateAction();
-      const t0 = Date.now();
-      recTimer = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); input.placeholder = '● Recording ' + Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) + ' — tap ⏹ to review'; }, 250);
+    /* ── Voice notes ──────────────────────────────────────────────────────
+       KT.recordVoiceNote (kt-voice-recorder.js) is the one recorder for the whole
+       portal. This screen already refused to auto-send and offered a play-back
+       bar, which was the right instinct — what it could not do was show that the
+       microphone was hearing anything, so a muted headset looked exactly like a
+       working one until the note arrived silent. The shared recorder adds the
+       live level meter and the timer, and keeps the rule this screen already
+       had: nothing is sent until the person has heard it. */
+    async function recordVoice() {
+      if (!(window.KT && KT.recordVoiceNote)) { ktToast('⚠️', 'Voice messages aren’t supported on this device'); return; }
+      action.disabled = true;
+      try {
+        const file = await KT.recordVoiceNote({ acceptLabel: 'Send' });
+        if (file) doSend(file);
+      } finally {
+        action.disabled = false;
+        updateAction();
+      }
     }
-    function stopRec() { if (recorder && recorder.state === 'recording') recorder.stop(); }
-    // Voice review bar: play it back, then Send or Delete (never auto-sends).
-    function voicePreview(blob, type) {
-      var url = URL.createObjectURL(blob);
-      var bar = Dom.el('div', { class: 'kt-voice-preview', style: 'display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--ink-100);background:#fff;' });
-      var del = Dom.el('button', { type: 'button', title: 'Delete', style: 'background:none;border:none;font-size:22px;cursor:pointer;flex-shrink:0;' }, '🗑');
-      var au = Dom.el('audio', { controls: '', src: url, style: 'flex:1;min-width:0;height:40px;' });
-      var snd = Dom.el('button', { type: 'button', style: 'background:#159FB4;color:#fff;border:none;border-radius:22px;padding:0 18px;height:44px;font-weight:800;cursor:pointer;flex-shrink:0;' }, 'Send');
-      bar.appendChild(del); bar.appendChild(au); bar.appendChild(snd);
-      compose.style.display = 'none';
-      tw.insertBefore(bar, compose);
-      function cleanup() { try { URL.revokeObjectURL(url); } catch (e) {} bar.remove(); compose.style.display = 'flex'; }
-      del.addEventListener('click', cleanup);
-      snd.addEventListener('click', function () { var f = new File([blob], 'voice.webm', { type: type }); cleanup(); doSend(f); });
-    }
+
     action.addEventListener('click', () => {
-      if (recorder && recorder.state === 'recording') { stopRec(); return; }
       if (input.value.trim()) { doSend(null); return; }
-      startRec();
+      recordVoice();
     });
 
     // -- Emoji reactions: work on ANY message, incl. the other person's. --
@@ -2395,16 +2969,38 @@
     if (!appMain || !state.children.length) return;
     const chipStyle = (active) => `display:inline-flex;align-items:center;padding:7px 14px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ${active ? '#159FB4' : 'var(--ink-200)'};background:${active ? '#159FB4' : '#fff'};color:${active ? '#fff' : 'var(--ink-700)'};`;
 
-    const tw = Dom.el('div', { style: 'position:fixed;inset:0;z-index:9600;background:#fff;display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
-    const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;border-bottom:1px solid var(--ink-100);flex-shrink:0;' });
+    /* On a phone a full-screen takeover is exactly right. On a desktop it was the same
+       thing: the entire window went white, the app chrome vanished, a small message box
+       sat at the top-left of an empty field and "Send message" stretched the full width
+       of the monitor. A wide screen gets a proper centred dialog instead; the phone keeps
+       precisely what it had. (Anthony, 2026-09-08) */
+    const wide = window.innerWidth > 768;
+    const tw = Dom.el('div', { style: wide
+      ? 'position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,.45);display:flex;align-items:center;'
+        + 'justify-content:center;padding:24px;box-sizing:border-box;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);'
+      : 'position:fixed;inset:0;z-index:9600;background:#fff;display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
+    // The card on desktop; on a phone the overlay IS the card, so nothing changes there.
+    const panel = wide
+      ? Dom.el('div', { style: 'width:min(620px,100%);max-height:min(86vh,100%);background:#fff;border-radius:18px;'
+          + 'box-shadow:0 24px 60px -20px rgba(15,23,42,.5);display:flex;flex-direction:column;overflow:hidden;' })
+      : tw;
+    if (wide) {
+      tw.appendChild(panel);
+      // Clicking the dimmed area closes, the way every other dialog here behaves.
+      tw.addEventListener('click', (e) => {
+        if (e.target !== tw) return;
+        if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove();
+      });
+    }
+    const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 10px) 12px 12px;border-bottom:1px solid var(--ink-100);flex-shrink:0;' });
     const back = Dom.el('button', { style: 'background:none;border:none;font-size:26px;color:#159FB4;cursor:pointer;padding:0 6px;line-height:1;' }, '‹');
     back.addEventListener('click', () => { if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove(); });
     header.appendChild(back);
     header.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:var(--ink-900);' }, 'New message'));
-    tw.appendChild(header);
+    panel.appendChild(header);
 
     const bodyWrap = Dom.el('div', { style: 'flex:1;overflow-y:auto;padding:16px;' });
-    tw.appendChild(bodyWrap);
+    panel.appendChild(bodyWrap);
 
     let chosenChild = state.children.find(c => c.id === state.selectedChildId) || state.children[0];
     if (state.children.length > 1) {
@@ -2420,7 +3016,16 @@
     }
     bodyWrap.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-bottom:8px;line-height:1.4;' }, "This goes to your child's room team at the centre."));
 
-    const ta = Dom.el('textarea', { placeholder: 'Write your message…', style: 'width:100%;box-sizing:border-box;min-height:130px;border:1.5px solid var(--ink-200);border-radius:14px;padding:13px 15px;font-size:16px;font-family:inherit;resize:vertical;' });
+    // display:block — a textarea is inline-block by default, which is why the
+    // "Add a photo" button sat alongside it instead of underneath.
+    const ta = Dom.el('textarea', { placeholder: 'Write your message…', style: 'display:block;width:100%;box-sizing:border-box;min-height:130px;border:1.5px solid var(--ink-200);border-radius:14px;padding:13px 15px;font-size:16px;font-family:inherit;resize:vertical;' });
+    /* The global "tight and clean" control rule caps input/select/textarea heights with
+       !important, which squashed the message box to 43px. That height is right for a
+       form field and wrong for the box somebody writes a paragraph in. An inline
+       !important is the one thing that outranks a stylesheet !important. */
+    ta.rows = 5;
+    ta.style.setProperty('min-height', '150px', 'important');
+    ta.style.setProperty('height', 'auto', 'important');
     bodyWrap.appendChild(ta);
 
     let pickedFile = null;
@@ -2443,7 +3048,7 @@
     bodyWrap.appendChild(preview);
 
     const status = Dom.el('div', { style: 'font-size:13px;color:#B45309;padding:0 16px;min-height:16px;' });
-    tw.appendChild(status);
+    panel.appendChild(status);
     const send = Dom.el('button', { type: 'button', style: 'margin:8px 16px calc(env(safe-area-inset-bottom,0px) + 14px);border:0;cursor:pointer;padding:15px;border-radius:14px;font-size:16px;font-weight:800;color:#fff;background:#159FB4;flex-shrink:0;' }, 'Send message');
     send.addEventListener('click', async () => {
       if (!ta.value.trim() && !pickedFile) { status.textContent = 'Write a message or add a photo first.'; return; }
@@ -2458,7 +3063,7 @@
         status.textContent = 'Could not send: ' + (e.message || 'please try again.');
       }
     });
-    tw.appendChild(send);
+    panel.appendChild(send);
 
     appMain.appendChild(tw);
     if (window.KT && KT.pushOverlay) KT.pushOverlay(tw);
