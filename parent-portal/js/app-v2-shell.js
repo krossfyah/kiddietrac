@@ -179,7 +179,7 @@
           { hash: 'bus-routes',       label: 'Bus routes',       icon: '🚐' },
           { hash: 'room-rotations',   label: 'Room rotations',   icon: '🔄' },
           { hash: 'reports',          label: 'Reports',          icon: '📋' },
-          { hash: 'immun-schedule',   label: 'Immunization due', icon: '💉' },
+
           { hash: 'cacfp',            label: 'CACFP meals',      icon: '🍽' },
           { hash: 'report-cards',     label: 'Report cards',    icon: '📑' },
           { hash: 'zones',            label: 'Activity zones',  icon: '🎨' },
@@ -220,6 +220,7 @@
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
+          { hash: 'sms-settings',       label: 'SMS settings',        icon: '💬' },
           { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
           { hash: 'document-templates', label: 'Document templates', icon: '📄' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
@@ -363,6 +364,15 @@
           // 2026-08-30: the canned Reports screen, scoped server-side to this
           // educator's own rooms and their own clock-ins.
           { hash: 'reports',       label: 'Reports',       icon: '📊' },
+          /* Forms sent from the Forms Manager land here — the same fill-and-sign the
+             emailed link opens, and a form leaves the list the moment it is signed.
+             It was on the home tile grid and nowhere else, so on a desktop, where the
+             sidebar IS the navigation, there was no way to reach it. */
+          { hash: 'my-forms',      label: 'Forms to sign', icon: '✍️' },
+          /* Their own filed paperwork — every form they have signed, plus the
+             Terms/Privacy/NDA and anything an admin attached to their record.
+             Signed forms were only ever visible to admins before this. */
+          { hash: 'my-documents',  label: 'My documents', icon: '📄' },
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
@@ -379,6 +389,15 @@
           { hash: 'new-home-visit', label: 'New visit report', icon: '📝' },
           { hash: 'home-visits',    label: 'My reports',       icon: '📋' },
           { hash: 'my-tasks',       label: 'My tasks',         icon: '✅' },
+          /* Forms sent from the Forms Manager land here — the same fill-and-sign the
+             emailed link opens, and a form leaves the list the moment it is signed.
+             It was on the home tile grid and nowhere else, so on a desktop, where the
+             sidebar IS the navigation, there was no way to reach it. */
+          { hash: 'my-forms',       label: 'Forms to sign',    icon: '✍️' },
+          /* Their own filed paperwork — every form they have signed, plus the
+             Terms/Privacy/NDA and anything an admin attached to their record.
+             Signed forms were only ever visible to admins before this. */
+          { hash: 'my-documents',  label: 'My documents', icon: '📄' },
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
@@ -428,6 +447,11 @@
         { hash: 'photos',             label: 'Photos & video', icon: '📸' },
         { hash: 'messages',           label: 'Messenger',   icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
+        /* Forms sent from the Forms Manager land here — the same fill-and-sign the
+           emailed link opens, and a form leaves the list the moment it is signed.
+           It was on the home tile grid and nowhere else, so on a desktop, where the
+           sidebar IS the navigation, there was no way to reach it. */
+        { hash: 'my-forms',           label: 'Forms to sign', icon: '✍️' },
         { hash: 'checkin',            label: 'Check-in',   icon: '☀' },
         { hash: 'billing',            label: 'Billing',    icon: '💳' },
         { hash: 'attendance-pattern', label: 'Attendance', icon: '📅' },
@@ -616,6 +640,8 @@
     'medications': 'Medication authorised, given and outstanding.',
     'immunizations': 'Immunisation records and what is missing.',
     'immun-schedule': 'Children with an immunisation due.',
+    /* Read by parents as well as staff — "the roster" is not a thing a parent has. */
+    'immunizations': 'Where each child stands against the immunisation schedule, the records on file, and a place to send one in.',
     'allergy-alerts': 'Allergies and dietary requirements, by room.',
     'room-ratios': 'Live child-to-educator ratios against licensing.',
     'room-rotations': 'Which educator is in which room.',
@@ -649,7 +675,8 @@
     'invitation-codes': 'Codes that let a family or educator join.',
     'synced-waitlist': 'Waitlist leads and enquiries.',
     'edocuments': 'Documents on file, and what is still outstanding.',
-    'my-documents': 'Reports your centre has shared with you, kept for you to open any time.',
+    'my-documents': 'Forms you have signed and reports shared with you, kept for you to open any time.',
+    'my-forms': 'Forms waiting for your signature. Once you sign one it moves to Documents, where it is kept.',
     'signed-docs': 'Agreements that have been signed.',
     'doc-workflows': 'Who has to sign what, and in which order.',
     'compliance': 'Licensing obligations and the evidence for them.',
@@ -696,6 +723,7 @@
     'marketing-site': 'Your public website.',
     'sms': 'Send a one-off text to staff or families.',
     'email-settings': 'The mailbox your agency sends from.',
+    'sms-settings': 'The Twilio account your agency texts from.',
     'notifications': 'What the app tells people about, and how.',
     'tickets': 'Operational issues, tracked to resolution.',
     'social-settings': 'Google, Microsoft and Facebook sign-in.',
@@ -990,9 +1018,16 @@
       }
 
       // 2. The dialog shapes this portal actually uses, by name.
+      /* .kt-select-sheet is named here rather than left to the shape test below,
+         because that test skips anything under 0.05 opacity and the sheet fades in from
+         opacity:0. For those ~170ms a refresher saw no dialog at all and was free to
+         rebuild the screen underneath an open dropdown — which orphans the <select> the
+         sheet is holding, so the user's choice fires `change` from a detached element
+         and is silently lost. A class name has no timing hole. (Anthony, 2026-09-07) */
       if (document.querySelector(
         '.kt-modal, .kt-modal-overlay, .modal-backdrop, .kt-scrim, .kt-lightbox,'
-        + ' .kt-doc-viewer, .kt-av-zoom, [role="dialog"], [data-kt-open-menu], .kt-sheet-open'
+        + ' .kt-doc-viewer, .kt-av-zoom, [role="dialog"], [data-kt-open-menu], .kt-sheet-open,'
+        + ' .kt-select-sheet'
       )) return true;
       var mr = document.getElementById('modalRoot');
       if (mr && mr.firstElementChild) return true;
@@ -1038,6 +1073,33 @@
     if (el.hasAttribute && el.hasAttribute('data-back')) return true;
     if (el.classList && el.classList.contains('kt-back')) return true;
 
+    /* AN IN-PAGE CONTROL IS NEVER BROWSER-BACK, whatever it is called.
+
+       This listener captures and calls stopPropagation(), so anything it claims by
+       mistake loses its OWN click handler and navigates away from the screen instead.
+       The word test below claims every control whose label contains "back" — and a
+       screen has every right to say "Back to Active", "Back to edit", "Back to
+       incidents": those move between views WITHIN the screen and have nothing to do
+       with history.
+
+       Screens had been coping by never writing the word (see the note in
+       screen-account-ledgers.js, which renamed its pair "All accounts" / "One account"
+       purely to dodge this listener). That is a workaround, and it forces labels to be
+       chosen around a bug rather than for the reader. This is the actual fix: a control
+       marks itself data-kt-inpage and the shell leaves it alone.
+
+       Found via the archived chat list: "Back to inbox" was silently doing a history
+       back — it left Messenger for whatever screen you were on before, instead of
+       returning to the active conversations. (Anthony, 2026-09-09) */
+    if (el.hasAttribute && el.hasAttribute('data-kt-inpage')) return false;
+
+    /* A link with a real destination already says where it goes; honouring the href is
+       always at least as correct as guessing history. */
+    if (el.tagName === 'A') {
+      var href = el.getAttribute('href') || '';
+      if (href && href !== '#') return false;
+    }
+
     var s = (t || '').toLowerCase();
     // Paging and check-in/out are actions on the page, never navigation history.
     if (/\b(prev|previous|next|newer|older|forward)\b/.test(s)) return false;
@@ -1070,6 +1132,86 @@
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
     location.reload();
   };
+  /* THE FOOT OF THE SIDEBAR — one container, one order.
+
+     Three files mount a control under the user's name (the role preview here, the
+     agency switcher, and the impersonation launcher), at three different moments:
+     boot, after an async agencies fetch, and DOMContentLoaded. Three independent
+     insertBefore calls against the same anchor produce an order that depends on
+     network timing, and it was how one of them ended up above the name.
+
+     Each control claims a numbered slot and the container keeps its children sorted,
+     so the result is identical whatever sequence they arrive in:
+        10 agency selector · 20 view as (role) · 30 view as… (person)
+
+     Defined here because this file loads before the other two. */
+  /* Match the menu's own left and right insets.
+
+     A nav link runs 16..209 inside a 231px column — NOT symmetric, because #navLinks
+     reserves a scrollbar gutter on the right. That is why picking a single padding value
+     by hand kept looking wrong on one side. Measured from a real link instead, so the
+     foot sits in the same column as the fifty items above it, and stays there if the nav
+     is restyled. */
+  function alignSidebarFoot(foot) {
+    var link = document.querySelector('#navLinks .nav-link');
+    var sb = document.getElementById('appSidebar');
+    if (!link || !sb) { return; }
+    var l = link.getBoundingClientRect();
+    var s = sb.getBoundingClientRect();
+    var left = Math.round(l.left - s.left);
+    var right = Math.round(s.right - l.right);
+    // Sanity: a hidden or collapsed nav measures nonsense; keep the fallback padding.
+    if (!(l.width > 40) || left < 0 || right < 0 || left > 60 || right > 60) { return; }
+    foot.style.paddingLeft = left + 'px';
+    foot.style.paddingRight = right + 'px';
+  }
+
+  window.KT = window.KT || {};
+  window.KT.sidebarFoot = function (slot, el) {
+    var sb = document.getElementById('appSidebar');
+    var nu = document.getElementById('navUser');
+    if (!sb || !nu || nu.parentNode !== sb) { return null; }
+
+    var foot = document.getElementById('kt-sidebar-foot');
+    if (!foot) {
+      foot = document.createElement('div');
+      foot.id = 'kt-sidebar-foot';
+      /* The container owns the spacing. Its three controls come from three files that
+         had never been neighbours and each brought its own margins, giving three
+         widths and three left edges — close enough to read as a mistake.
+
+         width:100% is load-bearing, not belt-and-braces: without it the foot is sized
+         by its CONTENT and measured 234px inside a 232px sidebar, hanging off both
+         edges and taking the controls with it. */
+      foot.style.cssText = 'flex-shrink:0;display:flex;flex-direction:column;gap:8px;'
+        + 'width:100%;box-sizing:border-box;align-self:stretch;padding:0 10px 10px;';
+      nu.insertAdjacentElement('afterend', foot);
+    }
+    if (!el) { return foot; }
+
+    el.setAttribute('data-foot-slot', String(slot));
+    // Insert before the first child with a HIGHER slot; otherwise append.
+    var kids = [].slice.call(foot.children);
+    var before = null;
+    for (var i = 0; i < kids.length; i++) {
+      if (Number(kids[i].getAttribute('data-foot-slot') || 0) > Number(slot)) { before = kids[i]; break; }
+    }
+    /* Normalised on the way in, so a control keeps whatever look it likes but not its
+       own idea of how wide it should be. A fourth one added later lines up for free. */
+    el.style.margin = '0';
+    el.style.width = '100%';
+    el.style.boxSizing = 'border-box';
+
+    if (before) { foot.insertBefore(el, before); } else { foot.appendChild(el); }
+
+    /* Now, and again next frame: the foot can be built before #navLinks has rendered
+       its items, and there is nothing to measure until it has. */
+    alignSidebarFoot(foot);
+    requestAnimationFrame(function () { alignSidebarFoot(foot); });
+
+    return foot;
+  };
+
   function _injectViewAs(user) {
     if (!user || !Array.isArray(user.roles) || user.roles.indexOf('platform_admin') === -1) return;
     var cur = ''; try { cur = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
@@ -1077,14 +1219,32 @@
     var roles = [['', 'Super admin (default)'], ['agency_admin', '\uD83C\uDFE2 Agency admin'], ['centre_director', '\uD83C\uDFEB Centre director'], ['educator', '\uD83C\uDF93 Educator'], ['guardian', '\uD83D\uDC6A Parent / guardian'], ['home_visitor', '\uD83C\uDFE1 Home visitor'], ['sales_rep', '\uD83D\uDCBC Sales rep'], ['auditor', '\uD83D\uDD0D Auditor']];
     var wrap = document.createElement('div'); wrap.id = 'kt-view-as';
     // Embedded in the sidebar (not a floating overlay) so it never blocks content.
-    wrap.style.cssText = 'margin:10px 8px 8px;background:' + (cur ? '#7C3AED' : '#0f2233') + ';color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;display:flex;align-items:center;gap:8px;font-family:inherit;flex-wrap:wrap;';
+    /* Quiet when it is doing nothing, LOUD when it is. Sitting in the sidebar foot
+       between the agency switcher and the person picker, a permanent dark slab read as
+       an alert for a control that is idle 99% of the time. Idle now matches its two
+       neighbours; the purple stays for when a role IS being previewed, which is exactly
+       when it should be impossible to miss. */
+    wrap.style.cssText = 'margin:0 10px 8px;border-radius:8px;padding:4px 10px;font-size:12px;'
+      + 'display:flex;align-items:center;gap:8px;font-family:inherit;flex-wrap:nowrap;min-height:40px;'
+      + (cur
+          ? 'background:#7C3AED;color:#fff;border:1px solid #7C3AED;'
+          : 'background:rgba(31,96,128,0.06);color:#1F6080;border:1px solid rgba(31,96,128,0.18);');
     var lab = document.createElement('span'); lab.textContent = cur ? '\uD83D\uDC41 Viewing as' : '\uD83D\uDC41 View as'; lab.style.cssText = 'font-weight:700;white-space:nowrap';
-    var sel = document.createElement('select'); sel.style.cssText = 'border-radius:7px;padding:4px 8px;font-size:12px;font-family:inherit;cursor:pointer;flex:1;min-width:118px;max-width:100%;';
+    var sel = document.createElement('select');
+    /* The select keeps the portal's standard size: kt-polish-v22.css sets its padding
+       and font with !important on every select, so anything set here is overruled —
+       an earlier attempt to shrink it to 21px applied inline and changed nothing.
+       min-width:0 IS load-bearing: without it the select will not shrink and the row
+       wraps onto two lines in a narrow sidebar. */
+    sel.style.cssText = 'border-radius:7px;font-family:inherit;cursor:pointer;'
+      + 'flex:1;min-width:0;max-width:100%;';
     roles.forEach(function (r) { var o = document.createElement('option'); o.value = r[0]; o.textContent = r[1]; if (r[0] === cur) o.selected = true; sel.appendChild(o); });
     sel.addEventListener('change', function () { window.ktViewAs(sel.value); });
     wrap.appendChild(lab); wrap.appendChild(sel);
     var _sb = document.getElementById('appSidebar');
-    if (_sb) { var _nu = document.getElementById('navUser'); if (_nu && _nu.parentNode === _sb) _sb.insertBefore(wrap, _nu); else _sb.appendChild(wrap); }
+    // Slot 20: below the name and the agency selector, above the person picker.
+    if (_sb && window.KT && KT.sidebarFoot && KT.sidebarFoot(20, wrap)) { /* placed */ }
+    else if (_sb) { _sb.appendChild(wrap); }
     else { wrap.style.position = 'fixed'; wrap.style.left = '14px'; wrap.style.bottom = '14px'; wrap.style.zIndex = '9000'; document.body.appendChild(wrap); }
   }
 
@@ -1103,6 +1263,49 @@
      moment the reader touches the scroll themselves — putting somebody back where they
      were is help, moving them while they are scrolling is a fight they always lose.
      (Anthony, 2026-08-26) */
+  /* A BACKGROUND REFRESH SHOULD NOT BE VISIBLE.
+     renderScreen() clears #appMain and then awaits the screen's async render, so for a
+     few hundred milliseconds the page is empty and the content visibly disappears and
+     comes back. Scroll and height are already pinned; the flash is what is left.
+
+     Rendering into a detached node and swapping it in would remove the gap, but screens
+     reach for document.getElementById on their own markup while rendering, and a
+     detached screen silently fails that way — that is the stuck-skeleton bug.
+
+     So the screen still renders exactly where it always did, and an inert CLONE is laid
+     over the top for the duration. The reader keeps seeing the old screen until the new
+     one is ready, then it is uncovered in one frame. The clone is pointer-events:none, so
+     it is purely something to look at — clicks go to the real DOM underneath. */
+  function __ktSnapshot(main) {
+    try {
+      __ktDropSnapshot();
+      var r = main.getBoundingClientRect();
+      if (!r || r.width < 2 || r.height < 2) { return null; }
+      var snap = main.cloneNode(true);
+      snap.id = 'kt-refresh-snap';
+      snap.removeAttribute('data-kt-pretty');
+      snap.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;'
+        + 'width:' + r.width + 'px;height:' + r.height + 'px;overflow:hidden;'
+        + 'pointer-events:none;z-index:300;background:' + (getComputedStyle(main).backgroundColor || '#fff') + ';';
+      document.body.appendChild(snap);
+      // Mobile scrolls #appMain itself, so an unscrolled clone would show the top of the
+      // page while the reader is halfway down it.
+      try { snap.scrollTop = main.scrollTop; } catch (e) {}
+      /* A render that throws must never leave the page frozen behind a picture of
+         itself. This fires regardless of what the render does. */
+      window.__ktSnapKill = setTimeout(__ktDropSnapshot, 4000);
+      return snap;
+    } catch (e) { return null; }
+  }
+
+  function __ktDropSnapshot() {
+    try { if (window.__ktSnapKill) { clearTimeout(window.__ktSnapKill); window.__ktSnapKill = null; } } catch (e) {}
+    try {
+      var old = document.getElementById('kt-refresh-snap');
+      if (old && old.parentNode) { old.parentNode.removeChild(old); }
+    } catch (e) {}
+  }
+
   function __ktSettleScroll(y, releaseEl) {
     var tries = 0, aborted = false;
     var lastSet = -1;                      // the position WE last asked for
@@ -1181,13 +1384,67 @@
         if (_h > 0) { main.style.minHeight = _h + 'px'; }
       } catch (e) {}
     }
+    /* Only for a background refresh of the screen you are already on. Navigation SHOULD
+        look like something happened, and a save wants its own feedback. The flag is set by
+        kt-auto-refresh / kt-live and consumed here so it cannot leak into the next render. */
+    var _ktSilent = false;
+    try {
+      _ktSilent = !!window.__ktSilentRefresh && _ktSameScreen;
+      window.__ktSilentRefresh = false;
+    } catch (e) {}
+    if (_ktSilent && main) { __ktSnapshot(main); }
+
     Dom.clear(main);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
+
+    /* THIS RENDER'S GENERATION. Every deferred banner pass carries the number it was
+       scheduled under and stands down if the screen has moved on since.
+
+       Without it, the eight deferred passes below (7 timers out to 7.5s, plus a
+       MutationObserver) keep running after you navigate — and because they close over
+       the OLD screen's title and icon while #appMain is shared by every screen, they
+       insert the previous section's banner into the page you are now on. They also run
+       normaliseBanners() over content they know nothing about, which is the flashing
+       and the banner moving as you change filters. */
+    var __ktGen = (window.__ktRenderGen = (window.__ktRenderGen || 0) + 1);
 
 
 
     const user = Auth.user();
     const role = Roles.primaryRoleOf(user);
+
+    /* NO ROLE MEANS NO ROLE — it does not mean "parent".
+
+       primaryRoleOf() returns null when an account holds no active role assignment,
+       and everything downstream then fell through to the guardian default: buildNav()
+       ends with the family menu, and the home screen calls /parent/children. The
+       account is not a guardian, so the API answered exactly what it should —
+       "Forbidden. Required role: guardian" — and that is the message the person got,
+       naming a role they had never asked for and could not act on.
+
+       It happened on 2026-09-10 to an educator account whose role assignment had been
+       withdrawn (deliberately, as a mis-filing) five days earlier: the sign-in itself
+       succeeded, so from her side the app simply accused her of not being a parent.
+
+       Say the true thing instead. This is a state an administrator has to resolve, so
+       the screen names it and stops, rather than routing on a guess. Platform admins
+       are exempt: they legitimately hold no tenant role and are routed through the
+       agency_admin shell above. (2026-09-10) */
+    const _isPlatformAdmin = !!(user && Array.isArray(user.roles)
+      && user.roles.indexOf('platform_admin') !== -1);
+    if (!role && !_isPlatformAdmin) {
+      Dom.clear(main);
+      main.appendChild(emptyState(
+        '🔒',
+        'This account has no access yet',
+        'Your sign-in worked, but this account holds no active role, so there is nothing '
+        + 'here for it to open. Ask your administrator to assign a role — or sign in with '
+        + 'the account you normally use.'
+      ));
+      __ktDropSnapshot();
+      return;
+    }
+
     const hash = (window.location.hash || ('#' + homeHashForRole(role))).replace('#', '').split('?')[0];
     _trackNav(hash);
 
@@ -1225,11 +1482,28 @@
 
     if (!fn) {
       main.appendChild(emptyState('🤔', 'Screen not available', 'No screen registered for this role + page.'));
+      // Early return: uncover, or the reader stares at a picture of the old screen until
+      // the safety timeout fires.
+      __ktDropSnapshot();
       return;
     }
 
     try {
       await fn(main, { user, role, params: parseParams() });
+      /* Uncover on the next frame: the render has returned, so the new content is in the
+         DOM, and one frame lets the browser paint it before the picture of the old screen
+         is taken away. Removing it synchronously here shows a blank flash again. */
+      if (_ktSilent) {
+        /* A frame OR 250ms, whichever comes first. requestAnimationFrame does not fire in
+           a backgrounded tab, so on its own it left the snapshot in place until the
+           safety timeout — and somebody switching back to the tab in that window would
+           find the screen frozen behind a picture of itself. The frame is what makes the
+           swap seamless when the tab is visible; the timer is what guarantees it ends. */
+        var _dropped = false;
+        var _drop = function () { if (_dropped) { return; } _dropped = true; __ktDropSnapshot(); };
+        try { requestAnimationFrame(function () { requestAnimationFrame(_drop); }); } catch (e) {}
+        setTimeout(_drop, 250);
+      }
       // Land every freshly-rendered screen at the very top. Doing it AFTER render
       // (not just on hashchange, before the async content exists) is what stops the
       // "shows the bottom, then scrolls to the top" flash on tall screens like Home.
@@ -1278,6 +1552,8 @@
           return !!main.querySelector('.kt-hero, [data-kt-no-autohero]');
         };
         var __ensure = function () {
+          // Belongs to a screen that is no longer on display — do nothing at all.
+          if (__ktGen !== window.__ktRenderGen) { return; }
           // The budget is GLOBAL per screen visit, not per render pass. A screen that
           // re-renders itself (support tickets does) calls renderScreen again, which
           // would reset a per-pass counter to zero — so a screen that re-adds the banner
@@ -1294,7 +1570,17 @@
         // later — after the old 4s window had closed, which left them with no banner
         // at all. The 15-run budget is what keeps this cheap.
         [120, 400, 900, 1800, 3200, 5200, 7500].forEach(function (ms) { setTimeout(__ensure, ms); });
-        if (window.MutationObserver) { var __obs = new MutationObserver(__ensure); window.__ktBannerObs = __obs; __obs.observe(main, { childList: true }); setTimeout(function () { __obs.disconnect(); }, 9000); }
+        if (window.MutationObserver) {
+          var __obs = new MutationObserver(function () {
+            // Stop watching the moment this screen is replaced, rather than waiting out
+            // the 9s timeout while another screen's content churns underneath us.
+            if (__ktGen !== window.__ktRenderGen) { try { __obs.disconnect(); } catch (e) {} return; }
+            __ensure();
+          });
+          window.__ktBannerObs = __obs;
+          __obs.observe(main, { childList: true });
+          setTimeout(function () { try { __obs.disconnect(); } catch (e) {} }, 9000);
+        }
       } catch (e) {}
     } catch (e) {
       console.error('Screen render error:', e);
@@ -1586,7 +1872,8 @@
     }
     // `user.name?.` guards a missing NAME, not a null USER — which is the case that
     // actually occurs here.
-    if (navName)   navName.textContent   = ((user && user.name) || '').split(' ').slice(0, 2).join(' ') || 'You';
+    // First name only — "just leave my display pic/avatar and first name" (2026-09-06).
+    if (navName)   navName.textContent   = ((user && user.name) || '').split(' ')[0] || 'You';
     if (navRole && role) {
       // Distinguish a platform_admin (primaryRoleOf resolves them to agency_admin)
       // from a genuine agency admin — a real agency admin was mislabelled "Platform
@@ -1605,6 +1892,16 @@
             auditor:         'Auditor',
           }[role] || role);
       navRole.textContent = roleLabel;
+      /* Hidden ONLY on the desktop admin sidebar — "on the side bar where it shows my
+         name at the bottom ... just leave my display pic/avatar and first name".
+
+         For a guardian, educator, home visitor or sales rep this same user block IS
+         their top bar (kt-parent-chrome moves it there), and the role belongs on it.
+         Hiding it for everyone took it off those bars too. Still computed either way;
+         the role map is worth keeping. */
+      var _pcRole = /role-(guardian|educator|home-visitor|sales-rep)/.test(document.body.className || '');
+      var _wide = !window.matchMedia || window.matchMedia('(min-width: 769px)').matches;
+      navRole.style.display = (_wide && !_pcRole) ? 'none' : '';
     }
 
     Dom.$('#navUser')?.addEventListener('click', () => {

@@ -179,7 +179,32 @@ final class AuthController extends Controller
             ]
         );
 
-        $this->audit($request, $user->id, 'login', 'user', $user->id);
+        /* WHAT THE LOGIN ROW HAS TO SAY.
+
+           Every one of the 64 login rows on file had a NULL payload: user_id, an IP and
+           a User-Agent, and nothing else. When an educator could not get in on
+           2026-09-10 the row was there all along — and invisible, because searching the
+           audit log for her name, her email or the username she typed matched nothing.
+           With five accounts on two addresses, "user 139" is not an answer to "who
+           signed in".
+
+           `roles` is the diagnostic that matters. An account with none is the state
+           that produces "Forbidden. Required role: guardian" a second later, and this
+           is where that becomes readable instead of inferable. */
+        $activeRoles = DB::table('role_assignments')->where('user_id', $user->id)
+            ->where('active', 1)->pluck('role')->unique()->values()->all();
+
+        $this->audit($request, $user->id, 'login', 'user', $user->id, [
+            'identifier' => $login,
+            'account' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+            'username' => $user->username,
+            'email' => $user->email,
+            'device' => (string) ($data['device_platform'] ?? 'unknown'),
+            'device_name' => (string) ($data['device_name'] ?? ''),
+            'roles' => $activeRoles,
+            // Names the fault outright rather than leaving it to be worked out.
+            'no_active_role' => $activeRoles === [],
+        ]);
 
         return response()->json([
             'token' => $tokenObj->plainTextToken,
@@ -362,11 +387,16 @@ final class AuthController extends Controller
             $resetUrl = $portalUrl.'/reset-password.html?token='.$token.'&email='.urlencode($data['email']);
 
             try {
-                Mail::to($data['email'])->send(new PasswordResetEmail(
+                /* A password reset belongs to the PERSON, not to a tenant. Somebody
+                   locked out of one agency must not be kept out because a different
+                   agency they also have an account in has its mail switched off. */
+                Mail::to($data['email'])->send((new PasswordResetEmail(
                     recipientName: $user->first_name ?? 'there',
                     resetUrl: $resetUrl,
                     expiresInMinutes: (string) self::RESET_TOKEN_TTL_MINUTES,
-                ));
+                ))->withSymfonyMessage(function ($msg) {
+                    \App\Support\MailScope::platform($msg);
+                }));
                 $this->audit($request, $user->id, 'password_reset_requested', 'user', $user->id);
             } catch (Throwable $e) {
                 Log::error('Password reset email failed', ['error' => $e->getMessage(), 'email' => $data['email']]);
@@ -874,6 +904,9 @@ final class AuthController extends Controller
                     if ($bd !== '') $body = ($hd !== '' ? $hd . "\n\n" : '') . $bd;
                     if ($cl !== '') $ctaLabel = $cl;
                 }
+                /* Queued: the request context is gone by the time this sends, so the
+                   agency has to be resolved NOW and carried on the message itself. */
+                $noticeAgencyId = \App\Support\MailScope::agencyOfUser((int) $user->id);
                 \Illuminate\Support\Facades\Mail::to($user->email, $name ?: null)->queue(
                     (new \App\Mail\AccountNotice(
                         recipientName: $name ?: 'there',
@@ -881,6 +914,7 @@ final class AuthController extends Controller
                         bodyText:      $body,
                         ctaLabel:      $ctaLabel,
                         ctaUrl:        $portal,
+                        agencyId:      $noticeAgencyId,
                     ))->onQueue('mail')
                 );
             } catch (\Throwable $e) {
@@ -913,7 +947,7 @@ final class AuthController extends Controller
         };
     }
 
-    private function audit(Request $request, ?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, ?string $details = null): void
+    private function audit(Request $request, ?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, string|array|null $details = null): void
     {
         try {
             \App\Support\Audit::write([
