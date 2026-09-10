@@ -162,9 +162,16 @@
 
        · /auth/me/documents  — their own record. EVERY role has one, so this screen is
          no longer parent-only: an educator's signed policies land here too.
-       · /parent/documents   — reports the centre shared about their children. Guardians
-         only, and it 403s for everybody else, which is why a failure here is not an
-         error: it is the ordinary answer for a person with no children on file.
+       · /parent/documents   — reports the centre shared about their children. It sits
+         behind role:guardian, so ASKED BY ANYBODY ELSE IT IS A 403 — and since failing
+         GETs are audited, every educator opening this screen wrote a "403 forbidden"
+         line into the agency's audit log. Twenty-three of them in a day, from people
+         doing nothing wrong, in the log an administrator reads to spot people doing
+         something wrong.
+
+         So it is no longer ASKED unless the account has a guardian role. Catching the
+         refusal was never the problem; making a request whose answer is already known
+         was. Same conclusion the top-bar activity feed reached after 761 of these.
 
        Both are allowed to fail independently. One source being down should not blank a
        screen that the other could have filled. */
@@ -179,13 +186,26 @@
       return;
     }
 
+    /* Does this ACCOUNT have children here — not "is it acting as a parent right now".
+       A member of staff whose own child attends should still see that child's shared
+       reports on her own documents screen; she just should not be asked to prove it
+       with a refused request. */
+    var isGuardian = false;
+    try {
+      var ku = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      isGuardian = (Array.isArray(ku.roles) && ku.roles.indexOf('guardian') !== -1)
+        || ku.primary_role === 'guardian';
+    } catch (e) { isGuardian = false; }
+
     var results = await Promise.all([
       A.get('/auth/me/documents').then(function (r) {
         mineOk = true; return (r && r.documents) || [];
       }).catch(function () { return []; }),
-      A.get('/parent/documents').then(function (r) {
-        sharedOk = true; return (r && r.documents) || [];
-      }).catch(function () { return []; }),
+      isGuardian
+        ? A.get('/parent/documents').then(function (r) {
+            sharedOk = true; return (r && r.documents) || [];
+          }).catch(function () { return []; })
+        : Promise.resolve([]),
     ]);
     mine = results[0]; shared = results[1];
 
