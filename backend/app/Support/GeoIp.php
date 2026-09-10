@@ -22,8 +22,27 @@ final class GeoIp
 {
     private const TTL = 604800;   // 7 days
 
-    /** "Toronto, Canada 🇨🇦" — or the IP itself if we can't place it. */
-    public static function locate(?string $ip): string
+    /**
+     * "Toronto, Canada 🇨🇦" — or the IP itself if we can't place it.
+     *
+     * $cacheOnly is how a PAGE should ask. warm() resolves a whole screenful in one
+     * request before the rows are drawn, but it is an optimisation, not a guarantee: if
+     * that batch call fails or times out it caches nothing, and the render then fell
+     * through to a blocking 3-second HTTP call PER ROW with nothing to cap it. Fifty
+     * rows, three seconds each. That is the 10.3-second audit log recorded on
+     * 2026-09-10, and the 10.7-second one this class's own docblock already describes —
+     * the batch was added for it, and this is the hole the batch left open.
+     *
+     * With $cacheOnly the render can only ever read what warm() already put there, so
+     * the worst case for a page is warm()'s single 5s timeout instead of 50 × 3s. An
+     * unresolved address shows as the raw IP, which is what it showed before any of this
+     * existed and is a perfectly good answer.
+     *
+     * The rate limit makes this more than theoretical: ip-api's free tier allows 45
+     * requests a minute, so a busy moment is exactly when the batch fails AND when the
+     * per-row fallback is most expensive.
+     */
+    public static function locate(?string $ip, bool $cacheOnly = false): string
     {
         $ip = trim((string) $ip);
         if ($ip === '') {
@@ -38,6 +57,17 @@ final class GeoIp
 
         if (self::isPrivate($ip)) {
             return 'Internal network';
+        }
+
+        /* Rendering a page: read what warm() left, and never reach for the network.
+           A miss returns the raw IP rather than blocking the response. */
+        if ($cacheOnly) {
+            $cached = Cache::get('geoip:' . $ip);
+
+            return ($cached && ! empty($cached['country']))
+                ? trim(($cached['city'] ? $cached['city'] . ', ' . $cached['country'] : $cached['country'])
+                    . ' ' . self::flag($cached['code'] ?? ''))
+                : $ip;
         }
 
         $hit = Cache::remember('geoip:' . $ip, self::TTL, function () use ($ip) {

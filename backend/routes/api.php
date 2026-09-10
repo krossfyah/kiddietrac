@@ -629,6 +629,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         /* How far this person has read — the bell, the what's-new dot, the sales-chat
            badge. Their own read position and nobody else's, so there is no route that
            takes a user id. See UiMarkerController. */
+        /* WHERE THIS PERSON'S PAY GOES. Their own only — there is no route here
+           that takes a user id. Write-only: nothing returns an account number, only
+           a hint like "•••• 4821" so they can confirm the right account is on file. */
+        Route::get('/me/payout-method', [\App\Http\Controllers\Api\StaffPayoutMethodController::class, 'mine']);
+        Route::put('/me/payout-method', [\App\Http\Controllers\Api\StaffPayoutMethodController::class, 'update']);
         Route::get('/me/markers', [\App\Http\Controllers\Api\UiMarkerController::class, 'index']);
         Route::put('/me/markers', [\App\Http\Controllers\Api\UiMarkerController::class, 'update']);
 
@@ -757,6 +762,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Own shifts only, and child records only for children the caller can
         // already access (canAccessChildScoped). The director/admin schedule +
         // payroll routes stay centre-wide and stay director-gated.
+        /* PAYOUT METHODS, for issuing payroll. Director-gated like every other
+           payroll READ on this group; manual payroll WRITING stays agency_admin-only
+           further down, unchanged — running a site is not the same as moving money.
+
+           index() returns hints only, which is enough to answer "can this run go
+           out". reveal() is the single door to the real numbers, and audits every
+           use. */
+        Route::get   ('/admin/payroll/payout-methods',               [\App\Http\Controllers\Api\StaffPayoutMethodController::class, 'index'])->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::get   ('/admin/payroll/payout-methods/{user}/reveal', [\App\Http\Controllers\Api\StaffPayoutMethodController::class, 'reveal'])->where('user', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+
         Route::get   ('/provider/shifts/me',        [\App\Http\Controllers\Api\EducatorSelfController::class, 'myShifts']);
         Route::get   ('/provider/children',          [\App\Http\Controllers\Api\EducatorSelfController::class, 'children']);
         // ── Forms Manager: upload PDF → assign to roles → e-sign → track sign-offs ──

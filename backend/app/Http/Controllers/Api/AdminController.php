@@ -1272,7 +1272,9 @@ final class AdminController extends Controller
             $r->entity_name  = $this->describeAuditEntity($r->entity_type, $r->entity_id ? (int) $r->entity_id : null, $r->payload);
             $r->summary      = $this->summarizeAuditPayload($r->payload, $auditTz);
             // An IP address tells an auditor nothing. Where it came from does.
-            $r->location     = \App\Support\GeoIp::locate($r->ip_address);
+            // cache-only: warm() above resolved the whole page in one call. If that
+            // failed, show the IP rather than making a blocking lookup per row.
+            $r->location     = \App\Support\GeoIp::locate($r->ip_address, true);
             $r->payload      = $this->trimAuditPayloadBlobs($r->payload);
             return $r;
         });
