@@ -53,7 +53,66 @@ class SeedDemoDaily extends Command
         foreach ($centreIds as $cid) {
             if ($this->seedCentre((int) $cid) !== self::SUCCESS) $rc = self::FAILURE;
         }
+
+        $this->seedHomeVisitorRooms($agencyId, $centreIds->all());
+
         return $rc;
+    }
+
+    /**
+     * A home visitor gets ONE ROOM IN EVERY CENTRE — the cross-centre shape.
+     *
+     * Not an arbitrary choice. Lloydene's nine assignments sit in nine different
+     * centres, because in a home childcare agency each provider's home IS a centre with
+     * one room. That shape is what broke bootstrap() on 2026-09-06 — it intersected her
+     * assignments with a single resolved centre and showed her one provider out of nine.
+     * A home visitor fixture confined to one centre would not have caught it, so the
+     * demo agency reproduces the shape that actually fails.
+     *
+     * Home-visitor roles are agency-attached (centre_id NULL), which is why this runs
+     * once for the agency rather than inside the per-centre loop.
+     */
+    private function seedHomeVisitorRooms(int $agencyId, array $centreIds): void
+    {
+        $visitors = DB::table('role_assignments as ra')
+            ->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.role', 'home_visitor')->where('ra.active', true)
+            ->where('u.status', 'active')
+            ->where(function ($w) use ($agencyId, $centreIds) {
+                $w->where('ra.agency_id', $agencyId)->orWhereIn('ra.centre_id', $centreIds);
+            })
+            ->distinct()->pluck('ra.user_id');
+
+        if ($visitors->isEmpty() || ! $centreIds) {
+            return;
+        }
+
+        $this->section('home visitor rooms', function () use ($visitors, $centreIds) {
+            $n = 0;
+            foreach ($visitors as $uid) {
+                foreach ($centreIds as $cid) {
+                    // Already has a room in this centre? Leave it exactly as it is.
+                    $hasHere = DB::table('educator_rooms as er')
+                        ->join('rooms as r', 'r.id', '=', 'er.room_id')
+                        ->where('er.user_id', $uid)->where('r.centre_id', $cid)->exists();
+                    if ($hasHere) {
+                        continue;
+                    }
+                    $roomId = DB::table('rooms')->where('centre_id', $cid)
+                        ->where('active', true)->orderBy('id')->value('id');
+                    if (! $roomId) {
+                        continue;
+                    }
+                    DB::table('educator_rooms')->insert([
+                        'user_id' => $uid,
+                        'room_id' => (int) $roomId,
+                        'created_at' => now(),
+                    ]);
+                    $n++;
+                }
+            }
+            return $n;
+        });
     }
 
     private function seedCentre(int $centreId): int
@@ -82,7 +141,8 @@ class SeedDemoDaily extends Command
         $children = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->where('f.centre_id', $centreId)
-            ->select('ch.id', 'ch.first_name', 'ch.family_id')->get()->values();
+            // photo_url so the avatar pass can tell a generated picture from a real one.
+            ->select('ch.id', 'ch.first_name', 'ch.family_id', 'ch.photo_url')->get()->values();
         $rooms = DB::table('rooms')->where('centre_id', $centreId)->orderBy('id')->pluck('id')->values();
         if ($children->isEmpty() || $rooms->isEmpty()) {
             $this->error('No demo children / rooms for this centre — run the base demo seeder first.');
@@ -92,16 +152,76 @@ class SeedDemoDaily extends Command
 
         $this->info("Seeding demo data for centre {$centreId} ({$centre->name}) — {$children->count()} children, {$staff->count()} staff.");
 
+        /* ── 0) ROOM ASSIGNMENTS ────────────────────────────────────────────────
+           Without these the demo agency cannot exercise anything room-scoped:
+           assignedRoomIds() returns null for a person with no assignments, so an
+           educator is "unrestricted" and a scoping test proves nothing. Test Agency
+           had 12 educators and zero assignments, which is why the room-scoped paths
+           had to be verified against a live agency.
+
+           Round-robin, one room each, and only ever INSERTS — an assignment somebody
+           made by hand is never removed by the nightly cron. */
+        $this->section('room assignments', function () use ($staff, $rooms, $centreId) {
+            $n = 0;
+            $educators = $staff->where('role', 'educator')->values();
+            foreach ($educators as $i => $e) {
+                $roomId = (int) $rooms[$i % $rooms->count()];
+                $exists = DB::table('educator_rooms')
+                    ->where('user_id', $e->id)->where('room_id', $roomId)->exists();
+                if ($exists) {
+                    continue;
+                }
+                // Only if they hold NO room in this centre yet, so a hand-made
+                // assignment elsewhere in the centre is left alone.
+                $hasHere = DB::table('educator_rooms as er')
+                    ->join('rooms as r', 'r.id', '=', 'er.room_id')
+                    ->where('er.user_id', $e->id)->where('r.centre_id', $centreId)->exists();
+                if ($hasHere) {
+                    continue;
+                }
+                DB::table('educator_rooms')->insert([
+                    'user_id' => $e->id,
+                    'room_id' => $roomId,
+                    'created_at' => now(),
+                ]);
+                $n++;
+            }
+            // section() casts this to int and prints it as the count.
+            return $n;
+        });
+
         // ── 1) Avatars (users = real photos, children = kid-friendly illustrated) ──
         $this->section('avatars', function () use ($agencyId, $children) {
             $n = 0;
             $userIds = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', true)->pluck('user_id')->unique();
             foreach (DB::table('users')->whereIn('id', $userIds)->get() as $u) {
+                /* Only ever REPLACE a demo photo, never a real one.
+
+                   This used to overwrite photo_url for every account holding a role in
+                   the demo agency, unconditionally, every night at 05:00. That is fine
+                   for the generated staff, and quietly destructive for anyone real who
+                   also holds a role here — which is how the platform admin's uploaded
+                   photo became a pravatar face on 2026-09-10, the morning after a test
+                   family gave him a guardian role in this agency.
+
+                   The seeder's job is to fill in demo data, not to take a picture away
+                   from someone who chose one. An empty slot or a photo this command
+                   itself generated is ours; anything else belongs to a person. */
+                $current = trim((string) ($u->photo_url ?? ''));
+                $isOurs = $current === '' || preg_match('~(pravatar\.cc|api\.dicebear\.com)~i', $current);
+                if (! $isOurs) {
+                    continue;
+                }
                 $seed = rawurlencode((string) ($u->email ?: $u->id));
                 DB::table('users')->where('id', $u->id)->update(['photo_url' => "https://i.pravatar.cc/240?u={$seed}"]);
                 $n++;
             }
             foreach ($children as $c) {
+                // Same rule as the staff above: a real photo is never replaced.
+                $cur = trim((string) ($c->photo_url ?? ''));
+                if ($cur !== '' && ! preg_match('~(pravatar\.cc|api\.dicebear\.com)~i', $cur)) {
+                    continue;
+                }
                 $seed = rawurlencode(($c->first_name ?: 'kid') . $c->id);
                 DB::table('children')->where('id', $c->id)->update([
                     'photo_url' => "https://api.dicebear.com/9.x/adventurer/svg?seed={$seed}&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf,d1f4d9",
@@ -146,7 +266,8 @@ class SeedDemoDaily extends Command
                 DB::table('time_punches')
                     ->where('user_id', $s->id)->where('centre_id', $centreId)
                     ->whereNull('punched_out_at')
-                    ->whereDate('punched_in_at', '<', $today->toDateString())
+                    // "Punched in before today began" — the start of the agency day.
+                    ->where('punched_in_at', '<', \App\Support\AgencyTime::dayRangeForCentre($centreId)[0])
                     ->update(['punched_out_at' => DB::raw("DATE_ADD(DATE(punched_in_at), INTERVAL 17.5 HOUR)")]);
 
                 // time_punches — the table the clock actually writes. Seeding the
@@ -171,11 +292,13 @@ class SeedDemoDaily extends Command
         });
 
         // ── 2) Attendance (check in + out) — one pair per child per day ──
-        $this->section('attendance', function () use ($children, $roomFor, $recorder, $today, $seedAt) {
+        $this->section('attendance', function () use ($children, $roomFor, $recorder, $today, $seedAt, $centreId) {
             $n = 0;
             foreach ($children as $i => $c) {
                 $already = DB::table('check_events')->where('child_id', $c->id)
-                    ->where('event_type', 'check_in')->whereDate('occurred_at', $today->toDateString())->exists();
+                    ->where('event_type', 'check_in')
+                    ->where('occurred_at', '>=', \App\Support\AgencyTime::dayRangeForCentre($centreId)[0])
+                    ->where('occurred_at', '<', \App\Support\AgencyTime::dayRangeForCentre($centreId)[1])->exists();
                 if ($already) continue;
                 // Demo realism: leave ~30% of children NOT checked in, so the
                 // agency-overview "who's in / who's out" view shows both sides.
@@ -199,7 +322,7 @@ class SeedDemoDaily extends Command
         });
 
         // ── 3) Daily log events (meal / nap / mood / activity) ──
-        $this->section('daily events', function () use ($children, $roomFor, $educators, $today, $seedAt) {
+        $this->section('daily events', function () use ($children, $roomFor, $educators, $today, $seedAt, $centreId) {
             $n = 0;
             $plan = [
                 ['activity', 9, 30, '[Demo] Circle time — songs and calendar'],
@@ -210,7 +333,9 @@ class SeedDemoDaily extends Command
                 ['mood', 15, 30, '[Demo] Cheerful during free play'],
             ];
             foreach ($children as $i => $c) {
-                if (DB::table('daily_events')->where('child_id', $c->id)->whereDate('occurred_at', $today->toDateString())->exists()) continue;
+                if (DB::table('daily_events')->where('child_id', $c->id)
+                    ->where('occurred_at', '>=', \App\Support\AgencyTime::dayRangeForCentre($centreId)[0])
+                    ->where('occurred_at', '<', \App\Support\AgencyTime::dayRangeForCentre($centreId)[1])->exists()) continue;
                 $ed = $educators[$i % max(1, $educators->count())];
                 foreach ($plan as $p) {
                     DB::table('daily_events')->insert([
@@ -259,7 +384,7 @@ class SeedDemoDaily extends Command
             $idx = $today->day % $children->count();
             $c = $children[$idx];
             DB::table('incidents')->insert([
-                'child_id' => $c->id, 'room_id' => $roomFor($idx), 'incident_type' => 'injury', 'severity' => 'minor',
+                'child_id' => $c->id, 'room_id' => $roomFor($idx), 'incident_type' => 'injury', 'severity' => 'low',
                 'occurred_at' => $seedAt(10, 45), 'location' => 'Outdoor play area',
                 'description' => $marker . ' — small bump on the knee after a trip on the grass.',
                 'action_taken' => 'Cleaned, cold compress applied, comforted. No further concern.',

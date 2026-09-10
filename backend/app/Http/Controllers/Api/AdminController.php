@@ -291,6 +291,10 @@ final class AdminController extends Controller
                 ->distinct()
                 ->count('user_id');
 
+            /* Resolved ONCE per centre. Inlined into the builder it ran a centres
+               lookup per bound, and per-row fan-out is what saturates this host at 9am. */
+            [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForCentre((int) $c->id);
+
             return [
                 'id' => $c->id,
                 'name' => $c->name,
@@ -307,7 +311,9 @@ final class AdminController extends Controller
                     ->join('rooms as r', 'r.id', '=', 'ce1.room_id')
                     ->where('r.centre_id', $c->id)
                     ->where('ce1.event_type', 'check_in')
-                    ->whereDate('ce1.occurred_at', now()->toDateString())
+                    // Agency day as instants — a UTC date emptied this tile every evening.
+                    ->where('ce1.occurred_at', '>=', $dayFrom)
+                    ->where('ce1.occurred_at', '<', $dayTo)
                     ->whereNotExists(function ($q) {
                         $q->select(\Illuminate\Support\Facades\DB::raw(1))
                           ->from('check_events as ce2')
@@ -1521,8 +1527,10 @@ final class AdminController extends Controller
 
            null means "we could not find out", which is not the same as false. */
         try {
+            [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRange($agencyId);
             $present = DB::table('check_events as ci')
-                ->whereDate('ci.occurred_at', now())
+                // Agency day as instants, not a UTC date — see AgencyTime::dayRange.
+                ->where('ci.occurred_at', '>=', $dayFrom)->where('ci.occurred_at', '<', $dayTo)
                 ->where('ci.event_type', 'check_in')
                 ->whereNotExists(fn ($qq) => $qq->select(DB::raw(1))
                     ->from('check_events as co')
@@ -1957,6 +1965,8 @@ final class AdminController extends Controller
             // Never strip roles from the protected super-admin account.
             if (!$this->isProtectedEmail($data['email'] ?? null)) {
                 DB::table('role_assignments')->where('user_id', $userId)->delete();
+                // Their role is being replaced; anything signed in is holding the old one.
+                \App\Support\RoleChange::endSessions($userId);
             }
         } else {
             $userId = DB::table('users')->insertGetId([
@@ -2540,22 +2550,39 @@ final class AdminController extends Controller
                 }
             }
         }
+        /* BUG (fixed 2026-09-10): ONE welcome email now goes to BOTH parents, so its
+           email_logs row records a comma-joined recipient list —
+           "jessica@…, andrew@…". That broke this twice over: an exact
+           `LOWER(to_email) IN (…)` never matched such a row so it was not even
+           fetched, and the map was then keyed by the whole joined string, which no
+           guardian lookup could ever hit. Both parents therefore came back
+           'never_sent' and the family showed "No welcome sent" minutes after a
+           successful send — the delivery was fine, the reading of it was not.
+
+           The subject filter already narrows this to ~100 rows, so they are fetched
+           and split here rather than matched in SQL: a LIKE per guardian address
+           would be both slower and still wrong for a three-guardian family. */
         $welcomeSent = [];
         if ($guardianEmails) {
             foreach (DB::table('email_logs')
-                ->whereIn(DB::raw('LOWER(to_email)'), array_keys($guardianEmails))
                 ->where(function ($q) {
                     $q->where('subject', 'like', 'Welcome to%')
                       ->orWhere('subject', 'like', '%meet your child%');
                 })
                 ->orderBy('id')
                 ->get(['to_email', 'status', 'created_at']) as $row) {
-                // Last word wins: a later successful send supersedes an earlier
-                // suppression, which is exactly what a resend is for.
-                $welcomeSent[strtolower($row->to_email)] = [
-                    'status' => $row->status,
-                    'at' => $row->created_at,
-                ];
+                foreach (explode(',', (string) $row->to_email) as $addr) {
+                    $addr = strtolower(trim($addr));
+                    if ($addr === '' || ! isset($guardianEmails[$addr])) {
+                        continue;
+                    }
+                    // Last word wins: a later successful send supersedes an earlier
+                    // suppression, which is exactly what a resend is for.
+                    $welcomeSent[$addr] = [
+                        'status' => $row->status,
+                        'at' => $row->created_at,
+                    ];
+                }
             }
         }
 
@@ -2823,6 +2850,75 @@ final class AdminController extends Controller
      *      several rooms on the admin's behalf would be a guess, and a child in the wrong
      *      room is worse than a child the system openly says still needs placing.
      */
+    /**
+     * GET /admin/centres/{centre}/rooms
+     *
+     * The rooms of ONE centre, each with the educators who hold it and how many
+     * children are already enrolled. The family wizard needs this: it lets the admin
+     * pick the centre, so it cannot use /director/rooms (which only ever answers for
+     * the caller's own resolved centre).
+     *
+     * Scoped to the ACTIVE AGENCY and failing closed — a centre id from another
+     * tenant returns 403, never that tenant's room names.
+     */
+    public function centreRooms(Request $request, int $centre): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) {
+            return response()->json(['message' => 'No agency context'], 403);
+        }
+
+        $owns = \Illuminate\Support\Facades\DB::table('centres')
+            ->where('id', $centre)->where('agency_id', $agencyId)->exists();
+        if (! $owns) {
+            return response()->json(['message' => 'Unknown centre for this agency'], 403);
+        }
+
+        $rooms = \Illuminate\Support\Facades\DB::table('rooms')
+            ->where('centre_id', $centre)
+            ->orderBy('age_min_months')
+            ->get(['id', 'name', 'age_group', 'age_min_months', 'age_max_months', 'capacity']);
+
+        $roomIds = $rooms->pluck('id')->all();
+        if (! $roomIds) {
+            return response()->json(['rooms' => []]);
+        }
+
+        $educators = \Illuminate\Support\Facades\DB::table('educator_rooms as er')
+            ->join('users as u', 'u.id', '=', 'er.user_id')
+            ->whereIn('er.room_id', $roomIds)
+            ->get(['er.room_id', 'u.id', 'u.first_name', 'u.last_name', 'u.preferred_name'])
+            ->groupBy('room_id');
+
+        /* Headcount from enrollments, which is what the rosters and ratios read.
+           Counting children.primary_room_id instead would report a room as fuller
+           than every roster shows it. Open enrolments only. */
+        $counts = \Illuminate\Support\Facades\DB::table('enrollments')
+            ->whereIn('room_id', $roomIds)
+            ->where(function ($q) {
+                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+            })
+            ->groupBy('room_id')
+            ->pluck(\Illuminate\Support\Facades\DB::raw('COUNT(*)'), 'room_id');
+
+        return response()->json([
+            'rooms' => $rooms->map(function ($r) use ($educators, $counts) {
+                $eds = $educators[$r->id] ?? collect();
+
+                return [
+                    'id'         => (int) $r->id,
+                    'name'       => $r->name,
+                    'age_group'  => $r->age_group,
+                    'age_min_months' => (int) $r->age_min_months,
+                    'age_max_months' => (int) $r->age_max_months,
+                    'capacity'   => (int) $r->capacity,
+                    'enrolled'   => (int) ($counts[$r->id] ?? 0),
+                    'educators'  => $eds->map(fn ($e) => trim(($e->preferred_name ?: $e->first_name) . ' ' . $e->last_name))->values()->all(),
+                ];
+            })->values(),
+        ]);
+    }
+
     private function resolveRoomForNewChild($centreRooms, $explicitRoomId): ?int
     {
         if ($explicitRoomId) {
@@ -2856,6 +2952,12 @@ final class AdminController extends Controller
             'preferred_lang' => ['nullable', 'string', 'max:10'],
             'billing_split' => ['nullable', 'in:single,split_50_50,custom'],
             'notes' => ['nullable', 'string'],
+            /* Whether to email the family at all. The wizard now ASKS on its last step
+               rather than deciding for the person filling it in: a family entered from a
+               paper form weeks before they start should not be emailed a password today.
+               Defaults TRUE so every other caller — and the old single-step form — keeps
+               behaving exactly as before. (Anthony, 2026-09-09) */
+            'send_welcome' => ['sometimes', 'boolean'],
             // v22p36: optional nested guardians + children for the multi-step wizard.
             // Omitting them keeps the legacy single-step behaviour (family only).
             'guardians' => ['nullable', 'array'],
@@ -2882,6 +2984,15 @@ final class AdminController extends Controller
                see the note on the child record's own fields. */
             'children.*.expected_dropoff_time' => ['nullable', 'date_format:H:i'],
             'children.*.expected_pickup_time' => ['nullable', 'date_format:H:i'],
+            /* WHICH DAYS THE CHILD ACTUALLY ATTENDS.
+
+               Was hardcoded Mon-Fri below, so a three-day child was counted in every
+               roster, ratio and headcount for five and only a later visit to the
+               care-schedule editor could correct it -- which nobody makes for a record
+               that already looks right. The wizard now asks. Omitted keeps the old
+               Mon-Fri, so every other caller behaves exactly as before. */
+            'children.*.schedule' => ['nullable', 'array'],
+            'children.*.schedule.*' => ['string', 'in:mon,tue,wed,thu,fri,sat,sun'],
             // v22p… onboarding wizard — rich child + emergency-contact data.
             'children.*.allergies' => ['nullable', 'string', 'max:1000'],
             'children.*.dietary_restrictions' => ['nullable', 'string', 'max:1000'],
@@ -2982,7 +3093,23 @@ final class AdminController extends Controller
         try {
             $unplaced = [];
             $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId, $centreRooms, &$newGuardians, &$unplaced) {
-                $famId = DB::table('families')->insertGetId(array_merge($data, [
+                /* BUG (fixed 2026-09-09): this merged the WHOLE validated payload into the
+                   insert, so every validated key had to also be a `families` column. It
+                   stopped being true the moment `send_welcome` was added to the rules —
+                   a flag about what to do AFTER creating the family, not a field of it —
+                   and from then on the New-family wizard could not create anything at
+                   all: "Unknown column 'send_welcome' in 'INSERT INTO'", on every
+                   attempt. Nothing else posts that flag, which is why the sync and
+                   onboarding paths kept working and this went unnoticed.
+
+                   Keeping only real columns makes the whole class of bug impossible:
+                   the next flag added to the rules is ignored here instead of breaking
+                   the endpoint. $data itself is left alone — $sendWelcome is read from
+                   it further down. */
+                $famColumns = \Illuminate\Support\Facades\Schema::getColumnListing('families');
+                $famRow = array_intersect_key($data, array_flip($famColumns));
+
+                $famId = DB::table('families')->insertGetId(array_merge($famRow, [
                     'preferred_lang' => $data['preferred_lang'] ?? 'en-CA',
                     'billing_split' => $data['billing_split'] ?? 'single',
                     'created_at' => now(),
@@ -2992,17 +3119,60 @@ final class AdminController extends Controller
                 $guardianIds = [];
                 foreach (array_values($guardians) as $i => $g) {
                     $email = strtolower(trim($g['email']));
-                    // Reuse an existing (non-deleted) user with this email so we
-                    // never duplicate accounts or clobber an existing login.
-                    $existing = DB::table('users')->whereRaw('LOWER(email) = ?', [$email])->whereNull('deleted_at')->first();
+                    /* Reuse an existing (non-deleted) account with this email — but only
+                       one that ALREADY BELONGS TO THIS AGENCY, and never by rewriting who
+                       they are.
+
+                       BUG (found 2026-09-10): this matched on email alone and then wrote
+                       the wizard's guardian name and phone onto whatever account held that
+                       address. An email is not an identity here — the portal deliberately
+                       allows several accounts per address ("multiple accounts per email"),
+                       and one address can legitimately exist in two different agencies.
+                       So a New-family submitted in agency A, naming a guardian whose email
+                       happens to belong to an account in agency B, renamed that account.
+                       That is exactly what happened to the platform admin: creating a test
+                       family whose guardian used his address turned "Anthony Hosein" into
+                       "Test Guardian" portal-wide, and attached him to that agency, which
+                       then pulled him into the demo seeder's avatar sweep and replaced his
+                       photo too. One wizard submit, and the super admin's identity was
+                       gone from every screen in the product.
+
+                       Two rules now, both needed:
+                       - SCOPE: only an account already active in THIS agency is reused. An
+                         account belonging elsewhere is not ours to touch, so a NEW account
+                         is created for this household instead (the shared-address case the
+                         platform already supports).
+                       - NEVER RENAME: an existing account's name and phone are left exactly
+                         as they are. The wizard is describing a new household, not
+                         correcting the record of someone who already has a login. Filling
+                         in a BLANK field is safe and still helpful; overwriting a set one
+                         never is. */
+                    $existing = DB::table('users as u')
+                        ->whereRaw('LOWER(u.email) = ?', [$email])
+                        ->whereNull('u.deleted_at')
+                        ->where(function ($q) use ($agencyId) {
+                            $q->whereExists(fn ($s) => $s->select(DB::raw(1))->from('role_assignments as ra')
+                                ->whereColumn('ra.user_id', 'u.id')->where('ra.active', 1)
+                                ->where('ra.agency_id', $agencyId))
+                              ->orWhereExists(fn ($s) => $s->select(DB::raw(1))->from('guardians as g')
+                                ->join('families as f', 'f.id', '=', 'g.family_id')
+                                ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                                ->whereColumn('g.user_id', 'u.id')->whereNull('f.deleted_at')
+                                ->where('c.agency_id', $agencyId));
+                        })
+                        ->first();
                     if ($existing) {
                         $uid = (int) $existing->id;
-                        DB::table('users')->where('id', $uid)->update(array_filter([
-                            'first_name' => $g['first_name'] ?? null,
-                            'last_name' => $g['last_name'] ?? null,
-                            'phone' => $g['phone'] ?? null,
-                            'updated_at' => now(),
-                        ], fn ($v) => $v !== null));
+                        // Blanks only. A value that is already set is never overwritten.
+                        $fill = [];
+                        foreach (['first_name', 'last_name', 'phone'] as $col) {
+                            if (trim((string) ($existing->$col ?? '')) === '' && trim((string) ($g[$col] ?? '')) !== '') {
+                                $fill[$col] = $g[$col];
+                            }
+                        }
+                        if ($fill) {
+                            DB::table('users')->where('id', $uid)->update($fill + ['updated_at' => now()]);
+                        }
                     } else {
                         $temp = Str::random(12);
                         $uid = (int) DB::table('users')->insertGetId([
@@ -3079,11 +3249,35 @@ final class AdminController extends Controller
                     /* The enrolment row is the OTHER half of being in a room.
                        A waitlisted child correctly has neither — they have not started. */
                     if ($roomId && $status === 'enrolled') {
+                        /* The days as chosen, in WEEK ORDER and de-duplicated -- the value
+                           is read back by CareSchedule and shown to people, and a client
+                           is free to post ["fri","mon","mon"].
+
+                           An absent or EMPTY list falls back to Mon-Fri rather than being
+                           written as []. That is not politeness: CareSchedule treats an
+                           empty schedule as "every day" (so the rows that predate this
+                           feature still render), which means storing [] would say the
+                           exact opposite of "attends no days". The wizard blocks empty at
+                           the last step; this is the belt for every other caller. */
+                        $days = array_values(array_intersect(
+                            \App\Support\CareSchedule::DAYS,
+                            array_map('strval', (array) ($c['schedule'] ?? []))
+                        ));
+                        if (! $days) {
+                            $days = ['mon', 'tue', 'wed', 'thu', 'fri'];
+                        }
+
                         DB::table('enrollments')->insert([
                             'child_id' => $cid,
                             'room_id' => $roomId,
-                            'start_date' => now()->toDateString(),
-                            'schedule' => json_encode(['mon', 'tue', 'wed', 'thu', 'fri']),
+                            /* The CENTRE'S day, not the server's. app.timezone is UTC,
+                               so after ~8pm Toronto now()->toDateString() returns
+                               tomorrow — and a roster filtering start_date <= today
+                               then skips the child for their whole first day, with
+                               nothing anywhere to say why. Verified: a child added at
+                               23:56 Toronto was given a start_date of the 10th. */
+                            'start_date' => \App\Support\AgencyTime::todayForCentre((int) $data['centre_id']),
+                            'schedule' => json_encode($days),
                             'monthly_fee' => 0.00,
                             'cwelcc_eligible' => 1,
                             'created_at' => now(),
@@ -3138,8 +3332,11 @@ final class AdminController extends Controller
         // Invite each NEW guardian by email — login + a nudge to complete their
         // family profile (onboarding). Uses AccountNotice (carries X-KT-Invite so
         // it reaches a not-yet-onboarded user); agency suppression still applies.
+        /* Absent means yes — see the note on the validation rule above. */
+        $sendWelcome = ! array_key_exists('send_welcome', $data) || (bool) $data['send_welcome'];
+
         $invited = 0;
-        foreach ($newGuardians as $g) {
+        foreach (($sendWelcome ? $newGuardians : []) as $g) {
             $ok = $this->sendAccountEmail(
                 $g['email'],
                 $g['first_name'] ?: 'there',
@@ -3160,7 +3357,11 @@ final class AdminController extends Controller
         // agency suppression applies (so a suppressed agency stays quiet until
         // it goes live). Sent to ALL guardians on the family, new or existing.
         try {
-            $allGuardianEmails = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+            /* Held back by the same choice as the invite above: "do not welcome them yet"
+               has to mean BOTH emails, or the family gets a warm introduction to a login
+               they were never sent. An empty recipient list rather than an early return,
+               so the audit/logging below behaves identically either way. */
+            $allGuardianEmails = ! $sendWelcome ? [] : DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
                 ->where('g.family_id', $result['family_id'])->whereNotNull('u.email')
                 ->get(['u.email', 'u.first_name'])
                 ->map(fn ($r) => ['email' => $r->email, 'first_name' => $r->first_name])->all();
@@ -3177,6 +3378,9 @@ final class AdminController extends Controller
             'guardians' => count($result['guardian_ids']),
             'children' => count($result['child_ids']),
             'invited' => $invited,
+            // So the confirmation can say "no email sent" instead of "0 invites sent",
+            // which reads like a failure rather than the choice it was.
+            'welcome_suppressed' => ! $sendWelcome,
             /* The caller needs to know if anybody landed nowhere, so it can say so rather
                than report a clean success over a child no educator can see. */
             'unplaced' => $unplaced,
@@ -4760,6 +4964,11 @@ final class AdminController extends Controller
             DB::table('role_assignments')->where('user_id', $userId)->update([
                 'active' => false,
             ]);
+            /* End their sessions. The API refuses the old role from the next request
+               either way, but the browser keeps the roles it cached at sign-in, so
+               without this a deactivated admin goes on being shown a staff menu whose
+               every call 403s. */
+            \App\Support\RoleChange::endSessions($userId);
             /* Take them off their rooms (2026-08-25). Deactivating used to leave
                educator_rooms untouched, and SIX readers pluck educators by room without
                checking the person is still active — WithdrawalController, SmsController,
@@ -5088,7 +5297,8 @@ final class AdminController extends Controller
                 "Welcome to Kiddietrac!\n\n" .
                 "Your account is ready at https://app.kiddietrac.com\n\n" .
                 "Temporary password: {$tempPassword}\n\n" .
-                "Sign in with it, then change it under your profile."
+                "Sign in with it, then change it under your profile.",
+                $agencyId
             );
         } else {
             /* A reset link rather than a temp password: it proves they own the
@@ -5116,12 +5326,15 @@ final class AdminController extends Controller
                 ]);
 
                 \Illuminate\Support\Facades\Mail::to($user->email)->send(
-                    new \App\Mail\PasswordResetEmail(
+                    (new \App\Mail\PasswordResetEmail(
                         recipientName: $user->first_name ?: 'there',
                         resetUrl: 'https://app.kiddietrac.com/reset-password.html?token=' . $token
                             . '&email=' . urlencode($user->email),
                         expiresInMinutes: (string) $ttl,
-                    )
+                    ))->withSymfonyMessage(function ($msg) {
+                        // Account recovery belongs to the person, not to a tenant.
+                        \App\Support\MailScope::platform($msg);
+                    })
                 );
                 $emailed = true;
             } catch (\Throwable $e) {
@@ -5324,6 +5537,59 @@ final class AdminController extends Controller
     }
 
     /** POST /admin/families/{family}/provider-welcome — manually (re)send the provider welcome. */
+    /**
+     * A guardian who has never claimed their account.
+     *
+     * The same test resendWelcome uses, deliberately: 'invited' / 'not_invited' means
+     * nobody has ever signed in with this account, so issuing a temporary password
+     * takes nothing away. Any other status has a password that works, and replacing it
+     * is how an admin trying to help locks somebody out
+     * (see the note on resendWelcome).
+     */
+    private const UNCLAIMED_STATUSES = ['invited', 'not_invited'];
+
+    /** GET /admin/families/{family}/welcome-preflight — who would get what. */
+    public function welcomePreflight(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        $family = DB::table('families')->where('id', $familyId)->whereNull('deleted_at')->first();
+        if (! $family) {
+            return response()->json(['message' => 'Family not found'], 404);
+        }
+        $centre = DB::table('centres')->where('id', $family->centre_id)->first();
+        if (! $centre || ($agencyId && (int) $centre->agency_id !== (int) $agencyId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $rows = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $familyId)->whereNotNull('u.email')->where('u.email', '!=', '')
+            ->whereNull('u.deleted_at')
+            ->get(['u.id', 'u.email', 'u.first_name', 'u.last_name', 'u.status', 'u.last_login_at', 'u.onboarded_at']);
+
+        return response()->json([
+            'family_id'   => $familyId,
+            'family_name' => $family->family_name,
+            'centre_name' => $centre->name,
+            'guardians'   => $rows->map(function ($r) {
+                $unclaimed = in_array((string) $r->status, self::UNCLAIMED_STATUSES, true);
+
+                return [
+                    'id'    => (int) $r->id,
+                    'name'  => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: $r->email,
+                    'email' => $r->email,
+                    'status' => $r->status,
+                    'signed_in'    => ! empty($r->last_login_at),
+                    'onboarded'    => ! empty($r->onboarded_at),
+                    // Only these get sign-in details; the rest already have a password.
+                    'needs_activation' => $unclaimed,
+                    'why' => $unclaimed
+                        ? 'Has never signed in — would be sent a temporary password.'
+                        : 'Already has a working password; sign-in details would not be resent.',
+                ];
+            })->values(),
+        ]);
+    }
+
     public function resendProviderWelcome(Request $request, int $familyId): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
@@ -5335,18 +5601,93 @@ final class AdminController extends Controller
         if (! $centre || ($agencyId && (int) $centre->agency_id !== (int) $agencyId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
-        $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
-            ->where('g.family_id', $familyId)->whereNotNull('u.email')
-            ->get(['u.email', 'u.first_name'])
-            ->map(fn ($r) => ['email' => $r->email, 'first_name' => $r->first_name])->all();
-        if (empty($guardians)) {
+        $rows = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $familyId)->whereNotNull('u.email')->where('u.email', '!=', '')
+            ->whereNull('u.deleted_at')
+            ->get(['u.id', 'u.email', 'u.first_name', 'u.last_name', 'u.status']);
+        if ($rows->isEmpty()) {
             return response()->json(['message' => 'No guardian email addresses on this family.'], 422);
         }
+        $guardians = $rows->map(fn ($r) => ['email' => $r->email, 'first_name' => $r->first_name])->all();
+
         $childNames = DB::table('children')->where('family_id', $familyId)->whereNull('deleted_at')->pluck('first_name')->all();
         $this->sendProviderWelcomeToFamily((int) $family->centre_id, (int) $centre->agency_id, $guardians, $childNames);
-        $this->audit($request->user()->id, 'family.provider_welcome_resent', 'family', $familyId, ['guardians' => count($guardians)]);
 
-        return response()->json(['message' => 'Provider welcome email sent.', 'recipients' => count($guardians)]);
+        /* THE SECOND EMAIL, ON PURPOSE.
+
+           The provider welcome introduces the provider; it does not let anyone in.
+           Guardians were being welcomed, then reminded four times to "finish setting
+           up", without ever having been sent a password — four real iLearn parents
+           were in exactly that state. Opt-in rather than automatic, and never for an
+           account that already has a working password. */
+        $activated = [];
+        $skipped = [];
+        if ($request->boolean('send_activation')) {
+            foreach ($rows as $r) {
+                if (! in_array((string) $r->status, self::UNCLAIMED_STATUSES, true)) {
+                    $skipped[] = $r->email;
+                    continue;
+                }
+                if ($this->issueActivation((int) $r->id, $r->email, trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')), $agencyId)) {
+                    $activated[] = $r->email;
+                }
+            }
+        }
+
+        $this->audit($request->user()->id, 'family.provider_welcome_resent', 'family', $familyId, [
+            'guardians'  => count($guardians),
+            'activation_sent_to' => $activated,
+            'activation_skipped' => $skipped,
+        ]);
+
+        $msg = 'Provider welcome email sent.';
+        if ($activated) {
+            $msg .= ' Sign-in details sent to ' . count($activated) . ' guardian'
+                . (count($activated) === 1 ? '' : 's') . '.';
+        }
+
+        return response()->json([
+            'message'    => $msg,
+            'recipients' => count($guardians),
+            'activation_sent' => count($activated),
+            'activation_skipped' => count($skipped),
+        ]);
+    }
+
+    /**
+     * Give one never-claimed guardian a temporary password and email it.
+     *
+     * Mirrors resendWelcome's unclaimed branch — the caller has ALREADY checked the
+     * status, and this checks again rather than trusting it, because the cost of
+     * getting it wrong is overwriting a working password.
+     */
+    private function issueActivation(int $userId, string $email, string $name, ?int $agencyId): bool
+    {
+        $user = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
+        if (! $user || ! in_array((string) $user->status, self::UNCLAIMED_STATUSES, true)) {
+            return false;
+        }
+
+        $temp = Str::random(12);
+        DB::transaction(function () use ($userId, $temp) {
+            DB::table('users')->where('id', $userId)->update([
+                'password'   => Hash::make($temp),
+                'status'     => 'invited',
+                'updated_at' => now(),
+            ]);
+            DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
+        });
+
+        return $this->sendAccountEmail(
+            $email,
+            $name,
+            'Welcome to Kiddietrac',
+            "Welcome to Kiddietrac!\n\n" .
+            "Your account is ready at https://app.kiddietrac.com\n\n" .
+            "Temporary password: {$temp}\n\n" .
+            "Sign in with it, then change it under your profile.",
+            $agencyId
+        );
     }
 
     /** GET /admin/email-template/provider-welcome — the agency's editable blocks. */
@@ -5623,7 +5964,7 @@ final class AdminController extends Controller
 
         foreach ($recipients as $uid) {
             if ((int) $uid === $byUserId) continue;   // don't notify the person who did it
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id'    => (int) $uid,
                 'type'       => 'user_invited',
                 'title'      => $title,
@@ -5810,15 +6151,19 @@ final class AdminController extends Controller
      * v22p3.3: was Mail::raw() — now uses the branded HTML layout with
      * logo, primary colour, and footer (privacy + terms + contact).
      */
-    private function sendAccountEmail(string $to, string $name, string $subject, string $body): bool
+    private function sendAccountEmail(string $to, string $name, string $subject, string $body, ?int $agencyId = null): bool
     {
         try {
+            /* QUEUED, so the request context is gone by the time this sends — the
+               sending agency travels on the mailable itself, as a scalar. A
+               withSymfonyMessage() closure cannot be serialized onto a queue. */
             $mailable = new \App\Mail\AccountNotice(
                 recipientName: $name ?: 'there',
                 subjectLine:   $subject,
                 bodyText:      $body,
                 ctaLabel:      'Sign in to Kiddietrac',
                 ctaUrl:        config('app.url', 'https://app.kiddietrac.com'),
+                agencyId:      $agencyId,
             );
             $mailable->onQueue('mail');
             Mail::to($to, $name ?: null)->queue($mailable); // background — returns immediately
