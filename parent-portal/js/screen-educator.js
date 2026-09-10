@@ -66,6 +66,27 @@
         centreLabel = bootstrapCache.centre?.name || 'My classroom';
       }
 
+      /* LABEL BY PROVIDER WHENEVER THE LIST ACTUALLY SPANS CENTRES.
+
+         roomLabel() only prefixes the centre in providerMode, and providerMode was set
+         solely by isAgencyScope() — an admin looking at the whole agency. An educator
+         holding rooms in several centres was therefore given a selector of rooms named
+         only by room. In a home childcare agency every provider's home is its own
+         centre with one room, and they are all called "Main Room": nine identical
+         entries and no way to tell which provider you were about to open.
+
+         Decide it from the DATA rather than from who is asking, so any list that
+         crosses centres explains itself. A single-centre educator is untouched — one
+         centre_id, so this never fires. */
+      if (!providerMode) {
+        var _centreIds = {};
+        (rooms || []).forEach(function (r) { if (r && r.centre_id != null) _centreIds[r.centre_id] = 1; });
+        if (Object.keys(_centreIds).length > 1) {
+          providerMode = true;
+          centreLabel = 'My providers';
+        }
+      }
+
       if (rooms.length === 0) {
         shell.appendChild(emptyState('🏫', 'No rooms assigned',
           'Speak to your director — no rooms are set up at this centre yet.'));
@@ -471,8 +492,30 @@
       const grid = Dom.el('div', { class: 'educator-roster', 'data-kt-list': '1', 'data-kt-no-kebab': '1' });
 
       if (!data.roster || data.roster.length === 0) {
-        grid.appendChild(emptyState('👶', 'No children enrolled',
-          'Children enrolled in this room will appear here.'));
+        /* WHICH KIND of empty. A room with nine children in it Monday to Friday is not
+           "no children enrolled" on a Saturday — it is closed today, and telling an
+           educator otherwise reads as the app having lost their room. The server sends
+           `enrolled_total` (ignoring the day filter) and the day's name so the two can
+           be told apart.
+
+           The day name is NEVER computed here: new Date().getDay() names the device's
+           day, not the agency's, and after 8pm they are not even the same date. If the
+           API did not say, the wording stays vague rather than becoming wrong. */
+        var dayName = data.day && data.day.label;
+        var enrolledElsewhere = Number(data.enrolled_total) > 0;
+
+        if (enrolledElsewhere && dayName) {
+          grid.appendChild(emptyState('🗓️', 'No children scheduled for ' + dayName,
+            data.enrolled_total + ' child' + (data.enrolled_total === 1 ? '' : 'ren')
+            + ' enrolled in this room, none booked in today.'));
+        } else if (enrolledElsewhere) {
+          grid.appendChild(emptyState('🗓️', 'No children scheduled today',
+            data.enrolled_total + ' child' + (data.enrolled_total === 1 ? '' : 'ren')
+            + ' enrolled in this room, none booked in today.'));
+        } else {
+          grid.appendChild(emptyState('👶', 'No children enrolled',
+            'Children enrolled in this room will appear here.'));
+        }
         container.appendChild(grid);
         return;
       }
