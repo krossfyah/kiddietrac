@@ -168,14 +168,27 @@ final class TenantIsolationCheck extends Command
                 ->map(fn ($c) => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')))
         );
 
-        // Only names distinctive enough to mean something, and not shared with the
-        // other agency — a person really can appear in two agencies.
+        /* A CANARY MUST NAME EXACTLY ONE AGENCY, or it accuses the innocent.
+
+           The first version excluded only names found in the other agency's children
+           and centres, and the first real run produced fourteen findings of which every
+           single one was false. "Ali Family" exists in BOTH agencies, so an admin seeing
+           their OWN Ali Family was reported as a leak ten times over. A check that cries
+           wolf gets muted, and the one true finding is muted with it.
+
+           So the exclusion list is everything named ANYWHERE outside this agency —
+           families and users included, which is what was missed — and a name surviving
+           it is unique platform-wide. */
         $otherCentreIds = DB::table('centres')->where('agency_id', '!=', $agencyId)->pluck('id');
-        $elsewhere = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
-            ->whereIn('f.centre_id', $otherCentreIds)
-            ->get(['ch.first_name', 'ch.last_name'])
-            ->map(fn ($c) => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')))
+        $elsewhere = collect()
+            ->merge(DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->whereIn('f.centre_id', $otherCentreIds)
+                ->get(['ch.first_name', 'ch.last_name'])
+                ->map(fn ($c) => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? ''))))
+            ->merge(DB::table('families')->whereIn('centre_id', $otherCentreIds)->pluck('family_name'))
             ->merge(DB::table('centres')->whereIn('id', $otherCentreIds)->pluck('name'))
+            ->merge(DB::table('users')->get(['first_name', 'last_name'])
+                ->map(fn ($u) => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))))
             ->map(fn ($n) => mb_strtolower(trim((string) $n)))
             ->filter()->unique()->all();
 
@@ -186,20 +199,63 @@ final class TenantIsolationCheck extends Command
             ->unique()->values()->all();
     }
 
-    /** @return string[] the foreign names actually present in the body */
+    /**
+     * Foreign names present in the STRUCTURED part of a JSON response.
+     *
+     * Two things are deliberately not evidence, because both produced false findings on
+     * the first run:
+     *
+     *   · a response that is not JSON. `invoices/preview-sample` renders a specimen
+     *     invoice for a fictional "Liam Thompson", and a demo child of that name exists.
+     *     A document, not a record, and nobody's data.
+     *   · free text. A crash report's body carries whatever the reporter was looking at,
+     *     so a support ticket in one agency can legitimately quote a centre from another
+     *     when the reporter belongs to both. The ticket was correctly scoped; the prose
+     *     inside it is not a leak of the row.
+     *
+     * What remains is a name in a KEYED FIELD — a child, a family, a centre on a record
+     * the endpoint returned. That is the thing that must never cross.
+     *
+     * @return string[]
+     */
     private function foreignHits(string $body, array $canaries): array
     {
-        $hits = [];
-        foreach ($canaries as $c) {
-            if (stripos($body, $c) !== false) {
-                $hits[] = $c;
-                if (count($hits) >= 3) {
-                    break;
-                }
-            }
+        $decoded = json_decode($body, true);
+        if (! is_array($decoded)) {
+            return [];   // HTML, PDF, a rendered sample — not a record listing
         }
 
-        return $hits;
+        // Free-prose fields, written by people, about anything.
+        static $prose = ['body', 'notes', 'note', 'payload', 'message', 'description',
+            'summary', 'resolution', 'user_agent', 'html', 'preview', 'comment'];
+
+        $hits = [];
+        $walk = function ($node, ?string $key) use (&$walk, &$hits, $canaries, $prose) {
+            if (count($hits) >= 3) {
+                return;
+            }
+            if (is_array($node)) {
+                foreach ($node as $k => $v) {
+                    $walk($v, is_string($k) ? $k : $key);
+                }
+
+                return;
+            }
+            if (! is_string($node) || $node === '') {
+                return;
+            }
+            if ($key !== null && in_array(mb_strtolower($key), $prose, true)) {
+                return;
+            }
+            foreach ($canaries as $c) {
+                if (stripos($node, $c) !== false && ! in_array($c, $hits, true)) {
+                    $hits[] = $c;
+                }
+            }
+        };
+        $walk($decoded, null);
+
+        return array_slice($hits, 0, 3);
     }
 
     private function pickUser(int $agencyId, string $kind): ?object
