@@ -805,7 +805,26 @@
      TWO CARRIERS since 2026-09-10. Twilio and Telnyx sit side by side; the agency says
      which one sends and whether the other catches a refusal. Telnyx also carries VOICE,
      which is the second tab, and its one API key covers both — which is why the key is
-     asked for on the text tab and the voice tab only asks for what is voice-specific. */
+     asked for on the text tab and the voice tab only asks for what is voice-specific.
+
+     ── HOW THIS IS LAID OUT, AND WHY ──
+     Two levels of tab, because there are two different questions here:
+
+        Text messages / Voice calls     — which CHANNEL you are setting up
+          └ Twilio / Telnyx             — which CARRIER's credentials you are typing
+
+     The carriers get a page each rather than two cards stacked down one long scroll:
+     they have no fields in common, and reading past nine Twilio boxes to reach the
+     Telnyx ones invites filling in the wrong set.
+
+     The "which carrier sends" card stays ABOVE the carrier tabs, because it is a
+     decision about the PAIR and belongs to neither of them. Separating the pages makes
+     one new mistake possible — carefully filling in Telnyx and never actually switching
+     to it — so the carrier that is currently sending is marked on its own tab.
+
+     BOTH PANES ARE ALWAYS IN THE DOM; the hidden one is only display:none. Save reads
+     every field on the screen regardless of which tab is showing, so setting up Telnyx
+     cannot quietly discard a number typed on the Twilio page. */
   async function renderSmsSettings(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
@@ -871,12 +890,25 @@
         + '<span style="display:block;font-size:11.5px;color:#64748B;margin-top:2px;">' + sub + '</span></span></label>';
     }
 
+    /* Carrier tabs are UNDERLINED, where the channel tabs above them are filled pills.
+       Two rows of identical-looking tabs stacked on top of each other read as one broken
+       row; the different treatment is what says "these are inside those". */
+    function carrierTab(value, label) {
+      return '<button type="button" data-cx-tab="' + value + '" style="appearance:none;background:none;'
+        + 'border:0;border-bottom:2px solid transparent;padding:8px 4px;margin-right:18px;font:inherit;'
+        + 'font-size:13.5px;font-weight:800;color:#64748B;cursor:pointer;display:inline-flex;align-items:center;'
+        + 'gap:8px;">' + esc(label)
+        + '<span data-cx-sending="' + value + '" style="display:none;font-size:10.5px;font-weight:800;'
+        + 'text-transform:uppercase;letter-spacing:.4px;background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0;'
+        + 'border-radius:999px;padding:2px 7px;">sending</span></button>';
+    }
+
     main.innerHTML = ''
       + '<div style="padding:24px;max-width:880px;margin:0 auto;">'
-      +   '<div class="kt-page-hero"><h2>💬 SMS &amp; voice</h2>'
+      +   '<div class="kt-page-hero"><h2>📡 Carrier settings</h2>'
       +     '<p>The carriers this agency sends text messages and places announcement calls through.</p></div>'
 
-      /* ── tabs ── */
+      /* ── channel tabs ── */
       +   '<div style="display:flex;gap:6px;margin-top:16px;flex-wrap:wrap;" id="sv-tabs">'
       +     '<button type="button" data-sv-tab="text" style="height:32px;padding:0 14px;border-radius:9px;'
       +       'border:1px solid #1F6080;background:#1F6080;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">'
@@ -892,14 +924,14 @@
       +     '<div class="kt-card" style="margin-top:14px;">'
       +       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">'
       +         chip(s.twilio_ready, 'Twilio ' + (s.twilio_ready ? 'ready' : 'not set up'))
-      +           chip(s.telnyx_ready, 'Telnyx ' + (s.telnyx_ready ? 'ready' : 'not set up'))
-      +           chip(s.sms_enabled, 'Texting ' + (s.sms_enabled ? 'on' : 'off'))
+      +         chip(s.telnyx_ready, 'Telnyx ' + (s.telnyx_ready ? 'ready' : 'not set up'))
+      +         chip(s.sms_enabled, 'Texting ' + (s.sms_enabled ? 'on' : 'off'))
       +       '</div>'
       +       '<div style="font-size:13px;font-weight:800;color:#0F172A;">Which carrier sends</div>'
       +       '<div style="' + hint + 'margin-bottom:10px;">Both can be set up at once. Only the one chosen here sends.</div>'
       +       '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
       +         radio('sms-prov-twilio', 'twilio', s.provider !== 'telnyx', 'Twilio', 'The original carrier')
-      +           radio('sms-prov-telnyx', 'telnyx', s.provider === 'telnyx', 'Telnyx', 'Also carries voice calls')
+      +         radio('sms-prov-telnyx', 'telnyx', s.provider === 'telnyx', 'Telnyx', 'Also carries voice calls')
       +       '</div>'
       +       '<label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px;font-size:13.5px;'
       +         'color:#0F172A;cursor:pointer;">'
@@ -918,84 +950,91 @@
       +       stats
       +     '</div>'
 
+      /* ── carrier tabs ── */
+      +     '<div id="sms-carrier-tabs" style="margin:20px 0 2px;border-bottom:1px solid #E2E8F0;">'
+      +       carrierTab('twilio', 'Twilio')
+      +       carrierTab('telnyx', 'Telnyx')
+      +     '</div>'
+
       /* ── Twilio ── */
-      +     '<div class="kt-card" style="margin-top:14px;">'
-      +       '<div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px;">Twilio</div>'
-      +       '<div style="' + hint + 'margin-bottom:12px;">Console → Account Info.</div>'
-      +       '<div><label style="' + lbl + '">Account SID</label>'
-      +         '<input id="sms-sid" style="' + fld + '" placeholder="AC…" value="' + esc(s.account_sid || '') + '">'
-      +         '<div style="' + hint + '">Starts with <b>AC</b>. An OAuth client id (OQ…) is a different '
-      +           'credential and will not work.</div></div>'
-      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Auth token</label>'
-      +         '<input id="sms-token" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
-      +           (s.has_auth_token ? 'Saved — leave blank to keep it' : 'Paste the auth token') + '">'
-      +         '<div style="' + hint + '">Stored encrypted. It is never sent back to this screen, so leaving '
-      +           'this blank keeps the one already saved.</div></div>'
-      +       '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
-      +         '<div style="font-size:13px;font-weight:800;color:#0F172A;">API key <span style="font-weight:600;'
-      +           'color:#64748B;">— recommended, and used in preference to the auth token above</span></div>'
-      +         '<div style="' + hint + '">Console → Account → API keys &amp; tokens → <b>Create API key</b>. '
-      +           'A key can be revoked on its own without resetting the whole account, and the secret is shown '
-      +           'only once — copy it before closing the dialog.</div>'
-      +         '<div style="margin-top:12px;"><label style="' + lbl + '">API key SID</label>'
-      +           '<input id="sms-keysid" style="' + fld + '" placeholder="SK…" value="' + esc(s.api_key_sid || '') + '"></div>'
-      +         '<div style="margin-top:12px;"><label style="' + lbl + '">API key secret</label>'
-      +           '<input id="sms-keysecret" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
-      +             (s.has_api_key_secret ? 'Saved — leave blank to keep it' : 'Paste the secret') + '"></div>'
+      +     '<div data-cx-pane="twilio">'
+      +       '<div class="kt-card" style="margin-top:14px;">'
+      +         '<div style="' + hint + 'margin:0 0 12px;">Twilio Console → Account Info.</div>'
+      +         '<div><label style="' + lbl + '">Account SID</label>'
+      +           '<input id="sms-sid" style="' + fld + '" placeholder="AC…" value="' + esc(s.account_sid || '') + '">'
+      +           '<div style="' + hint + '">Starts with <b>AC</b>. An OAuth client id (OQ…) is a different '
+      +             'credential and will not work.</div></div>'
+      +         '<div style="margin-top:14px;"><label style="' + lbl + '">Auth token</label>'
+      +           '<input id="sms-token" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
+      +             (s.has_auth_token ? 'Saved — leave blank to keep it' : 'Paste the auth token') + '">'
+      +           '<div style="' + hint + '">Stored encrypted. It is never sent back to this screen, so leaving '
+      +             'this blank keeps the one already saved.</div></div>'
+      +         '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
+      +           '<div style="font-size:13px;font-weight:800;color:#0F172A;">API key <span style="font-weight:600;'
+      +             'color:#64748B;">— recommended, and used in preference to the auth token above</span></div>'
+      +           '<div style="' + hint + '">Console → Account → API keys &amp; tokens → <b>Create API key</b>. '
+      +             'A key can be revoked on its own without resetting the whole account, and the secret is shown '
+      +             'only once — copy it before closing the dialog.</div>'
+      +           '<div style="margin-top:12px;"><label style="' + lbl + '">API key SID</label>'
+      +             '<input id="sms-keysid" style="' + fld + '" placeholder="SK…" value="' + esc(s.api_key_sid || '') + '"></div>'
+      +           '<div style="margin-top:12px;"><label style="' + lbl + '">API key secret</label>'
+      +             '<input id="sms-keysecret" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
+      +               (s.has_api_key_secret ? 'Saved — leave blank to keep it' : 'Paste the secret') + '"></div>'
+      +         '</div>'
+      +         '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
+      +           '<input id="sms-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(s.from || '') + '">'
+      +           '<div style="' + hint + '">The Twilio number in full international form, or a Messaging Service '
+      +             'SID (MG…).</div></div>'
+      +         '<div style="margin-top:14px;"><label style="' + lbl + '">Replies and STOP webhook</label>'
+      +           '<code style="' + mono + '">' + esc(s.inbound_webhook || '') + '</code>'
+      +           '<div style="' + hint + '">In Twilio, set the number\'s incoming-message webhook to this. Without '
+      +             'it, somebody texting STOP is not recorded as opted out — which carriers treat as a violation.</div></div>'
       +       '</div>'
-      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
-      +         '<input id="sms-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(s.from || '') + '">'
-      +         '<div style="' + hint + '">The Twilio number in full international form, or a Messaging Service '
-      +           'SID (MG…).</div></div>'
-      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Replies and STOP webhook</label>'
-      +         '<code style="' + mono + '">' + esc(s.inbound_webhook || '') + '</code>'
-      +         '<div style="' + hint + '">In Twilio, set the number\'s incoming-message webhook to this. Without '
-      +           'it, somebody texting STOP is not recorded as opted out — which carriers treat as a violation.</div></div>'
       +     '</div>'
 
       /* ── Telnyx ── */
-      +     '<div class="kt-card" style="margin-top:14px;">'
-      +       '<div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px;">Telnyx</div>'
-      +       '<div style="' + hint + 'margin-bottom:12px;">Mission Control → API Keys. The same key covers '
-      +         'text messages and voice calls, so it is only asked for here.</div>'
-      +       '<div><label style="' + lbl + '">API key</label>'
-      +         '<input id="tx-key" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
-      +           (t.has_api_key ? 'Saved — leave blank to keep it' : 'KEY…') + '">'
-      +         '<div style="' + hint + '">Starts with <b>KEY</b>. Stored encrypted and never sent back to this '
-      +           'screen. The <i>public</i> key below is a different credential.</div></div>'
-      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
-      +         '<input id="tx-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(t.sms_from || '') + '">'
-      +         '<div style="' + hint + '">In full international form.</div></div>'
-      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Messaging profile id <span '
-      +         'style="font-weight:600;text-transform:none;letter-spacing:0;">— optional</span></label>'
-      +         '<input id="tx-profile" style="' + fld + '" placeholder="00000000-0000-0000-0000-000000000000" value="'
+      +     '<div data-cx-pane="telnyx" style="display:none;">'
+      +       '<div class="kt-card" style="margin-top:14px;">'
+      +         '<div style="' + hint + 'margin:0 0 12px;">Telnyx Mission Control → API Keys. The same key covers '
+      +           'text messages and voice calls, so it is only asked for here — the Voice calls tab reads it '
+      +           'from this page.</div>'
+      +         '<div><label style="' + lbl + '">API key</label>'
+      +           '<input id="tx-key" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
+      +             (t.has_api_key ? 'Saved — leave blank to keep it' : 'KEY…') + '">'
+      +           '<div style="' + hint + '">Starts with <b>KEY</b>. Stored encrypted and never sent back to this '
+      +             'screen. The <i>public</i> key below is a different credential.</div></div>'
+      +         '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
+      +           '<input id="tx-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(t.sms_from || '') + '">'
+      +           '<div style="' + hint + '">In full international form.</div></div>'
+      +         '<div style="margin-top:14px;"><label style="' + lbl + '">Messaging profile id <span '
+      +           'style="font-weight:600;text-transform:none;letter-spacing:0;">— optional</span></label>'
+      +           '<input id="tx-profile" style="' + fld + '" placeholder="00000000-0000-0000-0000-000000000000" value="'
       +             esc(t.messaging_profile_id || '') + '">'
-      +         '<div style="' + hint + '">Only needed for a number pool or an alphanumeric sender id. With one '
-      +           'set, the number above may be left blank.</div></div>'
-      +       '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
-      +         '<label style="' + lbl + '">Webhook public key</label>'
-      +         '<input id="tx-pubkey" style="' + fld + '" placeholder="base64, 44 characters" value="'
+      +           '<div style="' + hint + '">Only needed for a number pool or an alphanumeric sender id. With one '
+      +             'set, the number above may be left blank.</div></div>'
+      +         '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
+      +           '<label style="' + lbl + '">Webhook public key</label>'
+      +           '<input id="tx-pubkey" style="' + fld + '" placeholder="base64, 44 characters" value="'
       +             esc(t.public_key || '') + '">'
-      +         '<div style="' + hint + '">Mission Control → Keys &amp; Credentials → <b>Public Key</b>. Every '
-      +           'reply and call event is checked against this; without it they are all refused, which is '
-      +           'deliberate — an unverified webhook would let anyone opt a number in or out.</div>'
-      +         '<div style="margin-top:12px;"><label style="' + lbl + '">Inbound message webhook</label>'
-      +           '<code style="' + mono + '">' + esc(s.telnyx_inbound_webhook || '') + '</code>'
-      +           '<div style="' + hint + '">Set this on the messaging profile.</div></div>'
+      +           '<div style="' + hint + '">Mission Control → Keys &amp; Credentials → <b>Public Key</b>. Every '
+      +             'reply and call event is checked against this; without it they are all refused, which is '
+      +             'deliberate — an unverified webhook would let anyone opt a number in or out.</div>'
+      +           '<div style="margin-top:12px;"><label style="' + lbl + '">Inbound message webhook</label>'
+      +             '<code style="' + mono + '">' + esc(s.telnyx_inbound_webhook || '') + '</code>'
+      +             '<div style="' + hint + '">Set this on the messaging profile.</div></div>'
+      +         '</div>'
       +       '</div>'
       +     '</div>'
 
       +     '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center;">'
       +       '<button type="button" id="sms-save" style="height:34px;padding:0 18px;background:#1F6080;color:#fff;'
       +         'border:0;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;">Save</button>'
-      +       '<button type="button" id="sms-test-twilio" data-kt-iconized="1" style="height:34px;padding:0 14px;'
+      +       '<button type="button" id="sms-test" data-kt-iconized="1" style="height:34px;padding:0 14px;'
       +         'background:#fff;color:#1F6080;border:1px solid #CBD5E1;border-radius:9px;font-weight:800;'
       +         'font-size:13px;cursor:pointer;">Test Twilio</button>'
-      +       '<button type="button" id="sms-test-telnyx" data-kt-iconized="1" style="height:34px;padding:0 14px;'
-      +         'background:#fff;color:#1F6080;border:1px solid #CBD5E1;border-radius:9px;font-weight:800;'
-      +         'font-size:13px;cursor:pointer;">Test Telnyx</button>'
       +       '<span id="sms-msg" style="font-size:13px;font-weight:700;"></span>'
       +     '</div>'
+      +     '<div style="' + hint + 'margin-top:8px;">Save stores both carriers at once, whichever page you are on.</div>'
       +   '</div>'
 
       /* ══════════════════════ VOICE ══════════════════════ */
@@ -1012,7 +1051,7 @@
       +         'asked not to be telephoned is never called at all.</div>'
       +       '<div style="margin-top:16px;"><label style="' + lbl + '">Call Control connection id</label>'
       +         '<input id="vx-conn" style="' + fld + '" placeholder="e.g. 2891234567890123456" value="'
-      +             esc(t.voice_connection_id || '') + '">'
+      +           esc(t.voice_connection_id || '') + '">'
       +         '<div style="' + hint + '">Mission Control → Voice → <b>Call Control</b> → your application. '
       +           'Set that application\'s webhook URL to the address at the bottom of this card.</div></div>'
       +       '<div style="margin-top:14px;"><label style="' + lbl + '">Call from</label>'
@@ -1021,7 +1060,7 @@
       +       '<div style="margin-top:14px;"><label style="' + lbl + '">Caller name <span style="font-weight:600;'
       +         'text-transform:none;letter-spacing:0;">— optional</span></label>'
       +         '<input id="vx-name" maxlength="128" style="' + fld + '" placeholder="Sunnyside Childcare" value="'
-      +             esc(t.voice_caller_name || '') + '">'
+      +           esc(t.voice_caller_name || '') + '">'
       +         '<div style="' + hint + '">Shown on handsets that support caller ID name. Not every carrier passes it on.</div></div>'
       +       '<div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;">'
       +         '<div style="flex:1 1 240px;"><label style="' + lbl + '">Voice</label>'
@@ -1030,7 +1069,7 @@
       +             '<b>AWS.Polly.Joanna-Neural</b> sounds far more natural and is billed at the premium rate.</div></div>'
       +         '<div style="flex:1 1 160px;"><label style="' + lbl + '">Language</label>'
       +           '<input id="vx-lang" maxlength="12" style="' + fld + '" placeholder="en-US" value="'
-      +               esc(t.voice_language || '') + '">'
+      +             esc(t.voice_language || '') + '">'
       +           '<div style="' + hint + '">e.g. en-US, en-GB, fr-CA.</div></div>'
       +       '</div>'
       +       '<label style="display:flex;align-items:center;gap:10px;margin-top:18px;font-size:14px;font-weight:600;'
@@ -1059,7 +1098,7 @@
       +   '</div>'
       + '</div>';
 
-    // ── tabs ──
+    // ── channel tabs ──
     var panes = {};
     main.querySelectorAll('[data-sv-pane]').forEach(function (p) { panes[p.getAttribute('data-sv-pane')] = p; });
     main.querySelectorAll('[data-sv-tab]').forEach(function (b) {
@@ -1075,7 +1114,44 @@
       });
     });
 
-    // Repaint the carrier cards as the radio moves, so the choice is legible at a glance.
+    /* ── carrier tabs ──
+       showCarrier() also repaints the "sending" badge and the Test button, so the page
+       you are looking at, the carrier you would be testing, and the carrier that
+       actually sends can never disagree on screen. */
+    function selectedProvider() {
+      var r = main.querySelector('input[name="sms-provider"]:checked');
+      return r ? r.value : 'twilio';
+    }
+
+    var openCarrier = 'twilio';
+
+    function showCarrier(which) {
+      openCarrier = which;
+      main.querySelectorAll('[data-cx-tab]').forEach(function (b) {
+        var on = b.getAttribute('data-cx-tab') === which;
+        b.style.color = on ? '#1F6080' : '#64748B';
+        b.style.borderBottomColor = on ? '#1F6080' : 'transparent';
+      });
+      main.querySelectorAll('[data-cx-pane]').forEach(function (p) {
+        p.style.display = p.getAttribute('data-cx-pane') === which ? '' : 'none';
+      });
+
+      var sending = selectedProvider();
+      main.querySelectorAll('[data-cx-sending]').forEach(function (pill) {
+        pill.style.display = pill.getAttribute('data-cx-sending') === sending ? '' : 'none';
+      });
+
+      var test = document.getElementById('sms-test');
+      if (test) { test.textContent = 'Test ' + (which === 'telnyx' ? 'Telnyx' : 'Twilio'); }
+    }
+
+    main.querySelectorAll('[data-cx-tab]').forEach(function (b) {
+      b.addEventListener('click', function () { showCarrier(b.getAttribute('data-cx-tab')); });
+    });
+
+    /* Changing the carrier moves you to its page. Choosing Telnyx and then being left
+       looking at the Twilio form is the one thing that would make two pages worse than
+       one long one. */
     main.querySelectorAll('input[name="sms-provider"]').forEach(function (r) {
       r.addEventListener('change', function () {
         main.querySelectorAll('[data-prov-card]').forEach(function (c) {
@@ -1083,8 +1159,12 @@
           c.style.borderColor = on ? '#1F6080' : '#E2E8F0';
           c.style.background = on ? '#F0F7FA' : '#fff';
         });
+        showCarrier(r.value);
       });
     });
+
+    // Open on the carrier that is actually sending — the one you most likely came to see.
+    showCarrier(s.provider === 'telnyx' ? 'telnyx' : 'twilio');
 
     function say(id, text, ok) {
       var m = document.getElementById(id);
@@ -1094,17 +1174,16 @@
     }
     function val(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
 
-    /* ONE SAVE FOR BOTH TABS. Both panes are always in the DOM — the hidden one is only
-       display:none — so a save from either button carries every field. Saving on the
-       voice tab and losing the number typed on the text tab would be its own bug. */
+    /* ONE SAVE FOR EVERY TAB. Every pane is always in the DOM — a hidden one is only
+       display:none — so a save from any of them carries every field. Setting up Telnyx
+       and losing the number typed on the Twilio page would be its own bug. */
     async function save(msgId) {
-      var prov = main.querySelector('input[name="sms-provider"]:checked');
       var body = {
         account_sid: val('sms-sid'),
         from: val('sms-from'),
         api_key_sid: val('sms-keysid'),
         sms_enabled: document.getElementById('sms-enabled').checked,
-        provider: prov ? prov.value : 'twilio',
+        provider: selectedProvider(),
         failover: document.getElementById('sms-failover').checked,
 
         telnyx_public_key: val('tx-pubkey'),
@@ -1143,20 +1222,20 @@
 
     /* Reads the carrier's account rather than sending a message: it proves the
        credentials are accepted without costing anything or needing a consenting
-       recipient. Each carrier is tested on its own, because testing the one that is
-       not selected is exactly the sort of test that passes while sending fails. */
-    [['sms-test-twilio', 'twilio'], ['sms-test-telnyx', 'telnyx']].forEach(function (pair) {
-      document.getElementById(pair[0]).addEventListener('click', async function () {
-        var btn = this;
-        btn.disabled = true; say('sms-msg', 'Checking ' + pair[1] + '…', true);
-        try {
-          var r = await api().post('/admin/sms-settings/test', { provider: pair[1] });
-          say('sms-msg', (r && r.message) || 'Connected.', true);
-        } catch (e) {
-          say('sms-msg', (e && e.message) || 'Those credentials were refused.', false);
-        }
-        btn.disabled = false;
-      });
+       recipient. It tests the carrier whose PAGE is open, which is the one whose boxes
+       you were just typing in — testing the other one is exactly the sort of test that
+       passes while sending fails. */
+    document.getElementById('sms-test').addEventListener('click', async function () {
+      var btn = this;
+      var which = openCarrier;
+      btn.disabled = true; say('sms-msg', 'Checking ' + which + '…', true);
+      try {
+        var r = await api().post('/admin/sms-settings/test', { provider: which });
+        say('sms-msg', (r && r.message) || 'Connected.', true);
+      } catch (e) {
+        say('sms-msg', (e && e.message) || 'Those credentials were refused.', false);
+      }
+      btn.disabled = false;
     });
 
     document.getElementById('vx-test').addEventListener('click', async function () {

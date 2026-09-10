@@ -220,7 +220,11 @@
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
-          { hash: 'sms-settings',       label: 'SMS settings',        icon: '💬' },
+          /* Two carriers and two channels live behind this now, so naming it after
+             one of them was already wrong and naming it after SMS alone hides the
+             voice half. The HASH is untouched — it is in bookmarks and in the
+             screen registry. */
+          { hash: 'sms-settings',       label: 'Carrier settings',    icon: '📡' },
           { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
           { hash: 'document-templates', label: 'Document templates', icon: '📄' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
@@ -744,7 +748,7 @@
     'marketing-site': 'Your public website.',
     'sms': 'Send a one-off text to staff or families.',
     'email-settings': 'The mailbox your agency sends from.',
-    'sms-settings': 'The Twilio account your agency texts from.',
+    'sms-settings': 'The carriers your agency texts and calls through.',
     'notifications': 'What the app tells people about, and how.',
     'tickets': 'Operational issues, tracked to resolution.',
     'social-settings': 'Google, Microsoft and Facebook sign-in.',
