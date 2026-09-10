@@ -281,7 +281,7 @@
     function stab(label, pane) {
       var b = el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:9px 8px;margin-bottom:-1px;font-size:14px;font-weight:700;color:#6B7280;cursor:pointer;white-space:nowrap;flex:0 0 auto;' }, [label]);
       b.addEventListener('click', function () { _stabs.forEach(function (t) { t.b.style.color = '#6B7280'; t.b.style.borderBottomColor = 'transparent'; t.p.style.display = 'none'; }); b.style.color = '#1F6080'; b.style.borderBottomColor = '#1F6080'; pane.style.display = ''; });
-      _stabs.push({ b: b, p: pane }); tabBar.appendChild(b); return b;
+      _stabs.push({ b: b, p: pane, key: String(label).toLowerCase() }); tabBar.appendChild(b); return b;
     }
     var _t0 = stab('Profile', paneProfile);
     stab('Documents', paneDocs);
@@ -297,6 +297,18 @@
     wrap.appendChild(paneSecurity);
     wrap.appendChild(paneAbout);
     _t0.style.color = '#1F6080'; _t0.style.borderBottomColor = '#1F6080';
+
+    /* OPEN THE TAB THE LINK ASKED FOR — #settings?tab=payroll.
+
+       Sending somebody to Settings and letting them hunt is the same failure as a
+       notification whose Open button drops you on a list: the destination was known,
+       and the reader was made to find it anyway. */
+    (function () {
+      var want = String((ctx && ctx.params && ctx.params.tab) || '').toLowerCase();
+      if (!want) { return; }
+      var hit = _stabs.filter(function (t) { return t.key === want; })[0];
+      if (hit) { hit.b.click(); }
+    }());
     // Payments (guardian only) — Autopay + Wallet, moved here from the home tiles.
     if (isGuardian) {
       var apBox = el('div', {});
