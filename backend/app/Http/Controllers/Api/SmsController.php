@@ -4,11 +4,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\BroadcastAudience;
+use App\Support\SmsGateway;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Twilio\Rest\Client;
 
 /**
  * v22p51 — Twilio SMS.
@@ -21,7 +22,15 @@ use Twilio\Rest\Client;
  * Each send goes through sendOne() so we get a sms_messages row for audit
  * and a single point of opt-in respect.
  *
- * Env: TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM. Inert without them.
+ * WHICH CARRIER CARRIES IT is no longer this file's business. Twilio was the only
+ * one until 2026-09-10; Telnyx is now a second, and App\Support\SmsGateway chooses
+ * between them and falls back to the other when one refuses. Every gate below still
+ * runs first and applies to both -- adding a carrier must never become a way around
+ * consent.
+ *
+ * Credentials are per agency (SmsSettingsController for Twilio, App\Support\Telnyx
+ * for Telnyx). The TWILIO_* env values survive only as a platform-wide fallback for
+ * an agency that has configured nothing at all.
  */
 final class SmsController extends Controller
 {
@@ -38,26 +47,17 @@ final class SmsController extends Controller
             'body'     => 'required|string|max:300',
             'category' => 'nullable|string|max:40',
         ]);
-        // A narrowing audience without the thing to narrow BY used to fall through to
-        // "everyone in the agency". On a paid channel that turns a message for one room
-        // into a message for every family the agency has. Refuse it instead.
-        $needs = ['centre' => 'centre_id', 'room' => 'room_id', 'family' => 'family_id'];
-        if (isset($needs[$data['audience']]) && empty($data[$needs[$data['audience']]])) {
+        /* A narrowing audience without the thing to narrow BY used to fall through to
+           "everyone in the agency". On a paid channel that turns a message for one room
+           into a message for every family the agency has. Both guards now live in
+           BroadcastAudience so the voice channel beside this one cannot drift from them. */
+        if ($missing = BroadcastAudience::missingSelector($data)) {
             return response()->json([
                 'message' => 'Choose which one to send to before sending.',
-                'errors' => [$needs[$data['audience']] => ['Required for this audience.']],
+                'errors' => [$missing => ['Required for this audience.']],
             ], 422);
         }
-
-        // The centre or room must belong to THIS agency — the ids arrive from the client.
-        if (! empty($data['centre_id'])) {
-            abort_unless(DB::table('centres')->where('id', $data['centre_id'])
-                ->where('agency_id', $agencyId)->exists(), 403, 'Unknown centre.');
-        }
-        if (! empty($data['room_id'])) {
-            abort_unless(DB::table('rooms as r')->join('centres as c', 'c.id', '=', 'r.centre_id')
-                ->where('r.id', $data['room_id'])->where('c.agency_id', $agencyId)->exists(), 403, 'Unknown room.');
-        }
+        BroadcastAudience::assertOwned($agencyId, $data);
 
         $recipients = $this->resolveRecipients($agencyId, $data);
         $sent = 0; $skipped = 0;
@@ -79,58 +79,43 @@ final class SmsController extends Controller
         return response()->json(['data' => $rows]);
     }
 
+    /**
+     * Moved into App\Support\BroadcastAudience when voice announcements were added, so
+     * that both channels ask the same question and get the same answer. The SMS rule is
+     * unchanged -- same joins, same sms_opt_in filter, same fail-closed `?: [0]`.
+     */
     private function resolveRecipients(int $agencyId, array $data)
     {
-        $q = DB::table('users as u')
-            ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-            ->where('ra.agency_id', $agencyId)
-            ->where('ra.active', true)
-            ->where('u.sms_opt_in', 1)
-            ->whereNotNull('u.phone')
-            ->where('u.phone', '!=', '')
-            ->select('u.id', 'u.first_name', 'u.last_name', 'u.phone')
-            ->distinct();
-
-        if ($data['audience'] === 'role' && !empty($data['role'])) {
-            $q->where('ra.role', $data['role']);
-        }
-        if ($data['audience'] === 'centre' && !empty($data['centre_id'])) {
-            $q->where('ra.centre_id', $data['centre_id']);
-        }
-        // `guardians` is the family-to-user link. This joined `family_users`, which does
-        // not exist on this database, so every family broadcast was a 500.
-        if ($data['audience'] === 'family' && !empty($data['family_id'])) {
-            $q->join('guardians as g', 'g.user_id', '=', 'u.id')
-              ->where('g.family_id', $data['family_id']);
-        }
-
-        // A room means the people in it: the educators assigned to it, and the guardians
-        // of the children enrolled in it. Anything less is not who you meant.
-        if ($data['audience'] === 'room' && !empty($data['room_id'])) {
-            $roomId = (int) $data['room_id'];
-
-            $educators = DB::table('educator_rooms')->where('room_id', $roomId)->pluck('user_id');
-            $guardians = DB::table('enrollments as e')
-                ->join('children as ch', 'ch.id', '=', 'e.child_id')
-                ->join('guardians as g', 'g.family_id', '=', 'ch.family_id')
-                ->where('e.room_id', $roomId)
-                ->whereNull('ch.deleted_at')
-                ->where(function ($w) {
-                    $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', now()->toDateString());
-                })
-                ->pluck('g.user_id');
-
-            $q->whereIn('u.id', $educators->merge($guardians)->unique()->values()->all() ?: [0]);
-        }
-
-        return $q->get();
+        return BroadcastAudience::resolve($agencyId, $data, 'sms');
     }
 
-    public function sendOne(int $agencyId, int $userId, string $phone, string $body, string $category): bool
+    public function sendOne(int $agencyId, int $userId, string $phone, string $body, string $category, ?string $mediaUrl = null): bool
     {
         // Do-not-contact: never text a parent at a live agency while we are testing.
         if (\App\Support\Suppression::isUser($userId)) {
             \App\Support\Suppression::note('sms', $userId, $category);
+            return false;
+        }
+
+        /* The per-agency switch. agencies.sms_enabled existed on the table and in the
+           agency settings API, and NOTHING on the send path ever read it — so it was a
+           toggle that changed nothing, and putting Twilio credentials in .env would have
+           turned SMS on for every agency at once rather than for the one being tested.
+           It belongs here beside suppression and consent, so a new category inherits all
+           three by default instead of having to remember them. Logged as a skipped row,
+           not dropped, so "why did that not send?" has an answer. (Anthony, 2026-09-08) */
+        if (! DB::table('agencies')->where('id', $agencyId)->value('sms_enabled')) {
+            DB::table('sms_messages')->insert([
+                'agency_id' => $agencyId,
+                'to_user_id' => $userId,
+                'to_phone' => $phone,
+                'body' => $body,
+                'category' => $category,
+                'status' => 'skipped',
+                'error' => 'sms disabled for this agency',
+                'created_at' => now(),
+            ]);
+
             return false;
         }
 
@@ -167,26 +152,136 @@ final class SmsController extends Controller
             'status'     => 'queued',
             'created_at' => now(),
         ]);
-        if (!env('TWILIO_SID') || !$phone) {
-            DB::table('sms_messages')->where('id', $rowId)->update([
-                'status' => 'skipped', 'error' => !env('TWILIO_SID') ? 'twilio not configured' : 'no phone',
-            ]);
+        if (! $phone) {
+            DB::table('sms_messages')->where('id', $rowId)->update(['status' => 'skipped', 'error' => 'no phone']);
+
             return false;
         }
-        try {
-            $client = new Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
-            $msg = $client->messages->create($phone, ['from' => env('TWILIO_FROM'), 'body' => $body]);
+
+        /* WHICH CARRIER SENDS THIS is SmsGateway's decision, not this method's. It tries
+           the agency's chosen carrier, and where the other one is configured it catches a
+           refusal -- because the whole value of a closure notice is that it arrives in the
+           next two minutes.
+
+           The gates above are unchanged and still run first, so a second carrier is a
+           second way to send a message that was already allowed, and never a way around
+           suppression, the agency switch or consent. */
+        $r = SmsGateway::deliver($agencyId, $phone, $body, $mediaUrl);
+
+        if (! $r['ok']) {
+            Log::warning('SMS send failed', ['user' => $userId, 'msg' => $r['error']]);
             DB::table('sms_messages')->where('id', $rowId)->update([
-                'twilio_sid' => $msg->sid, 'status' => 'sent', 'sent_at' => now(),
+                'status' => 'failed',
+                'provider' => $r['provider'],
+                'error' => $r['error'],
             ]);
-            return true;
-        } catch (\Throwable $e) {
-            Log::warning('Twilio send failed', ['user' => $userId, 'msg' => $e->getMessage()]);
-            DB::table('sms_messages')->where('id', $rowId)->update([
-                'status' => 'failed', 'error' => $e->getMessage(),
-            ]);
+
             return false;
         }
+
+        DB::table('sms_messages')->where('id', $rowId)->update([
+            'provider' => $r['provider'],
+            'provider_ref' => $r['ref'],
+            // Still written for a Twilio send. Nothing reads it today, but it is the id
+            // support would quote back to Twilio, and it is what every row before
+            // 2026-09-10 has.
+            'twilio_sid' => $r['provider'] === 'twilio' ? $r['ref'] : null,
+            'status' => 'sent',
+            'sent_at' => now(),
+            // Only when a carrier had to be stepped over: "Twilio refused, Telnyx sent
+            // it" is the single most useful thing this column can hold.
+            'error' => ($r['attempts'] && str_contains((string) $r['attempts'], '|')) ? $r['attempts'] : null,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * Twilio credentials, or null if they are not REALLY set.
+     *
+     * `env('TWILIO_SID')` as a truthiness test was the same trap the `sk_live_` Stripe
+     * placeholder set: TWILIO_FROM shipped as a 12-character placeholder ending "xxxx",
+     * which is perfectly truthy, and nothing checked it at all. Every send would have
+     * been accepted locally, marked queued, then rejected by Twilio for an invalid
+     * sender — a remote failure standing in for a local misconfiguration.
+     *
+     * Shapes: Account SID is AC + 32 hex. A sender is either E.164 (+15551234567) or a
+     * Messaging Service SID (MG + 32 hex).
+     */
+    public static function twilioConfig(?int $agencyId = null): ?array
+    {
+        /* THE AGENCY'S OWN CREDENTIALS COME FIRST.
+           These used to be read only from .env, which meant one Twilio account for the
+           whole platform and an SSH session to change a number. An agency brings its own
+           account and its own number, so it sets them on its own settings screen and they
+           are stored beside the agency, encrypted (SmsSettingsController).
+           The .env values are kept as a fallback so nothing that worked before stops. */
+        if ($agencyId) {
+            $cfg = \App\Http\Controllers\Api\SmsSettingsController::readConfig($agencyId);
+            $sid = trim((string) ($cfg['account_sid'] ?? ''));
+            $from = trim((string) ($cfg['from'] ?? ''));
+            $keySid = trim((string) ($cfg['api_key_sid'] ?? ''));
+
+            $dec = function (?string $v): string {
+                if (empty($v)) { return ''; }
+                try {
+                    return \Illuminate\Support\Facades\Crypt::decryptString($v);
+                } catch (\Throwable $e) {
+                    // Something that cannot be decrypted is not a credential. Treated as
+                    // absent rather than thrown, so it can never blow up inside a send.
+                    return '';
+                }
+            };
+            $token = $dec($cfg['auth_token'] ?? null);
+            $keySecret = $dec($cfg['api_key_secret'] ?? null);
+
+            /* AN API KEY WINS OVER THE ACCOUNT'S MASTER TOKEN.
+               Twilio authenticates a key as (SK sid, secret) with the account sid passed
+               separately, and recommends keys over the auth token because one can be
+               revoked on its own. If an agency has bothered to create one, that is the
+               credential they mean to use. */
+            if ($keySid !== '' && $keySecret !== '' && preg_match('/^SK[0-9a-f]{32}$/i', $keySid)
+                && self::accountOk($sid) && self::senderOk($from)) {
+                return ['user' => $keySid, 'pass' => $keySecret, 'account' => $sid, 'from' => $from];
+            }
+
+            if (self::shapeOk($sid, $token, $from)) {
+                return ['user' => $sid, 'pass' => $token, 'account' => $sid, 'from' => $from];
+            }
+            /* A HALF-CONFIGURED AGENCY MUST NOT BORROW THE PLATFORM'S NUMBER.
+               Falling back here would send an agency's texts from somebody else's sender,
+               which is worse than not sending: it bills the wrong account and replies go
+               somewhere nobody is reading. Only an agency that has configured NOTHING
+               falls through to the platform default. */
+            if ($sid !== '' || $token !== '' || $from !== '' || $keySid !== '' || $keySecret !== '') {
+                return null;
+            }
+        }
+
+        $sid = trim((string) env('TWILIO_SID'));
+        $token = trim((string) env('TWILIO_TOKEN'));
+        $from = trim((string) env('TWILIO_FROM'));
+
+        return self::shapeOk($sid, $token, $from)
+            ? ['user' => $sid, 'pass' => $token, 'account' => $sid, 'from' => $from]
+            : null;
+    }
+
+    /** Account SID: AC + 32 hex. */
+    private static function accountOk(string $sid): bool
+    {
+        return (bool) preg_match('/^AC[0-9a-f]{32}$/i', $sid);
+    }
+
+    /** A sender is either E.164 or a Messaging Service SID. */
+    private static function senderOk(string $from): bool
+    {
+        return (bool) preg_match('/^(\+[1-9]\d{7,14}|MG[0-9a-f]{32})$/i', $from);
+    }
+
+    private static function shapeOk(string $sid, string $token, string $from): bool
+    {
+        return self::accountOk($sid) && strlen($token) >= 24 && self::senderOk($from);
     }
 
     private function resolveAgencyId(Request $request): int

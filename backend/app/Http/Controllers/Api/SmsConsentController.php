@@ -131,13 +131,13 @@ final class SmsConsentController extends Controller
     }
 
     /**
-     * Twilio's inbound webhook. Public — Twilio is not carrying a session — so the request
-     * is signature-verified instead.
+     * Twilio's inbound webhook. Public -- Twilio is not carrying a session -- so the
+     * request is signature-verified instead.
      *
-     * Twilio itself blocks a number that has texted STOP, so a missed webhook does not mean
-     * messages keep arriving. It does mean we would carry on QUEUEING them, showing centres
-     * a delivery record for messages nobody received, and leave the app claiming they are
-     * opted in. So the state is recorded here regardless of what the carrier does.
+     * Twilio itself blocks a number that has texted STOP, so a missed webhook does not
+     * mean messages keep arriving. It does mean we would carry on QUEUEING them, showing
+     * centres a delivery record for messages nobody received, and leave the app claiming
+     * they are opted in. So the state is recorded here regardless of what the carrier does.
      */
     public function inbound(Request $request): Response
     {
@@ -147,10 +147,127 @@ final class SmsConsentController extends Controller
             return response('', 403);
         }
 
-        $from = trim((string) $request->input('From', ''));
-        $body = strtolower(trim((string) $request->input('Body', '')));
+        $reply = $this->handleKeyword(
+            (string) $request->input('From', ''),
+            (string) $request->input('Body', ''),
+            'twilio'
+        );
+
+        /* Empty TwiML for anything we do not recognise -- silence is the right answer to
+           a parent replying "thanks" to an automated number.
+
+           Twilio's own Advanced Opt-Out, if switched on for the messaging service,
+           already answers these keywords. Set SMS_KEYWORD_REPLIES=false then, or the
+           sender gets two replies to one STOP. */
+        if ($reply === null || ! self::keywordRepliesOn()) {
+            return response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200)
+                ->header('Content-Type', 'text/xml');
+        }
+
+        return response(
+            '<?xml version="1.0" encoding="UTF-8"?><Response><Message>'
+            . htmlspecialchars($reply, ENT_XML1) . '</Message></Response>',
+            200
+        )->header('Content-Type', 'text/xml');
+    }
+
+    /**
+     * Telnyx's inbound webhook (2026-09-10). POST /sms/telnyx/inbound/{agency}
+     *
+     * Same job as inbound() above and deliberately the same keyword handling, because
+     * STOP has to mean the same thing on both carriers. What differs is everything
+     * around it:
+     *
+     *   - Verified with Ed25519 over the RAW body, not an HMAC over the form fields.
+     *   - The agency is in the PATH. A webhook does not otherwise say whose Telnyx
+     *     account it came from, and the signing key has to be chosen before anything in
+     *     the body can be trusted. (Twilio's endpoint above has no such parameter and
+     *     verifies against the platform-wide TWILIO_TOKEN -- a real limitation of that
+     *     older route, not a pattern to copy.)
+     *   - THERE IS NO TwiML. Telnyx does not take a reply in the webhook response, so a
+     *     confirmation is a fresh outbound message.
+     *
+     * Always 200 once the signature is good: Telnyx retries a non-2xx, and a retried
+     * STOP would send a second confirmation.
+     */
+    public function telnyxInbound(Request $request, int $agency): Response
+    {
+        $raw = $request->getContent();
+
+        if (! \App\Support\Telnyx::verifyWebhook(
+            \App\Support\Telnyx::publicKey($agency),
+            (string) $request->header('telnyx-signature-ed25519', ''),
+            (string) $request->header('telnyx-timestamp', ''),
+            $raw
+        )) {
+            Log::warning('SMS inbound: bad Telnyx signature', ['agency' => $agency]);
+
+            return response('', 403);
+        }
+
+        $body = json_decode($raw, true) ?: [];
+        $event = (string) ($body['data']['event_type'] ?? '');
+
+        // The same endpoint receives delivery receipts (message.sent, message.finalized).
+        // Acknowledged so Telnyx stops retrying, and otherwise not our business here.
+        if ($event !== 'message.received') {
+            return response('', 200);
+        }
+
+        $p = (array) ($body['data']['payload'] ?? []);
+        $from = (string) ($p['from']['phone_number'] ?? '');
+        $reply = $this->handleKeyword($from, (string) ($p['text'] ?? ''), 'telnyx');
+
+        if ($reply === null || ! self::keywordRepliesOn() || $from === '') {
+            return response('', 200);
+        }
+
+        /* SENT DIRECTLY, NOT THROUGH SmsController::sendOne.
+           sendOne would refuse this: the person has, a line above, just been marked
+           opted out, which is exactly what its consent gate exists to catch. But the
+           STOP CONFIRMATION is the one message a carrier requires to go out after an
+           opt-out, so it bypasses the gate and is logged by hand instead of silently
+           skipped. */
+        $cfg = \App\Support\Telnyx::smsConfig($agency);
+        if (! $cfg) {
+            Log::warning('Telnyx keyword reply not sent: agency has no Telnyx sender', ['agency' => $agency]);
+
+            return response('', 200);
+        }
+
+        $res = \App\Support\Telnyx::sendSms($cfg, $from, $reply);
+
+        DB::table('sms_messages')->insert([
+            'agency_id' => $agency,
+            'to_user_id' => $this->userByPhone($from)->id ?? null,
+            'to_phone' => $from,
+            'body' => $reply,
+            'category' => 'keyword_reply',
+            'provider' => 'telnyx',
+            'provider_ref' => $res['ok'] ? ($res['id'] ?: null) : null,
+            'status' => $res['ok'] ? 'sent' : 'failed',
+            'error' => $res['ok'] ? null : $res['error'],
+            'sent_at' => $res['ok'] ? now() : null,
+            'created_at' => now(),
+        ]);
+
+        return response('', 200);
+    }
+
+    /**
+     * STOP, START and HELP -- the carrier-mandated keywords, handled identically on
+     * every carrier.
+     *
+     * Returns the reply to send, or null for anything we do not recognise. The opt-in
+     * or opt-out is recorded here regardless of whether a reply goes out, because the
+     * record is the part that matters: a carrier blocks the number itself, but only we
+     * can stop the app claiming somebody is still subscribed.
+     */
+    private function handleKeyword(string $from, string $rawText, string $carrier): ?string
+    {
+        $from = trim($from);
         // Punctuation and stray whitespace are common in a real reply ("STOP." / " stop ").
-        $word = trim(preg_replace('/[^a-z\-]/', '', $body) ?? '');
+        $word = trim(preg_replace('/[^a-z\-]/', '', strtolower(trim($rawText))) ?? '');
 
         $user = $this->userByPhone($from);
         $reply = null;
@@ -169,28 +286,24 @@ final class SmsConsentController extends Controller
             $reply = sprintf(self::MSG_HELP, $user ? $this->agencyNameFor((int) $user->id) : 'your agency');
         }
 
-        Log::info('SMS inbound', ['from' => $from, 'word' => $word, 'matched' => $reply !== null, 'user' => $user->id ?? null]);
+        Log::info('SMS inbound', [
+            'carrier' => $carrier, 'from' => $from, 'word' => $word,
+            'matched' => $reply !== null, 'user' => $user->id ?? null,
+        ]);
 
-        // Empty TwiML for anything we do not recognise — silence is the right answer to a
-        // parent replying "thanks" to an automated number.
-        if ($reply === null) {
-            return response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200)
-                ->header('Content-Type', 'text/xml');
-        }
+        return $reply;
+    }
 
-        // Twilio's own Advanced Opt-Out, if switched on for the messaging service, already
-        // answers these keywords. Set SMS_KEYWORD_REPLIES=false then, or the sender gets
-        // two replies to one STOP.
-        if (! filter_var(env('SMS_KEYWORD_REPLIES', true), FILTER_VALIDATE_BOOLEAN)) {
-            return response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200)
-                ->header('Content-Type', 'text/xml');
-        }
-
-        return response(
-            '<?xml version="1.0" encoding="UTF-8"?><Response><Message>'
-            . htmlspecialchars($reply, ENT_XML1) . '</Message></Response>',
-            200
-        )->header('Content-Type', 'text/xml');
+    /**
+     * Whether we answer the keywords ourselves.
+     *
+     * Both carriers can answer STOP and HELP on their own -- Twilio's Advanced Opt-Out,
+     * Telnyx's messaging profile settings. With both switched on, one STOP gets two
+     * replies, which reads to the recipient as the opt-out not having worked.
+     */
+    private static function keywordRepliesOn(): bool
+    {
+        return filter_var(env('SMS_KEYWORD_REPLIES', true), FILTER_VALIDATE_BOOLEAN);
     }
 
     // ── internals ───────────────────────────────────────────────────────────

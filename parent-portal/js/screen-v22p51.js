@@ -476,7 +476,8 @@
     main.innerHTML = `
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 12px;color:#1F6080;">Payroll</h2>
-        <div id="pr-tabs" class="kt-subtabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 16px;padding:0 0 2px;"></div>
+        <!-- The "Documents issued" tab was here. Hours and documents are one
+             question, so the documents now sit on the rows they belong to. -->
         <div style="display:flex;gap:12px;margin-bottom:18px;align-items:end;">
           <label style="font-size:13px;color:#374151;">From <input id="pr-from" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
           <label style="font-size:13px;color:#374151;">To <input id="pr-to" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
@@ -488,41 +489,14 @@
         <div id="pr-docs" hidden></div>
       </div>`;
 
-    // Hours worked and documents issued are two different questions about the same
-    // payroll, and they were never both answerable: a payslip was computed on demand and
-    // never written down, so "what did we issue this person" had no record to read.
-    const PR_TABS = [{ key: 'hours', label: '⏱ Hours worked' }, { key: 'docs', label: '🧾 Documents issued' }];
+    /* The two tabs are gone. What each person worked and what they were paid for it is
+       one question, and answering it across two views meant matching names by eye. The
+       documents are on the rows now; see paintPanes() in runPayroll(). */
     let prTab = 'hours';
-    const paintPrTabs = () => {
-      const bar = document.getElementById('pr-tabs');
-      if (!bar) return;
-      bar.innerHTML = PR_TABS.map(t => `<button type="button" data-pr-tab="${t.key}" style="background:none;border:0;border-bottom:2px solid ${prTab === t.key ? '#1F6080' : 'transparent'};padding:9px 13px;font-size:13.5px;font-weight:700;color:${prTab === t.key ? '#0F172A' : '#64748B'};cursor:pointer;border-radius:8px 8px 0 0;">${t.label}</button>`).join('');
-      bar.querySelectorAll('[data-pr-tab]').forEach(b => {
-        b.onclick = () => {
-          // The screen can be torn down between the click and this handler running: an
-          // idle sign-out redirects to the login page while this bar is still painted,
-          // and every lookup below then returns null. Same guard runPayroll() carries.
-          //
-          // Only the two PANES are required. The CSV button is NOT: kt-table-export
-          // removes legacy per-screen export buttons ("⤓ CSV") once its own bar is up,
-          // so demanding it here made the guard fire on every click and the tab do
-          // nothing at all.
-          const result = document.getElementById('pr-result');
-          const docs = document.getElementById('pr-docs');
-          if (!result || !docs) return;
-          const csv = document.getElementById('pr-csv');
-
-          prTab = b.getAttribute('data-pr-tab');
-          const hoursOn = prTab === 'hours';
-          result.hidden = !hoursOn;
-          if (csv) { csv.hidden = !hoursOn; }
-          docs.hidden = hoursOn;
-          paintPrTabs();
-          if (!hoursOn) renderPayrollDocs();
-        };
-      });
-    };
-    paintPrTabs();
+    /* The Hours / Documents tab bar stood here and is gone: hours and documents are
+       one question and now share one table. REMOVED rather than left guarded — its
+       body referenced PR_TABS, which no longer exists, so restoring the #pr-tabs div
+       would have thrown a ReferenceError instead of quietly doing nothing. */
     // v22p98: default to a trailing 30-day window (was first-of-month → today,
     // a single empty day on the 1st, hiding the whole prior pay period).
     const today = new Date();
@@ -535,7 +509,9 @@
        already, and a payroll RUN is a different thing from the hours report. */
     const manualBtn = document.getElementById('pr-manual');
     if (manualBtn) manualBtn.onclick = () => {
-      if (KT.ManualPayroll) KT.ManualPayroll.open(() => renderPayrollDocs());
+      // A finished run changes hours AND the documents on those rows, which are the
+      // same table now, so the whole report is redrawn rather than a separate ledger.
+      if (KT.ManualPayroll) KT.ManualPayroll.open(() => runPayroll());
     };
     // Same reason: by the time this runs the export module may already have removed it.
     const csvBtn = document.getElementById('pr-csv');
@@ -599,6 +575,38 @@
     const money = (n) => '$' + (Number(n) || 0).toFixed(2);
     // Date-only: see KT.dayLabel — this was showing payroll periods a day early.
     const dt = (d) => (window.KT && KT.dayLabel) ? KT.dayLabel(d) : (d || '');
+
+    /* ALL OF ONE PERSON'S PAYSLIPS, IN ONE PLACE.
+
+       The table is a payroll RUN — every document across every person, which is the right
+       shape for "what went out this fortnight" and the wrong one for "send Amna her March
+       payslip". That question meant scrolling a mixed list hunting for her name, and there
+       was nowhere at all to email one from.
+
+       So a name opens the person: their documents, newest first, each with View, Download
+       and Email. The rows come from what the screen already loaded — no second request —
+       and every action goes through the same helpers the table uses, so the two can never
+       start behaving differently. (Anthony, 2026-09-10) */
+    function openStaffPayslips(userId, name) {
+      /* Same dialog as the payroll run's — this table just carries the documents in a
+         different shape, so it maps and hands them over. `after` re-renders this ledger
+         rather than the run, which is the only thing the two callers differ on. */
+      const mine = rows.filter(r => String(r.user_id) === String(userId));
+      const email = (mine.find(r => r.payee_email) || {}).payee_email || '';
+      payslipsPopup(host, {
+        title: name || 'Payslips',
+        subtitle: email,
+        email: email,
+        userId: userId,
+        docs: mine.map(r => ({
+          id: r.id, kind: r.kind, reference: r.reference,
+          period_start: r.period_start, period_end: r.period_end,
+          status: r.status, net: (r.net != null ? r.net : r.gross),
+          email: r.payee_email || email,
+        })),
+        after: renderPayrollDocs,
+      });
+    }
     const chip = (s) => {
       const tone = s === 'paid' ? ['#DCFCE7', '#166534'] : (s === 'void' ? ['#F1F5F9', '#64748B'] : ['#E0F2FE', '#075985']);
       return `<span style="font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;background:${tone[0]};color:${tone[1]};">${escapeHtml(s.charAt(0).toUpperCase() + s.slice(1))}</span>`;
@@ -631,7 +639,9 @@
           <th style="${th('left')}">Period</th><th style="${th('right')}">Units</th><th style="${th('right')}">Gross</th>
           <th style="${th('left')}">Status</th><th style="${th('left')}"></th>
         </tr></thead><tbody>${list.map(r => `<tr>
-          <td style="${td('left')}">${escapeHtml(r.payee_name || '')}<div style="font-size:11.5px;color:#94A3B8;">${escapeHtml(r.role_label || '')}</div></td>
+          <td style="${td('left')}">${r.user_id
+            ? `<button data-staff="${r.user_id}" data-n="${escapeHtml(r.payee_name || '')}" style="background:none;border:0;padding:0;font:inherit;font-weight:600;color:#1F6080;cursor:pointer;text-align:left;text-decoration:underline;">${escapeHtml(r.payee_name || '')}</button>`
+            : escapeHtml(r.payee_name || '')}<div style="font-size:11.5px;color:#94A3B8;">${escapeHtml(r.role_label || '')}</div></td>
           <td style="${td('left')}">${r.kind === 'invoice' ? 'Invoice' : 'Payslip'}</td>
           <td style="${td('left')}">${escapeHtml(r.reference || '')}</td>
           <td style="${td('left')}">${escapeHtml(dt(r.period_start))}</td>
@@ -644,6 +654,10 @@
             ${r.status !== 'paid' ? `<button data-pd-paid="${r.id}" style="background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;">Mark paid</button>` : ''}</td>
         </tr>`).join('')}</tbody></table></div></div>`;
     }).join('');
+
+    host.querySelectorAll('[data-staff]').forEach(b => {
+      b.onclick = () => openStaffPayslips(b.getAttribute('data-staff'), b.getAttribute('data-n'));
+    });
 
     host.querySelectorAll('[data-pd-view]').forEach(b => {
       b.onclick = async () => {
@@ -705,17 +719,37 @@
     const td = (align, extra) => `padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:${align};${extra || ''}`;
     let grand = 0;
 
+    /* The documents belonging to one row, hidden until their count is clicked.
+
+       The last cell holds plain labelled buttons on purpose - kt-row-actions.js turns
+       exactly that into the portal's own kebab. `userId` is null for a contractor, and
+       that is what decides whether Interac can be offered at all. */
+    /* Parked for the dialog rather than rendered as hidden rows under the table. The
+       markup those rows produced is now the dialog's, so there is one place a payslip
+       action is written. */
+    const docRows = (key, docs, userId) => {
+      PR_DOCS[key] = { docs: docs || [], userId: userId || null };
+      return '';
+    };
+
+
     const section = (g) => {
       const rows = byGroup[g.key] || [];
       if (!rows.length) return '';
       let sub = 0;
       const body = rows.map(r => {
         sub += parseFloat(r.total_hours || 0);
+        const docs = r.documents || [];
+        const paidNet = Number(r.paid_net || 0);
         return `<tr><td style="${td('left')}">${escapeHtml(r.user_name)}</td>`
           + `<td style="${td('left')}"><span style="font-size:11.5px;font-weight:700;color:#475569;background:#F1F5F9;border-radius:999px;padding:2px 9px;">${escapeHtml(r.role || 'Staff')}</span></td>`
           + `<td style="${td('left')}">${escapeHtml(r.centre_name || '')}</td>`
           + `<td style="${td('right')}">${r.punch_count}</td>`
-          + `<td style="${td('right', 'font-weight:600;')}">${r.total_hours}</td></tr>`;
+          + `<td style="${td('right', 'font-weight:600;')}">${r.total_hours}</td>`
+          + `<td style="${td('right')}">${docs.length
+              ? `<button type="button" data-pr-docs="u${r.user_id}" data-n="${escapeHtml(r.user_name || '')}" style="border:0;background:none;cursor:pointer;color:#1F6080;font-weight:700;font-size:12.5px;padding:2px 4px;text-decoration:underline;">${docs.length} payslip${docs.length > 1 ? 's' : ''} &middot; $${paidNet.toFixed(2)}</button>`
+              : '<span style="color:#94A3B8;">&mdash;</span>'}</td></tr>`
+          + docRows('u' + r.user_id, docs, r.user_id);
       }).join('');
       grand += sub;
       return `<div style="margin-bottom:22px;">
@@ -725,17 +759,124 @@
         </div>
         <table style="width:100%;border-collapse:collapse;"><thead><tr>
           <th style="${th('left')}">Staff</th><th style="${th('left')}">Role</th><th style="${th('left')}">Centre</th>
-          <th style="${th('right')}">Punches</th><th style="${th('right')}">Hours</th>
+          <th style="${th('right')}">Punches</th><th style="${th('right')}">Hours</th><th style="${th('right')}">Payslips</th>
         </tr></thead><tbody>${body}
         <tr><td colspan="4" style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${escapeHtml(g.label.replace(/^\S+\s/, ''))} subtotal</td>
-        <td style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${sub.toFixed(2)}</td></tr>
+        <td style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${sub.toFixed(2)}</td>
+        <td style="border-top:2px solid #CBD5E1;"></td></tr>
         </tbody></table></div>`;
     };
 
-    host.innerHTML = GROUPS.map(section).join('')
-      + `<div style="display:flex;justify-content:flex-end;gap:14px;align-items:baseline;border-top:2px solid #1F6080;padding:12px 8px 0;">
+    /* CONTRACTORS: paid, never clocked. No punches, so no hours — what they were
+       actually paid in the period is the only true thing to report, and it is said
+       plainly rather than shown as a zero in an hours column. */
+    const contractors = res.contractors || [];
+    const contractorPanel = () => {
+      if (!contractors.length) {
+        return `<div style="color:#64748B;padding:14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;">
+          No contractor was paid in this period. Contractors do not clock in — they are paid by name,
+          so nothing appears here until a payroll run includes one.</div>`;
+      }
+      const rows = contractors.map((c, ci) => `<tr>
+        <td style="${td('left')}">${escapeHtml(c.payee_name)}</td>
+        <td style="${td('left')}"><span style="font-size:11.5px;font-weight:700;color:#5B21B6;background:#EDE9FE;border-radius:999px;padding:2px 9px;">Contractor</span></td>
+        <td style="${td('left')}">${escapeHtml(c.first_period || '')}${c.last_period && c.last_period !== c.first_period ? ' - ' + escapeHtml(c.last_period) : ''}</td>
+        <td style="${td('right')}"><button type="button" data-pr-docs="c${ci}" data-n="${escapeHtml(c.name || c.payee_name || 'Contractor')}" style="border:0;background:none;cursor:pointer;color:#1F6080;font-weight:700;font-size:12.5px;padding:2px 4px;text-decoration:underline;">${c.documents_count}</button></td>
+        <td style="${td('right', 'font-weight:600;')}">$${Number(c.net).toFixed(2)}</td></tr>`
+        /* No user_id, so no Interac: /director/zum/send resolves a person's account to
+           send to, and a contractor is a name rather than an account. Marked paid by
+           hand instead, with the reason stated rather than the button just missing. */
+        + docRows('c' + ci, c.documents, null)).join('');
+      const total = contractors.reduce((a, c) => a + Number(c.net || 0), 0);
+      return `<div style="margin-bottom:10px;padding:11px 13px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:9px;color:#3730A3;font-size:12.5px;">
+          Contractors are paid by name and do not clock in, so this shows what was <strong>paid</strong> in the period, not hours worked.
+        </div>
+        <table style="width:100%;border-collapse:collapse;"><thead><tr>
+          <th style="${th('left')}">Payee</th><th style="${th('left')}">Type</th><th style="${th('left')}">Period</th>
+          <th style="${th('right')}">Payslips</th><th style="${th('right')}">Paid (net)</th>
+        </tr></thead><tbody>${rows}
+        <tr><td colspan="4" style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">Total paid</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">$${total.toFixed(2)}</td></tr>
+        </tbody></table>`;
+    };
+
+    /* SUBTABS, not three tables stacked. Educators, other staff and contractors are
+       separate payrolls — different terms, different approvers, and in the contractors'
+       case a different unit entirely — so only one is on screen at a time and its own
+       subtotal is the number in view. */
+    const PANELS = [
+      { key: 'educators', label: '🧑‍🏫 Educators', count: (byGroup.educators || []).length },
+      { key: 'other', label: '👥 Other staff', count: (byGroup.other || []).length },
+      { key: 'contractors', label: '📄 Contractors', count: contractors.length },
+    ];
+    let pane = 'educators';
+    // Land on a tab that has something in it rather than an empty one.
+    const firstFilled = PANELS.find(p => p.count > 0);
+    if (firstFilled) pane = firstFilled.key;
+
+    const paintPanes = () => {
+      const bar = PANELS.map(p => `<button type="button" data-pay-pane="${p.key}"
+          style="background:none;border:0;border-bottom:2px solid ${pane === p.key ? '#1F6080' : 'transparent'};
+          padding:9px 13px;font-size:13.5px;font-weight:700;color:${pane === p.key ? '#0F172A' : '#64748B'};
+          cursor:pointer;border-radius:8px 8px 0 0;white-space:nowrap;">${p.label}
+          <span style="font-weight:800;color:${pane === p.key ? '#1F6080' : '#94A3B8'};">${p.count}</span></button>`).join('');
+
+      let body;
+      if (pane === 'contractors') {
+        body = contractorPanel();
+      } else {
+        const g = GROUPS.find(x => x.key === pane);
+        grand = 0;
+        body = section(g) || `<div style="color:#64748B;padding:14px;">Nobody in this group has punches in this range.</div>`;
+      }
+
+      /* The overall hours figure survives the split. Contractors are excluded from it
+         on purpose - they have no hours, and folding a zero into a total labelled
+         "hours worked" would state something untrue about them. */
+      const allHours = (res.data || []).reduce((a, r) => a + parseFloat(r.total_hours || 0), 0);
+      const footer = pane === 'contractors' ? '' :
+        `<div style="display:flex;justify-content:flex-end;gap:14px;align-items:baseline;border-top:2px solid #1F6080;padding:12px 8px 0;margin-top:6px;">
+          <span style="font-size:13px;color:#64748B;">All staff, both groups</span>
           <span style="font-size:14px;font-weight:700;color:#0F172A;">Total hours</span>
-          <span style="font-size:18px;font-weight:800;color:#1F6080;">${grand.toFixed(2)}</span></div>`;
+          <span style="font-size:18px;font-weight:800;color:#1F6080;">${allHours.toFixed(2)}</span></div>`;
+
+      host.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 16px;padding:0 0 2px;">${bar}</div>${body}${footer}`;
+      host.querySelectorAll('[data-pay-pane]').forEach(b => {
+        b.onclick = () => { pane = b.getAttribute('data-pay-pane'); paintPanes(); };
+      });
+
+      /* A person's payslips, in a dialog. The row shows the count; the dialog shows the
+         documents and everything you can do with one. */
+      host.querySelectorAll('[data-pr-docs]').forEach(b => {
+        b.onclick = () => {
+          const key = b.getAttribute('data-pr-docs');
+          const entry = PR_DOCS[key] || { docs: [], userId: null };
+          payslipsPopup(host, {
+            title: b.getAttribute('data-n') || 'Payslips',
+            docs: entry.docs,
+            userId: entry.userId,
+          });
+        };
+      });
+    };
+
+    /* One delegated listener for every document action. paintPanes() replaces the whole
+       table on each tab switch and after each action, so per-button handlers would be
+       discarded every render. */
+    /* The delegated listener is now a two-line adapter: every action lives in the
+       module-scope runDocAction(), so the dialog can offer the same six buttons without a
+       second copy of the code behind them. */
+    if (!host.__prDocsWired) {
+      host.__prDocsWired = true;
+      host.addEventListener('click', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('[data-doc-act]') : null;
+        if (!b || !host.contains(b)) { return; }
+        ev.preventDefault();
+        runDocAction(b.getAttribute('data-doc-act'), b, runPayroll);
+      });
+    }
+
+    paintPanes();
     return;
 
     // eslint-disable-next-line no-unreachable
@@ -855,6 +996,15 @@
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-card" style="max-width:720px;padding:20px;">
         <div style="display:grid;grid-template-columns:120px 1fr;gap:12px 14px;align-items:center;">
+          <!-- TEXT OR A PHONE CALL. Same audience, same guards, two very different
+               things to be on the receiving end of — so the channel is the first choice
+               on the form rather than a checkbox somewhere below the message. -->
+          <label style="font-size:13px;font-weight:600;color:#334155;">Send by</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="sms-chan">
+            <button type="button" data-chan="sms" style="height:32px;padding:0 14px;border-radius:8px;border:1px solid #1F6080;background:#1F6080;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">💬 Text message</button>
+            <button type="button" data-chan="voice" style="height:32px;padding:0 14px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-weight:700;font-size:13px;cursor:pointer;">📞 Voice call</button>
+          </div>
+
           <label for="sms-aud" style="font-size:13px;font-weight:600;color:#334155;">Audience</label>
           <select id="sms-aud" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;">
             <option value="role">By role</option>
@@ -874,12 +1024,25 @@
             <option value="guardian">Parents</option><option value="educator">Educators</option><option value="centre_director">Directors</option>
           </select>
 
-          <label for="sms-body" style="font-size:13px;font-weight:600;color:#334155;align-self:start;padding-top:8px;">Message</label>
+          <label for="sms-cat" id="sms-cat-l" style="font-size:13px;font-weight:600;color:#334155;">Reason</label>
+          <select id="sms-cat" class="kt-input" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;">
+            <option value="closure">Closure</option>
+            <option value="evacuation">Evacuation</option>
+            <option value="lockdown">Lockdown</option>
+            <option value="illness">Illness at the centre</option>
+            <option value="emergency">Other emergency</option>
+            <option value="broadcast">Not an emergency</option>
+          </select>
+
+          <label for="sms-body" id="sms-body-l" style="font-size:13px;font-weight:600;color:#334155;align-self:start;padding-top:8px;">Message</label>
           <div>
             <textarea id="sms-body" maxlength="300" rows="4" style="width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;resize:vertical;font:inherit;"></textarea>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-              <span style="font-size:12px;color:#64748B;">Only recipients who opted in to SMS and have a phone number on file will receive it.</span>
-              <span id="sms-count" style="font-size:12px;color:#64748B;">0 / 300</span>
+            <!-- The counter must not be wrapped into the note. The voice note is three
+                 times longer than the text one, and with both allowed to flex the digits
+                 ended up interleaved with the sentence. -->
+            <div style="display:flex;justify-content:space-between;gap:12px;margin-top:4px;align-items:flex-start;">
+              <span id="sms-note" style="font-size:12px;color:#64748B;flex:1 1 auto;">Only recipients who opted in to SMS and have a phone number on file will receive it.</span>
+              <span id="sms-count" style="font-size:12px;color:#64748B;flex:0 0 auto;white-space:nowrap;">0 / 300</span>
             </div>
           </div>
 
@@ -891,13 +1054,55 @@
         </div>
       </div>
 
-      <h3 style="margin:26px 0 10px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recent broadcasts</h3>
+      <h3 id="sms-recent-h" style="margin:26px 0 10px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recent broadcasts</h3>
       <div id="sms-recent"></div>
     </div>`;
 
     const body = document.getElementById('sms-body');
     const counter = document.getElementById('sms-count');
-    body.addEventListener('input', () => { counter.textContent = `${body.value.length} / 300`; });
+
+    /* A text is capped at 300 characters because every 160 is another billed segment.
+       A spoken announcement is not segmented, so it is capped at 800 — which is about
+       forty seconds read aloud, and past that people hang up. */
+    let channel = 'sms';
+    const LIMIT = { sms: 300, voice: 800 };
+    const recount = () => { counter.textContent = `${body.value.length} / ${LIMIT[channel]}`; };
+    body.addEventListener('input', recount);
+
+    const catRow = document.getElementById('sms-cat-l');
+    const catSel = document.getElementById('sms-cat');
+    const note = document.getElementById('sms-note');
+    const bodyLabel = document.getElementById('sms-body-l');
+    const recentH = document.getElementById('sms-recent-h');
+    const sendBtn = document.getElementById('sms-send');
+
+    function syncChannel() {
+      document.querySelectorAll('#sms-chan [data-chan]').forEach(b => {
+        const on = b.getAttribute('data-chan') === channel;
+        b.style.background = on ? '#1F6080' : '#fff';
+        b.style.color = on ? '#fff' : '#334155';
+        b.style.borderColor = on ? '#1F6080' : '#CBD5E1';
+      });
+      const voice = channel === 'voice';
+      catRow.style.display = voice ? '' : 'none';
+      catSel.style.display = voice ? '' : 'none';
+      bodyLabel.textContent = voice ? 'Announcement' : 'Message';
+      sendBtn.textContent = voice ? 'Place calls' : 'Send broadcast';
+      recentH.textContent = voice ? 'Recent calls' : 'Recent broadcasts';
+      body.maxLength = LIMIT[channel];
+      note.textContent = voice
+        ? 'Read aloud by an automated voice. An emergency reason reaches everyone with a phone '
+          + 'number on file; anything else only reaches people who agreed to be contacted. Nobody '
+          + 'who asked not to be telephoned is ever called.'
+        : 'Only recipients who opted in to SMS and have a phone number on file will receive it.';
+      recount();
+      loadSmsRecent(channel);
+    }
+
+    document.querySelectorAll('#sms-chan [data-chan]').forEach(b => {
+      b.addEventListener('click', () => { channel = b.getAttribute('data-chan'); syncChannel(); });
+    });
+    syncChannel();
 
     const aud = document.getElementById('sms-aud');
     const roleRow = document.getElementById('sms-role-l');
@@ -949,7 +1154,11 @@
     loadRooms();
 
     document.getElementById('sms-send').onclick = async () => {
-      const payload = { audience: aud.value, body: body.value, category: 'broadcast' };
+      const payload = {
+        audience: aud.value,
+        body: body.value,
+        category: channel === 'voice' ? catSel.value : 'broadcast',
+      };
       if (aud.value === 'role') payload.role = roleSel.value;
       // Send the id the audience needs. Without this, "by centre" reached everybody.
       if (aud.value === 'centre') payload.centre_id = parseInt(centreSel.value, 10) || null;
@@ -962,42 +1171,66 @@
           '<span style="color:#B91C1C;">Choose which one to send to first.</span>';
         return;
       }
+      /* A phone call is not undoable and not silent. Confirmed by count, because
+         "call 214 people" and "call 4 people" are different decisions and the audience
+         picker above does not make which one this is obvious. */
+      if (channel === 'voice') {
+        const ok = window.KT && KT.confirm
+          ? await KT.confirm('Place announcement calls now? Everyone this reaches will have their phone ring.')
+          : window.confirm('Place announcement calls now?');
+        if (!ok) return;
+      }
+
       try {
-        const r = await Api.post('/admin/sms/broadcast', payload);
-        document.getElementById('sms-msg').innerHTML = `<span style="color:#047857;">Sent ${r.sent} · skipped ${r.skipped} · total ${r.total}</span>`;
-      } catch (e) { document.getElementById('sms-msg').innerHTML = '<span style="color:#B91C1C;">Send failed</span>'; }
-      loadSmsRecent();
+        const r = channel === 'voice'
+          ? await Api.post('/admin/voice/announce', payload)
+          : await Api.post('/admin/sms/broadcast', payload);
+        const done = channel === 'voice' ? r.placed : r.sent;
+        const verb = channel === 'voice' ? 'Calling' : 'Sent';
+        document.getElementById('sms-msg').innerHTML =
+          `<span style="color:#047857;">${verb} ${done} · skipped ${r.skipped} · total ${r.total}</span>`;
+      } catch (e) {
+        document.getElementById('sms-msg').innerHTML =
+          `<span style="color:#B91C1C;">${escapeHtml((e && e.message) || 'Send failed')}</span>`;
+      }
+      loadSmsRecent(channel);
     };
-    loadSmsRecent();
+    // syncChannel() above already drew the list for the starting channel.
   }
 
   // Recent broadcasts as a REAL table, so it picks up the same search, sort and record
   // count as every other table on the site (kt-table-filter + kt-table-export attach to
   // any #appMain table). It used to be a hand-rolled list of divs, which got none of it.
-  async function loadSmsRecent() {
-    const r = await Api.get('/admin/sms/messages').catch(() => ({ data: [] }));
+  async function loadSmsRecent(channel) {
+    const voice = channel === 'voice';
+    const r = await Api.get(voice ? '/admin/voice/calls' : '/admin/sms/messages').catch(() => ({ data: [] }));
     const host = document.getElementById('sms-recent');
     if (!host) return;
     const rows = (r && r.data) || [];
     if (!rows.length) {
-      host.innerHTML = '<div class="kt-card" style="color:#64748B;padding:40px;text-align:center;font-size:13px;">No broadcasts sent yet.</div>';
+      host.innerHTML = '<div class="kt-card" style="color:#64748B;padding:40px;text-align:center;font-size:13px;">'
+        + (voice ? 'No calls placed yet.' : 'No broadcasts sent yet.') + '</div>';
       return;
     }
-    const colour = (st) => st === 'sent' ? '#047857' : st === 'failed' ? '#B91C1C' : '#D97706';
+    /* A call has more ways to end than a text has. Green is only for a call that was
+       actually answered and heard out; "no answer" is amber because it is a normal
+       outcome and not a fault, and only a genuine failure is red. */
+    const colour = (st) => ['sent', 'completed', 'spoken'].includes(st) ? '#047857'
+      : ['failed', 'rejected'].includes(st) ? '#B91C1C' : '#D97706';
     host.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff;">
       <thead style="background:#F8FAFC;">
         <tr>
-          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Sent</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Called' : 'Sent'}</th>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">To</th>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Status</th>
-          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Message</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Announcement' : 'Message'}</th>
         </tr>
       </thead>
       <tbody>
         ${rows.map(m => `<tr>
           <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${fmtDate(m.created_at)}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${escapeHtml(m.to_phone || '')}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;"><span style="color:${colour(m.status)};font-weight:600;">${escapeHtml(m.status || '')}</span></td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${escapeHtml(m.to_name || m.to_phone || '')}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;"><span style="color:${colour(m.status)};font-weight:600;">${escapeHtml((m.status || '').replace(/_/g, ' '))}</span>${m.error ? `<div style="font-size:11.5px;color:#94A3B8;">${escapeHtml(String(m.error).substring(0, 120))}</div>` : ''}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;">${escapeHtml((m.body || '').substring(0, 200))}</td>
         </tr>`).join('')}
       </tbody>
@@ -1086,6 +1319,232 @@
 
   // ============================ Helpers ============================
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  /* ONE WAY TO FETCH A PAYSLIP, AND ONE WAY TO SPEAK.
+
+     Two screens in this file open payslips — the payroll run and the per-person popup —
+     and a second copy of the fetch is where they would start disagreeing about which
+     header to send or what a failure means. Lifted here so there is one.
+
+     Fetched with the bearer rather than linked: a plain href gets a 401, and a payslip
+     URL in the address bar is somebody's pay left in browser history. */
+  async function payslipBlob(id) {
+    const tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+    const base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    const r = await fetch(`${base}/payroll-documents/${id}/pdf`, {
+      headers: { Authorization: 'Bearer ' + tok, Accept: 'application/pdf' },
+    });
+    if (!r.ok) { throw new Error('That payslip could not be opened (' + r.status + ').'); }
+    return await r.blob();
+  }
+
+  function say(m) { return (window.KT && KT.toast) ? KT.toast(m, 'info') : alert(m); }
+
+  /* THE DOCUMENTS FOR ONE PERSON, KEYED BY THE BUTTON THAT OPENS THEM.
+
+     The payroll run renders a row per person and knows their documents at render time;
+     the click happens later. Rather than serialising a list into a data- attribute, the
+     render parks it here and the handler looks it up. Cleared on each render so a stale
+     person cannot be opened from a table that no longer shows them. */
+  var PR_DOCS = {};
+
+  /**
+   * All of one person's payslips, in a dialog.
+   *
+   * The list used to expand INLINE under their row — which works for one person and falls
+   * apart the moment somebody has six documents and you are trying to read the table
+   * around them. A dialog gives the documents the whole width, keeps the run table intact
+   * underneath, and is the shape somebody actually wants when the task is "send Amna her
+   * March payslip" rather than "what went out this fortnight".
+   *
+   * Rendered INSIDE `host` on purpose. Every action here is served by the delegated
+   * [data-doc-act] listener bound to that host, so putting the dialog anywhere else would
+   * mean a second copy of the action code — and the two would drift. The overlay is
+   * position:fixed, so where it sits in the DOM changes nothing about how it looks.
+   * (Anthony, 2026-09-10)
+   */
+  function payslipsPopup(host, opts) {
+    var docs = opts.docs || [];
+    var stale = host.querySelector('.pr-slip-ov');
+    if (stale) { stale.remove(); }
+
+    var money = function (n) { return '$' + (Number(n) || 0).toFixed(2); };
+    var day = function (d) { return (window.KT && KT.dayLabel) ? KT.dayLabel(d) : (d || ''); };
+
+    var net = docs.reduce(function (a, d) { return a + (Number(d.net) || 0); }, 0);
+    var unpaid = docs.filter(function (d) { return String(d.status) !== 'paid' && String(d.status) !== 'void'; })
+      .reduce(function (a, d) { return a + (Number(d.net) || 0); }, 0);
+
+    var ov = document.createElement('div');
+    ov.className = 'kt-scrim pr-slip-ov';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;'
+      + 'justify-content:center;padding:20px;overflow-y:auto;background:rgba(8,20,40,.55);';
+
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:880px;width:100%;margin:auto;'
+      + 'overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="padding:18px 22px;border-bottom:1px solid #EEF2F7;display:flex;align-items:center;gap:12px;">'
+      +   '<div style="min-width:0;">'
+      +     '<div style="font-size:17px;font-weight:800;color:#0F172A;">💵 ' + escapeHtml(opts.title || 'Payslips') + '</div>'
+      +     '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">'
+      +       docs.length + ' document' + (docs.length === 1 ? '' : 's') + ' · ' + money(net) + ' net'
+      +       (unpaid ? ' · <span style="color:#9A3412;font-weight:700;">' + money(unpaid) + ' unpaid</span>' : '')
+      +       (opts.subtitle ? ' · ' + escapeHtml(opts.subtitle) : '')
+      +     '</div>'
+      +   '</div>'
+      +   '<button class="pr-slip-x" type="button" aria-label="Close" data-kt-iconized="1" style="margin-left:auto;'
+      +     'background:#F1F5F9;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;cursor:pointer;color:#475569;">✕</button>'
+      + '</div>'
+      + '<div style="padding:14px 22px 20px;max-height:min(72vh,760px);overflow-y:auto;" data-kt-scroll="1">'
+      + (docs.length
+          ? docs.map(function (d) {
+              var isPaid = String(d.status) === 'paid';
+              var period = (d.period_start === d.period_end)
+                ? day(d.period_end)
+                : (day(d.period_start) + ' – ' + day(d.period_end));
+              return '<div style="border:1px solid #E5E7EB;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
+                + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+                +   '<div style="font-weight:700;color:#0F172A;font-size:14px;">'
+                +     escapeHtml(d.kind === 'invoice' ? 'Payroll invoice' : 'Payslip')
+                +     (d.reference ? ' <span style="font-weight:500;color:#64748B;">· ' + escapeHtml(d.reference) + '</span>' : '')
+                +   '</div>'
+                +   (isPaid
+                      ? '<span style="font-size:11px;font-weight:800;color:#166534;background:#DCFCE7;border-radius:999px;padding:2px 9px;">Paid</span>'
+                      : '<span style="font-size:11px;font-weight:800;color:#92400E;background:#FEF3C7;border-radius:999px;padding:2px 9px;">'
+                        + escapeHtml(d.status || 'issued') + '</span>')
+                +   '<div style="margin-left:auto;font-weight:800;color:#0F172A;">' + money(d.net) + '</div>'
+                + '</div>'
+                + '<div style="font-size:12.5px;color:#64748B;margin-top:3px;">' + escapeHtml(period) + '</div>'
+                + '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;">'
+                +   '<button type="button" data-doc-act="pdf" data-doc="' + d.id + '" style="' + SLIP_BTN + '">👁 View</button>'
+                +   '<button type="button" data-doc-act="save" data-doc="' + d.id + '" style="' + SLIP_BTN + '">⬇️ Download</button>'
+                +   '<button type="button" data-doc-act="print" data-doc="' + d.id + '" style="' + SLIP_BTN + '">🖨 Print</button>'
+                +   '<button type="button" data-doc-act="email" data-doc="' + d.id + '" data-email="'
+                +     escapeHtml(d.email || opts.email || '') + '" style="' + SLIP_BTN_P + '">✉️ Email</button>'
+                +   ((opts.userId && !isPaid)
+                        ? '<button type="button" data-doc-act="zum" data-doc="' + d.id + '" data-user="' + opts.userId
+                          + '" data-net="' + d.net + '" style="' + SLIP_BTN + '">Send by Interac</button>'
+                        : '')
+                +   '<button type="button" data-doc-act="status" data-doc="' + d.id + '" data-to="'
+                +     (isPaid ? 'issued' : 'paid') + '" style="' + SLIP_BTN + '">'
+                +     (isPaid ? 'Mark unpaid' : 'Mark as paid') + '</button>'
+                + '</div></div>';
+            }).join('')
+          : '<div style="padding:26px;text-align:center;color:#64748B;">No payroll documents for this person in the period shown.</div>')
+      + '</div></div>';
+
+    host.appendChild(ov);
+    ov.querySelector('.pr-slip-x').addEventListener('click', function () { ov.remove(); });
+
+    /* Wired directly rather than left to a delegated listener: this dialog is opened from
+       two different hosts and only one of them has that listener. Same function either
+       way, so the buttons cannot behave differently depending on where you opened it. */
+    ov.querySelectorAll('[data-doc-act]').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();          // or the host's delegation would run it twice
+        runDocAction(b.getAttribute('data-doc-act'), b, function () {
+          ov.remove();                 // the numbers moved; the table behind is redrawing
+          if (typeof opts.after === 'function') { opts.after(); }
+        });
+      });
+    });
+  }
+
+  /**
+   * Everything you can do to one payroll document.
+   *
+   * Was a closure inside the payroll run's delegated listener, which meant the per-person
+   * dialog either duplicated it or offered fewer buttons. Neither is acceptable for a
+   * screen that moves real money, so it moved here: one implementation, called from the
+   * run table's delegation and from the dialog's own buttons.
+   *
+   * `after` is what to re-render when something changed — the caller knows that; this
+   * does not. (Anthony, 2026-09-10)
+   */
+  async function runDocAction(act, b, after) {
+    const id = b.getAttribute('data-doc');
+    try {
+      if (act === 'pdf' || act === 'print') {
+        const url = URL.createObjectURL(await payslipBlob(id));
+        const w = window.open(url, '_blank');
+        if (!w) { URL.revokeObjectURL(url); return say('Allow pop-ups for this site to open the payslip.'); }
+        if (act === 'print') { w.addEventListener('load', () => { try { w.print(); } catch (e) {} }); }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        return;
+      }
+
+      if (act === 'save') {
+        const url = URL.createObjectURL(await payslipBlob(id));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'payslip-' + id + '.pdf';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        return;
+      }
+
+      if (act === 'email') {
+        /* Prefilled, never assumed — the endpoint requires an address for the same
+           reason: a default recipient means a lost field posts somebody's pay to an
+           address nobody chose. */
+        const to = window.prompt('Email this payslip to:', b.getAttribute('data-email') || '');
+        if (!to) { return; }
+        b.disabled = true;
+        try {
+          /* NOTE the /provider/ prefix. The admin payroll-document routes are
+             namespaced there; only the PDF route is not. */
+          const res = await Api.post(`/provider/payroll-documents/${id}/email`, { to });
+          say(res.sent
+            ? 'Payslip emailed to ' + to + (res.attachment ? '' : ' (without the PDF — it could not be built)')
+            : 'Not sent: ' + (res.reason || 'the mail layer held it back.'));
+        } finally {
+          b.disabled = false;
+        }
+        return;
+      }
+
+      if (act === 'zum') {
+        /* Real money leaving the account, so it is confirmed and the amount is named in
+           the question rather than assumed from context. */
+        const net = Number(b.getAttribute('data-net') || 0);
+        const who = b.getAttribute('data-who') || '';
+        if (!window.confirm(`Send $${net.toFixed(2)} by Interac${who ? ' to ' + who : ''}?\n\nThis moves real money.`)) { return; }
+        const was = b.textContent;
+        b.disabled = true; b.textContent = 'Sending…';
+        try {
+          const r = await Api.post('/director/zum/send', {
+            user_id: Number(b.getAttribute('data-user')),
+            amount: net,
+            payroll_document_id: Number(id),
+            comment: 'Payroll payment',
+          });
+          say(r.message || 'Interac payment sent.');
+          if (after) { after(); }
+        } catch (e) {
+          b.disabled = false; b.textContent = was;
+          say(e.message || 'That could not be sent.');
+        }
+        return;
+      }
+
+      if (act === 'status') {
+        const to = b.getAttribute('data-to');
+        b.disabled = true;
+        await Api.post(`/provider/payroll-documents/${id}/status`, { status: to });
+        say(to === 'paid' ? 'Marked as paid.' : 'Marked unpaid.');
+        if (after) { after(); }
+        return;
+      }
+    } catch (e) {
+      say((e && e.message) || 'That did not work.');
+    }
+  }
+
+  var SLIP_BTN = 'background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;padding:6px 12px;'
+    + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#334155;font-family:inherit;';
+  var SLIP_BTN_P = 'background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:6px 12px;'
+    + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#1E40AF;font-family:inherit;';
   function fmtDate(s) { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
   // Approving time off is for directors & agency admins ONLY. Honour "View as":
   // when a super-admin previews a lower role (educator / home_visitor / guardian),

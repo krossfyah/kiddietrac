@@ -425,6 +425,23 @@ Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController
 // the request is Twilio-signature-verified inside, and refused outright when TWILIO_TOKEN
 // is unset, since an unverifiable endpoint here would let anyone opt a number in or out.
 Route::post('/sms/inbound', [\App\Http\Controllers\Api\SmsConsentController::class, 'inbound'])->middleware('throttle:120,1');
+
+/* PUBLIC — Telnyx inbound SMS and call events (2026-09-10). No auth for the same
+   reason as the Twilio route above; verified instead with the agency's own Ed25519
+   public key over the RAW body, and refused outright when no key is stored.
+
+   THE AGENCY IS IN THE PATH because a Telnyx webhook does not say whose account it
+   came from, and the signing key has to be chosen before anything in the body can be
+   trusted. The id is not a secret and is not what authorises anything — the
+   signature is, and for a call the row must ALSO belong to the agency named here.
+
+   Throttled higher than the SMS route: a single announcement to one room produces
+   four webhooks per recipient (initiated, answered, speak.ended, hangup), so thirty
+   families is a burst of a hundred and twenty in under a minute. */
+Route::post('/sms/telnyx/inbound/{agency}', [\App\Http\Controllers\Api\SmsConsentController::class, 'telnyxInbound'])
+    ->where('agency', '[0-9]+')->middleware('throttle:300,1');
+Route::post('/voice/telnyx/webhook/{agency}', [\App\Http\Controllers\Api\VoiceController::class, 'webhook'])
+    ->where('agency', '[0-9]+')->middleware('throttle:1200,1');
 // Signed (session-less) e-document view — a mobile WebView can open this URL directly.
 Route::get('/edoc/{id}/view', [\App\Http\Controllers\Api\EDocumentController::class, 'signedStream'])->name('edoc.signed')->middleware('signed');
 // One-tap time-off decisions from the approver's email. The GET only DISPLAYS —
@@ -1882,6 +1899,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::post('/admin/sms/broadcast', [\App\Http\Controllers\Api\SmsController::class, 'broadcast']);
         Route::get ('/admin/sms/messages',  [\App\Http\Controllers\Api\SmsController::class, 'listMessages']);
+    });
+
+    /* ---- VOICE ANNOUNCEMENTS (2026-09-10) ----
+       Gated exactly like the SMS broadcast beside it: a director can send one, because a
+       closure or an evacuation is a site-level decision made by whoever is standing in the
+       building. The CREDENTIALS behind it stay agency-admin-only on the settings screen,
+       and the master switch is off until somebody turns it on — running a site is not the
+       same as deciding the agency starts telephoning people.
+
+       test-call rings the caller's OWN number and nobody else's; see the controller. */
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::post('/admin/voice/announce',  [\App\Http\Controllers\Api\VoiceController::class, 'announce']);
+        Route::post('/admin/voice/test-call', [\App\Http\Controllers\Api\VoiceController::class, 'testCall']);
+        Route::get ('/admin/voice/calls',     [\App\Http\Controllers\Api\VoiceController::class, 'calls']);
     });
 
     // ---- AI features ----

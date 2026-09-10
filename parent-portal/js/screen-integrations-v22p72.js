@@ -221,7 +221,86 @@
         })()
       + '</div>'
       + '<div id="es-closerem-out" style="font-size:12px;margin-top:10px;min-height:14px;"></div>'
+
+      /* Statutory holidays. Deliberately inside the closure card: what this switch does is
+         write closures, and it is announced by the same nightly pass. */
+      + '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #E2E8F0;">'
+      + '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0 0 4px;">'
+      + '<span><span style="display:block;font-size:13.5px;font-weight:700;color:#0F172A;">Close automatically on statutory holidays</span>'
+      + '<span style="display:block;font-size:12px;color:#64748B;margin-top:2px;">Adds each public holiday to every centre\u2019s calendar as a closure, so the schedule, autofill and attendance all treat it as a day off. A date you have already entered yourself is never overwritten.</span></span>'
+      + '<input type="checkbox" id="es-stathol" data-kt-switch="1"' + (s.stat_holidays_enabled ? ' checked' : '') + '></label>'
+
+      + '<div id="es-stathol-body" style="margin-top:12px;' + (s.stat_holidays_enabled ? '' : 'display:none;') + '">'
+      + '<div style="font-size:13px;font-weight:700;color:#0F172A;margin:6px 0 2px;">Holiday calendar</div>'
+      + '<select id="es-stathol-country" style="width:100%;max-width:340px;padding:9px 11px;border:1px solid #CBD5E1;border-radius:8px;font-size:13.5px;background:#fff;color:#0F172A;">'
+      + '<option value="CA"' + (s.stat_holidays_country !== 'US' ? ' selected' : '') + '>Canada \u2014 Ontario public holidays</option>'
+      + '<option value="US"' + (s.stat_holidays_country === 'US' ? ' selected' : '') + '>United States \u2014 federal holidays</option>'
+      + '</select>'
+
+      + (function () {
+          /* Only Canada has genuinely optional days: the ESA does not oblige a childcare
+             operator to close for these, and agencies differ. Offering them as tick-boxes
+             is more honest than picking for them. */
+          var avail = s.stat_holidays_optional_available || {};
+          var keys = Object.keys(avail);
+          if (!keys.length) { return ''; }
+          var picked = s.stat_holidays_optional || [];
+          return '<div style="font-size:13px;font-weight:700;color:#0F172A;margin:14px 0 2px;">Also close for</div>'
+            + '<div style="font-size:12px;color:#64748B;margin-bottom:8px;">Not required by the Employment Standards Act \u2014 tick the ones your agency observes.</div>'
+            + '<div id="es-stathol-opt" style="display:flex;gap:8px;flex-wrap:wrap;">'
+            + keys.map(function (k) {
+                var on = picked.indexOf(k) !== -1;
+                return '<label style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid '
+                  + (on ? '#1F6080' : '#E2E8F0') + ';background:' + (on ? '#EFF6FF' : '#fff')
+                  + ';border-radius:999px;padding:6px 13px;font-size:13px;font-weight:600;color:'
+                  + (on ? '#1F6080' : '#475569') + ';cursor:pointer;">'
+                  + '<input type="checkbox" data-stathol-opt="' + esc(k) + '"' + (on ? ' checked' : '')
+                  + ' style="margin:0;">' + esc(avail[k]) + '</label>';
+              }).join('')
+            + '</div>';
+        })()
+
+      + '<div style="font-size:13px;font-weight:700;color:#0F172A;margin:14px 0 2px;">Tell everyone</div>'
+      + '<div style="font-size:12px;color:#64748B;margin-bottom:8px;">Counted in <strong>working days at each centre</strong>, so the note lands on a day people are actually in — a Monday holiday is announced on the Friday, never over the weekend. Parents and educators get a note about the holiday, including what the day is for and who their child is with.</div>'
+      + '<div id="es-statholdays" style="display:flex;gap:8px;flex-wrap:wrap;">'
+      + (function () {
+          var picked = String(s.stat_holidays_notice_days == null ? '1' : s.stat_holidays_notice_days)
+            .split(',').map(function (d) { return parseInt(d, 10); });
+          return [7, 3, 2, 1].map(function (d) {
+            var on = picked.indexOf(d) !== -1;
+            return '<label style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid '
+              + (on ? '#1F6080' : '#E2E8F0') + ';background:' + (on ? '#EFF6FF' : '#fff')
+              + ';border-radius:999px;padding:6px 13px;font-size:13px;font-weight:600;color:'
+              + (on ? '#1F6080' : '#475569') + ';cursor:pointer;">'
+              + '<input type="checkbox" data-stathol-day="' + d + '"' + (on ? ' checked' : '')
+              + ' style="margin:0;">' + (d === 1 ? 'Last working day' : d + ' working days') + '</label>';
+          }).join('');
+        })()
+      + '</div>'
+      + '<div id="es-stathol-out" style="font-size:12px;margin-top:10px;min-height:14px;"></div>'
       + '</div></div>'
+      + '</div></div>'
+
+      /* Missed-chat email timing. Lives with the other mail settings, where an agency
+         admin can actually reach it — it used to sit behind the pencil icon on the
+         platform Agencies screen, which the nav does not even offer to a platform admin
+         (app-v2-shell only adds "Agencies" for NON platform admins), so the person most
+         likely to change it could not find it. (Anthony, 2026-09-09) */
+      + '<div class="kt-card" style="max-width:680px;margin-bottom:18px;">'
+      +   '<div style="font-size:14px;font-weight:700;color:#0F172A;">&#9200; Unread chat messages</div>'
+      +   '<div style="font-size:12.5px;color:#64748B;margin:3px 0 12px;line-height:1.5;">'
+      +     'How long a chat message may sit <strong>unread</strong> before the recipient is emailed about it. '
+      +     'Everything still waiting is gathered into <strong>one email per person</strong>, and nobody is told '
+      +     'twice about the same message. Set it longer for an agency that finds email noisy.'
+      +   '</div>'
+      +   '<label style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:#334155;">'
+      +     '<span>Email after</span>'
+      +     '<input type="number" id="es-chat-delay" min="1" max="1440" step="1" value="'
+      +       esc(String(s.chat_email_delay_minutes || 5))
+      +       '" style="width:96px;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:14px;">'
+      +     '<span>minutes</span>'
+      +   '</label>'
+      + '</div>'
 
       // ── Per-centre / per-room delivery control (pre-boarding switchboard) ──
       + '<div id="es-delivery" style="max-width:680px;margin-bottom:18px;"></div>'
@@ -341,6 +420,7 @@
     // QR check-in nudge toggle — saves immediately.
     // Closure reminders live on their own tab but are wired here with the rest.
     try { wireClosureReminders(document, patch); } catch (e) { /* card absent for this role */ }
+    try { wireStatHolidays(document, patch); } catch (e) { /* card absent for this role */ }
 
     var qrNudge = document.getElementById('es-qrnudge');
     var qrOut = document.getElementById('es-qrnudge-out');
@@ -369,6 +449,10 @@
         graph_tenant_id: v('es-gt'),
         graph_client_id: v('es-gc')
       };
+      /* Sent only when it is a usable number, so a blank or nonsense box leaves the
+         stored value alone rather than resetting the agency to the default. */
+      var _cd = parseInt((document.getElementById('es-chat-delay') || {}).value, 10);
+      if (_cd >= 1 && _cd <= 1440) { body.chat_email_delay_minutes = _cd; }
       var pw = document.getElementById('es-pass').value; if (pw) body.smtp_password = pw;
       var gs = document.getElementById('es-gs').value; if (gs) body.graph_client_secret = gs;
       try { await patch('/admin/email-settings', body); toast('Email settings saved.', 'success'); }
@@ -471,11 +555,83 @@
     { key: 'delivery',  label: 'Delivery',  icon: '🎛️', id: 'es-delivery' },
     { key: 'closures',  label: 'Closures',  icon: '🗓', id: 'es-closures' },
     { key: 'birthdays', label: 'Birthdays', icon: '🎂', birthdays: true },
+    { key: 'immunization', label: 'Immunization', icon: '🩹', immunization: true },
     /* The Reseller "Email" screen, folded in here. requiresEl means the tab only
        appears when its container was actually rendered — platform admins only, since
        nobody else can load /platform/mail-settings. */
     { key: 'platform', label: 'Platform mail', icon: '🌐', id: 'es-platform-mail', requiresEl: true }
   ];
+
+  /* Statutory holidays. Same save-on-change pattern as the closure reminders below.
+     Turning this on writes closures, so the confirmation says how many were created —
+     "saved" would not tell an admin whether anything actually happened. */
+  function wireStatHolidays(root, patch) {
+    var master = root.querySelector('#es-stathol');
+    var body = root.querySelector('#es-stathol-body');
+    var out = root.querySelector('#es-stathol-out');
+    if (!master || !body) { return; }
+
+    function say(msg, bad) {
+      if (!out) { return; }
+      out.style.color = bad ? '#BE4038' : '#1E8E60';
+      out.textContent = msg;
+      setTimeout(function () { if (out.textContent === msg) { out.textContent = ''; } }, 4000);
+    }
+    function paint(sel) {
+      root.querySelectorAll(sel).forEach(function (c) {
+        var on = c.checked, l = c.parentElement;
+        l.style.borderColor = on ? '#1F6080' : '#E2E8F0';
+        l.style.background = on ? '#EFF6FF' : '#fff';
+        l.style.color = on ? '#1F6080' : '#475569';
+      });
+    }
+    function picked(sel, attr) {
+      return Array.prototype.slice.call(root.querySelectorAll(sel))
+        .filter(function (c) { return c.checked; })
+        .map(function (c) { return c.getAttribute(attr); });
+    }
+
+    master.addEventListener('change', function () {
+      body.style.display = master.checked ? '' : 'none';
+      patch('/admin/email-settings', { stat_holidays_enabled: master.checked })
+        .then(function () {
+          say(master.checked
+            ? 'On \u2014 holidays will be added to every centre\u2019s calendar.'
+            : 'Off \u2014 no new holiday closures will be created.');
+        })
+        .catch(function () { say('Could not save', true); });
+    });
+
+    var country = root.querySelector('#es-stathol-country');
+    if (country) {
+      country.addEventListener('change', function () {
+        patch('/admin/email-settings', { stat_holidays_country: country.value })
+          /* The optional list differs by country, so the card is re-rendered rather than
+             left showing tick-boxes that no longer apply. */
+          .then(function () { say('Saved \u2014 reopen this tab to see that calendar\u2019s options.'); })
+          .catch(function () { say('Could not save', true); });
+      });
+    }
+
+    root.querySelectorAll('[data-stathol-opt]').forEach(function (c) {
+      c.addEventListener('change', function () {
+        paint('[data-stathol-opt]');
+        patch('/admin/email-settings', { stat_holidays_optional: picked('[data-stathol-opt]', 'data-stathol-opt') })
+          .then(function () { say('Saved'); })
+          .catch(function () { say('Could not save', true); });
+      });
+    });
+
+    root.querySelectorAll('[data-stathol-day]').forEach(function (c) {
+      c.addEventListener('change', function () {
+        paint('[data-stathol-day]');
+        var d = picked('[data-stathol-day]', 'data-stathol-day').join(',');
+        patch('/admin/email-settings', { stat_holidays_notice_days: d || '1' })
+          .then(function () { say(d ? 'Saved' : 'Kept the day-before notice \u2014 at least one is needed.'); })
+          .catch(function () { say('Could not save', true); });
+      });
+    });
+  }
 
   /* Closure reminders. Saved on change rather than behind a Save button, like the other
      switches on this screen — and the day pills re-render their own state so the ring
@@ -588,6 +744,7 @@
     TABS.forEach(function (t) { root.appendChild(panes[t.key]); });
 
     var birthdaysLoaded = false;
+    var immunizationLoaded = false;
     function show(key) {
       TABS.forEach(function (t) {
         panes[t.key].style.display = (t.key === key) ? '' : 'none';
@@ -606,6 +763,16 @@
           KT.BirthdaySettings.render(panes.birthdays);
         } else {
           panes.birthdays.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Birthday settings could not be loaded.</div>';
+        }
+      }
+      // Same reasoning as birthdays: its own API call, and most visits here are
+      // about something else.
+      if (key === 'immunization' && !immunizationLoaded) {
+        immunizationLoaded = true;
+        if (window.KT && KT.ImmunizationSettings && KT.ImmunizationSettings.render) {
+          KT.ImmunizationSettings.render(panes.immunization);
+        } else {
+          panes.immunization.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Immunization reminder settings could not be loaded.</div>';
         }
       }
     }
@@ -627,11 +794,394 @@
       + 'style="width:100%;padding:10px;border:1.5px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">';
   }
 
+
+  /* ───────────── SMS and voice settings (per agency) ─────────────
+     The credentials used to live in .env: one Twilio account for the whole platform,
+     and a shell session to change a number. An agency brings its own account and its
+     own number, so it sets them here. Every secret is write-only — the API reports
+     whether one is stored and never what it is, so this screen can never show one back,
+     to an admin or to anyone reading over their shoulder.
+
+     TWO CARRIERS since 2026-09-10. Twilio and Telnyx sit side by side; the agency says
+     which one sends and whether the other catches a refusal. Telnyx also carries VOICE,
+     which is the second tab, and its one API key covers both — which is why the key is
+     asked for on the text tab and the voice tab only asks for what is voice-specific. */
+  async function renderSmsSettings(main) {
+    main.setAttribute('data-kt-pretty', '1');
+    main.innerHTML = '<div style="padding:24px;">Loading…</div>';
+
+    var s;
+    try { s = await api().get('/admin/sms-settings'); }
+    catch (e) {
+      main.innerHTML = '<div class="kt-card" style="margin:24px;padding:32px;text-align:center;color:#B45309;">'
+        + 'Could not load SMS settings' + (e && e.message ? ' — ' + esc(e.message) : '') + '.</div>';
+      return;
+    }
+
+    var t = s.telnyx || {};
+    var fld = 'width:100%;box-sizing:border-box;height:34px;padding:0 11px;border:1px solid #E2E8F0;'
+      + 'border-radius:9px;font:inherit;font-size:14px;';
+    var lbl = 'display:block;font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;'
+      + 'letter-spacing:.4px;margin-bottom:5px;';
+    var hint = 'font-size:11.5px;color:#94A3B8;margin-top:4px;';
+    var mono = 'display:block;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:9px 11px;'
+      + 'font-size:12.5px;color:#0F172A;word-break:break-all;';
+
+    function chip(on, label) {
+      return '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;'
+        + 'font-size:12px;font-weight:800;background:' + (on ? '#ECFDF5' : '#F1F5F9') + ';color:'
+        + (on ? '#065F46' : '#64748B') + ';border:1px solid ' + (on ? '#A7F3D0' : '#E2E8F0') + ';">'
+        + (on ? '✓' : '○') + ' ' + esc(label) + '</span>';
+    }
+    function note(kind, html) {
+      var c = kind === 'ok' ? ['#ECFDF5', '#A7F3D0', '#065F46']
+        : kind === 'bad' ? ['#FEE2E2', '#FECACA', '#991B1B'] : ['#FEF3C7', '#FDE68A', '#92400E'];
+      return '<div style="background:' + c[0] + ';border:1px solid ' + c[1] + ';color:' + c[2] + ';border-radius:12px;'
+        + 'padding:11px 14px;font-size:13px;font-weight:600;">' + html + '</div>';
+    }
+
+    /* Two switches decide whether anything sends, and they are not the same one. An
+       admin who does not know that spends a long time wondering why nothing arrives. */
+    var offNote = s.notifications_enabled ? ''
+      : '<div style="margin-top:10px;">' + note('bad', 'This agency has all notifications switched off in '
+        + 'Email settings, so nothing will send or ring even once a carrier is configured.') + '</div>';
+
+    // Sends per carrier over the last 30 days — the first question after switching.
+    var stats = '';
+    try {
+      var rb = s.recent_by_provider || {};
+      var bits = Object.keys(rb).map(function (p) {
+        var counts = rb[p] || {};
+        return esc(p) + ' — ' + Object.keys(counts).map(function (k) {
+          return counts[k] + ' ' + esc(k);
+        }).join(', ');
+      });
+      if (bits.length) {
+        stats = '<div style="' + hint + 'margin-top:12px;">Last 30 days: ' + bits.join(' · ') + '</div>';
+      }
+    } catch (e) { /* a decoration must never break the screen it decorates */ }
+
+    function radio(id, value, checked, label, sub) {
+      return '<label for="' + id + '" style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;'
+        + 'border:1.5px solid ' + (checked ? '#1F6080' : '#E2E8F0') + ';border-radius:10px;cursor:pointer;'
+        + 'background:' + (checked ? '#F0F7FA' : '#fff') + ';flex:1 1 220px;" data-prov-card="' + value + '">'
+        + '<input type="radio" name="sms-provider" id="' + id + '" value="' + value + '"'
+        + (checked ? ' checked' : '') + ' style="margin-top:2px;width:16px;height:16px;cursor:pointer;">'
+        + '<span><span style="display:block;font-size:14px;font-weight:800;color:#0F172A;">' + label + '</span>'
+        + '<span style="display:block;font-size:11.5px;color:#64748B;margin-top:2px;">' + sub + '</span></span></label>';
+    }
+
+    main.innerHTML = ''
+      + '<div style="padding:24px;max-width:880px;margin:0 auto;">'
+      +   '<div class="kt-page-hero"><h2>💬 SMS &amp; voice</h2>'
+      +     '<p>The carriers this agency sends text messages and places announcement calls through.</p></div>'
+
+      /* ── tabs ── */
+      +   '<div style="display:flex;gap:6px;margin-top:16px;flex-wrap:wrap;" id="sv-tabs">'
+      +     '<button type="button" data-sv-tab="text" style="height:32px;padding:0 14px;border-radius:9px;'
+      +       'border:1px solid #1F6080;background:#1F6080;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">'
+      +       'Text messages</button>'
+      +     '<button type="button" data-sv-tab="voice" style="height:32px;padding:0 14px;border-radius:9px;'
+      +       'border:1px solid #CBD5E1;background:#fff;color:#334155;font-weight:800;font-size:13px;cursor:pointer;">'
+      +       'Voice calls</button>'
+      +   '</div>'
+
+      /* ══════════════════════ TEXT ══════════════════════ */
+      +   '<div data-sv-pane="text">'
+
+      +     '<div class="kt-card" style="margin-top:14px;">'
+      +       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">'
+      +         chip(s.twilio_ready, 'Twilio ' + (s.twilio_ready ? 'ready' : 'not set up'))
+      +           chip(s.telnyx_ready, 'Telnyx ' + (s.telnyx_ready ? 'ready' : 'not set up'))
+      +           chip(s.sms_enabled, 'Texting ' + (s.sms_enabled ? 'on' : 'off'))
+      +       '</div>'
+      +       '<div style="font-size:13px;font-weight:800;color:#0F172A;">Which carrier sends</div>'
+      +       '<div style="' + hint + 'margin-bottom:10px;">Both can be set up at once. Only the one chosen here sends.</div>'
+      +       '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+      +         radio('sms-prov-twilio', 'twilio', s.provider !== 'telnyx', 'Twilio', 'The original carrier')
+      +           radio('sms-prov-telnyx', 'telnyx', s.provider === 'telnyx', 'Telnyx', 'Also carries voice calls')
+      +       '</div>'
+      +       '<label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px;font-size:13.5px;'
+      +         'color:#0F172A;cursor:pointer;">'
+      +         '<input type="checkbox" id="sms-failover"' + (s.failover ? ' checked' : '')
+      +           ' style="width:18px;height:18px;cursor:pointer;margin-top:1px;">'
+      +         '<span><b>If that carrier refuses, try the other one.</b>'
+      +           '<span style="display:block;font-size:11.5px;color:#64748B;margin-top:2px;">'
+      +           'Only ever engages when the other carrier is fully set up, and only on a refusal — a message '
+      +           'already accepted is never sent twice.</span></span></label>'
+      +       '<label style="display:flex;align-items:center;gap:10px;margin-top:14px;font-size:14px;font-weight:600;'
+      +         'color:#0F172A;cursor:pointer;">'
+      +         '<input type="checkbox" id="sms-enabled"' + (s.sms_enabled ? ' checked' : '')
+      +           ' style="width:18px;height:18px;cursor:pointer;">'
+      +         'Send text messages for this agency</label>'
+      +       offNote
+      +       stats
+      +     '</div>'
+
+      /* ── Twilio ── */
+      +     '<div class="kt-card" style="margin-top:14px;">'
+      +       '<div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px;">Twilio</div>'
+      +       '<div style="' + hint + 'margin-bottom:12px;">Console → Account Info.</div>'
+      +       '<div><label style="' + lbl + '">Account SID</label>'
+      +         '<input id="sms-sid" style="' + fld + '" placeholder="AC…" value="' + esc(s.account_sid || '') + '">'
+      +         '<div style="' + hint + '">Starts with <b>AC</b>. An OAuth client id (OQ…) is a different '
+      +           'credential and will not work.</div></div>'
+      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Auth token</label>'
+      +         '<input id="sms-token" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
+      +           (s.has_auth_token ? 'Saved — leave blank to keep it' : 'Paste the auth token') + '">'
+      +         '<div style="' + hint + '">Stored encrypted. It is never sent back to this screen, so leaving '
+      +           'this blank keeps the one already saved.</div></div>'
+      +       '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
+      +         '<div style="font-size:13px;font-weight:800;color:#0F172A;">API key <span style="font-weight:600;'
+      +           'color:#64748B;">— recommended, and used in preference to the auth token above</span></div>'
+      +         '<div style="' + hint + '">Console → Account → API keys &amp; tokens → <b>Create API key</b>. '
+      +           'A key can be revoked on its own without resetting the whole account, and the secret is shown '
+      +           'only once — copy it before closing the dialog.</div>'
+      +         '<div style="margin-top:12px;"><label style="' + lbl + '">API key SID</label>'
+      +           '<input id="sms-keysid" style="' + fld + '" placeholder="SK…" value="' + esc(s.api_key_sid || '') + '"></div>'
+      +         '<div style="margin-top:12px;"><label style="' + lbl + '">API key secret</label>'
+      +           '<input id="sms-keysecret" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
+      +             (s.has_api_key_secret ? 'Saved — leave blank to keep it' : 'Paste the secret') + '"></div>'
+      +       '</div>'
+      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
+      +         '<input id="sms-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(s.from || '') + '">'
+      +         '<div style="' + hint + '">The Twilio number in full international form, or a Messaging Service '
+      +           'SID (MG…).</div></div>'
+      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Replies and STOP webhook</label>'
+      +         '<code style="' + mono + '">' + esc(s.inbound_webhook || '') + '</code>'
+      +         '<div style="' + hint + '">In Twilio, set the number\'s incoming-message webhook to this. Without '
+      +           'it, somebody texting STOP is not recorded as opted out — which carriers treat as a violation.</div></div>'
+      +     '</div>'
+
+      /* ── Telnyx ── */
+      +     '<div class="kt-card" style="margin-top:14px;">'
+      +       '<div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:2px;">Telnyx</div>'
+      +       '<div style="' + hint + 'margin-bottom:12px;">Mission Control → API Keys. The same key covers '
+      +         'text messages and voice calls, so it is only asked for here.</div>'
+      +       '<div><label style="' + lbl + '">API key</label>'
+      +         '<input id="tx-key" type="password" autocomplete="new-password" style="' + fld + '" placeholder="'
+      +           (t.has_api_key ? 'Saved — leave blank to keep it' : 'KEY…') + '">'
+      +         '<div style="' + hint + '">Starts with <b>KEY</b>. Stored encrypted and never sent back to this '
+      +           'screen. The <i>public</i> key below is a different credential.</div></div>'
+      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Send from</label>'
+      +         '<input id="tx-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(t.sms_from || '') + '">'
+      +         '<div style="' + hint + '">In full international form.</div></div>'
+      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Messaging profile id <span '
+      +         'style="font-weight:600;text-transform:none;letter-spacing:0;">— optional</span></label>'
+      +         '<input id="tx-profile" style="' + fld + '" placeholder="00000000-0000-0000-0000-000000000000" value="'
+      +             esc(t.messaging_profile_id || '') + '">'
+      +         '<div style="' + hint + '">Only needed for a number pool or an alphanumeric sender id. With one '
+      +           'set, the number above may be left blank.</div></div>'
+      +       '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #EDF2F7;">'
+      +         '<label style="' + lbl + '">Webhook public key</label>'
+      +         '<input id="tx-pubkey" style="' + fld + '" placeholder="base64, 44 characters" value="'
+      +             esc(t.public_key || '') + '">'
+      +         '<div style="' + hint + '">Mission Control → Keys &amp; Credentials → <b>Public Key</b>. Every '
+      +           'reply and call event is checked against this; without it they are all refused, which is '
+      +           'deliberate — an unverified webhook would let anyone opt a number in or out.</div>'
+      +         '<div style="margin-top:12px;"><label style="' + lbl + '">Inbound message webhook</label>'
+      +           '<code style="' + mono + '">' + esc(s.telnyx_inbound_webhook || '') + '</code>'
+      +           '<div style="' + hint + '">Set this on the messaging profile.</div></div>'
+      +       '</div>'
+      +     '</div>'
+
+      +     '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center;">'
+      +       '<button type="button" id="sms-save" style="height:34px;padding:0 18px;background:#1F6080;color:#fff;'
+      +         'border:0;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;">Save</button>'
+      +       '<button type="button" id="sms-test-twilio" data-kt-iconized="1" style="height:34px;padding:0 14px;'
+      +         'background:#fff;color:#1F6080;border:1px solid #CBD5E1;border-radius:9px;font-weight:800;'
+      +         'font-size:13px;cursor:pointer;">Test Twilio</button>'
+      +       '<button type="button" id="sms-test-telnyx" data-kt-iconized="1" style="height:34px;padding:0 14px;'
+      +         'background:#fff;color:#1F6080;border:1px solid #CBD5E1;border-radius:9px;font-weight:800;'
+      +         'font-size:13px;cursor:pointer;">Test Telnyx</button>'
+      +       '<span id="sms-msg" style="font-size:13px;font-weight:700;"></span>'
+      +     '</div>'
+      +   '</div>'
+
+      /* ══════════════════════ VOICE ══════════════════════ */
+      +   '<div data-sv-pane="voice" style="display:none;">'
+      +     '<div class="kt-card" style="margin-top:14px;">'
+      +       (s.voice_ready
+        ? note('ok', 'Telnyx voice is configured' + (s.voice_enabled ? ' and switched on.' : ', but calls are switched OFF below.'))
+        : note('warn', 'Not set up yet — voice needs the Telnyx API key on the Text messages tab, plus a '
+            + 'Call Control connection and a caller number here.'))
+      +       '<div style="' + hint + 'margin:12px 0 0;line-height:1.6;">'
+      +         'An announcement call rings a parent and reads a short message out loud. It is for the notice you '
+      +         'cannot assume anybody read — a closure, an evacuation, a lockdown, an illness at the centre. '
+      +         'Anything outside that only reaches people who have agreed to be contacted, and a parent who has '
+      +         'asked not to be telephoned is never called at all.</div>'
+      +       '<div style="margin-top:16px;"><label style="' + lbl + '">Call Control connection id</label>'
+      +         '<input id="vx-conn" style="' + fld + '" placeholder="e.g. 2891234567890123456" value="'
+      +             esc(t.voice_connection_id || '') + '">'
+      +         '<div style="' + hint + '">Mission Control → Voice → <b>Call Control</b> → your application. '
+      +           'Set that application\'s webhook URL to the address at the bottom of this card.</div></div>'
+      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Call from</label>'
+      +         '<input id="vx-from" style="' + fld + '" placeholder="+16475550123" value="' + esc(t.voice_from || '') + '">'
+      +         '<div style="' + hint + '">The number parents will see. In full international form.</div></div>'
+      +       '<div style="margin-top:14px;"><label style="' + lbl + '">Caller name <span style="font-weight:600;'
+      +         'text-transform:none;letter-spacing:0;">— optional</span></label>'
+      +         '<input id="vx-name" maxlength="128" style="' + fld + '" placeholder="Sunnyside Childcare" value="'
+      +             esc(t.voice_caller_name || '') + '">'
+      +         '<div style="' + hint + '">Shown on handsets that support caller ID name. Not every carrier passes it on.</div></div>'
+      +       '<div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;">'
+      +         '<div style="flex:1 1 240px;"><label style="' + lbl + '">Voice</label>'
+      +           '<input id="vx-voice" style="' + fld + '" placeholder="female" value="' + esc(t.voice_voice || '') + '">'
+      +           '<div style="' + hint + '"><b>female</b> or <b>male</b> for the basic voice. A name like '
+      +             '<b>AWS.Polly.Joanna-Neural</b> sounds far more natural and is billed at the premium rate.</div></div>'
+      +         '<div style="flex:1 1 160px;"><label style="' + lbl + '">Language</label>'
+      +           '<input id="vx-lang" maxlength="12" style="' + fld + '" placeholder="en-US" value="'
+      +               esc(t.voice_language || '') + '">'
+      +           '<div style="' + hint + '">e.g. en-US, en-GB, fr-CA.</div></div>'
+      +       '</div>'
+      +       '<label style="display:flex;align-items:center;gap:10px;margin-top:18px;font-size:14px;font-weight:600;'
+      +         'color:#0F172A;cursor:pointer;">'
+      +         '<input type="checkbox" id="vx-enabled"' + (s.voice_enabled ? ' checked' : '')
+      +           ' style="width:18px;height:18px;cursor:pointer;">'
+      +         'Place announcement calls for this agency</label>'
+      +       '<div style="' + hint + 'margin-left:28px;">Off until you turn it on. Saving credentials on its own '
+      +         'never starts phones ringing.</div>'
+      +       '<div style="margin-top:16px;"><label style="' + lbl + '">Call events webhook</label>'
+      +         '<code style="' + mono + '">' + esc(s.telnyx_voice_webhook || '') + '</code>'
+      +         '<div style="' + hint + '">Set this on the Call Control application. Without it a call connects '
+      +           'and then sits in silence — the announcement is spoken in response to the "answered" event, '
+      +           'because speaking any earlier plays it to a ringing handset nobody is holding.</div></div>'
+      +       '<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;align-items:center;">'
+      +         '<button type="button" id="vx-save" style="height:34px;padding:0 18px;background:#1F6080;color:#fff;'
+      +           'border:0;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;">Save</button>'
+      +         '<button type="button" id="vx-test" data-kt-iconized="1" style="height:34px;padding:0 14px;'
+      +           'background:#fff;color:#1F6080;border:1px solid #CBD5E1;border-radius:9px;font-weight:800;'
+      +           'font-size:13px;cursor:pointer;">Call my own number</button>'
+      +         '<span id="vx-msg" style="font-size:13px;font-weight:700;"></span>'
+      +       '</div>'
+      +       '<div style="' + hint + 'margin-top:8px;">The test rings the number on <b>your own</b> profile and '
+      +         'nobody else\'s.</div>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>';
+
+    // ── tabs ──
+    var panes = {};
+    main.querySelectorAll('[data-sv-pane]').forEach(function (p) { panes[p.getAttribute('data-sv-pane')] = p; });
+    main.querySelectorAll('[data-sv-tab]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-sv-tab');
+        main.querySelectorAll('[data-sv-tab]').forEach(function (o) {
+          var on = o === b;
+          o.style.background = on ? '#1F6080' : '#fff';
+          o.style.color = on ? '#fff' : '#334155';
+          o.style.borderColor = on ? '#1F6080' : '#CBD5E1';
+        });
+        Object.keys(panes).forEach(function (k) { panes[k].style.display = k === key ? '' : 'none'; });
+      });
+    });
+
+    // Repaint the carrier cards as the radio moves, so the choice is legible at a glance.
+    main.querySelectorAll('input[name="sms-provider"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        main.querySelectorAll('[data-prov-card]').forEach(function (c) {
+          var on = c.getAttribute('data-prov-card') === r.value && r.checked;
+          c.style.borderColor = on ? '#1F6080' : '#E2E8F0';
+          c.style.background = on ? '#F0F7FA' : '#fff';
+        });
+      });
+    });
+
+    function say(id, text, ok) {
+      var m = document.getElementById(id);
+      if (!m) { return; }
+      m.textContent = text;
+      m.style.color = ok ? '#047857' : '#B91C1C';
+    }
+    function val(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
+
+    /* ONE SAVE FOR BOTH TABS. Both panes are always in the DOM — the hidden one is only
+       display:none — so a save from either button carries every field. Saving on the
+       voice tab and losing the number typed on the text tab would be its own bug. */
+    async function save(msgId) {
+      var prov = main.querySelector('input[name="sms-provider"]:checked');
+      var body = {
+        account_sid: val('sms-sid'),
+        from: val('sms-from'),
+        api_key_sid: val('sms-keysid'),
+        sms_enabled: document.getElementById('sms-enabled').checked,
+        provider: prov ? prov.value : 'twilio',
+        failover: document.getElementById('sms-failover').checked,
+
+        telnyx_public_key: val('tx-pubkey'),
+        telnyx_sms_from: val('tx-from'),
+        telnyx_messaging_profile_id: val('tx-profile'),
+        telnyx_voice_connection_id: val('vx-conn'),
+        telnyx_voice_from: val('vx-from'),
+        telnyx_voice_caller_name: val('vx-name'),
+        telnyx_voice_voice: val('vx-voice'),
+        telnyx_voice_language: val('vx-lang'),
+        voice_enabled: document.getElementById('vx-enabled').checked,
+      };
+      // Secrets are only sent when something was typed, so a blank box keeps the stored one.
+      if (val('sms-token')) { body.auth_token = val('sms-token'); }
+      if (val('sms-keysecret')) { body.api_key_secret = val('sms-keysecret'); }
+      if (val('tx-key')) { body.telnyx_api_key = val('tx-key'); }
+
+      say(msgId, '', true);
+      try {
+        await api().patch('/admin/sms-settings', body);
+        toast('SMS and voice settings saved.', 'success');
+        renderSmsSettings(main);
+      } catch (e) {
+        say(msgId, (e && e.message) || 'Could not save those settings.', false);
+      }
+    }
+
+    document.getElementById('sms-save').addEventListener('click', function () {
+      this.disabled = true; var b = this;
+      save('sms-msg').then(function () { b.disabled = false; });
+    });
+    document.getElementById('vx-save').addEventListener('click', function () {
+      this.disabled = true; var b = this;
+      save('vx-msg').then(function () { b.disabled = false; });
+    });
+
+    /* Reads the carrier's account rather than sending a message: it proves the
+       credentials are accepted without costing anything or needing a consenting
+       recipient. Each carrier is tested on its own, because testing the one that is
+       not selected is exactly the sort of test that passes while sending fails. */
+    [['sms-test-twilio', 'twilio'], ['sms-test-telnyx', 'telnyx']].forEach(function (pair) {
+      document.getElementById(pair[0]).addEventListener('click', async function () {
+        var btn = this;
+        btn.disabled = true; say('sms-msg', 'Checking ' + pair[1] + '…', true);
+        try {
+          var r = await api().post('/admin/sms-settings/test', { provider: pair[1] });
+          say('sms-msg', (r && r.message) || 'Connected.', true);
+        } catch (e) {
+          say('sms-msg', (e && e.message) || 'Those credentials were refused.', false);
+        }
+        btn.disabled = false;
+      });
+    });
+
+    document.getElementById('vx-test').addEventListener('click', async function () {
+      var btn = this;
+      var ok = window.KT && KT.confirm
+        ? await KT.confirm('Ring your own number now with a short test announcement?')
+        : window.confirm('Ring your own number now?');
+      if (!ok) { return; }
+      btn.disabled = true; say('vx-msg', 'Placing the call…', true);
+      try {
+        var r = await api().post('/admin/voice/test-call', {});
+        say('vx-msg', (r && r.message) || 'Calling now.', true);
+      } catch (e) {
+        say('vx-msg', (e && e.message) || 'The call could not be placed.', false);
+      }
+      btn.disabled = false;
+    });
+  }
+
   // Register screens
   function reg() {
     if (!(window.KT && window.KT.Shell && window.KT.Shell.registerScreen)) { setTimeout(reg, 200); return; }
     ['agency_admin', 'platform_admin', 'centre_director'].forEach(function (r) {
       window.KT.Shell.registerScreen(r + ':quickbooks', renderQuickbooks);
+      window.KT.Shell.registerScreen(r + ':sms-settings', renderSmsSettings);
       // Wrapped rather than folded into renderEmailSettings: the tabs are a layer over
       // whatever that function rendered, and keeping them separate means the render path
       // is unchanged if the tabs are ever dropped.
@@ -653,6 +1203,22 @@
               && !main.querySelector('#es-platform-mail')) {
             var pm = document.createElement('div');
             pm.id = 'es-platform-mail';
+            /* LEFT-ALIGN IT LIKE EVERY OTHER TAB.
+               screen-mail-settings.js is ALSO a standalone screen (#mail-settings), where
+               a centred column is right and is what the rest of the portal does. Embedded
+               here it kept that centring while every other pane is a plain left-aligned
+               kt-card, so the content jumped to the middle of the page on this one tab.
+               Fixed here rather than in that file, so the standalone screen is untouched.
+               !important is unavoidable: the centring is an inline style on the child.
+               The width is matched to the neighbouring panes (680px) so moving across the
+               tabs does not resize the column either. */
+            if (!document.getElementById('es-pm-align')) {
+              var pmCss = document.createElement('style');
+              pmCss.id = 'es-pm-align';
+              pmCss.textContent = '#es-platform-mail > div{margin-left:0 !important;margin-right:0 !important;'
+                + 'padding-left:0 !important;padding-right:0 !important;max-width:680px !important;}';
+              document.head.appendChild(pmCss);
+            }
             /* Into root, not main: applyEmailTabs relocates root.children, and
                root is main.firstElementChild. A sibling of root is invisible to it. */
             (main.firstElementChild || main).appendChild(pm);
