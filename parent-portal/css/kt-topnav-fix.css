@@ -204,3 +204,36 @@ body.role-sales-rep #appMain > .kt-tilehome {
   opacity: 1 !important;
   transform: none !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE PHONE HEADER HAS TO CLEAR THE STATUS BAR — in every context.
+
+   These headers are `position: sticky; top: 0`, and nothing here ever inset them.
+   The only rule that did was in kt-mobile-app.css:
+
+       html.kt-app #appSidebar { padding-top: max(var(--kt-safe-top, …), 22px) }
+
+   and `kt-app` is set only when Capacitor reports a NATIVE app. There is no iOS
+   native build yet, so on an iPhone — Safari or added to the Home Screen — that
+   class never appears and the header pinned to y=0, underneath the notch. The
+   avatar and the role pill were half-hidden behind the clock, which is exactly how
+   it was reported: "the top bar is not showing with the user's avatar and name".
+
+   Android's APK was fine throughout, because there `kt-app` IS set. That is why
+   this survived: the platform that had the bug was the one nobody was testing on.
+
+   Written as an inset ON TOP of the 10px the header already has, and read through
+   --kt-safe-top first because iOS reports env(safe-area-inset-top) as 0 in the very
+   context that needs it (see kt-ios-safearea.js). Where there is no cutout — every
+   desktop, every Android browser, an older iPhone — both resolve to 0px and this
+   changes nothing at all.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  body.role-guardian     #appSidebar,
+  body.role-educator     #appSidebar,
+  body.role-auditor      #appSidebar,
+  body.role-home-visitor #appSidebar,
+  body.role-sales-rep    #appSidebar {
+    padding-top: calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 10px);
+  }
+}
