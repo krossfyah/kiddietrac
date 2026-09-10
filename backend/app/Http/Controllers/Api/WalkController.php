@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
 /**
  * Walks & outings — lightweight, educator-started field trips with live GPS.
@@ -23,6 +24,43 @@ final class WalkController extends Controller
     use ResolvesCentreContext;
 
     /** Centre ids the current staff member is assigned to. */
+    /**
+     * Every centre this person may OVERSEE, as opposed to the ones they work at.
+     *
+     * An educator or a centre director is attached to specific centres. An agency admin
+     * is attached to none of them and is responsible for all of them, so reading
+     * role_assignments.centre_id alone leaves them looking at an empty screen.
+     *
+     * A platform admin is scoped to whichever agency they are currently viewing, never
+     * to everything at once — see the standing rule about agency isolation.
+     */
+    private function overseenCentreIds(Request $request): array
+    {
+        $userId = $request->user()->id;
+        $ids = $this->staffCentreIds($userId);
+
+        $roles = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)
+            ->get(['role', 'agency_id']);
+
+        $agencyIds = $roles->where('role', 'agency_admin')->pluck('agency_id')->filter()->all();
+
+        if ($roles->contains('role', 'platform_admin')) {
+            // Only the agency actually being viewed. "All agencies" is not a thing here:
+            // one map of every child in the platform is exactly what must not exist.
+            $active = (int) $request->header('X-Active-Agency-Id');
+            if ($active) {
+                $agencyIds[] = $active;
+            }
+        }
+
+        if ($agencyIds) {
+            $ids = array_merge($ids, DB::table('centres')->whereIn('agency_id', array_unique($agencyIds))
+                ->whereNull('deleted_at')->pluck('id')->map(fn ($v) => (int) $v)->all());
+        }
+
+        return array_values(array_unique($ids));
+    }
+
     private function staffCentreIds(int $userId): array
     {
         return DB::table('role_assignments')->where('user_id', $userId)
@@ -160,6 +198,231 @@ final class WalkController extends Controller
     }
 
     /** GET /provider/walks/eligible-children — children clocked in TODAY (selectable for a walk). */
+    /**
+     * GET /provider/walks/tracker?date=YYYY-MM-DD
+     *
+     * Every walk and outing on one day, across the centres this person oversees.
+     *
+     * Deliberately a day at a time, not a trip at a time: "who is out right now" and
+     * "where did Tuesday's group go" are the same question, and a dropdown of individual
+     * trips answers neither well.
+     *
+     * Scoped through the viewer's own centres — the standing rule. A director must never
+     * see another agency's children on a map.
+     */
+    public function tracker(Request $request): JsonResponse
+    {
+        $u = $request->user();
+        $centreIds = $this->overseenCentreIds($request);
+        if (! $centreIds) {
+            return response()->json(['date' => null, 'trips' => []]);
+        }
+
+        $tz = $this->staffTz($u->id);
+        $date = $request->query('date')
+            ? Carbon::parse($request->query('date'), $tz)->toDateString()
+            : Carbon::now($tz)->toDateString();
+
+        $trips = DB::table('field_trips as t')
+            ->leftJoin('users as u', 'u.id', '=', 't.staff_lead_id')
+            ->whereIn('t.centre_id', $centreIds)
+            ->whereDate('t.trip_date', $date)
+            ->orderByDesc('t.status')       // active first, then the rest
+            ->orderByDesc('t.id')
+            ->get([
+                't.id', 't.title', 't.destination', 't.status', 't.trip_date',
+                't.depart_time', 't.return_time', 't.distance_km', 't.map_token',
+                't.transport_method', 't.centre_id', 't.staff_lead_id',
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as lead_name"),
+                'u.phone as lead_phone',
+            ]);
+
+        if ($trips->isEmpty()) {
+            return response()->json(['date' => $date, 'trips' => []]);
+        }
+
+        $tripIds = $trips->pluck('id')->all();
+
+        // The children, by name. A count tells a director nothing when a parent rings up
+        // asking whether their child is on the outing.
+        $kids = DB::table('field_trip_permissions as p')
+            ->join('children as c', 'c.id', '=', 'p.child_id')
+            ->whereIn('p.field_trip_id', $tripIds)
+            ->whereNull('c.deleted_at')
+            ->get(['p.field_trip_id', 'p.status', 'c.id', 'c.first_name', 'c.last_name', 'c.photo_url'])
+            ->groupBy('field_trip_id');
+
+        $centreNames = DB::table('centres')->whereIn('id', $trips->pluck('centre_id')->filter()->unique())
+            ->pluck('name', 'id');
+
+        $out = [];
+        foreach ($trips as $t) {
+            $first = DB::table('field_trip_pings')->where('field_trip_id', $t->id)
+                ->orderBy('recorded_at')->orderBy('id')->first(['lat', 'lon', 'recorded_at']);
+            $last = DB::table('field_trip_pings')->where('field_trip_id', $t->id)
+                ->orderByDesc('recorded_at')->orderByDesc('id')->first(['lat', 'lon', 'recorded_at', 'accuracy_m']);
+            $pingCount = DB::table('field_trip_pings')->where('field_trip_id', $t->id)->count();
+
+            $summary = self::walkSummary((int) $t->id);
+
+            // How stale the position is matters more than the position on an active
+            // trip — a fix from 40 minutes ago is not "where they are".
+            $ageMin = null;
+            if ($last && $last->recorded_at) {
+                $ageMin = (int) Carbon::parse($last->recorded_at)->diffInMinutes(Carbon::now());
+            }
+
+            $out[] = array_merge([
+                'id' => (int) $t->id,
+                'title' => $t->title,
+                'destination' => $t->destination,
+                'status' => $t->status,
+                'trip_date' => $t->trip_date,
+                'depart_time' => $t->depart_time,
+                'return_time' => $t->return_time,
+                'transport_method' => $t->transport_method,
+                'centre_name' => $centreNames[$t->centre_id] ?? null,
+                'lead' => [
+                    'id' => $t->staff_lead_id ? (int) $t->staff_lead_id : null,
+                    'name' => $t->lead_name ?: null,
+                    'phone' => $t->lead_phone ?: null,
+                ],
+                'children' => collect($kids[$t->id] ?? [])->map(fn ($c) => [
+                    'id' => (int) $c->id,
+                    'name' => trim($c->first_name.' '.$c->last_name),
+                    'photo_url' => $c->photo_url,
+                    'permission' => $c->status,
+                ])->values(),
+                'ping_count' => $pingCount,
+                // Where they set off from, and where they are now — in words.
+                'from' => $first ? [
+                    'lat' => (float) $first->lat, 'lon' => (float) $first->lon,
+                    'at' => $first->recorded_at,
+                    'address' => \App\Support\Geocode::reverse($first->lat, $first->lon),
+                ] : null,
+                'current' => $last ? [
+                    'lat' => (float) $last->lat, 'lon' => (float) $last->lon,
+                    'at' => $last->recorded_at,
+                    'accuracy_m' => $last->accuracy_m,
+                    'age_min' => $ageMin,
+                    'address' => \App\Support\Geocode::reverse($last->lat, $last->lon),
+                ] : null,
+                'map_url' => $t->map_token
+                    ? rtrim((string) config('app.url'), '/').'/walk-maps/'.$t->map_token.'.png'
+                    : null,
+            ], $summary);
+        }
+
+        return response()->json(['date' => $date, 'trips' => $out]);
+    }
+
+    /**
+     * GET /provider/walks/tracker-dates — which days actually have something on them.
+     *
+     * So the date picker can mark the days worth visiting instead of leaving somebody
+     * clicking backwards through empty ones.
+     */
+    public function trackerDates(Request $request): JsonResponse
+    {
+        $centreIds = $this->overseenCentreIds($request);
+        if (! $centreIds) {
+            return response()->json(['dates' => []]);
+        }
+
+        $dates = DB::table('field_trips')
+            ->whereIn('centre_id', $centreIds)
+            ->whereNotNull('trip_date')
+            ->orderByDesc('trip_date')
+            ->limit(180)
+            ->pluck('trip_date')->unique()->values();
+
+        return response()->json(['dates' => $dates]);
+    }
+
+    /**
+     * GET /provider/walks/geofence
+     *
+     * Where "home" is, so the educator's own phone can notice it has left and offer to
+     * start the walk nobody remembered to start.
+     *
+     * The device is given the fence and works out the distance ITSELF. It would have
+     * been easier to have the app post its coordinates and let the server decide, and
+     * that is exactly what makes it the wrong design: it would mean a continuous record
+     * of where staff are, kept by us, for a feature whose entire job is to notice one
+     * moment. Nothing here is written down, and no location is received. The server
+     * learns where anyone is only once a walk actually starts — which is the point at
+     * which the parents are told too.
+     *
+     * Returns nothing usable unless there is something to prompt ABOUT: children signed
+     * in, and no walk already running.
+     */
+    public function geofence(Request $request): JsonResponse
+    {
+        $userId = (int) $request->user()->id;
+
+        $centreId = DB::table('role_assignments')->where('user_id', $userId)
+            ->where('active', 1)->whereNotNull('centre_id')->value('centre_id');
+        if (! $centreId) {
+            return response()->json(['enabled' => false, 'reason' => 'no_centre']);
+        }
+
+        $centre = DB::table('centres')->where('id', $centreId)
+            ->whereNull('deleted_at')->first(['id', 'name', 'latitude', 'longitude']);
+        if (! $centre || $centre->latitude === null || $centre->longitude === null) {
+            /* An address without coordinates cannot be fenced. Said plainly so the app
+               can stay quiet rather than guessing from a postcode. */
+            return response()->json(['enabled' => false, 'reason' => 'no_coordinates']);
+        }
+
+        /* Already out? Then there is nothing to offer. Matches active() exactly —
+           this user's own trip, today, still running. */
+        $activeWalk = DB::table('field_trips')
+            ->where('staff_lead_id', $userId)
+            ->where('status', 'active')
+            ->whereDate('trip_date', \Illuminate\Support\Carbon::now($this->staffTz($userId))->toDateString())
+            ->exists();
+
+        /* Children actually here. Prompting to take nobody for a walk is how a feature
+           teaches people to dismiss it. */
+        $roomIds = DB::table('rooms')->where('centre_id', $centreId)->pluck('id');
+        /* Agency day as instants. This query had the bug TWICE — the arrival and the
+           "has since left" subquery each carried their own whereDate, so the test
+           could be evaluated against a different day from the arrival it excluded. */
+        [$walkFrom, $walkTo] = \App\Support\AgencyTime::dayRangeForCentre((int) $centreId);
+        $present = DB::table('check_events as ci')
+            ->whereIn('ci.room_id', $roomIds)
+            ->where('ci.event_type', 'check_in')
+            ->where('ci.occurred_at', '>=', $walkFrom)->where('ci.occurred_at', '<', $walkTo)
+            /* use() — the subquery is a CLOSURE, and PHP closures do not inherit
+               scope, so $walkFrom/$walkTo were undefined here and every call to this
+               endpoint died with a 500. The outer ->where() above reads the same two
+               variables and works, which is what made this look like a data problem
+               rather than a missing import. Introduced while fixing the whereDate bug
+               the comment above describes: the fix that split the day into instants
+               put one of its two uses inside a closure. (2026-09-10) */
+            ->whereNotExists(function ($q) use ($walkFrom, $walkTo) {
+                $q->select(DB::raw(1))->from('check_events as co')
+                  ->whereColumn('co.child_id', 'ci.child_id')
+                  ->where('co.event_type', 'check_out')
+                  ->whereColumn('co.occurred_at', '>', 'ci.occurred_at')
+                  ->where('co.occurred_at', '>=', $walkFrom)->where('co.occurred_at', '<', $walkTo);
+            })
+            ->distinct()->count('ci.child_id');
+
+        return response()->json([
+            'enabled' => true,
+            'centre_id' => (int) $centre->id,
+            'centre_name' => $centre->name,
+            'latitude' => (float) $centre->latitude,
+            'longitude' => (float) $centre->longitude,
+            /* Generous on purpose. A phone indoors drifts, and a false "you have left"
+               is worse than a late one — it trains people to ignore the prompt. */
+            'radius_m' => 200,
+            'children_present' => $present,
+            'walk_in_progress' => $activeWalk,
+        ]);
+    }
+
     public function eligibleChildren(Request $request): JsonResponse
     {
         $u = $request->user();
@@ -256,7 +519,7 @@ final class WalkController extends Controller
         }
 
         // Now tell their parents, while it is still happening.
-        $this->notifyGuardiansWalkStarted($tripId, $selected, (int) $u->id);
+        $this->announceWalk($tripId, $selected, (int) $u->id, 'started');
 
         $names = DB::table('children')->whereIn('id', $selected)
             ->selectRaw("TRIM(CONCAT(first_name, ' ', last_name)) as name")
@@ -293,6 +556,12 @@ final class WalkController extends Controller
 
         // The walk belongs in each child's day, not only on a map nobody opens.
         $this->logWalkToDay($id, $u->id);
+
+        /* And tell the parents they are back - until 2026-08-25 the end of a walk
+           announced itself to nobody at all. */
+        $walkChildIds = DB::table('field_trip_permissions')->where('field_trip_id', $id)
+            ->pluck('child_id')->map(fn ($v) => (int) $v)->unique()->all();
+        $this->announceWalk($id, $walkChildIds, (int) $u->id, 'ended', ['distance_km' => $km]);
 
         return response()->json(['status' => 'completed', 'distance_km' => $km]);
     }
@@ -390,6 +659,157 @@ final class WalkController extends Controller
      * Wrapped whole: a push failure must never stop an educator starting a walk. They
      * are standing at the door with their coats on.
      */
+    /**
+     * Tell a walk's parents that it has started, or that everyone is back.
+     *
+     * Supersedes notifyGuardiansWalkStarted() below, which sent an FCM push and NOTHING
+     * ELSE - no bell in the portal, no email. On Amna Ahsan's walk of 25 Aug 2026 all
+     * three attached children's guardians had zero registered device tokens, so the push
+     * had nowhere to go and the walk was announced to nobody at all. A channel that only
+     * reaches people who installed the app is not an announcement.
+     *
+     * And the END was announced by nothing whatsoever. The children came back and the
+     * only trace was a line in the daily log that surfaces in the 18:30 summary. "Back
+     * safely" is the half a parent is actually waiting for.
+     *
+     * Three independent channels, each wrapped so one failing cannot stop the others:
+     * an in-app notification (the one everybody gets), a push (whoever has the app), and
+     * an email. Suppression is deliberately NOT bypassed - a walk is routine, and an
+     * agency's own delivery settings are theirs to decide.
+     */
+    private function announceWalk(int $tripId, array $childIds, int $byUserId, string $phase, array $extra = []): void
+    {
+        try {
+            if (! $childIds) { return; }
+
+            $trip = DB::table('field_trips')->where('id', $tripId)->first();
+            if (! $trip) { return; }
+
+            $ended = $phase === 'ended';
+            $tz = $this->staffTz($byUserId);
+            $stamp = Carbon::now($tz)->format('g:i A');
+            $where = trim((string) ($trip->destination ?? '')) ?: 'a walk';
+            $lead = DB::table('users')->where('id', $byUserId)->value('first_name');
+            $agencyId = (int) ($trip->agency_id ?? 0);
+            $km = isset($extra['distance_km']) ? (float) $extra['distance_km'] : null;
+
+            $children = DB::table('children')->whereIn('id', $childIds)
+                ->whereNull('deleted_at')
+                ->get(['id', 'first_name', 'preferred_name', 'family_id']);
+
+            $rows = [];
+            $recipients = [];
+
+            foreach ($children as $child) {
+                $name = trim((string) ($child->preferred_name ?: $child->first_name));
+
+                $title = $ended
+                    ? "\u{1F3E1} " . $name . ' is back from the walk'
+                    : "\u{1F6B6} " . $name . ' is out on a walk';
+                $body = $ended
+                    ? ($name . ' got back at ' . $stamp . '.'
+                        . ($km ? ' They covered about ' . number_format($km, 1) . ' km.' : '')
+                        . ' It is on their daily log.')
+                    : ('Off to ' . $where . ($lead ? ' with ' . $lead : '') . ', from ' . $stamp
+                        . '. Tap to follow along on the map.');
+
+                $guardians = DB::table('guardians as g')
+                    ->join('users as u', 'u.id', '=', 'g.user_id')
+                    ->where('g.family_id', $child->family_id)
+                    ->whereNull('u.deleted_at')
+                    ->select('g.user_id', 'u.email', 'u.first_name as gfirst')
+                    ->get()->unique('user_id');
+
+                foreach ($guardians as $g) {
+                    if (! $g->user_id) { continue; }
+
+                    // 1) The bell - the channel that does not depend on owning a phone.
+                    $rows[] = [
+                        'user_id' => (int) $g->user_id,
+                        'type' => $ended ? 'walk_ended' : 'walk_started',
+                        'title' => $title,
+                        'body' => $body,
+                        'data' => json_encode(['link' => '#walks', 'trip_id' => $tripId]),
+                        'created_at' => now(),
+                    ];
+
+                    // 2) Push, for whoever has the app.
+                    try {
+                        app(\App\Services\FcmService::class)
+                            ->sendToUser((int) $g->user_id, $title, $body, '#walks');
+                    } catch (\Throwable $ePush) { /* one dead token must not stop the rest */ }
+
+                    if ($g->email) {
+                        $recipients[] = ['to' => $g->email, 'child' => $name];
+                    }
+                }
+            }
+
+            if ($rows) {
+                \App\Support\Notify::write($rows);
+            }
+
+            // 3) Email.
+            $this->mailWalk($agencyId, $recipients, $ended, $where, $lead, $stamp, $km);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('walk announce failed', [
+                'trip_id' => $tripId, 'phase' => $phase, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /** The parent's note about a walk. One message per guardian, named to their child. */
+    private function mailWalk(int $agencyId, array $recipients, bool $ended, string $where,
+                              ?string $lead, string $stamp, ?float $km): void
+    {
+        if (! $recipients) { return; }
+        $esc = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+
+        $addresses = array_values(array_unique(array_column($recipients, 'to')));
+        $bcc = \App\Support\MailOversight::bccFor($agencyId, null, $addresses);
+        $i = 0;
+
+        foreach ($recipients as $r) {
+            $child = $r['child'];
+            $subject = $ended ? $child . ' is back from the walk' : $child . ' is out on a walk';
+            $panel = $ended ? ['#DCFCE7', '#15803D', 'BACK SAFELY'] : ['#E4EEF2', '#1F6080', 'OUT NOW'];
+            $line = $ended
+                ? ($child . ' got back at ' . $stamp . '.' . ($km ? ' About ' . number_format($km, 1) . ' km.' : ''))
+                : ($child . ' set off at ' . $stamp . ($lead ? ' with ' . $lead : '') . '.');
+
+            $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+                . '<tr><td style="padding:0 0 12px;"><div style="background:' . $panel[0] . ';border-radius:10px;'
+                . 'padding:14px 16px;"><strong style="color:' . $panel[1] . ';text-transform:uppercase;'
+                . 'font-size:12px;letter-spacing:.06em;">' . $panel[2] . '</strong><br>'
+                . '<span style="font-size:15px;color:#0F172A;">' . $esc($line) . '</span></div></td></tr>'
+                . ($ended
+                    ? '<tr><td style="font-size:15px;line-height:1.6;color:#334155;">Everyone is back, and the '
+                        . 'walk has been added to ' . $esc($child) . '&rsquo;s daily log.</td></tr>'
+                    : '<tr><td style="font-size:15px;line-height:1.6;color:#334155;">They have gone to '
+                        . $esc($where) . '. You can follow along on the live map in the app while they are out, '
+                        . 'and we will let you know as soon as they are back.</td></tr>')
+                . '</table>';
+
+            try {
+                $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                    'eyebrow' => $ended ? 'BACK FROM THE WALK' : 'OUT ON A WALK',
+                    'title' => $subject,
+                ]);
+                $copyTo = \App\Support\MailOversight::firstOnly($bcc, $i++);
+                \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($r, $subject, $copyTo, $agencyId) {
+                    \App\Support\MailScope::agency($m, $agencyId);
+                    $m->to($r['to'])->subject($subject);
+                    if ($copyTo) { $m->bcc($copyTo); }
+                });
+            } catch (\Throwable $ex) {
+                \Illuminate\Support\Facades\Log::warning('walk email failed', [
+                    'to' => $r['to'], 'error' => $ex->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /** @deprecated 2026-08-25 - superseded by announceWalk(); push-only, kept for reference. */
     private function notifyGuardiansWalkStarted(int $tripId, array $childIds, int $byUserId): void
     {
         try {

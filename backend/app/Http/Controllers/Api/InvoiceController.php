@@ -957,7 +957,19 @@ final class InvoiceController extends Controller
                 continue;
             }
 
-            DB::transaction(function () use ($familyId, $childEnrollments, $centreId, $issueDate, $dueDate, &$generated) {
+            /* $siblingTiers and $emailQueue were read and written inside without being
+               imported, and NEITHER threw — which is why this was never reported:
+
+                 · `empty($siblingTiers)` on an undefined variable is quietly true,
+                   so the sibling-discount branch never ran. Families with two or
+                   more children were billed full price, silently.
+                 · `$emailQueue[] = $invoiceId` created a NEW array local to the
+                   closure. The foreach after the transaction reads the outer one,
+                   which stayed empty, so generated invoices were never emailed.
+
+               $emailQueue by reference because it is filled here and read after the
+               transaction commits. (2026-09-10) */
+            DB::transaction(function () use ($familyId, $childEnrollments, $centreId, $issueDate, $dueDate, $siblingTiers, &$emailQueue, &$generated) {
                 $subtotal = 0;
                 $subsidyTotal = 0;
                 $lineItems = [];

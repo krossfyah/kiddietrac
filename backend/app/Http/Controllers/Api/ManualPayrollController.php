@@ -73,11 +73,18 @@ final class ManualPayrollController extends Controller
         /* WHAT THE CLOCK SAYS. Only CLOSED punches count: a shift still open has no
            duration yet, and inventing one would pay for time that has not happened.
            They are reported separately so nobody wonders why a total looks short. */
+        /* Agency-day instants. punched_in_at is a UTC instant, so whereDate() bucketed
+           it by the UTC date and a shift starting after 8pm fell on the NEXT day — and
+           therefore, at a period boundary, into the next PAY PERIOD. */
+        [$payFrom, $payTo] = \App\Support\AgencyTime::spanRangeForCentre(
+            (int) ($centreIds->first() ?? 0), $from, $to
+        );
+
         $punches = DB::table('time_punches')
             ->whereIn('user_id', $userIds)
             ->whereIn('centre_id', $centreIds->isEmpty() ? [0] : $centreIds)
-            ->whereDate('punched_in_at', '>=', $from)
-            ->whereDate('punched_in_at', '<=', $to)
+            ->where('punched_in_at', '>=', $payFrom)
+            ->where('punched_in_at', '<', $payTo)
             ->orderBy('punched_in_at')
             ->get(['user_id', 'centre_id', 'punched_in_at', 'punched_out_at']);
 
@@ -235,7 +242,11 @@ final class ManualPayrollController extends Controller
         $created = [];
         $skipped = [];
 
-        DB::transaction(function () use ($data, $agencyId, $from, $to, $allowed, $people, $request, &$created, &$skipped) {
+        /* $knownPayees was read inside without being imported — `$knownPayees->has(...)`
+           on an undefined variable is a fatal, so every manual payroll run containing
+           a CONTRACTOR row (no user_id, a payee name) died. Staff rows never touch it,
+           which is why it survived. (2026-09-10) */
+        DB::transaction(function () use ($data, $agencyId, $from, $to, $allowed, $people, $request, $knownPayees, &$created, &$skipped) {
             foreach ($data['rows'] as $row) {
                 $uid = isset($row['user_id']) ? (int) $row['user_id'] : 0;
                 $payeeName = trim((string) ($row['payee_name'] ?? ''));
