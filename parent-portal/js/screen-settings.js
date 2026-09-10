@@ -48,7 +48,199 @@
   function absUrl(u) { if (!u) return u; if (/^https?:\/\//.test(u)) return u; return apiBase().replace(/\/api\/v1\/?$/, '') + (u.charAt(0) === '/' ? u : '/' + u); }
   function cachedUser() { try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
 
-  async function render(main) {
+  /* ctx.role is the role the person is working as RIGHT NOW — the shell resolves it,
+     honouring view-as. Not the same question as "which roles does this account hold",
+     which is what the tabs below used to ask. */
+
+  /* ══════════════════════════════════════════════════════════════════════
+     WHERE THIS PERSON'S PAY GOES.
+
+     The tab this replaces offered staff the parent AUTOPAY page — somewhere to
+     hand the centre a card so it could charge them for childcare — on the profile
+     of somebody the centre owes money to.
+
+     WRITE-ONLY, like every other secret in the portal. What comes back from the
+     server is a HINT: "•••• 4821", "c•••@example.com". Enough to answer "is the
+     right account on file", useless to anybody reading over a shoulder, and it
+     means a stored account number is never in a response, a log or a DOM node.
+
+     Blank leaves the stored value alone, so fixing a typo in the legal name cannot
+     wipe the account number. Removing is explicit, via Remove.
+     ══════════════════════════════════════════════════════════════════════ */
+  async function renderPayout(pane) {
+    pane.innerHTML = '';
+    var card = el('div', { style: CARD });
+    pane.appendChild(card);
+    card.appendChild(el('div', { style: 'font-size:15px;font-weight:800;color:#0D1B2A;margin-bottom:4px;' }, ['How you are paid']));
+    card.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:14px;line-height:1.5;' },
+      ['Used by your agency to issue payroll. Only your administrator and centre director can see it, '
+       + 'and it is stored encrypted — this page will only ever show you the last few digits.']));
+
+    var body = el('div', {});
+    card.appendChild(body);
+    body.innerHTML = '<div style="color:#94A3B8;font-size:13px;">Loading…</div>';
+
+    var current = null;
+    try {
+      var r = await Api.get('/me/payout-method');
+      current = (r && r.payout_method) || null;
+    } catch (e) { /* first time, or offline — treat as unset */ }
+
+    body.innerHTML = '';
+
+    // ── what is on file now ──
+    if (current) {
+      var onFile = el('div', {
+        style: 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #BBF7D0;'
+          + 'background:#F0FDF4;border-radius:10px;margin-bottom:14px;flex-wrap:wrap;',
+      });
+      onFile.appendChild(el('span', { style: 'font-size:16px;' }, ['✓']));
+      onFile.appendChild(el('span', { style: 'font-size:13px;color:#166534;font-weight:700;' },
+        [current.method === 'interac' ? 'Interac e-Transfer' : 'Direct deposit']));
+      if (current.hint) {
+        onFile.appendChild(el('span', { style: 'font-size:13px;color:#166534;font-variant-numeric:tabular-nums;' }, [current.hint]));
+      }
+      if (current.updated_at) {
+        onFile.appendChild(el('span', { style: 'margin-left:auto;font-size:11.5px;color:#15803D;' },
+          ['updated ' + ((window.KT && KT.Fmt)
+            ? (KT.Fmt.date(current.updated_at, { month: 'short', day: 'numeric' }) + ' · ' + KT.Fmt.time(current.updated_at))
+            : String(current.updated_at).slice(0, 16))]));
+      }
+      body.appendChild(onFile);
+    }
+
+    // ── choose a method ──
+    var method = (current && current.method) || 'interac';
+    var pick = el('div', { style: 'display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;' });
+    body.appendChild(pick);
+
+    var interacBox = el('div', {});
+    var bankBox = el('div', { style: 'display:none;' });
+
+    function paintPick() {
+      Array.prototype.forEach.call(pick.children, function (b) {
+        var on = b.getAttribute('data-m') === method;
+        b.style.background = on ? '#1F6080' : '#fff';
+        b.style.color = on ? '#fff' : '#334155';
+        b.style.borderColor = on ? '#1F6080' : '#D1D5DB';
+      });
+      interacBox.style.display = method === 'interac' ? '' : 'none';
+      bankBox.style.display = method === 'direct_deposit' ? '' : 'none';
+    }
+    [['interac', '💸 Interac e-Transfer'], ['direct_deposit', '🏦 Direct deposit']].forEach(function (o) {
+      var b = el('button', {
+        type: 'button', 'data-m': o[0],
+        style: 'appearance:none;border:1px solid #D1D5DB;border-radius:10px;padding:9px 14px;'
+          + 'font-size:13.5px;font-weight:700;cursor:pointer;flex:0 0 auto;',
+      }, [o[1]]);
+      b.addEventListener('click', function () { method = o[0]; paintPick(); });
+      pick.appendChild(b);
+    });
+
+    function field(label, attrs, hint) {
+      var w = el('div', { style: 'margin-bottom:10px;' });
+      w.appendChild(el('label', { style: 'display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;' }, [label]));
+      var i = el('input', Object.assign({
+        style: 'width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D1D5DB;'
+          + 'border-radius:9px;font-size:14px;font-family:inherit;',
+      }, attrs || {}));
+      w.appendChild(i);
+      if (hint) { w.appendChild(el('div', { style: 'font-size:11.5px;color:#94A3B8;margin-top:3px;' }, [hint])); }
+      return { wrap: w, input: i };
+    }
+
+    var nameF = field('Name on the account', {
+      type: 'text', maxlength: '160', value: (current && current.legal_name) || '',
+      placeholder: 'As it appears at your bank',
+    });
+    body.appendChild(nameF.wrap);
+
+    body.appendChild(interacBox);
+    body.appendChild(bankBox);
+
+    var emailF = field('e-Transfer address', {
+      type: 'email', maxlength: '190',
+      placeholder: current && current.method === 'interac' && current.hint
+        ? 'On file: ' + current.hint + ' — leave blank to keep it'
+        : 'you@example.com',
+    }, 'Where the transfer will be sent.');
+    interacBox.appendChild(emailF.wrap);
+
+    var instF = field('Institution number', { type: 'text', inputmode: 'numeric', maxlength: '3', placeholder: '004' }, '3 digits');
+    var transF = field('Transit number', { type: 'text', inputmode: 'numeric', maxlength: '5', placeholder: '12345' }, '5 digits');
+    var acctF = field('Account number', {
+      type: 'text', inputmode: 'numeric', maxlength: '12',
+      placeholder: current && current.method === 'direct_deposit' && current.hint
+        ? 'On file: ' + current.hint + ' — leave blank to keep it'
+        : '7 to 12 digits',
+    }, 'Found on a void cheque or your bank’s direct-deposit form.');
+    bankBox.appendChild(instF.wrap);
+    bankBox.appendChild(transF.wrap);
+    bankBox.appendChild(acctF.wrap);
+
+    paintPick();
+
+    var msg = el('div', { style: 'font-size:12.5px;margin:8px 0 0;min-height:18px;' });
+    var row = el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;' });
+    var save = el('button', {
+      type: 'button',
+      style: 'appearance:none;border:0;border-radius:10px;background:#1F6080;color:#fff;'
+        + 'padding:10px 18px;font-size:14px;font-weight:800;cursor:pointer;',
+    }, ['Save']);
+    row.appendChild(save);
+
+    if (current) {
+      var del = el('button', {
+        type: 'button',
+        style: 'appearance:none;border:1px solid #FECACA;border-radius:10px;background:#fff;'
+          + 'color:#DC2626;padding:10px 14px;font-size:13.5px;font-weight:700;cursor:pointer;',
+      }, ['Remove']);
+      del.addEventListener('click', async function () {
+        var ok = KT.confirm
+          ? await KT.confirm('Remove your payout details? Payroll will have nowhere to send your pay until you add them again.')
+          : window.confirm('Remove your payout details?');
+        if (!ok) { return; }
+        try {
+          await Api.put('/me/payout-method', { method: method, clear: true });
+          renderPayout(pane);
+        } catch (e) {
+          msg.style.color = '#DC2626';
+          msg.textContent = (e && e.message) || 'Could not remove those details.';
+        }
+      });
+      row.appendChild(del);
+    }
+
+    body.appendChild(row);
+    body.appendChild(msg);
+
+    save.addEventListener('click', async function () {
+      save.disabled = true;
+      msg.style.color = '#64748B';
+      msg.textContent = 'Saving…';
+      var payload = { method: method, legal_name: nameF.input.value.trim() };
+      if (method === 'interac') {
+        if (emailF.input.value.trim()) { payload.interac_email = emailF.input.value.trim(); }
+      } else {
+        /* Sent only when filled, because blank means "keep what is stored" — the whole
+           point of a write-only field. All three or none is enforced server-side. */
+        if (instF.input.value.trim())  { payload.institution_number = instF.input.value.trim(); }
+        if (transF.input.value.trim()) { payload.transit_number = transF.input.value.trim(); }
+        if (acctF.input.value.trim())  { payload.account_number = acctF.input.value.trim(); }
+      }
+      try {
+        await Api.put('/me/payout-method', payload);
+        if (KT.toast) { KT.toast('✓', 'Saved', 'Payroll will use this from now on.', '#16A34A'); }
+        renderPayout(pane);
+      } catch (e) {
+        save.disabled = false;
+        msg.style.color = '#DC2626';
+        msg.textContent = (e && e.message) || 'Could not save those details.';
+      }
+    });
+  }
+
+  async function render(main, ctx) {
     Dom.clear ? Dom.clear(main) : (main.innerHTML = '');
     // Extra bottom padding so the last controls (Remove PIN / Sign out) clear the
     // fixed mobile bottom bar instead of hiding behind it.
@@ -62,11 +254,27 @@
 
     // v23: tabbed settings — Profile / Documents / Payments (guardian) / Security.
     // Consistent on desktop and mobile; each section below appends to a pane.
-    var isGuardian = (u.primary_role === 'guardian') || (Array.isArray(u.roles) && u.roles.indexOf('guardian') !== -1);
+    /* THE ROLE THEY ARE WORKING AS, not every role they hold.
+
+       This asked whether the ACCOUNT has a guardian role anywhere, so an educator who is
+       also a parent at the centre — which is common, and true of several people here —
+       was shown the parent Payments tab while working a shift: a page to set up AUTOPAY,
+       so the centre could charge her for childcare, on the profile of somebody the
+       centre PAYS. Reported as "there is a payments page as if she was a parent".
+
+       She still has it, in the parent portal, where it belongs. */
+    var activeRole = (ctx && ctx.role) || u.primary_role || '';
+    var isGuardian = activeRole === 'guardian';
+
+    /* Anybody the agency pays. A director and an admin are on payroll too — and an
+       auditor is not, so they are deliberately absent. */
+    var isPaidStaff = ['educator', 'home_visitor', 'centre_director', 'agency_admin']
+      .indexOf(activeRole) !== -1;
     var tabBar = el('div', { style: 'display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid #E5E7EB;margin-bottom:16px;-webkit-overflow-scrolling:touch;' });
     var paneProfile = el('div', {});
     var paneDocs = el('div', { style: 'display:none;' });
     var panePay = el('div', { style: 'display:none;' });
+    var panePayroll = el('div', { style: 'display:none;' });
     var paneSecurity = el('div', { style: 'display:none;' });
     var paneAbout = el('div', { style: 'display:none;' });
     var _stabs = [];
@@ -78,12 +286,14 @@
     var _t0 = stab('Profile', paneProfile);
     stab('Documents', paneDocs);
     if (isGuardian) stab('Payments', panePay);
+    if (isPaidStaff) stab('Payroll', panePayroll);
     stab('Security', paneSecurity);
     stab('About', paneAbout);
     wrap.appendChild(tabBar);
     wrap.appendChild(paneProfile);
     wrap.appendChild(paneDocs);
     if (isGuardian) wrap.appendChild(panePay);
+    if (isPaidStaff) wrap.appendChild(panePayroll);
     wrap.appendChild(paneSecurity);
     wrap.appendChild(paneAbout);
     _t0.style.color = '#1F6080'; _t0.style.borderBottomColor = '#1F6080';
@@ -95,6 +305,9 @@
       try { if (KT.Autopay && KT.Autopay.render) KT.Autopay.render(apBox); } catch (e) {}
       try { if (KT.V22p58 && KT.V22p58.renderWallet) KT.V22p58.renderWallet(wBox); } catch (e) {}
     }
+
+    // ── PAYROLL (staff) — where their pay goes ──
+    if (isPaidStaff) { renderPayout(panePayroll); }
 
     // ── PROFILE ──
     var pc = el('div', { style: CARD });
@@ -266,6 +479,43 @@
         .catch(function (e) { pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#B91C1C'; pwStatus.textContent = (e && e.message) ? e.message : 'Could not change password.'; });
     });
     sc.appendChild(pwStatus); sc.appendChild(pwBtn);
+
+    /* Two-factor, in the same card as the password.
+
+       It used to be its own item in the menu, which put the two halves of "how do I
+       get into this account" in different places — and left a nav entry pointing at a
+       page most people open once, ever. The real screen is rendered here in embedded
+       mode rather than copied, so there is exactly one two-factor flow.
+
+       Shown to everyone it applies to. The platform support account is deliberately
+       exempt (see kt-mfa-gate.js), and for agency admins and directors it is required
+       rather than optional — said plainly, because a required control that looks
+       optional gets left off. */
+    try {
+      var _roles = (cachedUser().roles) || [];
+      var _mfa = window.KT && KT.MfaScreen;
+      if (_mfa && _mfa.appliesTo && _mfa.appliesTo(_roles)) {
+        sc.appendChild(el('div', {
+          style: 'height:1px;background:#EEF2F7;margin:16px 0 14px;',
+        }));
+        var _hdr = el('div', {
+          style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px;',
+        });
+        _hdr.appendChild(el('div', {
+          style: 'font-size:14px;font-weight:800;color:#0f172a;',
+        }, ['🔐 Two-factor authentication']));
+        if (_mfa.required && _mfa.required(_roles)) {
+          _hdr.appendChild(el('span', {
+            style: 'font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;'
+              + 'background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:20px;',
+          }, ['Required for your role']));
+        }
+        sc.appendChild(_hdr);
+        var _mfaBox = el('div', {});
+        sc.appendChild(_mfaBox);
+        _mfa.render(_mfaBox, { embedded: true });
+      }
+    } catch (e) { /* the rest of Settings must render even if this does not */ }
 
     // biometric toggle (native only)
     sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
@@ -780,5 +1030,12 @@
   Shell.registerScreen('sales_rep:settings', render);
   Shell.registerScreen('platform_admin:settings', render);
   Shell.registerScreen('educator:settings', render);
+  /* Agency admins and centre directors had no personal profile screen, which is the
+     only reason two-factor stayed in their agency-settings menu. The panes are
+     role-agnostic (Payments is already gated to guardians), so the same screen serves
+     them — and two-factor is REQUIRED for these two roles, so this is the pair that
+     most needed somewhere personal to manage it. */
+  Shell.registerScreen('agency_admin:settings', render);
+  Shell.registerScreen('centre_director:settings', render);
   window.KT.renderSettings = render;
 })(window);
