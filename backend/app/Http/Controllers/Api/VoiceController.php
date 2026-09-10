@@ -163,9 +163,9 @@ final class VoiceController extends Controller
            Without the last argument this refuses itself: 'test' is not an emergency, so
            callOne requires the recipient to have opted in to being contacted -- and an
            admin who has never opted in to TEXT messages could then never prove their own
-           voice setup works, which is the one thing this button exists to do. The
-           argument only ever applies to a call the recipient asked for, on their own
-           number, in the same second. A standing "do not ring me" is still honoured. */
+           voice setup works, which is the one thing this button exists to do. Here it
+           only ever applies to a call the recipient asked for, on their own number, in
+           the same second. A standing "do not ring me" is still honoured. */
         $ok = $this->callOne(
             $agencyId,
             (int) $u->id,
@@ -198,7 +198,7 @@ final class VoiceController extends Controller
         string $script,
         string $category,
         ?int $startedBy = null,
-        bool $selfRequested = false
+        bool $bypassOptIn = false
     ): bool {
         // 1. Do-not-contact: never ring a parent at a live agency while we are testing.
         if (\App\Support\Suppression::isUser($userId)) {
@@ -240,11 +240,20 @@ final class VoiceController extends Controller
             return $write('skipped', 'this person has opted out of phone calls');
         }
 
-        // 4. Anything that is not an emergency needs an actual yes. The emergency list
-        //    is closed and short on purpose; see BroadcastAudience. $selfRequested is the
-        //    one exception and means the recipient asked for THIS call, on their own
-        //    number, a moment ago -- see testCall().
-        if (! $selfRequested && ! BroadcastAudience::isEmergency($category)
+        /* 4. Anything that is not an emergency needs an actual yes. The emergency list
+              is closed and short on purpose; see BroadcastAudience.
+
+              $bypassOptIn has exactly TWO legitimate callers and both are deliberate
+              administrative acts, not sends to an audience:
+                - testCall(), where the recipient IS the person who pressed the button,
+                  on the number from their own profile, a second ago;
+                - SmsSettingsController::testSend(), where an admin typed one number to
+                  prove the carrier works and has confirmed they control it.
+
+              It does NOT bypass gate 3. A standing "do not ring me" stays absolute, and
+              a number that belongs to somebody who has opted out is refused by the
+              caller before it ever reaches here. */
+        if (! $bypassOptIn && ! BroadcastAudience::isEmergency($category)
             && ! ($user && (int) ($user->sms_opt_in ?? 0) === 1)) {
             return $write('skipped', 'no consent for non-emergency calls');
         }

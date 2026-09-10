@@ -832,7 +832,7 @@
   /* Bumped by hand whenever this screen changes shape. It is printed under the hero so
      "which version am I looking at" is answerable from the screen instead of from
      devtools — a stale cached copy is otherwise indistinguishable from a bug. */
-  var SCREEN_BUILD = '2026-09-10 carrier-subtabs + test-log';
+  var SCREEN_BUILD = '2026-09-10 carrier-subtabs + test-log + live-send';
 
   async function renderSmsSettings(main) {
     main.setAttribute('data-kt-pretty', '1');
@@ -1073,6 +1073,31 @@
          working right now" and nothing else. Halfway through pasting four credentials
          the useful question is "what did it say the last three times, and has it ever
          passed" — so every attempt is kept server-side and drawn here. */
+      /* SEND A REAL ONE. Everything above proves the credentials are accepted; only
+         this proves a message survives the route and lights up a handset. It is
+         deliberately the loudest, most fenced control on the screen — it costs money
+         and rings a phone that may not be yours. */
+      +     '<div class="kt-card" style="margin-top:16px;border:1px solid #FDE68A;background:#FFFBEB;">'
+      +       '<div style="font-size:13px;font-weight:800;color:#92400E;">Send a real test</div>'
+      +       '<div style="font-size:12.5px;color:#92400E;margin:5px 0 12px;line-height:1.55;">'
+      +         'This actually sends. It is billed by your carrier and it rings a real phone, so '
+      +         'use a number you control. The message says it is a test, names your agency and '
+      +         'carries STOP. Five an hour.</div>'
+      +       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+      +         '<input id="sms-testto" type="tel" style="' + fld + 'max-width:230px;" placeholder="+16475550123">'
+      +         '<button type="button" id="sms-sendtext" style="height:34px;padding:0 14px;background:#fff;'
+      +           'color:#92400E;border:1px solid #FCD34D;border-radius:9px;font-weight:800;font-size:13px;'
+      +           'cursor:pointer;">💬 Send text</button>'
+      +         '<button type="button" id="sms-sendcall" style="height:34px;padding:0 14px;background:#fff;'
+      +           'color:#92400E;border:1px solid #FCD34D;border-radius:9px;font-weight:800;font-size:13px;'
+      +           'cursor:pointer;">📞 Place call</button>'
+      +       '</div>'
+      +       '<label style="display:flex;align-items:flex-start;gap:9px;margin-top:11px;font-size:12.5px;'
+      +         'color:#92400E;cursor:pointer;">'
+      +         '<input type="checkbox" id="sms-testown" style="width:16px;height:16px;cursor:pointer;margin-top:1px;">'
+      +         'I control this number, or its owner is expecting this.</label>'
+      +       '<div id="sms-sendmsg" style="font-size:12.5px;font-weight:700;margin-top:9px;min-height:17px;"></div>'
+      +     '</div>'
       +     '<div id="sms-testlog" style="margin-top:16px;"></div>'
       +   '</div>'
 
@@ -1339,6 +1364,43 @@
         say('sms-msg', (e && e.message) || 'The test could not be run.', false);
       }
       btn.disabled = false;
+    });
+
+    /* The real send. Confirmed by NUMBER rather than by a generic "are you sure",
+       because the mistake this guards against is a wrong digit, and a dialog that does
+       not show the digits cannot catch it. */
+    [['sms-sendtext', 'sms', 'text message'], ['sms-sendcall', 'voice', 'call']].forEach(function (spec) {
+      var btn = document.getElementById(spec[0]);
+      if (!btn) { return; }
+      btn.addEventListener('click', async function () {
+        var to = (document.getElementById('sms-testto').value || '').trim();
+        if (!to) {
+          say('sms-sendmsg', 'Type the number to test first.', false);
+          return;
+        }
+        if (!document.getElementById('sms-testown').checked) {
+          say('sms-sendmsg', 'Tick the box to confirm you control that number.', false);
+          return;
+        }
+
+        var ok = window.KT && KT.confirm
+          ? await KT.confirm('Send a real ' + spec[2] + ' to ' + to + ' now? Your carrier will bill for it.')
+          : window.confirm('Send a real ' + spec[2] + ' to ' + to + '?');
+        if (!ok) { return; }
+
+        btn.disabled = true;
+        say('sms-sendmsg', 'Sending…', true);
+        try {
+          var r = await api().post('/admin/sms-settings/test-send', {
+            to: to, channel: spec[1], confirm: true,
+          });
+          say('sms-sendmsg', (r && r.message) || '', !!(r && r.ok));
+          renderTestLog((r && r.recent_tests) || []);
+        } catch (e) {
+          say('sms-sendmsg', (e && e.message) || 'That could not be sent.', false);
+        }
+        btn.disabled = false;
+      });
     });
 
     document.getElementById('vx-test').addEventListener('click', async function () {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use App\Support\SmsGateway;
@@ -196,7 +197,7 @@ class SmsSettingsController extends Controller
         $rows = DB::table('audit_logs as al')
             ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
             ->where('al.agency_id', $agencyId)
-            ->where('al.action', 'sms.settings.test')
+            ->whereIn('al.action', ['sms.settings.test', 'sms.settings.test_send'])
             ->orderByDesc('al.created_at')->orderByDesc('al.id')
             ->limit($limit)
             ->get(['al.payload', 'al.created_at', 'u.first_name', 'u.last_name']);
@@ -582,4 +583,197 @@ class SmsSettingsController extends Controller
             $checks,
         ];
     }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       SEND A REAL ONE, TO A NUMBER YOU TYPE.
+
+       Everything above this proves the CREDENTIALS are accepted. It cannot prove
+       that a message leaves the carrier, survives the route and lights up a handset
+       — which is the thing an admin actually wants to know before switching a
+       centre over.
+
+       This does send. It costs money and it rings a real phone, so it is fenced:
+
+         · AGENCY ADMINS ONLY. assertAdmin, not the director-level gate the rest of
+           the send screens use. This one spends money and can reach a stranger.
+         · FIVE AN HOUR per agency. A diagnostic needs two or three attempts; a
+           hundred is not diagnosis, it is a sender.
+         · THE AGENCY'S OWN SWITCH STILL APPLIES. If texting is off for the agency,
+           a "successful" test would prove the credentials work and prove nothing
+           about whether real messages go out — which is the question being asked.
+         · A STANDING OPT-OUT IS ABSOLUTE. If the number belongs to somebody who
+           replied STOP, or who has asked not to be telephoned, this refuses. There
+           is no override, and "it was only a test" is exactly the excuse the STOP
+           keyword exists to defeat.
+         · THE BODY IS FIXED AND SAYS WHAT IT IS. An admin cannot type the message.
+           A wrong digit sends a stranger something that names the sender, explains
+           itself and carries STOP, rather than an unexplained text about a child.
+         · EVERY ATTEMPT IS AUDITED with the number, the channel and the actor, and
+           appears in the same test log on the screen.
+
+       The caller must tick a box confirming they control the number. That is not
+       security — it is the record that they were asked.
+       ───────────────────────────────────────────────────────────────────────── */
+
+    /** Five an hour, per agency. */
+    private const TEST_SEND_LIMIT = 5;
+
+    /** POST /admin/sms-settings/test-send */
+    public function testSend(Request $request): JsonResponse
+    {
+        $this->assertAdmin($request);
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($agencyId, 404, 'No agency in context');
+
+        $data = $request->validate([
+            'to' => ['required', 'string', 'max:40'],
+            'channel' => ['required', 'string', 'in:sms,voice'],
+            'confirm' => ['accepted'],
+        ], [
+            'confirm.accepted' => 'Confirm that you control the number you are testing.',
+        ]);
+
+        $channel = $data['channel'];
+        $to = Telnyx::e164((string) $data['to']);
+        if ($to === '') {
+            return $this->sendResult($request, $agencyId, $channel, (string) $data['to'], false,
+                'That is not a number we can dial. Use the full international form, like +16475550123.');
+        }
+
+        // ── five an hour ──
+        $bucket = 'kt.testsend:' . $agencyId . ':' . now()->format('YmdH');
+        $used = (int) Cache::get($bucket, 0);
+        if ($used >= self::TEST_SEND_LIMIT) {
+            return $this->sendResult($request, $agencyId, $channel, $to, false,
+                'That is ' . self::TEST_SEND_LIMIT . ' test messages this hour, which is the limit. '
+                . 'If they are not arriving, the test log above will say why.');
+        }
+
+        /* A STANDING OPT-OUT IS ABSOLUTE — checked against the number, not the
+           account, because the person who replied STOP is identified by the handset. */
+        $owner = DB::table('users')
+            ->whereRaw("RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', ''), 10) = ?", [substr(preg_replace('/\D/', '', $to) ?? '', -10)])
+            ->orderByDesc('id')
+            ->first(['id', 'first_name', 'last_name', 'sms_opt_out_at', 'sms_consent_source', 'voice_opt_out']);
+
+        if ($channel === 'sms' && $owner && $owner->sms_opt_out_at) {
+            return $this->sendResult($request, $agencyId, $channel, $to, false,
+                'That number has opted out of text messages. A test is not a reason to override that — '
+                . 'reply START from the handset if it was opted out by mistake.');
+        }
+        if ($channel === 'voice' && $owner && (int) ($owner->voice_opt_out ?? 0) === 1) {
+            return $this->sendResult($request, $agencyId, $channel, $to, false,
+                'That number has asked not to be telephoned. A test is not a reason to override that.');
+        }
+
+        $agency = DB::table('agencies')->where('id', $agencyId)->first(['name', 'sms_enabled', 'voice_enabled']);
+        $agencyName = (string) ($agency->name ?? 'your agency');
+
+        if ($channel === 'sms' && ! ($agency->sms_enabled ?? false)) {
+            return $this->sendResult($request, $agencyId, $channel, $to, false,
+                'Text messages are switched off for this agency, so nothing would send. '
+                . 'Turn on "Send text messages for this agency" above first.');
+        }
+        if ($channel === 'voice' && ! ($agency->voice_enabled ?? false)) {
+            return $this->sendResult($request, $agencyId, $channel, $to, false,
+                'Announcement calls are switched off for this agency. Turn them on under Voice calls first.');
+        }
+
+        Cache::put($bucket, $used + 1, now()->addHour());
+
+        // ── SMS ──
+        if ($channel === 'sms') {
+            /* Sent through the GATEWAY rather than SmsController::sendOne, deliberately.
+               sendOne would refuse: its consent gate asks whether the RECIPIENT opted
+               in, and a number typed into a diagnostic box never has. The gate is right
+               for every ordinary send and wrong for this one, so this path steps past
+               it and carries the fence above instead. The row is written by hand so the
+               send is still in the log like any other. */
+            $bodyText = 'KiddieTrac test message from ' . $agencyName
+                . '. If you were not expecting this you can ignore it. Reply STOP to opt out.';
+
+            $r = SmsGateway::deliver($agencyId, $to, $bodyText);
+
+            DB::table('sms_messages')->insert([
+                'agency_id' => $agencyId,
+                'to_user_id' => $owner->id ?? null,
+                'to_phone' => $to,
+                'body' => $bodyText,
+                'category' => 'test_send',
+                'provider' => $r['provider'],
+                'provider_ref' => $r['ok'] ? $r['ref'] : null,
+                'twilio_sid' => ($r['ok'] && $r['provider'] === 'twilio') ? $r['ref'] : null,
+                'status' => $r['ok'] ? 'sent' : 'failed',
+                'error' => $r['ok'] ? null : $r['error'],
+                'sent_at' => $r['ok'] ? now() : null,
+                'created_at' => now(),
+            ]);
+
+            return $this->sendResult($request, $agencyId, $channel, $to, (bool) $r['ok'],
+                $r['ok']
+                    ? ('Handed to ' . $r['provider'] . ' for ' . $to . '. It should arrive within a few seconds.')
+                    : ('Not sent — ' . $r['error']));
+        }
+
+        // ── VOICE ──
+        $ok = app(\App\Http\Controllers\Api\VoiceController::class)->callOne(
+            $agencyId,
+            (int) ($owner->id ?? 0),
+            $to,
+            'This is a test call from Kiddie Trac for ' . $agencyName
+                . '. If you were not expecting this call you can ignore it. Goodbye.',
+            'test',
+            (int) $request->user()->id,
+            true                       // see callOne(): a deliberate administrative test
+        );
+
+        $why = $ok ? '' : (string) (DB::table('voice_calls')->where('agency_id', $agencyId)
+            ->where('to_phone', $to)->orderByDesc('id')->value('error') ?: 'the call could not be placed');
+
+        return $this->sendResult($request, $agencyId, $channel, $to, $ok,
+            $ok ? ('Calling ' . $to . ' now. It will ring, then read a short test message.')
+                : ('Not placed — ' . $why));
+    }
+
+    /**
+     * Audit one real test send and hand back what the screen draws.
+     *
+     * Shares the test log with the credential checks, because "the key is accepted" and
+     * "a text actually arrived" are the same investigation and reading them in two
+     * places is how you conclude the wrong thing.
+     */
+    private function sendResult(Request $request, int $agencyId, string $channel, string $to, bool $ok, string $message): JsonResponse
+    {
+        $label = $channel === 'voice' ? 'Test call' : 'Test text';
+
+        try {
+            \App\Support\Audit::write([
+                'user_id' => optional($request->user())->id,
+                'agency_id' => $agencyId,
+                'action' => 'sms.settings.test_send',
+                'entity_type' => 'agency',
+                'entity_id' => $agencyId,
+                'payload' => json_encode([
+                    'summary' => $label . ' to ' . $to . ' — ' . ($ok ? 'sent' : 'refused') . ': ' . $message,
+                    'provider' => $channel === 'voice' ? 'voice' : SmsGateway::preference($agencyId)['primary'],
+                    'ok' => $ok,
+                    'message' => $message,
+                    'checks' => [self::check($label . ' to ' . $to, $ok, $message)],
+                    'to' => $to,
+                    'channel' => $channel,
+                ]),
+            ]);
+        } catch (\Throwable $e) {
+            // History is worth having, not worth failing a send over.
+        }
+
+        return response()->json([
+            'ok' => $ok,
+            'message' => $message,
+            'to' => $to,
+            'channel' => $channel,
+            'recent_tests' => self::recentTests($agencyId),
+        ]);
+    }
 }
+

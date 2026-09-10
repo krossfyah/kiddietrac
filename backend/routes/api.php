@@ -1805,6 +1805,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/admin/sms-settings',      [\App\Http\Controllers\Api\SmsSettingsController::class, 'show']);
         Route::patch('/admin/sms-settings',      [\App\Http\Controllers\Api\SmsSettingsController::class, 'update']);
         Route::post ('/admin/sms-settings/test', [\App\Http\Controllers\Api\SmsSettingsController::class, 'test']);
+        /* SENDS A REAL ONE to a number typed on the screen. Agency admins only, and
+           carrying its own role guard as well as the controller's assertAdmin: this
+           one spends money and can ring a stranger, so it should not be reachable by
+           a director the way the rest of this group is. Five an hour, per agency,
+           enforced in the controller. */
+        Route::post ('/admin/sms-settings/test-send', [\App\Http\Controllers\Api\SmsSettingsController::class, 'testSend'])
+            ->middleware('role:agency_admin,platform_admin');
         Route::get('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'show']);
         Route::patch('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'update']);
         Route::post('/admin/email-settings/test', [\App\Http\Controllers\Api\EmailSettingsController::class, 'sendTest']);
