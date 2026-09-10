@@ -30,7 +30,17 @@
      rejection, and My documents rendered blank. Every other screen reads the global at
      the moment it calls it, which is why every other screen worked. (ticket #60) */
   function api() {
-    return (typeof window !== 'undefined' && window.Api) ? window.Api : null;
+    /* KT.Api — read off window.KT at CALL time.
+
+       `window.Api` does not exist and never did: app.js publishes the client as
+       `window.KT = { Auth, Api, ... }`, and every other screen reaches it as KT.Api.
+       The original `var Api = window.Api` therefore captured undefined, and my first
+       pass at this kept the wrong source while fixing only the timing — so it went on
+       throwing, now one line lower. Read from window.KT rather than the KT captured at
+       the top of this file, because app.js REPLACES window.KT wholesale rather than
+       merging into it. (ticket #60, then #63) */
+    var k = (typeof window !== 'undefined') ? window.KT : null;
+    return (k && k.Api) ? k.Api : null;
   }
 
   function apiHost() {
@@ -144,11 +154,19 @@
     var mine = [], shared = [];
     var mineOk = false, sharedOk = false;
 
+    var A = api();
+    if (!A) {
+      // Nothing to fetch with. Say so rather than throwing into an unhandled rejection.
+      list.innerHTML = '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">'
+        + 'Could not load your documents just now. Please refresh.</div>';
+      return;
+    }
+
     var results = await Promise.all([
-      api().get('/auth/me/documents').then(function (r) {
+      A.get('/auth/me/documents').then(function (r) {
         mineOk = true; return (r && r.documents) || [];
       }).catch(function () { return []; }),
-      api().get('/parent/documents').then(function (r) {
+      A.get('/parent/documents').then(function (r) {
         sharedOk = true; return (r && r.documents) || [];
       }).catch(function () { return []; }),
     ]);
