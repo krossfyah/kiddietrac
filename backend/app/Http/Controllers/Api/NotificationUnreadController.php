@@ -23,14 +23,27 @@ final class NotificationUnreadController extends Controller
      */
     public function unreadCount(Request $request): JsonResponse
     {
-        $type = $request->input('type', 'announcement');
-        $count = DB::table('notifications')
-            ->where('user_id', $request->user()->id)
-            ->where('type', $type)
-            ->whereNull('read_at')
-            ->count();
+        /* `type=*` means EVERY kind, which is what a bell has to count.
 
-        return response()->json(['type' => $type, 'unread' => $count]);
+           The default of 'announcement' is right for the callers that ask "does this
+           one tab have something new". It was wrong as a general answer, and there was
+           no way to ask for the general answer at all — so the top-bar bell could not
+           use this endpoint and did not count a person's alerts at all. An agency admin
+           had 338 unread notifications and a silent bell. (2026-09-10) */
+        $type = (string) $request->input('type', 'announcement');
+        $all = $type === '*' || $request->boolean('all');
+
+        $q = DB::table('notifications')
+            ->where('user_id', $request->user()->id)
+            ->whereNull('read_at');
+        if (! $all) {
+            $q->where('type', $type);
+        }
+
+        return response()->json([
+            'type' => $all ? '*' : $type,
+            'unread' => $q->count(),
+        ]);
     }
 
     /**
@@ -125,6 +138,24 @@ final class NotificationUnreadController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Delete one notification — IDEMPOTENTLY.
+     *
+     * This used to 404 whenever the row was already gone, which is the normal outcome of
+     * deleting the same notification twice: the bell dropdown and the notifications screen
+     * keep separate caches, so binning it in one leaves it listed in the other. The client
+     * treats any error as a failure — it restores the row it had optimistically removed and
+     * shows "Could not delete". So a delete that had in fact WORKED reported failure, put
+     * the notification back on screen, and invited another click that failed the same way.
+     *
+     * Seen live 2026-08-25: Cassandra Schnarr (user 146) deleted notification 2232 at
+     * 17:00:31 — a clean 200, the row genuinely gone — then five further attempts over the
+     * next 22 seconds, every one a 404, every one telling her it had failed.
+     *
+     * Deleting something that is already deleted is a success: the caller asked for a state,
+     * and that state holds. Only a notification belonging to SOMEONE ELSE is a real 404 —
+     * and it must stay a 404, so this cannot be used to probe which ids exist.
+     */
     public function destroy(Request $request, int $id): JsonResponse
     {
         $deleted = DB::table('notifications')
@@ -132,7 +163,15 @@ final class NotificationUnreadController extends Controller
             ->where('id', $id)
             ->delete();
 
-        if (!$deleted) return response()->json(['message' => 'Not found'], 404);
-        return response()->json(['deleted' => $deleted]);
+        if ($deleted) {
+            return response()->json(['deleted' => $deleted]);
+        }
+
+        // Nothing deleted. Does the row exist at all, or was it already gone?
+        if (DB::table('notifications')->where('id', $id)->exists()) {
+            return response()->json(['message' => 'Not found'], 404);   // someone else's
+        }
+
+        return response()->json(['deleted' => 0, 'already_deleted' => true]);
     }
 }

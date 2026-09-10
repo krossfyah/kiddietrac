@@ -114,8 +114,29 @@
 
   // ── Notification / activity feed (admins + directors; platform_admin sees ALL
   //    agencies, everyone else only their own — the backend isolates it). ────────
-  function notifSeen() { try { return localStorage.getItem('kt_notif_seen') || ''; } catch (e) { return ''; } }
-  function setNotifSeen(v) { try { if (v) localStorage.setItem('kt_notif_seen', v); } catch (e) {} }
+  /* ON THE ACCOUNT, NOT THE BROWSER.
+
+     This read position was localStorage only, so clearing the bell on a laptop left it
+     lit on the phone and every new browser started by claiming everything was unread.
+     KT.markers keeps localStorage as a cache — the badge still paints instantly — and
+     reconciles with the server, which refuses to move a marker backwards.
+
+     Falls back to reading localStorage directly if kt-markers.js has not loaded: a bell
+     that works per-device is worse than one that works everywhere, and far better than a
+     bell that throws. */
+  function notifSeen() {
+    if (window.KT && KT.markers) { return KT.markers.get('kt_notif_seen'); }
+    try { return localStorage.getItem('kt_notif_seen') || ''; } catch (e) { return ''; }
+  }
+  function setNotifSeen(v) {
+    if (!v) { return; }
+    if (window.KT && KT.markers) { KT.markers.set('kt_notif_seen', String(v)); return; }
+    try {
+      var cur = localStorage.getItem('kt_notif_seen') || '';
+      if (cur && String(v) < cur) { return; }   // never backwards
+      localStorage.setItem('kt_notif_seen', String(v));
+    } catch (e) {}
+  }
   function relTime(iso) {
     if (!iso) return '';
     // MySQL timestamps come back UTC with NO zone marker; without appending 'Z' the
@@ -151,19 +172,88 @@
        request is actually made. Same helper the bar builds itself with, so there is
        one answer to "is this person an admin". */
     if (!isAdminRole(user())) { cb(null); return; }
-    fetch(API + '/admin/activity-feed', { headers: { 'Authorization': 'Bearer ' + t } })
+    /* SCOPED TO THE AGENCY ON SCREEN, like every other call in the portal.
+
+       This sent no X-Active-Agency-Id, and the endpoint reads that header to decide what
+       a platform admin may see: without it the response comes back `scope: "all"` — every
+       agency's activity — while the rest of the portal is showing one agency. Measured:
+       no header → scope "all", header → scope "agency". So a super admin's bell was
+       counting other tenants' check-ins and sign-ins, which is both wrong and impossible
+       to clear by reading anything on screen. (Anthony, 2026-09-09) */
+    var h = { 'Authorization': 'Bearer ' + t };
+    try { var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa; } catch (e) {}
+    fetch(API + '/admin/activity-feed', { headers: h })
       .then(function (r) { return r.ok ? r.json() : null; }).then(cb).catch(function () { cb(null); });
   }
   function setNotifBadge(n) {
     var b = document.getElementById('kt-tb-notif-badge'); if (!b) return;
     if (n > 0) { b.textContent = n > 99 ? '99+' : String(n); b.hidden = false; } else { b.hidden = true; }
   }
+  /* THE PERSON'S OWN ALERTS, which the admin bell never counted.
+
+     There are two streams and only one of them was on screen for an admin:
+
+       notifications        — addressed to a PERSON: an absence, a chat, a clock
+                              reminder, a form. Written by the whole product.
+       admin/activity-feed  — agency EVENTS addressed to nobody: a family created,
+                              a sign-in, an inspection filed.
+
+     The admin bell counted the second and ignored the first, so an alert could be
+     written, delivered by push, emailed — and the indicator beside it never moved.
+     Measured on 2026-09-10: 338 unread notifications for one agency admin, 13 for
+     another, none of which the bell had ever counted. That is the whole of "alerts
+     are logged but the indicator doesn't populate".
+
+     Counted here, and the panel gains a row that opens the inbox, so the number
+     always corresponds to something the reader can actually go and look at. */
+  var __ownUnread = 0;
+  function refreshOwnUnread(done) {
+    var t = store('kt_token');
+    if (!t) { __ownUnread = 0; if (done) done(); return; }
+    var h = { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' };
+    try { var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa; } catch (e) {}
+    fetch(API + '/notifications/unread-count?type=*', { headers: h })   // * = every kind, not just announcements
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        var n = d && (d.unread_count != null ? d.unread_count
+                    : (d.count != null ? d.count : (d.unread != null ? d.unread : null)));
+        __ownUnread = Number(n) || 0;
+      })
+      .catch(function () { /* leave the last known value; a blip must not zero the bell */ })
+      .then(function () { if (done) done(); });
+  }
+
   function refreshNotifBadge() {
+    refreshOwnUnread(function () {
     loadFeed(function (d) {
-      if (!d || !d.events) return;
+      // No feed (not an admin, or it failed) is not a reason to hide their own alerts.
+      if (!d || !d.events) { setNotifBadge(__ownUnread); return; }
       var seen = notifSeen();
-      var unread = d.events.filter(function (e) { return e.when && (!seen || e.when > seen); }).length;
-      setNotifBadge(unread);
+
+      /* NO MARKER YET = ESTABLISH THE BASELINE, do not shout.
+
+         `!seen` counted EVERY event as unread, and the feed is capped at 40 — so any
+         device without the marker showed a hard 40 that nothing on screen could explain.
+         A new device, a cleared browser, a private window, a second computer: all of them
+         opened on "40 unread", and reading the events did not help because the count was
+         never about them.
+
+         The marker is local, so "unread" here can only ever mean "since this device last
+         looked". The honest first answer is therefore none — take the current newest as
+         the starting point and report what arrives AFTER it. Same reasoning as the first
+         poll in kt-urgent-alert.js, which establishes a baseline rather than announcing
+         everything that already happened. (Anthony, 2026-09-09) */
+      if (!seen) {
+        if (d.events[0] && d.events[0].when) { setNotifSeen(d.events[0].when); }
+        // The baseline is for the FEED only. Alerts addressed to this person are
+        // server-side unread and were never "already seen" on any device.
+        setNotifBadge(__ownUnread);
+        return;
+      }
+
+      var unread = d.events.filter(function (e) { return e.when && e.when > seen; }).length;
+      setNotifBadge(unread + __ownUnread);
+    });
     });
   }
   var __notifStarted = false;
@@ -220,8 +310,36 @@
       var scopeEl = document.getElementById('kt-notif-scope');
       if (scopeEl && d && d.scope === 'all') scopeEl.textContent = 'Across all agencies';
       var events = (d && d.events) || [];
-      if (!events.length) { list.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;font-size:13px;">Nothing new yet.</div>'; return; }
+
+      /* MARKED READ AS SOON AS IT IS OPENED, before a single row is drawn.
+
+         setNotifSeen used to run at the very END of this callback, so any early return or
+         throw between here and there left the panel read but the marker unwritten — and
+         the 15s poll then put the number straight back. The empty case returned early and
+         never marked anything at all, so a quiet feed could never be cleared.
+
+         Writing it first costs nothing: the newest event is already in hand, and marking
+         it seen is exactly what opening the panel means. */
       var seen = notifSeen();
+      if (events[0] && events[0].when) { setNotifSeen(events[0].when); }
+      setNotifBadge(__ownUnread);   // opening the FEED does not read their inbox
+
+      /* Alerts addressed to this person, above the agency's activity. Without this
+         the badge could show a number with nothing in the panel to explain it. */
+      if (__ownUnread > 0) {
+        var own = document.createElement('div');
+        own.style.cssText = 'display:flex;gap:11px;align-items:center;padding:11px 16px;'
+          + 'border-bottom:1px solid #E2E8F0;background:#F0F9FF;cursor:pointer;';
+        own.innerHTML = '<span style="font-size:17px;">📬</span>'
+          + '<span style="flex:1;min-width:0;font-size:13px;color:#0D1B2A;">'
+          + '<strong>' + (__ownUnread > 99 ? '99+' : __ownUnread) + '</strong> '
+          + (__ownUnread === 1 ? 'alert for you' : 'alerts for you') + '</span>'
+          + '<span style="font-size:12px;color:#1F6080;font-weight:700;">Open ›</span>';
+        own.addEventListener('click', function () { closeNotif(); go('#notifications'); });
+        list.parentNode.insertBefore(own, list);
+      }
+
+      if (!events.length) { list.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;font-size:13px;">Nothing new yet.</div>'; return; }
       list.innerHTML = '';
       events.forEach(function (e) {
         var isNew = e.when && (!seen || e.when > seen);
@@ -245,8 +363,7 @@
         if (e.link) row.onclick = function () { closeNotif(); go(e.link); };
         list.appendChild(row);
       });
-      if (events[0] && events[0].when) setNotifSeen(events[0].when);
-      setNotifBadge(0);
+      // (seen + badge were already set above, before the rows were built)
     });
   }
   function openProfile() {
@@ -428,7 +545,21 @@
     var clock = document.createElement('span'); clock.className = 'kt-tb-clock'; clock.id = 'kt-tb-clock'; clock.textContent = fmtClock(); right.appendChild(clock);
 
     bar.appendChild(left);
-    if (isPlatformAdmin(u)) { var selBox = document.createElement('div'); selBox.id = 'kt-tb-selectors'; selBox.className = 'kt-tb-selectors'; bar.appendChild(selBox); }
+    /* NO View-as / agency selector in the top bar any more.
+
+       These were a second copy of the two sidebar controls: the bar built its own pair
+       into #kt-tb-selectors and hid the sidebar originals via body.kt-tb-has-selectors,
+       reversing it only below 900px. Anthony asked for them "at the bottom of the sidebar
+       below my name to clean this up", and the header pair was what he was actually
+       looking at.
+
+       Not moved — REMOVED, so there is one implementation instead of two that had already
+       drifted apart. Without this host, buildSelectors() returns immediately and never
+       sets the flag, so the sidebar pair is visible at every width.
+
+       buildSelectors() and its CSS are left intact below: restoring the header copies is
+       putting this one line back. */
+    void isPlatformAdmin;
     bar.appendChild(right);
     host.insertBefore(bar, host.firstChild);
     buildSelectors();
@@ -459,6 +590,46 @@
       .then(function (d) {
         var fresh = d && (d.user || d); if (!fresh) return;
         var cur = user();
+
+        /* ROLES, NOT JUST THE PHOTO.
+           This already asked /auth/me on every boot and then used one field from the
+           answer. The client's entire nav and screen routing is driven by the cached
+           kt_user.roles, and nothing ever refreshed it — so a role granted or revoked did
+           not take effect until the person signed out and back in. The API enforces the
+           truth either way, so a revoked admin kept being shown staff screens whose every
+           request came back 403: one account on this platform produced 55 forbidden
+           /provider/* calls over three days that way, filling their own audit log with
+           failures for a UI they could no longer use.
+           (Anthony, 2026-09-08) */
+        var a = Array.isArray(fresh.roles) ? fresh.roles.slice().sort().join(',') : null;
+        var b = Array.isArray(cur.roles) ? cur.roles.slice().sort().join(',') : null;
+        /* ABSENCE IS NOT DISAGREEMENT. A stored user with no roles array at all — an
+           older session, or one seeded by a path that saved a slimmer object — is not
+           somebody whose access changed, and signing them out would be a logout for no
+           reason mid-shift. Adopt the server's answer quietly and carry on; only a
+           cached list that actually CONTRADICTS the server ends the session. */
+        if (a !== null && b === null) {
+          cur.roles = fresh.roles;
+          if (typeof fresh.is_platform_admin !== 'undefined') { cur.is_platform_admin = fresh.is_platform_admin; }
+          try { sessionStorage.setItem('kt_user', JSON.stringify(cur)); } catch (e) {}
+        } else if (a !== null && a !== b) {
+          /* SIGN THEM OUT. Reloading with the corrected roles was the first answer, but a
+             role change is usually somebody being given or taken off access, and carrying
+             a half-updated session through that is how a person ends up looking at a menu
+             they no longer have. A fresh sign-in shows exactly what they may now do.
+             The server ends the session too (App\Support\RoleChange), so this is the
+             visible half of it, not the enforcement. (Anthony, 2026-09-08) */
+          try {
+            var msg = 'Your access has changed. Please sign in again.';
+            sessionStorage.clear();
+            localStorage.removeItem('kt_token');
+            localStorage.removeItem('kt_user');
+            try { sessionStorage.setItem('kt_signout_reason', msg); } catch (e2) {}
+          } catch (e) {}
+          window.location.href = '/index.html?reason=roles-changed';
+          return;
+        }
+
         if (fresh.photo_url && fresh.photo_url !== cur.photo_url) {
           cur.photo_url = fresh.photo_url;
           try { sessionStorage.setItem('kt_user', JSON.stringify(cur)); } catch (e) {}
@@ -526,4 +697,8 @@
      never disagree about what a role or an agency switch does. */
   window.KT = window.KT || {};
   window.KT.Topbar = { buildViewAs: buildViewAs, buildAgency: buildAgency };
+  /* Exposed so an arriving push can move the bell AT ONCE instead of waiting up to a
+     full 15s poll. "Realtime" is what a person expects of a notification indicator, and
+     the push is the earliest moment the news exists on the device. */
+  window.KT.refreshBell = function () { refreshBellBadge(); try { refreshUnread(); } catch (e) {} };
 })();
