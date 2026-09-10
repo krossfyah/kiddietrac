@@ -1739,7 +1739,7 @@
         if (!(window.KT && KT.recordVoiceNote)) { return; }
         micBtn.disabled = true;
         try {
-          var file = await KT.recordVoiceNote({ acceptLabel: 'Attach' });
+          var file = await KT.recordVoiceNote({ anchor: micBtn.parentElement, acceptLabel: 'Attach' });
           if (file) { setPending(file, '🎤 Voice note'); }
         } finally {
           micBtn.disabled = false;
@@ -2425,7 +2425,8 @@
         if (!KT.recordVoiceNote) return;
         micBtn.disabled = true;
         try {
-          const file = await KT.recordVoiceNote({ acceptLabel: 'Send' });
+          // The recorder stands in for the composer row the mic button sits on.
+          const file = await KT.recordVoiceNote({ anchor: micBtn.parentElement, acceptLabel: 'Send' });
           if (file) { setPending(file); doSend(); }
         } finally {
           micBtn.disabled = false;

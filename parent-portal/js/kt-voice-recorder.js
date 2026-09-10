@@ -1,35 +1,33 @@
 /* ═══════════════════════════════════════════════════════════════════
    KiddieTrac — the voice note recorder (2026-09-10).
 
-   ONE recorder for every composer that can send audio. Before this there were
-   three separate MediaRecorder blocks — the Messenger family thread, the
-   colleague thread, and the parent Messages screen — and they behaved like three
-   different products:
+   ONE recorder for every composer that can send audio: the Messenger family
+   thread, the colleague thread, and the parent Messages screen. Before this they
+   were three separate MediaRecorder blocks that behaved like three products —
+   the family thread SENT the moment you pressed stop, with no review and no
+   undo; the colleague thread staged the file with no way to hear it; only the
+   parent screen let you play it back. None of the three showed that the
+   microphone was picking anything up, and a recorder that shows nothing is
+   indistinguishable from a broken one until a parent gets silence.
 
-     · the family thread turned the 🎤 red and, the moment you pressed stop,
-       SENT the recording. No review, no undo, no way to discard a false start.
-       You found out what you had said by listening to it in the thread, along
-       with everybody else.
-     · the colleague thread staged the file with no way to hear it first.
-     · only the parent screen let you play it back before sending.
+   IT LIVES IN THE COMPOSER, NOT IN A DIALOG. The first version put this in a
+   modal over the page, which is too much furniture for holding down a button and
+   talking for six seconds. It takes the place of the message row it belongs to,
+   for as long as it is needed, and then gives it back.
 
-   None of the three showed that the microphone was actually picking anything up,
-   which is the one thing a person wants to know while they are talking into a
-   phone. A recorder that shows nothing is indistinguishable from a broken one,
-   and the way you discover the difference is by sending silence to a parent.
+   One row, and it says only what matters:
 
-   So: a real recorder. A live level meter driven by the audio itself, a running
-   timer, and STOP THEN LISTEN — nothing leaves until the person has heard it and
-   chosen to send. Re-record throws the take away and starts again.
+       ●  0:07   ▁▃▅▂▇▃▁▅   ✕   ⏹        while recording
+       ▶  0:07   ▁▃▅▂▇▃▁▅   ✕   Send     once it has stopped
 
-   API — one call, resolves to a File or to null if they backed out:
+   API — resolves to a File, or to null if they backed out:
 
-       var file = await KT.recordVoiceNote();          // 'Send'
-       var file = await KT.recordVoiceNote({ acceptLabel: 'Attach' });
-       if (file) { ...hand it to the composer... }
+       var file = await KT.recordVoiceNote({ anchor: inputRowEl });
 
-   The caller keeps whatever it did with the file before. This module owns the
-   microphone, the UI and the discipline; it does not know what a conversation is.
+   `anchor` is the composer row to stand in for; it is hidden while the recorder
+   is up and restored on every exit. The caller keeps whatever it did with the
+   file — this module owns the microphone and the discipline, not the
+   conversation.
    ═══════════════════════════════════════════════════════════════════ */
 (function (window, document) {
   'use strict';
@@ -38,8 +36,8 @@
   if (KT.recordVoiceNote) return;
 
   var MAX_MS = 5 * 60 * 1000;   // a voice note, not a podcast — auto-stops here
-  var MIN_BYTES = 800;          // below this the take is silence/noise, not speech
-  var BARS = 24;
+  var MIN_BYTES = 800;          // below this the take is silence, not speech
+  var BARS = 14;                // enough to read as a voice, few enough to stay a row
 
   /* The container MediaRecorder will actually give us. Safari/iOS has no webm and
      produces audio/mp4; asking for an unsupported type throws, so probe first. */
@@ -68,6 +66,7 @@
 
   KT.recordVoiceNote = function (opts) {
     opts = opts || {};
+    var anchor = opts.anchor || null;
     var acceptLabel = opts.acceptLabel || 'Send';
 
     return new Promise(function (resolve) {
@@ -75,13 +74,18 @@
         toast('⚠️', 'Not supported', 'This device cannot record audio.', '#DC2626');
         return resolve(null);
       }
+      if (!anchor || !anchor.parentNode) {
+        toast('⚠️', 'Cannot record here', '', '#DC2626');
+        return resolve(null);
+      }
 
       var stream = null, rec = null, chunks = [], mime = '';
       var audioCtx = null, analyser = null, rafId = null, tickId = null;
-      var startedAt = 0, blob = null, blobUrl = null, done = false;
+      var startedAt = 0, heldMs = 0, blob = null, blobUrl = null, audioEl = null, done = false;
+      var anchorDisplay = anchor.style.display;
 
-      /* EVERY exit goes through here. A live track leaves the browser's recording
-         indicator burning after the dialog is gone, which reads as "it is still
+      /* Every exit goes through here. A live track leaves the browser's recording
+         indicator burning after the bar is gone, which reads as "it is still
          listening to me" — and on a phone it is a real battery and privacy cost. */
       function release() {
         if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -97,8 +101,10 @@
         if (done) return;
         done = true;
         release();
+        try { if (audioEl) audioEl.pause(); } catch (e) {}
         try { if (blobUrl) URL.revokeObjectURL(blobUrl); } catch (e) {}
-        try { if (ov && ov.parentNode) ov.parentNode.removeChild(ov); } catch (e) {}
+        try { if (bar.parentNode) bar.parentNode.removeChild(bar); } catch (e) {}
+        anchor.style.display = anchorDisplay;      // the composer comes back
         document.removeEventListener('keydown', onKey, true);
         resolve(file || null);
       }
@@ -107,72 +113,71 @@
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(null); }
       }
 
-      // ── the panel ──────────────────────────────────────────────────────────
-      /* role="dialog" + .kt-modal on purpose: that is the shape KT.uiBusy() looks
-         for, so the background refreshers hold off instead of re-rendering the
-         screen out from under an open recorder. */
-      var ov = document.createElement('div');
-      ov.className = 'kt-modal kt-voice-recorder';
-      ov.setAttribute('role', 'dialog');
-      ov.setAttribute('aria-modal', 'true');
-      ov.setAttribute('aria-label', 'Voice note recorder');
-      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(13,27,42,.55);'
-        + 'display:flex;align-items:center;justify-content:center;padding:16px;';
+      // ── the row ────────────────────────────────────────────────────────────
+      var bar = document.createElement('div');
+      bar.className = 'kt-voice-bar';
+      bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 10px 10px;min-height:44px;'
+        + 'box-sizing:border-box;';
 
-      var panel = document.createElement('div');
-      panel.style.cssText = 'width:100%;max-width:420px;background:#fff;border-radius:16px;'
-        + 'box-shadow:0 18px 48px rgba(0,0,0,.28);padding:18px 18px 14px;font-family:inherit;';
-      ov.appendChild(panel);
+      var lead = document.createElement('button');
+      lead.type = 'button';
+      lead.style.cssText = 'flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:none;cursor:default;'
+        + 'background:#FEE2E2;color:#DC2626;font-size:13px;line-height:1;display:inline-flex;'
+        + 'align-items:center;justify-content:center;padding:0;';
+      lead.textContent = '●';
+      lead.setAttribute('aria-hidden', 'true');
 
-      panel.innerHTML =
-          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">'
-        +   '<span style="font-size:18px;">🎤</span>'
-        +   '<strong style="font-size:15px;color:#0D1B2A;">Voice note</strong>'
-        +   '<span data-el="state" style="margin-left:auto;font-size:12px;font-weight:700;color:#DC2626;">● Recording</span>'
-        + '</div>'
-        + '<div data-el="meter" style="display:flex;align-items:center;justify-content:center;gap:3px;'
-        +   'height:56px;padding:0 4px;margin-bottom:8px;"></div>'
-        + '<div data-el="time" style="text-align:center;font-size:22px;font-weight:800;color:#0D1B2A;'
-        +   'font-variant-numeric:tabular-nums;margin-bottom:4px;">0:00</div>'
-        + '<div data-el="hint" style="text-align:center;font-size:12px;color:#64748B;margin-bottom:14px;">'
-        +   'Speak, then press Stop to listen back.</div>'
-        + '<div data-el="playback" style="display:none;margin-bottom:14px;"></div>'
-        + '<div data-el="actions" style="display:flex;gap:8px;"></div>';
+      var time = document.createElement('span');
+      time.style.cssText = 'flex:0 0 auto;font-size:12.5px;font-weight:700;color:#0D1B2A;'
+        + 'font-variant-numeric:tabular-nums;min-width:34px;';
+      time.textContent = '0:00';
 
-      var elState = panel.querySelector('[data-el="state"]');
-      var elMeter = panel.querySelector('[data-el="meter"]');
-      var elTime = panel.querySelector('[data-el="time"]');
-      var elHint = panel.querySelector('[data-el="hint"]');
-      var elPlay = panel.querySelector('[data-el="playback"]');
-      var elActions = panel.querySelector('[data-el="actions"]');
+      var meter = document.createElement('div');
+      meter.style.cssText = 'flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:24px;overflow:hidden;';
 
       var bars = [];
       for (var b = 0; b < BARS; b++) {
-        var bar = document.createElement('span');
-        bar.style.cssText = 'display:block;width:4px;height:4px;border-radius:2px;background:#CBD5E1;'
-          + 'transition:height .06s linear,background-color .12s linear;';
-        elMeter.appendChild(bar);
-        bars.push(bar);
+        var el = document.createElement('span');
+        el.style.cssText = 'flex:1;min-width:2px;height:3px;border-radius:2px;background:#CBD5E1;'
+          + 'transition:height .06s linear;';
+        meter.appendChild(el);
+        bars.push(el);
       }
 
-      function button(label, kind) {
+      function iconBtn(glyph, title, colour) {
         var el = document.createElement('button');
         el.type = 'button';
-        var base = 'flex:1;height:40px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;'
-          + 'display:inline-flex;align-items:center;justify-content:center;gap:6px;';
-        el.style.cssText = base + (kind === 'primary'
-          ? 'background:#159FB4;color:#fff;border:1px solid #159FB4;'
-          : (kind === 'danger'
-            ? 'background:#fff;color:#DC2626;border:1px solid #FECACA;'
-            : 'background:#fff;color:#334155;border:1px solid #E5E7EB;'));
-        el.textContent = label;
+        el.title = title;
+        el.setAttribute('aria-label', title);
+        el.style.cssText = 'flex:0 0 auto;width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;'
+          + 'background:transparent;color:' + (colour || '#64748B') + ';font-size:16px;line-height:1;'
+          + 'display:inline-flex;align-items:center;justify-content:center;padding:0;';
+        el.textContent = glyph;
         return el;
       }
 
-      // ── level meter ────────────────────────────────────────────────────────
-      /* Driven by the microphone itself, not by an animation pretending to listen.
-         A meter that moves whether or not sound is arriving would answer the only
-         question it exists to answer — "is this picking me up?" — with a lie. */
+      var discard = iconBtn('✕', 'Discard', '#94A3B8');
+      var stopBtn = iconBtn('⏹', 'Stop', '#DC2626');
+
+      var sendBtn = document.createElement('button');
+      sendBtn.type = 'button';
+      sendBtn.style.cssText = 'flex:0 0 auto;height:32px;padding:0 14px;border-radius:16px;border:none;'
+        + 'background:#159FB4;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:none;';
+      sendBtn.textContent = acceptLabel;
+
+      bar.appendChild(lead);
+      bar.appendChild(time);
+      bar.appendChild(meter);
+      bar.appendChild(discard);
+      bar.appendChild(stopBtn);
+      bar.appendChild(sendBtn);
+
+      discard.addEventListener('click', function () { finish(null); });
+
+      // ── level meter, driven by the microphone itself ───────────────────────
+      /* Not an animation pretending to listen: a meter that moves whether or not
+         sound is arriving would answer the only question it exists to answer —
+         "is this picking me up?" — with a lie. */
       function startMeter() {
         try {
           var Ctx = window.AudioContext || window.webkitAudioContext;
@@ -182,94 +187,81 @@
           analyser = audioCtx.createAnalyser();
           analyser.fftSize = 512;
           analyser.smoothingTimeConstant = 0.75;
-          src.connect(analyser);          // analyser only — never to destination, or it echoes
+          src.connect(analyser);        // analyser only — never to destination, or it echoes
           var data = new Uint8Array(analyser.frequencyBinCount);
-          var peak = 0;
+          var seen = 0;
 
           var draw = function () {
             if (!analyser) return;
             analyser.getByteTimeDomainData(data);
             var sum = 0;
             for (var i = 0; i < data.length; i++) { var v = (data[i] - 128) / 128; sum += v * v; }
-            var rms = Math.sqrt(sum / data.length);
-            var level = Math.min(1, rms * 3.2);
-            peak = Math.max(level, peak * 0.92);
+            var level = Math.min(1, Math.sqrt(sum / data.length) * 3.2);
+            seen = Math.max(level, seen * 0.94);
 
             for (var j = 0; j < bars.length; j++) {
-              /* Centre-weighted so it reads as a voice, loudest in the middle,
-                 rather than a flat wall of equal bars. */
               var d = Math.abs(j - (bars.length - 1) / 2) / ((bars.length - 1) / 2);
-              var h = 4 + Math.round(level * 48 * (1 - d * 0.72) * (0.75 + Math.random() * 0.5));
-              bars[j].style.height = Math.max(4, Math.min(52, h)) + 'px';
-              bars[j].style.backgroundColor = level > 0.02 ? '#159FB4' : '#CBD5E1';
+              var h = 3 + Math.round(level * 21 * (1 - d * 0.6) * (0.7 + Math.random() * 0.6));
+              bars[j].style.height = Math.max(3, Math.min(24, h)) + 'px';
+              bars[j].style.background = level > 0.02 ? '#159FB4' : '#CBD5E1';
             }
-            /* Nothing at all is arriving: say so, because a muted headset or a
+            /* Nothing arriving at all: say so quietly, because a muted headset or a
                microphone another app has grabbed looks exactly like a working one. */
-            elHint.textContent = peak < 0.015
-              ? 'No sound is reaching the microphone yet — try speaking up.'
-              : 'Speak, then press Stop to listen back.';
-            elHint.style.color = peak < 0.015 ? '#B45309' : '#64748B';
+            time.style.color = seen < 0.015 ? '#B45309' : '#0D1B2A';
+            time.title = seen < 0.015 ? 'No sound is reaching the microphone' : '';
             rafId = requestAnimationFrame(draw);
           };
           rafId = requestAnimationFrame(draw);
         } catch (e) { /* no meter is survivable; recording is not */ }
       }
 
-      function restMeter() {
-        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-        for (var j = 0; j < bars.length; j++) {
-          bars[j].style.height = '4px';
-          bars[j].style.backgroundColor = '#CBD5E1';
-        }
-      }
-
-      // ── review step ────────────────────────────────────────────────────────
+      // ── review ─────────────────────────────────────────────────────────────
       function showReview() {
-        restMeter();
-        elState.textContent = '✓ Ready to send';
-        elState.style.color = '#0F766E';
-        elHint.textContent = 'Listen to it before you send. Re-record starts again.';
-        elHint.style.color = '#64748B';
-
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
         blobUrl = URL.createObjectURL(blob);
-        elPlay.innerHTML = '';
-        var au = document.createElement('audio');
-        au.controls = true;
-        au.src = blobUrl;
-        au.style.cssText = 'width:100%;height:40px;display:block;';
-        elPlay.appendChild(au);
-        elPlay.style.display = 'block';
+        audioEl = new Audio(blobUrl);
 
-        elActions.innerHTML = '';
-        var again = button('Re-record');
-        var cancel = button('Cancel', 'danger');
-        var accept = button(acceptLabel, 'primary');
-        elActions.appendChild(cancel);
-        elActions.appendChild(again);
-        elActions.appendChild(accept);
+        lead.style.background = '#E0F2F5';
+        lead.style.color = '#0E7490';
+        lead.style.cursor = 'pointer';
+        lead.textContent = '▶';
+        lead.removeAttribute('aria-hidden');
+        lead.title = 'Play it back';
+        lead.setAttribute('aria-label', 'Play it back');
+        time.textContent = mmss(heldMs);
+        time.style.color = '#0D1B2A';
+        time.title = '';
+        stopBtn.style.display = 'none';
+        sendBtn.style.display = 'inline-flex';
+        discard.title = 'Delete this recording';
 
-        cancel.addEventListener('click', function () { finish(null); });
-        again.addEventListener('click', function () {
-          try { au.pause(); } catch (e) {}
-          try { if (blobUrl) URL.revokeObjectURL(blobUrl); } catch (e) {}
-          blobUrl = null; blob = null;
-          elPlay.style.display = 'none';
-          elPlay.innerHTML = '';
-          begin();
+        // A still waveform, so the row still reads as a recording rather than a blank.
+        for (var j = 0; j < bars.length; j++) {
+          var d = Math.abs(j - (bars.length - 1) / 2) / ((bars.length - 1) / 2);
+          bars[j].style.height = (4 + Math.round(14 * (1 - d * 0.7))) + 'px';
+          bars[j].style.background = '#94A3B8';
+        }
+
+        lead.addEventListener('click', function () {
+          if (audioEl.paused) { audioEl.play().catch(function () {}); }
+          else { audioEl.pause(); }
         });
-        accept.addEventListener('click', function () {
+        audioEl.addEventListener('play', function () { lead.textContent = '⏸'; });
+        audioEl.addEventListener('pause', function () { lead.textContent = '▶'; });
+        audioEl.addEventListener('ended', function () { lead.textContent = '▶'; });
+        audioEl.addEventListener('timeupdate', function () {
+          if (!isNaN(audioEl.currentTime)) time.textContent = mmss(audioEl.currentTime * 1000);
+        });
+
+        sendBtn.addEventListener('click', function () {
           var type = blob.type || mime || 'audio/webm';
           finish(new File([blob], 'voice-' + Date.now() + '.' + extFor(type), { type: type }));
         });
       }
 
-      // ── recording step ─────────────────────────────────────────────────────
+      // ── recording ──────────────────────────────────────────────────────────
       function begin() {
         chunks = [];
-        elState.textContent = '● Recording';
-        elState.style.color = '#DC2626';
-        elTime.textContent = '0:00';
-
         try {
           rec = mime ? new window.MediaRecorder(stream, { mimeType: mime })
                      : new window.MediaRecorder(stream);
@@ -283,15 +275,15 @@
         rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
         rec.onstop = function () {
           if (tickId) { clearInterval(tickId); tickId = null; }
+          heldMs = Date.now() - startedAt;
           var type = (chunks[0] && chunks[0].type) || mime || 'audio/webm';
           blob = new Blob(chunks, { type: type });
           if (blob.size < MIN_BYTES) {
-            /* Too short to be anything. Sending it would put an empty bubble in
-               front of a parent, so say what happened and stay open to try again. */
-            toast('🎤', 'Nothing recorded', 'That was too short — hold on a moment longer.', '#B45309');
+            /* Too short to be anything. Sending it would put an empty bubble in front
+               of a parent, so say so and stay open rather than send silence. */
+            toast('🎤', 'Too short', 'Hold on a moment longer.', '#B45309');
             blob = null;
-            begin();
-            return;
+            return finish(null);
           }
           showReview();
         };
@@ -302,22 +294,16 @@
 
         tickId = setInterval(function () {
           var ms = Date.now() - startedAt;
-          elTime.textContent = mmss(ms);
+          time.textContent = mmss(ms);
           if (ms >= MAX_MS) {
-            toast('🎤', 'Five minutes reached', 'The recording was stopped so you can review it.', '#B45309');
+            toast('🎤', 'Five minutes reached', 'Stopped so you can review it.', '#B45309');
             try { if (rec && rec.state === 'recording') rec.stop(); } catch (e) {}
           }
         }, 200);
 
-        elActions.innerHTML = '';
-        var cancel = button('Cancel', 'danger');
-        var stop = button('Stop', 'primary');
-        elActions.appendChild(cancel);
-        elActions.appendChild(stop);
-        cancel.addEventListener('click', function () { finish(null); });
-        stop.addEventListener('click', function () {
-          stop.disabled = true;
-          stop.style.opacity = '.6';
+        stopBtn.addEventListener('click', function () {
+          stopBtn.disabled = true;
+          stopBtn.style.opacity = '.5';
           try { if (rec && rec.state === 'recording') rec.stop(); } catch (e) {}
         });
       }
@@ -328,7 +314,8 @@
       }).then(function (s) {
         stream = s;
         mime = pickMime();
-        document.body.appendChild(ov);
+        anchor.parentNode.insertBefore(bar, anchor);
+        anchor.style.display = 'none';
         document.addEventListener('keydown', onKey, true);
         begin();
       }).catch(function () {

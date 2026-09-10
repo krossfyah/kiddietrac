@@ -38,16 +38,31 @@
       // Defer open until body is populated — caller appends to .body synchronously then we open on next tick
       const self = this;
       setTimeout(() => {
-        if (!self._opened) {
-          Shell.Modal.open({
-            title: self._title,
-            body: self._body,
-            onClose: () => { self._opened = false; }
-          });
-          self._opened = true;
-        }
+        if (!self._opened) { self.show(); }
       }, 0);
     }
+
+    /* OPEN IT NOW.
+       Four call sites in this file end with `modal.show()` — New family, New room,
+       Enroll a child and Invite a parent — and the class never had the method. Every
+       one of them threw "modal.show is not a function", filed a crash report and left
+       the person looking at a button that did nothing. The dialog HAD in fact opened a
+       tick earlier via the timer above, so the screen looked half-alive: a form on
+       screen and an exception behind it, which is why this read as a mystery rather
+       than a missing method.
+
+       Idempotent, and the constructor's timer defers to it, so both styles work:
+       call show() and it opens immediately; forget to, and the tick still opens it. */
+    show() {
+      if (this._opened) return;
+      Shell.Modal.open({
+        title: this._title,
+        body: this._body,
+        onClose: () => { this._opened = false; }
+      });
+      this._opened = true;
+    }
+
     close() {
       // Shell.Modal.open closes by clearing #modalRoot; we trigger that
       const root = Dom.$('#modalRoot');
@@ -487,9 +502,9 @@
       section.appendChild(buttonsWrap);
 
       [
-        ['🏫 New room', () => showAddRoomModal(() => window.location.reload())],
+        ['🏫 New room', () => showAddRoomModal(() => (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload()))],
         ['👪 New family', () => showAddFamilyModal()],
-        ['👶 New child', () => showAddChildModal(() => window.location.reload())],
+        ['👶 New child', () => showAddChildModal(() => (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload()))],
         ['💌 Invite parent', () => showInviteParentModal(null)],
         ['👨‍🏫 Invite staff', () => showInviteStaffModal()],
       ].forEach(([label, handler]) => {
@@ -522,12 +537,19 @@
       // falling off-screen at the very bottom of a tall sidebar. Anchor on navUser's actual
       // parent, since `sidebar` may have matched an outer wrapper (e.g. .app-shell--sidebar)
       // rather than the .app-sidebar aside itself.
-      var navUser = document.querySelector('.nav-user');
-      if (navUser && navUser.parentNode) {
-        navUser.parentNode.insertBefore(section, navUser);
-      } else {
-        sidebar.appendChild(section);
-      }
+      /* NOT IN THE SIDEBAR ANY MORE. Anthony, 2026-09-06: "remove the quick add
+         button from the left side bar - not needed".
+
+         Built and kept in the document all the same, because kt-mobilenav.js reads
+         its buttons to populate the PHONE quick-add sheet and forwards each tap to
+         the original — "nothing about what 'New family' does is duplicated here".
+         Deleting the section outright would empty that sheet, so it becomes an
+         offscreen source of truth rather than a visible control.
+
+         If the phone sheet is ever retired too, this whole injector goes with it. \*/
+      section.setAttribute('data-kt-hidden-source', '1');
+      section.style.display = 'none';
+      document.body.appendChild(section);
       return true;
     };
 

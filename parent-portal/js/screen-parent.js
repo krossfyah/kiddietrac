@@ -2736,7 +2736,7 @@
       if (!(window.KT && KT.recordVoiceNote)) { ktToast('⚠️', 'Voice messages aren’t supported on this device'); return; }
       action.disabled = true;
       try {
-        const file = await KT.recordVoiceNote({ acceptLabel: 'Send' });
+        const file = await KT.recordVoiceNote({ anchor: compose, acceptLabel: 'Send' });
         if (file) doSend(file);
       } finally {
         action.disabled = false;
