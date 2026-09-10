@@ -825,6 +825,11 @@
      BOTH PANES ARE ALWAYS IN THE DOM; the hidden one is only display:none. Save reads
      every field on the screen regardless of which tab is showing, so setting up Telnyx
      cannot quietly discard a number typed on the Twilio page. */
+  /* Bumped by hand whenever this screen changes shape. It is printed under the hero so
+     "which version am I looking at" is answerable from the screen instead of from
+     devtools — a stale cached copy is otherwise indistinguishable from a bug. */
+  var SCREEN_BUILD = '2026-09-10 carrier-subtabs';
+
   async function renderSmsSettings(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
@@ -890,23 +895,36 @@
         + '<span style="display:block;font-size:11.5px;color:#64748B;margin-top:2px;">' + sub + '</span></span></label>';
     }
 
-    /* Carrier tabs are UNDERLINED, where the channel tabs above them are filled pills.
-       Two rows of identical-looking tabs stacked on top of each other read as one broken
-       row; the different treatment is what says "these are inside those". */
-    function carrierTab(value, label) {
-      return '<button type="button" data-cx-tab="' + value + '" style="appearance:none;background:none;'
-        + 'border:0;border-bottom:2px solid transparent;padding:8px 4px;margin-right:18px;font:inherit;'
-        + 'font-size:13.5px;font-weight:800;color:#64748B;cursor:pointer;display:inline-flex;align-items:center;'
-        + 'gap:8px;">' + esc(label)
-        + '<span data-cx-sending="' + value + '" style="display:none;font-size:10.5px;font-weight:800;'
-        + 'text-transform:uppercase;letter-spacing:.4px;background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0;'
-        + 'border-radius:999px;padding:2px 7px;">sending</span></button>';
+    /* THE CARRIER TABS.
+       These began as small underlined text between two cards, matching the treatment
+       the Email settings strip uses. That was too quiet: sitting under a row of filled
+       pill tabs and directly above a card full of fields, the row did not read as a
+       control at all — it read as a caption, and the page looked like one long form
+       with Twilio at the top. So they are a bordered segmented control with a label in
+       front of them, deliberately louder than the tabs above rather than quieter.
+
+       Kept visually distinct from the channel tabs above all the same: those are solid
+       pills, these are a joined segment group inside a tray. Two rows of identical
+       tabs stacked on each other read as one broken row. */
+    function carrierTab(value, label, first, last) {
+      var radius = first ? '9px 0 0 9px' : (last ? '0 9px 9px 0' : '0');
+      return '<button type="button" data-cx-tab="' + value + '" style="appearance:none;'
+        + 'background:#fff;border:1px solid #CBD5E1;border-radius:' + radius + ';'
+        + (first ? '' : 'margin-left:-1px;')
+        + 'padding:0 16px;height:34px;font:inherit;font-size:13.5px;font-weight:800;'
+        + 'color:#475569;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">'
+        + esc(label)
+        + '<span data-cx-sending="' + value + '" style="display:none;font-size:10px;font-weight:800;'
+        + 'text-transform:uppercase;letter-spacing:.4px;background:#ECFDF5;color:#065F46;'
+        + 'border:1px solid #A7F3D0;border-radius:999px;padding:2px 6px;">sending</span></button>';
     }
 
     main.innerHTML = ''
       + '<div style="padding:24px;max-width:880px;margin:0 auto;">'
       +   '<div class="kt-page-hero"><h2>📡 Carrier settings</h2>'
-      +     '<p>The carriers this agency sends text messages and places announcement calls through.</p></div>'
+      +     '<p>The carriers this agency sends text messages and places announcement calls through.</p>'
+      +     '<div style="margin-top:6px;font-size:11px;opacity:.6;">Screen build '
+      +       esc(SCREEN_BUILD) + '</div></div>'
 
       /* ── channel tabs ── */
       +   '<div style="display:flex;gap:6px;margin-top:16px;flex-wrap:wrap;" id="sv-tabs">'
@@ -951,9 +969,15 @@
       +     '</div>'
 
       /* ── carrier tabs ── */
-      +     '<div id="sms-carrier-tabs" style="margin:20px 0 2px;border-bottom:1px solid #E2E8F0;">'
-      +       carrierTab('twilio', 'Twilio')
-      +       carrierTab('telnyx', 'Telnyx')
+      +     '<div id="sms-carrier-tabs" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;'
+      +       'margin:22px 0 0;padding:12px 14px;background:#F1F5F9;border:1px solid #E2E8F0;'
+      +       'border-radius:12px;">'
+      +       '<span style="font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;'
+      +         'letter-spacing:.5px;">Set up carrier</span>'
+      +       '<span style="display:inline-flex;">'
+      +         carrierTab('twilio', 'Twilio', true, false)
+      +         carrierTab('telnyx', 'Telnyx', false, true)
+      +       '</span>'
       +     '</div>'
 
       /* ── Twilio ── */
@@ -1129,8 +1153,10 @@
       openCarrier = which;
       main.querySelectorAll('[data-cx-tab]').forEach(function (b) {
         var on = b.getAttribute('data-cx-tab') === which;
-        b.style.color = on ? '#1F6080' : '#64748B';
-        b.style.borderBottomColor = on ? '#1F6080' : 'transparent';
+        b.style.background = on ? '#1F6080' : '#fff';
+        b.style.color = on ? '#fff' : '#475569';
+        b.style.borderColor = on ? '#1F6080' : '#CBD5E1';
+        b.style.position = on ? 'relative' : '';   // keep the active border on top
       });
       main.querySelectorAll('[data-cx-pane]').forEach(function (p) {
         p.style.display = p.getAttribute('data-cx-pane') === which ? '' : 'none';
