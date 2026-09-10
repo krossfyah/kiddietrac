@@ -92,22 +92,51 @@ class AbsenceController extends Controller
             ? Carbon::parse($data['date'], $tz)->toDateString()
             : Carbon::now($tz)->toDateString();
 
-        DB::table('child_absences')->updateOrInsert(
-            ['child_id' => (int) $data['child_id'], 'absent_on' => $date],
-            [
-                'reason' => $data['reason'] ?? null,
-                'note' => $data['note'] ?? null,
-                'reported_by_id' => $request->user()->id,
-                'created_at' => now(),
-            ]
-        );
+        $key = ['child_id' => (int) $data['child_id'], 'absent_on' => $date];
+        $reason = $data['reason'] ?? null;
+        $note = $data['note'] ?? null;
 
-        $reporter = trim(($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? ''));
-        $this->tellTheCentre($child, $date, $data['reason'] ?? null, $data['note'] ?? null, $reporter, $tz);
-        $this->tellTheFamily($child, $date, $data['reason'] ?? null, $data['note'] ?? null,
-            $reporter, (int) $request->user()->id, $tz);
+        /* TELL PEOPLE ABOUT A CHANGE, NOT ABOUT A REQUEST.
 
-        return response()->json(['ok' => true, 'date' => $date]);
+           `updateOrInsert` keeps one row per child per day, so posting the same absence
+           twice was always harmless to the DATA — and the two notify calls below ran
+           anyway, once per POST. On 2026-09-10 an educator marked George absent at
+           12:49:25, worked down her list, and submitted the identical absence again at
+           12:50:06: same child, same date, same reason, same (empty) note. Nothing
+           changed, and every director's phone alerted a second time while his mother was
+           emailed "George has been marked absent today" twice.
+
+           A re-submit is not rare. The educator is on a phone, on a list of children,
+           with no way to see that the first tap registered — so tapping again is the
+           obvious thing to do, and the portal answered by alerting the whole centre
+           again.
+
+           So: compare against what is already on file and notify only when this is new
+           or genuinely different. An unchanged re-post still returns ok, because from
+           the educator's side nothing is wrong — the absence IS recorded. */
+        $prior = DB::table('child_absences')->where($key)->first();
+        $isNews = ! $prior
+            || (string) ($prior->reason ?? '') !== (string) ($reason ?? '')
+            || (string) ($prior->note ?? '') !== (string) ($note ?? '');
+
+        DB::table('child_absences')->updateOrInsert($key, [
+            'reason' => $reason,
+            'note' => $note,
+            'reported_by_id' => $request->user()->id,
+            /* The ORIGINAL time it was reported. This used to be stamped now() on every
+               write, so a re-post moved the record forward and the table ordered itself
+               by "last touched" while claiming to be a report time. */
+            'created_at' => $prior->created_at ?? now(),
+        ]);
+
+        if ($isNews) {
+            $reporter = trim(($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? ''));
+            $this->tellTheCentre($child, $date, $reason, $note, $reporter, $tz);
+            $this->tellTheFamily($child, $date, $reason, $note,
+                $reporter, (int) $request->user()->id, $tz);
+        }
+
+        return response()->json(['ok' => true, 'date' => $date, 'notified' => $isNews]);
     }
 
     /** DELETE /parent/absences/{child}/{date} — "actually, they are coming in". */
@@ -187,7 +216,7 @@ class AbsenceController extends Controller
 
                 // In-app + push.
                 try {
-                    DB::table('notifications')->insert([
+                    \App\Support\Notify::write([
                         'user_id' => (int) $g->id,
                         'type' => 'absence',
                         'title' => $title,
@@ -195,7 +224,8 @@ class AbsenceController extends Controller
                         'data' => json_encode(['link' => '#today', 'child_id' => $child->id]),
                         'created_at' => now(),
                     ]);
-                    app(FcmService::class)->sendToUser((int) $g->id, $title, $line, '#today', true);
+                    // NOT urgent — see tellTheCentre() for what that flag actually does.
+                    app(FcmService::class)->sendToUser((int) $g->id, $title, $line, '#today', false);
                 } catch (\Throwable $e) {
                 }
 
@@ -280,7 +310,7 @@ class AbsenceController extends Controller
 
         foreach ($staffIds as $uid) {
             try {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $uid,
                     'type' => 'absence',
                     'title' => $title,
@@ -288,7 +318,27 @@ class AbsenceController extends Controller
                     'data' => json_encode(['link' => '#today', 'child_id' => $child->id]),
                     'created_at' => now(),
                 ]);
-                app(FcmService::class)->sendToUser((int) $uid, $title, $body, '#today', true);
+                /* NOT URGENT. `true` here does not mean "important" — it selects a
+                   different transport with different behaviour on the handset: a
+                   data-only FCM message carrying kt_urgent + kt_fullscreen, which
+                   KtMessagingService renders with FLAG_INSISTENT. Android then REPEATS
+                   the sound until somebody touches the notification, and the takeover
+                   claims the lock screen.
+
+                   That is the right treatment for a message meant to reach an educator
+                   holding a room full of children. A child not coming in today is a
+                   thing to know, not an emergency: it is the same class of event as a
+                   check-in, which passes false, and as an incident, which also passes
+                   false. Absences were the only routine event in the portal asking for
+                   an alarm.
+
+                   Admins never noticed for the two months this flag has been here,
+                   because the in-app layer skipped them entirely; widening that on
+                   2026-09-09 is what finally handed directors a phone that would not
+                   stop ringing. The in-app side was narrowed back the same day, but a
+                   JS fix cannot govern the native notification — only not asking for it
+                   can, which is what this does. (2026-09-10) */
+                app(FcmService::class)->sendToUser((int) $uid, $title, $body, '#today', false);
             } catch (\Throwable $e) {
             }
         }
