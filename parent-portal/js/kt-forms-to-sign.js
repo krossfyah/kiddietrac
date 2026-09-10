@@ -53,13 +53,29 @@
     else loadMine(listEl, tab, main);
   }
 
+  /* WHEN, IN THE AGENCY'S ZONE — via KT.Fmt, which is the one place that knows how.
+
+     This parsed the server's timestamp with `new Date(str.replace(' ','T'))` and no 'Z'.
+     MySQL hands us UTC with no zone marker, so a bare parse reads it as the DEVICE's
+     local time: on anything behind UTC the instant lands hours away, and the rendering
+     then used the device zone on top. A form signed at 8pm Toronto could read as the
+     next day. KT.Fmt.parse exists for exactly this and KT.Fmt.date/time render against
+     KT.tz(), so a director on a phone set to another zone still sees the centre's clock.
+
+     Date AND time: "when was this signed" is a question about a moment, and a bare date
+     cannot answer it for anything filed today. */
   function fmtWhen(ts) {
     if (!ts) return '';
     try {
-      var d = new Date(String(ts).replace(' ', 'T'));
+      if (window.KT && KT.Fmt && KT.Fmt.parse(ts)) {
+        return KT.Fmt.date(ts, { month: 'short', day: 'numeric' }) + ' · ' + KT.Fmt.time(ts);
+      }
+      var iso = String(ts).trim().replace(' ', 'T');
+      if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(iso)) iso += 'Z';
+      var d = new Date(iso);
       if (isNaN(d.getTime())) return String(ts);
-      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-        + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
+        + ' · ' + d.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
     } catch (e) { return String(ts); }
   }
 
@@ -93,7 +109,19 @@
           + '</div>';
         return;
       }
-      el.innerHTML = rows.map(function (f) { return mineCard(f, kind); }).join('');
+      /* WHERE THE SIGNED COPY LIVES.
+
+         A form leaves "To sign" the moment it is signed, which is right and also leaves
+         somebody wondering where it went. Every signed form is now filed on the signer's
+         own record, so this says so and links there — one sentence instead of a support
+         ticket. */
+      el.innerHTML = (kind === 'submitted'
+        ? '<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:11px 14px;'
+          + 'font-size:13px;color:#0C4A6E;margin-bottom:12px;">'
+          + 'Your signed copies are kept in <a href="#my-documents" style="font-weight:800;color:#0369A1;">Documents</a>, '
+          + 'where you can open or save them at any time.</div>'
+        : '')
+        + rows.map(function (f) { return mineCard(f, kind); }).join('');
       el.querySelectorAll('.mf-view').forEach(function (b) {
         b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); });
       });

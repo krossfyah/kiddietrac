@@ -26,16 +26,1209 @@
       '<div style="padding:0 24px 24px;max-width:1080px;margin:0 auto;color:#0F172A;">'
       + '<div style="display:flex;gap:8px;margin:16px 0 16px;">'
       + '<button class="fm-tab" data-t="library" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📚 Library</button>'
+      + '<button class="fm-tab" data-t="package" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📦 Multiple forms</button>'
+      + '<button class="fm-tab" data-t="files" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📥 Request files</button>'
       + '<button class="fm-tab" data-t="completed" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">✅ Completed</button>'
       + '</div><div id="fm-body"></div></div>';
     var body = container.querySelector('#fm-body');
     var tabs = container.querySelectorAll('.fm-tab');
     function activate(t) {
       tabs.forEach(function (b) { var on = b.getAttribute('data-t') === t; b.style.background = on ? '#1F6080' : '#fff'; b.style.color = on ? '#fff' : '#334155'; });
-      if (t === 'completed') renderCompleted(body); else renderLibrary(body);
+      if (t === 'completed') renderCompleted(body);
+      else if (t === 'files') renderFileRequests(body);
+      else if (t === 'package') renderPackage(body);
+      else renderLibrary(body);
     }
     tabs.forEach(function (b) { b.addEventListener('click', function () { activate(b.getAttribute('data-t')); }); });
     activate('library');
+  }
+
+  /* ───────── PACKAGE: several forms, several people, one email ─────────
+
+     Assigning used to be one form at a time, from the form's own Edit dialog. Onboarding a
+     family meant opening the consent form, picking them, saving; then the photo permission;
+     then the medical form — and the parent was told about none of it, because assigning has
+     never sent anything.
+
+     The tab now shows the HISTORY — what went to whom, when, and who sent it — and the
+     sending itself happens in a dialog over the top. That ordering is deliberate: the
+     question an admin arrives with is almost always "did this already go out?", and the
+     answer used to be unavailable anywhere in the portal.
+     (Anthony, 2026-09-09) */
+
+  /* Survives the tab switch to the Library and back — a render-scoped variable would be
+     rebuilt empty by the very re-render it needs to outlive. */
+  var PK_RESUME = null;
+
+  function renderPackage(body) {
+    body.innerHTML =
+      '<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:17px;font-weight:800;color:#0F172A;">📦 Multiple forms</div>'
+      +   '<div style="font-size:13px;color:#64748B;margin-top:2px;">Send several forms at once, and see everything that has gone out.</div>'
+      + '</div>'
+      + '<button id="pk-open" type="button" data-kt-iconized="1" style="margin-left:auto;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 20px;font-weight:800;font-size:13.5px;cursor:pointer;">+ Send multiple forms</button>'
+      + '</div>'
+      + '<div id="pk-history"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+
+    body.querySelector('#pk-open').addEventListener('click', function () { openPackageDialog(body); });
+    loadPackageHistory(body.querySelector('#pk-history'));
+
+    // Coming back from an upload in the Library: reopen the dialog where it left off.
+    if (PK_RESUME) { setTimeout(function () { openPackageDialog(body); }, 250); }
+  }
+
+  /* ONE POPUP MENU, used by both kebabs on this screen.
+
+     The Completed tab already had this logic inline; a second copy for the sends table
+     would be the point at which the two menus start behaving differently -- one closing
+     on scroll, one not, one flipping above the button near the bottom of the window and
+     one running off the screen. Lifted out unchanged in behaviour. */
+  function openMenu(btn, build) {
+    var menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:2147483000;background:#fff;border:1px solid #E5E7EB;'
+      + 'border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);padding:6px 0;min-width:190px;';
+
+    function close() {
+      if (menu.parentNode) { menu.remove(); }
+      document.removeEventListener('click', onDoc, true);
+      window.removeEventListener('scroll', close, true);
+    }
+    function onDoc(ev) { if (!menu.contains(ev.target) && ev.target !== btn) { close(); } }
+
+    function item(icon, label, danger, fn) {
+      var mi = document.createElement('button');
+      mi.type = 'button';
+      mi.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;'
+        + 'background:none;border:none;padding:10px 15px;font-size:13.5px;cursor:pointer;color:'
+        + (danger ? '#B91C1C' : '#111827') + ';font-family:inherit;white-space:nowrap;';
+      mi.innerHTML = '<span style="width:18px;text-align:center;">' + icon + '</span><span>' + label + '</span>';
+      mi.onmouseenter = function () { mi.style.background = '#F1F5F9'; };
+      mi.onmouseleave = function () { mi.style.background = 'none'; };
+      mi.onclick = function (ev) { ev.stopPropagation(); close(); fn(); };
+      menu.appendChild(mi);
+      return mi;
+    }
+
+    build(item, close);
+    if (!menu.children.length) { return; }
+
+    document.body.appendChild(menu);
+    var rect = btn.getBoundingClientRect();
+    var mw = menu.offsetWidth || 190, mh = menu.offsetHeight || 150;
+    menu.style.left = Math.max(8, Math.min(rect.right - mw, innerWidth - mw - 8)) + 'px';
+    // Flips above the button rather than off the bottom of a phone screen.
+    menu.style.top = (rect.bottom + 6 + mh > innerHeight - 8
+      ? Math.max(8, rect.top - mh - 6)
+      : rect.bottom + 6) + 'px';
+    setTimeout(function () {
+      document.addEventListener('click', onDoc, true);
+      window.addEventListener('scroll', close, true);
+    }, 0);
+  }
+
+  /* A plain dialog for the package views. Uses the same scrim and card as the send
+     dialog so the screen has one look, and opts out of the modal guard for the same
+     reason that one does -- it ships its own ✕. */
+  function openSheet(titleHtml, bodyHtml, wide) {
+    var stale = document.getElementById('pk-sheet');
+    if (stale && stale.parentNode) { stale.parentNode.removeChild(stale); }
+
+    var ov = document.createElement('div');
+    ov.id = 'pk-sheet';
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;'
+      + 'justify-content:center;padding:20px;overflow-y:auto;background:rgba(8,20,40,.55);';
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:16px;max-width:' + (wide ? '900px' : '640px')
+      + ';width:100%;margin:auto;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);overflow:hidden;';
+    card.innerHTML =
+      '<div style="padding:18px 22px;border-bottom:1px solid #EEF2F7;display:flex;align-items:center;gap:12px;">'
+      +   '<div style="min-width:0;">' + titleHtml + '</div>'
+      +   '<button class="modal-close" type="button" aria-label="Close" data-kt-iconized="1" style="margin-left:auto;background:#F1F5F9;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;cursor:pointer;color:#475569;">✕</button>'
+      + '</div>'
+      + '<div id="pk-sheet-body" style="padding:18px 22px;max-height:min(70vh,720px);overflow-y:auto;" data-kt-scroll="1">' + bodyHtml + '</div>';
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    card.querySelector('.modal-close').addEventListener('click', function () { ov.remove(); });
+    return { overlay: ov, card: card, body: card.querySelector('#pk-sheet-body') };
+  }
+
+  /** What has been sent — the answer to "did this already go out?" */
+  function loadPackageHistory(el) {
+    Api.get('/admin/managed-forms/packages').then(function (d) {
+      var rows = (d && d.sends) || [];
+      if (!rows.length) {
+        el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">Nothing sent yet. Use <strong>+ Send multiple forms</strong> above.</div>';
+        return;
+      }
+      var th = function (t, extra) {
+        return '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;' + (extra || '') + '">' + t + '</th>';
+      };
+      /* SEARCHABLE AND SORTABLE, like every other table in the portal.
+
+         data-kt-filter-always asks kt-table-filter.js for the search box and the row
+         counter even while this is short — a history an admin comes to precisely to
+         answer "did this already go out?" should not gain and lose its controls as it
+         grows. kt-polish.js makes the headers sortable; the data-kt-sort keys written
+         onto the cells below are what make that sort mean anything, since three of the
+         five columns hold stacked lines or a badge rather than one plain value.
+         (Anthony, 2026-09-09) */
+      el.innerHTML = '<div style="overflow-x:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">'
+        + '<table data-kt-paginate="25" data-kt-filter-always="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
+        + '<thead><tr style="background:#F9FAFB;">'
+        +   th('Sent') + th('Forms') + th('Sent to') + th('Signed') + th('Emailed') + th('By') + th('')
+        + '</tr></thead><tbody>'
+        + rows.map(function (r) {
+            var titles = (r.forms || []);
+            var people = (r.recipients || []);
+            var formCell = titles.slice(0, 3).map(function (t) {
+              return '<div style="font-weight:600;color:#111827;">' + esc(t) + '</div>';
+            }).join('') + (titles.length > 3
+              ? '<div style="font-size:11.5px;color:#94A3B8;">+' + (titles.length - 3) + ' more</div>' : '');
+            var whoCell = people.slice(0, 3).map(function (p) {
+              return '<div>' + esc(p.name || p.email || '—')
+                + (p.name && p.email ? '<span style="color:#94A3B8;font-size:11.5px;"> · ' + esc(p.email) + '</span>' : '')
+                + '</div>';
+            }).join('') + (people.length > 3
+              ? '<div style="font-size:11.5px;color:#94A3B8;">+' + (people.length - 3) + ' more</div>' : '');
+            /* Three distinct states, because a tick alone cannot say whether email was
+               switched off or simply reached nobody. */
+            var mail = !r.notified
+              ? '<span style="font-size:11px;font-weight:800;color:#64748B;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:999px;padding:2px 9px;">Not sent</span>'
+              : (r.emailed > 0
+                  ? '<span style="color:#16A34A;font-weight:700;">✓ ' + r.emailed + ' of ' + r.recipient_count + '</span>'
+                  : '<span style="font-size:11px;font-weight:800;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:999px;padding:2px 9px;">None went</span>');
+            /* Sort keys. Dates sort by the raw stamp, never by the formatted text
+               ("9 Sep" would file under 9). The two stacked columns sort by their first
+               entry, which is what the eye reads first. Email sorts by state, so the
+               three states group instead of interleaving. */
+            var kSent  = String(r.sent_at || '');
+            var kForms = String(titles[0] || '').toLowerCase();
+            var kWho   = String((people[0] && (people[0].name || people[0].email)) || '').toLowerCase();
+            var kMail  = !r.notified ? '0 not sent' : (r.emailed > 0 ? '2 sent ' + r.emailed : '1 none went');
+
+            /* HOW MUCH HAS COME BACK. A package is forms x people signatures; this is how
+               many of them exist. Sorted on the RATIO, not the count — "2 of 2" is
+               finished and "2 of 40" is barely started, and a column that put them next
+               to each other would be the wrong list to work from. */
+            var pct = (r.slots ? (r.signed || 0) / r.slots : -1);
+            var doneCell;
+            if (!r.slots) {
+              doneCell = '<span style="color:#CBD5E1;">—</span>';
+            } else if (r.signed >= r.slots) {
+              doneCell = '<span style="font-size:11px;font-weight:800;color:#166534;background:#DCFCE7;border:1px solid #BBF7D0;border-radius:999px;padding:2px 9px;white-space:nowrap;">✓ All ' + r.slots + '</span>';
+            } else {
+              doneCell = '<span style="font-size:11px;font-weight:800;color:' + (r.signed ? '#B45309' : '#64748B') + ';background:' + (r.signed ? '#FEF3C7' : '#F1F5F9') + ';border:1px solid ' + (r.signed ? '#FDE68A' : '#E2E8F0') + ';border-radius:999px;padding:2px 9px;white-space:nowrap;">'
+                + (r.signed || 0) + ' of ' + r.slots + '</span>';
+            }
+            /* The search box matches on text, so every value a reader might type has to
+               BE in the row. Titles and addresses past the third are folded into
+               "+2 more", which reads well and cannot be searched — so they ride along
+               in a visually-hidden span. Filtering a send history by a form name that
+               happens to be fourth in the list should still find it. */
+            var hidden = titles.slice(3).concat(people.slice(3).map(function (p) {
+              return [p.name, p.email].filter(Boolean).join(' ');
+            })).join(' ');
+            var hiddenCell = hidden
+              ? '<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">' + esc(hidden) + '</span>'
+              : '';
+            return '<tr style="border-top:1px solid #F3F4F6;vertical-align:top;">'
+              + '<td data-kt-sort="' + esc(kSent) + '" style="padding:11px 14px;white-space:nowrap;color:#374151;">' + esc(fmtStamp(r.sent_at)) + '</td>'
+              + '<td data-kt-sort="' + esc(kForms) + '" style="padding:11px 14px;position:relative;">' + formCell + hiddenCell + '</td>'
+              + '<td data-kt-sort="' + esc(kWho) + '" style="padding:11px 14px;color:#334155;">' + whoCell + '</td>'
+              + '<td data-kt-sort="' + esc(String(pct.toFixed(4))) + '" style="padding:11px 14px;white-space:nowrap;">' + doneCell + '</td>'
+              + '<td data-kt-sort="' + esc(kMail) + '" style="padding:11px 14px;white-space:nowrap;">' + mail + '</td>'
+              + '<td data-kt-sort="' + esc(String(r.sent_by || '').toLowerCase()) + '" style="padding:11px 14px;color:#475569;white-space:nowrap;">' + esc(r.sent_by || '—') + '</td>'
+              + '<td style="padding:11px 8px;text-align:right;">'
+              +   '<button class="pk-kebab" data-id="' + r.id + '" data-kt-iconized="1" title="Actions" '
+              +   'style="width:32px;height:32px;border:1px solid #E5E7EB;background:#fff;border-radius:8px;cursor:pointer;font-size:17px;color:#475569;">⋮</button>'
+              + '</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table></div>';
+      wirePackageKebabs(el, rows);
+      /* This table appears on a TAB SWITCH, which changes no hash — so without asking,
+         its search box and sortable headers arrive only if the sweep bus happens to be
+         alive. See KT.enhanceTables. */
+      if (KT.enhanceTables) { KT.enhanceTables(); }
+    }).catch(function (e) {
+      el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>';
+    });
+  }
+
+  /* View · Print · Download · Resend · Delete, on each send. */
+  function wirePackageKebabs(el, rows) {
+    var byId = {};
+    rows.forEach(function (r) { byId[String(r.id)] = r; });
+
+    el.querySelectorAll('.pk-kebab').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var r = byId[btn.getAttribute('data-id')];
+        if (!r) { return; }
+
+        openMenu(btn, function (item) {
+          item('👁', 'View forms', false, function () { viewPackage(r.id); });
+          item('🖨', 'Print summary', false, function () { printPackage(r.id); });
+          item('⬇️', 'Download PDF', false, function () { downloadPackagePdf(r); });
+          /* Absent, not disabled, when the send predates the ids being kept: an action
+             that is visible and refuses is worse than one that was never offered. */
+          if (r.can_resend) {
+            /* TWO DIFFERENT SENDS, named for what they do rather than for the endpoint.
+               One chases what is missing; the other posts on what is finished. Labelled
+               with the count so nobody has to open the row to find out whether pressing
+               it would do anything. */
+            var outstanding = r.slots ? (r.slots - (r.signed || 0)) : 0;
+            if (outstanding > 0) {
+              item('🔔', 'Send reminder (' + outstanding + ' unsigned)', false, function () { resendPackage(r, el); });
+            }
+            if (r.signed > 0) {
+              item('📤', 'Resend ' + r.signed + ' completed copy(ies)', false, function () { redeliverPackage(r); });
+            }
+          }
+          item('🗑', 'Delete from history', true, function () { deletePackage(r, el); });
+        });
+      });
+    });
+  }
+
+  /* The three read-only views share one fetch and one renderer, so Print cannot show
+     something View does not. */
+  function packageSheetHtml(d) {
+    /* d.id is the send this table belongs to — the per-form resend posts against it, so
+       the server can check the pairing really is part of this package. */
+    var forms = (d.forms || []);
+    var people = (d.recipients || []);
+    var totalSlots = forms.length * people.length;
+    var doneSlots = 0;
+    people.forEach(function (p) {
+      (p.forms || []).forEach(function (f) { if (f.signed_at) { doneSlots++; } });
+    });
+
+    var h = '<div style="display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:#334155;margin-bottom:16px;">'
+      + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Sent</div>'
+      +   esc(fmtStamp(d.sent_at)) + '</div>'
+      + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">By</div>'
+      +   esc(d.sent_by || '—') + '</div>'
+      + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Emailed</div>'
+      +   (d.notified ? esc(String(d.emailed)) + ' of ' + people.length : 'not sent') + '</div>'
+      + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Signed</div>'
+      +   doneSlots + ' of ' + totalSlots + '</div>'
+      + '</div>';
+
+    if (d.note) {
+      h += '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:11px 14px;'
+        + 'font-size:13px;color:#334155;margin-bottom:16px;"><strong>Note sent with it:</strong> '
+        + esc(d.note) + '</div>';
+    }
+
+    h += '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Forms in this package</div>';
+    h += '<div style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;margin-bottom:18px;">';
+    forms.forEach(function (f, i) {
+      h += '<div style="display:flex;gap:10px;align-items:center;padding:9px 13px;font-size:13px;'
+        + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
+        + '<span style="flex:1;min-width:0;font-weight:600;color:#111827;">' + esc(f.title) + '</span>'
+        /* A form withdrawn since the send still belongs in the record of it — saying so
+           is the difference between a history and a list of things that happen to exist. */
+        + (f.still_here
+            ? (f.active ? '' : '<span style="font-size:11px;color:#B45309;background:#FEF3C7;border-radius:999px;padding:1px 8px;">archived</span>')
+            : '<span style="font-size:11px;color:#B91C1C;background:#FEE2E2;border-radius:999px;padding:1px 8px;">deleted since</span>')
+        + '<span style="font-size:12px;color:#64748B;white-space:nowrap;">' + f.signed + ' signed</span>'
+        + '</div>';
+    });
+    h += '</div>';
+
+    h += '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Who it went to</div>';
+    h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">'
+      + '<thead><tr style="background:#F9FAFB;">'
+      + '<th style="text-align:left;padding:8px 12px;font-size:11px;color:#64748B;text-transform:uppercase;">Person</th>'
+      + forms.map(function (f) {
+          return '<th style="text-align:left;padding:8px 12px;font-size:11px;color:#64748B;text-transform:uppercase;">' + esc(f.title) + '</th>';
+        }).join('')
+      + '</tr></thead><tbody>';
+    people.forEach(function (p) {
+      h += '<tr style="border-top:1px solid #F3F4F6;">'
+        + '<td style="padding:9px 12px;"><div style="font-weight:600;color:#111827;">' + esc(p.name || p.email || '—') + '</div>'
+        + (p.email ? '<div style="font-size:11px;color:#94A3B8;">' + esc(p.email) + '</div>' : '') + '</td>'
+        /* A SIGNED CELL IS THE DOCUMENT. Clicking it opens the completed PDF — the
+           returned form is the thing an admin came to this row to look at, and until now
+           the only route to it was the Completed tab and a second search. Cells with no
+           signature stay inert; there is nothing behind them yet. */
+        + (p.forms || []).map(function (f, fi) {
+            /* NOT BACK YET → the one control that helps: send THIS form to THIS person
+               again. Chasing the whole package because one person's one form went astray
+               is how a reminder turns into noise everybody learns to ignore. */
+            if (!f.signed_at) {
+              var fid = ((d.forms || [])[fi] || {}).id;
+              return '<td style="padding:9px 12px;white-space:nowrap;">'
+                + ((fid && p.id)
+                    ? '<button type="button" class="pkv-again" data-f="' + esc(fid) + '" data-u="' + esc(p.id) + '"'
+                      + ' data-t="' + esc(f.form) + '" data-n="' + esc(p.name || p.email || 'them') + '"'
+                      + ' title="Send this form to this person again"'
+                      + ' style="background:none;border:0;padding:0;font:inherit;color:#1F6FB2;font-weight:700;cursor:pointer;text-decoration:underline;">Send again</button>'
+                    : '<span style="color:#94A3B8;">—</span>')
+                + '</td>';
+            }
+            return '<td style="padding:9px 12px;white-space:nowrap;">'
+              + (f.file_url
+                  ? '<button type="button" class="pkv-open" data-u="' + esc(f.file_url) + '" data-t="' + esc((p.name || '') + ' — ' + f.form) + '"'
+                    + ' title="Open the completed form"'
+                    + ' style="background:none;border:0;padding:0;font:inherit;color:#16A34A;font-weight:700;cursor:pointer;text-decoration:underline;">'
+                    + '✓ ' + esc(fmtStamp(f.signed_at)) + '</button>'
+                  /* Signed as a read-and-sign notice: there is no filled PDF, and saying
+                     so beats a link that opens a blank form. */
+                  : '<span style="color:#16A34A;font-weight:700;" title="Signed as a read-and-sign notice — no filled PDF">✓ ' + esc(fmtStamp(f.signed_at)) + '</span>')
+              + '</td>';
+          }).join('')
+        + '</tr>';
+    });
+    h += '</tbody></table></div>';
+    return h;
+  }
+
+  function viewPackage(id) {
+    var sheet = openSheet(
+      '<div style="font-size:17px;font-weight:800;color:#0F172A;">📦 Package sent</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">What went out, to whom, and who has signed since.</div>',
+      '<div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div>', true);
+
+    Api.get('/admin/managed-forms/packages/' + id).then(function (r) {
+      var d = (r && r.send) || {};
+      sheet.body.innerHTML = packageSheetHtml(d);
+      sheet.body.querySelectorAll('.pkv-open').forEach(function (b) {
+        b.addEventListener('click', function () {
+          openPdfPopup(fileUrl(b.getAttribute('data-u')), b.getAttribute('data-t'));
+        });
+      });
+      sheet.body.querySelectorAll('.pkv-again').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var msg = 'Send “' + b.getAttribute('data-t') + '” to ' + b.getAttribute('data-n') + ' again?';
+          Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(function (ok) {
+            if (!ok) { return; }
+            b.disabled = true; b.textContent = 'Sending…';
+            Api.post('/admin/managed-forms/packages/' + id + '/resend-one', {
+              form_id: Number(b.getAttribute('data-f')),
+              user_id: Number(b.getAttribute('data-u')),
+            }).then(function (r) {
+              b.textContent = 'Sent ✓';
+              b.style.color = '#16A34A';
+              b.style.textDecoration = 'none';
+              toast('📤', 'Sent again', (r && r.message) || '', '#16A34A');
+            }).catch(function (e) {
+              b.disabled = false; b.textContent = 'Send again';
+              toast('⚠️', 'Could not send', (e && e.message) || '', '#B91C1C');
+            });
+          });
+        });
+      });
+      /* One form, one person, one signature: open it straight away. Making somebody hunt
+         for the single link on the page is the kind of small friction that makes a
+         feature feel unfinished. */
+      var only = onlyCompleted(d);
+      if (only) { openPdfPopup(fileUrl(only.url), only.title); }
+    }).catch(function (e) {
+      sheet.body.innerHTML = '<div style="padding:20px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>';
+    });
+  }
+
+  function printPackage(id) {
+    Api.get('/admin/managed-forms/packages/' + id).then(function (r) {
+      var d = (r && r.send) || {};
+      /* Printed from a hidden iframe rather than a popup window: a blocker kills
+         window.open() that is not a direct click, and the click here is on a menu item
+         that has already closed by the time the fetch resolves. */
+      var f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      document.body.appendChild(f);
+      var doc = f.contentDocument;
+      doc.open();
+      doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Package sent '
+        + esc(fmtStamp(d.sent_at)) + '</title>'
+        + '<style>body{font:13px/1.5 system-ui,-apple-system,sans-serif;color:#0F172A;padding:24px;}'
+        + 'table{width:100%;border-collapse:collapse;} th,td{text-align:left;}'
+        + '@page{margin:14mm;}</style></head><body>'
+        + '<h1 style="font-size:19px;margin:0 0 14px;">📦 Package sent</h1>'
+        + packageSheetHtml(d)
+        + '</body></html>');
+      doc.close();
+      f.contentWindow.focus();
+      f.contentWindow.print();
+      // Left in place briefly: removing it during print cancels the job in some browsers.
+      setTimeout(function () { f.remove(); }, 60000);
+    }).catch(function (e) {
+      toast('⚠️', 'Could not print', (e && e.message) || '', '#B91C1C');
+    });
+  }
+
+  /* The one completed copy, when there is exactly one. */
+  function onlyCompleted(d) {
+    var hits = [];
+    (d.recipients || []).forEach(function (p) {
+      (p.forms || []).forEach(function (f) {
+        if (f.signed_at && f.file_url) { hits.push({ url: f.file_url, title: (p.name || '') + ' — ' + f.form }); }
+      });
+    });
+    return hits.length === 1 ? hits[0] : null;
+  }
+
+  /* pdf-lib, borrowed from the filler rather than loaded a second way. It is already the
+     library this screen's forms are written with, and a second copy from a second CDN is
+     a second thing to break. */
+  function pdfLib() {
+    if (window.PDFLib) { return Promise.resolve(window.PDFLib); }
+    return new Promise(function (res, rej) {
+      var src = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+      var ex = document.querySelector('script[data-kt-lib="' + src + '"]');
+      if (ex) { ex.addEventListener('load', function () { res(window.PDFLib); }); ex.addEventListener('error', rej); return; }
+      var sc = document.createElement('script');
+      sc.src = src; sc.async = true; sc.setAttribute('data-kt-lib', src);
+      sc.onload = function () { res(window.PDFLib); };
+      sc.onerror = function () { rej(new Error('Could not load the PDF tools.')); };
+      document.head.appendChild(sc);
+    });
+  }
+
+  /* EVERY COMPLETED FORM IN THE PACKAGE, AS ONE PDF.
+
+     Was a CSV, which was the wrong reading of "download": what a package produces is
+     signed documents, and a spreadsheet of dates is not one of them. The completed copies
+     are merged client-side with pdf-lib — the host has no PDF library, which is also why
+     the filler flattens in the browser — so a package of four forms downloads as one file
+     in the order the summary lists them.
+
+     Falls back to the blank forms when nothing has been signed yet, because "download the
+     pack so I can print it" is the other real reason to press this. */
+  function downloadPackagePdf(r) {
+    toast('⬇️', 'Preparing PDF', 'Collecting the forms…', '#1F6080');
+    Api.get('/admin/managed-forms/packages/' + r.id).then(function (res) {
+      var d = (res && res.send) || {};
+      var items = [];
+      (d.recipients || []).forEach(function (p) {
+        (p.forms || []).forEach(function (f) {
+          if (f.signed_at && f.file_url) { items.push(f.file_url); }
+        });
+      });
+      var completed = items.length;
+      if (!completed) {
+        (d.forms || []).forEach(function (f) { if (f.file_url) { items.push(f.file_url); } });
+      }
+      if (!items.length) {
+        toast('⚠️', 'Nothing to download', 'No files are attached to this package.', '#B45309');
+        return;
+      }
+
+      return pdfLib().then(function (PDFLib) {
+        return PDFLib.PDFDocument.create().then(function (out) {
+          var chain = Promise.resolve();
+          var added = 0;
+          items.forEach(function (u) {
+            chain = chain.then(function () {
+              return fetch(fileUrl(u)).then(function (resp) {
+                if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
+                return resp.arrayBuffer();
+              }).then(function (buf) {
+                return PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
+              }).then(function (src) {
+                return out.copyPages(src, src.getPageIndices()).then(function (pages) {
+                  pages.forEach(function (pg) { out.addPage(pg); });
+                  added++;
+                });
+              }).catch(function () {
+                /* One unreadable file must not lose the other three. Counted, and
+                   reported at the end rather than as a popup per failure. */
+              });
+            });
+          });
+          return chain.then(function () {
+            if (!added) { throw new Error('None of the files could be read.'); }
+            return out.save().then(function (bytes) {
+              var name = (completed ? 'completed-forms-' : 'forms-') + r.id + '-'
+                + String(r.sent_at || '').slice(0, 10) + '.pdf';
+              var blob = new Blob([bytes], { type: 'application/pdf' });
+              var a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = name;
+              document.body.appendChild(a);
+              a.click();
+              setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 30000);
+              toast('✅', 'Downloaded', added + ' form(s) in one PDF'
+                + (added < items.length ? ' · ' + (items.length - added) + ' could not be read' : '')
+                + (completed ? '' : ' — blank copies, nothing signed yet'), '#16A34A');
+            });
+          });
+        });
+      });
+    }).catch(function (e) {
+      toast('⚠️', 'Could not download', (e && e.message) || '', '#B91C1C');
+    });
+  }
+
+  /* Post the finished copies on — to the agency and back to whoever signed each one. */
+  function redeliverPackage(r) {
+    var msg = 'Send the ' + (r.signed || 0) + ' completed form(s) again?\n\n'
+      + 'Each goes to the agency’s admins and directors, and a copy back to the person who signed it.';
+    Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(function (ok) {
+      if (!ok) { return; }
+      Api.post('/admin/managed-forms/packages/' + r.id + '/redeliver', {}).then(function (d) {
+        toast('📤', 'Sent', (d && d.message) || '', '#16A34A');
+      }).catch(function (e) {
+        toast('⚠️', 'Could not send', (e && e.message) || '', '#B91C1C');
+      });
+    });
+  }
+
+
+  function resendPackage(r, el) {
+    var who = (r.recipients || []).map(function (p) { return p.name || p.email; }).filter(Boolean);
+    var msg = 'Email this package again to ' + (who.length > 3
+      ? who.slice(0, 3).join(', ') + ' and ' + (who.length - 3) + ' more'
+      : who.join(', ')) + '?\n\nAnyone who has already signed everything in it is skipped.';
+
+    Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(function (ok) {
+      if (!ok) { return; }
+      Api.post('/admin/managed-forms/packages/' + r.id + '/resend', {}).then(function (d) {
+        toast('📤', 'Sent again', (d && d.message) || '', '#16A34A');
+        loadPackageHistory(el);
+      }).catch(function (e) {
+        toast('⚠️', 'Could not resend', (e && e.message) || '', '#B91C1C');
+      });
+    });
+  }
+
+  function deletePackage(r, el) {
+    /* Says exactly what survives. "Delete" on a history row reads like it might undo the
+       send, and somebody pressing it deserves to know it does not. */
+    var msg = 'Remove this send from the history?\n\nThe forms, the assignments and any '
+      + 'signatures stay exactly as they are — this only removes the record that it was sent.';
+    Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(function (ok) {
+      if (!ok) { return; }
+      Api.delete('/admin/managed-forms/packages/' + r.id).then(function (d) {
+        toast('🗑️', 'Removed', (d && d.message) || '', '#B91C1C');
+        loadPackageHistory(el);
+      }).catch(function (e) {
+        toast('⚠️', 'Could not remove', (e && e.message) || '', '#B91C1C');
+      });
+    });
+  }
+
+  /* ───────── REQUEST FILES: the other direction ─────────
+
+     A form package sends a document out for somebody to fill in. This asks for documents
+     they already have — an immunisation card, both sides of an ID, last year's tax slip —
+     which until now happened over email, so "what did we ask for and what is still
+     missing" could only be answered by reading a thread.
+
+     A request is a LIST of lines, each with its own description, kind and quantity, and
+     the recipient gets a page with one button per line. Everything that arrives is filed
+     on their own record, so it shows up in their Documents screen and on their user record
+     with no separate place to look. (Anthony, 2026-09-10) */
+
+  var PRI = {
+    low:    ['Low', '#64748B', '#F1F5F9', '#E2E8F0'],
+    normal: ['Normal', '#1E40AF', '#EFF6FF', '#BFDBFE'],
+    high:   ['High', '#B45309', '#FEF3C7', '#FDE68A'],
+    urgent: ['Urgent', '#B91C1C', '#FEE2E2', '#FECACA'],
+  };
+  function priChip(p) {
+    var v = PRI[p] || PRI.normal;
+    return '<span style="font-size:11px;font-weight:800;color:' + v[1] + ';background:' + v[2]
+      + ';border:1px solid ' + v[3] + ';border-radius:999px;padding:2px 9px;white-space:nowrap;">' + v[0] + '</span>';
+  }
+
+  function renderFileRequests(body) {
+    body.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'
+      +   '<div><div style="font-size:17px;font-weight:800;color:#0F172A;">📥 Request files</div>'
+      +   '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">Ask a parent or a staff member for documents. They upload from a link — no password — and everything lands on their record.</div></div>'
+      + '<button id="fr-open" type="button" data-kt-iconized="1" style="margin-left:auto;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 20px;font-weight:800;font-size:13.5px;cursor:pointer;">+ Request files</button>'
+      + '</div>'
+      + '<div id="fr-list"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+
+    body.querySelector('#fr-open').addEventListener('click', function () { openFileRequestDialog(body); });
+    loadFileRequests(body.querySelector('#fr-list'));
+  }
+
+  function loadFileRequests(el) {
+    Api.get('/admin/file-requests').then(function (d) {
+      var rows = (d && d.requests) || [];
+      if (!rows.length) {
+        el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">Nothing requested yet. Use <strong>+ Request files</strong> above.</div>';
+        return;
+      }
+      var th = function (t) {
+        return '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;">' + t + '</th>';
+      };
+      el.innerHTML = '<div style="overflow-x:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">'
+        + '<table data-kt-no-kebab="1" data-kt-paginate="25" data-kt-filter-always="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
+        + '<thead><tr style="background:#F9FAFB;">'
+        +   th('Requested') + th('From') + th('What') + th('Received') + th('Priority') + th('Due') + th('By') + th('')
+        + '</tr></thead><tbody>'
+        + rows.map(function (r) {
+            var pct = r.asked ? r.received / r.asked : -1;
+            var got = !r.asked
+              ? '<span style="color:#CBD5E1;">—</span>'
+              : (r.received >= r.asked
+                  ? '<span style="font-size:11px;font-weight:800;color:#166534;background:#DCFCE7;border:1px solid #BBF7D0;border-radius:999px;padding:2px 9px;white-space:nowrap;">✓ All ' + r.asked + '</span>'
+                  : '<span style="font-size:11px;font-weight:800;color:' + (r.received ? '#B45309' : '#64748B') + ';background:' + (r.received ? '#FEF3C7' : '#F1F5F9') + ';border:1px solid ' + (r.received ? '#FDE68A' : '#E2E8F0') + ';border-radius:999px;padding:2px 9px;white-space:nowrap;">' + r.received + ' of ' + r.asked + '</span>');
+            /* An overdue request says so. A due date that has passed and looks like every
+               other due date is a due date nobody acts on. */
+            var overdue = r.due_on && r.status !== 'complete' && String(r.due_on).slice(0, 10) < new Date().toISOString().slice(0, 10);
+            return '<tr style="border-top:1px solid #F3F4F6;vertical-align:top;">'
+              + '<td data-kt-sort="' + esc(String(r.created_at || '')) + '" style="padding:11px 14px;white-space:nowrap;color:#374151;">' + esc(fmtStamp(r.created_at)) + '</td>'
+              + '<td data-kt-sort="' + esc(String(r.person || '').toLowerCase()) + '" style="padding:11px 14px;"><div style="font-weight:600;color:#111827;">' + esc(r.person) + '</div>'
+              +   (r.email ? '<div style="font-size:11.5px;color:#94A3B8;">' + esc(r.email) + '</div>' : '') + '</td>'
+              + '<td data-kt-sort="' + esc(String(r.items)) + '" style="padding:11px 14px;color:#334155;white-space:nowrap;">' + r.items + ' item' + (r.items === 1 ? '' : 's') + '</td>'
+              + '<td data-kt-sort="' + esc(pct.toFixed(4)) + '" style="padding:11px 14px;white-space:nowrap;">' + got + '</td>'
+              + '<td data-kt-sort="' + esc(({ urgent: '3', high: '2', normal: '1', low: '0' })[r.priority] || '1') + '" style="padding:11px 14px;white-space:nowrap;">' + priChip(r.priority) + '</td>'
+              + '<td data-kt-sort="' + esc(String(r.due_on || '9999')) + '" style="padding:11px 14px;white-space:nowrap;color:' + (overdue ? '#B91C1C;font-weight:700' : '#475569') + ';">'
+              +   (r.due_on ? esc(String(r.due_on).slice(0, 10)) + (overdue ? ' · overdue' : '') : '<span style="color:#CBD5E1;">—</span>') + '</td>'
+              + '<td data-kt-sort="' + esc(String(r.requested_by || '').toLowerCase()) + '" style="padding:11px 14px;color:#475569;white-space:nowrap;">' + esc(r.requested_by || '—') + '</td>'
+              + '<td style="padding:11px 8px;text-align:right;">'
+              +   '<button class="fr-kebab" data-id="' + r.id + '" type="button" data-kt-iconized="1" title="Actions" style="width:32px;height:32px;border:1px solid #E5E7EB;background:#fff;border-radius:8px;cursor:pointer;font-size:17px;color:#475569;">⋮</button>'
+              + '</td></tr>';
+          }).join('')
+        + '</tbody></table></div>';
+
+      var byId = {};
+      rows.forEach(function (r) { byId[String(r.id)] = r; });
+      el.querySelectorAll('.fr-kebab').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var r = byId[btn.getAttribute('data-id')];
+          if (!r) { return; }
+          openMenu(btn, function (item) {
+            item('👁', 'View files', false, function () { viewFileRequest(r.id); });
+            if (r.received > 0) {
+              item('⬇️', 'Download ' + r.received + ' file(s)', false, function () { downloadFileRequest(r.id); });
+            }
+            if (r.received < r.asked) {
+              item('🔔', 'Send reminder', false, function () { remindFileRequest(r, el); });
+            }
+            item('🗑', 'Delete request', true, function () { deleteFileRequest(r, el); });
+          });
+        });
+      });
+
+      if (KT.enhanceTables) { KT.enhanceTables(); }
+    }).catch(function (e) {
+      el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>';
+    });
+  }
+
+  function frItemsHtml(d) {
+    return (d.items || []).map(function (it) {
+      var files = it.files || [];
+      return '<div style="border:1px solid ' + (it.done ? '#BBF7D0' : '#E2E8F0') + ';background:' + (it.done ? '#F0FDF4' : '#fff')
+        + ';border-radius:11px;padding:12px 14px;margin-bottom:9px;">'
+        + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+        +   '<div style="font-weight:700;color:#111827;font-size:13.5px;">' + esc(it.description) + '</div>'
+        +   '<span style="font-size:11.5px;color:#64748B;">' + files.length + ' of ' + it.quantity + '</span>'
+        +   (it.done ? '<span style="font-size:11px;font-weight:800;color:#166534;">✓ complete</span>' : '')
+        + '</div>'
+        + (files.length
+            ? '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">'
+              + files.map(function (f) {
+                  /* BOTH VERBS. Somebody checking a document wants to look at it; somebody
+                     filing it with a licensing body wants it on disk. Offering only "Open"
+                     made the second person right-click and save from a PDF viewer.
+
+                     Both go through /admin/file-requests/{id}/files/{doc}/download rather
+                     than the raw /storage path: these are ID documents and immunisation
+                     cards, and possession of a URL is not authorisation to read one. */
+                  return '<div style="display:flex;align-items:center;gap:9px;font-size:12.5px;">'
+                    + '<span>' + (/pdf/i.test(f.file_type || '') ? '📄' : /image/i.test(f.file_type || '') ? '🖼️' : '📎') + '</span>'
+                    + '<span style="flex:1;min-width:0;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(f.title) + '</span>'
+                    + '<span style="color:#94A3B8;white-space:nowrap;">' + esc(frSize(f.file_size)) + '</span>'
+                    + '<button type="button" class="frv-open" data-d="' + esc(f.id) + '" data-t="' + esc(f.title) + '" data-type="' + esc(f.file_type || '') + '"'
+                    + ' style="background:none;border:0;padding:0;font:inherit;color:#1F6080;font-weight:700;cursor:pointer;text-decoration:underline;">View</button>'
+                    + '<button type="button" class="frv-dl" data-d="' + esc(f.id) + '" data-t="' + esc(f.title) + '"'
+                    + ' style="background:none;border:0;padding:0;font:inherit;color:#475569;font-weight:700;cursor:pointer;text-decoration:underline;">Download</button>'
+                    + '</div>';
+                }).join('')
+              + '</div>'
+            : '<div style="margin-top:6px;font-size:12.5px;color:#94A3B8;">Nothing sent yet.</div>')
+        + '</div>';
+    }).join('') || '<div style="color:#94A3B8;font-size:13px;">No items.</div>';
+  }
+
+  function frSize(n) {
+    n = Number(n) || 0;
+    if (n < 1024) { return n + ' B'; }
+    if (n < 1048576) { return Math.round(n / 1024) + ' KB'; }
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+
+  /**
+   * Fetch one requested file through the API, then either show it or save it.
+   *
+   * Streamed with the bearer token rather than linked at its /storage path — the endpoint
+   * checks the document really belongs to this request and that the caller is an admin
+   * here. A blob URL then serves both verbs from one download, so viewing and then saving
+   * does not fetch somebody's passport twice.
+   */
+  function frFetchFile(reqId, btn, save) {
+    var was = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = save ? 'Saving…' : 'Opening…';
+    /* Opened on the click, before any await — a popup blocker rejects a window.open()
+       that is not a direct result of one. Not needed for a save. */
+    var win = save ? null : window.open('', '_blank');
+
+    fetch(API_HOST + '/api/v1/admin/file-requests/' + reqId + '/files/' + btn.getAttribute('data-d') + '/download', {
+      headers: {
+        Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''),
+        'X-Active-Agency-Id': sessionStorage.getItem('kt_active_agency_id') || '',
+      },
+    }).then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.blob();
+    }).then(function (blob) {
+      var u = URL.createObjectURL(blob);
+      if (save) {
+        var a = document.createElement('a');
+        a.href = u;
+        a.download = String(btn.getAttribute('data-t') || 'file').replace(/[^A-Za-z0-9._ -]+/g, '-');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else if (win) {
+        win.location = u;
+      } else {
+        window.open(u, '_blank');
+      }
+      setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+    }).catch(function (e) {
+      if (win) { win.close(); }
+      toast('⚠️', save ? 'Could not download' : 'Could not open', (e && e.message) || '', '#B91C1C');
+    }).finally(function () {
+      btn.disabled = false;
+      btn.textContent = was;
+    });
+  }
+
+  function viewFileRequest(id) {
+    var sheet = openSheet(
+      '<div style="font-size:17px;font-weight:800;color:#0F172A;">📥 Files requested</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">What was asked for, and what has arrived.</div>',
+      '<div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div>', true);
+
+    Api.get('/admin/file-requests/' + id).then(function (r) {
+      var d = (r && r.request) || {};
+      sheet.body.innerHTML =
+        '<div style="display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:#334155;margin-bottom:16px;">'
+        + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">From</div>' + esc(d.person || '—') + '</div>'
+        + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Requested by</div>' + esc(d.requested_by || '—') + '</div>'
+        + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Priority</div>' + priChip(d.priority) + '</div>'
+        + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Due</div>' + (d.due_on ? esc(String(d.due_on).slice(0, 10)) : '—') + '</div>'
+        + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Received</div>' + (d.received || 0) + ' of ' + (d.asked || 0) + '</div>'
+        + '</div>'
+        + (d.note ? '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:11px 14px;font-size:13px;color:#334155;margin-bottom:16px;"><strong>Note:</strong> ' + esc(d.note) + '</div>' : '')
+        + frItemsHtml(d);
+
+      sheet.body.querySelectorAll('.frv-open').forEach(function (b) {
+        b.addEventListener('click', function () { frFetchFile(id, b, false); });
+      });
+      sheet.body.querySelectorAll('.frv-dl').forEach(function (b) {
+        b.addEventListener('click', function () { frFetchFile(id, b, true); });
+      });
+    }).catch(function (e) {
+      sheet.body.innerHTML = '<div style="padding:20px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>';
+    });
+  }
+
+  /* Every file this person sent, one after another. Mixed types (a PDF and two photos)
+     cannot be merged into one document, so they arrive as separate downloads — spaced out,
+     because a browser treats six at once as a popup storm and blocks most of them. */
+  function downloadFileRequest(id) {
+    Api.get('/admin/file-requests/' + id).then(function (r) {
+      var d = (r && r.request) || {};
+      var files = [];
+      (d.items || []).forEach(function (it) { (it.files || []).forEach(function (f) { files.push(f); }); });
+      if (!files.length) {
+        toast('⚠️', 'Nothing to download', 'No files have been sent yet.', '#B45309');
+        return;
+      }
+      toast('⬇️', 'Downloading', files.length + ' file(s)…', '#1F6080');
+      /* One at a time, through the authorised route, and SEQUENTIALLY — six parallel
+         saves read as a popup storm and a browser blocks most of them. */
+      var chain = Promise.resolve();
+      var ok = 0;
+      files.forEach(function (f) {
+        chain = chain.then(function () {
+          return fetch(API_HOST + '/api/v1/admin/file-requests/' + id + '/files/' + f.id + '/download', {
+            headers: {
+              Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''),
+              'X-Active-Agency-Id': sessionStorage.getItem('kt_active_agency_id') || '',
+            },
+          }).then(function (r) {
+            if (!r.ok) { throw new Error('HTTP ' + r.status); }
+            return r.blob();
+          }).then(function (blob) {
+            var u = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = u;
+            a.download = String(f.title || 'file').replace(/[^A-Za-z0-9._ -]+/g, '-');
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            ok++;
+            setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+          }).catch(function () {
+            /* One unreadable file must not lose the rest; counted and reported at the end. */
+          });
+        });
+      });
+      return chain.then(function () {
+        if (ok < files.length) {
+          toast('⚠️', 'Some files failed', ok + ' of ' + files.length + ' downloaded.', '#B45309');
+        }
+      });
+    }).catch(function (e) {
+      toast('⚠️', 'Could not download', (e && e.message) || '', '#B91C1C');
+    });
+  }
+
+  function remindFileRequest(r, el) {
+    var msg = 'Send ' + (r.person || 'them') + ' a reminder about the '
+      + (r.asked - r.received) + ' item(s) still outstanding?';
+    Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(function (ok) {
+      if (!ok) { return; }
+      Api.post('/admin/file-requests/' + r.id + '/remind', {}).then(function (d) {
+        toast('🔔', 'Reminder sent', (d && d.message) || '', '#16A34A');
+        loadFileRequests(el);
+      }).catch(function (e) {
+        toast('⚠️', 'Could not send', (e && e.message) || '', '#B91C1C');
+      });
+    });
+  }
+
+  function deleteFileRequest(r, el) {
+    /* Says what survives. Deleting the ASK must not read as deleting the documents
+       somebody has already handed over in good faith. */
+    var msg = 'Delete this request?\n\nAny files ' + (r.person || 'they') + ' already sent stay on their record — '
+      + 'only the request itself is removed.';
+    Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(function (ok) {
+      if (!ok) { return; }
+      Api.delete('/admin/file-requests/' + r.id).then(function (d) {
+        toast('🗑️', 'Deleted', (d && d.message) || '', '#B91C1C');
+        loadFileRequests(el);
+      }).catch(function (e) {
+        toast('⚠️', 'Could not delete', (e && e.message) || '', '#B91C1C');
+      });
+    });
+  }
+
+  /* The ask itself. Recipient, priority, due date, note, and the list of what is wanted. */
+  function openFileRequestDialog(hostBody) {
+    var LBL2 = 'display:block;font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;';
+    var IN = 'width:100%;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:13.5px;box-sizing:border-box;font-family:inherit;';
+
+    var sheet = openSheet(
+      '<div style="font-size:17px;font-weight:800;color:#0F172A;">📥 Request files</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">They get one email with a link, and a button for each thing you ask for.</div>',
+      '<div style="display:grid;gap:14px;">'
+      + '<div><label style="' + LBL2 + '">Ask</label>'
+      +   '<select id="fr-user" style="' + IN + 'background:#fff;"><option value="">Loading people…</option></select>'
+      +   '<div style="font-size:12px;color:#64748B;margin-top:6px;">…or type an address instead</div>'
+      +   '<input id="fr-email" type="email" placeholder="name@example.com" style="' + IN + 'margin-top:4px;"></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+      +   '<div><label style="' + LBL2 + '">Priority</label><select id="fr-pri" style="' + IN + 'background:#fff;">'
+      +     '<option value="low">Low</option><option value="normal" selected>Normal</option>'
+      +     '<option value="high">High</option><option value="urgent">Urgent</option></select></div>'
+      +   '<div><label style="' + LBL2 + '">Needed by</label><input id="fr-due" type="date" style="' + IN + '"></div>'
+      + '</div>'
+      + '<div><label style="' + LBL2 + '">Note (optional)</label>'
+      +   '<textarea id="fr-note" rows="2" placeholder="Anything they should know — where to find it, why you need it…" style="' + IN + 'resize:vertical;"></textarea></div>'
+      + '<div><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+      +   '<label style="' + LBL2 + 'margin:0;">What do you need?</label>'
+      +   '<button id="fr-add" type="button" style="margin-left:auto;background:#fff;border:1.5px solid #BFDBFE;color:#1F6FB2;border-radius:9px;padding:6px 13px;font-size:12.5px;font-weight:800;cursor:pointer;">+ Add another</button>'
+      + '</div><div id="fr-items"></div></div>'
+      + '<div id="fr-msg" style="font-size:13px;color:#B91C1C;min-height:18px;"></div>'
+      + '<div style="display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #EEF2F7;padding-top:14px;">'
+      +   '<label style="display:flex;align-items:center;gap:8px;margin-right:auto;font-size:13px;font-weight:600;color:#334155;cursor:pointer;">'
+      +     '<input id="fr-notify" type="checkbox" checked style="width:17px;height:17px;accent-color:#1F6080;"> Email them now</label>'
+      +   '<button id="fr-send" type="button" style="background:#1F6080;border:0;color:#fff;border-radius:10px;padding:11px 24px;font-size:14px;font-weight:800;cursor:pointer;">Send request</button>'
+      + '</div></div>');
+
+    var items = [{ description: '', kind: 'any', quantity: 1 }];
+    var itemsEl = sheet.body.querySelector('#fr-items');
+
+    function paintItems() {
+      itemsEl.innerHTML = items.map(function (it, i) {
+        return '<div style="display:grid;grid-template-columns:1fr 130px 78px 34px;gap:8px;align-items:center;margin-bottom:8px;">'
+          + '<input class="fri-d" data-i="' + i + '" placeholder="e.g. Immunisation card" value="' + esc(it.description) + '" style="' + IN + '">'
+          + '<select class="fri-k" data-i="' + i + '" style="' + IN + 'background:#fff;">'
+          +   ['any:Any file', 'pdf:PDF', 'image:Photo/scan', 'document:Word doc'].map(function (o) {
+                var p = o.split(':');
+                return '<option value="' + p[0] + '"' + (it.kind === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+              }).join('')
+          + '</select>'
+          + '<input class="fri-q" data-i="' + i + '" type="number" min="1" max="20" value="' + esc(it.quantity) + '" title="How many files" style="' + IN + '">'
+          + (items.length > 1
+              ? '<button class="fri-x" data-i="' + i + '" type="button" title="Remove" style="background:none;border:0;color:#DC2626;font-size:16px;cursor:pointer;">✕</button>'
+              : '<span></span>')
+          + '</div>';
+      }).join('');
+
+      itemsEl.querySelectorAll('.fri-d').forEach(function (b) {
+        b.addEventListener('input', function () { items[+b.getAttribute('data-i')].description = b.value; });
+      });
+      itemsEl.querySelectorAll('.fri-k').forEach(function (b) {
+        b.addEventListener('change', function () { items[+b.getAttribute('data-i')].kind = b.value; });
+      });
+      itemsEl.querySelectorAll('.fri-q').forEach(function (b) {
+        b.addEventListener('input', function () { items[+b.getAttribute('data-i')].quantity = Math.max(1, parseInt(b.value, 10) || 1); });
+      });
+      itemsEl.querySelectorAll('.fri-x').forEach(function (b) {
+        b.addEventListener('click', function () { items.splice(+b.getAttribute('data-i'), 1); paintItems(); });
+      });
+    }
+    paintItems();
+    sheet.body.querySelector('#fr-add').addEventListener('click', function () {
+      items.push({ description: '', kind: 'any', quantity: 1 });
+      paintItems();
+    });
+
+    /* The picker only ever offers this agency's people — /admin/users is scoped
+       server-side — and the typed address is re-checked there too. */
+    Api.get('/admin/users').then(function (d) {
+      var people = (d && (d.users || d.data)) || [];
+      var sel = sheet.body.querySelector('#fr-user');
+      sel.innerHTML = '<option value="">— choose a person —</option>'
+        + people.map(function (u) {
+            var nm = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || u.email || ('#' + u.id);
+            return '<option value="' + u.id + '">' + esc(nm) + (u.email ? ' · ' + esc(u.email) : '') + '</option>';
+          }).join('');
+    }).catch(function () {
+      sheet.body.querySelector('#fr-user').innerHTML = '<option value="">Could not load people — type an address instead</option>';
+    });
+
+    sheet.body.querySelector('#fr-send').addEventListener('click', function () {
+      var msg = sheet.body.querySelector('#fr-msg');
+      var clean = items.filter(function (i) { return (i.description || '').trim(); });
+      if (!clean.length) { msg.textContent = 'Add at least one thing you need.'; return; }
+      var uid = sheet.body.querySelector('#fr-user').value;
+      var email = (sheet.body.querySelector('#fr-email').value || '').trim();
+      if (!uid && !email) { msg.textContent = 'Choose a person, or type an address.'; return; }
+
+      var btn = sheet.body.querySelector('#fr-send');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      msg.style.color = '#64748B'; msg.textContent = '';
+
+      Api.post('/admin/file-requests', {
+        user_id: uid ? Number(uid) : null,
+        email: email || null,
+        priority: sheet.body.querySelector('#fr-pri').value,
+        due_on: sheet.body.querySelector('#fr-due').value || null,
+        note: (sheet.body.querySelector('#fr-note').value || '').trim() || null,
+        notify: sheet.body.querySelector('#fr-notify').checked,
+        items: clean.map(function (i) {
+          return { description: i.description.trim(), kind: i.kind, quantity: i.quantity };
+        }),
+      }).then(function (r) {
+        sheet.overlay.remove();
+        toast('📥', 'Requested', (r && r.message) || '', '#16A34A');
+        if (hostBody) { loadFileRequests(hostBody.querySelector('#fr-list')); }
+      }).catch(function (e) {
+        btn.disabled = false; btn.textContent = 'Send request';
+        msg.style.color = '#B91C1C';
+        msg.textContent = (e && e.message) || 'Could not send that request.';
+      });
+    });
+  }
+
+  /** The send dialog. Forms as a TICKABLE TABLE, people picked or typed. */
+  function openPackageDialog(hostBody) {
+    var stale = document.getElementById('pk-ov');
+    if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+
+    var ov = document.createElement('div');
+    ov.id = 'pk-ov';
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;'
+      + 'justify-content:center;padding:20px;overflow-y:auto;background:rgba(8,20,40,.55);';
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:16px;max-width:760px;width:100%;margin:auto;'
+      + 'box-shadow:0 30px 80px -20px rgba(8,20,40,.6);overflow:hidden;';
+    ov.appendChild(card);
+
+    card.innerHTML =
+      '<div style="padding:18px 22px;border-bottom:1px solid #EEF2F7;display:flex;align-items:center;gap:12px;">'
+      +   '<div style="min-width:0;"><div style="font-size:17px;font-weight:800;color:#0F172A;">📦 Send multiple forms</div>'
+      +   '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">Everyone chosen is assigned every form ticked, and gets one email listing them all.</div></div>'
+      +   '<button id="pk-x" type="button" aria-label="Close" data-kt-iconized="1" style="margin-left:auto;background:#F1F5F9;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;cursor:pointer;color:#475569;">✕</button>'
+      + '</div>'
+      + '<div style="padding:18px 22px;max-height:min(70vh,720px);overflow-y:auto;">'
+      +   '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">'
+      +     '<span style="' + LBL + 'margin:0;">Forms in this package</span>'
+      +     '<button id="pk-upload" type="button" data-kt-iconized="1" style="margin-left:auto;background:#fff;border:1.5px solid #BFDBFE;color:#1F6FB2;border-radius:9px;padding:6px 13px;font-size:12.5px;font-weight:800;cursor:pointer;">+ Upload a form</button>'
+      +   '</div>'
+      +   '<div id="pk-forms" style="border:1.5px solid #E2E8F0;border-radius:12px;overflow:hidden;margin-bottom:6px;">'
+      +     '<div style="padding:18px;text-align:center;color:#94A3B8;font-size:13px;">Loading forms…</div>'
+      +   '</div>'
+      +   '<div id="pk-fcount" style="font-size:12.5px;color:#64748B;margin-bottom:16px;">No forms chosen yet.</div>'
+      +   peopleBlockHtml('pk', 'Everyone you tick here receives every form above.')
+      +   '<div style="' + LBL + '">Or type email addresses</div>'
+      +   '<input id="pk-emails" type="text" placeholder="anne@example.com, ben@example.com" style="' + FIELD + 'margin-bottom:4px;">'
+      +   '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:16px;">Separate with commas. Each address must already have an account here — a form is signed while signed in, so there is nowhere to put a signature for an address with nobody behind it. Anything unrecognised is reported back, never silently dropped.</div>'
+      +   '<div style="' + LBL + '">Add a note (optional)</div>'
+      +   '<textarea id="pk-note" rows="2" placeholder="e.g. Please complete these before Monday." style="' + FIELD + 'resize:vertical;margin-bottom:14px;"></textarea>'
+      +   toggleCardHtml('pk-notify', 'Email them now', 'Sends one email listing the forms, with a link to sign them. Untick to assign quietly — they will still see the forms in the portal.', true)
+      + '</div>'
+      + '<div style="padding:14px 22px;border-top:1px solid #EEF2F7;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#FCFDFE;">'
+      +   '<button id="pk-send" type="button" style="background:#1F6080;border:none;color:#fff;border-radius:10px;padding:11px 24px;font-size:14px;font-weight:800;cursor:pointer;">Send package</button>'
+      +   '<button id="pk-cancel" type="button" style="background:#F1F5F9;border:1px solid #CBD5E1;color:#334155;border-radius:10px;padding:11px 18px;font-size:13.5px;font-weight:700;cursor:pointer;">Cancel</button>'
+      +   '<span id="pk-out" style="font-size:13px;"></span>'
+      + '</div>';
+
+    document.body.appendChild(ov);
+
+    var chosenForms = {};
+    var listEl = ov.querySelector('#pk-forms');
+    var countEl = ov.querySelector('#pk-fcount');
+    var out = ov.querySelector('#pk-out');
+    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    ov.querySelector('#pk-x').addEventListener('click', close);
+    ov.querySelector('#pk-cancel').addEventListener('click', close);
+
+    function say(msg, bad) { out.style.color = bad ? '#B91C1C' : '#15803D'; out.textContent = msg; }
+    function paintCount() {
+      var n = Object.keys(chosenForms).length;
+      countEl.textContent = n === 0 ? 'No forms chosen yet.' : (n === 1 ? '1 form chosen.' : n + ' forms chosen.');
+      countEl.style.color = n ? '#1E40AF' : '#64748B';
+    }
+
+    Api.get('/admin/managed-forms').then(function (d) {
+      /* Only ACTIVE forms — an archived one still resolves, and putting it in a package
+         would assign paperwork nobody intends to collect. */
+      var forms = ((d && d.forms) || []).filter(function (f) { return f.active !== false && f.active !== 0; });
+      if (!forms.length) {
+        listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#64748B;font-size:13px;">No active forms. Upload one first.</div>';
+        return;
+      }
+      /* A TABLE with real tick boxes, not a row of switches: these are several
+         independent choices out of a list, which is exactly what a checkbox column means.
+         A toggle reads as "turn this feature on" and gives no column to scan down. */
+      listEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        + '<thead><tr style="background:#F8FAFC;">'
+        +   '<th style="width:42px;padding:9px 0 9px 14px;"><input type="checkbox" id="pk-all" title="Choose all" style="width:16px;height:16px;accent-color:#1F6080;cursor:pointer;"></th>'
+        +   '<th style="text-align:left;padding:9px 10px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;">Form</th>'
+        +   '<th style="text-align:left;padding:9px 10px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;">What they do</th>'
+        + '</tr></thead><tbody>'
+        + forms.map(function (f) {
+            var desc = (f.description || '').trim();
+            /* What the RECIPIENT gets. A list of titles cannot tell the two apart, so a
+               package of "forms to fill in" could quietly contain one nobody can type into. */
+            var kind = f.fillable
+              ? '<span style="display:inline-block;font-size:10.5px;font-weight:800;color:#0F766E;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:2px 8px;white-space:nowrap;">📝 Fill &amp; sign</span>'
+              : '<span style="display:inline-block;font-size:10.5px;font-weight:800;color:#475569;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:999px;padding:2px 8px;white-space:nowrap;">✍️ Sign only</span>';
+            return '<tr class="pk-row" data-id="' + f.id + '" style="border-top:1px solid #F1F5F9;cursor:pointer;">'
+              + '<td style="padding:10px 0 10px 14px;"><input type="checkbox" class="pk-f" data-id="' + f.id + '" style="width:16px;height:16px;accent-color:#1F6080;cursor:pointer;"></td>'
+              + '<td style="padding:10px;"><div style="font-weight:700;color:#0F172A;">' + esc(f.title) + '</div>'
+              +   (desc ? '<div style="font-size:12.5px;color:#64748B;margin-top:2px;line-height:1.45;">' + esc(desc) + '</div>' : '') + '</td>'
+              + '<td style="padding:10px;">' + kind + '</td></tr>';
+          }).join('')
+        + '</tbody></table>';
+
+      function setRow(c) {
+        var id = c.getAttribute('data-id');
+        if (c.checked) { chosenForms[id] = true; } else { delete chosenForms[id]; }
+        var tr = c.closest('tr'); if (tr) tr.style.background = c.checked ? '#F0F9FF' : '';
+      }
+      listEl.querySelectorAll('.pk-f').forEach(function (c) {
+        c.addEventListener('change', function () { setRow(c); paintCount(); });
+      });
+      // The whole row is the target — a 16px box is a poor thing to aim at.
+      listEl.querySelectorAll('.pk-row').forEach(function (tr) {
+        tr.addEventListener('click', function (e) {
+          if (e.target && e.target.classList && e.target.classList.contains('pk-f')) return;
+          var c = tr.querySelector('.pk-f'); c.checked = !c.checked; setRow(c); paintCount();
+        });
+      });
+      var all = listEl.querySelector('#pk-all');
+      all.addEventListener('click', function (e) { e.stopPropagation(); });
+      all.addEventListener('change', function () {
+        listEl.querySelectorAll('.pk-f').forEach(function (c) { c.checked = all.checked; setRow(c); });
+        paintCount();
+      });
+
+      if (PK_RESUME) {
+        var want = PK_RESUME; PK_RESUME = null;
+        listEl.querySelectorAll('.pk-f').forEach(function (c, i) {
+          var id = c.getAttribute('data-id');
+          if (want.ids.indexOf(id) !== -1 || (want.tickNewest && i === 0)) { c.checked = true; setRow(c); }
+        });
+        paintCount();
+      }
+    }).catch(function (e) {
+      listEl.innerHTML = '<div style="padding:18px;color:#B91C1C;font-size:13px;">Could not load forms: ' + esc(e.message || '') + '</div>';
+    });
+
+    var picker = attachPeoplePicker(ov, {
+      toggle: '#pk-rtoggle', panel: '#pk-rpicker', list: '#pk-rlist',
+      search: '#pk-rsearch', count: '#pk-rcount'
+    }, []);
+
+    ov.querySelector('#pk-upload').addEventListener('click', function () {
+      /* Hand off to the LIBRARY's upload dialog rather than building a second one: it owns
+         the fillable toggle, the audiences and the people picker, and two upload forms
+         would drift apart the moment either changed. */
+      PK_RESUME = { ids: Object.keys(chosenForms), tickNewest: true };
+      close();
+      var libTab = document.querySelector('.fm-tab[data-t="library"]');
+      if (libTab) { libTab.click(); }
+      setTimeout(function () {
+        var open = [].slice.call(document.querySelectorAll('button')).filter(function (b) {
+          return /upload a form/i.test(b.textContent || '');
+        })[0];
+        if (open) { open.click(); }
+      }, 500);
+    });
+
+    var notifyBox = ov.querySelector('#pk-notify');
+    ov.querySelector('#pk-send').addEventListener('click', function () {
+      var btn = this;
+      var formIds = Object.keys(chosenForms).map(Number);
+      var userIds = picker.ids().map(Number);
+      var emails = (ov.querySelector('#pk-emails').value || '')
+        .split(/[,;\s]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+
+      // Each half named separately — "nothing happened" is the least useful thing to say.
+      if (!formIds.length) { say('Tick at least one form to send.', true); return; }
+      if (!userIds.length && !emails.length) { say('Choose people, or type an email address.', true); return; }
+
+      btn.disabled = true; say('Sending…', false);
+      Api.post('/admin/managed-forms/bulk-assign', {
+        form_ids: formIds, user_ids: userIds, emails: emails,
+        notify: !notifyBox || notifyBox.checked,
+        note: (ov.querySelector('#pk-note').value || '').trim() || null
+      }).then(function (r) {
+        btn.disabled = false;
+        var un = (r && r.unmatched) || [];
+        if (un.length) {
+          /* Sent for the rest, and SAID so for the ones it could not reach. Closing on a
+             success toast here would be a quiet lie about who was written to. */
+          say((r.message || 'Sent.') + ' No account for: ' + un.join(', '), true);
+          if (hostBody) loadPackageHistory(hostBody.querySelector('#pk-history'));
+          return;
+        }
+        toast('📦', 'Package sent', (r && r.message) || '');
+        close();
+        if (hostBody) loadPackageHistory(hostBody.querySelector('#pk-history'));
+      }).catch(function (e) {
+        btn.disabled = false;
+        /* The server's message already NAMES the addresses it could not place, so
+           appending the list again read as "ghost@nowhere.test ... (ghost@nowhere.test)".
+           Only add it when the message did not say it. */
+        var msg = (e && e.message) || 'Could not send that package.';
+        var un = (e && e.data && e.data.unmatched) || [];
+        var missing = un.filter(function (a) { return msg.indexOf(a) === -1; });
+        say(missing.length ? (msg + ' (' + missing.join(', ') + ')') : msg, true);
+      });
+    });
   }
 
   /* ───────── LIBRARY: upload + list ───────── */
@@ -192,6 +1385,12 @@
         out.style.color = '#047857'; out.textContent = '✓ Uploaded.';
         try { body.dispatchEvent(new CustomEvent('kt-fm-uploaded')); } catch (e) {}
         toast('🗂️', 'Form uploaded', '"' + title + '" is now assigned.', '#16A34A');
+        /* Came from the package tab: go back to it rather than stranding somebody in the
+           Library holding a half-built package. */
+        if (PK_RESUME) {
+          var pkTab = document.querySelector('.fm-tab[data-t="package"]');
+          if (pkTab) { pkTab.click(); return; }
+        }
         renderLibrary(body);
       }).catch(function (e) {
         // Laravel answers a 422 with {message, errors:{field:[...]}}. The summary
@@ -312,6 +1511,12 @@
    * evening upload could show the wrong DAY entirely. kt-tz.js owns the agency zone
    * (from /auth/me) and is the single source of truth for this everywhere.
    */
+  /* The completed-forms grid showed `String(signed_at).slice(0,10)` — the raw UTC
+     date off the server, never converted. An evening submission in Toronto is already
+     the NEXT day in UTC, so the grid could date a form to the day after it was signed,
+     while the same value elsewhere on the screen read correctly through fmtStamp.
+     Everything now goes through fmtStamp, which tells the string it is UTC and renders
+     it in the agency's zone with the time. (2026-09-10) */
   function fmtStamp(ts) {
     if (!ts) return '';
     try {
@@ -667,7 +1872,7 @@
     Api.get('/admin/managed-forms/signoffs').then(function (d) {
       var rows = (d && d.signoffs) || [];
       if (!rows.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms have been signed yet.</div>'; return; }
-      el.innerHTML = '<table data-kt-no-kebab="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
+      el.innerHTML = '<table data-kt-no-kebab="1" data-kt-paginate="25" data-kt-filter-always="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
         + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Signed by', 'Signed (agency time)', 'Copy emailed', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || '—';
@@ -693,6 +1898,7 @@
             + '<td style="padding:9px 8px;text-align:right;">' + kebab(r) + '</td></tr>';
         }).join('') + '</tbody></table>';
       wireKebabs(el, rows);
+      if (KT.enhanceTables) { KT.enhanceTables(); }
     }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
   }
 
@@ -741,6 +1947,32 @@
         menu.appendChild(item('✉️', 'Email the signer', false, function () {
           var to = r.email || ''; var subj = encodeURIComponent('Re: ' + (r.form_title || 'signed form'));
           window.location.href = 'mailto:' + to + '?subject=' + subj;
+        }));
+
+        /* WITHDRAW THE SIGNATURE.
+
+           The one action here that removes a record rather than a note about one, so the
+           confirm says exactly what goes and what happens next — the completed PDF, the
+           copy filed on the signer's own record, and the form becoming outstanding for
+           them again. That last part is usually the reason somebody is doing this: the
+           wrong person signed, or signed the wrong thing.
+
+           The server checks the caller is an admin or director of this agency; this menu
+           entry is the convenience, not the control. */
+        menu.appendChild(item('🗑', 'Delete this sign-off', true, function () {
+          var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || 'this person';
+          var msg = 'Withdraw ' + who + '’s signature on “' + (r.form_title || 'this form') + '”?\n\n'
+            + 'The completed PDF and their filed copy are deleted, and the form becomes outstanding for them again. '
+            + 'This is recorded in the audit log and cannot be undone.';
+          Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(function (ok) {
+            if (!ok) { return; }
+            Api.delete('/admin/managed-forms/signoffs/' + r.id).then(function (d) {
+              toast('🗑️', 'Signature withdrawn', (d && d.message) || '', '#B91C1C');
+              renderCompleted(el.parentNode || el);
+            }).catch(function (e) {
+              toast('⚠️', 'Could not delete', (e && e.message) || '', '#B91C1C');
+            });
+          });
         }));
         document.body.appendChild(menu);
         var rect = btn.getBoundingClientRect();

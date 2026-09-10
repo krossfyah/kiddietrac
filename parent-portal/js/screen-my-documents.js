@@ -64,11 +64,28 @@
   /* created_at is a real INSTANT written by the server in UTC, so it is converted
      into the agency's zone — unlike the incident's own occurred_at, which is a
      wall-clock time and is already baked into the document's title as typed. */
+  /* THE MOMENT IT WAS FILED, in the AGENCY's zone, with the time.
+
+     Two things were wrong and one was missing. `new Date(t)` on the server's zone-less
+     UTC string is read as the DEVICE's local time — hours off — and the rendering used
+     the device zone as well, so a document filed at 8pm Toronto could show the next
+     day's date to somebody whose phone was set elsewhere. And it showed a date alone,
+     which cannot answer "when was this signed" for anything filed today.
+
+     KT.Fmt is the one place that knows both answers: parse() tells the string it is UTC,
+     date()/time() render against KT.tz(). */
   function filedOn(t) {
     if (!t) { return ''; }
     try {
-      return new Date(t).toLocaleDateString('en-CA', {
+      if (window.KT && KT.Fmt && KT.Fmt.parse(t)) {
+        return KT.Fmt.date(t, { year: 'numeric', month: 'short', day: 'numeric' })
+          + ' · ' + KT.Fmt.time(t);
+      }
+      var iso = String(t).trim().replace(' ', 'T');
+      if (!/[Zz]|[+-]\d{2}:?\d{2}$/.test(iso)) { iso += 'Z'; }
+      return new Date(iso).toLocaleString('en-CA', {
         year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit',
       });
     } catch (e) { return String(t).slice(0, 10); }
   }
