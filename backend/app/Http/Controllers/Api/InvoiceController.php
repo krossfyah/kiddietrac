@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\InvoiceStatus;
+
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Services\InvoicePdfRenderer;
@@ -77,7 +79,12 @@ final class InvoiceController extends Controller
                     'total' => (float) $e->total,
                     'balance_due' => (float) $e->balance_due,
                     'status' => $e->status,
-                    'status_label' => (float) $e->balance_due <= 0 ? 'Paid' : ucfirst((string) $e->status),
+                    /* Not due yet reads "Scheduled" rather than "Open". A zero
+                       balance still wins: money received is not a matter of
+                       interpretation. */
+                    'status_label' => InvoiceStatus::label(
+                        (string) $e->status, $e->due_at, (float) $e->balance_due
+                    ),
                     'is_estimate' => false,
                     'external' => true,
                     'source' => $e->source_label ?: 'iLearn',
@@ -192,6 +199,69 @@ final class InvoiceController extends Controller
      * into KiddieTrac (external_invoices). Scoped to the logged-in guardian's
      * family/families. Read-only — these are collected in the source platform.
      */
+    /**
+     * GET /parent/external-invoices/{id}/link
+     *
+     * Hands back the provider's own link for ONE externally-issued invoice, after
+     * checking the signed-in guardian belongs to the family it was raised against.
+     *
+     * A link rather than a file on purpose: pdf_url is named for what we hoped it was,
+     * but the provider answers it with text/html — it is a tokenised invoice PAGE on
+     * their site, not a PDF. Calling it a download would promise a file that never
+     * arrives.
+     *
+     * Returned through the API instead of printed into the page so the token stays out
+     * of the DOM, and so ownership is checked on OUR side rather than resting on the
+     * provider's token alone.
+     */
+    public function externalInvoiceLinkForParent(Request $request, int $id): JsonResponse
+    {
+        $familyIds = DB::table('guardians')
+            ->where('user_id', $request->user()->id)
+            ->pluck('family_id')->filter()->map(fn ($v) => (int) $v)->all();
+
+        $inv = DB::table('external_invoices')->where('id', $id)->first();
+        abort_unless($inv, 404, 'Invoice not found');
+        // ?: [0] — an empty family list must match nothing, never everything.
+        abort_unless(in_array((int) $inv->family_id, $familyIds ?: [0], true), 403);
+        abort_unless($inv->pdf_url, 404, 'No document for this invoice');
+
+        return response()->json([
+            'url' => $inv->pdf_url,
+            'number' => $inv->number,
+        ]);
+    }
+
+    /**
+     * The same document, opened by STAFF.
+     *
+     * externalInvoiceLinkForParent() resolves the caller's families through `guardians`,
+     * which is exactly right for a parent and answers 403 for everybody else — an
+     * agency admin is not a guardian of anyone. The payment-schedules screen is used by
+     * both, and its "View invoice" button called the parent route for everybody: staff
+     * could see the row, and were told "Forbidden. Required role: guardian" the moment
+     * they clicked it. Listing a document you are then refused is worse than not
+     * listing it.
+     *
+     * Scoped by the ACTIVE AGENCY, not by guardianship — `external_invoices.agency_id`
+     * is stamped at import. 404 rather than 403 for an invoice outside it: another
+     * agency's billing is not ours to confirm the existence of.
+     */
+    public function externalInvoiceLinkForAgency(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($agencyId, 403);
+
+        $inv = DB::table('external_invoices')->where('id', $id)->first();
+        abort_unless($inv && (int) $inv->agency_id === (int) $agencyId, 404, 'Invoice not found');
+        abort_unless($inv->pdf_url, 404, 'No document for this invoice');
+
+        return response()->json([
+            'url' => $inv->pdf_url,
+            'number' => $inv->number,
+        ]);
+    }
+
     public function externalForParent(Request $request): JsonResponse
     {
         $familyIds = DB::table('guardians')
@@ -760,7 +830,9 @@ final class InvoiceController extends Controller
                     'preheader' => 'Your invoice ' . $num . ' is attached.',
                 ])->render();
 
-                Mail::html($mailHtml, function ($m) use ($emails, $num, $pdf) {
+                $invCentreId = (int) $data['centre_id'];
+                Mail::html($mailHtml, function ($m) use ($emails, $num, $pdf, $invCentreId) {
+                    \App\Support\MailScope::centre($m, $invCentreId);
                     $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
                     $first = array_shift($emails);
                     $m->to($first)->subject('Your invoice ' . $num);
@@ -1016,7 +1088,7 @@ final class InvoiceController extends Controller
                 $invTitle = 'New invoice: ' . $invoiceNumber;
                 $invBody = 'Your invoice for $' . number_format($total, 2) . ' is ready. Due ' . $dueDate->format('M j, Y') . '.';
                 foreach (DB::table('guardians')->where('family_id', $familyId)->pluck('user_id') as $gid) {
-                    DB::table('notifications')->insert([
+                    \App\Support\Notify::write([
                         'user_id' => $gid,
                         'type' => 'invoice',
                         'title' => $invTitle,
@@ -1134,7 +1206,9 @@ final class InvoiceController extends Controller
             Log::warning('invoice PDF failed for email', ['invoice' => $invoiceId, 'error' => $e->getMessage()]);
         }
 
-        Mail::html($html, function ($m) use ($emails, $num, $pdf) {
+        $invCentreId = (int) ($inv->centre_id ?? 0);
+        Mail::html($html, function ($m) use ($emails, $num, $pdf, $invCentreId) {
+            \App\Support\MailScope::centre($m, $invCentreId ?: null);
             $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
             $first = array_shift($emails);
             $m->to($first)->subject('Your invoice ' . $num);
@@ -1368,7 +1442,7 @@ final class InvoiceController extends Controller
                     ]),
                     'created_at' => $now,
                 ];
-                if (!empty($rows)) DB::table('notifications')->insert($rows);
+                if (!empty($rows)) \App\Support\Notify::write($rows);
             }
         });
 
@@ -1508,7 +1582,10 @@ final class InvoiceController extends Controller
             'total' => (float) $i->total,
             'balance_due' => (float) ($i->balance_due ?? $i->total),
             'status' => $i->status,
-            'status_label' => ucfirst($i->status),
+            // Not due yet reads "Scheduled" — see App\Support\InvoiceStatus.
+            'status_label' => InvoiceStatus::label(
+                (string) $i->status, $i->due_at, (float) ($i->balance_due ?? $i->total)
+            ),
             'is_estimate' => false,
         ];
     }

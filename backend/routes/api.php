@@ -2,6 +2,21 @@
 
 declare(strict_types=1);
 
+/* ONE role list for every `provider` prefix.
+
+   There were three provider groups carrying three DIFFERENT lists: one omitted
+   home_visitor, another omitted platform_admin — which is how a super admin ended up
+   403'd on /provider/lesson-plans, and a home visitor on half the endpoints they were
+   meant to reach. Divergent copies of a guard is exactly how the duplicate tenant-guard
+   leak hid, so this is the widest of the three, named once and referenced everywhere.
+
+   Widening WHO MAY ASK is safe here because it is not what scopes the answer: every one
+   of these endpoints still resolves rooms, centres and children through the tenant
+   guards, so a director still sees only their own centre's rooms. (Anthony, 2026-09-08) */
+if (! defined('KT_PROVIDER_ROLES')) {
+    define('KT_PROVIDER_ROLES', 'role:educator,home_visitor,centre_director,agency_admin,platform_admin');
+}
+
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AgencyController;
 use App\Http\Controllers\Api\CentreController;
@@ -389,7 +404,20 @@ Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->mid
    and dead once it expires. See App\Support\ProtectedMedia. */
 Route::get('/media/f', [\App\Http\Controllers\Api\MediaFileController::class, 'show'])
     ->name('media.file')
-    ->middleware('signed');
+    /* NormalizeEntityQuery runs BEFORE `signed`: it repairs `amp;p` / `amp;signature`
+       back to `p` / `signature` for emails ALREADY DELIVERED, whose <img src> carried
+       an HTML-escaped query string. Without it those images stay broken forever, since
+       the mail cannot be reissued. New emails use the path-only /media/e route. */
+    ->middleware([\App\Http\Middleware\NormalizeEntityQuery::class, 'signed']);
+
+/* The same file, for EMAIL. No query string, so nothing an HTML escaper can break:
+   Blade turns the `&` of a signed query string into `&amp;`, and a mail client that
+   fetches the src without decoding it gets a 403 and draws a broken image. The token
+   carries its own HMAC and expiry and is verified in the controller, so this route
+   deliberately does not use the `signed` middleware. */
+Route::get('/media/e/{token}', [\App\Http\Controllers\Api\MediaFileController::class, 'email'])
+    ->where('token', '[A-Za-z0-9\-_\.]+')
+    ->name('media.email');
 
 Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle'])->middleware('throttle:600,1');
 
@@ -409,6 +437,22 @@ Route::get ('/feedback/day/{child}', [\App\Http\Controllers\Api\ParentFeedbackCo
     ->name('parent.feedback.form')->middleware('signed')->whereNumber('child');
 Route::post('/feedback/day/{child}', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'submit'])
     ->middleware('signed')->whereNumber('child');
+
+/* FILL AND SIGN A FORM FROM A TEMPORARY LINK — no login, same shape as the two above.
+   A package email carries one of these per form, so a family can complete their paperwork
+   without first getting a password working. The signature covers {form} and {u}, so a link
+   cannot be edited into somebody else's form. See SignedFormController. */
+/* Send the files a centre asked for, with no password — the same device as the
+   fill-and-sign link. Signed, expiring, and write-only: it can add a file to its own
+   request and can never read one back. */
+Route::get ('/files/upload/{req}/{u}', [\App\Http\Controllers\Api\SignedFileUploadController::class, 'page'])
+    ->middleware('signed')->name('files.upload')->whereNumber('req')->whereNumber('u');
+Route::post('/files/upload/{req}/{u}', [\App\Http\Controllers\Api\SignedFileUploadController::class, 'put'])
+    ->middleware('signed')->name('files.upload.put')->whereNumber('req')->whereNumber('u');
+
+Route::get ('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFormController::class, 'page'])->name('forms.fill')->middleware('signed')->whereNumber('form')->whereNumber('u');
+Route::post('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFormController::class, 'submit'])->name('forms.fill.submit')->middleware('signed')->whereNumber('form')->whereNumber('u');
+Route::post('/forms/fill/{form}/{u}/draft', [\App\Http\Controllers\Api\SignedFormController::class, 'draft'])->name('forms.fill.draft')->middleware('signed')->whereNumber('form')->whereNumber('u');
 
 Route::get ('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::class, 'actPage'])->name('timeoff.act')->middleware('signed');
 Route::post('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::class, 'actSubmit'])->middleware('signed');
@@ -582,6 +626,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             return response()->json(['photo_url' => $publicPath, 'message' => 'Avatar updated']);
         });
 
+        /* How far this person has read — the bell, the what's-new dot, the sales-chat
+           badge. Their own read position and nobody else's, so there is no route that
+           takes a user id. See UiMarkerController. */
+        Route::get('/me/markers', [\App\Http\Controllers\Api\UiMarkerController::class, 'index']);
+        Route::put('/me/markers', [\App\Http\Controllers\Api\UiMarkerController::class, 'update']);
+
         // v23: a user's own filed documents — their signed NDA and any files an
         // admin attached to their record. Surfaced under "Forms" on mobile/APK.
         Route::get('/auth/me/documents', function (\Illuminate\Http\Request $request) {
@@ -713,7 +763,26 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/admin/managed-forms/signoffs',           [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffs']);
         // Send a completed copy to the address configured on its form (see emailSignoff).
         Route::post  ('/admin/managed-forms/signoffs/{id}/email', [\App\Http\Controllers\Api\ManagedFormController::class, 'emailSignoff'])->where('id', '[0-9]+');
+        Route::delete('/admin/managed-forms/signoffs/{id}',       [\App\Http\Controllers\Api\ManagedFormController::class, 'deleteSignoff'])->where('id', '[0-9]+');
         Route::get   ('/admin/managed-forms/{id}/signoff/{sid}',  [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffDetail']);
+        // What has been sent, for the history table.
+        /* Request files — the mirror of a form package: the agency asks for documents the
+           family already has, and they arrive on that person's own record. */
+        Route::get   ('/admin/file-requests',                     [\App\Http\Controllers\Api\FileRequestController::class, 'index']);
+        Route::post  ('/admin/file-requests',                     [\App\Http\Controllers\Api\FileRequestController::class, 'store']);
+        Route::get   ('/admin/file-requests/{id}',                [\App\Http\Controllers\Api\FileRequestController::class, 'show'])->whereNumber('id');
+        Route::post  ('/admin/file-requests/{id}/remind',         [\App\Http\Controllers\Api\FileRequestController::class, 'remind'])->whereNumber('id');
+        Route::delete('/admin/file-requests/{id}',                [\App\Http\Controllers\Api\FileRequestController::class, 'destroy'])->whereNumber('id');
+        Route::get   ('/admin/file-requests/{id}/files/{doc}/download', [\App\Http\Controllers\Api\FileRequestController::class, 'download'])->whereNumber('id')->whereNumber('doc');
+
+        Route::get   ('/admin/managed-forms/packages',            [\App\Http\Controllers\Api\ManagedFormController::class, 'packages']);
+        Route::get   ('/admin/managed-forms/packages/{id}',       [\App\Http\Controllers\Api\ManagedFormController::class, 'packageDetail'])->whereNumber('id');
+        Route::post  ('/admin/managed-forms/packages/{id}/resend', [\App\Http\Controllers\Api\ManagedFormController::class, 'packageResend'])->whereNumber('id');
+        Route::post  ('/admin/managed-forms/packages/{id}/redeliver', [\App\Http\Controllers\Api\ManagedFormController::class, 'packageRedeliver'])->whereNumber('id');
+        Route::post  ('/admin/managed-forms/packages/{id}/resend-one', [\App\Http\Controllers\Api\ManagedFormController::class, 'packageResendOne'])->whereNumber('id');
+        Route::delete('/admin/managed-forms/packages/{id}',       [\App\Http\Controllers\Api\ManagedFormController::class, 'packageDelete'])->whereNumber('id');
+        // Several forms to several people in one action, with one email listing them.
+        Route::post  ('/admin/managed-forms/bulk-assign',         [\App\Http\Controllers\Api\ManagedFormController::class, 'bulkAssign']);
         Route::get   ('/admin/managed-forms',                     [\App\Http\Controllers\Api\ManagedFormController::class, 'index']);
         Route::post  ('/admin/managed-forms',                     [\App\Http\Controllers\Api\ManagedFormController::class, 'store']);
         Route::patch ('/admin/managed-forms/{id}',                [\App\Http\Controllers\Api\ManagedFormController::class, 'update']);
@@ -786,10 +855,19 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
                 // holder or an address the admin names. Audited with the address.
                 Route::get('/admin/account-ledgers/{user}/statement.pdf', [\App\Http\Controllers\Api\AccountLedgerController::class, 'statementPdf'])->where('user', '[0-9]+');
                 Route::post('/admin/account-ledgers/{user}/email', [\App\Http\Controllers\Api\AccountLedgerController::class, 'emailStatement'])->where('user', '[0-9]+');
+                /* One invoice, to one address. The kind travels because native and
+                   external invoice ids OVERLAP (native 9..64, external 2..464), so
+                   guessing would fetch a different family's invoice. */
+                Route::post('/admin/invoices/{kind}/{id}/email', [\App\Http\Controllers\Api\AccountLedgerController::class, 'emailInvoice'])
+                    ->where('kind', 'native|external')->where('id', '[0-9]+');
             });
 
             Route::get   ('/agency/external-invoices',       [\App\Http\Controllers\Api\InvoiceController::class, 'externalForAgency']);
             Route::patch ('/agency/external-invoices/{id}', [\App\Http\Controllers\Api\InvoiceController::class, 'updateExternalInvoice'])->where('id','[0-9]+');
+            // Open ONE synced invoice as STAFF. The /parent/ twin resolves the caller's
+            // families through `guardians`, so it 403s for every admin and director —
+            // which is what "could not open that invoice" was.
+            Route::get   ('/agency/external-invoices/{id}/link', [\App\Http\Controllers\Api\InvoiceController::class, 'externalInvoiceLinkForAgency'])->where('id','[0-9]+');
             Route::get   ('/agency/waitlist',      [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'index']);
             Route::post  ('/agency/waitlist',      [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'store']);
             Route::patch ('/agency/waitlist/{id}', [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'update'])->where('id','[0-9]+');
@@ -809,6 +887,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/children/{child}/digest/{date}', [DailyEventController::class, 'digest']);
             Route::get('/children/{child}/invoices', [InvoiceController::class, 'forChild']);
             Route::get('/external-invoices', [InvoiceController::class, 'externalForParent']);
+            // Open ONE externally-issued invoice. Returns the provider's link after
+            // checking the guardian belongs to the family it was raised against.
+            Route::get('/external-invoices/{id}/link', [InvoiceController::class, 'externalInvoiceLinkForParent'])->where('id', '[0-9]+');
             Route::get('/children/{child}/photos', [MediaController::class, 'forChild']);
             Route::get('/children/{child}/observations', [MediaController::class, 'observationsForChild']);
             Route::get('/messages', [MessageController::class, 'myConversations']);
@@ -837,6 +918,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // v22p1: Parent reads of child health
             Route::get('/children/{child}/health',         [ChildHealthController::class, 'show']);
             Route::get('/children/{child}/medications',    [MedicationController::class, 'parentList']);
+            /* The parent nav has always offered "Your child's attendance history";
+               it used to call the STAFF /attendance/weekly-overview, which is
+               agency-wide and role-gated, so every guardian got a 403. Same shape,
+               their own children only. */
+            Route::get('/attendance/weekly-overview',      [\App\Http\Controllers\Api\AttendancePatternController::class, 'parentWeeklyOverview']);
+            /* A parent ASKS; a director authorises. Files as pending_auth into the
+               same queue staff already work through — see parentStore(). */
+            Route::post('/children/{child}/medications',   [MedicationController::class, 'parentStore']);
             Route::get('/children/{child}/immunizations',  [ImmunizationController::class, 'parentList']);
 
             /* A parent handing over their child's immunization RECORD — the card, the
@@ -866,13 +955,54 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/edocuments/{id}/download',         [EDocumentController::class, 'parentDownload']);
         });
 
-        Route::prefix('provider')->middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        /* WHAT A HOME VISITOR MAY SEE IN A ROOM SHE IS ASSIGNED TO.
+
+           Putting somebody in a room is how this platform says WHERE they work; their
+           role says WHAT they do there. A home visitor assigned to rooms could previously
+           open nothing at all — not a roster, not a ratio, not a child's health record —
+           because the whole provider API was gated on the educator role. Nine rooms, and
+           the assignment opened nothing.
+
+           These are the READS: the room's picture, children's files, and reporting. The
+           educator's job stays in the group below — signing children in and out, the
+           daily care log, giving medications, authoring observations and incidents,
+           issuing awards, the parent conversation, and their own timesheet.
+
+           Anthony, 2026-09-06: "home visitor role is not an educator role so should not
+           allow to sign in and out children only access children files and educator files
+           and reporting etc."
+
+           Room scope is enforced independently of this gate and is unchanged:
+           RoomController::assignedRoomIds() returns this user's own educator_rooms rows
+           (null — the whole centre — only for director/admin/platform), and
+           ResolvesCentreContext::canAccessChildId() demands an explicit room assignment
+           with the child in that room today. Neither asks what role anybody holds, so a
+           home visitor reads exactly the rooms somebody put her in. */
+        Route::prefix('provider')->middleware(KT_PROVIDER_ROLES)->group(function () {
             Route::get('/bootstrap', [RoomController::class, 'bootstrap']);
-            Route::get("/day-brief", [DayBriefController::class, "brief"]);
-            Route::get("/day-activity", [DayBriefController::class, "dayActivity"]);
+            Route::get('/day-brief', [DayBriefController::class, 'brief']);
+            Route::get('/day-activity', [DayBriefController::class, 'dayActivity']);
+
+            // The room itself: who is in it, and whether it is within ratio.
             Route::get('/rooms/{room}/roster', [RoomController::class, 'roster']);
             Route::get('/rooms/{room}/ratio', [RoomController::class, 'currentRatio']);
             Route::get('/present-count', [RoomController::class, 'presentCount']);
+
+            // Children's files. Reading a medication schedule is not giving one —
+            // /medications/give stays educator-only below.
+            Route::get('/medications', [MedicationController::class, 'activeForProvider']);
+            Route::get('/children/{child}/health', [ChildHealthController::class, 'show']);
+
+            // Reporting: reading and printing an incident, never writing one.
+            Route::get('/incidents', [IncidentController::class, 'index']);
+            Route::get('/incidents/{id}', [IncidentController::class, 'show'])->where('id', '[0-9]+');
+            Route::get('/incidents/{id}/report.pdf', [IncidentController::class, 'reportPdf'])->where('id', '[0-9]+');
+            Route::get('/awards', [\App\Http\Controllers\Api\AwardController::class, 'index']);
+            Route::get('/awards/roster', [\App\Http\Controllers\Api\AwardController::class, 'roster']);
+            Route::get('/observations', [AiObservationController::class, 'index']);
+        });
+
+        Route::prefix('provider')->middleware(KT_PROVIDER_ROLES)->group(function () {
 
             Route::post('/check-in', [CheckEventController::class, 'checkIn']);
             Route::post('/check-out', [CheckEventController::class, 'checkOut']);
@@ -889,13 +1019,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/incidents', [IncidentController::class, 'store']);
 
             // v22p1: Medications
-            Route::get('/medications',                  [MedicationController::class, 'activeForProvider']);
             Route::post('/medications/give',            [MedicationController::class, 'give']);
-            Route::get('/children/{child}/health',      [ChildHealthController::class, 'show']);
 
-            // v20: incident workflow (provider/educator side)
-            Route::get('/incidents',                       [IncidentController::class, 'index']);
-            Route::get('/incidents/{id}',                  [IncidentController::class, 'show']);
+            // v20: incident workflow (provider/educator side) — the reads moved to the
+            // group above, which home visitors may also reach.
             Route::patch('/incidents/{id}',                [IncidentController::class, 'update']);
             Route::post('/incidents/{id}/submit',          [IncidentController::class, 'submit']);
             Route::post('/incidents/{id}/notes',           [IncidentController::class, 'addNote']);
@@ -903,16 +1030,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Move an incident deliberately; every move records why as a note.
             Route::patch('/incidents/{id}/status',         [IncidentController::class, 'setStatus']);
             // The incident as a document, on the agency's own branding.
-            Route::get('/incidents/{id}/report.pdf',       [IncidentController::class, 'reportPdf']);
 
             // Child awards (educator/director: issue + list + delete)
-            Route::get('/awards',                          [\App\Http\Controllers\Api\AwardController::class, 'index']);
-            Route::get('/awards/roster',                   [\App\Http\Controllers\Api\AwardController::class, 'roster']);
             Route::post('/awards',                         [\App\Http\Controllers\Api\AwardController::class, 'store']);
             Route::delete('/awards/{id}',                  [\App\Http\Controllers\Api\AwardController::class, 'destroy']);
 
             // v21: AI Observation Notes
-            Route::get('/observations',                    [AiObservationController::class, 'index']);
             Route::post('/observations/structure',         [AiObservationController::class, 'structure']);
             Route::post('/observations/save',              [AiObservationController::class, 'save']);
 
@@ -1154,6 +1277,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         Route::get('/centres', [AdminController::class, 'listCentres']);
         Route::post('/centres/{centre}/coords', [AdminController::class, 'saveCentreCoords']);
+        // Rooms of one centre (with educators + headcount) — used by the family wizard.
+        Route::get('/centres/{centre}/rooms', [AdminController::class, 'centreRooms']);
         Route::post('/centres', [AdminController::class, 'createCentre']);
         Route::patch('/centres/{centre}', [AdminController::class, 'updateCentre']);
         Route::delete('/centres/{centre}', [AdminController::class, 'archiveCentre']);
@@ -1234,6 +1359,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            unlinking a guardian. Adding a child and inviting a guardian already had
            endpoints (enrollments / families.invite) that nothing on screen called. */
         Route::get   ('/families/{family}/provider-history',     [\App\Http\Controllers\Api\FamilyRecordController::class, 'providerHistory']);
+        Route::get   ('/families/{family}/documents',            [\App\Http\Controllers\Api\FamilyRecordController::class, 'documents'])->whereNumber('family');
         Route::get   ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'listNotes']);
         Route::post  ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'addNote']);
         Route::delete('/families/{family}/notes/{note}',         [\App\Http\Controllers\Api\FamilyRecordController::class, 'deleteNote']);
@@ -1260,6 +1386,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/families/{family}/outstanding', [AdminController::class, 'familyBalance'])->whereNumber('family');
         Route::delete('/families/{family}', [AdminController::class, 'destroyFamily']);
         Route::post('/families/{family}/provider-welcome', [AdminController::class, 'resendProviderWelcome']);
+        // Who would receive what, so the confirm can show it before anything is sent.
+        Route::get('/families/{family}/welcome-preflight', [AdminController::class, 'welcomePreflight']);
         Route::get('/email-template/provider-welcome', [AdminController::class, 'getProviderWelcomeTemplate']);
         Route::put('/email-template/provider-welcome', [AdminController::class, 'saveProviderWelcomeTemplate']);
         Route::post('/email-template/provider-welcome/test', [AdminController::class, 'testProviderWelcomeTemplate']);
@@ -1343,7 +1471,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // PROVIDER chat routes (educator + centre_director + agency_admin + home_visitor)
     // home_visitor is agency-scoped in providerCentreIds so they message families
     // across their agency. This group is chat-only — NOT the provider toolset.
-    Route::middleware('role:educator,centre_director,agency_admin,home_visitor')->prefix('provider')->group(function () {
+    Route::middleware(KT_PROVIDER_ROLES)->prefix('provider')->group(function () {
         // One message to a whole audience. POST without confirm=1 returns a COUNT
         // only, so the screen can say who it reaches before it reaches them.
         Route::post('/chats/broadcast',            [ChatController::class, 'broadcast']);
@@ -1400,6 +1528,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/payroll-documents',             [\App\Http\Controllers\Api\PayrollDocumentController::class, 'index']);
         Route::post('/payroll-documents/backfill',    [\App\Http\Controllers\Api\PayrollDocumentController::class, 'backfill']);
         Route::post('/payroll-documents/{id}/status', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'setStatus'])->where('id', '[0-9]+');
+        Route::post('/payroll-documents/{id}/email',  [\App\Http\Controllers\Api\PayrollDocumentController::class, 'email'])->where('id', '[0-9]+');
         Route::get ('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'index']);
         Route::get ('/payee-invoices/hours',        [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'hours']);
         Route::post('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'store']);
@@ -1461,7 +1590,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // PROVIDER — announcements compose + list (home_visitor may READ only; the
     // controller guards store/destroy against home_visitor, and the UI hides
     // compose for them — they see agency announcements but can't broadcast.)
-    Route::middleware('role:educator,centre_director,agency_admin,home_visitor')->prefix('provider')->group(function () {
+    Route::middleware(KT_PROVIDER_ROLES)->prefix('provider')->group(function () {
         Route::get('/announcements',                  [AnnouncementController::class, 'indexProvider']);
         Route::post('/announcements',                 [AnnouncementController::class, 'store']);
         // Staff can delete announcements their own centre/agency owns (single or
@@ -1487,7 +1616,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Public (no auth) — push public key
 
     // PROVIDER — lesson plans + scheduling
-    Route::middleware('role:educator,centre_director,agency_admin')->prefix('provider')->group(function () {
+    Route::middleware(KT_PROVIDER_ROLES)->prefix('provider')->group(function () {
         Route::get('/lesson-plans',        [LessonPlanController::class, 'show']);
         Route::put('/lesson-plans',        [LessonPlanController::class, 'upsert']);
         Route::get('/lesson-plans/list',   [LessonPlanController::class, 'listForRoom']);
@@ -1640,6 +1769,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            administrative. */
         Route::patch('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'update']);
         Route::patch('/admin/country', [\App\Http\Controllers\Api\CurrencyController::class, 'updateCountry']);
+        // Twilio credentials per agency, set from the portal rather than .env.
+        Route::get  ('/admin/sms-settings',      [\App\Http\Controllers\Api\SmsSettingsController::class, 'show']);
+        Route::patch('/admin/sms-settings',      [\App\Http\Controllers\Api\SmsSettingsController::class, 'update']);
+        Route::post ('/admin/sms-settings/test', [\App\Http\Controllers\Api\SmsSettingsController::class, 'test']);
         Route::get('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'show']);
         Route::patch('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'update']);
         Route::post('/admin/email-settings/test', [\App\Http\Controllers\Api\EmailSettingsController::class, 'sendTest']);
@@ -1832,6 +1965,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'closures']);
         Route::post  ('/operations/closures',          [\App\Http\Controllers\Api\OperationsV2Controller::class, 'addClosure']);
+        // A holiday across several providers at once. Same rows, same announcements as
+        // the single add above — a holiday IS a closure, so nothing downstream changes.
+        Route::get   ('/operations/closure-targets',   [\App\Http\Controllers\Api\OperationsV2Controller::class, 'closureTargets']);
+        Route::post  ('/operations/closures/bulk',     [\App\Http\Controllers\Api\OperationsV2Controller::class, 'addClosureBulk']);
         Route::patch ('/operations/closures/{id}',     [\App\Http\Controllers\Api\OperationsV2Controller::class, 'updateClosure']);
         Route::delete('/operations/closures/{id}',     [\App\Http\Controllers\Api\OperationsV2Controller::class, 'removeClosure']);
         });
@@ -1913,6 +2050,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/refunds/recent-payments',     [\App\Http\Controllers\Api\RefundsController::class, 'recentPayments']);
         Route::get ('/refunds/payment/{paymentId}', [\App\Http\Controllers\Api\RefundsController::class, 'listForPayment']);
         Route::post('/refunds',                     [\App\Http\Controllers\Api\RefundsController::class, 'create']);
+        /* Refund by INVOICE rather than by receipt. Money that arrived through the
+           integration has no payment row until one is refunded, so the invoice is the
+           only handle a person has on it. Both are admin/director-gated inside the
+           controller. */
+        Route::get ('/refunds/refundable',           [\App\Http\Controllers\Api\RefundsController::class, 'refundableInvoices']);
+        Route::get ('/refunds/lookup',               [\App\Http\Controllers\Api\RefundsController::class, 'lookupInvoice']);
+        Route::post('/refunds/invoice',              [\App\Http\Controllers\Api\RefundsController::class, 'createForInvoice']);
     });
     // Ledger
     Route::get('/parent/ledger',                    [\App\Http\Controllers\Api\LedgerController::class, 'myLedger']);

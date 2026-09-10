@@ -205,6 +205,7 @@
         </table>
       </div>`).join('') || `<div class="kt-card" style="text-align:center;padding:60px;color:#64748B;">${isStaff && !fid ? 'Select a family above to see their payment schedules.' : 'No payment schedules on file.'}</div>`}
     </div>`;
+    wireInvoiceActions(main);
     if (isStaff) {
       const sel = document.getElementById('pp-family');
       if (sel) sel.onchange = () => {
@@ -278,9 +279,83 @@
     const differs = i.invoice_differs
       ? `<div style="font-size:11.5px;color:#B45309;">invoiced ${fmtMoney(i.invoice_total)}</div>` : '';
 
+    /* Naming the invoice is not the same as being able to read it. An instalment raised
+       here has a real invoice id and opens in the portal's own viewer; one matched to an
+       imported invoice opens the provider's copy, which is the only place that document
+       exists. Deliberately one button and not a "PDF" one: the provider answers its
+       pdf_url with text/html, so promising a file would promise something that never
+       arrives. */
+    /* data-kt-iconized: kt-icon-buttons.js rewrote "View invoice" down to a bare
+       "ℹ️". A lone info glyph in a table cell does not tell a parent it opens
+       their invoice, and unlike a row of view/edit/delete icons it has no siblings to
+       give it context. The attribute is that engine's own opt-out. */
+    const openBtn = i.invoice_id
+      ? `<button type="button" data-kt-iconized="1" data-inv-view="${esc(String(i.invoice_id))}" style="${INV_BTN}">View invoice</button>`
+      : (i.external_invoice_id
+          ? `<button type="button" data-kt-iconized="1" data-inv-ext="${esc(String(i.external_invoice_id))}" style="${INV_BTN}">View invoice</button>`
+          : '');
+
     return `<span style="font-weight:600;">${esc(i.invoice_number)}</span>`
       + (when ? `<div style="font-size:11.5px;color:#64748B;">${esc(when.replace(' \u00b7 ', ''))}</div>` : '')
-      + differs;
+      + differs
+      + (openBtn ? `<div style="margin-top:5px;">${openBtn}</div>` : '');
+  }
+
+  const INV_BTN = 'background:#fff;border:1px solid #CBD5E1;border-radius:8px;padding:3px 10px;font-size:11.5px;font-weight:700;color:#1F6080;cursor:pointer;';
+
+  /* One delegated listener for the screen rather than one per row, so it survives the
+     redraws this table does whenever a schedule is created, cancelled or the family
+     picker changes. Guarded so repeated renders do not stack handlers. */
+  /* Asked at CLICK time, not captured at render. The delegated listener below outlives
+     any one render, and a view-as switch changes the answer without re-running it.
+     Same three roles renderPaymentPlans() tests. */
+  function staffNow() {
+    try {
+      const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
+      return Array.isArray(u.roles)
+        && u.roles.some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
+    } catch (e) { return false; }
+  }
+
+  function wireInvoiceActions(main) {
+    if (main.getAttribute('data-inv-wired') === '1') { return; }
+    main.setAttribute('data-inv-wired', '1');
+    main.addEventListener('click', async (e) => {
+      const v = e.target.closest('[data-inv-view]');
+      if (v) {
+        e.preventDefault();
+        if (KT.openInvoiceById) { KT.openInvoiceById(v.getAttribute('data-inv-view')); }
+        return;
+      }
+      const x = e.target.closest('[data-inv-ext]');
+      if (!x) { return; }
+      e.preventDefault();
+      /* Fetched through our API so the provider's token never sits in the page and the
+         family check happens on our side. The tab is opened BEFORE the await — a popup
+         blocker refuses a window opened after one. */
+      const w = window.open('', '_blank');
+      try {
+        /* THE ROUTE THAT MATCHES WHO IS ASKING.
+
+           This always called the /parent/ one, which resolves the caller's families
+           through `guardians` — correct for a parent, and a guaranteed 403 for an
+           admin or director, who is nobody's guardian. Staff could see the invoice
+           listed and were told "Forbidden. Required role: guardian" the moment they
+           clicked it. The staff twin is scoped by the active agency instead. */
+        const base = staffNow()
+          ? '/agency/external-invoices/'
+          : '/parent/external-invoices/';
+        const r = await Api.get(base + x.getAttribute('data-inv-ext') + '/link');
+        if (r && r.url) {
+          if (w) { w.location = r.url; } else { window.location = r.url; }
+        } else if (w) {
+          w.close();
+        }
+      } catch (err) {
+        if (w) { w.close(); }
+        toast('Could not open that invoice: ' + ((err && err.message) || 'please try again.'), 'error');
+      }
+    });
   }
 
   function openPaymentPlanModal(families) {
