@@ -594,7 +594,28 @@
     // Icons for screens reached outside the sidebar nav (home tiles, deep links)
     // so their auto-banner gets a unique glyph instead of the generic ✨ default.
     var EXTRA_ICONS = { 'awards': '🏆', 'walk': '🚶' };
-    return { icon: EXTRA_ICONS[base] || '', label: base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }), section: '' };
+
+    /* And a NAME, where the hash is not one. The fallback below turns "my-hours"
+       into "My Hours" — which is where the banner title came from, so renaming the
+       home tile alone changed the tile and left the banner saying something else.
+
+       Educators call this Payroll: the screen shows issued payslips, what is owed,
+       and where it will be sent. That is payroll, not a timesheet.
+
+       Per-role because the same hash is reached by a centre director, and what a
+       director wants it called is their question, not one to answer here.
+
+       THE HASH IS UNTOUCHED. #my-hours is in bookmarks, the home tiles,
+       role-widgets and the Settings shortcut; renaming a route to change a word on
+       screen would break every one of them. */
+    var EXTRA_LABELS = { educator: { 'my-hours': 'Payroll' } };
+    var override = (EXTRA_LABELS[role] || {})[base];
+
+    return {
+      icon: EXTRA_ICONS[base] || '',
+      label: override || base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }),
+      section: '',
+    };
   }
   // One-line description under each banner. Keyed by screen hash, so the wording lives
   // in one place instead of being re-invented per screen (which is why some banners had

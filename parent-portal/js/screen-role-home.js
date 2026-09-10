@@ -100,6 +100,7 @@
         { hash: 'billing',            icon: '💳', label: 'Billing' },
         { hash: 'attendance-pattern', icon: '📅', label: 'Attendance' },
         { hash: 'medications',        icon: '💊', label: 'Health' },
+        { hash: 'immunizations',      icon: '🩹', label: 'Immunization', sub: 'Send in your records' },
         { hash: 'announcements',      icon: '📢', label: 'News' },
         { hash: 'support',            icon: '🛟', label: 'Support' },
         { hash: 'help',               icon: '📖', label: 'Help' },
@@ -112,7 +113,7 @@
         { hash: 'wellness',       icon: '🩺', label: 'Wellness check' },
         { hash: 'pickup-auth',    icon: '🪪', label: 'Pickup people' },
         { hash: 'trends',         icon: '📊', label: 'Trends' },
-        { hash: 'payment-plans',  icon: '🗓️', label: 'Payment plans' },
+        { hash: 'payment-plans',  icon: '🗓️', label: 'Payment schedules' },
         { hash: 'ledger',         icon: '📒', label: 'Account ledger' },
         { hash: 'referrals',      icon: '🎁', label: 'Refer a friend' },
         { hash: 'withdraw',       icon: '🚸', label: 'Withdraw from care' },
@@ -140,7 +141,7 @@
         { hash: 'medications',   icon: '💊', label: 'Medications' },
         { hash: 'time-clock',    icon: '⏱', label: 'Clock in/out' },
         { hash: 'my-schedule',   icon: '📅', label: 'My calendar' },
-        { hash: 'my-hours',      icon: '💰', label: 'My hours' },
+        { hash: 'my-hours',      icon: '💰', label: 'Payroll' },
         { hash: 'reports',       icon: '📊', label: 'Reports',      sub: 'Your rooms & hours' },
         { hash: 'time-off',      icon: '🌴', label: 'Time off' },
         { hash: 'announcements', icon: '📢', label: 'News' },
@@ -196,6 +197,7 @@
     'parent-forms': 'Forms to review and sign', forms: 'Forms and documents',
     billing: 'Invoices and payments', 'attendance-pattern': "Your child's attendance history",
     attendance: 'Attendance records', medications: 'Medications & health info',
+    immunizations: 'Immunization records — send yours in',
     announcements: 'Latest news from your centre', support: 'Get help or report an issue',
     help: 'Guides and answers', children: 'Child records & details',
     'my-tasks': 'Tasks assigned to you', tasks: 'Assign and track educator tasks',
@@ -203,14 +205,16 @@
     'lesson-plans': 'Weekly lesson plans', menu: "This week's meals", incidents: 'Report & view incidents',
     'time-clock': 'Clock in and out', 'my-schedule': 'Your work schedule',
     reports: 'Attendance and hours for your room(s)',
-    'my-hours': 'Your logged hours', 'time-off': 'Request time off',
+    'my-hours': 'Your pay, payslips and payout details', 'time-off': 'Request time off',
     settings: 'Your account settings', compliance: 'Compliance overview',
     'audit-logs': 'System activity log', videos: 'Video moments', directory: 'Family directory',
     conferences: 'Parent–teacher conferences', 'signed-docs': 'Your signed documents',
     'doc-workflows': 'Documents awaiting signature', immunizations: 'Immunization records',
     wellness: 'Daily wellness checks', 'pickup-auth': 'Authorized pickup people',
     trends: 'Trends & insights', autopay: 'Automatic payments', wallet: 'Saved payment methods',
-    'payment-plans': 'Payment plans', ledger: 'Account ledger', referrals: 'Refer a friend', tickets: 'Support tickets',
+    // The hash stays 'payment-plans' — it is a route, and changing it would break every
+    // saved link and bookmark. Only what people read changes.
+    'payment-plans': 'Payment schedules', ledger: 'Account ledger', referrals: 'Refer a friend', tickets: 'Support tickets',
     sales: 'Your deal pipeline', 'sales-leads': 'All leads, searchable',
     'sales-new': 'Add a prospect', 'sales-followups': 'Follow-ups due',
     'sales-plans': 'Preset plans & pricing', 'sales-demo': 'Open the demo environment', mfa: 'Two-factor security',
@@ -227,6 +231,39 @@
   function gridHtml(items) {
     return '<div class="kt-tile-grid">' + items.map(tileHtml).join('') + '</div>';
   }
+
+  /**
+   * End the session.
+   *
+   * Lifted out of the launcher's click handler so the admin/director launcher can
+   * call the SAME code (screen-admin-home.js). Everything here is load-bearing:
+   * the biometric vault survives the wipe so relaunching still prompts for a
+   * fingerprint, and kt_bio_unlocked_at / kt_signed_out stop that same layer
+   * signing the user straight back in — the "sign out twice" bug.
+   */
+  function signOutNow() {
+    // Sign-out ends the session and purges the token from BOTH stores, but
+    // KEEPS biometric enrolment (the kt_bio_* vault) so relaunching prompts
+    // for fingerprint/Face ID to get back in — the whole point of biometric
+    // login. Fully removing it lives in Settings → "Turn off biometric".
+    try { if (KT.Auth && KT.Auth.clear) KT.Auth.clear(); } catch (e) {}
+    try {
+      // Preserve the biometric vault across the blanket sessionStorage/localStorage wipe.
+      var bio = {}; ['kt_biometric_enabled','kt_bio_token','kt_bio_user','kt_bio_agency','kt_bio_view','kt_bio_cred','kt_pin_vault','kt_pin_enabled'].forEach(function(k){var v=localStorage.getItem(k); if(v!=null) bio[k]=v;});
+      sessionStorage.clear();
+      localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user');
+      Object.keys(bio).forEach(function(k){ localStorage.setItem(k, bio[k]); });
+      // "Sign out twice" fix: the biometric layer auto-restored the session right
+      // back — the dashboard re-hydrate (kt_bio_unlocked_at < 30s) and the login
+      // page's auto-prompt would sign the user straight back in. Clear the recent-
+      // unlock stamp + set a one-shot flag so the login page shows (no auto-login);
+      // biometric is still available as a button + kept enrolled.
+      localStorage.removeItem('kt_bio_unlocked_at');
+      localStorage.setItem('kt_signed_out', '1');
+    } catch (e) {}
+    location.href = '/index.html';
+  }
+  KT.signOut = signOutNow;
 
   function renderHome(main, ctx) {
     var role = (ctx && ctx.role) || 'guardian';
@@ -277,28 +314,7 @@
 
     // Sign-out (parents have no bottom-bar Menu, so the launcher carries it).
     var signout = main.querySelector('#kt-home-signout');
-    if (signout) signout.addEventListener('click', function () {
-      // Sign-out ends the session and purges the token from BOTH stores, but
-      // KEEPS biometric enrolment (the kt_bio_* vault) so relaunching prompts
-      // for fingerprint/Face ID to get back in — the whole point of biometric
-      // login. Fully removing it lives in Settings → "Turn off biometric".
-      try { if (KT.Auth && KT.Auth.clear) KT.Auth.clear(); } catch (e) {}
-      try {
-        // Preserve the biometric vault across the blanket sessionStorage/localStorage wipe.
-        var bio = {}; ['kt_biometric_enabled','kt_bio_token','kt_bio_user','kt_bio_agency','kt_bio_view','kt_bio_cred','kt_pin_vault','kt_pin_enabled'].forEach(function(k){var v=localStorage.getItem(k); if(v!=null) bio[k]=v;});
-        sessionStorage.clear();
-        localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user');
-        Object.keys(bio).forEach(function(k){ localStorage.setItem(k, bio[k]); });
-        // "Sign out twice" fix: the biometric layer auto-restored the session right
-        // back — the dashboard re-hydrate (kt_bio_unlocked_at < 30s) and the login
-        // page's auto-prompt would sign the user straight back in. Clear the recent-
-        // unlock stamp + set a one-shot flag so the login page shows (no auto-login);
-        // biometric is still available as a button + kept enrolled.
-        localStorage.removeItem('kt_bio_unlocked_at');
-        localStorage.setItem('kt_signed_out', '1');
-      } catch (e) {}
-      location.href = '/index.html';
-    });
+    if (signout) signout.addEventListener('click', signOutNow);
 
     // Wire the "More" tiles (no hash — toggle the extra grid instead). Persist the
     // open/closed state per tile-set so returning Home (mobile/APK back button)
