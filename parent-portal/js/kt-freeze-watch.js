@@ -65,6 +65,14 @@
     if (blockers.length > KEEP) { blockers.shift(); }
   }
 
+  /* Whether this browser reports long tasks AT ALL.
+
+     "No long task was recorded" means two opposite things depending on the answer, and
+     the report used to offer both and settle neither. On Chrome, where long tasks ARE
+     reported, their absence across a multi-second stall is real evidence that our
+     scripts did not block the thread. On Safari it means nothing whatsoever. */
+  var ltSupported = false;
+
   try {
     if (typeof PerformanceObserver === 'function') {
       new PerformanceObserver(function (list) {
@@ -73,6 +81,7 @@
           if (es[i].duration >= BLOCK_MS) { noteTask(es[i]); }
         }
       }).observe({ entryTypes: ['longtask'] });
+      ltSupported = true;
     }
   } catch (e) { /* not supported (Safari) — the report is just less specific */ }
 
@@ -293,6 +302,33 @@
       reported[where] = 1;
       reports++;
 
+      /* DID THE MAIN THREAD RUN DURING THE GAP?
+
+         The single most useful thing this watchdog can say, and until now it did not
+         say it. A breadcrumb written inside the measured window means main-thread JS
+         executed at that moment, so the interface was NOT blocked for the whole span —
+         what stalled was this watchdog's own timer.
+
+         Ticket #68 (2026-09-14, 42.5s on #admin-users) is the case in point: an
+         'update offered' breadcrumb sits two-thirds of the way through the gap, and
+         zero long tasks were recorded on a Chrome that reports them. Without this line
+         the ticket reads as a 42-second freeze and cost an afternoon to unpick.
+
+         Deliberately NOT used to suppress the report. Ticket #55 was a genuine block
+         whose gap also contained breadcrumbs — the churn WAS the cause there — and on
+         four samples there is no honest way to tune a rule that separates the two
+         without risking hiding the next real one. So this is recorded as evidence and
+         the filing threshold is left alone. */
+      var during = [];
+      try {
+        if (w.KT && w.KT.crumbsBetween) { during = w.KT.crumbsBetween(gapFrom, gapTo, 'freeze') || []; }
+      } catch (e) {}
+
+      var evidence = 'worker_coverage=' + (cov === null ? 'n/a' : Math.round(cov * 100) + '%')
+        + '; longtask_support=' + (ltSupported ? 'yes' : 'no')
+        + '; long_tasks=' + (blocking ? 'yes' : 'none')
+        + '; main_thread_activity_in_gap=' + during.length;
+
     /* Reported through the crash pipe, so a freeze arrives with the same context a
        crash does — user, device, route, breadcrumbs — and de-duplicates into one
        ticket per screen rather than one per occurrence. Shaped like a trace because
@@ -318,9 +354,23 @@
           + 'Detected by the freeze watchdog, not by an exception.\n'
           + (blocking
               ? 'Worst blocking tasks in the two minutes before this: ' + blocking + '\n'
-              : 'No long task was recorded — either the browser does not report them '
-                + '(Safari), or the block happened outside scripting.\n'),
-          { quiet: true, longTasks: blocking }   // nothing broke visibly; a notice would be the only thing they saw
+              : (ltSupported
+                  ? 'No long task was recorded, and this browser DOES report them — so no '
+                    + 'single script blocked the thread. Either many short tasks ran back to '
+                    + 'back, or the block was outside scripting (a native dialog, a file '
+                    + 'picker, or the renderer being starved).\n'
+                  : 'No long task was recorded, and this browser does not report them at all '
+                    + '(Safari/older WebKit) — so this says nothing either way.\n'))
+          /* The line that decides it. Main-thread work inside the window means the
+             interface was not blocked for the whole of it. */
+          + (during.length
+              ? 'MAIN THREAD RAN DURING THE GAP: ' + during.length + ' breadcrumb(s) were '
+                + 'recorded inside it — ' + during.map(function (c) { return c.t + ' ' + c.k; }).join(', ')
+                + '. So the interface was not blocked for the full ' + secs + 's; this '
+                + "watchdog's own timer was descheduled for part of it.\n"
+              : 'No main-thread activity was recorded inside the gap, which is consistent '
+                + 'with a genuine block.\n'),
+          { quiet: true, longTasks: blocking, freezeEvidence: evidence }   // nothing broke visibly; a notice would be the only thing they saw
         );
       }
       } catch (e) {}

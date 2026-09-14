@@ -79,6 +79,11 @@
     try {
       ktCrumbs.push({
         t: new Date().toISOString().slice(11, 19),
+        /* Epoch too. `t` is HH:MM:SS for a human reading the ticket; comparing a
+           breadcrumb against a measured gap needs a number, and reconstructing one
+           from the string breaks over midnight. Internal — the report text is
+           unchanged. */
+        ms: Date.now(),
         k: String(kind).slice(0, 12),
         d: String(detail == null ? '' : detail).slice(0, 120),
       });
@@ -87,6 +92,30 @@
   }
   // Exposed so any screen can drop a marker: KT.crumb('walk', 'started tracking').
   try { (window.KT = window.KT || {}).crumb = crumb; } catch (x) {}
+
+  /* Which breadcrumbs fall inside a window, for the freeze watchdog.
+
+     A breadcrumb written DURING a measured stall is proof the main thread ran at that
+     moment — which is the one fact that separates "the interface was blocked" from
+     "our own timer was descheduled". Ticket #68 turned on exactly this: a 42.5s stall
+     that contained an 'update offered' breadcrumb two-thirds of the way through.
+
+     `kind` filtering excludes the watchdog's own 'freeze' crumbs, which would
+     otherwise count themselves as activity. */
+  try {
+    (window.KT = window.KT || {}).crumbsBetween = function (from, to, skipKind) {
+      var out = [];
+      try {
+        for (var i = 0; i < ktCrumbs.length; i++) {
+          var c = ktCrumbs[i];
+          if (!c.ms || c.ms <= from || c.ms >= to) { continue; }
+          if (skipKind && c.k === skipKind) { continue; }
+          out.push(c);
+        }
+      } catch (x) {}
+      return out;
+    };
+  } catch (x) {}
 
   // Where they went.
   try {
@@ -257,6 +286,9 @@
     /* The watchdog's long-task summary: which script blocked the thread, and for how
        long. Stored as its own field so freezes can be grouped by cause, not only read. */
     try { if (extra && extra.longTasks) { body.long_tasks = String(extra.longTasks).slice(0, 600); } } catch (x) {}
+    // The freeze watchdog's discriminators, kept as a field so they can be queried
+    // rather than only read in prose. See kt-freeze-watch.js.
+    try { if (extra && extra.freezeEvidence) { body.freeze_evidence = String(extra.freezeEvidence).slice(0, 400); } } catch (x) {}
     try {
       var u = currentUser();
       for (var k in u) if (Object.prototype.hasOwnProperty.call(u, k)) body[k] = u[k];
