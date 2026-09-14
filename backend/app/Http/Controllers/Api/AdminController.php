@@ -2193,7 +2193,7 @@ final class AdminController extends Controller
                 'to_email' => $email, 'to_name' => trim($firstName . ' ' . $lastName),
                 'from_email' => 'noreply@kiddietrac.com', 'subject' => 'You\'re invited to Kiddietrac — set your password',
                 'mailer' => config('mail.default'), 'status' => 'sent', 'tracking_token' => $trackToken,
-                'opens' => 0, 'created_at' => now(),
+                'opens' => 0, 'created_at' => now()->format(\App\Support\Audit::TS),
             ]);
         }
     }

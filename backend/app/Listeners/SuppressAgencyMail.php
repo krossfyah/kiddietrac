@@ -489,7 +489,7 @@ class SuppressAgencyMail
                     'body_html' => $supBody,
                     'tracking_token' => \Illuminate\Support\Str::random(32),
                     'opens' => 0,
-                    'created_at' => now(),
+                    'created_at' => now()->format(\App\Support\Audit::TS),
                 ]);
             }
 

@@ -414,6 +414,9 @@ final class PlatformController extends Controller
                     ?? (($set['owner']['name'] ?? null) ? (preg_split('/\s+/', trim($set['owner']['name']), 2)[1] ?? null) : null),
                 'owner_email' => $set['owner']['email'] ?? null,
                 'schedule_autofill' => (bool) ($set['schedule_autofill'] ?? false),
+                // Minutes a chat message may sit unread before it is emailed. The
+                // effective value, so the editor never shows a blank meaning "default".
+                'chat_email_delay_minutes' => \App\Console\Commands\EmailMissedMessagesCommand::delayForAgency($a),
                 'centre_count' => (int) ($centresPerAgency[$a->id] ?? 0),
                 'family_count' => $familyCount,
                 'child_count' => $childCount,
@@ -687,7 +690,7 @@ final class PlatformController extends Controller
                     'to_email' => $data['admin_email'], 'to_name' => $data['admin_first_name'].' '.$data['admin_last_name'],
                     'from_email' => 'noreply@kiddietrac.com', 'subject' => 'Welcome to Kiddietrac — set your password',
                     'mailer' => config('mail.default'), 'status' => 'sent', 'tracking_token' => $trackToken,
-                    'opens' => 0, 'created_at' => now(),
+                    'opens' => 0, 'created_at' => now()->format(\App\Support\Audit::TS),
                 ]);
             }
         } catch (\Throwable $e) {
@@ -980,6 +983,13 @@ final class PlatformController extends Controller
             // The nightly staff-schedule fill. Accepted by the agency-admin editor since
             // 2026-09-02 and never by this one, which is the editor a super admin uses.
             'schedule_autofill' => ['sometimes', 'boolean'],
+            /* Missed-chat email timing. Same trap as the line above, and the reason it is
+               worth repeating: a platform admin does not get the "Agencies" nav item at all
+               (app-v2-shell.js only adds it when the user is NOT a platform admin), so a
+               setting added only to screen-agencies.js is invisible to the very person
+               most likely to change it. Two editors — both must accept it.
+               (Anthony, 2026-09-09) */
+            'chat_email_delay_minutes' => ['sometimes', 'integer', 'min:1', 'max:1440'],
             // The price is a number; this says what it is a number OF.
             'plan_currency' => ['sometimes', 'nullable', 'string', 'in:CAD,USD,GBP,AUD,NZD,EUR'],
             'owner_email' => ['sometimes', 'nullable', 'email', 'max:180'],
@@ -1043,6 +1053,17 @@ final class PlatformController extends Controller
             $setA['schedule_autofill'] = (bool) $data['schedule_autofill'];
             $data['settings'] = json_encode($setA);
             unset($data['schedule_autofill']);
+        }
+
+        /* Reads $data['settings'] first, exactly like the block above: several of these
+           branches each fold one key into the same JSON blob, and whichever runs last must
+           build on what the previous ones already wrote rather than on the stored row. */
+        if (array_key_exists('chat_email_delay_minutes', $data)) {
+            $rowD = DB::table('agencies')->where('id', $agencyId)->first();
+            $setD = json_decode(($data['settings'] ?? $rowD->settings) ?? '{}', true) ?: [];
+            $setD['chat_email_delay_minutes'] = (int) $data['chat_email_delay_minutes'];
+            $data['settings'] = json_encode($setD);
+            unset($data['chat_email_delay_minutes']);
         }
 
         if (array_key_exists('owner_name', $data) || array_key_exists('owner_email', $data)

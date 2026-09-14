@@ -654,6 +654,10 @@
           '<div><label style="display:block;font-size:12px;font-weight:600;margin-bottom:3px;">From name</label>' +
             '<input id="ag-from-name" type="text" placeholder="' + esc(v('name', 'Agency')) + '" value="' + esc(v('email_from_name')) + '" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
         '</div>' +
+        /* The missed-chat email delay used to be here. It moved to Settings > Email
+           settings on 2026-09-09, next to the other mail options, where an agency admin
+           can reach it without going through a platform screen. The API still accepts it
+           on this endpoint, so nothing that already sets it breaks. */
       '</div>' +
         '<div style="border-top:1px solid #BBF7D0;margin-top:12px;padding-top:12px;">' +
           '<div style="font-size:12px;color:#475569;margin-bottom:6px;">Save first, then send yourself a message through these settings to prove they work.</div>' +
@@ -817,6 +821,7 @@
         email_from_address: modal.querySelector('#ag-from-addr').value.trim() || null,
         email_from_name: modal.querySelector('#ag-from-name').value.trim() || null,
       };
+
       var errBox = modal.querySelector('#ag-err');
       errBox.textContent = '';
       if (! payload.name) { errBox.textContent = 'Agency name is required.'; return; }
@@ -1036,7 +1041,7 @@
             '<div style="font-size:38px;">⚠️</div>' +
             '<h3 style="margin:10px 0 6px;font-size:18px;">Could not create the agency</h3>' +
             '<p style="font-size:13px;color:#DC2626;margin:0 0 16px;">' + esc(e.message || 'Unknown error.') + '</p>' +
-            '<button id="w-retry" style="background:#7C3AED;color:white;border:none;padding:10px 22px;border-radius:9px;font-weight:700;cursor:pointer;">← Back to review</button>' +
+            '<button id="w-retry" data-kt-inpage="1" style="background:#7C3AED;color:white;border:none;padding:10px 22px;border-radius:9px;font-weight:700;cursor:pointer;">← Back to review</button>' +
           '</div>';
         modal.querySelector('#w-retry').addEventListener('click', function () { st.step = 4; render(); });
       });
@@ -1207,7 +1212,30 @@
       // Agency timezone — NOT hardcoded Toronto (that was wrong for every agency
       // outside Eastern) and not the viewer's device zone.
       var zone; try { zone = (window.KT && KT.tz && KT.tz()) || undefined; } catch (e2) { zone = undefined; }
-      return dt.toLocaleString('en-CA', { timeZone: zone, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+      /* SECONDS AND MILLISECONDS. This stopped at the minute, which is useless for the
+         question the email log is usually opened to answer: which of these went out
+         first. A single batch writes six to eight rows inside one second, and on
+         2026-09-14 two password emails to the same person were logged a second apart
+         with only the later password still working — at minute precision those are the
+         same moment.
+
+         The fraction is appended from the Date rather than asked of Intl, because
+         fractionalSecondDigits cannot be mixed with dateStyle/timeStyle (Intl throws)
+         and is unsupported outright in the older WebViews the Android and iOS builds
+         use. Milliseconds are timezone-invariant — every offset is a whole number of
+         minutes — so this stays exact in the agency's zone. Same approach as the audit
+         log's fmtTime, deliberately, so the two logs read alike.
+
+         Rows written before 2026-09-14 show .000: email_logs.created_at was a
+         whole-second TIMESTAMP until then and the fraction is genuinely unknown. */
+      var base = dt.toLocaleString('en-CA', {
+        timeZone: zone, year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', second: '2-digit',
+      });
+      var ms = ('00' + dt.getMilliseconds()).slice(-3);
+      // If the locale ever stops matching, the time is still correct — just unfractioned.
+      return base.replace(/(\d{1,2}:\d{2}:\d{2})/, '$1.' + ms);
     } catch (e) { return String(d); }
   }
   function elToast(icon, title, msg, colour) { try { if (window.KT && KT.toast) KT.toast(icon, title, msg, colour || '#0E7C90'); } catch (e) {} }

@@ -32,6 +32,21 @@ final class Audit
     private const MAX = 45;
 
     /**
+     * created_at is TIMESTAMP(3); .v is the millisecond that precision exists for.
+     *
+     * PUBLIC because email_logs is the twin of this table and now carries the same
+     * precision. A Carbon handed straight to the query builder is formatted with the
+     * connection's default 'Y-m-d H:i:s', which stores .000 into a TIMESTAMP(3) and
+     * loses the fraction silently — the column looks widened and records nothing. Every
+     * writer that wants a millisecond formats with THIS, so there is one answer to
+     * "how does this platform stamp a time" rather than six copies of a format string.
+     *
+     * Stamped from PHP, never MySQL: the two run about seven hours apart on this host,
+     * so a CURRENT_TIMESTAMP(3) default would be precise and wrong.
+     */
+    public const TS = 'Y-m-d H:i:s.v';
+
+    /**
      * Where the current action is coming from.
      *
      * `request()` is bound even in console context in some Laravel setups, and it
@@ -49,6 +64,38 @@ final class Audit
         $ip = $req ? trim((string) $req->ip()) : '';
 
         return $ip !== '' ? substr($ip, 0, self::MAX) : 'system';
+    }
+
+    /**
+     * One timestamp, at millisecond precision, or null to let the database stamp it.
+     *
+     * Accepts what the call sites actually pass: a Carbon or DateTime, a string, or a
+     * unix timestamp. Anything unparseable — or absent — returns null, and write()
+     * substitutes the current time rather than letting the row fall through to the
+     * database's DEFAULT, which runs on a different clock. See write().
+     */
+    private static function stamp(mixed $v): ?string
+    {
+        if ($v === null || $v === '') {
+            return null;
+        }
+        if ($v instanceof \DateTimeInterface) {
+            return $v->format(self::TS);
+        }
+        if (is_int($v) || (is_string($v) && ctype_digit($v))) {
+            return (new \DateTimeImmutable('@' . (int) $v))
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::TS);
+        }
+        if (is_string($v)) {
+            try {
+                return (new \DateTimeImmutable($v))->format(self::TS);
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -74,6 +121,30 @@ final class Audit
             if (trim((string) ($r['ip_address'] ?? '')) === '') {
                 $rows[$i]['ip_address'] = $ip ??= self::ip();
             }
+
+            /* KEEP THE MILLISECONDS.
+
+               created_at is TIMESTAMP(3) because whole seconds cannot order this log:
+               241 of the 300 newest rows share their second, and one holds 25. Nothing
+               here normally sets the column — the DEFAULT CURRENT_TIMESTAMP(3) does,
+               using the same clock the rows are ordered by — but a caller that passes
+               a Carbon (the crash sink passes now()) would have it formatted by
+               Laravel as 'Y-m-d H:i:s' and silently truncated back to the second.
+
+               ONE CLOCK, AND IT IS THIS ONE. PHP runs in UTC here; MySQL's session
+               timezone is SYSTEM, which on this host is MST — seven hours apart, and
+               the column DEFAULT is MySQL's. A row that reaches that default is filed
+               seven hours in the past and interleaved into the log as if it happened
+               that morning, which in an audit trail is not a display problem but a
+               false record of when something happened. Nothing detects it: 20:14 looks
+               like a perfectly ordinary timestamp.
+
+               Every one of the 14,729 rows on production is on PHP's clock today, and a
+               walk in id order finds none going backwards. Stamping here — the one door
+               every audit row goes through — is what keeps it that way no matter what a
+               caller passes or forgets. */
+            $rows[$i]['created_at'] = self::stamp($r['created_at'] ?? null)
+                ?? now()->format(self::TS);
         }
 
         // An audit row must never be the reason a real action fails. This mirrors

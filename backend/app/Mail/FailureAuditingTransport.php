@@ -99,7 +99,7 @@ final class FailureAuditingTransport implements TransportInterface
                     'status'     => 'failed',
                     'error'      => $err,
                     'body_html'  => $bodyHtml ?? null,
-                    'created_at' => now(),
+                    'created_at' => now()->format(\App\Support\Audit::TS),
                 ]);
             }
             if (Schema::hasTable('audit_logs')) {

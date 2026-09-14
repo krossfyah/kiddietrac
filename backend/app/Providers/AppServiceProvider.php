@@ -189,7 +189,7 @@ class AppServiceProvider extends ServiceProvider
                     'status'     => 'sent',
                     'agency_id'  => $logAgency,
                     'body_html'  => (function () use ($msg) { try { $h = $msg->getHtmlBody(); if (! is_string($h)) $h = $msg->getTextBody(); return (is_string($h) && $h !== '') ? mb_substr($h, 0, 500000) : null; } catch (\Throwable $e) { return null; } })(),
-                    'created_at' => now(),
+                    'created_at' => now()->format(\App\Support\Audit::TS),
                 ]);
             } catch (\Throwable $e) {
                 // swallow — logging must never interfere with sending
