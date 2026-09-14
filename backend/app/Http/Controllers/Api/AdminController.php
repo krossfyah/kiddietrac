@@ -5253,6 +5253,47 @@ final class AdminController extends Controller
      * a notice with the temp password and a "use Forgot password" link.
      * Body: { send_email?: bool, set_status_invited?: bool }
      */
+    /**
+     * The sign-in line for a temp-password email: names the username when, and only
+     * when, the address carries more than one account that can actually sign in.
+     *
+     * One person can hold several Kiddietrac accounts under one email address - an
+     * educator and a home visitor, or a live account and a demo one. Login refuses to
+     * guess between them and asks for a username instead, which is correct. What was
+     * missing is that nothing ever TOLD anyone their username, so a perfectly valid
+     * temporary password hit a prompt the recipient could not answer.
+     *
+     * Lloydene King, 2026-09-14: two accounts on lloy_king@ilearnhcc.com, a temp
+     * password emailed twice, and seven sign-in attempts that never got as far as the
+     * password because the username prompt came first.
+     *
+     * Scoped the way the front door is - not deleted, not switched off - so an
+     * off-boarded account does not drag a username line into an email that does not
+     * need one. A single-account address gets exactly the email it got before.
+     */
+    private function signInHint(object $user): string
+    {
+        $rivals = DB::table('users')
+            ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
+            ->whereNull('deleted_at')
+            ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+            ->count();
+
+        if ($rivals < 2) {
+            return '';
+        }
+
+        $uname = trim((string) ($user->username ?? ''));
+
+        return $uname !== ''
+            ? "\n\nYou have more than one Kiddietrac account on this email address, "
+                . "so sign in with your USERNAME rather than your email:\n\n"
+                . "    Username: {$uname}\n"
+            : "\n\nYou have more than one Kiddietrac account on this email address. "
+                . "Ask your administrator which one to use - signing in by email alone "
+                . "will not work.\n";
+    }
+
     public function resetUserPassword(Request $request, int $userId): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
@@ -5291,7 +5332,8 @@ final class AdminController extends Controller
                 'Your Kiddietrac password has been reset',
                 "Your administrator has reset your Kiddietrac password.\n\n" .
                 "Temporary password: {$tempPassword}\n\n" .
-                "Sign in at https://app.kiddietrac.com and use the 'Forgot password' link to choose a new one."
+                "Sign in at https://app.kiddietrac.com and use the 'Forgot password' link to choose a new one." .
+                $this->signInHint($user)
             );
         }
 
@@ -5369,7 +5411,8 @@ final class AdminController extends Controller
                 "Welcome to Kiddietrac!\n\n" .
                 "Your account is ready at https://app.kiddietrac.com\n\n" .
                 "Temporary password: {$tempPassword}\n\n" .
-                "Sign in with it, then change it under your profile.",
+                "Sign in with it, then change it under your profile." .
+                $this->signInHint($user),
                 $agencyId
             );
         } else {
@@ -5384,18 +5427,37 @@ final class AdminController extends Controller
                    invented its own table, hashing and URL, which would have sent a
                    link that could never validate: a worse failure than the one
                    being fixed, because it looks like it worked. */
-                DB::table('password_resets')->where('email', $user->email)
+                /* SCOPED TO THIS ACCOUNT (2026-09-14). This cleared every outstanding
+                   token on the ADDRESS and minted a replacement carrying no user_id -
+                   so on a shared address it revoked a colleague's live invite, and the
+                   link it sent could only be resolved back to an account by guessing
+                   from the address at consume time. That guess took the lowest id and
+                   set the wrong account's password. Same fix as
+                   AuthController::forgotPassword(): invalidate this account's tokens
+                   only, and stamp the account onto the new one. */
+                DB::table('password_resets')
+                    ->where('email', $user->email)
+                    ->where(function ($q) use ($userId) {
+                        $q->where('user_id', $userId)->orWhereNull('user_id');
+                    })
                     ->whereNull('used_at')->update(['used_at' => now()]);
 
                 $token = Str::random(64);
                 $ttl = 60;
                 DB::table('password_resets')->insert([
                     'email' => $user->email,
+                    'user_id' => $userId,
                     'token' => hash('sha256', $token),
                     'expires_at' => now()->addMinutes($ttl),
                     'requester_ip' => $request->ip(),
                     'created_at' => now(),
                 ]);
+
+                $shared = DB::table('users')
+                    ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
+                    ->whereNull('deleted_at')
+                    ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+                    ->count() > 1;
 
                 \Illuminate\Support\Facades\Mail::to($user->email)->send(
                     (new \App\Mail\PasswordResetEmail(
@@ -5403,6 +5465,8 @@ final class AdminController extends Controller
                         resetUrl: 'https://app.kiddietrac.com/reset-password.html?token=' . $token
                             . '&email=' . urlencode($user->email),
                         expiresInMinutes: (string) $ttl,
+                        // Says which of their accounts this link opens.
+                        accountLabel: $shared ? (($user->username ?: null) ?: ('account #' . $userId)) : null,
                     ))->withSymfonyMessage(function ($msg) {
                         // Account recovery belongs to the person, not to a tenant.
                         \App\Support\MailScope::platform($msg);

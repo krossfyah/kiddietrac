@@ -14,10 +14,21 @@ final class PasswordResetEmail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * @param string|null $accountLabel
+     *   The username this particular link belongs to, and ONLY when the address
+     *   carries more than one account. One person can hold several accounts under
+     *   one email (an educator and a home visitor, say), each with its own
+     *   password; forgotPassword() then sends one of these per account. Without a
+     *   label the two emails are identical and the recipient has no way to tell
+     *   which link opens which account. Null - the normal case - renders exactly
+     *   the email this template rendered before.
+     */
     public function __construct(
         public readonly string $recipientName,
         public readonly string $resetUrl,
         public readonly string $expiresInMinutes,
+        public readonly ?string $accountLabel = null,
     ) {}
 
     public function envelope(): Envelope
@@ -57,9 +68,19 @@ final class PasswordResetEmail extends Mailable
         $first   = htmlspecialchars($this->recipientName !== '' ? $this->recipientName : 'there');
         $safeUrl = htmlspecialchars($this->resetUrl);
 
+        $label = $this->accountLabel !== null && $this->accountLabel !== ''
+            ? htmlspecialchars($this->accountLabel)
+            : '';
+
         $body = '<p style="margin:0 0 14px;">Hi ' . $first . ',</p>'
             . '<p style="margin:0 0 16px;">We received a request to reset your Kiddietrac password. '
             . 'Click the button below to choose a new one.</p>'
+            . ($label === '' ? '' :
+                '<p style="margin:0 0 16px;padding:11px 13px;border-radius:9px;background:#F1F5F9;'
+                . 'border-left:3px solid #159FB4;font-size:13px;color:#334155;">'
+                . 'You have more than one Kiddietrac account on this email address, so we sent a '
+                . 'separate link for each one. <strong>This link resets the account with the '
+                . 'username ' . $label . '.</strong> Use that username to sign in afterwards.</p>')
             . \App\Services\EmailTemplate::button('Reset my password →', $this->resetUrl)
             . '<p style="margin:16px 0 0;font-size:12px;color:#64748B;">Or paste this link into your browser:<br>'
             . '<a href="' . $safeUrl . '" style="color:#1F6080;">' . $safeUrl . '</a></p>'

@@ -49,23 +49,79 @@ final class AuthController extends Controller
             }
             $user = $q->first();
         } elseif (strpos($login, '@') !== false) {
-            // Looks like an email. One match → use it; shared by several → ask for
-            // the username so we sign them into the right account.
+            /* Looks like an email. One match → use it; shared by several → ask for
+               the username so we sign them into the right account.
+
+               ONLY A SIGN-IN-CAPABLE ACCOUNT CAN CREATE AMBIGUITY (2026-09-14).
+               This counted every row on the address, so a switched-off account still
+               forced the username prompt — and the prompt is a wall for anyone who was
+               never told their username. Lloydene King hit exactly that: a dormant Test
+               Agency demo account from July sat on her address as 'active', so her real
+               invited account could not be reached at all. She could not guess
+               'Lloydene-HV', and seven sign-in attempts died at a prompt that recorded
+               nothing.
+
+               An account in OFF_STATUSES cannot be signed into no matter which password
+               is presented, so it is not a candidate and must not be counted as one.
+               Selection deliberately still falls back to $matches->first(): when every
+               account on the address is switched off we want the honest 403 "Account is
+               not active." below, not a generic "Invalid credentials." */
             $matches = User::where('email', $login)->get();
-            if ($matches->count() > 1) {
+            $signable = $matches->reject(
+                fn ($u) => in_array($u->status, \App\Support\Audience::OFF_STATUSES, true)
+            )->values();
+
+            if ($signable->count() > 1) {
+                // Logged, because this is a REFUSAL and it used to leave no trace.
+                // Seven of these looked like "no attempt was ever made".
+                $this->audit($request, null, 'login_needs_username', null, null, [
+                    'login' => $login,
+                    'reason' => 'several_accounts_share_this_email',
+                    'account_ids' => $signable->pluck('id')->all(),
+                ]);
+
                 return response()->json([
                     'needs_username' => true,
                     'message' => 'More than one account uses this email. Enter your username to sign in.',
                 ], 200);
             }
-            $user = $matches->first();
+            $user = $signable->first() ?: $matches->first();
         } else {
             // No "@" → treat the identifier as a username.
             $user = User::whereRaw('LOWER(username) = ?', [mb_strtolower($login)])->first();
         }
 
-        if (! $user || ! Hash::check($data['password'], $user->password)) {
-            $this->audit($request, null, 'login_failed', null, null, "login: {$login}");
+        /* WHY IT FAILED, NOT JUST THAT IT FAILED (2026-09-14).
+
+           This wrote one payload — "login: <identifier>" — for two very different
+           events: no such account, and right account wrong password. Asked to explain
+           seven failures on one address, the log could not tell them apart, and the
+           answer (an unreachable account behind a username prompt) was invisible.
+
+           The reply to the caller is unchanged and still deliberately vague: the reason
+           goes to the audit log, never to the browser, so this tells an attacker
+           nothing it did not already tell them. */
+        if (! $user) {
+            $this->audit($request, null, 'login_failed', null, null, [
+                'login' => $login,
+                'reason' => $uname !== '' ? 'no_account_matching_email_and_username' : 'no_such_account',
+            ]);
+
+            return response()->json([
+                'message' => 'Invalid credentials.',
+                'errors' => ['email' => ['Invalid credentials.']],
+            ], 422);
+        }
+
+        if (! Hash::check($data['password'], $user->password)) {
+            // Named against the account so "is this person typing the wrong password,
+            // or reaching the wrong account?" is answerable from the log alone.
+            $this->audit($request, $user->id, 'login_failed', 'user', $user->id, [
+                'login' => $login,
+                'reason' => 'wrong_password',
+                'account_status' => $user->status,
+            ]);
+
             return response()->json([
                 'message' => 'Invalid credentials.',
                 'errors' => ['email' => ['Invalid credentials.']],
@@ -90,6 +146,12 @@ final class AuthController extends Controller
            door was the only place still keeping its own list — which is exactly how the
            two drifted apart without anyone noticing. */
         if (in_array($user->status, \App\Support\Audience::OFF_STATUSES, true)) {
+            $this->audit($request, $user->id, 'login_blocked', 'user', $user->id, [
+                'login' => $login,
+                'reason' => 'account_status',
+                'account_status' => $user->status,
+            ]);
+
             return response()->json(['message' => 'Account is not active.'], 403);
         }
 
@@ -360,18 +422,67 @@ final class AuthController extends Controller
     public function forgotPassword(Request $request): JsonResponse
     {
         $data = $request->validate(['email' => ['required', 'email']]);
-        $user = DB::table('users')->where('email', $data['email'])->first();
+        $email = trim((string) $data['email']);
 
-        if ($user) {
-            // Invalidate any previous tokens for this email
+        /* THE RESET MUST REACH AN ACCOUNT THAT CAN ACTUALLY SIGN IN (2026-09-14).
+
+           This was ->where('email', ...)->first(): no soft-delete scope, no status
+           filter, lowest id wins. On an address held by more than one account it
+           quietly picked the wrong one, and the reset row carried no user_id, so
+           resetPassword() repeated the same bad guess when the link was opened.
+
+           Lloydene King requested three resets. All three resolved to a dormant Test
+           Agency demo account created in July; the last completed at 15:50 and set
+           THAT account's password. Her real account, invited the same morning, was
+           never touched - which is why a reset that reported success left her still
+           unable to sign in. Resetting your own password must never be able to
+           rewrite the credentials of an account you were not trying to reach.
+
+           Scoped the way the front door is: not deleted, not switched off. A deleted
+           or deactivated account cannot be signed into, so sending it a reset link
+           only ever produces a password nobody can use.
+
+           When several live accounts share the address each gets its OWN token and
+           its own email, labelled with the username that link belongs to. Two emails
+           is not elegant, but the alternative is demanding a username from someone
+           locked out precisely because they do not know it - and one token silently
+           assigned to one of several accounts is the bug being fixed. */
+        $accounts = DB::table('users')
+            ->whereRaw('LOWER(email) = ?', [mb_strtolower($email)])
+            ->whereNull('deleted_at')
+            ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+            ->orderBy('id')
+            ->get();
+
+        if ($accounts->isEmpty()) {
+            /* A request matching nothing used to vanish completely, so "I don't see
+               any attempts to reset the password" had no answer either way. Recorded
+               with no user_id; the response below is unchanged, nothing is disclosed. */
+            $any = DB::table('users')->whereRaw('LOWER(email) = ?', [mb_strtolower($email)])->count();
+            $this->audit($request, null, 'password_reset_unmatched', null, null, [
+                'email' => $email,
+                'reason' => $any > 0 ? 'every_account_on_this_email_is_deleted_or_switched_off' : 'no_such_email',
+            ]);
+        }
+
+        // Invalidate previous outstanding tokens for this address ONCE, before minting
+        // the new ones below - the loop must not clear tokens it has just issued.
+        if ($accounts->isNotEmpty()) {
             DB::table('password_resets')
-                ->where('email', $data['email'])
+                ->where('email', $email)
                 ->whereNull('used_at')
                 ->update(['used_at' => now()]);
+        }
 
+        $several = $accounts->count() > 1;
+
+        foreach ($accounts as $user) {
             $token = Str::random(64);
             DB::table('password_resets')->insert([
-                'email' => $data['email'],
+                'email' => $email,
+                // STAMPED. 35 existing rows carry no user_id, which is what forced the
+                // consume side to re-guess the account from the address.
+                'user_id' => $user->id,
                 'token' => hash('sha256', $token), // Store hash, not plaintext
                 'expires_at' => now()->addMinutes(self::RESET_TOKEN_TTL_MINUTES),
                 'requester_ip' => $request->ip(),
@@ -384,22 +495,34 @@ final class AuthController extends Controller
             // unset dev default (localhost:3000). Use the production portal URL
             // directly, matching the rest of the codebase. (v22p97)
             $portalUrl = 'https://app.kiddietrac.com';
-            $resetUrl = $portalUrl.'/reset-password.html?token='.$token.'&email='.urlencode($data['email']);
+            $resetUrl = $portalUrl.'/reset-password.html?token='.$token.'&email='.urlencode($email);
 
             try {
                 /* A password reset belongs to the PERSON, not to a tenant. Somebody
                    locked out of one agency must not be kept out because a different
                    agency they also have an account in has its mail switched off. */
-                Mail::to($data['email'])->send((new PasswordResetEmail(
+                Mail::to($email)->send((new PasswordResetEmail(
                     recipientName: $user->first_name ?? 'there',
                     resetUrl: $resetUrl,
                     expiresInMinutes: (string) self::RESET_TOKEN_TTL_MINUTES,
+                    // Only when there is something to tell apart - a single-account
+                    // address gets exactly the email it got before.
+                    accountLabel: $several ? ($user->username ?: ('account #'.$user->id)) : null,
                 ))->withSymfonyMessage(function ($msg) {
                     \App\Support\MailScope::platform($msg);
                 }));
-                $this->audit($request, $user->id, 'password_reset_requested', 'user', $user->id);
+                $this->audit($request, $user->id, 'password_reset_requested', 'user', $user->id, [
+                    'email' => $email,
+                    'username' => $user->username,
+                    'account_status' => $user->status,
+                    'of_accounts_on_this_email' => $accounts->count(),
+                ]);
             } catch (Throwable $e) {
-                Log::error('Password reset email failed', ['error' => $e->getMessage(), 'email' => $data['email']]);
+                Log::error('Password reset email failed', ['error' => $e->getMessage(), 'email' => $email]);
+                $this->audit($request, $user->id, 'password_reset_send_failed', 'user', $user->id, [
+                    'email' => $email,
+                    'reason' => mb_substr($e->getMessage(), 0, 180),
+                ]);
                 // Still return success to user — don't leak whether the email exists
             }
         }
@@ -430,19 +553,72 @@ final class AuthController extends Controller
             ->first();
 
         if (! $record) {
+            /* Recorded. Someone clicking an expired link and being told "invalid or
+               expired" left no trace at all, so from the log it looked as though they
+               had never tried. */
+            $this->audit($request, null, 'password_reset_failed', null, null, [
+                'email' => $data['email'],
+                'reason' => 'token_invalid_used_or_expired',
+            ]);
+
             return response()->json([
                 'message' => 'Invalid or expired reset link. Request a new one.',
             ], 422);
         }
 
-        $user = ($record->user_id ?? null)
-            ? DB::table('users')->where('id', $record->user_id)->first()
-            : DB::table('users')->where('email', $data['email'])->first();
+        /* THE TOKEN NAMES ITS OWN ACCOUNT. The email fallback is only for the 35
+           legacy rows minted before forgotPassword() stamped user_id; it is now
+           scoped the same way the minting side is, and REFUSES an ambiguous address
+           rather than taking the lowest id. Guessing here is what set the wrong
+           account's password on 2026-09-14. */
+        $user = null;
+        if ($record->user_id ?? null) {
+            $user = DB::table('users')->where('id', $record->user_id)->first();
+        } else {
+            $candidates = DB::table('users')
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $data['email']))])
+                ->whereNull('deleted_at')
+                ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+                ->get();
+
+            if ($candidates->count() > 1) {
+                $this->audit($request, null, 'password_reset_failed', null, null, [
+                    'email' => $data['email'],
+                    'reason' => 'legacy_token_cannot_say_which_of_several_accounts',
+                    'account_ids' => $candidates->pluck('id')->all(),
+                ]);
+
+                return response()->json([
+                    'message' => 'This link is older than your second account. Request a new reset link.',
+                ], 422);
+            }
+
+            $user = $candidates->first();
+        }
+
         if (! $user) {
+            $this->audit($request, null, 'password_reset_failed', null, null, [
+                'email' => $data['email'],
+                'reason' => 'account_not_found_or_switched_off',
+            ]);
+
             return response()->json(['message' => 'Account not found.'], 422);
         }
 
-        \App\Services\PasswordPolicy::assertNotRecentlyUsed($user->id, $data['new_password'], 'new_password');
+        /* A rejected password ("you have used this one recently") throws out of here
+           as a validation error and left no audit row, so somebody stuck in that loop
+           was indistinguishable from somebody who never tried. */
+        try {
+            \App\Services\PasswordPolicy::assertNotRecentlyUsed($user->id, $data['new_password'], 'new_password');
+        } catch (Throwable $e) {
+            $this->audit($request, (int) $user->id, 'password_reset_failed', 'user', (int) $user->id, [
+                'email' => $data['email'],
+                'reason' => 'password_recently_used',
+            ]);
+
+            throw $e;
+        }
+
         $newHash = Hash::make($data['new_password']);
 
         DB::transaction(function () use ($user, $data, $newHash, $record): void {
@@ -464,7 +640,13 @@ final class AuthController extends Controller
                 ->delete();
         });
 
-        $this->audit($request, $user->id, 'password_reset_completed', 'user', $user->id);
+        // Names the account that actually changed, so "whose password did this set?"
+        // is answerable from the row without re-deriving it from the address.
+        $this->audit($request, $user->id, 'password_reset_completed', 'user', $user->id, [
+            'email' => $data['email'],
+            'username' => $user->username ?? null,
+            'token_id' => $record->id,
+        ]);
 
         return response()->json(['message' => 'Password updated. Please log in with your new password.']);
     }
@@ -494,8 +676,21 @@ final class AuthController extends Controller
             ->first();
 
         if (! $record) {
+            /* ONBOARDING ATTEMPTS ARE NOW RECORDED. Only success was audited, so an
+               invite link that had expired - or had already been invalidated by a
+               second welcome email issued moments later - produced no row at all. */
+            $this->audit($request, null, 'onboarding_failed', null, null, [
+                'reason' => 'invite_link_invalid_used_or_expired',
+            ]);
+
             return response()->json(['message' => 'This link is invalid or has expired. Ask for a new invite.'], 422);
         }
+
+        $startedFor = ($record->user_id ?? null) ? (int) $record->user_id : null;
+        $this->audit($request, $startedFor, 'onboarding_started', 'user', $startedFor, [
+            'email' => $record->email,
+            'token_id' => $record->id,
+        ]);
 
         // Prefer the exact account the token was minted for (emails can be shared
         // across accounts now); fall back to email for older tokens.
@@ -503,10 +698,25 @@ final class AuthController extends Controller
             ? User::find((int) $record->user_id)
             : User::where('email', $record->email)->first();
         if (! $user) {
+            $this->audit($request, null, 'onboarding_failed', null, null, [
+                'email' => $record->email,
+                'reason' => 'account_not_found_for_link',
+            ]);
+
             return response()->json(['message' => 'Account not found for this link.'], 422);
         }
 
-        \App\Services\PasswordPolicy::assertNotRecentlyUsed($user->id, $data['password']);
+        try {
+            \App\Services\PasswordPolicy::assertNotRecentlyUsed($user->id, $data['password']);
+        } catch (Throwable $e) {
+            $this->audit($request, (int) $user->id, 'onboarding_failed', 'user', (int) $user->id, [
+                'email' => $record->email,
+                'reason' => 'password_recently_used',
+            ]);
+
+            throw $e;
+        }
+
         $newHash = Hash::make($data['password']);
 
         DB::transaction(function () use ($user, $newHash, $record): void {

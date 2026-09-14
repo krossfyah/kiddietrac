@@ -69,30 +69,79 @@
     wire(main);
   }
 
+  function chipFor(e, r) {
+    var on = e.room_ids.indexOf(r.id) !== -1;
+    return '<label data-er-chip style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid '
+      + (on ? '#1F6080' : '#E2E8F0') + ';background:' + (on ? '#EFF6FF' : '#fff')
+      + ';color:' + (on ? '#1F6080' : '#475569')
+      + ';border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:600;cursor:pointer;margin:2px 4px 2px 0;">'
+      + '<input type="checkbox" data-er-user="' + e.id + '" data-er-room="' + r.id + '"'
+      + (on ? ' checked' : '') + ' style="margin:0;">'
+      + esc(r.name) + '</label>';
+  }
+
   function rowFor(e) {
-    // Only rooms at this educator's own centre. Offering every room in the agency is how
-    // somebody gets attached to a room three sites away by a mis-click.
+    /* EVERY CENTRE THIS PERSON IS POSTED TO, NOT JUST THE FIRST (2026-09-14).
+
+       This read e.centre_id, one centre, because that was all the API sent. Somebody
+       working across nine centres was therefore offered the rooms of one, and ticking
+       a room at any of the other eight was impossible — the checkbox was never drawn.
+       That is the "all rooms do not appear" report.
+
+       The original intent still holds and is kept: a person is offered the rooms of
+       THEIR centres, not every room in the agency, so nobody gets attached to a site
+       they have no business at by a mis-click. What changed is that "their centres"
+       is now the real list. An empty list still means an agency-level posting with no
+       centre, which correctly sees everything. */
+    var centreIds = e.centre_ids && e.centre_ids.length
+      ? e.centre_ids
+      : (e.centre_id ? [e.centre_id] : []);
+
     var rooms = state.rooms.filter(function (r) {
-      return e.centre_id ? r.centre_id === e.centre_id : true;
+      return centreIds.length ? centreIds.indexOf(r.centre_id) !== -1 : true;
     });
 
-    var chips = rooms.length
-      ? rooms.map(function (r) {
-          var on = e.room_ids.indexOf(r.id) !== -1;
-          return '<label data-er-chip style="display:inline-flex;align-items:center;gap:6px;border:1.5px solid '
-            + (on ? '#1F6080' : '#E2E8F0') + ';background:' + (on ? '#EFF6FF' : '#fff')
-            + ';color:' + (on ? '#1F6080' : '#475569')
-            + ';border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:600;cursor:pointer;margin:2px 4px 2px 0;">'
-            + '<input type="checkbox" data-er-user="' + e.id + '" data-er-room="' + r.id + '"'
-            + (on ? ' checked' : '') + ' style="margin:0;">'
-            + esc(r.name) + '</label>';
-        }).join('')
-      : '<span style="color:#94A3B8;font-size:12.5px;">No rooms at this centre yet.</span>';
+    var chips;
+    if (!rooms.length) {
+      chips = '<span style="color:#94A3B8;font-size:12.5px;">'
+        + (centreIds.length > 1 ? 'No rooms at any of their centres yet.' : 'No rooms at this centre yet.')
+        + '</span>';
+    } else if (centreIds.length > 1) {
+      /* Grouped under a heading per centre. Room names repeat across sites — nearly
+         every centre here has a "Toddlers" — so a flat row would offer several
+         identically-labelled checkboxes with no way to tell them apart. */
+      var byCentre = {};
+      var order = [];
+      rooms.forEach(function (r) {
+        var key = r.centre_name || ('Centre ' + r.centre_id);
+        if (!byCentre[key]) { byCentre[key] = []; order.push(key); }
+        byCentre[key].push(r);
+      });
+      chips = order.map(function (key) {
+        return '<div style="margin:0 0 7px;">'
+          + '<div style="font-size:11px;font-weight:800;color:#64748B;letter-spacing:.02em;margin:0 0 3px;">'
+          + esc(key) + '</div>'
+          + byCentre[key].map(function (r) { return chipFor(e, r); }).join('')
+          + '</div>';
+      }).join('');
+    } else {
+      chips = rooms.map(function (r) { return chipFor(e, r); }).join('');
+    }
+
+    var centreLabel = (e.centre_names && e.centre_names.length > 1)
+      ? '<span title="' + esc(e.centre_names.join(', ')) + '" style="font-weight:700;color:#1F6080;">'
+        + e.centre_names.length + ' centres</span>'
+      : esc((e.centre_names && e.centre_names[0]) || e.centre_name || '—');
+
+    var roleLabel = String(e.role || '').split('/').map(function (x) {
+      x = x.trim();
+      return x === 'home_visitor' ? 'Home visitor' : (x === 'educator' ? 'Educator' : x);
+    }).filter(Boolean).join(' / ') || 'Educator';
 
     return '<tr>'
       + '<td><strong>' + esc(e.name) + '</strong><div style="font-size:11.5px;color:#94A3B8;">' + esc(e.email || '') + '</div></td>'
-      + '<td>' + esc(e.role === 'home_visitor' ? 'Home visitor' : 'Educator') + '</td>'
-      + '<td>' + esc(e.centre_name || '—') + '</td>'
+      + '<td>' + esc(roleLabel) + '</td>'
+      + '<td>' + centreLabel + '</td>'
       + '<td>' + chips + '</td></tr>';
   }
 

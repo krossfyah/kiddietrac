@@ -60,7 +60,21 @@ class EducatorRoomController extends Controller
             ->orderBy('c.name')->orderBy('r.name')
             ->get(['r.id', 'r.name', 'r.age_group', 'c.id as centre_id', 'c.name as centre_name']);
 
-        $educators = DB::table('role_assignments as ra')
+        /* ONE ROW PER PERSON, BUT ALL OF THEIR CENTRES (2026-09-14).
+
+           This ended ->unique('id'), which is right in that somebody with four role
+           rows should appear once — but it keeps the FIRST row and throws the other
+           three away, taking their centres with them. The screen then filters the room
+           list by that single surviving centre_id, so an educator posted across nine
+           centres was offered the rooms of one and the other eight were invisible.
+
+           Reported as "all rooms do not appear ... the view designed to perform this
+           function doesn't appear to be working correctly". The view was working
+           exactly as written; what it was given was one ninth of the answer.
+
+           Collapsed by hand instead, keeping every distinct centre. centre_id and
+           centre_name are still emitted, unchanged, for anything reading one centre. */
+        $roleRows = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
             ->where('ra.active', 1)->where('ra.agency_id', $agencyId)
@@ -68,25 +82,51 @@ class EducatorRoomController extends Controller
             ->whereNull('u.deleted_at')
             ->orderBy('u.first_name')
             ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'ra.role',
-                   'ra.centre_id', 'c.name as centre_name'])
-            ->unique('id')->values();
+                   'ra.centre_id', 'c.name as centre_name']);
 
         $assigned = DB::table('educator_rooms')
-            ->whereIn('user_id', $educators->pluck('id'))
+            ->whereIn('user_id', $roleRows->pluck('id')->unique())
             ->get(['user_id', 'room_id'])
             ->groupBy('user_id');
 
+        $educators = $roleRows
+            ->groupBy('id')
+            ->map(function ($rows) use ($assigned) {
+                $first = $rows->first();
+
+                $centres = $rows
+                    ->filter(fn ($r) => $r->centre_id !== null)
+                    ->unique('centre_id')
+                    ->map(fn ($r) => [
+                        'id' => (int) $r->centre_id,
+                        'name' => $r->centre_name,
+                    ])
+                    ->sortBy('name')
+                    ->values();
+
+                return [
+                    'id' => (int) $first->id,
+                    'name' => trim($first->first_name . ' ' . ($first->last_name ?? '')),
+                    'email' => $first->email,
+                    // A person can hold both roles; say so rather than picking one.
+                    'role' => $rows->pluck('role')->unique()->implode(' / '),
+                    // Kept for callers that still read a single centre.
+                    'centre_id' => $first->centre_id ? (int) $first->centre_id : null,
+                    'centre_name' => $first->centre_name,
+                    // The whole truth. An EMPTY list means agency-wide, not "none":
+                    // a role row with no centre_id is an agency-level posting.
+                    'centre_ids' => $centres->pluck('id')->values(),
+                    'centre_names' => $centres->pluck('name')->values(),
+                    'room_ids' => $assigned->get((int) $first->id, collect())
+                        ->pluck('room_id')->map(fn ($r) => (int) $r)->values(),
+                ];
+            })
+            ->sortBy('name')
+            ->values();
+
         return response()->json([
             'rooms' => $rooms,
-            'educators' => $educators->map(fn ($e) => [
-                'id' => (int) $e->id,
-                'name' => trim($e->first_name . ' ' . ($e->last_name ?? '')),
-                'email' => $e->email,
-                'role' => $e->role,
-                'centre_id' => $e->centre_id ? (int) $e->centre_id : null,
-                'centre_name' => $e->centre_name,
-                'room_ids' => $assigned->get($e->id, collect())->pluck('room_id')->map(fn ($r) => (int) $r)->values(),
-            ]),
+            'educators' => $educators,
         ]);
     }
 
