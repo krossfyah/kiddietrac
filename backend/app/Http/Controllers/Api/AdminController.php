@@ -5271,6 +5271,64 @@ final class AdminController extends Controller
      * off-boarded account does not drag a username line into an email that does not
      * need one. A single-account address gets exactly the email it got before.
      */
+    /**
+     * Mail a password-reset link for ONE account.
+     *
+     * Built the way AuthController::forgotPassword builds it — `password_resets`, a
+     * sha256 of the token, an expiry, and reset-password.html on the PORTAL host — and
+     * stamped with user_id so the consume side never has to guess which account an
+     * address meant. Invalidates only THIS account's outstanding tokens, so a colleague
+     * sharing the address keeps their live invite.
+     */
+    private function sendResetLink(Request $request, object $user, int $userId, int $ttl = 60): bool
+    {
+        try {
+            DB::table('password_resets')
+                ->where('email', $user->email)
+                ->where(function ($q) use ($userId) {
+                    $q->where('user_id', $userId)->orWhereNull('user_id');
+                })
+                ->whereNull('used_at')->update(['used_at' => now()]);
+
+            $token = Str::random(64);
+            DB::table('password_resets')->insert([
+                'email' => $user->email,
+                'user_id' => $userId,
+                'token' => hash('sha256', $token),
+                'expires_at' => now()->addMinutes($ttl),
+                'requester_ip' => $request->ip(),
+                'created_at' => now(),
+            ]);
+
+            $shared = DB::table('users')
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
+                ->whereNull('deleted_at')
+                ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+                ->count() > 1;
+
+            \Illuminate\Support\Facades\Mail::to($user->email)->send(
+                (new \App\Mail\PasswordResetEmail(
+                    recipientName: $user->first_name ?: 'there',
+                    resetUrl: 'https://app.kiddietrac.com/reset-password.html?token=' . $token
+                        . '&email=' . urlencode($user->email),
+                    expiresInMinutes: (string) $ttl,
+                    accountLabel: $shared ? (($user->username ?: null) ?: ('account #' . $userId)) : null,
+                ))->withSymfonyMessage(function ($msg) {
+                    // Account recovery belongs to the person, not to a tenant.
+                    \App\Support\MailScope::platform($msg);
+                })
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Admin reset link failed', [
+                'user' => $userId, 'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
     private function signInHint(object $user): string
     {
         $rivals = DB::table('users')
@@ -5311,16 +5369,66 @@ final class AdminController extends Controller
         $user = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
         if (!$user) return response()->json(['message' => 'User not found'], 404);
 
-        // 12-char, mixed-case + digits. The user is encouraged to change it via Forgot password.
+        /* DON'T OVERWRITE A PASSWORD SOMEBODY HAS JUST CHOSEN (2026-09-14).
+
+           This always minted a temporary password. On 2026-09-14 Lloydene King finally
+           got in, chose her own password at 16:35:49 and signed in again at 16:41 — and
+           an admin pressed Reset password at 16:46:20, which silently replaced the
+           password she had just set with another random one out of an email. From her
+           side the reset she had completed eleven minutes earlier had simply stopped
+           working, for the third time that day.
+
+           So: an account that is ACTIVE and has actually signed in gets a reset LINK,
+           the same as resendWelcome already sends. The link proves they own the address,
+           needs nothing typed twice, and leaves their current password working until
+           they choose a new one — so pressing this button on a working account can no
+           longer lock anybody out.
+
+           A temporary password is still available, because sometimes it is genuinely
+           what is wanted (somebody with no access to their inbox, read out over the
+           phone). It now has to be asked for: force_temp_password=true. */
+        $hasSignedIn = ! empty($user->last_login_at);
+        $isClaimed = ! in_array((string) $user->status, ['invited', 'not_invited'], true);
+        $forceTemp = $request->boolean('force_temp_password');
+        $issueTemp = $forceTemp || ! ($isClaimed && $hasSignedIn);
+
+        if (! $issueTemp) {
+            $emailed = $this->sendResetLink($request, $user, $userId);
+
+            $this->audit($request->user()->id, 'user.password_reset', 'user', $userId, [
+                'mode' => 'reset_link',
+                'email_sent' => $emailed,
+                'reason' => 'account_is_active_and_has_signed_in',
+            ]);
+
+            return response()->json([
+                'message' => $emailed
+                    ? 'Reset link sent. Their current password keeps working until they choose a new one.'
+                    : 'Could not send the reset link.',
+                'mode' => 'reset_link',
+                'email_sent' => $emailed,
+            ]);
+        }
+
+        // 12-char, mixed-case + digits — a one-time key, not a credential to keep.
         $tempPassword = Str::random(12);
 
         DB::transaction(function () use ($userId, $tempPassword, $data) {
-            $upd = ['password' => Hash::make($tempPassword), 'updated_at' => now()];
+            $upd = [
+                'password' => Hash::make($tempPassword),
+                /* A password that has travelled through an inbox in plain text is not a
+                   credential. must_change_password makes it a one-time key:
+                   EnsurePasswordChanged refuses every endpoint outside auth/* until they
+                   choose their own. */
+                'must_change_password' => true,
+                'updated_at' => now(),
+            ];
             if (!empty($data['set_status_invited'])) {
                 $upd['status'] = 'invited';
             }
             DB::table('users')->where('id', $userId)->update($upd);
-            // Revoke existing sessions so the old password really stops working.
+            // Revoke existing sessions so the old password really stops working — this
+            // is the "boot them out" half; the flag above is the "keep them out" half.
             DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
         });
 
@@ -5332,13 +5440,18 @@ final class AdminController extends Controller
                 'Your Kiddietrac password has been reset',
                 "Your administrator has reset your Kiddietrac password.\n\n" .
                 "Temporary password: {$tempPassword}\n\n" .
-                "Sign in at https://app.kiddietrac.com and use the 'Forgot password' link to choose a new one." .
+                "Sign in at https://app.kiddietrac.com with this password. " .
+                "You will be asked to choose your own straight away — the temporary one " .
+                "stops working as soon as you do." .
                 $this->signInHint($user)
             );
         }
 
         $this->audit($request->user()->id, 'user.password_reset', 'user', $userId, [
+            'mode' => 'temp_password',
+            'forced' => $forceTemp,
             'email_sent' => $emailed,
+            'sessions_revoked' => true,
         ]);
 
         return response()->json([
@@ -5395,6 +5508,8 @@ final class AdminController extends Controller
                 DB::table('users')->where('id', $userId)->update([
                     'password'   => Hash::make($tempPassword),
                     'status'     => 'invited',
+                    // One-time key, same as the admin reset — see EnsurePasswordChanged.
+                    'must_change_password' => true,
                     'updated_at' => now(),
                 ]);
                 DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();

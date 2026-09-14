@@ -268,10 +268,15 @@ final class AuthController extends Controller
             'no_active_role' => $activeRoles === [],
         ]);
 
+        /* The token is issued even when a change is pending, because the change itself
+           needs an authenticated call. EnsurePasswordChanged is what makes it useless
+           for anything else; this flag is only so the client can go straight to the
+           change screen instead of painting a dashboard that will 403. */
         return response()->json([
             'token' => $tokenObj->plainTextToken,
             'expires_at' => $tokenObj->accessToken->expires_at?->toIso8601String(),
             'user' => $this->formatUser($user),
+            'must_change_password' => (bool) ($user->must_change_password ?? false),
         ]);
     }
 
@@ -405,11 +410,15 @@ final class AuthController extends Controller
         $newHash = Hash::make($data['new_password']);
         DB::table('users')->where('id', $user->id)->update([
             'password' => $newHash,
+            // Chosen, not issued — the gate opens.
+            'must_change_password' => false,
             'updated_at' => now(),
         ]);
         \App\Services\PasswordPolicy::record($user->id, $newHash);
 
-        $this->audit($request, $user->id, 'password_changed', 'user', $user->id);
+        $this->audit($request, $user->id, 'password_changed', 'user', $user->id, [
+            'cleared_forced_change' => ! empty($user->must_change_password),
+        ]);
 
         return response()->json(['message' => 'Password updated']);
     }
@@ -625,6 +634,8 @@ final class AuthController extends Controller
             DB::table('users')->where('id', $user->id)->update([
                 'password' => $newHash,
                 'status' => 'active',
+                // Whatever they were carrying, they have now chosen one.
+                'must_change_password' => false,
                 'updated_at' => now(),
             ]);
             \App\Services\PasswordPolicy::record($user->id, $newHash);
@@ -723,6 +734,7 @@ final class AuthController extends Controller
             DB::table('users')->where('id', $user->id)->update([
                 'password'   => $newHash,
                 'status'     => 'active',
+                'must_change_password' => false,
                 'updated_at' => now(),
             ]);
             DB::table('password_resets')->where('id', $record->id)->update(['used_at' => now()]);

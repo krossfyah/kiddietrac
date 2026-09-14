@@ -41,6 +41,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // impersonation tokens + platform admins). Kill switch:
             // ONBOARDING_GATE=false in .env + config:cache.
             EnsureOnboarded::class,
+            // Password-change gate — blocks all non-auth API calls while a user is
+            // carrying a password an administrator issued rather than one they chose.
+            // Kill switch: PASSWORD_CHANGE_GATE=false in .env + config:cache.
+            \App\Http\Middleware\EnsurePasswordChanged::class,
             EnforceAuditorReadOnly::class,
             SecurityHeaders::class,
             // Portal-wide activity audit — records every write action to audit_logs.
@@ -53,6 +57,13 @@ return Application::configure(basePath: dirname(__DIR__))
             // route and a number instead of a feeling. See the middleware for why it is
             // deliberately quiet.
             \App\Http\Middleware\TrackSlowRequests::class,
+            /* LAST, so it sees the final JSON whatever the rest of the pipeline did:
+               every protected /storage URL leaving the API is replaced with a signed,
+               expiring one. Uploaded files were served by Apache with no auth, no
+               tenant check and no audit — a signed agreement or a photograph of a
+               child was readable for ever by anyone who had ever seen the link.
+               See App\Support\ProtectedMedia. */
+            \App\Http\Middleware\SignProtectedMedia::class,
         ]);
 
         // Trust GoDaddy / CloudFlare proxy headers if present
