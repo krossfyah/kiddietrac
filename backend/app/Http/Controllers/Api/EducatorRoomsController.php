@@ -29,16 +29,42 @@ class EducatorRoomsController extends Controller
     /** GET /admin/users/{user}/rooms — the rooms of the user's centre, with what's assigned. */
     public function show(Request $request, int $user): JsonResponse
     {
-        $centreId = $this->centreOf($user);
-        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+        /* EVERY CENTRE THIS PERSON ACTUALLY BELONGS TO (2026-09-14).
+
+           This asked centreOf() for THE centre, which is ->value('centre_id') —
+           whichever role row came back first. For the 27 staff who hold one centre
+           that is right and nothing changes. For somebody posted across several it
+           silently picked one and hid the rest: Safia Ali holds an active educator
+           role at nine centres, and the picker offered a single room from centre 14
+           while nine existed across her nine.
+
+           Reported as "it doesn't show all the rooms that can be selected". The
+           process was not wrong; the control was built on a one-centre assumption
+           that the agency has since outgrown.
+
+           Narrowed by the ADMIN'S OWN reach as well. A centre director must not be
+           able to hand an educator rooms at a centre the director cannot see, so the
+           offer is the intersection: centres the educator holds a role at, AND
+           centres the person doing the assigning may access. An agency admin sees
+           all nine; a director of one centre still sees only theirs. */
+        $centreIds = array_values(array_filter(
+            $this->centreIdsOf($user),
+            fn ($c) => $this->authorizeCentreAccess($request->user(), $c)
+        ));
+
+        if (! $centreIds) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $rooms = DB::table('rooms')
-            ->where('centre_id', $centreId)
-            ->where('active', true)
-            ->orderBy('age_min_months')
-            ->get(['id', 'name', 'age_group']);
+        $centreId = $centreIds[0];   // kept for callers that still read one centre
+
+        $rooms = DB::table('rooms as r')
+            ->join('centres as c', 'c.id', '=', 'r.centre_id')
+            ->whereIn('r.centre_id', $centreIds)
+            ->where('r.active', true)
+            ->orderBy('c.name')
+            ->orderBy('r.age_min_months')
+            ->get(['r.id', 'r.name', 'r.age_group', 'r.centre_id', 'c.name as centre_name']);
 
         $assigned = DB::table('educator_rooms')
             ->where('user_id', $user)
@@ -46,14 +72,21 @@ class EducatorRoomsController extends Controller
             ->map(fn ($i) => (int) $i)
             ->all();
 
+        $multi = count($centreIds) > 1;
+
         return response()->json([
             'centre_id' => $centreId,
+            'centre_ids' => $centreIds,
+            'multi_centre' => $multi,
             'rooms' => $rooms,
             'assigned_room_ids' => $assigned,
             // Told plainly, because the fallback surprises people otherwise.
             'note' => $assigned
                 ? 'This educator sees only the rooms assigned below.'
-                : 'No rooms assigned — this educator currently sees every room at their centre.',
+                : ($multi
+                    ? 'No rooms assigned — this educator currently sees every room at all '
+                      . count($centreIds) . ' of their centres.'
+                    : 'No rooms assigned — this educator currently sees every room at their centre.'),
         ]);
     }
 
@@ -65,23 +98,34 @@ class EducatorRoomsController extends Controller
             'room_ids.*' => 'integer',
         ]);
 
-        $centreId = $this->centreOf($user);
-        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+        /* The same intersection show() offers, recomputed rather than trusted from the
+           request — the client sends room ids, and a client can send anything. */
+        $centreIds = array_values(array_filter(
+            $this->centreIdsOf($user),
+            fn ($c) => $this->authorizeCentreAccess($request->user(), $c)
+        ));
+
+        if (! $centreIds) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Every room must belong to THIS user's centre — otherwise a director could
-        // assign their educator into another centre's rooms and hand them that
-        // centre's children.
+        // Every room must belong to a centre this user actually holds a role at, and
+        // that the assigner can reach — otherwise a director could assign their
+        // educator into another centre's rooms and hand them that centre's children.
+        // Widened from one centre to their centres; the guard itself is unchanged.
         $roomIds = array_values(array_unique(array_map('intval', $data['room_ids'])));
         if ($roomIds) {
             $valid = DB::table('rooms')
                 ->whereIn('id', $roomIds)
-                ->where('centre_id', $centreId)
+                ->whereIn('centre_id', $centreIds)
                 ->pluck('id')->map(fn ($i) => (int) $i)->all();
 
             if (count($valid) !== count($roomIds)) {
-                return response()->json(['message' => 'Those rooms are not all at this educator\'s centre.'], 422);
+                return response()->json([
+                    'message' => count($centreIds) > 1
+                        ? 'Those rooms are not all at centres this educator belongs to.'
+                        : 'Those rooms are not all at this educator\'s centre.',
+                ], 422);
             }
         }
 
@@ -348,5 +392,26 @@ class EducatorRoomsController extends Controller
             ->value('centre_id');
 
         return $id ? (int) $id : null;
+    }
+
+    /**
+     * EVERY centre this person holds an active role at, not just the first one.
+     *
+     * centreOf() above answers "a centre they belong to", which is all a single-centre
+     * account ever needed. Somebody posted across several needs the whole list, or the
+     * rooms at the other centres are invisible to whoever is assigning them.
+     *
+     * @return int[]
+     */
+    private function centreIdsOf(int $userId): array
+    {
+        return DB::table('role_assignments')
+            ->where('user_id', $userId)
+            ->where('active', true)
+            ->whereNotNull('centre_id')
+            ->distinct()
+            ->pluck('centre_id')
+            ->map(fn ($i) => (int) $i)
+            ->all();
     }
 }

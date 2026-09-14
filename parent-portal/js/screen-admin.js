@@ -2470,8 +2470,23 @@
         const selected = {};
         (d.assigned_room_ids || []).forEach(function (id) { selected[id] = true; });
 
-        const grid = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;' });
-        (d.rooms || []).forEach(function (room) {
+        /* GROUPED BY CENTRE WHEN THERE IS MORE THAN ONE.
+
+           Somebody posted across several centres gets rooms from all of them, and
+           room names repeat — nearly every centre here has a "Toddlers". A flat row
+           of chips would offer three identically-labelled buttons with no way to tell
+           which is which. One heading per centre, and a flat row when there is only
+           one centre, so the single-centre case looks exactly as it did. */
+        const rooms = d.rooms || [];
+        const byCentre = {};
+        const order = [];
+        rooms.forEach(function (room) {
+          const key = room.centre_name || room.centre_id || '';
+          if (!byCentre[key]) { byCentre[key] = []; order.push(key); }
+          byCentre[key].push(room);
+        });
+
+        function chipFor(room) {
           const chip = Dom.el('button', {
             type: 'button',
             style: 'border-radius:999px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid;',
@@ -2484,9 +2499,31 @@
           };
           chip.addEventListener('click', function () { selected[room.id] = !selected[room.id]; paint(); });
           paint();
-          grid.appendChild(chip);
-        });
-        roomBody.appendChild(grid);
+          return chip;
+        }
+
+        /* Group only when it tells you something. This agency is home childcare:
+           each centre IS a provider and its single room carries the same name, so a
+           heading above a chip of identical text is pure noise. Where room names
+           repeat across centres — a centre-based agency with a Toddlers in each —
+           the heading is the only way to tell them apart. */
+        const names = rooms.map(function (r) { return r.name; });
+        const namesRepeat = names.some(function (n, i) { return names.indexOf(n) !== i; });
+
+        if (order.length > 1 && namesRepeat) {
+          order.forEach(function (key) {
+            roomBody.appendChild(Dom.el('div', {
+              style: 'font-size:11.5px;font-weight:800;color:#64748B;margin:12px 0 6px;',
+            }, String(key)));
+            const row = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;' });
+            byCentre[key].forEach(function (room) { row.appendChild(chipFor(room)); });
+            roomBody.appendChild(row);
+          });
+        } else {
+          const grid = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;' });
+          rooms.forEach(function (room) { grid.appendChild(chipFor(room)); });
+          roomBody.appendChild(grid);
+        }
 
         const status = Dom.el('div', { style: 'font-size:12.5px;min-height:16px;margin-top:8px;' });
         const save = Dom.el('button', {
@@ -2502,7 +2539,8 @@
               status.style.color = '#16A34A';
               status.textContent = ids.length
                 ? '✓ Saved. They now see only these ' + ids.length + ' room(s).'
-                : '✓ Saved. With no rooms selected they see every room at their centre.';
+                : ('✓ Saved. With no rooms selected they see every room at '
+                    + (d.multi_centre ? 'all ' + (d.centre_ids || []).length + ' of their centres.' : 'their centre.'));
             })
             .catch(function (e) {
               save.disabled = false; save.textContent = 'Save rooms';
