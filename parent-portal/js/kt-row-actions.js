@@ -268,11 +268,36 @@
 
     d.body.appendChild(menu);
 
-    // Position: right-aligned under the kebab, flip above if it would overflow.
+    /* POSITION — AND KEEP THE ⋮ COLUMN CLEAR (2026-09-14).
+
+       This right-aligned the menu to the kebab's own right edge, so the menu sat
+       exactly on top of the kebabs of the rows below it: same column, same width.
+       Measured on iLearn's user list — menu 1645–1858, the next row's kebab
+       1826–1858, entirely inside it.
+
+       What that does to somebody using the screen is worse than hiding a button.
+       Open a row's menu, then reach for the NEXT row's ⋮ — the aim is right, the
+       pointer is over the ⋮ — and the click lands on a MENU ITEM belonging to the
+       previous row. The menu shuts and something else happens, so it reads as "the
+       kebab doesn't open". Here it fired "View details" for the wrong person; with a
+       destructive first item it would have fired that instead, on a row nobody chose.
+
+       It is worst straight after a search, which is how it was reported: filter to two
+       or three rows and the open menu covers every remaining ⋮ on screen.
+
+       So the menu now hangs to the LEFT of the ⋮ column — its right edge stops short of
+       the kebab's left edge — which leaves every other row's ⋮ hittable while a menu is
+       open, and is where a row menu conventionally sits anyway. It still flips above
+       when there is no room below, and is still clamped to the viewport. */
+    var GUTTER = 6;
     var r = kebab.getBoundingClientRect();
     var mw = menu.offsetWidth, mh = menu.offsetHeight;
-    var left = Math.min(r.right - mw, w.innerWidth - mw - 8);
-    left = Math.max(8, left);
+
+    var left = Math.min(r.left - GUTTER - mw, w.innerWidth - mw - 8);
+    /* Only if there is genuinely no room to its left — a narrow screen — does it fall
+       back under the kebab, where covering the column is the lesser problem. */
+    if (left < 8) { left = Math.max(8, Math.min(r.right - mw, w.innerWidth - mw - 8)); }
+
     var top = r.bottom + 6;
     if (top + mh > w.innerHeight - 8) top = r.top - mh - 6;
     if (top < 8) top = 8;
