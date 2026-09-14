@@ -90,7 +90,15 @@
   }
 
   var last = Date.now();
-  var visibleSince = d.hidden ? 0 : Date.now();
+
+  /* Did the page actually go off screen during the interval that just ended?
+
+     This replaces an inference — comparing the gap against how long the page had been
+     visible — which a single focus event was enough to falsify, and which therefore
+     discarded every freeze anybody ever clicked on. Set only by signals that genuinely
+     mean the page was suspended, read and cleared once per tick so it describes that
+     interval and nothing else. */
+  var awayDuringGap = d.hidden;
   var reports = 0;
   var reported = {};          // one report per screen per session
 
@@ -108,20 +116,110 @@
      visibilitychange, pageshow (bfcache restore), window focus, and Capacitor's
      appStateChange, which is the only one guaranteed to fire in a native web view.
      Belt and braces on purpose — a missed reset is a false accusation. */
-  function resume() {
-    last = Date.now();
-    visibleSince = d.hidden ? 0 : Date.now();
-  }
-  try { d.addEventListener('visibilitychange', resume); } catch (e) {}
-  try { w.addEventListener('pageshow', resume); } catch (e) {}
-  try { w.addEventListener('focus', resume); } catch (e) {}
+  function markAway() { awayDuringGap = true; }
+  function resume() { last = Date.now(); }
+
+  /* document.hidden is the signal that means what we need: the page is not being shown,
+     which is when a browser suspends timers and a phone freezes the web view. Its
+     transitions are recorded, not inferred. */
+  try {
+    d.addEventListener('visibilitychange', function () {
+      if (d.hidden) { markAway(); }
+      resume();
+    });
+  } catch (e) {}
+
+  /* A bfcache restore is by definition a return from being away. */
+  try { w.addEventListener('pageshow', function () { markAway(); resume(); }); } catch (e) {}
+
+  /* FOCUS IS DELIBERATELY NOT A RESUME SIGNAL.
+
+     It fires when somebody clicks a tab that never left the screen — which is precisely
+     what a person does to a frozen interface, and resetting the clock there is what made
+     this watchdog silent. Input focus says nothing about whether the page was suspended;
+     visibilitychange above already covers the case where it was. */
+
+  /* In a native web view visibilitychange is not guaranteed, so Capacitor reports the
+     same fact. Both directions: going inactive is what a gap needs to be excused by. */
   try {
     var C = w.Capacitor;
     var App = C && C.Plugins && C.Plugins.App;
     if (App && App.addListener) {
-      App.addListener('appStateChange', function (st) { if (st && st.isActive) resume(); });
+      App.addListener('appStateChange', function (st) {
+        if (st && st.isActive) { resume(); } else { markAway(); }
+      });
     }
   } catch (e) {}
+
+  /* ── A NATIVE DIALOG IS NOT A FREEZE ────────────────────────────────────
+     window.alert / confirm / prompt block the main thread for exactly as long as the
+     dialog is on screen. That is the browser doing what it was asked, not this app
+     locking up — but the watchdog cannot see the dialog while it is open, because it
+     is blocked too, so the gap left behind is indistinguishable from a real stall.
+
+     That is ticket #67. An admin pressed "Delete user", the double-confirmation
+     prompt() opened, she spent eleven seconds reading it and typing, and this
+     watchdog filed a HIGH-PRIORITY "the interface stopped responding for 11.0s".
+     Nothing was wrong. There are ~180 of these calls across 45 files, so left alone
+     this files a false ticket every time anybody uses one — and a crash report that
+     cries wolf is how people learn to ignore crash reports.
+
+     Wrapping them records when one closed, which tick() then treats exactly as it
+     treats a page that was off screen. The wrapper is transparent: same arguments,
+     same return value, and it records even when the dialog throws. */
+  var dialogClosedAt = 0;
+  (function () {
+    ['alert', 'confirm', 'prompt'].forEach(function (name) {
+      var native = w[name];
+      if (typeof native !== 'function') { return; }
+      w[name] = function () {
+        try {
+          return native.apply(w, arguments);
+        } finally {
+          dialogClosedAt = Date.now();
+        }
+      };
+    });
+  })();
+
+  /* ── Was the PAGE alive while the main thread was not? ──────────────────
+     Every clock in this file is Date.now(), and Date.now() advances the same whether
+     the thread was blocked or the device was asleep. document.hidden was meant to be
+     the discriminator, but iOS often suspends a page on screen-lock WITHOUT firing
+     visibilitychange — so a pocketed iPhone is indistinguishable from a 38-second
+     freeze. That is ticket #47.
+
+     A worker runs on its own thread: it keeps beating through a blocked main thread
+     and stops when the device suspends. Beats sent during a block queue up and arrive
+     on release still carrying the time they were SENT. */
+  var beats = [];
+  var beatOk = false;
+
+  try {
+    if (w.Worker && w.Blob && w.URL && w.URL.createObjectURL) {
+      var hbSrc = 'setInterval(function(){postMessage(Date.now())},1000);';
+      var hb = new w.Worker(w.URL.createObjectURL(new w.Blob([hbSrc], { type: 'application/javascript' })));
+      hb.onmessage = function (e) {
+        beats.push(Number(e.data) || 0);
+        if (beats.length > 400) { beats.splice(0, beats.length - 400); }
+      };
+      beatOk = true;
+    }
+  } catch (e) { beatOk = false; }
+
+  /* What fraction of [from, to] the worker can prove it was awake for. null when there
+     is no heartbeat to ask. One beat per second, so an awake worker covers a gap almost
+     entirely and a suspended one covers almost none of it. */
+  function coverage(from, to) {
+    if (!beatOk) { return null; }
+    var span = to - from;
+    if (span <= 0) { return null; }
+    var inside = 0;
+    for (var i = 0; i < beats.length; i++) {
+      if (beats[i] > from && beats[i] < to) { inside++; }
+    }
+    return Math.min(1, (inside * 1000) / span);
+  }
 
   function screenName() {
     try { return String(w.location.hash || '#').slice(0, 60); } catch (e) { return '#'; }
@@ -132,9 +230,28 @@
     var gap = now - last;
     last = now;
 
+    /* Read and clear together: the flag describes the interval that just ended, so a
+       page that was away ten minutes ago cannot excuse a freeze happening now. */
+    var wasAway = awayDuringGap;
+    awayDuringGap = false;
+
+    /* Read and clear together, for the same reason wasAway is: a dialog somebody
+       dismissed ten minutes ago must not be able to excuse a freeze happening now. */
+    var hadDialog = dialogClosedAt >= now - gap;
+    dialogClosedAt = 0;
+
     if (gap <= TICK_MS + FREEZE_MS) return;              // normal jitter
-    if (d.hidden || !visibleSince) return;               // not on screen; not our story
-    if (now - visibleSince < gap) return;                // it was hidden during the gap
+    if (wasAway) return;                                 // the page was off screen for part of it
+    if (hadDialog) {                                     // alert/confirm/prompt held the thread
+      try {
+        if (w.KT && w.KT.crumb) {
+          w.KT.crumb('freeze', 'ignored ' + (gap / 1000).toFixed(1) + 's on ' + screenName()
+            + ' — a browser dialog was open');
+        }
+      } catch (e) {}
+      return;
+    }
+    if (d.hidden) return;                                // not on screen now; not our story
     if (gap > SLEEP_MS) return;                          // beyond plausible: a sleeping device
 
     var secs = (gap / 1000).toFixed(1);
@@ -151,8 +268,30 @@
     if (gap < REPORT_MS) return;
     if (reports >= MAX_REPORTS) return;
     if (reported[where]) return;                         // one per screen is the signal
-    reported[where] = 1;
-    reports++;
+
+    /* Ask the heartbeat before filing. Deferred: the queued beats and this timer are
+       both waiting on the freed thread with no guaranteed order, so deciding now would
+       read an empty queue and call every real freeze a sleeping device. */
+    var gapFrom = now - gap;
+    var gapTo = now;
+    setTimeout(function () {
+      var cov = coverage(gapFrom, gapTo);
+
+      /* The worker slept too, so the DEVICE slept. A pocketed phone, not a freeze —
+         dropped rather than filed, because a high-priority ticket every time somebody
+         locks their screen teaches people to ignore crash tickets. */
+      if (cov !== null && cov < 0.6) {
+        try {
+          if (w.KT && w.KT.crumb) {
+            w.KT.crumb('freeze', 'ignored ' + secs + 's on ' + where + ' — device was asleep');
+          }
+        } catch (e) {}
+        return;
+      }
+
+      if (reported[where]) { return; }
+      reported[where] = 1;
+      reports++;
 
     /* Reported through the crash pipe, so a freeze arrives with the same context a
        crash does — user, device, route, breadcrumbs — and de-duplicates into one
@@ -169,6 +308,13 @@
               ? 'Longer than ' + (LONG_MS / 1000) + 's, so a suspended device cannot be ruled '
                 + 'out — but the page reported itself visible for the whole gap.\n'
               : '')
+          /* What the visibility flag could not settle. iOS suspends a page on
+             screen-lock without firing visibilitychange, so "visible" proved nothing;
+             a worker on another thread does. */
+          + (cov === null ? ''
+              : 'A worker on another thread kept running for ' + Math.round(cov * 100)
+                + '% of the gap, so the page was alive and the MAIN THREAD was blocked '
+                + '— not a sleeping device.\n')
           + 'Detected by the freeze watchdog, not by an exception.\n'
           + (blocking
               ? 'Worst blocking tasks in the two minutes before this: ' + blocking + '\n'
@@ -177,7 +323,8 @@
           { quiet: true, longTasks: blocking }   // nothing broke visibly; a notice would be the only thing they saw
         );
       }
-    } catch (e) {}
+      } catch (e) {}
+    }, 400);
   }
 
   try { setInterval(tick, TICK_MS); } catch (e) {}

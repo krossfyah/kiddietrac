@@ -31,6 +31,16 @@
 
   // The master switch lives in the agency's settings JSON. Absent means ON — an
   // agency that has never touched it keeps working normally.
+  /* Defaults OFF, unlike notifications: this one CREATES shifts, and a setting that
+     rosters nine centres because nobody said otherwise is not a safe default. */
+  function autofillOn(a) {
+    try {
+      var st = a.settings;
+      if (typeof st === 'string') st = JSON.parse(st || '{}');
+      return !!(st && st.schedule_autofill);
+    } catch (e) { return false; }
+  }
+
   function notificationsOn(a) {
     try {
       var st = a.settings;
@@ -265,48 +275,131 @@
     });
   }
 
+  /* One at a time. The ⚙️ button is small and on a phone it gets pressed repeatedly
+     while the first request is still in flight — the crash report behind this had five
+     presses inside four seconds. Each one used to start its own fetch and then race to
+     write the same mount. */
+  let editOpening = false;
+
   async function openEditModal(container, agencyId) {
-    const data = await api('GET', '/admin/agencies');
+    if (editOpening) { return; }
+    editOpening = true;
+
+    let data;
+    try {
+      data = await api('GET', '/admin/agencies');
+    } finally {
+      editOpening = false;
+    }
+
+    /* THE USER MAY HAVE LEFT WHILE THAT WAS IN FLIGHT.
+       This awaits a network call and only then looks the mount up inside `container`.
+       Navigate away in the meantime — six seconds passed in the report that produced
+       this fix — and the shell has replaced #appMain, so `container` is a detached node,
+       the lookup returns null, and `.innerHTML` throws as an unhandled rejection.
+
+       isConnected is the check that matters rather than a null test alone: a detached
+       container can still CONTAIN the mount, so the lookup succeeds and the modal is
+       then written into a node that is no longer on the page — a dialog nobody can see
+       and nobody can dismiss. See the same trap in kiddietrac-sweep-detached-container. */
+    const mount = $('#kt-agency-modal-mount', container);
+    if (!mount || !mount.isConnected) { return; }
+
     const a = (data.agencies || []).find(x => x.id === agencyId);
     if (!a) return alert('Agency not found');
 
-    const mount = $('#kt-agency-modal-mount', container);
     mount.innerHTML = `
       <div class="kt-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;">
-        <div style="background:white;border-radius:16px;max-width:520px;width:100%;padding:24px;">
+        <div style="background:white;border-radius:16px;max-width:640px;width:100%;padding:24px;max-height:88vh;overflow:auto;">
           <h2 style="font-size:22px;margin:0 0 16px;">Manage: ${esc(a.name)}</h2>
           <form id="kt-edit-form" onsubmit="return false;" style="display:grid;gap:12px;">
-            <div><label style="font-size:13px;font-weight:600;">Name</label><input name="name" value="${esc(a.name)}" style="${inputStyle()}"></div>
-            <div><label style="font-size:13px;font-weight:600;">Subdomain</label><input name="subdomain" value="${esc(a.subdomain || '')}" style="${inputStyle()}"></div>
-            <div><label style="font-size:13px;font-weight:600;">Custom domain</label><input name="custom_domain" value="${esc(a.custom_domain || '')}" style="${inputStyle()}"></div>
-            <div><label style="font-size:13px;font-weight:600;">Contact email</label><input name="contact_email" type="email" value="${esc(a.contact_email || '')}" style="${inputStyle()}"></div>
-            <div><label style="font-size:13px;font-weight:600;">Timezone</label><select name="timezone" style="${inputStyle()}">${tzOptions(a.timezone || 'America/Toronto')}</select></div>
-            <div style="grid-column:1/-1;border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#F9FAFB;">
-              <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
-                <input type="checkbox" name="notifications_enabled" ${notificationsOn(a) ? 'checked' : ''}
-                  style="width:19px;height:19px;margin-top:2px;flex:0 0 auto;accent-color:#159FB4;">
-                <span>
-                  <span style="display:block;font-size:13.5px;font-weight:700;color:#111827;">Send notifications and emails</span>
-                  <span style="display:block;font-size:12px;color:#6B7280;line-height:1.5;margin-top:2px;">
-                    The master switch for this agency. Turn it OFF and <strong>nothing</strong> goes out to their
-                    staff or families — no email, no text, no push, no in-app alert. Everything still gets recorded;
-                    it just isn't sent. Use this while setting an agency up, or to stop the platform contacting a
-                    live agency's families.
+
+            <div id="kt-ag-tabs" style="display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin:-4px 0 4px;">
+              ${[['details','Details'],['address','Address'],['email','Email'],['plan','Plan & automation']]
+                .map(([k,l],i) => `<button type="button" data-agtab="${k}" style="border:none;background:none;padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer;border-bottom:2px solid ${i===0?'#1F6080':'transparent'};color:${i===0?'#1F6080':'#64748B'};">${l}</button>`).join('')}
+            </div>
+
+            <div data-agpane="details">
+              <div><label style="font-size:13px;font-weight:600;">Name</label><input name="name" value="${esc(a.name)}" style="${inputStyle()}"></div>
+              <div><label style="font-size:13px;font-weight:600;">Legal name <span style="font-weight:400;color:#94A3B8;">(if different from the trading name)</span></label><input name="legal_name" value="${esc(a.legal_name || '')}" style="${inputStyle()}"></div>
+              <div><label style="font-size:13px;font-weight:600;">Subdomain</label><input name="subdomain" value="${esc(a.subdomain || '')}" style="${inputStyle()}"></div>
+              <div><label style="font-size:13px;font-weight:600;">Custom domain</label><input name="custom_domain" value="${esc(a.custom_domain || '')}" style="${inputStyle()}"></div>
+              <div><label style="font-size:13px;font-weight:600;">Website</label><input name="website" value="${esc(a.website || '')}" placeholder="https://" style="${inputStyle()}"></div>
+              <div><label style="font-size:13px;font-weight:600;">Timezone</label><select name="timezone" style="${inputStyle()}">${tzOptions(a.timezone || 'America/Toronto')}</select>
+                <div style="font-size:12px;color:#6B7280;margin:-4px 0 8px;">Every time this agency records or displays \u2014 sign-ins, rotas, reports \u2014 is in this zone.</div>
+              </div>
+            </div>
+
+            <div data-agpane="address" hidden>
+              <div><label style="font-size:13px;font-weight:600;">Address line 1</label><input name="address_line1" value="${esc(a.address_line1 || '')}" style="${inputStyle()}"></div>
+              <div><label style="font-size:13px;font-weight:600;">Address line 2</label><input name="address_line2" value="${esc(a.address_line2 || '')}" placeholder="Unit, suite, floor" style="${inputStyle()}"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div><label style="font-size:13px;font-weight:600;">City</label><input name="city" value="${esc(a.city || '')}" style="${inputStyle()}"></div>
+                <div><label style="font-size:13px;font-weight:600;">Province / State</label><input name="province" value="${esc(a.province || '')}" style="${inputStyle()}"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div><label style="font-size:13px;font-weight:600;">Postal / ZIP code</label><input name="postal_code" value="${esc(a.postal_code || '')}" style="${inputStyle()}"></div>
+                <div><label style="font-size:13px;font-weight:600;">Country</label><input name="country" value="${esc(a.country || '')}" style="${inputStyle()}"></div>
+              </div>
+              <div style="font-size:12px;color:#6B7280;">Printed on invoices and receipts, and used for the statutory holiday calendar.</div>
+            </div>
+
+            <div data-agpane="email" hidden>
+              <div><label style="font-size:13px;font-weight:600;">Contact email</label><input name="contact_email" type="email" value="${esc(a.contact_email || '')}" style="${inputStyle()}">
+                <div style="font-size:12px;color:#6B7280;margin:-4px 0 8px;">Where we write to the agency itself \u2014 not what families see.</div>
+              </div>
+              <div><label style="font-size:13px;font-weight:600;">Contact phone</label><input name="contact_phone" value="${esc(a.contact_phone || '')}" style="${inputStyle()}"></div>
+              <div style="border-top:1px solid #F1F5F9;margin:6px 0 10px;"></div>
+              <div style="font-size:12.5px;font-weight:700;color:#0F172A;margin-bottom:6px;">How their mail appears to families</div>
+              <div><label style="font-size:13px;font-weight:600;">From name</label><input name="email_from_name" value="${esc(a.email_from_name || '')}" placeholder="${esc(a.name)}" style="${inputStyle()}"></div>
+              <div><label style="font-size:13px;font-weight:600;">From address</label><input name="email_from_address" type="email" value="${esc(a.email_from_address || '')}" placeholder="noreply@youragency.com" style="${inputStyle()}"></div>
+              <div style="font-size:12px;color:#6B7280;line-height:1.5;">
+                Mail servers, suppression, closure notices and the template library live on the full
+                <a href="#email-settings" style="color:#1F6080;font-weight:600;">Email settings</a> screen \u2014 kept there rather than copied here, so there is one place that decides how mail goes out.
+              </div>
+            </div>
+
+            <div data-agpane="plan" hidden>
+              <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#F9FAFB;margin-bottom:10px;">
+                <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+                  <input type="checkbox" name="notifications_enabled" ${notificationsOn(a) ? 'checked' : ''}
+                    style="width:19px;height:19px;margin-top:2px;flex:0 0 auto;accent-color:#159FB4;">
+                  <span>
+                    <span style="display:block;font-size:13.5px;font-weight:700;color:#111827;">Send notifications and emails</span>
+                    <span style="display:block;font-size:12px;color:#6B7280;line-height:1.5;margin-top:2px;">
+                      The master switch for this agency. Turn it OFF and <strong>nothing</strong> goes out to their
+                      staff or families \u2014 no email, no text, no push, no in-app alert. Everything is still recorded;
+                      it just isn't sent.
+                    </span>
                   </span>
-                </span>
-              </label>
-            </div>
-            <div><label style="font-size:13px;font-weight:600;">Plan</label>
-              <select name="plan" style="${inputStyle()}">
-                <option value="starter" ${a.plan==='starter'?'selected':''}>Starter</option>
-                <option value="centre"  ${a.plan==='centre' ?'selected':''}>Centre</option>
-                <option value="agency"  ${a.plan==='agency' ?'selected':''}>Agency</option>
-              </select>
-            </div>
-            <div><label style="font-size:13px;font-weight:600;">Billing status</label>
-              <select name="billing_status" style="${inputStyle()}">
-                ${['trial','active','past_due','suspended'].map(s=>`<option value="${s}" ${a.billing_status===s?'selected':''}>${s}</option>`).join('')}
-              </select>
+                </label>
+              </div>
+              <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#F9FAFB;margin-bottom:10px;">
+                <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+                  <input type="checkbox" name="schedule_autofill" ${autofillOn(a) ? 'checked' : ''}
+                    style="width:19px;height:19px;margin-top:2px;flex:0 0 auto;accent-color:#159FB4;">
+                  <span>
+                    <span style="display:block;font-size:13.5px;font-weight:700;color:#111827;">Fill staff schedules automatically</span>
+                    <span style="display:block;font-size:12px;color:#6B7280;line-height:1.5;margin-top:2px;">
+                      Each night at 04:30 this rosters <strong>every centre</strong> in the agency 28 days ahead, from each
+                      centre's own opening hours and open days. Closure days are skipped, a day already rostered is never
+                      overwritten, and <strong>a shift somebody deletes stays deleted</strong>.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              <div><label style="font-size:13px;font-weight:600;">Plan</label>
+                <select name="plan" style="${inputStyle()}">
+                  <option value="starter" ${a.plan==='starter'?'selected':''}>Starter</option>
+                  <option value="centre"  ${a.plan==='centre' ?'selected':''}>Centre</option>
+                  <option value="agency"  ${a.plan==='agency' ?'selected':''}>Agency</option>
+                </select>
+              </div>
+              <div><label style="font-size:13px;font-weight:600;">Billing status</label>
+                <select name="billing_status" style="${inputStyle()}">
+                  ${['trial','active','past_due','suspended'].map(st=>`<option value="${st}" ${a.billing_status===st?'selected':''}>${st}</option>`).join('')}
+                </select>
+              </div>
             </div>
             <div id="kt-edit-status" style="min-height:20px;font-size:14px;"></div>
             <div style="display:flex;justify-content:space-between;gap:8px;">
@@ -323,6 +416,23 @@
     const overlay = $('.kt-modal-overlay', mount);
     const form = $('#kt-edit-form', mount);
     const close = () => { mount.innerHTML = ''; };
+
+    /* Every pane is in the DOM and simply hidden. Building a tab's fields only when it is
+       opened would mean one Save posted whatever the user happened to look at, and quietly
+       dropped the rest. */
+    $$('[data-agtab]', mount).forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.getAttribute('data-agtab');
+        $$('[data-agtab]', mount).forEach((t) => {
+          const on = t === tab;
+          t.style.borderBottomColor = on ? '#1F6080' : 'transparent';
+          t.style.color = on ? '#1F6080' : '#64748B';
+        });
+        $$('[data-agpane]', mount).forEach((p) => {
+          p.hidden = p.getAttribute('data-agpane') !== key;
+        });
+      });
+    });
     $('#kt-cancel', mount).addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
@@ -345,6 +455,11 @@
       // like it silently refused to turn off. Read it from the element instead.
       const notifBox = form.querySelector('[name="notifications_enabled"]');
       if (notifBox) data.notifications_enabled = notifBox.checked;
+      // Same reason — an unchecked box never reaches FormData, so it could be switched
+      // on and never off.
+      const autoBox = form.querySelector('[name="schedule_autofill"]');
+      if (autoBox) data.schedule_autofill = autoBox.checked;
+
 
       try {
         await api('PATCH', '/admin/agencies/' + a.id, data);

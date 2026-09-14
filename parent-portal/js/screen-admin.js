@@ -2117,7 +2117,7 @@
       var list = Dom.el('div', {});
       card.appendChild(list);
 
-      var catLabels = { agreement: 'NDA / Agreement', file: 'File', contract: 'Contract', certificate: 'Certificate', id: 'ID document', other: 'Other' };
+      var catLabels = { agreement: 'NDA / Agreement', signed_form: 'Signed form', requested_file: 'File they sent in', file: 'File', contract: 'Contract', certificate: 'Certificate', id: 'ID document', other: 'Other' };
       // Files are public (unguessable /storage paths) — open the direct URL. On
       // the Capacitor APK target=_blank does nothing, so use the in-app Browser
       // plugin when present; else a new tab; else same-window navigation.
@@ -2136,6 +2136,8 @@
       function fmtSize(n) { n = Number(n || 0); if (n < 1024) return n + ' B'; if (n < 1048576) return Math.round(n / 1024) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
       function docIcon(d) {
         if (d.category === 'agreement') return '🔏';
+        if (d.category === 'signed_form') return '📝';
+        if (d.category === 'requested_file') return '📥';
         var t = (d.file_type || '') + ' ' + (d.file_url || '');
         if (/pdf/i.test(t)) return '📄';
         if (/(png|jpe?g|webp|gif|image)/i.test(t)) return '🖼️';
@@ -2160,8 +2162,20 @@
           var openBtn = Dom.el('button', { type: 'button', style: 'flex:0 0 auto;font-size:12px;font-weight:700;color:#1F6080;background:#fff;cursor:pointer;padding:5px 10px;border:1px solid #1F6080;border-radius:6px;' }, 'Open');
           openBtn.addEventListener('click', function () { openDoc(d); });
           row.appendChild(openBtn);
-          if (d.category === 'agreement') {
-            row.appendChild(Dom.el('span', { title: 'Legal record — cannot be deleted', style: 'flex:0 0 auto;font-size:13px;color:#64748B;padding:4px 6px;' }, '🔒'));
+          /* A SIGNED FORM IS A RECORD, NOT AN ATTACHMENT.
+
+             It is filed from the sign-off, so deleting the row here would delete nothing
+             a person cares about and the next backfill would put it straight back — a
+             button that appears to work and does not. Locked alongside the agreement:
+             withdrawing a signature means removing the sign-off, in the Forms Manager,
+             where the consequences are visible. */
+          if (d.category === 'agreement' || d.category === 'signed_form') {
+            row.appendChild(Dom.el('span', {
+              title: d.category === 'signed_form'
+                ? 'Signed form — filed from the signature, manage it in the Forms Manager'
+                : 'Legal record — cannot be deleted',
+              style: 'flex:0 0 auto;font-size:13px;color:#64748B;padding:4px 6px;',
+            }, '🔒'));
           } else {
             var del = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-danger kt-icon-tip', title: 'Remove', 'data-kttip': 'Remove', 'aria-label': 'Remove', style: 'flex:0 0 auto;' }, '🗑');
             del.addEventListener('click', async function () {
@@ -2951,8 +2965,18 @@
     deleteBtn.addEventListener('click', async () => {
       const c1 = await KT.confirm('Delete ' + user.name + ' (' + user.email + ')?\n\nThey will be unable to sign in. Their family/child records stay intact for audit.');
       if (!c1) return;
-      const c2 = prompt('Type "delete" to confirm:');
-      if (c2 !== 'delete') return;
+      /* KT.prompt, not the native one. window.prompt blocks the main thread for as
+         long as it is open, which the freeze watchdog correctly measured as an
+         eleven-second freeze and filed as a high-priority crash (ticket #67) — and in
+         the APK a system dialog over the web view is jarring besides. KT.prompt is
+         this portal's own, is not blocking, and was already here. */
+      const c2 = await KT.prompt({
+        title: 'Type "delete" to confirm',
+        description: 'This is the second of two confirmations because the account cannot be restored.',
+        placeholder: 'delete',
+        okLabel: 'Delete user',
+      });
+      if (String(c2 || '').trim().toLowerCase() !== 'delete') return;
       deleteBtn.disabled = true; deleteBtn.textContent = 'Deleting...';
       try {
         await Api.delete('/admin/users/' + user.id);
@@ -4122,6 +4146,78 @@
     };
   }
 
+  /* SEND THE WELCOME — AND, IF ASKED, THE WAY IN.
+
+     The provider welcome introduces the provider. It does not let anyone in, and that
+     gap was invisible: four real iLearn guardians had been welcomed and then reminded
+     four times to "finish setting up" without ever having been sent a password. So the
+     confirm now shows exactly who is on this family and who among them has no way to
+     sign in, and offers to send them one.
+
+     Never offered for an account that already works: replacing a live password is how
+     an admin trying to help locks a parent out. The preflight decides that, not this. */
+  async function sendFamilyWelcome(familyId) {
+    var pre = null;
+    try { pre = await Api.get('/admin/families/' + familyId + '/welcome-preflight'); }
+    catch (e) { pre = null; }
+
+    var guardians = (pre && Array.isArray(pre.guardians)) ? pre.guardians : [];
+    var needing = guardians.filter(function (g) { return g.needs_activation; });
+
+    var extra = Dom.el('div', {});
+    if (guardians.length) {
+      var list = Dom.el('div', {
+        style: 'border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;font-size:12.5px;line-height:1.6;',
+      });
+      guardians.forEach(function (g) {
+        var row = Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:10px;align-items:baseline;' });
+        row.appendChild(Dom.el('span', { style: 'color:#0F172A;font-weight:600;' }, g.name));
+        row.appendChild(Dom.el('span', {
+          style: 'color:' + (g.needs_activation ? '#B45309' : '#64748B') + ';font-size:11.5px;white-space:nowrap;',
+        }, g.needs_activation ? 'never signed in' : (g.onboarded ? 'active' : 'has a password')));
+        list.appendChild(row);
+      });
+      extra.appendChild(list);
+    } else if (!pre) {
+      extra.appendChild(Dom.el('div', {
+        style: 'font-size:12.5px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:9px 11px;',
+      }, 'Could not check who has signed in — the welcome will still send.'));
+    }
+
+    var cb = Dom.el('input', { type: 'checkbox' });
+    cb.checked = needing.length > 0;
+    cb.disabled = needing.length === 0;
+    var lab = Dom.el('label', {
+      style: 'display:flex;gap:9px;align-items:flex-start;margin-top:12px;font-size:13px;'
+        + 'cursor:' + (needing.length ? 'pointer' : 'default') + ';color:' + (needing.length ? '#0F172A' : '#94A3B8') + ';',
+    });
+    lab.appendChild(cb);
+    lab.appendChild(Dom.el('span', {}, needing.length
+      ? 'Also send sign-in details to ' + needing.length + ' guardian'
+        + (needing.length === 1 ? '' : 's') + ' who ' + (needing.length === 1 ? 'has' : 'have') + ' never signed in'
+      : 'Everyone on this family already has a password — no sign-in details needed'));
+    extra.appendChild(lab);
+
+    var go = !(window.KT && KT.confirm) || await KT.confirm({
+      title: 'Send provider welcome email?',
+      description: 'Emails the provider introduction to this family’s guardians, with the agency admin, director and educator on CC.',
+      okLabel: 'Send',
+      extra: extra,
+    });
+    if (!go) { return null; }
+
+    // Read the checkbox AFTER the dialog resolves — the caller still holds the element.
+    var res = await Api.post('/admin/families/' + familyId + '/provider-welcome', {
+      send_activation: !!(cb.checked && !cb.disabled),
+    });
+    if (window.KT && KT.Dom && KT.Dom.toast) {
+      var msg = 'Welcome email sent to ' + (res.recipients || 0) + ' guardian(s)';
+      if (res.activation_sent) { msg += ' · sign-in details to ' + res.activation_sent; }
+      KT.Dom.toast(msg, 'success');
+    }
+    return res;
+  }
+
   function familyActions(f, centres, content) {
     var bar = Dom.el('div', { style: 'display:flex;gap:6px;justify-content:flex-end;flex-shrink:0;' });
     var mk = function (icon, cls, tip, handler) {
@@ -4129,11 +4225,11 @@
       b.addEventListener('click', function (e) { e.stopPropagation(); handler(); });
       return b;
     };
+
     bar.appendChild(mk('👁️', 'kt-act-info', 'View', function () { showFamilyDetail(f.id); }));
     bar.appendChild(mk('✏️', 'kt-act-edit', 'Edit', function () { showFamilyModal(f, centres, content); }));
     bar.appendChild(mk('✉️', 'kt-act-teal', 'Send welcome email', async function () {
-      if (window.KT && KT.confirm && !await KT.confirm('Send the provider welcome / bio email to this family’s guardians? (Agency admin, director and educator are CC’d.)')) return;
-      try { var _r = await Api.post('/admin/families/' + f.id + '/provider-welcome', {}); if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Welcome email sent to ' + (_r.recipients || 0) + ' guardian(s)', 'success'); }
+      try { await sendFamilyWelcome(f.id); }
       catch (e) { if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not send: ' + (e.message || 'error'), 'error'); else alert('Could not send: ' + (e.message || 'error')); }
     }));
     if (f.suspended) {
@@ -4336,8 +4432,24 @@
         billing_split: 'single', notes: '',
       },
       guardians: [{ email: '', first_name: '', last_name: '', phone: '', relationship: 'mother', is_primary: true, can_pickup: true }],
-      children: [{ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '', expected_dropoff_time: '', expected_pickup_time: '' }],
+      /* schedule = the days this child actually attends, written straight onto the
+         enrolment. It used to be hardcoded Mon–Fri server-side, so a child attending
+         three days was on every roster, in every ratio and every headcount for five —
+         and the only way to correct it was the care-schedule editor afterwards, which
+         nobody opens for a child who looks fine. Defaults to Mon–Fri because that is the
+         common case, and is now a thing somebody SAW rather than a thing assumed. */
+      children: [{ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '', room_id: null, expected_dropoff_time: '', expected_pickup_time: '', schedule: ['mon', 'tue', 'wed', 'thu', 'fri'] }],
       emergency: [],
+      /* Rooms of the SELECTED centre, fetched on demand. Being in a room is what puts a
+         child on a roster at all, and until now the wizard never asked: the server only
+         auto-placed when a centre happened to have exactly one room, so every child added
+         to a multi-room centre was created with no room and no enrolment, invisible to
+         every educator. `roomsFor` is the centre those rooms belong to, so switching
+         centre on step 1 cannot leave the picker offering another centre's rooms. */
+      rooms: null,
+      roomsFor: null,
+      roomsError: null,
+      _roomsLoading: null,
     };
     var STEPS = ['Family', 'Guardians', 'Children', 'Emergency', 'Review'];
     var step = 0;
@@ -4395,6 +4507,13 @@
       if (opts.placeholder) input.placeholder = opts.placeholder;
       input.value = obj[key] == null ? '' : obj[key];
       input.addEventListener('input', function () { obj[key] = input.value; });
+      /* Some fields change what the rest of the step should say — the date of birth
+         decides which room matches this child's age. Re-render on CHANGE, not input:
+         change fires once the value is complete, so the field does not lose focus
+         (and the caret) on every keystroke while somebody is still typing it. */
+      if (opts.rerenderOnChange) {
+        input.addEventListener('change', function () { obj[key] = input.value; opts.rerenderOnChange(); });
+      }
       return input;
     }
     function bindSelect(obj, key, options) {
@@ -4523,9 +4642,222 @@
       bodyEl.appendChild(add);
     }
 
+    var DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    var DAY_SHORT = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+
+    /* Seven toggles, plus the two shortcuts that cover almost every real answer.
+       Toggles rather than a multi-select: the whole week has to be readable at a glance,
+       and a <select multiple> on a phone is a scroll box that hides most of it. */
+    /* One fetch per centre, cached on state. Called by the Children step; when it
+       resolves it re-renders so the selects fill in. A failure is shown, never treated
+       as "this centre has no rooms" - that reads as a data problem and would have the
+       admin create the child roomless all over again. */
+    function loadRooms(onArrived) {
+      var cid = parseInt(state.family.centre_id, 10);
+      if (!cid) { state.rooms = []; state.roomsFor = null; return; }
+      // Already have this centre's rooms, or a fetch for them is in flight: nothing to do.
+      if (state.roomsFor === cid) { return; }
+      if (state._roomsLoading === cid) { return; }
+
+      /* onArrived re-renders the step, and the step calls this on every render. It must
+         therefore fire ONLY when a fetch actually lands - calling it on a cache hit
+         re-enters the render synchronously and recurses until the stack blows. */
+      state._roomsLoading = cid;
+      state.rooms = null;
+      state.roomsError = null;
+      var settle = function (rooms, err) {
+        state._roomsLoading = null;
+        if (parseInt(state.family.centre_id, 10) !== cid) { return; }   // centre changed mid-flight
+        state.rooms = rooms;
+        state.roomsFor = cid;
+        state.roomsError = err;
+        if (onArrived) { onArrived(); }
+      };
+      Api.get('/admin/centres/' + cid + '/rooms')
+        .then(function (r) { settle((r && Array.isArray(r.rooms)) ? r.rooms : [], null); })
+        .catch(function (e) { settle([], (e && e.message) ? e.message : 'Could not load rooms'); });
+    }
+
+    /** Age in whole months at today, or null when the date of birth is not set yet. */
+    function ageMonths(dob) {
+      if (!dob) { return null; }
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dob).trim());
+      if (!m) { return null; }
+      /* Numeric parts only. new Date('YYYY-MM-DD') parses as UTC and then local
+         getMonth() can name the month before, which here would suggest the wrong room. */
+      var by = +m[1], bm = +m[2], bd = +m[3];
+      var now = new Date();
+      var months = (now.getFullYear() - by) * 12 + (now.getMonth() + 1 - bm);
+      if (now.getDate() < bd) { months -= 1; }
+      return months < 0 ? null : months;
+    }
+
+    /* The room this child belongs in, going by age - a suggestion, never a silent
+       assignment. The admin still has to see it and can override it. */
+    function suggestRoom(child, rooms) {
+      var am = ageMonths(child.date_of_birth);
+      if (am === null || !rooms || !rooms.length) { return null; }
+      for (var i = 0; i < rooms.length; i++) {
+        if (am >= rooms[i].age_min_months && am <= rooms[i].age_max_months) { return rooms[i]; }
+      }
+      return null;
+    }
+
+    /* WHICH ROOM, AND THEREFORE WHICH EDUCATORS.
+
+       children.primary_room_id AND enrollments.room_id are both written from this on the
+       server; the educators shown are the ones already assigned to that room, so the
+       admin can see who is about to pick this child up rather than discovering it later
+       from the roster. Enrolled children only - a waitlisted child has no room yet, the
+       same rule the attendance days follow. */
+    function childRoomRow(child, idx) {
+      var box = Dom.el('div', { style: 'margin:2px 0 10px;' });
+      box.appendChild(Dom.el('span', { style: labStyle }, 'Room *'));
+
+      var enrolled = (child.enrollment_status || 'enrolled') === 'enrolled';
+      if (!enrolled) {
+        child.room_id = null;
+        box.appendChild(Dom.el('div', {
+          style: 'font-size:12.5px;color:#64748B;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;padding:9px 12px;',
+        }, 'Assigned once this child is enrolled — a waitlisted child has no place in a room yet.'));
+        return box;
+      }
+
+      if (state.rooms === null) {
+        box.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;padding:9px 12px;' }, 'Loading rooms…'));
+        return box;
+      }
+
+      if (state.roomsError) {
+        box.appendChild(Dom.el('div', {
+          style: 'font-size:12.5px;color:#B91C1C;background:#FEF2F2;border:1px solid #FECACA;border-radius:9px;padding:9px 12px;',
+        }, '⚠ ' + state.roomsError + ' — reload before adding this child, or they will be created with no room and appear on nobody’s roster.'));
+        return box;
+      }
+
+      if (!state.rooms.length) {
+        box.appendChild(Dom.el('div', {
+          style: 'font-size:12.5px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:9px 12px;',
+        }, '⚠ This centre has no rooms yet. Add a room first — a child with no room does not appear on any roster, ratio or headcount.'));
+        return box;
+      }
+
+      // One room means one answer: pick it rather than making them choose from a list of one.
+      if (state.rooms.length === 1 && !child.room_id) { child.room_id = state.rooms[0].id; }
+
+      var sug = suggestRoom(child, state.rooms);
+      if (!child.room_id && sug) { child.room_id = sug.id; }
+
+      var sel = Dom.el('select', { style: inStyle });
+      sel.appendChild(Dom.el('option', { value: '' }, '— Choose a room —'));
+      state.rooms.forEach(function (r) {
+        var free = r.capacity - r.enrolled;
+        var label = r.name + '  (' + r.age_min_months + '–' + r.age_max_months + ' mo · '
+          + r.enrolled + '/' + r.capacity + (free <= 0 ? ' · FULL' : '') + ')';
+        var o = Dom.el('option', { value: String(r.id) }, label);
+        if (String(child.room_id) === String(r.id)) { o.selected = true; }
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', function () {
+        child.room_id = sel.value ? parseInt(sel.value, 10) : null;
+        renderChildrenStep();
+      });
+      box.appendChild(sel);
+
+      var note = Dom.el('div', { style: 'font-size:12px;margin-top:5px;line-height:1.5;' });
+      var chosen = null;
+      state.rooms.forEach(function (r) { if (String(r.id) === String(child.room_id)) { chosen = r; } });
+
+      if (!chosen) {
+        note.style.color = '#B91C1C';
+        note.textContent = 'Pick a room — a child with no room is on nobody’s roster.';
+      } else {
+        var bits = [];
+        if (chosen.educators && chosen.educators.length) {
+          bits.push('Educators: <strong>' + chosen.educators.map(_dupEsc).join(', ') + '</strong>');
+        } else {
+          bits.push('<span style="color:#B45309;">No educator is assigned to this room yet.</span>');
+        }
+        if (chosen.enrolled >= chosen.capacity) {
+          bits.push('<span style="color:#B45309;">At capacity (' + chosen.enrolled + '/' + chosen.capacity + ') — you can still add, but check your ratios.</span>');
+        }
+        var am = ageMonths(child.date_of_birth);
+        if (am !== null && (am < chosen.age_min_months || am > chosen.age_max_months)) {
+          bits.push('<span style="color:#B45309;">This child is ' + am + ' months — outside this room’s ' + chosen.age_min_months + '–' + chosen.age_max_months + ' month range'
+            + (sug ? ' (' + _dupEsc(sug.name) + ' matches their age).' : '.') + '</span>');
+        }
+        note.style.color = '#64748B';
+        note.innerHTML = bits.join('<br>');
+      }
+      box.appendChild(note);
+      return box;
+    }
+
+    function childDaysRow(child, idx) {
+      if (!Array.isArray(child.schedule)) { child.schedule = ['mon', 'tue', 'wed', 'thu', 'fri']; }
+
+      var box = Dom.el('div', { style: 'margin:2px 0 4px;' });
+      var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;' });
+      head.appendChild(Dom.el('span', { style: labStyle + 'margin:0;' }, 'Attendance days *'));
+
+      var enrolled = (child.enrollment_status || 'enrolled') === 'enrolled';
+
+      var quick = Dom.el('div', { style: 'display:flex;gap:6px;margin-left:auto;' });
+      [['Mon–Fri', ['mon', 'tue', 'wed', 'thu', 'fri']], ['Every day', DAY_KEYS.slice()]].forEach(function (q) {
+        var b = Dom.el('button', { type: 'button', style: 'background:none;border:none;color:#1F6080;font-size:12px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline;' }, q[0]);
+        b.addEventListener('click', function () { child.schedule = q[1].slice(); renderChildrenStep(); });
+        if (enrolled) { quick.appendChild(b); }
+      });
+      head.appendChild(quick);
+      box.appendChild(head);
+
+      if (!enrolled) {
+        box.appendChild(Dom.el('div', {
+          style: 'font-size:12.5px;color:#64748B;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;padding:9px 12px;',
+        }, 'Set once this child is enrolled — a waitlisted child has no place in a room yet.'));
+        return box;
+      }
+
+      var row = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;' });
+      DAY_KEYS.forEach(function (d) {
+        var on = child.schedule.indexOf(d) !== -1;
+        var b = Dom.el('button', {
+          type: 'button',
+          'aria-pressed': on ? 'true' : 'false',
+          /* data-kt-no-icon: the global icon engine turns short labelled buttons into
+             glyphs by matching their text, and "Sat"/"Sun" are exactly the kind of word
+             it takes for a verb. These have to keep reading as days. */
+          'data-kt-no-icon': '1',
+          style: 'min-width:52px;padding:7px 10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;'
+            + 'border:1.5px solid ' + (on ? '#1F6080' : '#E2E8F0') + ';'
+            + 'background:' + (on ? '#1F6080' : '#fff') + ';color:' + (on ? '#fff' : '#475569') + ';',
+        }, DAY_SHORT[d]);
+        b.addEventListener('click', function () {
+          var i = child.schedule.indexOf(d);
+          if (i === -1) { child.schedule.push(d); } else { child.schedule.splice(i, 1); }
+          /* Kept in week order however they were clicked — the value is read back on the
+             Review step and stored, and "fri,mon,wed" would be nonsense in both. */
+          child.schedule = DAY_KEYS.filter(function (k) { return child.schedule.indexOf(k) !== -1; });
+          renderChildrenStep();
+        });
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+
+      var n = child.schedule.length;
+      box.appendChild(Dom.el('div', {
+        style: 'font-size:12px;color:' + (n ? '#64748B' : '#B91C1C') + ';margin-top:5px;',
+      }, n
+        ? (n === 7 ? 'Every day' : n + ' day' + (n === 1 ? '' : 's') + ' a week')
+        : 'Pick at least one day — a child with no days is on nobody’s roster.'));
+
+      return box;
+    }
+
     function renderChildrenStep() {
+      loadRooms(function () { if (step === 2) { renderChildrenStep(); } });
       bodyEl.innerHTML = '';
-      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 10px;' }, 'Add the children in this family. Health, room and other details can be edited after creating.'));
+      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 10px;' }, 'Add the children in this family. Health and other details can be edited after creating.'));
       // Why the photo is mandatory — reassure parents on confidentiality/security.
       var blurb = Dom.el('div', { style: 'background:#F0F7FB;border:1px solid #D6E6F0;border-left:4px solid #1F6080;border-radius:10px;padding:12px 14px;margin:0 0 16px;font-size:12.5px;color:#334155;line-height:1.55;' });
       blurb.innerHTML = '<strong style="color:#1F6080;">📷 A photo helps, but you can add it later.</strong><br>'
@@ -4581,7 +4913,7 @@
         })(c, cDup);
         var r2 = fieldRow('1fr 1fr');
         r2.appendChild(wrap('Preferred name', bindInput(c, 'preferred_name')));
-        r2.appendChild(wrap('Date of birth *', bindInput(c, 'date_of_birth', { type: 'date' })));
+        r2.appendChild(wrap('Date of birth *', bindInput(c, 'date_of_birth', { type: 'date', rerenderOnChange: renderChildrenStep })));
         card.appendChild(r2);
         var r3 = fieldRow('1fr 1fr');
         r3.appendChild(wrap('Gender', bindSelect(c, 'gender', [
@@ -4611,6 +4943,21 @@
         r7.appendChild(wrap('Usual drop-off', bindInput(c, 'expected_dropoff_time', { type: 'time' })));
         r7.appendChild(wrap('Usual pick-up', bindInput(c, 'expected_pickup_time', { type: 'time' })));
         card.appendChild(r7);
+
+        /* WHICH DAYS THEY ACTUALLY COME.
+
+           Written onto the enrolment (`enrollments.schedule`), which is what every
+           roster, ratio and headcount reads through CareSchedule::constrain. Asked here,
+           beside the hours, because it is part of the same answer — "when is this child
+           with us" — and because the alternative is the care-schedule editor afterwards,
+           which nobody opens for a child whose record already looks complete.
+
+           Only for an ENROLLED child: a waitlisted one has not started, so they get
+           neither a room nor an enrolment row and there is nothing for days to attach to.
+           Shown greyed with an explanation rather than silently absent, so the control
+           does not appear and vanish as the dropdown above changes. */
+        card.appendChild(childRoomRow(c, idx));
+        card.appendChild(childDaysRow(c, idx));
         r6.appendChild(Dom.el('div', {}));
         card.appendChild(r6);
         var med = Dom.el('textarea', { style: inStyle + 'min-height:52px;font-family:inherit;' });
@@ -4619,7 +4966,7 @@
         bodyEl.appendChild(card);
       });
       var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add another child');
-      add.addEventListener('click', function () { state.children.push({ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '', expected_dropoff_time: '', expected_pickup_time: '' }); renderChildrenStep(); });
+      add.addEventListener('click', function () { state.children.push({ first_name: '', last_name: '', preferred_name: '', date_of_birth: '', gender: 'prefer_not_to_say', enrollment_status: 'enrolled', allergies: '', dietary_restrictions: '', medical_notes: '', doctor_name: '', doctor_phone: '', school: '', room_id: null, expected_dropoff_time: '', expected_pickup_time: '', schedule: ['mon', 'tue', 'wed', 'thu', 'fri'] }); renderChildrenStep(); });
       bodyEl.appendChild(add);
     }
 
@@ -4677,8 +5024,56 @@
       bodyEl.appendChild(gd);
       var ch = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;' });
       ch.appendChild(Dom.el('strong', { style: 'font-size:13px;color:#1F6080;display:block;margin-bottom:6px;' }, '🧒 Children (' + state.children.length + ')'));
-      state.children.forEach(function (c) { ch.appendChild(row((c.first_name + ' ' + c.last_name).trim(), (c.date_of_birth || '?') + '  ·  ' + c.enrollment_status)); });
+      state.children.forEach(function (c) {
+        ch.appendChild(row((c.first_name + ' ' + c.last_name).trim(), (c.date_of_birth || '?') + '  ·  ' + c.enrollment_status));
+        /* The room is now a decision made in this wizard, so it belongs on the summary
+           of what is about to be created — a review that silently omits it is how a
+           child ends up in the wrong room with nobody having seen the choice. */
+        if ((c.enrollment_status || 'enrolled') === 'enrolled') {
+          var rm = null;
+          (state.rooms || []).forEach(function (r) { if (String(r.id) === String(c.room_id)) { rm = r; } });
+          ch.appendChild(row('↳ Room', rm
+            ? (rm.name + (rm.educators && rm.educators.length ? '  ·  ' + rm.educators.join(', ') : '  ·  no educator assigned'))
+            : 'Not set'));
+        }
+        /* Confirmed before saving, not just entered. The days decide which rosters and
+           ratios this child lands in, and they are the one answer on this step that has
+           a default somebody may never have looked at. */
+        if ((c.enrollment_status || 'enrolled') === 'enrolled') {
+          var days = Array.isArray(c.schedule) ? c.schedule : [];
+          ch.appendChild(row('   ↳ Attends', days.length
+            ? (days.length === 7 ? 'Every day' : days.map(function (d) { return DAY_SHORT[d] || d; }).join(', '))
+            : '— no days chosen'));
+        }
+      });
       bodyEl.appendChild(ch);
+      /* ASK before emailing the family, on the step where they can still see who is
+         about to be written to. Creating a family sends two things: an account invite
+         with a temporary password, and a warm introduction to the provider. Both used to
+         go automatically, which is wrong for the common case of entering a household from
+         a paper form weeks before they start — they get a password today and have
+         forgotten it by their first day.
+
+         Ticked by default, because sending IS the normal case and the old behaviour
+         should not change for anyone who does not look. Unticking is recoverable: the
+         family card has an Invite action. (Anthony, 2026-09-09) */
+      if (state.sendWelcome === undefined) { state.sendWelcome = true; }
+      var wel = Dom.el('div', { style: 'border:1px solid #BBF7D0;background:#F0FDF4;border-radius:10px;padding:12px 14px;margin-bottom:12px;' });
+      var welLabel = Dom.el('label', { style: 'display:flex;gap:10px;align-items:flex-start;cursor:pointer;' });
+      var welBox = Dom.el('input', { type: 'checkbox', style: 'width:18px;height:18px;margin-top:2px;flex:0 0 auto;accent-color:#16A34A;' });
+      welBox.checked = !!state.sendWelcome;
+      welBox.addEventListener('change', function () { state.sendWelcome = welBox.checked; renderFooter(); });
+      var welText = Dom.el('span', {});
+      welText.appendChild(Dom.el('span', { style: 'display:block;font-size:13.5px;font-weight:700;color:#111827;' }, 'Send the welcome email now'));
+      var _names = state.guardians.map(function (g) { return (g.first_name + ' ' + g.last_name).trim() || g.email; }).filter(Boolean).join(', ');
+      welText.appendChild(Dom.el('span', { style: 'display:block;font-size:12px;color:#4B5563;line-height:1.5;margin-top:2px;' },
+        'Emails ' + (_names || 'the guardians') + ' their sign-in details and an introduction to the centre. '
+        + 'Leave it unticked to add the family quietly — you can send it later from the family card.'));
+      welLabel.appendChild(welBox);
+      welLabel.appendChild(welText);
+      wel.appendChild(welLabel);
+      bodyEl.appendChild(wel);
+
       // Emergency contacts — previously omitted from the review.
       var ec = (state.emergency || []).filter(function (e) { return ((e.first_name || '') + (e.last_name || '')).trim(); });
       if (ec.length) {
@@ -4716,6 +5111,15 @@
              form and rarely has a photo of the child; the family is asked for it during
              their own onboarding, where they actually have one. */
           if (c._dup && !c._dupOk) { status.style.color = '#B45309'; status.textContent = 'Child ' + (j + 1) + ' looks like an existing child — tick “This is a different child”, or open the existing record instead.'; return false; }
+          /* An enrolled child with no days would be written with an EMPTY schedule, and
+             an empty schedule means "every day" to CareSchedule (deliberately, so the
+             thousands of rows that predate this feature still render). Blocked here so
+             nobody can accidentally say the opposite of what they meant. */
+          if ((c.enrollment_status || 'enrolled') === 'enrolled'
+              && (!Array.isArray(c.schedule) || !c.schedule.length)) {
+            status.textContent = 'Child ' + (j + 1) + ': choose at least one attendance day.';
+            return false;
+          }
         }
       }
       status.textContent = '';
@@ -4747,7 +5151,8 @@
         next.addEventListener('click', function () { if (validateStep()) { step++; render(); } });
         right.appendChild(next);
       } else {
-        var create = Dom.el('button', { type: 'button', style: 'background:#16A34A;border:none;color:white;border-radius:8px;padding:9px 22px;font-weight:700;cursor:pointer;' }, '✓ Create family');
+        var create = Dom.el('button', { type: 'button', style: 'background:#16A34A;border:none;color:white;border-radius:8px;padding:9px 22px;font-weight:700;cursor:pointer;' },
+          state.sendWelcome === false ? '✓ Create family (no email)' : '✓ Create family & send welcome');
         create.addEventListener('click', submit);
         right.appendChild(create);
       }
@@ -4758,6 +5163,7 @@
       state.guardians.forEach(function (g, i) { g.is_primary = (i === 0); });
       var payload = {
         family_name: state.family.family_name.trim(),
+        send_welcome: state.sendWelcome !== false,
         centre_id: parseInt(state.family.centre_id, 10),
         primary_email: state.family.primary_email.trim() || null,
         primary_phone: state.family.primary_phone.trim() || null,
@@ -4773,8 +5179,18 @@
         children: state.children.map(function (c) {
           return { first_name: c.first_name.trim(), last_name: c.last_name.trim(), preferred_name: c.preferred_name.trim() || null, date_of_birth: c.date_of_birth, gender: c.gender, enrollment_status: c.enrollment_status,
             allergies: (c.allergies || '').trim() || null, dietary_restrictions: (c.dietary_restrictions || '').trim() || null, medical_notes: (c.medical_notes || '').trim() || null, doctor_name: (c.doctor_name || '').trim() || null, doctor_phone: (c.doctor_phone || '').trim() || null, school: (c.school || '').trim() || null,
+            /* The room. Without this the server only placed a child when the centre
+               happened to have exactly one room; everywhere else the child was created
+               with no primary_room_id and no enrolment row, and so appeared on no
+               roster, in no ratio and in no educator's day. Waitlisted children get no
+               room, matching `schedule` below. */
+            room_id: ((c.enrollment_status || 'enrolled') === 'enrolled' && c.room_id) ? c.room_id : null,
             expected_dropoff_time: (c.expected_dropoff_time || '').trim() || null,
-            expected_pickup_time: (c.expected_pickup_time || '').trim() || null };
+            expected_pickup_time: (c.expected_pickup_time || '').trim() || null,
+            /* Only for an enrolled child — a waitlisted one gets no enrolment row, so
+               there is nothing to attach days to and sending them would be noise. */
+            schedule: ((c.enrollment_status || 'enrolled') === 'enrolled' && Array.isArray(c.schedule) && c.schedule.length)
+              ? c.schedule.slice() : null };
         }),
         emergency_contacts: (state.emergency || []).filter(function (e) { return ((e.first_name || '') + (e.last_name || '')).trim(); }).map(function (e) {
           return { name: ((e.first_name || '') + ' ' + (e.last_name || '')).trim(), relationship: (e.relationship || '').trim() || null, phone: (e.phone || '').trim() || null, alt_phone: (e.alt_phone || '').trim() || null, can_pickup: !!e.can_pickup };
@@ -4783,7 +5199,8 @@
       // Circular progress + a short settle delay so the portal has time to update.
       if (!document.getElementById('kt-fam-spin-kf')) { var _st = document.createElement('style'); _st.id = 'kt-fam-spin-kf'; _st.textContent = '@keyframes kt-spin{to{transform:rotate(360deg)}}'; document.head.appendChild(_st); }
       status.style.color = '#1F6080';
-      status.innerHTML = '<span style="display:inline-flex;align-items:center;gap:10px;"><span style="width:18px;height:18px;border:3px solid #CBD5E1;border-top-color:#1F6080;border-radius:50%;display:inline-block;animation:kt-spin .7s linear infinite;"></span> Creating family &amp; sending guardian invites…</span>';
+      status.innerHTML = '<span style="display:inline-flex;align-items:center;gap:10px;"><span style="width:18px;height:18px;border:3px solid #CBD5E1;border-top-color:#1F6080;border-radius:50%;display:inline-block;animation:kt-spin .7s linear infinite;"></span> '
+        + (state.sendWelcome === false ? 'Creating family…' : 'Creating family &amp; sending guardian invites…') + '</span>';
       footer.innerHTML = '';
       try {
         var res = await Api.post('/admin/families', payload);
@@ -5672,30 +6089,21 @@
       });
   }
 
-  /* Every filed document across this family's children, newest first.
-     One request per child — a family has a handful, and there is no endpoint that
-     takes a family. Fails quietly: a document list is not worth the record. */
-  function renderFamilyDocuments(host, children) {
-    Dom.clear(host);
-    var kids = (children || []).filter(function (c) { return c && c.id; });
-    if (!kids.length) {
-      host.appendChild(Dom.el('div', {
-        style: 'font-size:13px;color:var(--ink-500);',
-      }, 'No children on this family, so no documents.'));
-      return;
-    }
+  /* Every document filed about this family, newest first.
 
+     ONE request, not one per child. This used to fan out across the children because
+     "there is no endpoint that takes a family"; there is now, and it returns the
+     children's files, the family's own, AND the forms the guardians have signed — which
+     were previously filed nowhere a human could reach, so a parent's signed consent was
+     invisible on the record it was about.
+
+     Fails quietly: a document list is worth showing an apology for, not an error page. */
+  function renderFamilyDocuments(host, familyId) {
+    Dom.clear(host);
     host.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' }, 'Loading…'));
 
-    Promise.all(kids.map(function (c) {
-      return Api.get('/director/children/' + c.id + '/documents')
-        .then(function (r) {
-          return ((r && r.documents) || []).map(function (d) { d.__child = c; return d; });
-        })
-        .catch(function () { return []; });   // one child's failure is not the family's
-    })).then(function (lists) {
-      var docs = [].concat.apply([], lists);
-      docs.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+    Api.get('/admin/families/' + familyId + '/documents').then(function (r) {
+      var docs = (r && r.documents) || [];
 
       Dom.clear(host);
       if (!docs.length) {
@@ -5705,9 +6113,8 @@
         return;
       }
 
-      var ICON = { incident_report: '🩹', agreement: '✍️', medical: '💊' };
+      var ICON = { incident_report: '🩹', agreement: '✍️', medical: '💊', signed_form: '📝' };
       docs.forEach(function (d) {
-        var kid = [d.__child.first_name, d.__child.last_name].filter(Boolean).join(' ');
         var row = Dom.el('div', {
           style: 'display:flex;gap:11px;align-items:center;padding:9px 0;'
                + 'border-top:1px solid var(--ink-100, #F1F5F9);',
@@ -5716,12 +6123,27 @@
           ICON[d.category] || '📄'));
 
         var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
-        mid.appendChild(Dom.el('div', {
+        var titleRow = Dom.el('div', {
+          style: 'display:flex;align-items:center;gap:7px;flex-wrap:wrap;',
+        });
+        titleRow.appendChild(Dom.el('div', {
           style: 'font-weight:600;color:var(--ink-900, #0F172A);font-size:13.5px;',
         }, d.title || 'Document'));
+        /* A signed form is a different kind of thing from a file somebody uploaded —
+           it carries a signature and a date, and the badge is what says so at a glance. */
+        if (d.category === 'signed_form') {
+          titleRow.appendChild(Dom.el('span', {
+            style: 'font-size:10.5px;font-weight:800;color:#166534;background:#DCFCE7;'
+                 + 'border:1px solid #BBF7D0;border-radius:999px;padding:1px 8px;',
+          }, 'Signed'));
+        }
+        mid.appendChild(titleRow);
+        /* Who it is about — the child, or the guardian who signed it. Without this a
+           family with three children and two parents is a list of undifferentiated titles. */
         mid.appendChild(Dom.el('div', {
           style: 'font-size:12px;color:var(--ink-500);margin-top:1px;',
-        }, [kid, String(d.created_at || '').slice(0, 10)].filter(Boolean).join('  ·  ')));
+        }, [d.about, String(d.signed_at || d.created_at || '').slice(0, 10)]
+              .filter(Boolean).join('  ·  ')));
         row.appendChild(mid);
 
         /* file_url arrives already signed — SignProtectedMedia rewrites protected
@@ -5735,6 +6157,11 @@
         }
         host.appendChild(row);
       });
+    }).catch(function () {
+      Dom.clear(host);
+      host.appendChild(Dom.el('div', {
+        style: 'font-size:13px;color:var(--ink-500);',
+      }, 'Documents could not be loaded.'));
     });
   }
 
@@ -5860,12 +6287,11 @@
       // guardians (CCs the agency admin, director and educator).
       var _resend = Dom.el('button', { style: 'padding:8px 14px;background:#fff;color:#1F6080;border:1.5px solid #1F6080;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;flex:0 0 auto;' }, '✉️ Send welcome');
       _resend.addEventListener('click', async function () {
-        var go = !(window.KT && KT.confirm) || await KT.confirm({ title: 'Send provider welcome email?', description: 'Emails the warm provider introduction to this family’s guardians, with the agency admin, director and educator on CC.' });
-        if (!go) return;
-        _resend.disabled = true; _resend.textContent = 'Sending…';
+        _resend.disabled = true;
         try {
-          var rr = await Api.post('/admin/families/' + familyId + '/provider-welcome', {});
-          if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Welcome email sent to ' + (rr.recipients || 0) + ' guardian(s)', 'success');
+          var rr = await sendFamilyWelcome(familyId);
+          // null = the admin cancelled at the confirm; the button goes back to normal.
+          if (!rr) { _resend.disabled = false; return; }
           _resend.textContent = '✓ Sent';
         } catch (e) {
           if (window.KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not send: ' + (e.message || 'error'), 'error');
@@ -6060,7 +6486,7 @@
       body.appendChild(famSectionHead('DOCUMENTS', null, null));
       var _docHost = Dom.el('div', {});
       body.appendChild(_docHost);
-      renderFamilyDocuments(_docHost, (data.children || []).map(function (c) { return c; }));
+      renderFamilyDocuments(_docHost, familyId);
 
       /* Notes, with who wrote them and when. `families.notes` is still shown above as a
          single field, but anything written from here is attributed and kept. */
