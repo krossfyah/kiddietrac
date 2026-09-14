@@ -3628,7 +3628,7 @@ final class AdminController extends Controller
                 'provider_notified' => $provSched,
                 'admins_notified' => $adminSched,
                 'message' => 'De-enrolment scheduled for '.\Illuminate\Support\Carbon::parse($lastDay)->format('j M Y')
-                    .'. They keep their access until then, and the family has been told.',
+                    .'. They keep their access until then, and the family is being told now.',
             ]);
         }
 
@@ -4265,14 +4265,19 @@ final class AdminController extends Controller
                 ]);
 
                 try {
-                    \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
-                        ->html($html, function ($m) use ($u, $kidList, $agencyName, $previewTo) {
-                            $m->to($u->email)->subject('Goodbye to ' . $kidList);
-                            if ($previewTo) {
-                                $m->subject('[Preview — educator] Goodbye to ' . $kidList);
-                                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
-                            }
-                        });
+                    /* QUEUED — this loop is the bulk of the cost. Family 107 had one
+                       guardian and one child and still sent four of these, one per
+                       educator holding the child's rooms, at ~540ms each. */
+                    $notice = new \App\Mail\AgencyHtmlNotice(
+                        bodyHtml: $html,
+                        subjectLine: $previewTo
+                            ? ('[Preview — educator] Goodbye to ' . $kidList)
+                            : ('Goodbye to ' . $kidList),
+                        agencyId: $agencyId,
+                        bypassSuppression: (bool) $previewTo,
+                    );
+                    $notice->onQueue('mail');
+                    \Illuminate\Support\Facades\Mail::to($u->email)->queue($notice);
                     $sent++;
                 } catch (\Throwable $e) {
                     \Log::warning('provider departure notice failed', ['e' => $e->getMessage()]);
@@ -4439,15 +4444,16 @@ final class AdminController extends Controller
                 . ($owed > 0 ? ' — $' . number_format($owed, 2) . ' outstanding' : '');
 
             try {
-                \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
-                    ->html($html, function ($m) use ($to, $subject, $previewTo) {
-                        $m->to($to[0])->subject($subject);
-                        if (count($to) > 1) { $m->bcc(array_slice($to, 1, 20)); }
-                        if ($previewTo) {
-                            $m->subject('[Preview — oversight] ' . $subject);
-                            $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
-                        }
-                    });
+                // QUEUED. One message with the rest of the admins bcc'd, as before.
+                $notice = new \App\Mail\AgencyHtmlNotice(
+                    bodyHtml: $html,
+                    subjectLine: $previewTo ? ('[Preview — oversight] ' . $subject) : $subject,
+                    agencyId: $agencyId,
+                    bccList: count($to) > 1 ? implode(',', array_slice($to, 1, 20)) : null,
+                    bypassSuppression: (bool) $previewTo,
+                );
+                $notice->onQueue('mail');
+                \Illuminate\Support\Facades\Mail::to($to[0])->queue($notice);
                 $sent = count($to);
             } catch (\Throwable $e) {
                 \Log::warning('oversight departure notice failed', ['e' => $e->getMessage()]);
@@ -4688,20 +4694,37 @@ final class AdminController extends Controller
                 $bcc = array_slice($bcc, 0, 15);
 
                 try {
-                    \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
-                        ->html($html, function ($m) use ($u, $agencyName, $bcc, $owed, $previewTo) {
-                            $m->to($u->email)->subject($owed
+                    /* QUEUED (2026-09-14). This sent synchronously, and so did the two
+                       notices beside it, so deleting a family cost the admin one mail
+                       round-trip per recipient while they watched a spinner. Measured on
+                       this host: ~540ms a send through sendmail, which forks a process
+                       per message; family 107 sent six and took 3,140ms, family 92 four
+                       days earlier took 3,144ms on completely different data.
+
+                       The closure is why it was synchronous — a queued mailable is
+                       serialized and a Closure cannot be — so everything it set travels
+                       on AgencyHtmlNotice as a scalar instead.
+
+                       X-KT-Account-Notice matters MORE now, not less: the family's logins
+                       are closed moments after this returns, so the send now certainly
+                       happens after the close rather than probably before it, and a closed
+                       account is exactly what the mail gate blocks. The header is the
+                       existing exemption and SuppressAgencyMail strips it before the
+                       message leaves. */
+                    $notice = new \App\Mail\AgencyHtmlNotice(
+                        bodyHtml: $html,
+                        subjectLine: $previewTo
+                            ? ('[Preview] ' . $agencyName . ' de-enrolment notice')
+                            : ($owed
                                 ? ('Leaving ' . $agencyName . ' — your records, access and outstanding balance')
-                                : ('Leaving ' . $agencyName . ' — your records and access'));
-                            if ($bcc) $m->bcc($bcc);
-                            if ($previewTo) {
-                                $m->subject('[Preview] ' . $agencyName . ' de-enrolment notice');
-                                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
-                            }
-                            // The accounts are closed moments after this is sent, and a
-                            // closed account is exactly what the mail gate blocks.
-                            $m->getHeaders()->addTextHeader('X-KT-Account-Notice', '1');
-                        });
+                                : ('Leaving ' . $agencyName . ' — your records and access')),
+                        agencyId: $agencyId,
+                        bccList: $bcc ?: null,
+                        accountNotice: true,
+                        bypassSuppression: (bool) $previewTo,
+                    );
+                    $notice->onQueue('mail');
+                    \Illuminate\Support\Facades\Mail::to($u->email)->queue($notice);
                     $sent++;
                 } catch (\Throwable $e) {
                     \Illuminate\Support\Facades\Log::error('De-enrolment notice could not be sent', [
