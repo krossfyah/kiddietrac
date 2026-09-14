@@ -41,18 +41,31 @@ class SuppressAgencyMail
 
     public function handle(MessageSending $event): bool
     {
-        // Explicit admin test sends carry a one-off bypass header — they target a
-        // specific address on purpose (e.g. the tester's own inbox) and must not
-        // be caught by the live-agency kill-switch. Only manual test commands set
-        // it; the header is stripped so it never rides along on the wire.
+/* X-KT-Bypass-Suppression SKIPS THE SWITCHES, NEVER THE PERSON.
+
+           It used to return here outright, which skipped every gate below — including
+           the not-onboarded gate and the suspended/deactivated/deleted check. The
+           comment said "Only manual test commands set it", and that stopped being true:
+           TimeOffController sets it on closure notices and rota changes, reasoning that
+           an operational message must arrive even where an agency has bulk notifications
+           switched off. That is a fair thing to say about the SWITCHES. It is not a
+           reason to write to somebody whose account is closed — and on 2026-09-02 a
+           deactivated director and a suspended one each received a rota notification
+           because of it.
+
+           So the header now means what its callers meant. The account-level gates still
+           run for every message; only the agency / centre / room switches and the .env
+           kill-switch are skipped. Somebody who has left is not staff any more. */
+        $bypassSwitches = false;
         try {
             $hdrs = $event->message->getHeaders();
             if ($hdrs && $hdrs->has('X-KT-Bypass-Suppression')) {
                 $hdrs->remove('X-KT-Bypass-Suppression');
-                Log::info('Email suppression bypassed for an explicit test send.', [
-                    'subject' => (string) ($event->message->getSubject() ?? ''),
-                ]);
-                return true;
+                $bypassSwitches = true;
+                Log::info('Email suppression: switches bypassed (operational or test send); '
+                    . 'account-level gates still apply.', [
+                        'subject' => (string) ($event->message->getSubject() ?? ''),
+                    ]);
             }
         } catch (\Throwable $e) {
         }
@@ -221,6 +234,26 @@ class SuppressAgencyMail
             }
         }
 
+        /* WHICH AGENCY IS SENDING THIS.
+
+           Every sender stamps X-KT-Agency-Id (the daily summaries, digests, reminders).
+           Without it the gate below judged a send by EVERY account sharing the
+           recipient's address, so one agency's off switch silenced another agency's
+           mail to the same inbox — mr.anthonyhosein@gmail.com holds an agency_admin in
+           iLearn and a home_visitor in Test Agency, and switching Test Agency off would
+           have stopped both.
+
+           Absent header → unchanged behaviour, which errs towards holding mail back
+           rather than releasing it. */
+        $sendingAgencyId = null;
+        try {
+            $hdrsAg = $event->message->getHeaders();
+            if ($hdrsAg && $hdrsAg->has('X-KT-Agency-Id')) {
+                $raw = trim((string) $hdrsAg->get('X-KT-Agency-Id')->getBodyAsString());
+                if ($raw !== '' && ctype_digit($raw)) { $sendingAgencyId = (int) $raw; }
+            }
+        } catch (\Throwable $e) { /* never break the mail layer over a header */ }
+
         // 1) The agency's OWN toggle ("Send notifications and emails") is
         //    ABSOLUTE — off means off, even for allowlisted addresses. This is
         //    what the Settings switch strictly controls.
@@ -246,27 +279,73 @@ class SuppressAgencyMail
                Now each account is asked in its own right and ANY account that says
                hold, holds. For a suppression gate, failing closed is the only safe
                direction. */
-            $uidsHere = DB::table('users')->where('email', $addr)->pluck('id');
+            /* A DELETED ACCOUNT HAS NO OPINIONS (2026-09-14).
+
+               This used to take every users row on the address, soft-deleted ones
+               included. Delete a member of staff and re-add them — the ordinary way a
+               role is corrected — and the deleted row, which is always 'deactivated',
+               vetoed every message to the address forever. The new account could never
+               be invited, could never set a password, and the log said only "this
+               account is deactivated or suspended", which was true of a row nobody
+               could see and false of the person waiting for the email.
+
+               That is Lloydene King, deleted and re-added on 2026-09-14: the invite
+               reached her, the password reset did not. */
+            $uidsHere = DB::table('users')->where('email', $addr)
+                ->whereNull('deleted_at')
+                ->pluck('id');
             if ($uidsHere->isEmpty()) {
                 continue;
+            }
+
+            /* CAN ANYBODY ON THIS ADDRESS ACTUALLY RECEIVE MAIL?
+
+               "Any account that says hold, holds" is the right rule for the agency and
+               centre switches below — those are the sender's policy, and a policy that
+               fails open is not a policy. It is the WRONG rule for accountOff, which
+               describes the RECIPIENT: if one person on this address is deactivated and
+               another is live, the message is for the live one, and holding it helps
+               nobody.
+
+               Worse, a deactivated account with no active role resolves to no agency at
+               all, and the agency filter below treats "no agency" as "belongs to every
+               agency" — so one dead account poisoned the address for the whole platform.
+
+               So accountOff is decided ACROSS the address rather than by the first row
+               to object: held only when there is genuinely nobody left to reach. */
+            $reachable = $uidsHere->filter(
+                fn ($id) => ! \App\Support\Suppression::accountOff((int) $id)
+            )->values();
+
+            if ($reachable->isEmpty()) {
+                $this->cancel($event, [$addr],
+                    'Every account on this address is deactivated or suspended, so nothing is sent to it.');
+
+                return false;
             }
 
             /* allowlist() lowercases its entries; comparing the raw address under a
                strict in_array meant a capitalised recipient missed its own exemption. */
             $isAllowlisted = in_array(mb_strtolower($addr), $this->allowlist(), true);
 
-            foreach ($uidsHere as $uidOnAddr) {
+            foreach ($reachable as $uidOnAddr) {
                 $uid = (int) $uidOnAddr;
 
-                // The account itself is deactivated or suspended — the most absolute of
-                // the three, and not exempted by anything.
-                if (\App\Support\Suppression::accountOff($uid)) {
-                    $this->cancel($event, [$addr],
-                        'This account is deactivated or suspended, so nothing is sent to it.');
-                    return false;
+                /* Only the account belonging to the agency actually sending. A person
+                   with accounts in two agencies is governed, for this message, by the
+                   one that wrote it — otherwise Test Agency's switch decides whether
+                   iLearn may write to them. */
+                if ($sendingAgencyId !== null) {
+                    $uidAgency = \App\Support\Suppression::agencyOfUser($uid);
+                    if ($uidAgency !== null && $uidAgency !== $sendingAgencyId) {
+                        continue;
+                    }
                 }
 
-                if (\App\Support\Suppression::agencyOff($uid)) {
+                /* accountOff is settled above, across the whole address, so by here
+                   every $uid in this loop is one that can actually be written to. */
+
+                if (! $bypassSwitches && \App\Support\Suppression::agencyOff($uid)) {
                     // Name the ACTUAL switch. Falling through to cancel()'s default
                     // blamed MAIL_SUPPRESS_AGENCIES, so the log said the env kill-switch
                     // stopped mail that the env kill-switch had nothing to do with —
@@ -285,7 +364,7 @@ class SuppressAgencyMail
             // back because the ADMIN doing the testing happens to belong to centres
             // whose email is switched off. A send you explicitly asked for should
             // arrive; the gate still applies to everyone else.
-                if (! $isInvite && ! $isAllowlisted
+                if (! $bypassSwitches && ! $isInvite && ! $isAllowlisted
                     && \App\Support\Suppression::blockedByCentreRoom($uid)) {
                     $this->cancel($event, [$addr],
                         'Every centre/room this recipient belongs to has email switched OFF '

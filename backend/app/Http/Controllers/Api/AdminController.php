@@ -1937,16 +1937,35 @@ final class AdminController extends Controller
                stays so the first account still validates. */
             'username' => [
                 'nullable',
+                /* ONLY AN ACCOUNT THAT CAN SIGN IN CREATES AMBIGUITY (2026-09-14).
+
+                   This counted every non-deleted row on the address, deactivated ones
+                   included. But login refuses `deactivated` and `suspended` outright
+                   (AuthController, fixed 2026-08-25), so such an account can never turn
+                   up at a sign-in prompt and can never be confused with anything.
+
+                   The effect was that re-adding somebody was blocked by whatever old,
+                   switched-off account happened to still carry their address — for
+                   Lloydene King it was a deactivated Test Agency account from July that
+                   nobody remembered, and re-adding her to iLearn demanded a username to
+                   tell her apart from herself. The admin's first attempt was refused 422.
+
+                   Counting only accounts that could actually appear at a login prompt
+                   keeps the rule doing its real job — a second LIVE account on one
+                   address still needs a username. */
                 Rule::requiredIf(fn () => filled($request->input('email'))
                     && DB::table('users')->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $request->input('email')))])
-                        ->whereNull('deleted_at')->exists()),
+                        ->whereNull('deleted_at')
+                        ->whereNotIn('status', ['deactivated', 'suspended'])
+                        ->exists()),
                 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/',
                 Rule::unique('users', 'username')->whereNull('deleted_at'),
             ],
         ], [
             // Named causes, not field names. Somebody who has never needed a username
             // needs to know why this one appeared.
-            'username.required' => 'This email address already has an account. Add a username so the two can be told apart at sign-in.',
+            'username.required' => 'This email address already has an account that can sign in. '
+                . 'Add a username so the two can be told apart at sign-in.',
             'username.unique' => 'That username is already taken — please choose another.',
             'username.regex' => 'A username can use letters, numbers, dots, dashes and underscores only.',
             'username.min' => 'A username needs at least 3 characters.',
