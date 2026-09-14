@@ -372,6 +372,10 @@ function showReloadGate(){
   <!-- A drag that merely ENDS on a backdrop must not close a dialog mid-edit. -->
   <!-- One way to draw a stored secret: a pill saying whether one is saved, and one
        wording for it, everywhere. Loaded before the settings screens that use it. -->
+  <!-- Tells a long-lived tab when it is running yesterday's app. A single-page app
+       that never navigates never re-fetches its own shell; without this, a deploy
+       reaches nobody who already has the page open. -->
+  <script src="/js/kt-update-check.js?v=20260914-1240" defer></script>
   <script src="/js/kt-secret-field.js?v=20260910-1800" defer></script>
   <script src="/js/kt-modal-safety.js?v=kt-202609100900" defer></script>
   <script src="/js/kt-parent-chrome.js?v=v20260906greet1" defer></script>
@@ -576,7 +580,7 @@ function showReloadGate(){
        out unreadable in the APK. Covers date, time, datetime-local and month. -->
   <script src="/js/kt-date-sheet.js?v=v584-2026082005" defer></script>
   <script src="/js/kt-select-sheet.js?v=202609072334" defer></script>
-  <script src="/js/kt-row-actions.js?v=20260914-1200" defer></script>
+  <script src="/js/kt-row-actions.js?v=20260914-1245" defer></script>
   <script src="/js/kt-tooltip-global.js?v=20260805tt1" defer></script>
   <script src="/js/kt-urgent-alert.js?v=kt-202609100010" defer></script>
   <script src="/js/kt-agreement.js?v=20260812nda1" defer></script>
