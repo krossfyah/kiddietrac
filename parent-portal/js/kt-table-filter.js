@@ -64,16 +64,32 @@
     // disagree with each other.
     if (table.hasAttribute('data-kt-no-filter')) return;
     if (table.dataset.ktFiltered) return;
-    table.dataset.ktFiltered = '1';
     const tbody = table.querySelector('tbody');
-    if (!tbody || tbody.children.length < 2) return; // skip 1-row tables
+    if (!tbody) return;
+    // Skip 1-row tables: a search box over a single row is noise. A table can opt in
+    // with data-kt-filter-always when the control should be present even while empty,
+    // so a screen still being populated does not look like it is missing the feature.
+    if (tbody.children.length < 2 && !table.hasAttribute('data-kt-filter-always')) return;
+
+    /* THE FLAG IS STAMPED HERE, NOT ABOVE.
+
+       It used to be set before the two early returns, which meant any table the sweep
+       happened to reach while it was still empty or one row long was marked "done"
+       forever — rows arriving a moment later found the door already shut, and the
+       screen looked like it was simply missing search and sorting. Everything that
+       renders its table after a fetch was exposed to that race. (Anthony, 2026-09-09) */
+    table.dataset.ktFiltered = '1';
 
     const wrap = document.createElement('div');
     wrap.className = 'kt-table-filter';
-    wrap.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;gap:12px;margin:14px 0 10px;flex-wrap:wrap;';
+    // Spacing lives in the stylesheet so a phone can tighten it; inline it could not be.
+    wrap.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;flex-wrap:wrap;';
 
     const left = document.createElement('div');
-    left.style.cssText = 'position:relative;flex:1;min-width:240px;max-width:380px;';
+    left.className = 'kt-tf-left';
+    // min/max width in the stylesheet: a 240px floor forced the row counter onto its
+    // own line on a phone.
+    left.style.cssText = 'position:relative;flex:1;';
     const input = document.createElement('input');
     input.type = 'search';
     input.placeholder = '🔍  Filter ' + tbody.children.length + ' rows…';
@@ -90,7 +106,67 @@
     counter.textContent = tbody.children.length + ' / ' + tbody.children.length;
     right.appendChild(counter);
 
+    /* Sorting, on a phone.
+       kt-mobile-tables.js restacks tables into cards below 600px and hides <thead>, so
+       the header click that sorts is unreachable there — the feature silently vanishes
+       on exactly the screens where a long list is hardest to read.
+
+       This does not sort anything itself. It finds the <th> for the chosen column and
+       CLICKS it, so kt-polish.js's handler stays the single implementation: same
+       comparator, same indicators, same ISO-date handling. The arrow button clicks
+       again, which is how that handler already toggles direction.
+
+       Hidden above 600px by CSS — with the headers on screen, they are the better
+       control and a second one would just disagree with them. */
+    var sortWrap = null;
+    try {
+      var _thead = table.querySelector('thead');
+      var headCells = Array.prototype.filter.call(_thead ? _thead.querySelectorAll('th') : [], function (th) {
+        return (th.textContent || '').trim() && !th.querySelector('button');
+      });
+      if (headCells.length > 1) {
+        sortWrap = document.createElement('div');
+        sortWrap.className = 'kt-tf-sortwrap';
+        /* The documented opt-out from the 16px/11px form-field sizing: this is table
+           chrome, not a form field. See kt-mobile-app.css. */
+        sortWrap.setAttribute('data-kt-compact', '1');
+
+        var sel = document.createElement('select');
+        sel.className = 'kt-tf-sort';
+        sel.setAttribute('aria-label', 'Sort by');
+        sel.innerHTML = '<option value="">Sort by…</option>' + headCells.map(function (th, i) {
+          var t = (th.textContent || '').replace(/[⇅↑↓]/g, '').trim();
+          return '<option value="' + i + '">' + t.replace(/[&<>"]/g, '') + '</option>';
+        }).join('');
+
+        var dirBtn = document.createElement('button');
+        dirBtn.type = 'button';
+        dirBtn.className = 'kt-tf-dir';
+        dirBtn.textContent = '↑↓';
+        dirBtn.setAttribute('aria-label', 'Reverse sort order');
+        dirBtn.disabled = true;
+
+        sel.addEventListener('change', function () {
+          var i = parseInt(sel.value, 10);
+          if (isNaN(i) || !headCells[i]) { dirBtn.disabled = true; return; }
+          dirBtn.disabled = false;
+          headCells[i].click();
+          dirBtn.textContent = headCells[i].dataset.ktSort === 'desc' ? '↓' : '↑';
+        });
+        dirBtn.addEventListener('click', function () {
+          var i = parseInt(sel.value, 10);
+          if (isNaN(i) || !headCells[i]) return;
+          headCells[i].click();
+          dirBtn.textContent = headCells[i].dataset.ktSort === 'desc' ? '↓' : '↑';
+        });
+
+        sortWrap.appendChild(sel);
+        sortWrap.appendChild(dirBtn);
+      }
+    } catch (e) { sortWrap = null; }
+
     wrap.appendChild(left);
+    if (sortWrap) wrap.appendChild(sortWrap);
     wrap.appendChild(right);
 
     // Bounded height + internal scroll (Gmail-style): wrap the table in a
@@ -163,24 +239,119 @@
       pager.appendChild(jl); pager.appendChild(jump);
     }
 
+  /* HOW WELL a row matches, not merely WHETHER it does.
+
+     Both list filters tested `row.textContent.includes(q)` and hid the rest. Everything
+     that survived kept its original position, so searching a name showed it wherever it
+     already happened to sit — often below rows that merely mention the word in an
+     address, a note or a status. On a phone, where only a few rows are on screen, the
+     thing you searched for is then simply not visible, which reads as "the search does
+     not work".
+
+     Ranked lowest-first: the identifying text IS the term, then begins with it, then
+     begins a WORD in it, then contains it, and last a row that matched only in some
+     other column. Ties keep their original order, so the list never shuffles for rows
+     that are equally good. (Anthony, 2026-09-08) */
+  function ktRankOf(primary, whole, q) {
+    if (whole.indexOf(q) === -1) { return -1; }
+    if (primary === q) { return 0; }
+    if (primary.indexOf(q) === 0) { return 1; }
+    var esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try { if (new RegExp('(^|[^a-z0-9])' + esc).test(primary)) { return 2; } } catch (e) {}
+    if (primary.indexOf(q) !== -1) { return 3; }
+    return 4;
+  }
+
+  /* The row's identifying text: the first cell that carries real words. Tables lead
+     with a checkbox or a spacer column, and scoring against that would rank nothing. */
+  function ktRowPrimary(r) {
+    var cells = r.children;
+    for (var i = 0; i < cells.length; i++) {
+      var t = (cells[i].textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (t.length > 1) { return t; }
+    }
+    return (r.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
     // Single source of truth for row visibility: a row shows iff it matches the
     // filter AND falls on the current page (of the matched subset). Called on input,
     // on page change, and whenever the tbody changes (sort / screen re-render).
     let renderScheduled = false;
+    /* The order the list was in when the search began — restored when the box is
+       cleared. Captured then rather than once at startup so it preserves whatever the
+       reader had already sorted by, instead of yanking them back to the default. */
+    let baseOrder = null;
+
+    /* Held so render() can switch it off while it rearranges the rows itself.
+       See the note at the bottom of this function. */
+    let mo = null;
+
     function render() {
       renderScheduled = false;
+
+      /* ── THE SEARCH USED TO FIGHT ITSELF ────────────────────────────────
+         Ranking re-appends the matching rows so the best match is first in the
+         DOM. appendChild on a row already in the tbody MOVES it, and a move is a
+         childList mutation — which is exactly what the observer at the end of
+         this function listens for. So render() woke itself: rank, mutate,
+         observe, schedule, 40ms later rank again, for as long as the search box
+         had anything in it. Around twenty-five renders a second, forever.
+
+         Nothing looked wrong, because every render produced the same list. What
+         it broke was CLICKING. A button press is mousedown, mouseup, and only
+         then a click — and the browser fires no click at all if the element
+         moved in between. With the rows being re-appended every 40ms, a press
+         landed in the gap more often than not, so action buttons did nothing
+         while a search was active and worked perfectly without one. Reported
+         three times as "the kebab won't open"; it was never the kebab.
+
+         The comment on the observer claimed render() "only flips style.display,
+         so it can't retrigger this". That was true of the paging half and false
+         of the ranking half added later.
+
+         Deaf while it speaks: disconnect() also discards the records already
+         queued, so the moves this function makes can never come back to it.
+         Re-observed in a finally, so a throw cannot leave the table permanently
+         unwatched. */
+      if (mo) { try { mo.disconnect(); } catch (e) {} }
+      try {
+        renderInner();
+      } finally {
+        if (mo) { try { mo.observe(tbody, { childList: true }); } catch (e) {} }
+      }
+    }
+
+    function renderInner() {
       const q = (input.value || '').trim().toLowerCase();
+
+      if (!q && baseOrder) {
+        baseOrder.forEach(r => { if (r.parentNode === tbody) tbody.appendChild(r); });
+        baseOrder = null;
+      }
+      if (q && !baseOrder) { baseOrder = Array.from(tbody.children); }
+
       const rows = Array.from(tbody.children);
-      const matched = q ? rows.filter(r => (r.textContent || '').toLowerCase().includes(q)) : rows;
+      let matched = rows;
+      if (q) {
+        const scored = [];
+        rows.forEach((r, i) => {
+          const sc = ktRankOf(ktRowPrimary(r), (r.textContent || '').toLowerCase(), q);
+          if (sc >= 0) { scored.push({ r, sc, i }); }
+        });
+        scored.sort((a, b) => (a.sc - b.sc) || (a.i - b.i));
+        // Best first IN THE DOM, so paging puts them on page 1 rather than page 3.
+        scored.forEach(m => tbody.appendChild(m.r));
+        matched = scored.map(m => m.r);
+      }
       const total = matched.length;
       const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
       if (page > totalPages) page = totalPages;
       if (page < 1) page = 1;
       const start = (page - 1) * PAGE_SIZE, end = start + PAGE_SIZE;
+      const inMatch = new Set(matched);
       let mi = 0;
-      for (const r of rows) {
-        const ok = !q || (r.textContent || '').toLowerCase().includes(q);
-        if (!ok) { r.style.display = 'none'; continue; }
+      for (const r of Array.from(tbody.children)) {
+        if (q && !inMatch.has(r)) { r.style.display = 'none'; continue; }
         r.style.display = (mi >= start && mi < end) ? '' : 'none';
         mi++;
       }
@@ -200,11 +371,11 @@
 
     input.addEventListener('input', () => { page = 1; render(); });
 
-    // Re-paginate when the tbody's rows change (column-header sort reorders them;
-    // a screen re-render replaces them). We watch childList only — render() itself
-    // only flips style.display (an attribute change), so it can't retrigger this.
+    /* Re-paginate when the tbody's rows change from OUTSIDE — a column-header sort
+       reorders them, a screen re-render replaces them. render() switches this off
+       around its own rearranging, so only somebody else's changes reach it. */
     try {
-      const mo = new MutationObserver(scheduleRender);
+      mo = new MutationObserver(scheduleRender);
       mo.observe(tbody, { childList: true });
     } catch (e) {}
 
@@ -237,6 +408,29 @@
   window.addEventListener('hashchange', scheduleSweep);
   (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweepTables) : setInterval(sweepTables, 4000);    // was 2000ms — the toolbar landed long after the table
   setTimeout(sweepTables, 700);
+
+  /* ASK FOR IT, DON'T WAIT TO BE SWEPT.
+
+     Both table enhancers (this one and kt-polish.js) find their work by sweeping, driven
+     by hashchange and by KT.sweepBus. That covers a screen you navigate TO. It does not
+     cover a table that appears when you click a tab INSIDE a screen — no hash changes, so
+     the only remaining chance is a bus tick, and the bus stops for the whole session once
+     a tab has been backgrounded. The result is a table with no search box and no sortable
+     headers, on a screen where the identical table two tabs over has both.
+
+     So a screen that has just rendered a table can say so. Each enhancer pushes its sweep
+     onto the same list and KT.enhanceTables() runs them all; the sweeps are already
+     guarded against running twice on the same table, so calling this is free.
+     (Anthony, 2026-09-09) */
+  window.KT = window.KT || {};
+  KT.tableEnhancers = KT.tableEnhancers || [];
+  KT.tableEnhancers.push(sweepTables);
+  if (!KT.enhanceTables) {
+    KT.enhanceTables = function () {
+      (KT.tableEnhancers || []).forEach(function (f) { try { f(); } catch (e) {} });
+    };
+  }
+
 
   // ============================ Better empty states ============================
   function sweepEmptyStates() {

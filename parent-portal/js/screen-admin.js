@@ -1402,23 +1402,7 @@
       return;
     }
 
-    /* ACTIONS STAY INLINE ON THIS TABLE (2026-09-14).
-
-       The row kebab has been reported as not opening here across several rounds, and
-       it could not be reproduced on this build in a desktop browser at the same
-       agency with the same search. Two genuine defects were found and fixed along the
-       way — the menu closing on a scroll that moved nothing, and the menu covering the
-       kebabs of the rows below it — and neither ended it.
-
-       Until the cause is actually known, this table opts out. data-kt-no-kebab is the
-       supported lever for exactly this and kt-row-actions honours it on tables, so the
-       five actions go back to being plain buttons in the row and User management works
-       whatever the menu is doing. A slightly wider column beats a screen an
-       administrator cannot use.
-
-       REMOVE THIS once the kebab is understood — a stopgap, not a decision about how
-       the column should look. */
-    const table = Dom.el('table', { 'data-kt-no-kebab': '1', style: 'width: 100%; background: white; border-radius: 12px; overflow: hidden; border-collapse: collapse; box-shadow: 0 1px 3px rgba(0,0,0,0.04);' });
+    const table = Dom.el('table', { style: 'width: 100%; background: white; border-radius: 12px; overflow: hidden; border-collapse: collapse; box-shadow: 0 1px 3px rgba(0,0,0,0.04);' });
     const thead = Dom.el('thead', { style: 'background: var(--ink-50, #F9FAFB);' });
     const headRow = Dom.el('tr', {});
 
