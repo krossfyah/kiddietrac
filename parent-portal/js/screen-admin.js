@@ -1298,9 +1298,28 @@
     return card;
   }
 
+  /* Which accounts count as "invited": created but never claimed.
+
+     users.status is the platform's own word for it — AccountStatus::markClaimed()
+     flips 'invited' to 'active' the first time somebody signs in, so the status alone
+     answers the question and no date arithmetic is needed. 'not_invited' is the same
+     state one step earlier: the account exists and no invite has gone out yet, which
+     is exactly the row an admin on this tab is looking for. */
+  function isUnclaimedUser(u) {
+    var st = String((u && u.status) || '').toLowerCase();
+    return st === 'invited' || st === 'not_invited';
+  }
+
   async function renderUsersTab(content, opts) {
     opts = opts || {};
-    const showDeactivated = !!opts.deactivated;
+    /* THREE SUB-TABS (2026-09-14). Deactivated accounts used to live behind a toggle
+       button in the action bar — findable only if you knew to look, and invited users
+       had no view of their own at all, so "who have we invited that never signed in"
+       meant reading the Status column of the whole list by eye.
+
+       `opts.deactivated` is still honoured: the reactivate flow re-renders with it. */
+    const view = opts.view || (opts.deactivated ? 'deactivated' : 'all');
+    const showDeactivated = view === 'deactivated';
     Dom.clear(content);
     content.appendChild(loading('Loading users...'));
 
@@ -1322,22 +1341,81 @@
 
     Dom.clear(content);
 
+    /* The fetch returns one of two sets — live accounts, or de-boarded ones. Invited is
+       a filtered view of the live set rather than a third request, because the status
+       is already on every row. */
+    const allUsers = data.users || [];
+    const invitedUsers = allUsers.filter(isUnclaimedUser);
+    const rows = view === 'invited' ? invitedUsers : allUsers;
+
     // v22p12.1: tab hero
     content.appendChild(tabHero(
-      showDeactivated ? '🗄 Deactivated users' : '👥 User management',
-      showDeactivated
-        ? (data.users.length + ' deactivated account' + (data.users.length === 1 ? '' : 's') + '. Reactivate one to restore access and its previous roles.')
-        : (data.users.length + ' active user' + (data.users.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.'),
+      view === 'deactivated' ? '🗄️ De-boarded & deactivated'
+        : view === 'invited' ? '✉️ Invited users'
+        : '👥 User management',
+      view === 'deactivated'
+        ? (rows.length + ' closed account' + (rows.length === 1 ? '' : 's')
+           + '. Staff who were deactivated and guardians whose family was de-boarded. '
+           + 'Reactivate one to restore access and its previous roles.')
+        : view === 'invited'
+          ? (rows.length + ' account' + (rows.length === 1 ? '' : 's')
+             + ' invited but never signed in. Resend the welcome email, or delete one that '
+             + 'was created by mistake — reactivating beats re-creating, so check here before '
+             + 'inviting somebody a second time.')
+          : (rows.length + ' active user' + (rows.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.'),
       'bear'
     ));
 
+    /* Sub-tabs, in the same underline style as the Administration strip above so they
+       read as one level down rather than a second set of buttons. */
+    const subTabs = Dom.el('div', {
+      style: 'display:flex;gap:4px;margin:0 0 18px;border-bottom:1px solid var(--ink-200,#E5E7EB);'
+        + 'overflow-x:auto;overflow-y:hidden;',
+    });
+
+    function subTab(key, label, count) {
+      const on = view === key;
+      const btn = Dom.el('button', {
+        // Already handled: kt-icon-buttons.js would otherwise replace a short label
+        // like "Invited" with a glyph and lose the count.
+        'data-kt-iconized': '1',
+        style: 'padding:10px 15px;border:none;background:transparent;cursor:pointer;'
+          + 'font-size:13.5px;font-weight:600;white-space:nowrap;display:inline-flex;'
+          + 'align-items:center;gap:7px;'
+          + (on
+              ? 'color:var(--brand-blue,#1F6080);border-bottom:2px solid var(--brand-blue,#1F6080);margin-bottom:-1px;'
+              : 'color:var(--ink-500);'),
+      }, label);
+
+      /* A count only where it is a fact this view already knows. The de-boarded total
+         lives behind a different query, and firing a second request on every render to
+         decorate a tab is not worth it — that tab states its own count in the hero. */
+      if (count != null) {
+        btn.appendChild(Dom.el('span', {
+          style: 'font-size:11px;font-weight:800;border-radius:999px;padding:1px 7px;'
+            + (on ? 'background:#E0F2FE;color:#0E7490;' : 'background:var(--ink-100,#E5E7EB);color:var(--ink-500);'),
+        }, String(count)));
+      }
+
+      btn.addEventListener('click', function () {
+        if (view === key) { return; }
+        renderUsersTab(content, { view: key });
+      });
+      return btn;
+    }
+
+    subTabs.appendChild(subTab('all', '👥 Active users', showDeactivated ? null : allUsers.length));
+    subTabs.appendChild(subTab('invited', '✉️ Invited', showDeactivated ? null : invitedUsers.length));
+    subTabs.appendChild(subTab('deactivated', '🗄️ De-boarded / deactivated', showDeactivated ? rows.length : null));
+    content.appendChild(subTabs);
+
     // Possible-duplicate-accounts advisory (best-effort; only on the active list).
-    if (!showDeactivated) {
+    if (view === 'all') {
       const dupHolder = Dom.el('div');
       content.appendChild(dupHolder);
       Api.get('/admin/duplicate-users').then(function (r) {
         const groups = (r && r.groups) || [];
-        if (groups.length) dupHolder.appendChild(buildDuplicateCard(groups, data.users || [], content));
+        if (groups.length) dupHolder.appendChild(buildDuplicateCard(groups, allUsers, content));
       }).catch(function () {});
     }
 
@@ -1349,14 +1427,12 @@
     csvBtn.addEventListener('click', () => downloadCsv('/admin/users', 'users.csv', csvBtn));
     bar.appendChild(csvBtn);
 
-    // Deactivated toggle + Invite share ONE pill style — identical to what
-    // applyAddStyle (kt-add-btn-std) applies to the Invite button, so the two are
-    // pixel-consistent (auto height, matching padding/line-height).
+    // The Invite pill matches what applyAddStyle (kt-add-btn-std) applies, so the two
+    // are pixel-consistent (auto height, matching padding/line-height).
+    // The old "🗄 Deactivated" toggle that used to sit here is now a sub-tab above —
+    // one place to switch views instead of a tab strip AND a button that did the same
+    // job in a different idiom.
     var _barPill = 'background:#fff;color:#475569;border:1px solid #CBD5E1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;line-height:1.1;display:inline-flex;align-items:center;box-sizing:border-box;';
-    // Toggle between active accounts and the deactivated (soft-deleted) ones.
-    const toggleBtn = Dom.el('button', { style: _barPill }, showDeactivated ? '← Active users' : '🗄 Deactivated');
-    toggleBtn.addEventListener('click', () => renderUsersTab(content, { deactivated: !showDeactivated }));
-    bar.appendChild(toggleBtn);
 
     if (!showDeactivated) {
       const addBtn = Dom.el('button', { class: 'kt-add-btn-std', style: _barPill }, '+ Invite user');
@@ -1397,8 +1473,14 @@
     bulkResend.addEventListener('click', () => bulkRun('Resend welcome', (id) => Api.post('/admin/users/' + id + '/resend-welcome', {})));
     bulkDelete.addEventListener('click', () => bulkRun('Delete', (id) => Api.delete('/admin/users/' + id)));
 
-    if (data.users.length === 0) {
-      content.appendChild(emptyMsg(showDeactivated ? 'No deactivated users. Everyone in your agency is active.' : 'No users yet.'));
+    if (rows.length === 0) {
+      content.appendChild(emptyMsg(
+        view === 'deactivated'
+          ? 'Nobody has been de-boarded or deactivated. Everyone in your agency is active.'
+          : view === 'invited'
+            ? 'Nobody is waiting on an invite — every account here has been signed into at least once.'
+            : 'No users yet.'
+      ));
       return;
     }
 
@@ -1430,7 +1512,7 @@
       refreshBulkBar();
     });
 
-    data.users.forEach(u => {
+    rows.forEach(u => {
       const row = Dom.el('tr', { style: 'border-top: 1px solid var(--ink-100, #E5E7EB);' });
 
       // v22p45: per-row checkbox (skip the caller's own user so admins can't
@@ -1487,7 +1569,7 @@
           reBtn.disabled = true; reBtn.textContent = 'Reactivating…';
           try {
             await Api.post('/admin/users/' + u.id + '/reactivate', {});
-            await renderUsersTab(content, { deactivated: true });
+            await renderUsersTab(content, { view: 'deactivated' });
           } catch (e) {
             reBtn.disabled = false; reBtn.textContent = '♻ Reactivate';
             alert('Could not reactivate: ' + (e && e.message ? e.message : 'error'));
