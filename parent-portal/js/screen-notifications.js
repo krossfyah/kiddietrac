@@ -6,6 +6,37 @@
 (function (window) {
   'use strict';
 
+  /* WRITES THE SERVER HAS NOT CONFIRMED YET — AT MODULE SCOPE, DELIBERATELY.
+
+     Marking one read is optimistic: the row flips immediately and a PATCH follows. But
+     `cache` is replaced wholesale by every load, and this screen reloads on the 45s poll,
+     on the live bus, and whenever it is re-entered — so a refresh landing while the PATCH
+     is still in flight hands back the PRE-WRITE row and silently undoes what the reader
+     just did. It looks like the tap did nothing, so they tap again. That is the "takes two
+     attempts", and a phone makes it far likelier because the round trip is slower.
+
+     This lives OUTSIDE the render function on purpose. My first attempt kept it inside,
+     which was useless: a full re-render builds a new closure and therefore a new empty
+     ledger — and a full re-render is precisely the event that clobbers the row. It has to
+     outlive the render it is protecting. (Anthony, 2026-09-09) */
+  var pendingRead = Object.create(null);
+  function rememberPending(id, value) { pendingRead[id] = value; }
+  function settlePending(id) {
+    /* Kept for a moment after the write lands: a GET that set off BEFORE the PATCH
+       finished is still in flight and will still be carrying the old row. */
+    setTimeout(function () { delete pendingRead[id]; }, 5000);
+  }
+  function applyPending(list) {
+    if (!Array.isArray(list)) { return list; }
+    for (var i = 0; i < list.length; i++) {
+      var id = list[i] && list[i].id;
+      if (id != null && Object.prototype.hasOwnProperty.call(pendingRead, id)) {
+        list[i].read_at = pendingRead[id];
+      }
+    }
+    return list;
+  }
+
   // KT.confirm returns a PROMISE — it does not take a callback. Passing one meant
   // the action never ran: the confirm box appeared, you pressed Yes, and nothing
   // happened. This wraps both shapes safely.
@@ -248,12 +279,24 @@
       }, n.read_at ? '📩 Mark unread' : '📖 Mark read');
       readBtn.addEventListener('click', function (e) {
         e.stopPropagation();          // the row itself navigates — an action must not
+        /* THE ACTION THE BUTTON PROMISES, not a toggle of whatever state we think we
+           hold. A toggle asks "what is it now?" and flips — so if this fires twice for
+           one gesture (a forwarded kebab click landing alongside the real one, a touch
+           that also produces a click) the second flips it straight back and the reader
+           sees nothing happen. Reading the intent off the button makes a repeat
+           activation idempotent: "mark read" twice is still read. */
+        var wantRead = this.getAttribute('data-act') === 'mark-read';
         var prev = n.read_at;
-        n.read_at = prev ? null : new Date().toISOString();      // optimistic
+        if (wantRead === !!prev) { return; }        // already where it is going
+        var next = wantRead ? new Date().toISOString() : null;
+        n.read_at = next;                                        // optimistic
+        rememberPending(n.id, next);
         paint();
-        Api.patch('/notifications/' + n.id + (prev ? '/unread' : '/read'), {})
+        Api.patch('/notifications/' + n.id + (wantRead ? '/read' : '/unread'), {})
+          .then(function () { settlePending(n.id); })
           .catch(function () {
             n.read_at = prev;                                     // put it back
+            delete pendingRead[n.id];
             paint();
             if (KT.toast) KT.toast('⚠️', 'Could not update', 'Please try again.', '#B91C1C');
           });
@@ -295,9 +338,11 @@
         if (!n.read_at) {
           // Optimistic update
           n.read_at = new Date().toISOString();
+          rememberPending(n.id, n.read_at);
           paint();
           Api.patch('/notifications/' + n.id + '/read', {})
-            .catch(function () { n.read_at = null; paint(); });
+            .then(function () { settlePending(n.id); })
+            .catch(function () { n.read_at = null; delete pendingRead[n.id]; paint(); });
         }
         // Tapping a notification takes you to the thing it is about.
         //
@@ -345,13 +390,35 @@
       if (!unread.length) return;
       if (!await KT.confirm('Mark all ' + unread.length + ' as read?')) return;
       markAll.disabled = true; markAll.textContent = 'Marking…';
+
+      /* MARK-ALL HAS TO USE THE PENDING LEDGER TOO (2026-09-14).
+
+         The ledger above was built for the single mark and never wired up here, so
+         "Mark all read" carried none of its protection. The hazard is the one the
+         ledger's own note describes: this screen reloads on the 45s poll, on the live
+         bus, and whenever it is re-entered, and a GET that set off BEFORE this POST
+         lands after it — carrying every row still unread. cache is replaced wholesale,
+         so the whole list flips back and the button looks like it did nothing.
+
+         One mark was protected; marking forty was not, which is why THIS is the button
+         people press two and three times. Every id is recorded before the write, so any
+         in-flight reload is corrected on arrival instead of undoing the lot. */
+      var nowIso = new Date().toISOString();
+      var marked = unread.map(function (r) { return r.id; });
+      marked.forEach(function (id) { rememberPending(id, nowIso); });
+
       try {
         await Api.post('/notifications/mark-read', {});
         var fresh = await Api.get('/notifications');
-        cache = (fresh && fresh.notifications) ? fresh.notifications : (Array.isArray(fresh) ? fresh : cache);
+        cache = applyPending((fresh && fresh.notifications) ? fresh.notifications : (Array.isArray(fresh) ? fresh : cache));
         paint();
+        // Released on the same delay a single mark uses, for the same reason.
+        marked.forEach(function (id) { settlePending(id); });
         if (window.KT && window.KT.refreshUnreadBadge) window.KT.refreshUnreadBadge();
       } catch (e) {
+        /* The write failed, so the optimistic entries are a lie — drop them at once
+           rather than letting them paper over unread rows for the next five seconds. */
+        marked.forEach(function (id) { delete pendingRead[id]; });
         // Say so, and leave the rows alone — claiming they are read when they are not
         // is what made this untrustworthy in the first place.
         if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not mark them read — please try again.', 'error');
@@ -364,7 +431,7 @@
     // (NotificationController::mine is gated for guardian only). Future
     // ships should extend this to staff via a new endpoint.
     Api.get('/notifications').then(function (data) {
-      cache = (data && data.notifications) ? data.notifications : (Array.isArray(data) ? data : []);
+      cache = applyPending((data && data.notifications) ? data.notifications : (Array.isArray(data) ? data : []));
       paint();
     }).catch(function (e) {
       Dom.clear(listWrap);

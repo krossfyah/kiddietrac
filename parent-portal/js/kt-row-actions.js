@@ -5,9 +5,10 @@
    selecting one forwards a REAL click to the original (hidden) button, so all
    existing per-button handlers AND container delegation keep working untouched.
 
-   • Desktop / tablet only (≥601px). Phones keep the card layout from
-     kt-mobile-tables.js (which cards tables at ≤600px) — on mobile we RESTORE
-     the original buttons so nothing changes there.
+   • EVERY width, phones included (since 2026-09-02; single actions too since
+     2026-09-07). Phones still get the card layout from kt-mobile-tables.js, and the
+     kebab sits in the card's action row. A list that needs its buttons left alone
+     opts out with data-kt-no-kebab.
    • Idempotent + reversible: safe to re-run on every render (kt-sweep-bus) and
      on breakpoint changes (resize between phone/desktop widths).
    • Forwarding via el.click() reproduces a genuine bubbling click with the right
@@ -120,8 +121,31 @@
     return { icon: icon, label: label };
   }
 
+  /* IS THIS CONTROL ALREADY A MENU?
+
+     Several screens build their own ⋮ — the Forms Manager's Completed and Multiple forms
+     tables, incidents, certifications, the ledgers. Those are buttons in the last cell,
+     so this file used to treat them as ordinary actions, hide them, and put a kebab in
+     front of them: a ⋮ that opens a menu whose only entry is another ⋮.
+
+     Recognised by what the control IS rather than by which screen drew it — the glyph, or
+     an explicit aria-haspopup — so a screen that adds its own row menu tomorrow is
+     covered without having to know this file exists. (Anthony, 2026-09-09) */
+  function isMenuOpener(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.classList && el.classList.contains('kt-ka-kebab')) return true;
+    if (el.getAttribute && el.getAttribute('aria-haspopup') === 'true') return true;
+    var t = (el.textContent || '').trim();
+    return t === '⋮' || t === '…' || t === '⋯';
+  }
+  function cellHasMenu(cell) {
+    var els = cell.querySelectorAll('button, a, [role="button"]');
+    for (var i = 0; i < els.length; i++) { if (isMenuOpener(els[i])) return true; }
+    return false;
+  }
+
   function isAction(el) {
-    if (el.classList && el.classList.contains('kt-ka-kebab')) return false;
+    if (isMenuOpener(el)) return false;
     if (el.tagName === 'BUTTON') return true;
     if (el.tagName === 'A') return el.hasAttribute('href') || el.hasAttribute('data-id') || el.hasAttribute('onclick');
     return el.getAttribute && el.getAttribute('role') === 'button';
@@ -197,8 +221,22 @@
     d.removeEventListener('keydown', onKey, true);
   }
 
+  /* Where the page is scrolled to, both scrollers. #appMain is the real one on this
+     platform; window scroll still moves on some screens. */
+  function scrollPos() {
+    var main = d.getElementById('appMain');
+    return [w.scrollY || w.pageYOffset || 0, main ? main.scrollTop : 0];
+  }
+
+  var openedAt = 0;
+  var openedScroll = [0, 0];
+  var openedSize = [0, 0];
+
   function openFor(kebab, actions) {
     closeMenu();
+    openedAt = Date.now();
+    openedScroll = scrollPos();
+    openedSize = [w.innerWidth, w.innerHeight];
     var menu = d.createElement('div');
     menu.className = 'kt-ka-menu';
     menu.setAttribute('role', 'menu');
@@ -251,8 +289,24 @@
   /* ---- transform / restore ------------------------------------------- */
   function kebabify(cell) {
     if (cell.getAttribute('data-kt-ka')) return;
+    /* The screen already owns this row's menu. Leave the whole cell alone — collapsing
+       the buttons NEXT to a hand-built ⋮ would give the row two menus side by side,
+       which is the same confusion in a different shape. */
+    if (cellHasMenu(cell)) return;
     var actions = actionsInCell(cell);
     if (!actions.length) return;
+    /* A SINGLE ACTION COLLAPSES TOO, on every width.
+
+       This used to return early for one action on a phone, on the grounds that a kebab is
+       no narrower than the button it replaces and costs a tap. True on width — but it made
+       the action column change shape row by row, because a list mixes rows that have two
+       actions with rows that have one. Daily Overview's roster is exactly that: "Sign in"
+       or "Sign out" on today's rows, "⏱ Fix" on earlier days. One ⋮ per row reads as a
+       column; a mix of labelled buttons and kebabs reads as ragged.
+
+       Lists where one tap genuinely matters opt out with data-kt-no-kebab — the educator
+       Today roster, the parent screens, Forms Manager's Completed tab, platform invoices.
+       That is the right lever for it, not a blanket rule here. (Anthony, 2026-09-07) */
     actions.forEach(function (el) {
       el.classList.add('kt-ka-hidden');
       // Inline display:none !important beats class rules like .kt-btn{display:…!important},
@@ -290,13 +344,10 @@
     var main = d.getElementById('appMain');
     if (!main) return;
 
-    if (!DESKTOP.matches) {
-      // Phone width — undo everything so kt-mobile-tables' card layout is clean.
-      var done = main.querySelectorAll('[data-kt-ka]');
-      for (var j = 0; j < done.length; j++) restore(done[j]);
-      closeMenu();
-      return;
-    }
+    /* Phones kebabify too, as of 2026-09-02. This used to restore the raw buttons at
+       ≤600px on the grounds that the card layout handled them — but a card is 355px wide
+       and three buttons in it is exactly the wasted width the cards were meant to remove.
+       kebabify() keeps a SINGLE action as a button on phones; see the note there. */
 
     var rows = main.querySelectorAll('table tr');
     for (var i = 0; i < rows.length; i++) {
@@ -341,8 +392,46 @@
     if (t.closest && (t.closest('.kt-ka-menu') || t.closest('.kt-ka-kebab'))) return;
     closeMenu();
   }, true);
-  w.addEventListener('scroll', function () { if (openMenu) closeMenu(); }, true);
-  w.addEventListener('resize', function () { if (openMenu) closeMenu(); });
+  /* ── CLOSE ON A SCROLL THAT ACTUALLY SCROLLED (2026-09-14) ──────────────
+     This closed the menu on ANY scroll event, in the capture phase, from anywhere on
+     the page. A scroll event does not mean the page moved: a zero-pixel scroll closed
+     it just as surely as a real one, and this app generates plenty of those — #appMain
+     is the single scroller, the table filter changes the table's height on every
+     keystroke, and the sweeps re-render underneath.
+
+     The symptom was the reported one: search for somebody, press ⋮, nothing appears.
+     Press it again and again and it eventually sticks — because the menu WAS opening
+     each time and being closed again in the same breath, and because pressing a second
+     time toggles it shut, so an even number of presses always looks like failure.
+     Safia's crash-report breadcrumbs show exactly that: three presses inside one second
+     at 13:27:32, then a fourth eight seconds later that worked.
+
+     Proven on this host: dispatching a scroll event that moved nothing closed an open
+     menu.
+
+     So compare against where the page was when the menu opened, and ignore the first
+     moments while layout settles from the click itself. A genuine scroll of more than a
+     few pixels still closes it, which is the behaviour this was for. */
+  var SCROLL_SLOP = 4;      // px — below this nothing has meaningfully moved
+  var SETTLE_MS = 350;      // the click's own layout settling
+
+  w.addEventListener('scroll', function () {
+    if (!openMenu) return;
+    if (Date.now() - openedAt < SETTLE_MS) return;
+    var now = scrollPos();
+    if (Math.abs(now[0] - openedScroll[0]) < SCROLL_SLOP
+      && Math.abs(now[1] - openedScroll[1]) < SCROLL_SLOP) { return; }
+    closeMenu();
+  }, true);
+
+  /* Same reasoning for resize. A resize event fires when a phone's address bar slides
+     away, which is not the user dismissing anything. */
+  w.addEventListener('resize', function () {
+    if (!openMenu) return;
+    if (Math.abs(w.innerWidth - openedSize[0]) < SCROLL_SLOP
+      && Math.abs(w.innerHeight - openedSize[1]) < SCROLL_SLOP) { return; }
+    closeMenu();
+  });
 
   setTimeout(sweep, 400);
 })(window, document);
