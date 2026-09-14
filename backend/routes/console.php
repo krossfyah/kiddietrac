@@ -33,6 +33,15 @@ Schedule::command('holidays:sync --months=14')
 
 Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
 
+/* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
+   had accumulated, 281 of them already expired: full-access credentials (`["*"]`) sitting
+   in the table long after the browser that earned them was closed. Removing an EXPIRED
+   token signs nobody out, because Sanctum already refuses it.
+   Runs at a quiet hour, and never touches a token without an expiry -- that is what the
+   iLearn integration holds. See App\Console\Commands\PruneTokens. */
+Schedule::command('tokens:prune --days=30')
+    ->dailyAt('03:15')->timezone('America/Toronto')->withoutOverlapping();
+
 /* Chases every incident that is still open until somebody closes it. An incident
    report nobody actions is the failure this exists to prevent, and until now
    nothing in the platform noticed. Silent when there is nothing open. */
@@ -136,15 +145,20 @@ Schedule::command('kiddietrac:revoke-off-tokens')
     ->runInBackground()
     ->onOneServer();
 
-// v22p40: missed-chat email notifications — every 15 minutes. Picks up
-// messages older than 30 minutes that have not been read and not yet
-// emailed. Groups by recipient+conversation so each user gets ONE
-// summary email per thread (not one per message).
-/* PAUSED 2026-08-20 — this grouped by recipient+CONVERSATION, so a person in 39
-   threads received 39 separate emails from one run (144 emails in a single run,
-   39 into one inbox in one minute). Re-enabled once it sends ONE digest per person. */
+/* Missed-chat email notifications.
+
+   The delay is per agency — agencies.settings.chat_email_delay_minutes, default 5 — so
+   the TICK has to be at least as frequent as the shortest delay anyone can choose.
+   At the old fifteen-minute tick a five-minute setting really meant "five to twenty".
+
+   The 2026-08-20 pause is over: that flood was one email per recipient per CONVERSATION
+   (a person in 39 threads got 39 emails from a single run). It now groups into ONE digest
+   per person per run, keyed by email address so two accounts sharing an inbox merge
+   instead of doubling. Volume is bounded by real messages, not by the tick: every message
+   is stamped email_notified_at when it goes out, so nobody is told twice about the same
+   one however often this runs. */
 Schedule::command('kiddietrac:chat-emails')
-    ->everyFifteenMinutes()
+    ->everyFiveMinutes()
     ->skip(fn () => ! config('suppression.chat_emails_enabled', false))
     ->withoutOverlapping(20)
     ->runInBackground()
@@ -248,8 +262,27 @@ Schedule::command('immunization:reminders')->hourly()->withoutOverlapping();
 // bulk sends) in the background so admin actions return instantly instead of
 // blocking ~1.3–5.5s per email. --stop-when-empty exits when drained; --max-time
 // keeps each run under a minute so the next tick restarts it.
+/* THE OVERLAP LOCK MUST EXPIRE IN MINUTES, NOT A DAY (2026-09-14).
+
+   withoutOverlapping() with no argument holds its lock for 1440 minutes. That is
+   only ever released by schedule:finish at the end of a run — so a run that is
+   KILLED rather than finished leaves the lock behind for twenty-four hours, and
+   every tick in between skips silently. Nothing is logged, because nothing ran.
+
+   That happened today. The worker ran every minute for months, the 12:50:03 run
+   was killed (this is shared hosting and long-running PHP gets reaped), and the
+   queue stopped draining. By the time anybody noticed, 33 emails were stranded —
+   parents' sign-in notices, clock-in reminders, and an invite and a password
+   reset for a member of staff who was waiting on them. The symptom was that mail
+   simply never arrived, with no error anywhere: the audit log recorded the admin
+   pressing the button, and no email_logs row was ever written, because the send
+   had not yet been attempted.
+
+   --max-time=55 means a legitimate run cannot exceed about a minute, so a lock
+   held beyond a few minutes is always wreckage. Five minutes gives a slow run
+   room and caps the damage from a killed one at five minutes instead of a day. */
 Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=55 --tries=3 --sleep=2 --backoff=30")
-    ->everyMinute()->withoutOverlapping()->runInBackground();
+    ->everyMinute()->withoutOverlapping(5)->runInBackground();
 
 
 // Daily sales-lead follow-up reminders (email owner/superadmin about due/overdue follow-ups).
