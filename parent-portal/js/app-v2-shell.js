@@ -1362,6 +1362,83 @@
   var __KT_REQ_GRACE_MS = 140;  // after the last request lands, long enough for its .then()
   var __KT_MAX_HOLD_MS = 2600;  // ceiling; a slow screen uncovers rather than freezing
 
+  /* A REBUILT ELEMENT RESTARTS ITS ANIMATIONS, AND THAT IS THE FLASH THAT WAS LEFT.
+
+     Anthony, 2026-09-15: "the only thing that messes up is the hero banner reloads and
+     affects the screen." Measured on #audit-logs across one silent refresh:
+
+       before   kt-hero-breathe currentTime 6033ms   background-position 87.5% 50%
+       after    kt-hero-breathe currentTime 2967ms   background-position 28.6% 50%
+
+     kt-hero-breathe is a 16s infinite gradient sweep on every .kt-hero / .kt-page-hero /
+     .page-header-v17 (kt-consistency-polish.css). Dom.clear() destroys the banner and the
+     screen builds a new one, so the sweep starts again at 0% — the gradient SNAPS across
+     the full width of the banner. Nothing was reloading; the animation was being reborn.
+     The 0.12s kt-fade-in on #appMain > * replays for the same reason.
+
+     Covering it is not the fix. The cover comes off eventually, and if the phase is wrong
+     underneath, the jump is simply deferred to the moment of the uncover.
+
+     So carry the phase across the rebuild. An animation's position is its elapsed time
+     modulo its duration, and a NEGATIVE animation-delay is how you say "start it already
+     that far in" — so the new element picks up exactly where the old one left off and the
+     gradient never moves. A one-shot entry animation is landed as already finished, which
+     is the honest thing for a screen that never went away.
+
+     Read from getComputedStyle rather than hard-coding the two current animations, so a
+     banner that gains a third keeps working. Silent refresh only: navigation SHOULD look
+     like something happened. */
+  var __KT_ANIM_EPOCH = Date.now();
+
+  function __ktSeconds(v) {
+    v = String(v || '').trim();
+    if (!v) { return 0; }
+    var n = parseFloat(v);
+    if (!isFinite(n)) { return 0; }
+    return /ms$/.test(v) ? n / 1000 : n;
+  }
+
+  function __ktPinAnimations(main) {
+    try {
+      var elapsed = (Date.now() - __KT_ANIM_EPOCH) / 1000;
+      var seen = [];
+      var targets = [];
+      try {
+        var banners = main.querySelectorAll('.kt-hero, .kt-page-hero, .page-header-v17, .kt-banner-fx');
+        for (var b = 0; b < banners.length; b++) { targets.push(banners[b]); }
+      } catch (e) {}
+      // #appMain > * carries the 0.12s entry fade. It normally finishes under the cover,
+      // but a screen that renders straight from memory can uncover inside that window.
+      for (var c = 0; c < main.children.length; c++) { targets.push(main.children[c]); }
+
+      for (var i = 0; i < targets.length; i++) {
+        var el = targets[i];
+        if (seen.indexOf(el) !== -1) { continue; }
+        seen.push(el);
+        var cs = null;
+        try { cs = getComputedStyle(el); } catch (e) { continue; }
+        if (!cs) { continue; }
+        var names = String(cs.animationName || '').split(',');
+        if (!names.length || names[0].trim() === '' || names[0].trim() === 'none') { continue; }
+        var durs = String(cs.animationDuration || '').split(',');
+        var iters = String(cs.animationIterationCount || '').split(',');
+        var delays = [];
+        for (var k = 0; k < names.length; k++) {
+          var dur = __ktSeconds(durs[k % durs.length]);
+          var infinite = String(iters[k % iters.length] || '').trim() === 'infinite';
+          if (infinite && dur > 0) {
+            delays.push('-' + (elapsed % dur).toFixed(3) + 's');   // same point in the loop
+          } else {
+            delays.push('-' + (dur + 1).toFixed(3) + 's');         // already over
+          }
+        }
+        // Inline !important: the stylesheet declares `animation: ... !important`, and an
+        // inline important declaration is the only thing that outranks it.
+        el.style.setProperty('animation-delay', delays.join(', '), 'important');
+      }
+    } catch (e) {}
+  }
+
   function __ktWaitSettled(main, done) {
     var finished = false;
     var started = Date.now();
@@ -1618,6 +1695,9 @@
         var _dropped = false;
         var _drop = function () { if (_dropped) { return; } _dropped = true; __ktDropSnapshot(); };
         __ktWaitSettled(main, function () {
+          /* BEFORE the uncover, never after: the phase has to be right in the DOM the
+             reader is about to be shown, or the banner still snaps — just later. */
+          __ktPinAnimations(main);
           try { requestAnimationFrame(function () { requestAnimationFrame(_drop); }); } catch (e) {}
           setTimeout(_drop, 250);
         });

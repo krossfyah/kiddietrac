@@ -72,7 +72,8 @@ class ParentImmunizationRecordController extends Controller
             ->where('d.category', self::CATEGORY)
             ->orderByDesc('d.id')
             ->get([
-                'd.id', 'd.scope_id', 'd.title', 'd.file_type', 'd.file_size',
+                'd.id', 'd.scope_id', 'd.title', 'd.notes', 'd.file_url',
+                'd.file_type', 'd.file_size',
                 'd.created_at', 'd.uploaded_by_id',
                 'u.first_name as up_first', 'u.last_name as up_last',
                 'ch.first_name as ch_first', 'ch.last_name as ch_last', 'ch.preferred_name as ch_pref',
@@ -90,11 +91,28 @@ class ParentImmunizationRecordController extends Controller
             ->map(fn ($r) => $r->user_id . ':' . $r->child_id)
             ->flip();
 
+        /* WHICH DOSES THIS RECORD ACCOUNTED FOR.
+           The link is proof_document_url: a dose recorded from a filed card carries that
+           card's path, so the two halves of the same action stay joined without a new
+           table. Everyone who can see the record sees what was read off it — that is what
+           makes the educator's and the parent's view the same view as the director's. */
+        $covered = DB::table('immunizations')
+            ->whereIn('child_id', $childIds)
+            ->whereIn('proof_document_url', $docs->pluck('file_url')->filter()->unique()->all() ?: [''])
+            ->get(['proof_document_url', 'vaccine', 'dose_label', 'administered_on'])
+            ->groupBy('proof_document_url');
+
         return $docs->map(fn ($d) => [
             'id' => (int) $d->id,
             'child_id' => (int) $d->scope_id,
             'child_name' => trim((($d->ch_pref ?: $d->ch_first) . ' ' . $d->ch_last)),
             'title' => $d->title,
+            'notes' => $d->notes,
+            'doses' => collect($covered->get($d->file_url, []))->map(fn ($r) => [
+                'vaccine' => $r->vaccine,
+                'dose_label' => $r->dose_label,
+                'administered_on' => $r->administered_on,
+            ])->values()->all(),
             'file_type' => $d->file_type,
             'file_size' => (int) $d->file_size,
             'uploaded_at' => $d->created_at,
@@ -118,7 +136,46 @@ class ParentImmunizationRecordController extends Controller
             // Photos are the common case — a parent holding the card up to their phone.
             'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic', 'max:10240'],
             'title' => ['nullable', 'string', 'max:200'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            /* A JSON STRING, not an array, because this request is multipart/form-data —
+               a file cannot travel in a JSON body, so the structured half has to be
+               carried as a field. Shape: [{vaccine, dose_label, administered_on?}, …] */
+            'doses' => ['nullable', 'string', 'max:20000'],
         ]);
+
+        /* READING A CARD IS A CLINICAL JUDGEMENT, AND IT IS THE CENTRE'S TO MAKE.
+
+           A parent may hand the record over — that is the whole point of this endpoint —
+           but deciding that the smudged line on it means "DTaP-IPV-Hib, 2nd dose" is the
+           act that clears a compliance flag, and a family must not be able to clear their
+           own. So the file is accepted from anyone who may reach the child, and the doses
+           only from staff. Asked of an ACTIVE role assignment that reaches this child, and
+           it fails closed — never of a role STRING on the user, which is how four
+           guardian checks flipped at once once before. */
+        $canRecord = $this->mayRecordDoses((int) $request->user()->id, $childId);
+
+        $doses = [];
+        foreach ((array) json_decode((string) ($data['doses'] ?? ''), true) as $d) {
+            if (! is_array($d)) {
+                continue;
+            }
+            $vaccine = trim((string) ($d['vaccine'] ?? ''));
+            if ($vaccine === '') {
+                continue;
+            }
+            $on = trim((string) ($d['administered_on'] ?? ''));
+            $doses[] = [
+                'vaccine' => mb_substr($vaccine, 0, 100),
+                'dose_label' => mb_substr(trim((string) ($d['dose_label'] ?? '')), 0, 40) ?: null,
+                // A blank date is honest when the card is unclear; it still records the dose.
+                'administered_on' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $on) ? $on : null,
+            ];
+        }
+        if ($doses && ! $canRecord) {
+            return response()->json([
+                'message' => 'Only the centre can record which doses a record covers.',
+            ], 403);
+        }
 
         $file = $request->file('file');
         $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
@@ -132,6 +189,7 @@ class ParentImmunizationRecordController extends Controller
             'scope_id' => $childId,
             'category' => self::CATEGORY,
             'title' => mb_substr($title, 0, 200),
+            'notes' => ($n = trim((string) ($data['notes'] ?? ''))) !== '' ? $n : null,
             'file_url' => $publicPath,
             'file_type' => $file->getClientMimeType() ?: 'application/octet-stream',
             'file_size' => $file->getSize(),
@@ -140,9 +198,56 @@ class ParentImmunizationRecordController extends Controller
         ]);
 
         $childName = trim(($child->preferred_name ?: $child->first_name) . ' ' . $child->last_name);
-        $this->alertTeam($childId, $childName, (int) $request->user()->id, $docId);
 
-        // Audit granularly: WHICH child, WHICH document, and who sent it.
+        /* The doses, against the same document, in the same action.
+           Filing the card and recording what it says used to be two jobs on two screens,
+           which is why records sat on file for weeks with the child still showing overdue.
+           An already-recorded dose is SKIPPED rather than duplicated — re-filing a clearer
+           photo of the same card is a normal thing to do, and it must not double the
+           history. */
+        $already = DB::table('immunizations')->where('child_id', $childId)
+            ->get(['vaccine', 'dose_label'])
+            ->map(fn ($r) => mb_strtolower(trim($r->vaccine . '|' . $r->dose_label)))
+            ->flip();
+
+        $recorded = [];
+        $skipped = [];
+        foreach ($doses as $d) {
+            $key = mb_strtolower(trim($d['vaccine'] . '|' . $d['dose_label']));
+            $label = trim($d['vaccine'] . ' ' . ($d['dose_label'] ?? ''));
+            if ($already->has($key)) {
+                $skipped[] = $label;
+                continue;
+            }
+            try {
+                DB::table('immunizations')->insert([
+                    'child_id' => $childId,
+                    'vaccine' => $d['vaccine'],
+                    'dose_label' => $d['dose_label'],
+                    'administered_on' => $d['administered_on'],
+                    // What this dose was read off. Joins the record to the row it produced.
+                    'proof_document_url' => $publicPath,
+                    'recorded_by_id' => $request->user()->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $already->put($key, true);
+                $recorded[] = $label;
+            } catch (\Throwable $e) {
+                Log::warning('Immunization dose insert failed', [
+                    'child' => $childId, 'dose' => $label, 'e' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $note = trim((string) ($data['notes'] ?? ''));
+        $byParent = ! $canRecord;
+        $this->alertTeam($childId, $childName, (int) $request->user()->id, $docId, $recorded, $byParent);
+        $this->emailOffice($childId, $childName, $request->user(), $docId, $title, $recorded, $skipped, $note);
+
+        /* Audit granularly: WHICH child, WHICH document, and NAMING every dose — not a
+           count. "3 doses recorded" cannot answer "was the 2nd DTaP entered from that
+           card?", which is the only question anyone ever asks of this log. */
         try {
             \App\Support\Audit::write([
                 'user_id' => $request->user()->id,
@@ -154,7 +259,10 @@ class ParentImmunizationRecordController extends Controller
                     'child_name' => $childName,
                     'document_id' => $docId,
                     'title' => $title,
-                    'uploaded_by' => 'parent',
+                    'uploaded_by' => $byParent ? 'parent' : 'staff',
+                    'doses_recorded' => $recorded,
+                    'doses_already_on_file' => $skipped,
+                    'notes' => $note !== '' ? $note : null,
                 ]),
                 'created_at' => now(),
             ]);
@@ -164,8 +272,182 @@ class ParentImmunizationRecordController extends Controller
 
         return response()->json([
             'id' => $docId,
-            'message' => 'Immunization record received — your child\'s educator and centre have been notified.',
+            'recorded' => $recorded,
+            'skipped' => $skipped,
+            'message' => $byParent
+                ? 'Immunization record received — your child\'s educator and centre have been notified.'
+                : ($recorded
+                    ? 'Record filed and ' . count($recorded) . ' dose' . (count($recorded) === 1 ? '' : 's') . ' recorded.'
+                    : 'Record filed.'),
         ]);
+    }
+
+    /**
+     * May this person record what a card says, as opposed to merely handing it over?
+     *
+     * An ACTIVE staff role assignment that reaches the child — through one of the centres
+     * where the child has an open enrolment, or through the agency above it. Platform
+     * admins hold no tenant role by design and are allowed through explicitly rather than
+     * by accident. Anything unrecognised is a no.
+     */
+    private function mayRecordDoses(int $userId, int $childId): bool
+    {
+        try {
+            if (DB::table('role_assignments')->where('user_id', $userId)
+                ->where('role', 'platform_admin')->where('active', 1)->exists()) {
+                return true;
+            }
+
+            $centreIds = DB::table('enrollments as e')
+                ->join('rooms as r', 'r.id', '=', 'e.room_id')
+                ->where('e.child_id', $childId)->whereNull('e.end_date')
+                ->distinct()->pluck('r.centre_id')->filter()->all();
+            $agencyIds = $centreIds
+                ? DB::table('centres')->whereIn('id', $centreIds)->pluck('agency_id')->filter()->unique()->all()
+                : [];
+            if (! $centreIds && ! $agencyIds) {
+                return false;
+            }
+
+            return DB::table('role_assignments')
+                ->where('user_id', $userId)->where('active', 1)
+                ->where(function ($q) use ($centreIds, $agencyIds) {
+                    if ($centreIds) {
+                        $q->orWhere(function ($x) use ($centreIds) {
+                            $x->whereIn('role', ['educator', 'centre_director', 'home_visitor'])
+                                ->whereIn('centre_id', $centreIds);
+                        });
+                    }
+                    if ($agencyIds) {
+                        $q->orWhere(function ($x) use ($agencyIds) {
+                            $x->whereIn('role', ['agency_admin', 'centre_director'])
+                                ->whereIn('agency_id', $agencyIds);
+                        });
+                    }
+                })
+                ->exists();
+        } catch (\Throwable $e) {
+            // Fail CLOSED. An error here must never hand out the right to clear a
+            // compliance flag.
+            return false;
+        }
+    }
+
+    /**
+     * Tell the office, by email, that a record was filed for a named child.
+     *
+     * The in-app notification alertTeam() writes reaches whoever happens to open the
+     * portal; an immunization record is a compliance artefact, and the person who has to
+     * answer for it is usually not the person who filed it. Modelled on the attendance
+     * correction notice — same recipients, same shape — so the office learns one format.
+     */
+    private function emailOffice(
+        int $childId,
+        string $childName,
+        $actor,
+        int $docId,
+        string $title,
+        array $recorded,
+        array $skipped,
+        string $note
+    ): void {
+        try {
+            $agencyId = $this->agencyOfChild($childId);
+            if (! $agencyId) {
+                return;
+            }
+            $centreIds = DB::table('enrollments as e')
+                ->join('rooms as r', 'r.id', '=', 'e.room_id')
+                ->where('e.child_id', $childId)->whereNull('e.end_date')
+                ->distinct()->pluck('r.centre_id')->filter();
+
+            $actorId = (int) $actor->id;
+            $to = DB::table('role_assignments as ra')
+                ->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.active', 1)
+                ->where(function ($q) use ($agencyId, $centreIds) {
+                    $q->where(function ($x) use ($agencyId) {
+                        $x->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId);
+                    });
+                    if ($centreIds->isNotEmpty()) {
+                        $q->orWhere(function ($x) use ($centreIds) {
+                            $x->where('ra.role', 'centre_director')->whereIn('ra.centre_id', $centreIds);
+                        });
+                    }
+                })
+                ->where('u.id', '!=', $actorId)
+                ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                ->distinct()->pluck('u.email')->filter()->unique()->values()->all();
+            if (! $to) {
+                return;
+            }
+
+            $actorName = trim(($actor->first_name ?? '') . ' ' . ($actor->last_name ?? '')) ?: 'Someone';
+
+            /* What is still outstanding AFTER this — the one number the office actually
+               wants, and the difference between "handled" and "handled, keep chasing". */
+            $outstanding = -1;   // -1 means "could not work it out", and says nothing
+            try {
+                $sched = DB::table('immunization_schedule')->where('agency_id', $agencyId)
+                    ->where('active', 1)->count();
+                $done = DB::table('immunizations')->where('child_id', $childId)->count();
+                $outstanding = max(0, $sched - $done);
+            } catch (\Throwable $e) {
+                $outstanding = -1;
+            }
+
+            $list = fn (array $xs) => '<ul style="margin:0 0 14px;padding-left:18px;color:#0F172A;">'
+                . implode('', array_map(fn ($x) => '<li style="margin:2px 0;">' . e($x) . '</li>', $xs))
+                . '</ul>';
+
+            $body = '<p style="margin:0 0 14px;"><strong>' . e($actorName) . '</strong> filed an '
+                . 'immunization record for <strong>' . e($childName) . '</strong>.</p>'
+                . ($recorded
+                    ? '<p style="margin:0 0 6px;font-weight:700;color:#166534;">Recorded from it ('
+                        . count($recorded) . '):</p>' . $list($recorded)
+                    : '<p style="margin:0 0 14px;color:#92400E;">No doses were recorded from it yet — '
+                        . 'the record is on file and still needs reading.</p>')
+                . ($skipped
+                    ? '<p style="margin:0 0 6px;font-weight:700;color:#475569;">Already on file, left alone:</p>'
+                        . $list($skipped)
+                    : '')
+                . ($note !== ''
+                    ? '<p style="margin:0 0 6px;font-weight:700;color:#475569;">Note:</p>'
+                        . '<p style="margin:0 0 14px;color:#0F172A;white-space:pre-wrap;">' . e($note) . '</p>'
+                    : '')
+                . ($outstanding === 0
+                    ? '<p style="margin:0 0 14px;color:#166534;font-weight:700;">'
+                        . 'Nothing outstanding for this child — the immunization item is complete.</p>'
+                    : ($outstanding > 0
+                        ? '<p style="margin:0 0 14px;color:#475569;">' . $outstanding . ' dose'
+                            . ($outstanding === 1 ? '' : 's') . ' on the schedule are still unrecorded.</p>'
+                        : ''))
+                . '<p style="margin:0 0 14px;font-size:13px;color:#475569;">Filed '
+                . e(now()->setTimezone(\App\Support\AgencyTime::tz($agencyId))->format('j M Y \a\t g:i A'))
+                . '. The record is on the child\'s Immunization tab.</p>'
+                . '<p style="margin:0;font-size:12.5px;color:#64748B;">Immunization records are compliance '
+                . 'evidence, so who filed one and what was read off it is recorded in the audit log.</p>';
+
+            $subject = 'Immunization record filed — ' . $childName;
+
+            $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                'eyebrow' => 'Immunization',
+                'title' => $subject,
+                'preheader' => $actorName . ' filed an immunization record for ' . $childName,
+            ]);
+
+            \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
+                ->html($html, function ($m) use ($to, $subject, $agencyId) {
+                    $m->to($to[0])->subject($subject);
+                    if (count($to) > 1) {
+                        $m->bcc(array_slice($to, 1));
+                    }
+                    try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); }
+                    catch (\Throwable $e) {}
+                });
+        } catch (\Throwable $e) {
+            Log::warning('Immunization filed notice failed', ['child' => $childId, 'e' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -202,8 +484,14 @@ class ParentImmunizationRecordController extends Controller
      * alert is not something the data can express today. The parent who uploaded it is
      * excluded; they already know.
      */
-    private function alertTeam(int $childId, string $childName, int $uploaderId, int $docId): void
-    {
+    private function alertTeam(
+        int $childId,
+        string $childName,
+        int $uploaderId,
+        int $docId,
+        array $recorded = [],
+        bool $byParent = true
+    ): void {
         try {
             $centreIds = DB::table('enrollments as e')
                 ->join('rooms as r', 'r.id', '=', 'e.room_id')
@@ -239,16 +527,22 @@ class ParentImmunizationRecordController extends Controller
                 'user_id' => (int) $uid,
                 'type' => 'immunization_record',
                 'title' => '💉 Immunization record for ' . $childName,
-                'body' => 'A parent uploaded an immunization record. It is on the child\'s Documents tab.',
+                'body' => ($byParent ? 'A parent' : 'The centre') . ' filed an immunization record'
+                    . ($recorded
+                        ? ', and ' . count($recorded) . ' dose' . (count($recorded) === 1 ? '' : 's')
+                            . ' were recorded from it: ' . implode(', ', $recorded) . '.'
+                        : '. No doses have been recorded from it yet.')
+                    . ' It is on the child\'s Immunization tab.',
                 'data' => json_encode([
                     'child_id' => $childId,
                     'document_id' => $docId,
-                    'hash' => 'child-detail?id=' . $childId . '&tab=documents',
+                    'doses_recorded' => $recorded,
+                    'hash' => 'child-detail?id=' . $childId . '&tab=immunization',
                 ]),
                 'created_at' => $now,
             ])->all();
 
-            DB::table('notifications')->insert($rows);
+            \App\Support\Notify::write($rows);
         } catch (\Throwable $e) {
             /* A record that was successfully filed must never fail because a bell
                could not be rung — the document is the thing that matters. */

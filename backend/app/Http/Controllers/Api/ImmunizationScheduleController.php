@@ -75,6 +75,25 @@ final class ImmunizationScheduleController extends Controller
             'updated_at' => now(),
         ];
         if (!empty($data['id'])) {
+            /* THE ROW MUST BE THIS AGENCY'S.
+
+               removeSchedule has checked this since v22p95; the update beside it never
+               did, so a posted id was written straight through -- one agency could edit
+               another's vaccine schedule, and the payload even carried its own agency_id,
+               which would have MOVED the row. Nothing in the UI could do it, but "the UI
+               does not offer it" is not an access control, and the editor is about to
+               become a real screen with real buttons.
+
+               Same shape as the delete: platform admins may touch any row, everybody else
+               only their own. (Anthony, 2026-09-10) */
+            $existing = DB::table('immunization_schedule')->where('id', $data['id'])->first();
+            abort_unless($existing, 404);
+            abort_unless(
+                $this->isPlatformAdminUser($request->user()) || (int) $existing->agency_id === (int) $agencyId,
+                403
+            );
+            /* Never re-home a row on update. agency_id belongs in the INSERT only. */
+            unset($payload['agency_id']);
             DB::table('immunization_schedule')->where('id', $data['id'])->update($payload);
             return response()->json(['id' => (int) $data['id'], 'status' => 'updated']);
         }
@@ -154,6 +173,31 @@ final class ImmunizationScheduleController extends Controller
         $dueSoon = $items->where('status', 'due_soon')->count();
         $done = $items->where('status', 'done')->count();
 
+        /* A RECORD ON FILE IS NOT THE SAME AS A DOSE RECORDED — and the screen has to be
+           able to tell them apart.
+
+           This endpoint only ever read the `immunizations` table, so a child whose card
+           had been photographed and filed that morning was indistinguishable from one
+           whose family had sent nothing in years. The panel headline said, in the staff
+           wording, "Nothing has been recorded against these. Upload the card or printout
+           if the family has sent one in." — asking for the exact document sitting on the
+           Records-on-file list three inches below it, and telling whoever had just spent
+           ten minutes uploading it that nothing had happened.
+
+           Anthony, 2026-09-15: "Safia uploaded an immunization record for a child and I
+           don't see this updated in the immunization section." She had; it was there; the
+           screen led with a red block saying it was not.
+
+           The count of overdue doses deliberately does NOT move. A PDF nobody has read is
+           not a recorded dose, and quietly clearing a compliance flag because a file
+           arrived would be worse than the bug. What changes is the ASK: the work still to
+           be done is transcribing the record, not chasing the family for it again.
+
+           Read through recordsFor() rather than a second query, so "a record is on file"
+           has one definition here, in the reminder job, and on the records list itself. */
+        $filed = \App\Http\Controllers\Api\ParentImmunizationRecordController::recordsFor([$childId]);
+        $latestFiled = $filed[0] ?? null;   // recordsFor() orders newest first
+
         return response()->json([
             'child_id' => $childId,
             'child_name' => $child->first_name . ' ' . $child->last_name,
@@ -165,6 +209,14 @@ final class ImmunizationScheduleController extends Controller
                 'done' => $done,
                 'total_applicable' => $items->where('due_at_age_months', '<=', $ageMonths + 6)->count(),
             ],
+            'record_on_file' => $latestFiled ? [
+                'id' => $latestFiled['id'],
+                'title' => $latestFiled['title'],
+                'uploaded_at' => $latestFiled['uploaded_at'],
+                'uploaded_by' => $latestFiled['uploaded_by'],
+                'uploaded_by_parent' => $latestFiled['uploaded_by_parent'],
+                'count' => count($filed),
+            ] : null,
         ]);
     }
 
@@ -190,6 +242,11 @@ final class ImmunizationScheduleController extends Controller
                 'centre_name' => $ch->centre_name,
                 'overdue' => $payload['summary']['overdue'],
                 'due_soon' => $payload['summary']['due_soon'],
+                /* So the agency list can tell "nothing has ever arrived" from "it arrived
+                   and still needs typing up" — two different jobs for two different
+                   people, and they looked identical here. */
+                'record_on_file' => ! empty($payload['record_on_file']),
+                'record_filed_at' => $payload['record_on_file']['uploaded_at'] ?? null,
             ];
         })->sortByDesc('overdue')->values();
         return response()->json(['data' => $rows]);
