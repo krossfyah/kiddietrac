@@ -681,18 +681,27 @@
     function openRecord(r, btn) {
       var was = btn.textContent;
       btn.disabled = true; btn.textContent = 'Opening…';
-      var win = window.open('', '_blank');   // opened on the click, or a blocker eats it
+      /* No pre-opened tab any more. It was there because a popup blocker eats a window
+         opened after an await — but the portal's own panel is not a popup, so the whole
+         problem goes away, and with it the blank tab left behind whenever the fetch
+         failed. */
       fetch(api() + base + '/immunization-records/' + r.id + '/download', {
         headers: { Authorization: 'Bearer ' + token() },
       }).then(function (res) {
         if (!res.ok) { throw new Error('HTTP ' + res.status); }
         return res.blob();
       }).then(function (b) {
-        var u = URL.createObjectURL(b);
-        if (win) { win.location = u; } else { window.open(u, '_blank'); }
-        setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+        if (!(window.KT && KT.viewBlob && KT.viewBlob(b, {
+          title: r.title || 'Immunization record',
+          label: 'Immunization record',
+          filename: 'immunization-record',
+        }))) {
+          // The viewer is not loaded — better a new tab than nothing.
+          var u = URL.createObjectURL(b);
+          window.open(u, '_blank');
+          setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+        }
       }).catch(function () {
-        if (win) { win.close(); }
         if (KT.toast) { KT.toast('⚠️', 'Could not open', 'That record could not be opened.', '#B91C1C'); }
       }).finally(function () {
         btn.disabled = false; btn.textContent = was;

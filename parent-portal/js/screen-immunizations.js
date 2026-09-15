@@ -616,9 +616,18 @@
       var res = await fetch(apiBase() + '/director/children/' + childId + '/immunization-records/' + docId + '/download',
         { headers: { 'Authorization': 'Bearer ' + token() } });
       if (!res.ok) { throw new Error('Could not open that file (' + res.status + ')'); }
-      var url = URL.createObjectURL(await res.blob());
-      window.open(url, '_blank');
-      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      var blob = await res.blob();
+      /* The portal's own panel, not a new tab — in the APK a new tab is an EXTERNAL
+         browser that loses the session. Same viewer the child's Immunization tab uses. */
+      if (!(window.KT && KT.viewBlob && KT.viewBlob(blob, {
+        title: 'Immunization record',
+        label: 'Immunization record',
+        filename: 'immunization-record',
+      }))) {
+        var url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      }
     } catch (e) {
       alert(e.message);
     }

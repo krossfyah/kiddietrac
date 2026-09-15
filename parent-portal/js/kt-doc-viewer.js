@@ -70,7 +70,11 @@
     ov.className = 'kt-scrim kt-doc-viewer';
     ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:18px;';
 
-    var inner = isImage(url)
+    /* A blob: URL carries no file extension, so isImage() cannot tell a photo from a
+       PDF and everything fetched through an authorised request landed in the iframe.
+       An <img> scales and centres properly where an iframe shows a scrollbox, so the
+       caller — who has the Blob and therefore its MIME type — can say. */
+    var inner = (isImage(url) || opts.image)
       ? '<div style="flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;">'
         + '<img src="' + esc(url) + '" alt="' + esc(title) + '" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;">'
         + '</div>'
@@ -94,6 +98,10 @@
     function close() {
       if (ov.parentNode) ov.parentNode.removeChild(ov);
       d.removeEventListener('keydown', onKey, true);
+      // Lets a caller release what it created — an object URL leaks for the life of the
+      // document otherwise, and "revoke after 60 seconds" races a reader who is still
+      // looking at it.
+      try { if (opts.onClose) opts.onClose(); } catch (e) {}
     }
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
     ov.querySelector('.ktdv-close').addEventListener('click', close);
@@ -313,7 +321,33 @@
   }, true);
 
   w.KT = w.KT || {};
+  /* ── a file you had to FETCH ──────────────────────────────────────────────
+     A child's health record, a payslip, an incident report: not a public URL but an
+     authorised request, so the screen ends up holding a Blob. Every one of them then
+     did the same thing — createObjectURL, window.open — which is exactly what this
+     file exists to stop. In the APK that opens an EXTERNAL browser, loses the session
+     and strands the reader outside the app with no way back but the task switcher.
+
+     So the Blob goes in the same panel as everything else, the MIME type decides
+     whether it renders as an image, and the object URL is released when the panel
+     closes rather than on a timer that races the reader. (Anthony, 2026-09-15) */
+  function viewBlob(blob, opts) {
+    if (!blob) { return null; }
+    opts = opts || {};
+    var url;
+    try { url = w.URL.createObjectURL(blob); } catch (e) { return null; }
+    var caller = opts.onClose;
+    return view(url, Object.assign({}, opts, {
+      image: opts.image != null ? opts.image : /^image\//i.test(blob.type || ''),
+      onClose: function () {
+        try { w.URL.revokeObjectURL(url); } catch (e) {}
+        try { if (caller) caller(); } catch (e) {}
+      },
+    }));
+  }
+
   w.KT.viewDocument = view;
+  w.KT.viewBlob = viewBlob;
   w.KT.viewHtml = viewHtml;
   w.KT.docWindow = docWindow;
   w.KT.openDocumentExternally = openExternally;
