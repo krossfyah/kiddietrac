@@ -36,6 +36,11 @@
     // Pre-fill with the email already in the login form
     const loginEmail = document.querySelector('input[type=email], input[name=email]');
     const prefillEmail = loginEmail ? loginEmail.value : '';
+    /* If the sign-in form has already demanded a username (needs_username — the address
+       is shared), carry it across. That is precisely the case the reset has to get
+       right, and making them type it twice is how they end up leaving it blank. */
+    const loginUname = document.getElementById('loginUsername');
+    const prefillUname = loginUname ? loginUname.value : '';
 
     // Build modal
     const overlay = document.createElement('div');
@@ -60,6 +65,18 @@
              style="width: 100%; padding: 12px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 15px; box-sizing: border-box; margin-bottom: 16px;"
              value="${prefillEmail.replace(/"/g, '&quot;')}">
 
+      <!-- ONE ADDRESS CAN HOLD SEVERAL ACCOUNTS. Optional, and stays optional: somebody
+           locked out of a password often does not know their username either, and a
+           required field here would be a wall rather than a reset. Given, it ties the
+           link to exactly one account; left blank, a shared address gets one labelled
+           email per account and the person picks the right one from their inbox. -->
+      <label for="forgot-username" style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px;">Username <span style="font-weight:400;color:#9CA3AF;">— optional</span></label>
+      <input id="forgot-username" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+             placeholder="only if you have one"
+             style="width: 100%; padding: 12px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 15px; box-sizing: border-box; margin-bottom: 6px;"
+             value="${prefillUname.replace(/"/g, '&quot;')}">
+      <p style="color:#9CA3AF;font-size:12px;margin:0 0 16px;">If more than one account uses this email, your username tells us which one to reset.</p>
+
       <div id="forgot-status" style="margin-bottom: 12px; font-size: 14px;"></div>
 
       <button id="forgot-submit" type="button"
@@ -76,6 +93,7 @@
     document.body.appendChild(overlay);
 
     const emailInput = card.querySelector('#forgot-email');
+    const unameInput = card.querySelector('#forgot-username');
     const submitBtn = card.querySelector('#forgot-submit');
     const cancelBtn = card.querySelector('#forgot-cancel');
     const status = card.querySelector('#forgot-status');
@@ -86,6 +104,7 @@
 
     submitBtn.addEventListener('click', async () => {
       const email = emailInput.value.trim();
+      const username = unameInput ? unameInput.value.trim() : '';
       if (!email) {
         status.style.color = '#DC2626';
         status.textContent = 'Please enter your email.';
@@ -101,7 +120,7 @@
         const res = await fetch('https://api.kiddietrac.com/api/v1/auth/forgot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify(username ? { email, username } : { email }),
         });
         const body = await res.json().catch(() => ({}));
 
@@ -119,9 +138,12 @@
       }
     });
 
-    emailInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submitBtn.click();
-      if (e.key === 'Escape') overlay.remove();
+    [emailInput, unameInput].forEach((el) => {
+      if (!el) { return; }
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitBtn.click();
+        if (e.key === 'Escape') overlay.remove();
+      });
     });
   }
 })();

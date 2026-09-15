@@ -1318,7 +1318,9 @@
       try { snap.scrollTop = main.scrollTop; } catch (e) {}
       /* A render that throws must never leave the page frozen behind a picture of
          itself. This fires regardless of what the render does. */
-      window.__ktSnapKill = setTimeout(__ktDropSnapshot, 4000);
+      /* Must outlast __ktWaitSettled's own ceiling, or the failsafe uncovers the
+         screen in the middle of the wait it was meant to back up. */
+      window.__ktSnapKill = setTimeout(__ktDropSnapshot, 6000);
       return snap;
     } catch (e) { return null; }
   }
@@ -1329,6 +1331,94 @@
       var old = document.getElementById('kt-refresh-snap');
       if (old && old.parentNode) { old.parentNode.removeChild(old); }
     } catch (e) {}
+  }
+
+  /* WHEN IS A SCREEN ACTUALLY FINISHED?
+
+     The cover above was dropped as soon as fn() returned, and that is the wrong moment.
+     Almost no screen in this portal finishes inside its render function: the usual shape is
+
+         Dom.clear(listWrap);
+         listWrap.appendChild(el('div', 'Loading audit log...'));
+         Api.get('/admin/audit-logs?...').then(function (data) { ...build the table... });
+
+     — the function returns at once, with a "Loading..." line on screen. So the reader was
+     shown the old page for two frames, then the loading placeholder for as long as the
+     request took, then the new page. The cover was hiding the only part that was never
+     visible anyway, and the flash it was written to remove was still there in full.
+     (Anthony, 2026-09-15: "the screen flashes as it appears its refreshing".)
+
+     Settled means all three:
+       - nothing this render started is still in flight (KT.Api counts, window.__ktInflight)
+       - #appMain has stopped changing for QUIET_MS — this catches screens with their own
+         fetch helper, and the global sweeps (search/sort, mobile tables, icon buttons)
+         that rearrange a table right after it appears
+       - MAX_HOLD_MS has not elapsed; a slow or broken screen must never stay covered
+
+     And it ends immediately if the reader touches anything. The cover is inert
+     (pointer-events:none) but it is a still picture, so a scroll would slide the page out
+     from under it. Whoever is interacting gets the real screen, loading line and all. */
+  var __KT_QUIET_MS = 160;      // no mutation for this long = the screen has stopped moving
+  var __KT_REQ_GRACE_MS = 140;  // after the last request lands, long enough for its .then()
+  var __KT_MAX_HOLD_MS = 2600;  // ceiling; a slow screen uncovers rather than freezing
+
+  function __ktWaitSettled(main, done) {
+    var finished = false;
+    var started = Date.now();
+    var lastMut = started;
+    /* WHICH SIGNAL DECIDES.
+       DOM quiet alone never arrives on most screens: renderScreen schedules seven
+       deferred banner passes out to 7.5s plus a MutationObserver, and each one touches
+       #appMain, so the quiet timer resets forever and every refresh ran to the ceiling.
+       The cover then sat there showing a picture that was already a second out of date.
+
+       So when the screen fetched anything — which is nearly all of them — the request is
+       the signal: settled once nothing is outstanding and its .then() has had a moment to
+       paint. DOM quiet is the fallback for a screen that renders purely from memory and
+       therefore issues no request at all. */
+    var sawRequest = false;
+    var lastBusy = started;
+    var obs = null;
+    var iv = null;
+    var EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown', 'mousedown'];
+    var opts = { passive: true, capture: true };
+
+    function cleanup() {
+      try { if (obs) obs.disconnect(); } catch (e) {}
+      try { if (iv) clearInterval(iv); } catch (e) {}
+      EVENTS.forEach(function (ev) {
+        try { window.removeEventListener(ev, finish, opts); } catch (e) {}
+      });
+    }
+    function finish() {
+      if (finished) { return; }
+      finished = true;
+      cleanup();
+      try { done(); } catch (e) {}
+    }
+
+    try {
+      obs = new MutationObserver(function () { lastMut = Date.now(); });
+      obs.observe(main, { childList: true, subtree: true, characterData: true, attributes: true });
+    } catch (e) { obs = null; }
+
+    EVENTS.forEach(function (ev) {
+      try { window.addEventListener(ev, finish, opts); } catch (e) {}
+    });
+
+    iv = setInterval(function () {
+      var now = Date.now();
+      if (now - started >= __KT_MAX_HOLD_MS) { finish(); return; }
+      var pending = 0;
+      try { pending = window.__ktInflight || 0; } catch (e) {}
+      if (pending > 0) { sawRequest = true; lastBusy = now; return; }
+      if (sawRequest) {
+        if (now - lastBusy >= __KT_REQ_GRACE_MS) { finish(); }
+        return;
+      }
+      if (now - lastMut < __KT_QUIET_MS) { return; }
+      finish();
+    }, 50);
   }
 
   function __ktSettleScroll(y, releaseEl) {
@@ -1519,15 +1609,18 @@
          DOM, and one frame lets the browser paint it before the picture of the old screen
          is taken away. Removing it synchronously here shows a blank flash again. */
       if (_ktSilent) {
-        /* A frame OR 250ms, whichever comes first. requestAnimationFrame does not fire in
-           a backgrounded tab, so on its own it left the snapshot in place until the
-           safety timeout — and somebody switching back to the tab in that window would
-           find the screen frozen behind a picture of itself. The frame is what makes the
-           swap seamless when the tab is visible; the timer is what guarantees it ends. */
+        /* Wait for the screen to SETTLE, not just for its render function to return —
+           see __ktWaitSettled. Then uncover on the next frame, so the browser has
+           painted the finished screen before the picture of the old one is taken away.
+           requestAnimationFrame does not fire in a backgrounded tab, so a 250ms timer
+           runs alongside it: the frame is what makes the swap seamless when the tab is
+           visible, the timer is what guarantees it ends. */
         var _dropped = false;
         var _drop = function () { if (_dropped) { return; } _dropped = true; __ktDropSnapshot(); };
-        try { requestAnimationFrame(function () { requestAnimationFrame(_drop); }); } catch (e) {}
-        setTimeout(_drop, 250);
+        __ktWaitSettled(main, function () {
+          try { requestAnimationFrame(function () { requestAnimationFrame(_drop); }); } catch (e) {}
+          setTimeout(_drop, 250);
+        });
       }
       // Land every freshly-rendered screen at the very top. Doing it AFTER render
       // (not just on hashchange, before the async content exists) is what stops the

@@ -430,65 +430,130 @@ final class AuthController extends Controller
      */
     public function forgotPassword(Request $request): JsonResponse
     {
-        $data = $request->validate(['email' => ['required', 'email']]);
-        $email = trim((string) $data['email']);
+        /* A RESET BELONGS TO AN ACCOUNT, NOT TO AN INBOX (2026-09-15).
 
-        /* THE RESET MUST REACH AN ACCOUNT THAT CAN ACTUALLY SIGN IN (2026-09-14).
+           `email` is the login IDENTIFIER, exactly as it is on the sign-in form — an
+           address or a username — and `username` is the same optional disambiguator that
+           form already sends. On an address held by several accounts a username narrows
+           the request to ONE of them: one token, one email, and only that account's
+           outstanding tokens invalidated. Asking for your own reset can no longer revoke
+           a colleague's pending invite that happens to sit on the same address.
 
-           This was ->where('email', ...)->first(): no soft-delete scope, no status
-           filter, lowest id wins. On an address held by more than one account it
-           quietly picked the wrong one, and the reset row carried no user_id, so
-           resetPassword() repeated the same bad guess when the link was opened.
+           Without a username a shared address still gets one token and one labelled email
+           PER live account. That fallback stays deliberately: somebody locked out of a
+           password very often does not know their username either, and demanding one
+           would rebuild the exact wall this area exists to remove — see login()'s
+           needs_username, which cost Lloydene King seven sign-in attempts. Every token is
+           stamped with its own user_id either way, so a link only ever sets the account it
+           names.
 
-           Lloydene King requested three resets. All three resolved to a dormant Test
-           Agency demo account created in July; the last completed at 15:50 and set
-           THAT account's password. Her real account, invited the same morning, was
-           never touched - which is why a reset that reported success left her still
-           unable to sign in. Resetting your own password must never be able to
-           rewrite the credentials of an account you were not trying to reach.
+           Nothing here is disclosed. A username that matches nothing, and a username that
+           names a different account than the address, both return the same message an
+           unknown address returns, and both write an audit row saying which it was.
 
-           Scoped the way the front door is: not deleted, not switched off. A deleted
-           or deactivated account cannot be signed into, so sending it a reset link
-           only ever produces a password nobody can use.
+           The account scope is the front door's: not soft-deleted, not switched off. A
+           reset for an account that cannot be signed into only ever produces a password
+           nobody can use. (Anthony, 2026-09-14 / 2026-09-15) */
+        $data = $request->validate([
+            'email' => ['required', 'string', 'max:180'],
+            'username' => ['nullable', 'string', 'max:50'],
+        ]);
+        $login = trim((string) $data['email']);
+        $uname = ! empty($data['username']) ? mb_strtolower(trim((string) $data['username'])) : '';
+        $looksLikeEmail = strpos($login, '@') !== false;
+        $email = $looksLikeEmail ? $login : '';
 
-           When several live accounts share the address each gets its OWN token and
-           its own email, labelled with the username that link belongs to. Two emails
-           is not elegant, but the alternative is demanding a username from someone
-           locked out precisely because they do not know it - and one token silently
-           assigned to one of several accounts is the bug being fixed. */
-        $accounts = DB::table('users')
-            ->whereRaw('LOWER(email) = ?', [mb_strtolower($email)])
-            ->whereNull('deleted_at')
-            ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
-            ->orderBy('id')
-            ->get();
+        $accounts = collect();
+        $narrowed = false;   // a username picked ONE account out of the address
+        $refusal = null;     // why nothing was sent, for the audit trail
+
+        if ($uname !== '' || ! $looksLikeEmail) {
+            $wanted = $uname !== '' ? $uname : mb_strtolower($login);
+            $q = DB::table('users')
+                ->whereRaw('LOWER(username) = ?', [$wanted])
+                ->whereNull('deleted_at')
+                ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES);
+            /* Both given: they must name the SAME account. A mismatched or browser
+               -autofilled username must never fall back to resolving by address — that
+               is the wrong-account bug wearing a different hat. */
+            if ($uname !== '' && $looksLikeEmail) {
+                $q->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($login)]);
+            }
+            $one = $q->first();
+            if ($one) {
+                $accounts = collect([$one]);
+                $email = (string) $one->email;
+                $narrowed = true;
+            } else {
+                /* Name the refusal precisely. These are three different situations for
+                   whoever reads the log — a typo, an account that was switched off, and
+                   a username that belongs to somebody else's address — and they were all
+                   being written as the same row. */
+                $held = DB::table('users')->whereRaw('LOWER(username) = ?', [$wanted])
+                    ->whereNull('deleted_at')->first();
+                if (! $held) {
+                    $refusal = 'no_such_username';
+                } elseif (in_array($held->status, \App\Support\Audience::OFF_STATUSES, true)) {
+                    $refusal = 'that_username_is_switched_off';
+                } else {
+                    $refusal = 'username_and_email_name_different_accounts';
+                }
+            }
+        } else {
+            $accounts = \App\Support\EmailAccounts::live($email);
+            if ($accounts->isEmpty()) {
+                $any = DB::table('users')
+                    ->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($email)])
+                    ->count();
+                $refusal = $any > 0
+                    ? 'every_account_on_this_email_is_deleted_or_switched_off'
+                    : 'no_such_email';
+            }
+        }
 
         if ($accounts->isEmpty()) {
-            /* A request matching nothing used to vanish completely, so "I don't see
-               any attempts to reset the password" had no answer either way. Recorded
-               with no user_id; the response below is unchanged, nothing is disclosed. */
-            $any = DB::table('users')->whereRaw('LOWER(email) = ?', [mb_strtolower($email)])->count();
+            /* A request matching nothing used to vanish completely, so "I don't see any
+               attempts to reset the password" had no answer either way. Recorded with no
+               user_id; the response below is unchanged, nothing is disclosed. */
             $this->audit($request, null, 'password_reset_unmatched', null, null, [
-                'email' => $email,
-                'reason' => $any > 0 ? 'every_account_on_this_email_is_deleted_or_switched_off' : 'no_such_email',
+                'identifier' => $login,
+                'username' => $uname !== '' ? $uname : null,
+                'reason' => $refusal ?: 'no_match',
             ]);
         }
 
-        // Invalidate previous outstanding tokens for this address ONCE, before minting
-        // the new ones below - the loop must not clear tokens it has just issued.
+        /* Invalidate outstanding tokens for the accounts being re-minted for, and NOTHING
+           else. This used to clear every unused row on the ADDRESS, which is how one
+           person's reset request revoked another person's live invite. */
         if ($accounts->isNotEmpty()) {
+            $ids = $accounts->pluck('id')->all();
             DB::table('password_resets')
-                ->where('email', $email)
                 ->whereNull('used_at')
+                ->where(function ($q) use ($ids, $email, $narrowed) {
+                    $q->whereIn('user_id', $ids);
+                    /* 35 legacy rows carry no user_id. They can only be attributed when
+                       the address means exactly one account; when it is shared,
+                       resetPassword() already refuses them, so leave them rather than
+                       guess whose they are. */
+                    if (! $narrowed && $email !== '' && count($ids) === 1) {
+                        $q->orWhere(function ($q2) use ($email) {
+                            $q2->whereNull('user_id')->where('email', $email);
+                        });
+                    }
+                })
                 ->update(['used_at' => now()]);
         }
 
-        $several = $accounts->count() > 1;
+        /* Label the email with its username whenever the ADDRESS is shared — including
+           when a username narrowed us to one account, because the person is choosing
+           between accounts either way and the link must say which one it opens. */
+        $sharedAddress = $email !== '' && \App\Support\EmailAccounts::live($email)->count() > 1;
 
         foreach ($accounts as $user) {
+            $acctEmail = (string) $user->email;
             $token = Str::random(64);
             DB::table('password_resets')->insert([
-                'email' => $email,
+                'email' => $acctEmail,
                 // STAMPED. 35 existing rows carry no user_id, which is what forced the
                 // consume side to re-guess the account from the address.
                 'user_id' => $user->id,
@@ -504,32 +569,33 @@ final class AuthController extends Controller
             // unset dev default (localhost:3000). Use the production portal URL
             // directly, matching the rest of the codebase. (v22p97)
             $portalUrl = 'https://app.kiddietrac.com';
-            $resetUrl = $portalUrl.'/reset-password.html?token='.$token.'&email='.urlencode($email);
+            $resetUrl = $portalUrl.'/reset-password.html?token='.$token.'&email='.urlencode($acctEmail);
 
             try {
                 /* A password reset belongs to the PERSON, not to a tenant. Somebody
                    locked out of one agency must not be kept out because a different
                    agency they also have an account in has its mail switched off. */
-                Mail::to($email)->send((new PasswordResetEmail(
+                Mail::to($acctEmail)->send((new PasswordResetEmail(
                     recipientName: $user->first_name ?? 'there',
                     resetUrl: $resetUrl,
                     expiresInMinutes: (string) self::RESET_TOKEN_TTL_MINUTES,
                     // Only when there is something to tell apart - a single-account
                     // address gets exactly the email it got before.
-                    accountLabel: $several ? ($user->username ?: ('account #'.$user->id)) : null,
+                    accountLabel: $sharedAddress ? ($user->username ?: ('account #'.$user->id)) : null,
                 ))->withSymfonyMessage(function ($msg) {
                     \App\Support\MailScope::platform($msg);
                 }));
                 $this->audit($request, $user->id, 'password_reset_requested', 'user', $user->id, [
-                    'email' => $email,
+                    'email' => $acctEmail,
                     'username' => $user->username,
                     'account_status' => $user->status,
+                    'narrowed_by_username' => $narrowed,
                     'of_accounts_on_this_email' => $accounts->count(),
                 ]);
             } catch (Throwable $e) {
-                Log::error('Password reset email failed', ['error' => $e->getMessage(), 'email' => $email]);
+                Log::error('Password reset email failed', ['error' => $e->getMessage(), 'email' => $acctEmail]);
                 $this->audit($request, $user->id, 'password_reset_send_failed', 'user', $user->id, [
-                    'email' => $email,
+                    'email' => $acctEmail,
                     'reason' => mb_substr($e->getMessage(), 0, 180),
                 ]);
                 // Still return success to user — don't leak whether the email exists

@@ -79,7 +79,18 @@
 
   // ─── API client ─────────────────────────────────────────────────
   const Api = {
-    async request(path, { method = 'GET', body = null, query = null } = {}) {
+    /* HOW MANY REQUESTS ARE OUTSTANDING RIGHT NOW.
+       The shell's background-refresh cover (app-v2-shell __ktWaitSettled) needs to know
+       when a screen has finished loading, and a screen's render function returns long
+       before that: almost every screen here paints a "Loading..." line, fires
+       Api.get().then(...) and returns immediately. Counting here — the one place every
+       request passes through — means no screen has to announce anything. */
+    async request(path, opts) {
+      try { window.__ktInflight = (window.__ktInflight || 0) + 1; } catch (e) {}
+      try { return await this._request(path, opts); }
+      finally { try { window.__ktInflight = Math.max(0, (window.__ktInflight || 1) - 1); } catch (e) {} }
+    },
+    async _request(path, { method = 'GET', body = null, query = null } = {}) {
       let url = API_BASE + path;
       if (query) {
         const qs = new URLSearchParams(query).toString();
@@ -320,7 +331,7 @@
 
     // Periodically refresh notification badge
     refreshNotificationBadge();
-    setInterval(refreshNotificationBadge, 60_000);
+    setInterval(refreshNotificationBadge, 15_000);   // was 60s: the badge trailed reality by a minute
 
     return user;
   }
@@ -341,4 +352,27 @@
 
   // Export
   window.KT = { Auth, Api, ApiError, Fmt, Dom, bootstrapPage, API_BASE };
+
+  /* KEEP THE SESSION ALIVE ACROSS AN APP RESTART — CALLED HERE, ON EVERY PAGE.
+
+     rememberSession() is what mirrors the token into localStorage so it survives the
+     WebView being killed, and restores it on a cold launch. It had exactly one caller,
+     bootstrapPage(), and NOTHING CALLS bootstrapPage — it is defined, exported, and dead.
+     The dashboard boots through app-v2-shell.js instead. So the mirror never ran and the
+     token lived only in sessionStorage, which Android discards whenever it reclaims the
+     app: for an educator with the phone in a pocket between nappy changes, that is every
+     few minutes.
+
+     It is why educators were signing in again and again while the session timeout said
+     sixteen hours. The timeout was never reached — there was no session left to time out.
+     Measured on 2026-09-09: three educators logged in 4-5 times each in an afternoon, one
+     pair of logins fourteen minutes apart, and NOT ONE logout event in the audit log,
+     because nobody ever logged out.
+
+     Called at module scope rather than from a boot function, so it cannot be orphaned
+     again by a page that boots some other way. It is cheap, idempotent, and self-guarding:
+     it does nothing when there is no token, and it deliberately stands aside when a
+     biometric or PIN lock is enrolled, because those own their own encrypted vault and
+     must not be bypassed. (Anthony, 2026-09-09) */
+  try { Auth.rememberSession(); } catch (e) {}
 })(window);
