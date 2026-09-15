@@ -69,7 +69,21 @@ class SocialAuthController extends Controller
             return $this->fail('Your ' . ucfirst($provider) . ' account did not share an email address, so we could not match it.');
         }
 
-        $user = DB::table('users')->whereRaw('LOWER(email) = ?', [$email])->whereNull('deleted_at')->first();
+        /* Exactly one account, or we do not guess — the same rule as SsoController, and
+           for the same reason: the social_identities row written below is permanent, so
+           a guess here signs somebody into the wrong account for good. This also stops
+           picking a switched-off account, which the old ->first() could do and which
+           then failed the status check below for a reason the user could not act on. */
+        $user = \App\Support\EmailAccounts::soleLive($email);
+
+        if (! $user && \App\Support\EmailAccounts::isAmbiguous($email)) {
+            return $this->fail(
+                'More than one KiddieTrac account uses ' . $email . '. Sign in with your '
+                . 'username and password, then link ' . ucfirst((string) $provider)
+                . ' from your account settings.'
+            );
+        }
+
         if (! $user) {
             return $this->fail('No KiddieTrac account is linked to ' . $email . '. Ask your administrator to invite you first.');
         }
@@ -82,6 +96,7 @@ class SocialAuthController extends Controller
             ['provider' => $provider, 'provider_id' => (string) $su->getId()],
             ['user_id' => $user->id, 'email' => $email, 'updated_at' => now(), 'created_at' => now()]
         );
+        \App\Support\AccountStatus::markClaimed((int) $user->id);
         DB::table('users')->where('id', $user->id)->update(['last_login_at' => now()]);
 
         $token = User::find($user->id)->createToken($provider . '-sso', ['*'], now()->addHours(12))->plainTextToken;

@@ -80,6 +80,14 @@ class SendScheduledReports extends Command
      */
     public static function undeliverableReason(string $email): ?string
     {
+        /* If ANY account on this address can be reached, the address is deliverable —
+           so say nothing. This took the lowest id, so on an address holding both a
+           departed account and a live one it warned that notifications were "paused"
+           for a person who was in fact receiving them. */
+        if (\App\Support\EmailAccounts::live($email)->isNotEmpty()) {
+            return null;
+        }
+
         $u = DB::table('users')->where('email', $email)->first(['id', 'status', 'deleted_at', 'first_name', 'last_name']);
         if (! $u) {
             return null;

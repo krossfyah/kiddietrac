@@ -73,7 +73,30 @@ final class SsoController extends Controller
 
         // 2. Try email match to existing account, then link
         if (!$user && $email) {
-            $user = DB::table('users')->where('email', $email)->whereNull('deleted_at')->first();
+            /* ONE ACCOUNT, OR NONE — never a guess (2026-09-15).
+
+               This was where('email', …)->first(): the lowest id wins. Linking is
+               PERMANENT — the sso_identities row written just below means every future
+               sign-in through this provider lands on whichever account that guess
+               picked. On an address holding several accounts (which this platform
+               deliberately allows, told apart by username) that is signing somebody
+               into the wrong account for good.
+
+               soleLive() answers only when the address means exactly one account that
+               can actually be signed into. More than one, and we decline to link rather
+               than choose — the person signs in with their username and can link the
+               provider from their own account afterwards, which is unambiguous because
+               by then we know who they are. */
+            $user = \App\Support\EmailAccounts::soleLive($email);
+
+            if (! $user && \App\Support\EmailAccounts::isAmbiguous($email)) {
+                return $this->fail(
+                    'More than one Kiddietrac account uses ' . $email . '. Sign in with your '
+                    . 'username and password first, then link ' . ucfirst((string) $provider)
+                    . ' from your account settings.'
+                );
+            }
+
             if ($user) {
                 DB::table('sso_identities')->insertOrIgnore([
                     'user_id' => $user->id,
@@ -116,6 +139,7 @@ final class SsoController extends Controller
 
         // Mint a Sanctum token + redirect back to the app
         $userModel = \App\Models\User::find($user->id);
+        \App\Support\AccountStatus::markClaimed((int) $user->id);
         $token = $userModel->createToken('sso-' . $provider)->plainTextToken;
         DB::table('users')->where('id', $user->id)->update([
             'last_login_at' => now(),
