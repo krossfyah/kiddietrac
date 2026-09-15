@@ -93,6 +93,150 @@
     return { close: close, el: ov };
   }
 
+  /* ── generated HTML, shown in the same panel ─────────────────────────────
+     view() takes a URL. Several screens instead BUILD a document — the emergency
+     card, the compliance report, an invoice, a help article — and showed it with
+     `window.open('', '_blank')` followed by document.write().
+
+     That is the trap this file was written about, arriving by a second route.
+     document.write() replaces the whole document, and everything the portal is
+     goes with it: the router, so the bottom bar stops navigating; kt-native-ui's
+     runtime StatusBar paint and dashboard.html's <meta name="theme-color">, so the
+     Android/iOS status bar drops from navy to default; and any way back, because a
+     written-into window has no history to go back through and close() is refused
+     inside a web view.
+
+     Reported three times over on the emergency card: "I cannot close the card",
+     "cannot move to other screens using the bottom bar", "the top bar is no longer
+     navy". One cause, and it is not worth diagnosing which of those a given web
+     view does — keeping the portal's own document alive makes all three impossible.
+
+     The document goes in an iframe, so its styles cannot leak into the portal and
+     the portal's cannot leak into what gets printed.
+     ──────────────────────────────────────────────────────────────────────── */
+  function viewHtml(html, opts) {
+    if (!html) return null;
+    opts = opts || {};
+    var title = opts.title || 'Document';
+    var label = (opts.label || 'Document').toUpperCase();
+
+    /* The embedded document usually carries its own toolbar, built for the standalone
+       tab it used to open in. The panel supplies Close and Print, so hide the
+       duplicate — its Close would act on the IFRAME, which is worse than useless. */
+    var doc = String(html);
+    if (opts.hide) {
+      doc += '<style>' + String(opts.hide) + '{display:none !important;}</style>';
+    }
+
+    var ov = d.createElement('div');
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.className = 'kt-scrim kt-doc-viewer';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:18px;';
+
+    ov.innerHTML =
+      '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
+      + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
+      +   '<div style="min-width:0;flex:1;">'
+      +     '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">' + esc(label) + '</div>'
+      +     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
+      +   '</div>'
+      // No "Open in new tab": there is no URL to open, and a new tab is the thing
+      // being moved away from.
+      +   '<button class="ktdv-print" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🖨 Print</button>'
+      +   '<button class="ktdv-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
+      + '</div>'
+      + '<iframe class="ktdv-frame" title="' + esc(title) + '" style="flex:1;width:100%;border:0;background:#fff;"></iframe>'
+      + '</div>';
+
+    d.body.appendChild(ov);
+
+    /* srcdoc rather than document.write into the frame: one assignment, no open/close
+       dance, and the frame keeps its own origin-less sandbox for styling purposes. */
+    var frame = ov.querySelector('.ktdv-frame');
+    try { frame.srcdoc = doc; } catch (e) {
+      try {
+        var fd = frame.contentWindow.document;
+        fd.open(); fd.write(doc); fd.close();
+      } catch (e2) {}
+    }
+
+    function close() {
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      d.removeEventListener('keydown', onKey, true);
+    }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+
+    ov.querySelector('.ktdv-close').addEventListener('click', close);
+    ov.querySelector('.ktdv-print').addEventListener('click', function () {
+      // Printing the FRAME prints the document, not the portal behind it.
+      try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) {}
+    });
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    d.addEventListener('keydown', onKey, true);
+
+    return { close: close, el: ov, frame: frame };
+  }
+
+  /* A stand-in for `window.open('', '_blank')`.
+
+     Ten screens build a document and write it into a blank window. Rewriting each of
+     those long HTML concatenations to hand viewHtml a string would be a big diff over
+     code that is fiddly and rarely touched — and every one of them would be a chance to
+     drop a closing tag.
+
+     So this answers the same small API those call sites actually use — document.open,
+     document.write, document.close, document.body.innerHTML, print(), close() — and
+     renders into the portal's own panel instead of a window. A call site changes one
+     line and nothing else.
+
+     Writes are buffered and flushed on a microtask, so the pattern of writing a
+     "Loading…" placeholder and replacing it a moment later still shows both. */
+  function docWindow(opts) {
+    opts = opts || {};
+    var buf = '';
+    var handle = null;
+    var queued = false;
+
+    function paint() {
+      queued = false;
+      var html = buf || '<p style="font-family:sans-serif;padding:20px;color:#64748B;">Loading…</p>';
+      if (handle && handle.frame) {
+        try { handle.frame.srcdoc = html + (opts.hide ? '<style>' + opts.hide + '{display:none !important;}</style>' : ''); return; }
+        catch (e) { /* fall through and rebuild */ }
+      }
+      handle = viewHtml(html, opts);
+    }
+
+    function schedule() {
+      if (queued) return;
+      queued = true;
+      // A microtask, so a run of .write() calls paints once.
+      Promise.resolve().then(paint);
+    }
+
+    var bodyShim = {
+      get innerHTML() { return buf; },
+      set innerHTML(v) { buf = String(v == null ? '' : v); schedule(); },
+    };
+
+    return {
+      document: {
+        open: function () { buf = ''; },
+        write: function (x) { buf += (x == null ? '' : String(x)); schedule(); },
+        writeln: function (x) { buf += (x == null ? '' : String(x)) + '\n'; schedule(); },
+        close: function () { schedule(); },
+        get body() { return bodyShim; },
+      },
+      focus: function () { try { handle && handle.frame && handle.frame.contentWindow.focus(); } catch (e) {} },
+      print: function () {
+        try { handle.frame.contentWindow.focus(); handle.frame.contentWindow.print(); } catch (e) {}
+      },
+      close: function () { try { handle && handle.close(); } catch (e) {} },
+      get closed() { return !handle || !handle.el || !handle.el.parentNode; },
+    };
+  }
+
   // ── the delegate: ordinary document links, without touching each screen ──
   function docUrlFrom(a) {
     var href = a.getAttribute('data-kt-doc-url') || a.getAttribute('href') || '';
@@ -128,5 +272,7 @@
 
   w.KT = w.KT || {};
   w.KT.viewDocument = view;
+  w.KT.viewHtml = viewHtml;
+  w.KT.docWindow = docWindow;
   w.KT.openDocumentExternally = openExternally;
 })(window);
