@@ -296,12 +296,63 @@
     var base = '/' + scope + '/children/' + child.id;
     var canUpload = opts.canUpload !== false;
 
+    /* TWO SUB-TABS, because they answer two different questions.
+
+       Stacked, the filed records sat under a fourteen-row schedule table and a collapsed
+       "show the rest" — so the answer to "did the record I uploaded arrive?" was below
+       the fold of the answer to "what is still outstanding?". Somebody who has just
+       filed a card is looking for the first thing and lands on the second.
+
+       role="tablist" is load-bearing as well as correct: kt-icon-buttons refuses to
+       reach inside one, so these keep their labels instead of becoming glyphs.
+       (Anthony, 2026-09-15) */
     host.innerHTML =
-      '<div class="ip-due"><div style="padding:18px;color:#94A3B8;font-size:13px;">Working out what is due…</div></div>'
+      '<div class="ip-tabs" role="tablist" style="display:flex;gap:4px;border-bottom:1px solid #E5E7EB;'
+      +   'margin-bottom:16px;flex-wrap:wrap;"></div>'
+      + '<div class="ip-due"><div style="padding:18px;color:#94A3B8;font-size:13px;">Working out what is due…</div></div>'
       + '<div class="ip-recs" style="margin-top:16px;"></div>';
 
+    var tabsEl = host.querySelector('.ip-tabs');
     var dueEl = host.querySelector('.ip-due');
     var recEl = host.querySelector('.ip-recs');
+
+    var PANES = [
+      ['due', '💉 What is due'],
+      ['recs', scope === 'parent' ? '📄 Records you have sent' : '📄 Records on file'],
+    ];
+    var pane = 'due';
+    var recCount = null;          // null until the records have actually loaded
+
+    function paintTabs() {
+      tabsEl.innerHTML = PANES.map(function (t) {
+        var on = t[0] === pane;
+        var label = t[1] + (t[0] === 'recs' && recCount !== null ? ' (' + recCount + ')' : '');
+        return '<button type="button" role="tab" data-pane="' + t[0] + '" aria-selected="' + on + '" '
+          + 'style="background:none;border:none;border-bottom:3px solid '
+          +   (on ? '#1F6080' : 'transparent') + ';color:' + (on ? '#1F6080' : '#64748B') + ';'
+          +   'font-weight:700;font-size:13.5px;padding:9px 14px;cursor:pointer;margin-bottom:-1px;'
+          +   'white-space:nowrap;">' + label + '</button>';
+      }).join('');
+      Array.prototype.forEach.call(tabsEl.querySelectorAll('[data-pane]'), function (b) {
+        b.addEventListener('click', function () { showPane(b.getAttribute('data-pane')); });
+      });
+    }
+
+    function showPane(which) {
+      pane = which === 'recs' ? 'recs' : 'due';
+      // display, not [hidden] — a global rule can out-rank [hidden] in this portal.
+      dueEl.style.display = pane === 'due' ? '' : 'none';
+      recEl.style.display = pane === 'recs' ? '' : 'none';
+      recEl.style.marginTop = pane === 'recs' ? '0' : '16px';
+      paintTabs();
+    }
+
+    /* Exposed so the filing dialog can land the reader on what they just filed —
+       "show me the uploaded record" is the whole reason they were in the dialog. */
+    host.__ktShowRecords = function () { showPane('recs'); };
+
+    paintTabs();
+    showPane('due');
 
     /* The dose checklist in the filing dialog is the SAME list the panel is already
        showing. Kept here rather than re-fetched: a second read could disagree with what
@@ -448,7 +499,12 @@
         scope: scope,
         child: child,
         status: lastStatus,
-        onFiled: function () { loadDue(); loadRecords(); },
+        onFiled: function () {
+          loadDue();
+          loadRecords();
+          // Land on the record that was just filed, not on the list of what is still due.
+          showPane('recs');
+        },
       });
     }
 
@@ -465,6 +521,8 @@
     }
 
     function paintRecords(records) {
+      recCount = records.length;
+      paintTabs();
       recEl.innerHTML = '<div style="font-weight:800;font-size:13px;color:#0F172A;margin-bottom:8px;">'
         + (scope === 'parent' ? 'Records you have sent in' : 'Records on file') + '</div>';
 
@@ -506,6 +564,14 @@
 
           var view = document.createElement('button');
           view.type = 'button';
+          /* KEEP THE WORD. kt-icon-buttons replaces any short label it recognises with a
+             glyph, and its ONLY opt-out is the data-kt-iconized flag it also stamps on
+             what it has finished with — data-kt-no-icon is read by nobody. Un-opted, this
+             became a bare blue square beside a record, and the uploader below became a
+             square with the words "PDF or a photo, up to 10 MB." orphaned next to it.
+             These are not row actions in a table; they are the only two things you can do
+             on this panel. (Anthony, 2026-09-15) */
+          view.dataset.ktIconized = '1';
           view.textContent = 'View';
           view.style.cssText = 'padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;'
             + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;';
@@ -561,7 +627,7 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = scope === 'parent' ? '📷 Send in a record' : '＋ Upload a record';
-      btn.setAttribute('data-kt-no-icon', '1');
+      btn.dataset.ktIconized = '1';   // see the note on the View button above
       btn.style.cssText = 'padding:10px 18px;border-radius:10px;border:0;background:#1F6080;color:#fff;'
         + 'font-size:13.5px;font-weight:800;cursor:pointer;';
 

@@ -107,10 +107,23 @@
      so the button belongs on the tabs where those rows are, not only on the records tab
      you reach by knowing to go there. Same markup and same handler in all three places;
      the dialog behind it is the same one the child's own Immunization tab opens. */
+  /* data-kt-iconized="1" IS THE OPT-OUT, not data-kt-no-icon.
+
+     kt-icon-buttons walks every button under #appMain and its only "leave this alone"
+     check is `if (b.dataset.ktIconized) continue;` — the same attribute it stamps on
+     everything it has finished with. data-kt-no-icon is read by nobody, which is why
+     this button shipped as a bare 📤 glyph, 38px square, in the far-right corner: the
+     engine matched "↑ Upload record" to an icon and replaced the label with it. The
+     panel's own uploader survives only because its "＋ Upload a record" hits the add-pill
+     branch, which keeps the label — luck, not intent.
+
+     Labelled "Upload a record" to match that one, and long enough to read as an action
+     rather than decoration. (Anthony, 2026-09-15: "not positioned correctly where a user
+     can see it and use it".) */
   function immUploadBtn() {
-    return '<button class="kt-imm-upload" data-kt-no-icon="1" style="background:#1F6080;color:white;'
-      + 'border:none;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;">'
-      + '↑ Upload record</button>';
+    return '<button class="kt-imm-upload" data-kt-iconized="1" style="background:#1F6080;color:white;'
+      + 'border:none;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;'
+      + 'white-space:nowrap;">↑ Upload a record</button>';
   }
   function wireImmUpload(container) {
     container.querySelectorAll('.kt-imm-upload').forEach(function (b) {
@@ -118,14 +131,28 @@
     });
   }
 
-  function immTabBar(active) {
-    return '<div style="margin-bottom:18px;">' + IMM_TABS.map(function (t) {
-      var on = t[0] === active;
-      return '<button id="kt-tab-' + t[0] + '" class="kt-tab' + (on ? ' active' : '') + '" style="padding:8px 16px;' +
-        'margin-right:8px;border:1px solid ' + (on ? '#1F6080' : '#D1D5DB') + ';border-radius:8px;background:' +
-        (on ? '#1F6080' : 'white') + ';color:' + (on ? 'white' : '#374151') + ';font-weight:600;cursor:pointer;">' +
-        t[1] + '</button>';
-    }).join('') + '</div>';
+  /* THE ACTION SITS WITH THE TABS, on one line.
+
+     It used to be its own right-aligned strip between the hero and the tab bar — and
+     ensureTopbar() inserts the top bar right there too, so the button ended up stranded
+     in the gap between the greeting and the tabs, hard against the right edge of a
+     1800px container. Nobody looks there. On the tab row it is where the eye already is,
+     it is on every tab, and it wraps under the tabs on a narrow screen instead of
+     falling off the side. */
+  function immTabBar(active, actionsHtml) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;'
+      + 'gap:12px;flex-wrap:wrap;margin-bottom:18px;">'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;">'
+      + IMM_TABS.map(function (t) {
+          var on = t[0] === active;
+          return '<button id="kt-tab-' + t[0] + '" class="kt-tab' + (on ? ' active' : '') + '" style="padding:8px 16px;' +
+            'border:1px solid ' + (on ? '#1F6080' : '#D1D5DB') + ';border-radius:8px;background:' +
+            (on ? '#1F6080' : 'white') + ';color:' + (on ? 'white' : '#374151') + ';font-weight:600;cursor:pointer;">' +
+            t[1] + '</button>';
+        }).join('')
+      + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + (actionsHtml || '') + '</div>'
+      + '</div>';
   }
   function wireImmTabs(container) {
     var go = {
@@ -185,10 +212,8 @@
         : 'Children with a dose overdue or due soon, worked out from each date of birth.')
       /* Not on Schedule defaults: that tab is the agency's rulebook, and filing one
          child's card against it is not a thing anybody means to do from there. */
-      + (pane === 'defaults' ? ''
-          : '<div style="display:flex;justify-content:flex-end;margin:-8px 0 12px;">'
-            + immUploadBtn() + '</div>')
-      + immTabBar(pane === 'defaults' ? 'schedule' : 'due')
+      + immTabBar(pane === 'defaults' ? 'schedule' : 'due',
+          pane === 'defaults' ? '' : immUploadBtn())
       + '<div id="imm-embed"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div>';
     wireImmTabs(container);
     wireImmUpload(container);
@@ -233,11 +258,11 @@
     container.innerHTML =
       '<div style="padding:24px;max-width:1800px;">' +
         immHero('Vaccines recorded against each child, dose by dose.') +
-        '<div style="display:flex;justify-content:flex-end;gap:8px;margin:-8px 0 12px;flex-wrap:wrap;">' +
+        immTabBar(opts.overdue ? 'overdue' : 'all',
           immUploadBtn() +
-          '<button id="kt-new-imm" data-kt-no-icon="1" style="background:#fff;color:#1F6080;border:1px solid #1F6080;padding:11px 20px;border-radius:10px;font-weight:700;cursor:pointer;">+ Add record</button>' +
-        '</div>' +
-        immTabBar(opts.overdue ? 'overdue' : 'all') +
+          '<button id="kt-new-imm" data-kt-iconized="1" style="background:#fff;color:#1F6080;' +
+            'border:1px solid #1F6080;padding:11px 20px;border-radius:10px;font-weight:700;' +
+            'cursor:pointer;white-space:nowrap;">+ Add a dose</button>') +
         (rows.length === 0
           /* An empty table with nothing but "No records yet." is what made this look
              like lost data. Say what this tab holds and where the roster is. */
@@ -427,10 +452,7 @@
     container.innerHTML =
       '<div style="padding:24px;max-width:1800px;">' +
         immHero('Records handed in by families and filed by staff.') +
-        '<div style="display:flex;justify-content:flex-end;margin:-8px 0 12px;">' +
-          immUploadBtn() +
-        '</div>' +
-        immTabBar('records') +
+        immTabBar('records', immUploadBtn()) +
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;">' +
           '<span style="padding:6px 12px;border-radius:20px;background:#E0F2FE;color:#075985;font-weight:700;">' +
             fromParents + ' from parents</span>' +
