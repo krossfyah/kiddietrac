@@ -98,6 +98,29 @@
     } catch (x) { return ''; }
   }
 
+  /* DID A LONG TASK ACTUALLY OVERLAP *THIS* GAP? (2026-09-15)
+
+     blockerSummary() takes a flat two-minute window and calls the result "worst
+     blocking tasks", which reads as the cause of the freeze being reported. It often
+     is not. Ticket #71: a 10s stall on #onboarding was filed listing an 8543ms task —
+     but the user had signed in two minutes earlier, and an 8.5-second task right after
+     a sign-in is the boot parse (162 files, ~5MB), not anything to do with the screen
+     she was on. Reading that report, the obvious conclusion is the wrong one.
+
+     An entry's `at` is stamped when the observer fires, which is the END of the task,
+     so a task ran over [at - ms, at]. Overlap with the gap is the honest test. What
+     came earlier is still worth printing, but as context and labelled as such. */
+  function blockersOverlapping(from, to) {
+    try {
+      return blockers
+        .filter(function (b) { return b.at >= from && (b.at - b.ms) <= to; })
+        .sort(function (a, b) { return b.ms - a.ms; })
+        .slice(0, 5)
+        .map(function (b) { return b.ms + 'ms' + (b.who ? ' ' + b.who : ''); })
+        .join(', ');
+    } catch (x) { return ''; }
+  }
+
   var last = Date.now();
 
   /* Did the page actually go off screen during the interval that just ended?
@@ -319,15 +342,18 @@
          four samples there is no honest way to tune a rule that separates the two
          without risking hiding the next real one. So this is recorded as evidence and
          the filing threshold is left alone. */
-      var during = [];
+      var during = blockersOverlapping(gapFrom, gapTo);
+
+      var crumbsIn = [];
       try {
-        if (w.KT && w.KT.crumbsBetween) { during = w.KT.crumbsBetween(gapFrom, gapTo, 'freeze') || []; }
+        if (w.KT && w.KT.crumbsBetween) { crumbsIn = w.KT.crumbsBetween(gapFrom, gapTo, 'freeze') || []; }
       } catch (e) {}
 
       var evidence = 'worker_coverage=' + (cov === null ? 'n/a' : Math.round(cov * 100) + '%')
         + '; longtask_support=' + (ltSupported ? 'yes' : 'no')
         + '; long_tasks=' + (blocking ? 'yes' : 'none')
-        + '; main_thread_activity_in_gap=' + during.length;
+        + '; long_task_in_gap=' + (during ? 'yes' : 'no')
+        + '; main_thread_activity_in_gap=' + crumbsIn.length;
 
     /* Reported through the crash pipe, so a freeze arrives with the same context a
        crash does — user, device, route, breadcrumbs — and de-duplicates into one
@@ -352,8 +378,16 @@
                 + '% of the gap, so the page was alive and the MAIN THREAD was blocked '
                 + '— not a sleeping device.\n')
           + 'Detected by the freeze watchdog, not by an exception.\n'
-          + (blocking
-              ? 'Worst blocking tasks in the two minutes before this: ' + blocking + '\n'
+          + (during
+              ? 'A long task OVERLAPPED this gap — this is the block: ' + during + '\n'
+                + (blocking && blocking !== during
+                    ? 'Other long tasks in the two minutes before it (context, not the cause): '
+                      + blocking + '\n'
+                    : '')
+              : blocking
+              ? 'No long task overlapped the gap itself. These ran in the two minutes '
+                + 'BEFORE it and are context, not the cause — a multi-second one just '
+                + 'after a sign-in is the boot parse: ' + blocking + '\n'
               : (ltSupported
                   ? 'No long task was recorded, and this browser DOES report them — so no '
                     + 'single script blocked the thread. Either many short tasks ran back to '
@@ -363,9 +397,9 @@
                     + '(Safari/older WebKit) — so this says nothing either way.\n'))
           /* The line that decides it. Main-thread work inside the window means the
              interface was not blocked for the whole of it. */
-          + (during.length
-              ? 'MAIN THREAD RAN DURING THE GAP: ' + during.length + ' breadcrumb(s) were '
-                + 'recorded inside it — ' + during.map(function (c) { return c.t + ' ' + c.k; }).join(', ')
+          + (crumbsIn.length
+              ? 'MAIN THREAD RAN DURING THE GAP: ' + crumbsIn.length + ' breadcrumb(s) were '
+                + 'recorded inside it — ' + crumbsIn.map(function (c) { return c.t + ' ' + c.k; }).join(', ')
                 + '. So the interface was not blocked for the full ' + secs + 's; this '
                 + "watchdog's own timer was descheduled for part of it.\n"
               : 'No main-thread activity was recorded inside the gap, which is consistent '
