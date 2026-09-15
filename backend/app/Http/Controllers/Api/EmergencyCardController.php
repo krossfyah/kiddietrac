@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
@@ -107,6 +108,7 @@ final class EmergencyCardController extends Controller
             ->orderByDesc('guardians.is_primary')
             ->get([
                 'users.first_name', 'users.last_name', 'users.phone', 'users.email',
+                'users.photo_url', 'users.sex',
                 'guardians.relationship', 'guardians.is_primary', 'guardians.can_pickup',
             ]);
 
@@ -114,7 +116,29 @@ final class EmergencyCardController extends Controller
             ->where('child_id', $child->id)
             ->where('status', 'active')
             ->whereNull('deleted_at')
-            ->get(['name', 'strength', 'dosage', 'frequency', 'special_instructions']);
+            ->get(['name', 'strength', 'dosage', 'frequency', 'special_instructions',
+                   'route', 'storage_location', 'requires_refrigeration', 'prescribing_physician']);
+
+        /* The contacts to ring when the guardians cannot be reached. This table exists
+           for exactly this card and the card never read it. */
+        $emergencyContacts = Schema::hasTable('emergency_contacts')
+            ? DB::table('emergency_contacts')->where('family_id', $child->family_id)
+                ->get(['name', 'relationship', 'phone', 'alt_phone', 'can_pickup', 'notes'])
+            : collect();
+
+        /* Who is caring for this child, and who has them TODAY. With a week that can be
+           split between providers, "their educator" is a question with a different answer
+           depending on the day — and an emergency is always on a particular day. */
+        $todayRoomId = \App\Support\CareSchedule::roomToday((int) $child->id)
+            ?: ($room->id ?? null);
+        $todayRoom = $todayRoomId ? DB::table('rooms')->where('id', $todayRoomId)->first() : $room;
+        $todayCentre = $todayRoom
+            ? DB::table('centres')->where('id', $todayRoom->centre_id)->first()
+            : $centre;
+
+        $educators = $this->providerFor($todayRoomId, $todayCentre);
+
+        $weekSummary = \App\Support\CareSchedule::summary((int) $child->id);
 
         $age = '';
         if ($child->date_of_birth) {
@@ -127,12 +151,15 @@ final class EmergencyCardController extends Controller
         return [
             'child' => $child,
             'family' => $family,
-            'centre' => $centre,
-            'room' => $room,
+            'centre' => $todayCentre ?: $centre,
+            'room' => $todayRoom ?: $room,
             'age' => $age,
             'health_flags' => $healthFlags,
             'guardians' => $guardians,
             'medications' => $medications,
+            'emergency_contacts' => $emergencyContacts,
+            'educators' => $educators,
+            'week_summary' => $weekSummary,
         ];
     }
 
@@ -156,6 +183,10 @@ final class EmergencyCardController extends Controller
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Without this a phone lays the page out at ~980px and scales it down, which is why
+     the two-column people grid squeezed "THEIR PROVIDER TODAY" onto two colliding
+     lines. Print is unaffected: @page owns the printed layout. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{$title}</title>
 <style>
   :root { --kt-blue: #1F6080; --kt-red: #DC2626; --kt-amber: #F59E0B; --kt-faint: #6B7280; --kt-border: #E5E7EB; }
@@ -186,22 +217,105 @@ final class EmergencyCardController extends Controller
   .footer-stamp { display: flex; justify-content: space-between; padding-top: 12px; font-size: 11px; color: var(--kt-faint); border-top: 1px solid var(--kt-border); margin-top: 14px; }
   .empty { text-align: center; padding: 40px; color: var(--kt-faint); }
 
+  /* ── Added 2026-08-27 ────────────────────────────────────────────────────
+     The card was text on white and read as a form. It is used standing up, at a
+     door, in a hurry — so faces are large, the things that can hurt a child are
+     the loudest element on the page, and every phone number is bold. */
+  .av { border-radius: 50%; object-fit: cover; display: inline-flex; flex: 0 0 auto;
+        align-items: center; justify-content: center; background: #E4EEF2; }
+  .av-i { background: var(--kt-blue); color: #fff; font-weight: 800; letter-spacing: .5px; }
+  .photo { border-radius: 50%; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .people { display: flex; flex-direction: column; gap: 9px; }
+  .person { display: flex; align-items: center; gap: 10px; }
+  .person-t { min-width: 0; }
+  .person-n { font-size: 14px; font-weight: 700; color: #0F172A; }
+  .person-s { font-size: 12.5px; color: var(--kt-faint); }
+  .week { margin-top: 9px; font-size: 12px; color: var(--kt-blue); font-weight: 700;
+          background: #F0F7FA; border-radius: 8px; padding: 6px 9px; }
+
+  /* Allergies are the reason this card exists — bigger and louder than anything else. */
+  .alert-list .alert { background: #FEF2F2; border-left: 5px solid var(--kt-red);
+        padding: 9px 12px; margin-bottom: 6px; font-size: 14.5px; color: #7F1D1D;
+        border-radius: 6px; line-height: 1.45; }
+  .alert-list .plan { margin-top: 4px; font-size: 12.5px; color: #991B1B; font-weight: 600; }
+
+  /* Empty is not the same as safe, and it must not look the same either. */
+  .none-recorded { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px;
+        padding: 9px 12px; font-size: 13px; color: #92400E; line-height: 1.5; }
+  .missing { color: #B45309; font-weight: 600; }
+
+  .where-b { background: #F8FAFC; border: 1px solid var(--kt-border); border-radius: 10px;
+        padding: 10px 12px; font-size: 13px; line-height: 1.55; }
+  .where-n { font-weight: 800; font-size: 14px; color: #0F172A; }
+  .sub { font-size: 11.5px; color: var(--kt-faint); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { background: #F9FAFB; padding: 6px 8px; text-align: left; font-size: 11px;
+       letter-spacing: .5px; color: var(--kt-faint); border-bottom: 1px solid var(--kt-border); }
+  td { padding: 6px 8px; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
+
+  /* The photo lies on top of the emoji rather than instead of it — see avatarHtml().
+     A failed load simply reveals the face underneath. */
+  .av-e { position: relative; overflow: hidden; }
+  .av-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        object-fit: cover; border-radius: 50%; }
+
+  .tb-actions { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
+  .btn-ghost { background: #fff; color: var(--kt-blue); border: 1px solid var(--kt-border); }
+
+  /* ── Phone (2026-09-15) ──────────────────────────────────────────────────
+     The card was built for letter paper and a desktop, and on a 390px screen the
+     fixed grids did the damage: a three-column head crushed the agency name against
+     the child's details, and a 1fr 1fr people grid left each column ~170px wide, so
+     every uppercase heading wrapped mid-phrase.
+
+     The photo deliberately does NOT shrink. This card is read standing up, at a door,
+     in a hurry — the face is the point. */
+  @media screen and (max-width: 640px) {
+    body { padding: 12px; }
+    .toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+    .tb-actions .btn { flex: 1; }
+    .card { padding: 16px; }
+    /* Two columns, and the agency/provider name drops to its own row underneath
+       instead of fighting the name for space. */
+    .card-head { grid-template-columns: 100px 1fr; gap: 14px; }
+    .agency-logo { grid-column: 1 / -1; text-align: left; }
+    .agency-logo img { margin-left: 0; }
+    /* One column. This is the fix for the wrapped headings. */
+    .cols { grid-template-columns: 1fr; gap: 16px; }
+    .info-row { grid-template-columns: 1fr; gap: 2px; }
+    .section h3 { letter-spacing: .5px; }
+  }
+
   @page { size: letter; margin: 0.5in; }
   @media print {
     body { background: white; padding: 0; }
     .toolbar { display: none; }
     .card { box-shadow: none; border: 1px solid var(--kt-border); margin: 0; max-width: none; page-break-after: always; page-break-inside: avoid; }
+    /* Printers strip background colour by default, which would turn the allergy
+       block into plain text and lose the one visual cue that matters most. */
+    .alert-list .alert, .none-recorded, .where-b, th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section, .person, .alert-list { page-break-inside: avoid; }
     .card:last-child { page-break-after: auto; }
   }
 </style>
 </head>
 <body>
   <div class="toolbar">
-    <div>
+    <div class="tb-text">
       <h1>{$title}</h1>
       <p>Generated {$generatedAt} · Print or Save as PDF (⌘/Ctrl+P)</p>
     </div>
-    <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
+    <div class="tb-actions">
+      <!-- The page is written into a window.open() by the portal, so on a desktop
+           browser close() works. Inside the Android/iOS web view there is no browser
+           chrome and close() is refused, so fall back to going back — which returns to
+           the child record the card was opened from. Both attempts are cheap and one of
+           them always applies; before this there was no way off the page at all. -->
+      <button class="btn btn-ghost" onclick="try{window.close();}catch(e){}setTimeout(function(){if(!window.closed){history.back();}},150);">✕ Close</button>
+      <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
   </div>
   {$cardsHtml}
 </body>
@@ -209,6 +323,17 @@ final class EmergencyCardController extends Controller
 HTML;
     }
 
+    /**
+     * One child, one card.
+     *
+     * Ordered by what a person needs in the order they need it: who this is, what could
+     * harm them, who to ring, where they physically are. Identifiers and the home address
+     * sit at the bottom — nobody looks up a postal code first.
+     *
+     * "Not recorded" is printed in amber wherever a safety field is empty, rather than an
+     * em-dash. A dash reads as "nothing to worry about"; the truth is that nobody has been
+     * asked, and on an allergy line those are very different statements.
+     */
     private function renderCard(array $c, int $idx, int $total): string
     {
         $child = $c['child'];
@@ -222,76 +347,142 @@ HTML;
         $gender = $this->esc($child->gender ? str_replace('_', ' ', $child->gender) : '—');
         $roomName = $room ? $this->esc($room->name) : '—';
         $familyName = $this->esc($family->family_name);
-        $address = $this->esc(trim(($family->address_line1 ?? '').' '.($family->city ?? '').' '.($family->province ?? '').' '.($family->postal_code ?? '')));
+        $address = $this->esc(trim(($family->address_line1 ?? '').' '.($family->city ?? '').' '
+            .($family->province ?? '').' '.($family->postal_code ?? '')));
         $hcLast4 = $this->esc($child->health_card_last4 ?: '');
-        $hcDisplay = $hcLast4 ? "xxxx-xxxx-{$hcLast4}" : '—';
-        $doctor = $this->esc($child->doctor_name ?: '—');
+        $hcDisplay = $hcLast4 ? "xxxx-xxxx-{$hcLast4}" : $this->missing('Not recorded');
+        $doctor = $child->doctor_name ? $this->esc($child->doctor_name) : $this->missing('No doctor on file');
         $doctorPhone = $this->esc($child->doctor_phone ?: '');
-        $medical = $this->esc($child->medical_notes ?: '—');
-        $dietary = $this->esc($child->dietary_notes ?: '—');
 
-        $photo = '';
-        if ($child->photo_url) {
-            $photo = '<img src="'.$this->esc($child->photo_url).'" alt="">';
-        } else {
-            $photo = $this->esc(mb_substr($child->preferred_name ?: $child->first_name, 0, 1));
-        }
+        $photo = $this->avatarHtml($child->photo_url ?? null,
+            trim(($child->preferred_name ?: $child->first_name).' '.($child->last_name ?? '')), 96,
+            $child->sex ?? $child->gender ?? null, true);
 
-        $agencyLogo = '';
-        if ($centre && $centre->logo_url) {
-            $agencyLogo = '<img src="'.$this->esc($centre->logo_url).'" alt="">';
-        }
+        $agencyLogo = ($centre && $centre->logo_url)
+            ? '<img src="'.$this->esc($centre->logo_url).'" alt="">' : '';
         $centreName = $centre ? $this->esc($centre->name) : '';
 
-        // Health alerts (allergies + conditions): inline red boxes.
-        $alertsHtml = '';
-        $allergies = [];
-        $conditions = [];
+        // ── What could harm this child ─────────────────────────────────────
+        $alerts = [];
         foreach ($c['health_flags'] as $hf) {
-            if (($hf->flag_type ?? '') === 'allergy') $allergies[] = $hf;
-            else $conditions[] = $hf;
+            $label = strtoupper($hf->flag_type ?? 'condition');
+            $detail = $hf->notes ?? $hf->category ?? 'unspecified';
+            $sev = $hf->severity ? ' ('.$this->esc($hf->severity).')' : '';
+            $alerts[] = '<strong>'.$this->esc($label).':</strong> '.$this->esc($detail).$sev
+                .($hf->action_plan ? '<div class="plan">'.$this->esc($hf->action_plan).'</div>' : '');
         }
-        if (! empty($allergies) || ! empty($conditions)) {
-            $alertsHtml = '<div class="section alert-list">'.'<h3>⚠️ Critical alerts</h3>';
-            foreach ($allergies as $a) {
-                $alertsHtml .= '<div class="alert"><strong>ALLERGY:</strong> '.$this->esc($a->detail ?? $a->name ?? 'unspecified').'</div>';
+        /* Also the child record's own columns. The card only ever read child_health_flags,
+           which is empty for every child on the system — so allergies typed onto the child
+           record never reached the card that exists to carry them. */
+        foreach (['allergies' => 'ALLERGY', 'dietary_restrictions' => 'DIETARY',
+                  'health_alerts' => 'HEALTH'] as $col => $label) {
+            foreach ($this->listFrom($child->$col ?? null) as $item) {
+                $alerts[] = '<strong>'.$label.':</strong> '.$this->esc($item);
             }
-            foreach ($conditions as $a) {
-                $alertsHtml .= '<div class="alert"><strong>'.$this->esc(strtoupper($a->flag_type ?? 'CONDITION')).':</strong> '.$this->esc($a->detail ?? $a->name ?? 'unspecified').'</div>';
-            }
-            $alertsHtml .= '</div>';
+        }
+        if ($child->medical_notes ?? null) {
+            $alerts[] = '<strong>MEDICAL:</strong> '.$this->esc($child->medical_notes);
+        }
+        if ($child->dietary_notes ?? null) {
+            $alerts[] = '<strong>DIETARY:</strong> '.$this->esc($child->dietary_notes);
         }
 
-        // Guardians table
-        $guardiansHtml = '<div class="section guardians"><h3>Authorized pickups & contacts</h3><table><thead><tr><th>Name</th><th>Rel.</th><th>Phone</th><th>Pickup?</th></tr></thead><tbody>';
+        $alertsHtml = '<div class="section"><h3>⚠️ Allergies, medical &amp; dietary</h3>';
+        if ($alerts) {
+            $alertsHtml .= '<div class="alert-list">';
+            foreach ($alerts as $a) { $alertsHtml .= '<div class="alert">'.$a.'</div>'; }
+            $alertsHtml .= '</div>';
+        } else {
+            $alertsHtml .= '<div class="none-recorded">Nothing has been recorded for this child. '
+                .'That is not the same as having no allergies — confirm with the family.</div>';
+        }
+        $alertsHtml .= '</div>';
+
+        // ── Who has this child ─────────────────────────────────────────────
+        $eduHtml = '<div class="section"><h3>👩‍🏫 Their provider today</h3>';
+        if (count($c['educators'])) {
+            $eduHtml .= '<div class="people">';
+            foreach ($c['educators'] as $e) {
+                $en = trim(($e->first_name ?? '').' '.($e->last_name ?? ''));
+                $eduHtml .= '<div class="person">'
+                    .$this->avatarHtml($e->photo_url ?? null, $en, 48, $e->sex ?? null, false)
+                    .'<div class="person-t"><div class="person-n">'.$this->esc($en).'</div>'
+                    .'<div class="person-s">'.($e->phone ? $this->esc($e->phone) : 'No phone on file').'</div>'
+                    .'</div></div>';
+            }
+            $eduHtml .= '</div>';
+        } else {
+            $eduHtml .= '<div class="none-recorded">No educator is assigned to '.$roomName.'.</div>';
+        }
+        $eduHtml .= '<div class="week">'.$this->esc($c['week_summary'] ?? '').'</div></div>';
+
+        // ── Who to ring ────────────────────────────────────────────────────
+        $guardiansHtml = '<div class="section"><h3>📞 Guardians</h3><div class="people">';
         if (count($c['guardians']) === 0) {
-            $guardiansHtml .= '<tr><td colspan="4" style="color:var(--kt-faint);padding:8px;">No guardians on record</td></tr>';
+            $guardiansHtml .= '<div class="none-recorded">No guardians on record.</div>';
         } else {
             foreach ($c['guardians'] as $g) {
-                $gName = $this->esc(trim(($g->first_name ?? '').' '.($g->last_name ?? ''))).($g->is_primary ? ' <span class="badge">PRIMARY</span>' : '');
-                $rel = $this->esc($g->relationship ?: '—');
-                $phone = $this->esc($g->phone ?: '—');
-                $pickup = $g->can_pickup ? '✓' : '<span class="badge badge-no-pickup">NO</span>';
-                $guardiansHtml .= "<tr><td>{$gName}</td><td>{$rel}</td><td>{$phone}</td><td>{$pickup}</td></tr>";
+                $gn = trim(($g->first_name ?? '').' '.($g->last_name ?? ''));
+                $tags = ($g->is_primary ? '<span class="badge">PRIMARY</span>' : '')
+                    .($g->can_pickup ? '' : '<span class="badge badge-no-pickup">NO PICKUP</span>');
+                $guardiansHtml .= '<div class="person">'
+                    .$this->avatarHtml($g->photo_url ?? null, $gn, 48, $g->sex ?? null, false)
+                    .'<div class="person-t">'
+                        .'<div class="person-n">'.$this->esc($gn).' '.$tags.'</div>'
+                        .'<div class="person-s">'.$this->esc($g->relationship ?: 'guardian').' · '
+                            .'<strong>'.($g->phone ? $this->esc($g->phone) : 'no phone').'</strong></div>'
+                    .'</div></div>';
             }
         }
-        $guardiansHtml .= '</tbody></table></div>';
+        $guardiansHtml .= '</div></div>';
 
-        // Medications table
+        $ecHtml = '';
+        if (count($c['emergency_contacts'])) {
+            $ecHtml = '<div class="section"><h3>🆘 If the guardians cannot be reached</h3><table><thead><tr>'
+                .'<th>Name</th><th>Relationship</th><th>Phone</th><th>Pickup?</th></tr></thead><tbody>';
+            foreach ($c['emergency_contacts'] as $e) {
+                $ph = trim($this->esc($e->phone ?? '').($e->alt_phone ? ' / '.$this->esc($e->alt_phone) : ''));
+                $ecHtml .= '<tr><td><strong>'.$this->esc($e->name ?? '').'</strong>'
+                    .($e->notes ? '<div class="sub">'.$this->esc($e->notes).'</div>' : '').'</td>'
+                    .'<td>'.$this->esc($e->relationship ?: '—').'</td>'
+                    .'<td>'.($ph ?: '—').'</td>'
+                    .'<td>'.($e->can_pickup ? '✓' : '<span class="badge badge-no-pickup">NO</span>').'</td></tr>';
+            }
+            $ecHtml .= '</tbody></table></div>';
+        }
+
+        // ── Medications ────────────────────────────────────────────────────
         $medsHtml = '';
         if (count($c['medications']) > 0) {
-            $medsHtml = '<div class="section meds"><h3>Active medications</h3><table><thead><tr><th>Drug</th><th>Dose / Strength</th><th>Frequency</th><th>Special instructions</th></tr></thead><tbody>';
+            $medsHtml = '<div class="section"><h3>💊 Active medications</h3><table><thead><tr>'
+                .'<th>Medication</th><th>Dose</th><th>When</th><th>Instructions</th></tr></thead><tbody>';
             foreach ($c['medications'] as $m) {
                 $dose = trim(($m->dosage ?? '').' '.($m->strength ?? ''));
+                $store = trim(($m->storage_location ?? '').(($m->requires_refrigeration ?? false) ? ' · refrigerated' : ''));
                 $medsHtml .= '<tr>'
-                    .'<td><strong>'.$this->esc($m->name ?? '').'</strong></td>'
+                    .'<td><strong>'.$this->esc($m->name ?? '').'</strong>'
+                        .($m->route ? '<div class="sub">'.$this->humanise($m->route).'</div>' : '').'</td>'
                     .'<td>'.$this->esc($dose ?: '—').'</td>'
-                    .'<td>'.$this->esc($m->frequency ?? '').'</td>'
-                    .'<td>'.$this->esc($m->special_instructions ?? '').'</td>'
+                    .'<td>'.$this->humanise($m->frequency ?? '').'</td>'
+                    .'<td>'.$this->esc($m->special_instructions ?? '')
+                        .($store ? '<div class="sub">Kept: '.$this->esc($store).'</div>' : '').'</td>'
                     .'</tr>';
             }
             $medsHtml .= '</tbody></table></div>';
         }
+
+        // ── Where the child physically is ──────────────────────────────────
+        $centreAddr = $centre
+            ? $this->esc(trim(($centre->address_line1 ?? '').' '.($centre->city ?? '').' '
+                .($centre->province ?? '').' '.($centre->postal_code ?? ''))) : '';
+        $centrePhone = $centre && $centre->phone ? $this->esc($centre->phone) : '';
+        $whereHtml = '<div class="section where"><h3>📍 Where this child is</h3>'
+            .'<div class="where-b"><div class="where-n">'.($centreName ?: '—').'</div>'
+            .($centreAddr ? '<div>'.$centreAddr.'</div>' : '')
+            .($centrePhone ? '<div><strong>'.$centrePhone.'</strong></div>' : '')
+            .'<div class="sub">Room: '.$roomName.'</div></div></div>';
+
+        $expected = trim(($child->expected_dropoff_time ?? '').' – '.($child->expected_pickup_time ?? ''), ' –');
 
         return <<<HTML
 <div class="card">
@@ -300,7 +491,7 @@ HTML;
     <div>
       <h2>{$name}</h2>
       <div class="meta">{$age} · DOB {$dob} · {$gender}</div>
-      <div class="meta">{$familyName} family · {$roomName}</div>
+      <div class="meta">{$familyName} family</div>
     </div>
     <div class="agency-logo">
       {$agencyLogo}
@@ -310,21 +501,21 @@ HTML;
 
   {$alertsHtml}
 
+  <div class="cols">
+    <div>{$eduHtml}{$whereHtml}</div>
+    <div>{$guardiansHtml}</div>
+  </div>
+
+  {$ecHtml}
+  {$medsHtml}
+
   <div class="section">
     <h3>Identifiers</h3>
     <div class="info-row"><span class="lbl">Health card</span><span>{$hcDisplay}</span></div>
-    <div class="info-row"><span class="lbl">Doctor</span><span>{$doctor} · {$doctorPhone}</span></div>
-    <div class="info-row"><span class="lbl">Address</span><span>{$address}</span></div>
+    <div class="info-row"><span class="lbl">Doctor</span><span>{$doctor} {$doctorPhone}</span></div>
+    <div class="info-row"><span class="lbl">Usual hours</span><span>{$expected}</span></div>
+    <div class="info-row"><span class="lbl">Home address</span><span>{$address}</span></div>
   </div>
-
-  <div class="section">
-    <h3>Medical & dietary</h3>
-    <div class="info-row"><span class="lbl">Medical notes</span><span>{$medical}</span></div>
-    <div class="info-row"><span class="lbl">Dietary notes</span><span>{$dietary}</span></div>
-  </div>
-
-  {$guardiansHtml}
-  {$medsHtml}
 
   <div class="footer-stamp">
     <span>Card {$idx} of {$total}</span>
@@ -332,6 +523,151 @@ HTML;
   </div>
 </div>
 HTML;
+    }
+
+    /** A photo when there is one, a face when there is not. Never an empty box. */
+    private function avatarHtml(?string $url, string $name, int $size, $sex = null, bool $isChild = false): string
+    {
+        $n = trim($name);
+
+        /* THE EMOJI IS ALWAYS DRAWN, AND THE PHOTO SITS ON TOP OF IT (2026-09-15).
+
+           Two bugs in one line here. The photo used to REPLACE the emoji, so a broken
+           image left a grey box with a torn-paper icon in it — which is exactly what an
+           educator and a guardian looked like on the card, while the child beside them
+           (who has no photo at all, so took the emoji path) came out fine.
+
+           It was broken because the URL was emitted raw. users.photo_url holds a plain
+           '/storage/avatars/....jpg' for 34 of the 64 people who have one, and /storage
+           is closed on both hosts — it answers 403, deliberately, because protected media
+           is only served through the signed /api/v1/media/f route. Every JSON response
+           gets those paths rewritten on the way out by App\Http\Middleware\
+           SignProtectedMedia, but that middleware returns early on anything that is not
+           a JsonResponse, and this card is HTML. So the one page built to be read in an
+           emergency was the one place the signing never reached.
+
+           Signed here the same way SignedFormController already does it. The other 30
+           photos are absolute http URLs (pravatar, from the demo seeder) and sign()
+           returns anything it does not own unchanged, so they are untouched.
+
+           Layering rather than replacing also covers what signing cannot: an expired
+           link, a deleted file, a blocked third-party host. The face underneath is the
+           same one kt-emoji-avatars.js draws on screen, so a failure degrades to the
+           portrait the reader already associates with that person instead of to a
+           broken-image glyph. No script and no onerror handler, so it survives print
+           and any CSP. */
+        $face = '<span class="av av-e" style="width:'.$size.'px;height:'.$size.'px;font-size:'
+            .max(16, (int) round($size * 0.62)).'px;">'.$this->personEmoji($n, $sex, $isChild);
+
+        if ($url) {
+            $face .= '<img class="av-img" src="'
+                .$this->esc((string) \App\Support\ProtectedMedia::sign($url)).'" alt="">';
+        }
+
+        return $face.'</span>';
+    }
+
+    /** as_needed -> As needed. Database vocabulary should not reach a printed card. */
+    private function humanise(?string $v): string
+    {
+        $v = trim((string) $v);
+
+        return $v === '' ? '—' : $this->esc(ucfirst(str_replace('_', ' ', $v)));
+    }
+
+    /**
+     * The provider who has this child, rather than everyone rostered to the room.
+     *
+     * A home-childcare centre IS one provider, and the provider is the user whose email
+     * matches `centres.email` — the same match the Daily Overview uses. Several educators
+     * can hold a role at one centre (centre 14 has three), and listing them all under
+     * "their provider today" reads as three people caring for the child.
+     *
+     * Falls back to the room's educators when no account matches the centre email: a
+     * centre whose email does not line up is a data problem to notice, not a reason for
+     * an emergency card to name nobody.
+     */
+    private function providerFor(?int $roomId, ?object $centre)
+    {
+        if (! $roomId) {
+            return collect();
+        }
+
+        $educators = DB::table('educator_rooms as er')
+            ->join('users as u', 'u.id', '=', 'er.user_id')
+            ->where('er.room_id', $roomId)
+            ->whereNull('u.deleted_at')
+            ->where('u.status', 'active')
+            ->get(['u.first_name', 'u.last_name', 'u.phone', 'u.photo_url', 'u.email', 'u.sex']);
+
+        $centreEmail = strtolower(trim((string) ($centre->email ?? '')));
+        if ($centreEmail !== '') {
+            // Case-insensitively: they genuinely differ in the data.
+            $just = $educators->filter(
+                fn ($u) => strtolower(trim((string) $u->email)) === $centreEmail
+            )->values();
+            if ($just->count()) {
+                return $just;
+            }
+        }
+
+        return $educators;
+    }
+
+    /**
+     * The person emoji used everywhere else for somebody with no photo.
+     *
+     * Mirrors kt-emoji-avatars.js exactly, including its name hash, so a child without a
+     * photo gets the SAME face on the printed card as on the screen. A different one
+     * would read as a different child.
+     */
+    private function personEmoji(string $name, $sex = null, bool $isChild = false): string
+    {
+        $s = strtolower(trim((string) $sex));
+        if (preg_match('/^(m|male|boy|man)$/', $s)) {
+            $sexKey = 'male';
+        } elseif (preg_match('/^(f|female|girl|woman)$/', $s)) {
+            $sexKey = 'female';
+        } else {
+            // Same deterministic hash as the browser: h = (h * 31 + code) >>> 0.
+            $h = 0;
+            $len = mb_strlen($name);
+            for ($i = 0; $i < $len; $i++) {
+                $h = ($h * 31 + mb_ord(mb_substr($name, $i, 1))) & 0xFFFFFFFF;
+            }
+            $sexKey = ($h % 2 === 0) ? 'male' : 'female';
+        }
+
+        if ($isChild) {
+            return $sexKey === 'female' ? '👧' : '👦';
+        }
+
+        return $sexKey === 'female' ? '👩' : '👨';
+    }
+
+    /** An empty safety field, said out loud rather than left as a dash. */
+    private function missing(string $text): string
+    {
+        return '<span class="missing">'.$this->esc($text).'</span>';
+    }
+
+    /** A JSON array column, a comma list, or a plain string — all become a list. */
+    private function listFrom($raw): array
+    {
+        if (is_array($raw)) { $arr = $raw; }
+        elseif (! $raw || trim((string) $raw) === '' || trim((string) $raw) === '[]') { return []; }
+        else {
+            $decoded = json_decode((string) $raw, true);
+            $arr = is_array($decoded) ? $decoded : explode(',', (string) $raw);
+        }
+        $out = [];
+        foreach ($arr as $v) {
+            if (is_array($v)) { $v = $v['allergen'] ?? $v['restriction'] ?? $v['alert'] ?? json_encode($v); }
+            $v = trim((string) $v);
+            if ($v !== '') { $out[] = $v; }
+        }
+
+        return $out;
     }
 
     private function esc(?string $s): string
