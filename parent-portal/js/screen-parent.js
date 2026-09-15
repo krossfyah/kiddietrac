@@ -1200,7 +1200,10 @@
       + '<tr class="g"><td>' + (inv.status === 'paid' ? 'Paid in full' : 'Balance due') + '</td><td class="r">' + _extMoney(inv.balance_due) + '</td></tr></table>'
       + '<div style="margin-top:26px;font-size:11px;color:#64748B">Billed by ' + esc(agency || 'your provider') + '. Please pay directly with them.</div>'
       + '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},350);};</scr' + 'ipt></body></html>';
-    var w = window.open('', '_blank');
+    // Keeps the portal alive; see KT.docWindow in kt-doc-viewer.js.
+    var w = (window.KT && KT.docWindow)
+      ? KT.docWindow({ title: 'Document', label: 'Document' })
+      : window.open('', '_blank');
     if (!w) { if (KT.toast) KT.toast('⚠️', 'Pop-up blocked', 'Allow pop-ups to print or save the invoice.', '#B45309'); return; }
     w.document.open(); w.document.write(html); w.document.close();
   }

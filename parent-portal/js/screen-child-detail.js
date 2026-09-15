@@ -517,6 +517,17 @@
               title: (child.full_name || 'Child') + ' — emergency card',
               label: 'Emergency card',
               hide: '.toolbar',
+              /* Only asked for when the Print button is actually pressed inside the
+                 app, so no link is minted for the ordinary case of reading the card on
+                 screen. Five minutes, signed, and audited at both ends. */
+              externalPrint: function () {
+                return fetch(apiBase + '/director/children/' + child.id + '/emergency-card/print-link', {
+                  headers: hdrs,
+                }).then(function (r) {
+                  if (!r.ok) throw new Error('HTTP ' + r.status);
+                  return r.json();
+                }).then(function (d) { return d && d.url; });
+              },
             });
             return;
           }

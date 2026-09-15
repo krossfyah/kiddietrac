@@ -444,6 +444,12 @@ Route::post('/voice/telnyx/webhook/{agency}', [\App\Http\Controllers\Api\VoiceCo
     ->where('agency', '[0-9]+')->middleware('throttle:1200,1');
 // Signed (session-less) e-document view — a mobile WebView can open this URL directly.
 Route::get('/edoc/{id}/view', [\App\Http\Controllers\Api\EDocumentController::class, 'signedStream'])->name('edoc.signed')->middleware('signed');
+
+/* The emergency card, openable in the device's own browser so it can be printed —
+   the app's web view has no window.print(). Signed and five minutes long; minted by
+   the authenticated print-link endpoint, which runs the card's own centre check. */
+Route::get('/print/emergency-card/{child}', [\App\Http\Controllers\Api\EmergencyCardController::class, 'signedForChild'])
+    ->name('emergency.card.signed')->middleware('signed')->whereNumber('child');
 // One-tap time-off decisions from the approver's email. The GET only DISPLAYS —
 // mail scanners fetch every link in a message, so a GET that decided anything would
 // be decided by the scanner before the director saw it. The POST does the work.
@@ -1153,6 +1159,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/guardians/{guardian}/kiosk-pin', [\App\Http\Controllers\Api\KioskController::class, 'setGuardianPin']);
             // v22p6: emergency cards (print-optimised HTML, browser Print/Save-PDF)
             Route::get('/children/{child}/emergency-card', [\App\Http\Controllers\Api\EmergencyCardController::class, 'forChild']);
+            // Mints the five-minute signed link the phone app hands to the real browser
+            // to print with. Same authorisation as the card itself — see printLink().
+            Route::get('/children/{child}/emergency-card/print-link', [\App\Http\Controllers\Api\EmergencyCardController::class, 'printLink'])->whereNumber('child');
             Route::get('/rooms/{room}/emergency-cards', [\App\Http\Controllers\Api\EmergencyCardController::class, 'forRoom']);
 
 

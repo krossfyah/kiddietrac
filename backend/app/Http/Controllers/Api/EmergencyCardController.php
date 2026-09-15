@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,109 @@ final class EmergencyCardController extends Controller
             return response('Forbidden', 403);
         }
 
+        return $this->renderChild($child, $family);
+    }
+
+    /**
+     * GET /director/children/{child}/emergency-card/print-link
+     *
+     * A five-minute signed link to the card, for printing from the phone app.
+     *
+     * The app's web view does not implement window.print() — neither Android's nor
+     * iOS's does; a host app has to drive the platform print service itself, and this
+     * one cannot without a rebuild. So the card is handed to the device's REAL browser
+     * through the Capacitor Browser plugin, where Print works normally. That browser
+     * carries no session, which is what this link is for.
+     *
+     * The exposure is real and deliberately small. The card holds a child's allergies,
+     * their guardians' numbers and where they are, so:
+     *   - minting runs the SAME authorisation the card itself does, on the same
+     *     centre check, so nobody can mint a link to a child they cannot already read;
+     *   - the link lives five minutes;
+     *   - both the mint and every use of it are audited, so an unexpected read is
+     *     visible rather than silent.
+     * Signed URLs are Laravel's own — the signature covers the child id and the expiry,
+     * and the `signed` middleware rejects a tampered or stale one before this class is
+     * reached.
+     */
+    public function printLink(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        $family = DB::table('families')->where('id', $child->family_id)->first();
+        if (! $family || ! $this->authorizeCentreAccess($request->user(), (int) $family->centre_id)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $minutes = 5;
+        $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'emergency.card.signed',
+            now()->addMinutes($minutes),
+            ['child' => $childId]
+        );
+
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id ?? null,
+            'agency_id' => \App\Support\AuditScope::resolve((int) ($request->user()->id ?? 0), $request),
+            'action' => 'emergency_card.print_link_issued',
+            'entity_type' => 'child',
+            'entity_id' => $childId,
+            'payload' => json_encode([
+                'summary' => 'Issued a '.$minutes.'-minute printable link for an emergency card',
+                'child_id' => $childId,
+                'expires_in_minutes' => $minutes,
+            ]),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 500),
+            'created_at' => now(),
+        ]);
+
+        return response()->json(['url' => $url, 'expires_in_minutes' => $minutes]);
+    }
+
+    /**
+     * GET /print/emergency-card/{child} — signed, no session.
+     *
+     * Reached only with a valid signature; the `signed` middleware has already rejected
+     * anything tampered with or expired. Audited on every read, with no user id because
+     * there is no session — the mint row above names who created the link.
+     */
+    public function signedForChild(Request $request, int $childId): SymfonyResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) {
+            return response('Not found', 404);
+        }
+
+        $family = DB::table('families')->where('id', $child->family_id)->first();
+        if (! $family) {
+            return response('Not found', 404);
+        }
+
+        \App\Support\Audit::write([
+            'user_id' => null,
+            'agency_id' => null,
+            'action' => 'emergency_card.printed',
+            'entity_type' => 'child',
+            'entity_id' => $childId,
+            'payload' => json_encode([
+                'summary' => 'Emergency card opened through a signed printable link',
+                'child_id' => $childId,
+            ]),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 500),
+            'created_at' => now(),
+        ]);
+
+        return $this->renderChild($child, $family);
+    }
+
+    /** The render both entry points share, so the two can never drift apart. */
+    private function renderChild(object $child, object $family): SymfonyResponse
+    {
         $centre = DB::table('centres')->where('id', $family->centre_id)->first();
         $card = $this->buildCardData($child, $family, $centre);
         $html = $this->buildPage([$card], $centre);

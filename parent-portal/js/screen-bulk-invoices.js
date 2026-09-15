@@ -71,7 +71,8 @@
 
     function money(n) {
       var v = Number(n) || 0;
-      try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(v); }
+      try { return new Intl.NumberFormat('en-CA', {  /* pinned: `undefined` follows the BROWSER, so CAD renders '$' on an en-CA
+                                       machine and 'CA$' on en-US — the same amount, two ways */ style: 'currency', currency: 'CAD' }).format(v); }
       catch (e) { return '$' + v.toFixed(2); }
     }
 
@@ -333,7 +334,14 @@
       function scheduleStep(body) {
         var per = body.basis === 'hours' ? (body.hours * body.rate) : body.amount;
         var step = body.frequency === 'weekly' ? 7 : (body.frequency === 'biweekly' ? 14 : 0);
-        var start = body.period_start ? new Date(body.period_start + 'T00:00:00') : new Date();
+        /* Numeric parts: the string form parses as UTC and lands on the previous day
+           locally, and every date below is read back with local getters — so each
+           scheduled invoice was dated one day before the period start that was chosen. */
+        var start = new Date();
+        if (body.period_start) {
+          var _ps = String(body.period_start).split('-');
+          if (_ps.length === 3) { start = new Date(+_ps[0], +_ps[1] - 1, +_ps[2]); }
+        }
         var occurrences = body.frequency === 'monthly' ? 12 : (body.frequency === 'biweekly' ? 13 : 12);
 
         var rows = [];
@@ -368,7 +376,7 @@
           +   '<span id="pi-stotal" style="font-size:20px;font-weight:800;color:#0F172A;"></span></div>'
           + '<div id="pi-serr" style="color:#DC2626;font-size:12.5px;min-height:17px;margin-top:6px;"></div>'
           + '<div style="display:flex;justify-content:space-between;gap:8px;">'
-          +   '<button id="pi-sback" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">← Back to edit</button>'
+          +   '<button id="pi-sback" data-kt-inpage="1" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">← Back to edit</button>'
           +   '<button id="pi-screate" style="background:#16A34A;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Create these invoices</button>'
           + '</div>';
 
@@ -497,7 +505,7 @@
               : '')
           + '<div id="pi-cerr" style="color:#DC2626;font-size:12.5px;min-height:17px;"></div>'
           + '<div style="display:flex;justify-content:space-between;gap:8px;">'
-          +   '<button id="pi-back" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">← Back to edit</button>'
+          +   '<button id="pi-back" data-kt-inpage="1" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">← Back to edit</button>'
           +   '<button id="pi-confirm" style="background:#16A34A;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Create this invoice</button>'
           + '</div>';
 
@@ -1090,7 +1098,11 @@
   // Open the branded white-label invoice HTML (needs the auth header, so fetch it
   // then write it into a new window — a plain link would 401).
   function viewInvoicePreview(invoiceId) {
-    var w = window.open('', '_blank');
+    // Same trap as the emergency card: a written-into window replaces the portal —
+    // router, theme-color and all — and leaves no way back inside the app.
+    var w = (window.KT && KT.docWindow)
+      ? KT.docWindow({ title: 'Invoice', label: 'Invoice' })
+      : window.open('', '_blank');
     if (!w) { toast('⚠️', 'Pop-up blocked', 'Allow pop-ups to view the invoice.', '#B45309'); return; }
     w.document.write('<p style="font-family:sans-serif;padding:20px;color:#64748B;">Loading invoice…</p>');
     fetch(apiBase() + '/invoices/' + invoiceId + '/preview', { headers: { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token') } })

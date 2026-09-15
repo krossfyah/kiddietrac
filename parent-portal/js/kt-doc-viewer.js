@@ -33,6 +33,16 @@
 
   function isImage(url) { return IMAGE_RE.test(String(url || '')); }
 
+  /* True when this is the packaged app, whose web view ignores window.print().
+     Checked through Capacitor rather than by sniffing the user agent, because that is
+     the same signal kt-doc-viewer already trusts for openExternally(). */
+  function nativePrintUnavailable() {
+    try {
+      var C = w.Capacitor;
+      return !!(C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative));
+    } catch (e) { return false; }
+  }
+
   // Open a URL the old way — a real new tab, or the in-app browser on the APK.
   // Used only by the panel's own "Open in new tab" button.
   function openExternally(url) {
@@ -143,7 +153,8 @@
       +   '</div>'
       // No "Open in new tab": there is no URL to open, and a new tab is the thing
       // being moved away from.
-      +   '<button class="ktdv-print" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🖨 Print</button>'
+      +   '<button class="ktdv-print" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">'
+      +     (nativePrintUnavailable() && opts.externalPrint ? '🖨 Print in browser' : '🖨 Print') + '</button>'
       +   '<button class="ktdv-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
       + '</div>'
       + '<iframe class="ktdv-frame" title="' + esc(title) + '" style="flex:1;width:100%;border:0;background:#fff;"></iframe>'
@@ -168,7 +179,38 @@
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
 
     ov.querySelector('.ktdv-close').addEventListener('click', close);
-    ov.querySelector('.ktdv-print').addEventListener('click', function () {
+    ov.querySelector('.ktdv-print').addEventListener('click', function (ev) {
+      /* IN THE APP, window.print() DOES NOTHING.
+
+         Neither Android's web view nor iOS's implements it — a host app has to drive
+         the platform's own print service, which needs a native rebuild this one cannot
+         have. Calling it there is a button that silently fails, which is worse than no
+         button. So on a native platform the document is handed to the device's real
+         browser through the Capacitor Browser plugin, where Print works normally; the
+         caller supplies `externalPrint`, a function returning a promise of a URL that
+         browser can open without a session. */
+      if (nativePrintUnavailable() && opts.externalPrint) {
+        var btn = ev.currentTarget;
+        var was = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Opening…';
+        Promise.resolve()
+          .then(function () { return opts.externalPrint(); })
+          .then(function (url) {
+            if (url) { openExternally(url); }
+            else { throw new Error('no link'); }
+          })
+          .catch(function (e) {
+            // Say so rather than appear to have worked.
+            btn.textContent = 'Could not open';
+            setTimeout(function () { btn.textContent = was; btn.disabled = false; }, 2200);
+            return;
+          })
+          .then(function () {
+            if (btn.textContent === 'Opening…') { btn.textContent = was; btn.disabled = false; }
+          });
+        return;
+      }
       // Printing the FRAME prints the document, not the portal behind it.
       try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) {}
     });

@@ -300,6 +300,92 @@
       try { content.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
     }
 
+    /**
+     * "How the guides are doing" — views, helpful rate, and what people said.
+     *
+     * /help/analytics has existed the whole time and no client ever called it, so the
+     * 👍/👎 on every article wrote to a table nobody read. This is the other half of
+     * that loop. Rendered only when the endpoint answers: it is restricted to
+     * agency_admin / centre_director / platform_admin, and a 403 just means the panel
+     * is not for this person, so it disappears rather than showing an error.
+     * (Anthony, 2026-08-27)
+     */
+    async function renderFeedbackPanel(host) {
+      let d;
+      try { d = await Api.get('/help/analytics'); }
+      catch (e) { host.remove(); return; }
+      if (!d || !d.totals) { host.remove(); return; }
+
+      const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const title = (slug) => esc(String(slug || '').replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()));
+
+      const t = d.totals || {};
+      const pct = t.helpful_pct;
+
+      /* No rating at all is its own state, and it is the common one — five votes in
+         four months. "—" with a plain explanation beats a green 0% or a fake 100%. */
+      const pctText = (pct === null || pct === undefined) ? '—' : pct + '%';
+      const pctCol = (pct === null || pct === undefined) ? '#64748B'
+        : (pct >= 75 ? '#166534' : (pct >= 50 ? '#92400E' : '#B91C1C'));
+
+      const stat = (label, value, colour) =>
+        '<div style="flex:1;min-width:120px;">'
+        + '<div style="font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#64748B;">'
+          + esc(label) + '</div>'
+        + '<div style="font-size:20px;font-weight:800;margin-top:2px;color:' + (colour || '#0F172A') + ';">'
+          + esc(value) + '</div></div>';
+
+      const rows = (d.top_views || []).slice(0, 8).map((r) => {
+        const fb = r.feedback || { yes: 0, no: 0 };
+        const votes = fb.yes + fb.no;
+        const verdict = votes
+          ? '<span style="color:' + (fb.no > fb.yes ? '#B91C1C' : '#166534') + ';font-weight:700;">'
+            + fb.yes + ' 👍 · ' + fb.no + ' 👎</span>'
+          : '<span style="color:#94A3B8;">no rating yet</span>';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #F1F5F9;">'
+          + '<span style="flex:1;min-width:0;font-size:13px;color:#0F172A;overflow:hidden;'
+            + 'text-overflow:ellipsis;white-space:nowrap;">' + title(r.slug) + '</span>'
+          + '<span style="font-size:12px;color:#64748B;font-variant-numeric:tabular-nums;">'
+            + r.views + ' views</span>'
+          + '<span style="font-size:12px;min-width:96px;text-align:right;">' + verdict + '</span>'
+          + '</div>';
+      }).join('');
+
+      const comments = (d.negative_comments || []).slice(0, 6).map((c) =>
+        '<div style="padding:8px 0;border-top:1px solid #FEE2E2;">'
+        + '<div style="font-size:11.5px;color:#B91C1C;font-weight:700;">' + title(c.slug) + '</div>'
+        + '<div style="font-size:13px;color:#7F1D1D;line-height:1.5;margin-top:2px;">'
+          + esc(c.comment) + '</div></div>').join('');
+
+      host.innerHTML =
+        '<div style="background:#fff;border:1px solid #E8EDF3;border-radius:14px;padding:16px 18px;margin:4px 0 22px;'
+          + 'box-shadow:0 1px 3px rgba(0,0,0,.04);">'
+        + '<div style="font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#64748B;">'
+          + 'How the guides are doing</div>'
+        + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;">'
+          + stat('Views (30 days)', t.views_30d || 0)
+          + stat('Ratings', t.feedback_count || 0)
+          + stat('Found helpful', pctText, pctCol)
+        + '</div>'
+        + (rows
+            ? '<div style="margin-top:14px;">'
+              + '<div style="font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;'
+                + 'color:#64748B;margin-bottom:2px;">Most read</div>' + rows + '</div>'
+            : '<div style="margin-top:12px;font-size:13px;color:#94A3B8;">'
+              + 'No articles have been opened in the last 30 days.</div>')
+        + (comments
+            ? '<div style="margin-top:16px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:10px 13px;">'
+              + '<div style="font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;'
+                + 'color:#B91C1C;">What people said was missing</div>' + comments + '</div>'
+            : (t.feedback_count
+                ? ''
+                : '<div style="margin-top:14px;font-size:12.5px;color:#64748B;line-height:1.5;">'
+                  + 'Nobody has rated a guide yet. The 👍 / 👎 at the foot of each article feeds this, '
+                  + 'and a 👎 now asks what was missing.</div>'))
+        + '</div>';
+    }
+
     function renderHomePanels() {
       Dom.clear(content);
       Dom.clear(toc);
@@ -311,6 +397,16 @@
 
       home.appendChild(Dom.el('h2', { class: 'kt-help-home-h' }, '👋  Where to start'));
       home.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, 'Tap a topic below, search at the top, or ask our AI assistant anything.'));
+
+      /* What the guides are actually doing — before the topic tiles, not after.
+         Sat at the foot of the page first, which meant scrolling past twenty topic
+         tiles to reach it; something you have to hunt for is something you stop
+         checking. It only renders for the people who maintain the guides (the endpoint
+         refuses everybody else), so it costs an educator or a parent nothing. */
+      const fbPanel = Dom.el('div', { id: 'kt-help-feedback-panel' });
+      home.appendChild(fbPanel);
+      renderFeedbackPanel(fbPanel);
+
       if (Object.keys(state.categorized).length) home.appendChild(catTiles());
 
       if (state.featured.length) {
@@ -502,15 +598,70 @@
       const btns = Dom.el('div', { class: 'kt-help-feedback-btns' });
       const yes = Dom.el('button', { class: 'kt-help-fb-btn' }, '👍  Yes');
       const no = Dom.el('button', { class: 'kt-help-fb-btn' }, '👎  No');
+
+      const thanks = (msg) => {
+        Dom.clear(wrap);
+        wrap.appendChild(Dom.el('div', { class: 'kt-help-feedback-thanks' }, msg));
+      };
+
+      /* A thumbs-down on its own says an article failed, and nothing about how.
+         Every piece of feedback ever recorded here was a bare vote — the API has
+         always accepted a `comment`, and the analytics endpoint singles out negative
+         comments as the actionable ones, but nothing on screen ever asked. So ask,
+         once, in one line, with an obvious way out. (Anthony, 2026-08-27)
+
+         The vote is already saved by the time this appears: it posts on the click, and
+         the comment updates that same row. Someone who types nothing and walks away is
+         still counted. */
+      function askWhy() {
+        Dom.clear(wrap);
+        wrap.appendChild(Dom.el('div', { class: 'kt-help-feedback-q' },
+          'Sorry about that — what were you looking for?'));
+
+        const box = Dom.el('textarea', {
+          class: 'kt-help-fb-comment',
+          rows: '2',
+          maxlength: '1000',
+          placeholder: 'It would help to know what was missing or unclear (optional).',
+          style: 'width:100%;box-sizing:border-box;margin-top:8px;padding:8px 10px;'
+               + 'border:1.5px solid #CBD5E1;border-radius:8px;font-family:inherit;'
+               + 'font-size:13px;line-height:1.45;resize:vertical;',
+        });
+        wrap.appendChild(box);
+
+        const row = Dom.el('div', { class: 'kt-help-feedback-btns', style: 'margin-top:8px;' });
+        const send = Dom.el('button', { class: 'kt-help-fb-btn' }, 'Send');
+        const skip = Dom.el('button', { class: 'kt-help-fb-btn' }, 'No thanks');
+
+        send.addEventListener('click', async () => {
+          const comment = String(box.value || '').trim();
+          if (!comment) { thanks('🙏  Thanks for the feedback!'); return; }
+          send.disabled = true; skip.disabled = true;
+          try {
+            await Api.post('/help/' + article.slug + '/feedback', { helpful: false, comment });
+            thanks('🙏  Thank you — that tells us what to fix.');
+          } catch (e) {
+            // The vote is already recorded; only the note failed. Say so honestly
+            // rather than pretending it sent.
+            send.disabled = false; skip.disabled = false;
+            thanks('🙏  Your feedback was recorded, but the note could not be sent.');
+          }
+        });
+        skip.addEventListener('click', () => thanks('🙏  Thanks for the feedback!'));
+
+        row.appendChild(send); row.appendChild(skip);
+        wrap.appendChild(row);
+        box.focus();
+      }
+
       [yes, no].forEach((b, i) => {
         b.addEventListener('click', async () => {
           const helpful = (i === 0);
           yes.disabled = true; no.disabled = true;
           try {
             await Api.post('/help/' + article.slug + '/feedback', { helpful });
-            Dom.clear(wrap);
-            wrap.appendChild(Dom.el('div', { class: 'kt-help-feedback-thanks' },
-              '🙏  Thanks for the feedback!' + (helpful ? '' : ' Try ✨ Ask AI for a follow-up.')));
+            if (helpful) { thanks('🙏  Thanks for the feedback!'); }
+            else { askWhy(); }
           } catch (e) {
             yes.disabled = false; no.disabled = false;
           }
@@ -522,7 +673,13 @@
     }
 
     function printArticle(article) {
-      const w = window.open('', 'print', 'width=900,height=700');
+      /* Keeps the portal alive. The w.print() below still opens the print dialog on
+         a desktop; inside the app it is a no-op, as it already was — the web view
+         has no window.print() — but the article is now readable and closable
+         instead of replacing the portal. */
+      const w = (window.KT && KT.docWindow)
+        ? KT.docWindow({ title: article.title || 'Article', label: 'Help article' })
+        : window.open('', 'print', 'width=900,height=700');
       const md = renderMarkdown(article.body);
       w.document.write(`<!DOCTYPE html><html><head><title>${article.title}</title>
         <style>
