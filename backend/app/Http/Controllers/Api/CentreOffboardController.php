@@ -55,7 +55,23 @@ final class CentreOffboardController extends Controller
 
         $data = $request->validate([
             'last_day' => ['required', 'date'],
-            'decisions' => ['required', 'array', 'min:1'],
+            /* NOT `required|min:1`. AN EMPTY PLAN IS A VALID PLAN.
+
+               The client builds `decisions` from the offboard plan's family list, so a
+               provider with no enrolled families posts `decisions: []` — and Laravel
+               reports an empty array as a failed `required`, which is why closing such a
+               provider answered "The decisions field is required." A provider that has
+               already emptied out is the EASIEST one to close and was the only one that
+               could not be. Anthony, 2026-09-15; the live case is Chearstine Fitzpatrick,
+               0 enrolled families.
+
+               `present` keeps the field mandatory in the request — a caller that forgets
+               it entirely is still a bug — while letting it be empty. Nothing is weakened
+               by this: the guard that actually matters is the $missing check below, which
+               compares the decisions against the families REALLY still enrolled and
+               refuses by name if any is unaccounted for. min:1 never enforced that; it
+               only ever failed the case where there was nothing to enforce. */
+            'decisions' => ['present', 'array'],
             'decisions.*.family_id' => ['required', 'integer'],
             'decisions.*.action' => ['required', 'in:transfer,withdraw'],
             'decisions.*.to_room_id' => ['nullable', 'integer'],
@@ -109,7 +125,10 @@ final class CentreOffboardController extends Controller
                 'withdrawals' => count(array_filter($data['decisions'], fn ($d) => $d['action'] === 'withdraw')),
                 'will_close_staff' => (bool) ($data['close_staff'] ?? false),
                 'will_archive' => (bool) ($data['archive'] ?? false),
-                'message' => 'Nothing has been changed. Send confirm=true to carry this out.',
+                'message' => $data['decisions']
+                    ? 'Nothing has been changed. Send confirm=true to carry this out.'
+                    : 'No families are enrolled here, so there is nobody to move. '
+                        .'Nothing has been changed. Send confirm=true to carry this out.',
             ]);
         }
 
