@@ -1701,9 +1701,36 @@ final class AdminController extends Controller
                         ->where('email', 'not like', 'no-reply@%');
                   });
             })
+            /* OFF-BOARDED MEANS SWITCHED OFF, NOT JUST SOFT-DELETED (2026-09-15).
+
+               This split the two tabs on deleted_at alone, and the platform has TWO
+               ways of ending someone's access that write different things:
+
+                 - deleting a user from this screen soft-deletes them (deleted_at set,
+                   status 'deactivated');
+                 - de-boarding a FAMILY closes its guardians' accounts by setting
+                   status 'deactivated' and leaves deleted_at NULL.
+
+               So the de-boarded ones were sorted the wrong way on both counts: 23
+               guardians in agency 2 — every one of them matching a family with a
+               departure already applied, Jessie Fuller, Lisa Williams, Deborah Black
+               and the rest — were listed under ACTIVE USERS, and were missing from the
+               tab named after them.
+
+               Audience::OFF_STATUSES is the platform's one definition of "this account
+               is switched off"; the login gate and EmailAccounts already use it, and
+               using it here makes the two tabs agree with the front door. */
             ->when($deactivated,
-                function ($q) { $q->whereNotNull('deleted_at'); },
-                function ($q) { $q->whereNull('deleted_at'); });
+                function ($q) {
+                    $q->where(function ($w) {
+                        $w->whereNotNull('deleted_at')
+                          ->orWhereIn('status', \App\Support\Audience::OFF_STATUSES);
+                    });
+                },
+                function ($q) {
+                    $q->whereNull('deleted_at')
+                      ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES);
+                });
 
         if ($searchQuery) {
             $usersQuery->where(function ($q) use ($searchQuery) {

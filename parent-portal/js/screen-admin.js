@@ -1601,6 +1601,19 @@
     });
     table.appendChild(tbody);
     content.appendChild(table);
+
+    /* ASK FOR THE TABLE TOOLS (2026-09-15).
+
+       This table is built AFTER a fetch, and the global sweep has long since run by
+       then — so on a fresh load of #admin-users it arrived with no sorting at all: no
+       ⇅ on the headers, nothing clickable, no filter bar and no sort select. They only
+       appeared if something else happened to trigger the sweep later, which is why it
+       looked intermittent rather than absent.
+
+       Measured before and after on the same page: 0 clickable headers and no filter
+       bar; after one call, 7 clickable headers with their indicators and the bar back.
+       Same fix as the Children screen, same cause. */
+    try { if (window.KT && KT.enhanceTables) { KT.enhanceTables(); } } catch (e) {}
   }
 
   function showInviteModal(content) {
