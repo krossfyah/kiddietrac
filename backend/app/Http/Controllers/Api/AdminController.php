@@ -2093,7 +2093,7 @@ final class AdminController extends Controller
                 ]);
                 $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?? 'Kiddietrac');
                 $this->sendUserInvite($data['email'], $data['first_name'], $data['last_name'], $agencyName,
-                    'https://app.kiddietrac.com/set-password.html?token=' . $token, (int) $agencyId);
+                    'https://app.kiddietrac.com/set-password.html?token=' . $token, (int) $agencyId, (int) $userId);
                 $inviteSent = true;
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('User invite email failed', ['email' => $data['email'], 'error' => $e->getMessage()]);
@@ -2130,7 +2130,7 @@ final class AdminController extends Controller
      * (sendmail) + logs to email_logs with a tracking token; the X-KT-Logged
      * header stops the global MessageSent listener writing a duplicate row.
      */
-    private function sendUserInvite(string $email, string $firstName, string $lastName, string $agencyName, string $link, ?int $agencyId = null): void
+    private function sendUserInvite(string $email, string $firstName, string $lastName, string $agencyName, string $link, ?int $agencyId = null, ?int $inviteUserId = null): void
     {
         $trackToken = bin2hex(random_bytes(16));
         $apiBase = preg_replace('#/api/v1/?$#', '', rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/'));
@@ -2173,8 +2173,8 @@ final class AdminController extends Controller
         // Send in the background so the invite request returns immediately
         // instead of blocking ~1.3–5.5s on sendmail. Capture only scalars.
         $recipientName = trim($firstName . ' ' . $lastName);
-        dispatch(function () use ($email, $recipientName, $html) {
-            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($email, $recipientName) {
+        dispatch(function () use ($email, $recipientName, $html, $inviteUserId) {
+            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($email, $recipientName, $inviteUserId) {
                 $m->to($email, $recipientName)
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
@@ -2185,6 +2185,12 @@ final class AdminController extends Controller
                 $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
                 // Carries a first-password link — see the invariant in SuppressAgencyMail.
                 $m->getHeaders()->addTextHeader('X-KT-Onboarding-Invite', '1');
+                /* WHICH account. One address can hold several accounts here, so the
+                   gate cannot tell from the address alone whether this particular
+                   invite is going to somebody who already has a password. */
+                if ($inviteUserId) {
+                    $m->getHeaders()->addTextHeader('X-KT-Invite-User', (string) $inviteUserId);
+                }
                 $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
             });
         })->onQueue('mail');

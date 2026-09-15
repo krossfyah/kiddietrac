@@ -157,17 +157,65 @@ class SuppressAgencyMail
             $hdrsInv = $event->message->getHeaders();
             if ($hdrsInv && $hdrsInv->has('X-KT-Onboarding-Invite')) {
                 $hdrsInv->remove('X-KT-Onboarding-Invite');
-                $claimed = DB::table('users')
-                    ->whereNotIn('status', ['invited', 'not_invited'])
-                    ->whereNotNull('email')
-                    ->whereIn(DB::raw('LOWER(TRIM(email))'), $recipients)
-                    ->pluck('email')
-                    ->map(fn ($e) => mb_strtolower(trim((string) $e)))
-                    ->values()->all();
-                if ($claimed) {
-                    $this->cancel($event, $claimed,
-                        'Set-password invite withheld: this account has already been claimed.');
-                    return false;
+
+                /* THE INVARIANT IS ABOUT AN ACCOUNT, NOT AN ADDRESS (2026-09-15).
+
+                   This asked "does ANY claimed account use this address?" and withheld
+                   the invite if so. But this platform deliberately allows several
+                   accounts under one email, told apart by username — that is the whole
+                   point of the username feature. So the moment somebody had one claimed
+                   account, no further account on that address could ever be invited.
+
+                   Lloydene King hit it today: she already had a claimed home-visitor
+                   account (#197, active), was then added as an agency admin (#198,
+                   invited), and the set-password invite for the NEW account was
+                   withheld as "this account has already been claimed" — about a
+                   different account entirely.
+
+                   The invariant itself is right and is kept: a first-password link must
+                   never reach somebody who already has a password. It just has to be
+                   asked about the account being invited.
+
+                   X-KT-Invite-User carries that account's id; both senders set it. For
+                   any sender that does not, fall back to a question that is still safe
+                   and still address-shaped: is there ANY account here awaiting a first
+                   password? If there is, this invite has a legitimate target and goes;
+                   if there is not, nobody at this address could correctly receive it
+                   and it is withheld exactly as before. */
+                $targetId = null;
+                if ($hdrsInv->has('X-KT-Invite-User')) {
+                    $targetId = (int) trim((string) $hdrsInv->get('X-KT-Invite-User')->getBodyAsString());
+                    $hdrsInv->remove('X-KT-Invite-User');
+                }
+
+                if ($targetId > 0) {
+                    $claimedTarget = DB::table('users')
+                        ->where('id', $targetId)
+                        ->whereNotIn('status', ['invited', 'not_invited'])
+                        ->exists();
+
+                    if ($claimedTarget) {
+                        $this->cancel($event, $recipients,
+                            'Set-password invite withheld: account #'.$targetId
+                            .' has already been claimed.');
+
+                        return false;
+                    }
+                } else {
+                    $anyUnclaimed = DB::table('users')
+                        ->whereNull('deleted_at')
+                        ->whereIn('status', ['invited', 'not_invited'])
+                        ->whereNotNull('email')
+                        ->whereIn(DB::raw('LOWER(TRIM(email))'), $recipients)
+                        ->exists();
+
+                    if (! $anyUnclaimed) {
+                        $this->cancel($event, $recipients,
+                            'Set-password invite withheld: no account on this address is '
+                            .'awaiting a first password.');
+
+                        return false;
+                    }
                 }
             }
         } catch (\Throwable $e) {
