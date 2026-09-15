@@ -81,6 +81,215 @@
    * errors must not take the upload button down with it — the whole point of the panel is
    * that a family can send the record in.
    */
+  /* ───────── FILING A RECORD, AND SAYING WHAT IS ON IT ─────────
+
+     Filing the card and reading it were two jobs on two screens, and that gap is where
+     records sat for weeks while the child still showed overdue: somebody uploaded a PDF,
+     the compliance list did not move, and nobody could tell whether it had been read or
+     merely received.
+
+     So it is one dialog: the document, the doses it accounts for, and a note for whatever
+     the card does not say. The server writes all of it in one request, so a filed record
+     can never exist without the decision that went with it.
+
+     ONE dialog, two doors. The child's Immunization tab opens it for the child it is
+     already showing; the Immunizations section opens it with a child picker, because
+     "upload it for them" is the thought an admin has while looking at an overdue row.
+     That section used to have its own smaller dialog which filed the document and asked
+     nothing — so a record filed from there never moved the very list it was filed from.
+
+     Parents keep the plain uploader. Deciding that a smudged line means "DTaP-IPV-Hib,
+     2nd dose" is a clinical judgement and it is the centre's to make; the server enforces
+     that too, this is only the half you can see. (Anthony, 2026-09-15)
+
+     KT.immunFileRecord({ scope, child?, children?, status?, onFiled? })
+       child    : { id, first_name, last_name, preferred_name } — fixed, no picker
+       children : [{ id, name }] — offered in a picker when no child is fixed
+       status   : a /immunization/child/{id}/status payload already in hand
+       onFiled  : called after a successful filing
+     Returns false when it cannot open, so a caller can fall back. */
+  KT.immunFileRecord = function (opts) {
+    opts = opts || {};
+    var M = window.KT && KT.Shell && KT.Shell.Modal;
+    if (!M) { return false; }
+
+    var scope = opts.scope === 'parent' ? 'parent' : 'director';
+    var child = opts.child || null;
+    var roster = opts.children || [];
+    if (!child && !roster.length) { return false; }
+
+    var form = document.createElement('div');
+    form.innerHTML =
+      (child ? '' :
+        '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
+        + 'Child <span style="color:#DC2626;">*</span></label>'
+        + '<select class="fr-child" style="width:100%;box-sizing:border-box;padding:9px 11px;'
+        +   'border:1px solid #CBD5E1;border-radius:9px;font-size:13px;margin-bottom:16px;">'
+        +   roster.map(function (c) {
+              return '<option value="' + esc(String(c.id)) + '">' + esc(c.name) + '</option>';
+            }).join('')
+        + '</select>')
+
+      + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
+      + 'The record <span style="color:#DC2626;">*</span></label>'
+      + '<input type="file" class="fr-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" '
+      +   'style="display:block;width:100%;font-size:13px;margin-bottom:4px;">'
+      + '<div style="color:#64748B;font-size:12px;margin-bottom:16px;">'
+      +   'PDF or a photo of the card, up to 10 MB.</div>'
+
+      + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
+      + 'What does this record cover?</label>'
+      + '<div style="color:#64748B;font-size:12px;margin-bottom:8px;">'
+      +   'Tick each dose the record shows. A date is optional — leave it blank if the '
+      +   'card is unclear, the dose still counts as recorded.</div>'
+      + '<div class="fr-doses" style="border:1px solid #E2E8F0;border-radius:10px;max-height:260px;'
+      +   'overflow:auto;" data-kt-scroll="1"></div>'
+      + '<div class="fr-donenote" style="color:#64748B;font-size:12px;margin:6px 0 0;"></div>'
+
+      + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin:16px 0 6px;">'
+      + 'Notes</label>'
+      + '<textarea class="fr-notes" rows="3" maxlength="2000" '
+      +   'placeholder="Anything the record does not say — a faded line, a dose the clinic is confirming…" '
+      +   'style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #CBD5E1;'
+      +   'border-radius:9px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>'
+      + '<div class="fr-err" style="color:#B91C1C;font-size:12.5px;margin-top:10px;"></div>';
+
+    var listEl = form.querySelector('.fr-doses');
+    var pickEl = form.querySelector('.fr-child');
+    var noteEl = form.querySelector('.fr-donenote');
+
+    function currentChildId() {
+      return child ? Number(child.id) : Number(pickEl && pickEl.value) || 0;
+    }
+
+    function paintDoses(items) {
+      items = items || [];
+      listEl.innerHTML = '';
+      noteEl.textContent = '';
+      if (!items.length) {
+        listEl.innerHTML = '<div style="padding:14px;color:#64748B;font-size:13px;">'
+          + 'No immunisation schedule has been set up for this agency, so there is nothing '
+          + 'to tick. The record can still be filed.</div>';
+        return;
+      }
+      var done = 0;
+      items.forEach(function (i, idx) {
+        var already = (i.status === 'done' || i.status === 'exempt');
+        if (already) { done++; }
+        var row = document.createElement('label');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 11px;'
+          + 'border-top:' + (idx ? '1px solid #F1F5F9' : 'none') + ';font-size:13px;'
+          + (already ? 'opacity:0.55;' : 'cursor:pointer;');
+        row.innerHTML =
+          '<input type="checkbox" class="fr-tick"' + (already ? ' checked disabled' : '') + ' '
+          +   'data-vaccine="' + esc(i.vaccine) + '" data-dose="' + esc(i.dose_label || '') + '" '
+          +   'style="width:17px;height:17px;flex:none;">'
+          + '<span style="flex:1;min-width:0;">'
+          +   '<span style="font-weight:600;color:#0F172A;">' + esc(i.vaccine) + '</span> '
+          +   '<span style="color:#64748B;">' + esc(i.dose_label || '') + '</span>'
+          +   (already ? '<span style="color:#166534;font-size:12px;"> · already on file</span>' : '')
+          + '</span>'
+          + '<input type="date" class="fr-date" disabled '
+          +   'style="flex:none;width:142px;padding:4px 7px;border:1px solid #CBD5E1;'
+          +   'border-radius:7px;font-size:12.5px;">';
+        var tick = row.querySelector('.fr-tick');
+        var date = row.querySelector('.fr-date');
+        // The date box only means something once the dose is ticked; leaving it live
+        // invites a date against a dose nobody claimed.
+        if (!already) {
+          tick.addEventListener('change', function () {
+            date.disabled = !tick.checked;
+            if (!tick.checked) { date.value = ''; }
+          });
+        }
+        listEl.appendChild(row);
+      });
+      if (done) {
+        noteEl.textContent = done + ' dose' + (done === 1 ? ' is' : 's are')
+          + ' already on file and cannot be ticked again here.';
+      }
+    }
+
+    function loadDoses() {
+      var id = currentChildId();
+      if (!id) { return; }
+      listEl.innerHTML = '<div style="padding:14px;color:#94A3B8;font-size:13px;">'
+        + 'Working out what is due…</div>';
+      KT.Api.get('/immunization/child/' + id + '/status').then(function (d) {
+        paintDoses((d && d.items) || []);
+      }).catch(function (e) {
+        /* The schedule failing must never block the filing — the document is the part
+           that cannot wait, and the doses can be recorded afterwards. */
+        listEl.innerHTML = '<div style="padding:14px;color:#9A3412;font-size:13px;">'
+          + 'The dose list could not be loaded' + (e && e.message ? ' (' + esc(e.message) + ')' : '')
+          + '. The record can still be filed.</div>';
+        noteEl.textContent = '';
+      });
+    }
+
+    if (pickEl) { pickEl.addEventListener('change', loadDoses); }
+    if (opts.status && opts.status.items) { paintDoses(opts.status.items); } else { loadDoses(); }
+
+    M.open({
+      title: 'File an immunization record' + (child ? ' — ' + childName(child) : ''),
+      body: form,
+      large: true,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'File record',
+          primary: true,
+          busyLabel: 'Filing…',
+          handler: function () {
+            var err = form.querySelector('.fr-err');
+            err.textContent = '';
+            var id = currentChildId();
+            if (!id) { err.textContent = 'Choose the child this record belongs to.'; return false; }
+            var f = form.querySelector('.fr-file').files[0];
+            if (!f) { err.textContent = 'Choose the record to file.'; return false; }
+            if (f.size > 10 * 1024 * 1024) {
+              err.textContent = 'That file is larger than 10 MB.'; return false;
+            }
+
+            var doses = [];
+            var ticks = form.querySelectorAll('.fr-tick');
+            for (var k = 0; k < ticks.length; k++) {
+              var t = ticks[k];
+              if (t.disabled || !t.checked) { continue; }
+              doses.push({
+                vaccine: t.getAttribute('data-vaccine'),
+                dose_label: t.getAttribute('data-dose'),
+                administered_on: (t.parentNode.querySelector('.fr-date') || {}).value || null,
+              });
+            }
+
+            var fd = new FormData();
+            fd.append('file', f);
+            fd.append('title', 'Immunization record');
+            fd.append('notes', form.querySelector('.fr-notes').value || '');
+            if (doses.length) { fd.append('doses', JSON.stringify(doses)); }
+
+            return KT.Api.postForm('/' + scope + '/children/' + id + '/immunization-records', fd)
+              .then(function (res) {
+                // The caller re-reads rather than patching its own DOM: the server
+                // decides what was actually recorded (a dose already on file is skipped).
+                try { if (opts.onFiled) { opts.onFiled(res, id); } } catch (e) {}
+                try {
+                  if (window.Dom && Dom.toast) {
+                    Dom.toast((res && res.message) || 'Record filed.', 'success');
+                  }
+                } catch (e) {}
+              }).catch(function (e) {
+                err.textContent = (e && e.message) || 'Could not file the record.';
+                return false;
+              });
+          },
+        },
+      ],
+    });
+    return true;
+  };
+
   KT.immunPanel = function (host, child, opts) {
     opts = opts || {};
     var scope = opts.scope === 'director' ? 'director' : 'parent';
@@ -228,155 +437,19 @@
         + '</tbody></table></div>';
     }
 
-    /* ───────── filing a record, and saying what is on it ─────────
-
-       FILING THE CARD AND READING IT WERE TWO JOBS ON TWO SCREENS, and that gap is
-       exactly where records sat for weeks while the child still showed overdue: somebody
-       uploaded a PDF, the compliance list did not move, and nobody could tell whether it
-       had been read or merely received.
-
-       So for staff it is one dialog: the document, the doses it accounts for, and a note
-       for whatever the card does not say. The server writes all of it in one request, so
-       a filed record can never exist without the decision that went with it.
-
-       Parents keep the plain uploader. Deciding that a smudged line means "DTaP-IPV-Hib,
-       2nd dose" is a clinical judgement and it is the centre's to make — the server
-       enforces that too, this is only the half you can see. (Anthony, 2026-09-15) */
+    /* The child's own tab already knows which child it is and already holds the dose
+       list it is showing, so it hands both over rather than making the dialog fetch
+       them again — a second read could disagree with what is on screen, and ticking a
+       dose that is not the one you are looking at is the worst failure a health record
+       has. Everything else lives in KT.immunFileRecord, because the Immunizations
+       section opens the same dialog. */
     function fileRecordModal() {
-      var M = window.KT && KT.Shell && KT.Shell.Modal;
-      if (!M) { return null; }
-
-      var items = (lastStatus && lastStatus.items) || [];
-      var form = document.createElement('div');
-
-      var doneCount = items.filter(function (i) {
-        return i.status === 'done' || i.status === 'exempt';
-      }).length;
-
-      form.innerHTML =
-        '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
-        + 'The record <span style="color:#DC2626;">*</span></label>'
-        + '<input type="file" class="fr-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" '
-        +   'style="display:block;width:100%;font-size:13px;margin-bottom:4px;">'
-        + '<div style="color:#64748B;font-size:12px;margin-bottom:16px;">'
-        +   'PDF or a photo of the card, up to 10 MB.</div>'
-
-        + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
-        + 'What does this record cover?</label>'
-        + '<div style="color:#64748B;font-size:12px;margin-bottom:8px;">'
-        +   'Tick each dose the record shows. A date is optional — leave it blank if the '
-        +   'card is unclear, the dose still counts as recorded.</div>'
-        + '<div class="fr-doses" style="border:1px solid #E2E8F0;border-radius:10px;max-height:260px;'
-        +   'overflow:auto;" data-kt-scroll="1"></div>'
-        + (doneCount
-            ? '<div style="color:#64748B;font-size:12px;margin:6px 0 0;">'
-              + doneCount + ' dose' + (doneCount === 1 ? ' is' : 's are') + ' already on file and '
-              + 'cannot be ticked again here.</div>'
-            : '')
-
-        + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin:16px 0 6px;">'
-        + 'Notes</label>'
-        + '<textarea class="fr-notes" rows="3" maxlength="2000" '
-        +   'placeholder="Anything the record does not say — a faded line, a dose the clinic is confirming…" '
-        +   'style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #CBD5E1;'
-        +   'border-radius:9px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>'
-        + '<div class="fr-err" style="color:#B91C1C;font-size:12.5px;margin-top:10px;"></div>';
-
-      var listEl = form.querySelector('.fr-doses');
-      if (!items.length) {
-        listEl.innerHTML = '<div style="padding:14px;color:#64748B;font-size:13px;">'
-          + 'No immunisation schedule has been set up for this agency, so there is nothing '
-          + 'to tick. The record can still be filed.</div>';
-      } else {
-        items.forEach(function (i, idx) {
-          var already = (i.status === 'done' || i.status === 'exempt');
-          var row = document.createElement('label');
-          row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 11px;'
-            + 'border-top:' + (idx ? '1px solid #F1F5F9' : 'none') + ';font-size:13px;'
-            + (already ? 'opacity:0.55;' : 'cursor:pointer;');
-          row.innerHTML =
-            '<input type="checkbox" class="fr-tick"' + (already ? ' checked disabled' : '') + ' '
-            +   'data-vaccine="' + esc(i.vaccine) + '" data-dose="' + esc(i.dose_label || '') + '" '
-            +   'style="width:17px;height:17px;flex:none;">'
-            + '<span style="flex:1;min-width:0;">'
-            +   '<span style="font-weight:600;color:#0F172A;">' + esc(i.vaccine) + '</span> '
-            +   '<span style="color:#64748B;">' + esc(i.dose_label || '') + '</span>'
-            +   (already ? '<span style="color:#166534;font-size:12px;"> · already on file</span>' : '')
-            + '</span>'
-            + '<input type="date" class="fr-date"' + (already ? ' disabled' : ' disabled') + ' '
-            +   'style="flex:none;width:142px;padding:4px 7px;border:1px solid #CBD5E1;'
-            +   'border-radius:7px;font-size:12.5px;">';
-          var tick = row.querySelector('.fr-tick');
-          var date = row.querySelector('.fr-date');
-          // The date box only means something once the dose is ticked; leaving it live
-          // invites a date against a dose nobody claimed.
-          if (!already) {
-            tick.addEventListener('change', function () {
-              date.disabled = !tick.checked;
-              if (!tick.checked) { date.value = ''; }
-            });
-          }
-          listEl.appendChild(row);
-        });
-      }
-
-      M.open({
-        title: 'File an immunization record — ' + childName(child),
-        body: form,
-        large: true,
-        actions: [
-          { label: 'Cancel' },
-          {
-            label: 'File record',
-            primary: true,
-            busyLabel: 'Filing…',
-            handler: function () {
-              var err = form.querySelector('.fr-err');
-              err.textContent = '';
-              var f = form.querySelector('.fr-file').files[0];
-              if (!f) { err.textContent = 'Choose the record to file.'; return false; }
-              if (f.size > 10 * 1024 * 1024) {
-                err.textContent = 'That file is larger than 10 MB.'; return false;
-              }
-
-              var doses = [];
-              var ticks = form.querySelectorAll('.fr-tick');
-              for (var k = 0; k < ticks.length; k++) {
-                var t = ticks[k];
-                if (t.disabled || !t.checked) { continue; }
-                doses.push({
-                  vaccine: t.getAttribute('data-vaccine'),
-                  dose_label: t.getAttribute('data-dose'),
-                  administered_on: (t.parentNode.querySelector('.fr-date') || {}).value || null,
-                });
-              }
-
-              var fd = new FormData();
-              fd.append('file', f);
-              fd.append('title', 'Immunization record');
-              fd.append('notes', form.querySelector('.fr-notes').value || '');
-              if (doses.length) { fd.append('doses', JSON.stringify(doses)); }
-
-              return KT.Api.postForm(base + '/immunization-records', fd).then(function (res) {
-                // Both halves move: the record appears, and the doses read off it are
-                // no longer outstanding. Re-read rather than patch the DOM — the server
-                // decides what was actually recorded (a dose already on file is skipped).
-                loadDue();
-                loadRecords();
-                try {
-                  if (window.Dom && Dom.toast) {
-                    Dom.toast((res && res.message) || 'Record filed.', 'success');
-                  }
-                } catch (e) {}
-              }).catch(function (e) {
-                err.textContent = (e && e.message) || 'Could not file the record.';
-                return false;
-              });
-            },
-          },
-        ],
+      return KT.immunFileRecord({
+        scope: scope,
+        child: child,
+        status: lastStatus,
+        onFiled: function () { loadDue(); loadRecords(); },
       });
-      return true;
     }
 
     /* ───────── what has been sent in ───────── */
