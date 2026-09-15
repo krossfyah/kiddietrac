@@ -63,6 +63,8 @@
     // the rows currently loaded) beside it gives the user two search fields that
     // disagree with each other.
     if (table.hasAttribute('data-kt-no-filter')) return;
+    // A screen that owns its own SEARCH but still wants sorting uses
+    // data-kt-no-search instead — handled below, once the controls are built.
     if (table.dataset.ktFiltered) return;
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
@@ -97,7 +99,29 @@
     input.style.cssText = 'width:100%;padding:9px 14px;border:1px solid #E2E8F0;border-radius:8px;font-size:13.5px;background:#fff;transition:border-color .15s;';
     input.addEventListener('focus', () => input.style.borderColor = '#1F6080');
     input.addEventListener('blur', () => input.style.borderColor = '#E2E8F0');
-    left.appendChild(input);
+
+    /* data-kt-no-search — SORTING WITHOUT A SECOND SEARCH BOX.
+
+       data-kt-no-filter already exists for screens that own their search, and its own
+       comment says why: a client-side box beside a server-side one "gives the user two
+       search fields that disagree with each other". But it returns early, so it takes
+       the column sorting and the row counter with it — all or nothing.
+
+       The Children screen is the case that needed the middle option. It searches
+       SERVER-side (GET /director/enrollments?search=…, every child in the agency) and
+       has centre and status filters of its own, but no sorting — so opting out entirely
+       would have traded one duplicate box for a lost feature. Reported as "double the
+       filter and sort fields" on the phone, where the two boxes stack one above the
+       other and the duplication is unmissable.
+
+       The input is still CREATED, because the filter/sort pipeline below reads
+       input.value and listens to it. It is simply never shown, so it stays empty and
+       filters nothing, and sorting, pagination and the counter all work untouched. */
+    if (table.hasAttribute('data-kt-no-search')) {
+      left.style.flex = '0 0 auto';
+    } else {
+      left.appendChild(input);
+    }
 
     const right = document.createElement('div');
     right.style.cssText = 'display:flex;align-items:center;gap:14px;color:#64748B;font-size:13px;font-weight:600;flex-shrink:0;white-space:nowrap;margin-left:auto;';

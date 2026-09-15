@@ -164,6 +164,11 @@
       var view = localStorage.getItem('kt_view_children') || localStorage.getItem('kt_view_pref') || 'cards';
       if (view === 'table') {
         resultsEl.appendChild(renderChildrenTable(children, centreSelect.value));
+        /* The table is built AFTER a fetch, and the global sweep has long since run by
+           then — so on a fresh load it arrived with no sorting and no row counter, and
+           only picked them up if you happened to navigate away and back. Asking for the
+           table tools is the documented remedy for exactly this. */
+        try { if (window.KT && KT.enhanceTables) { KT.enhanceTables(); } } catch (e) {}
         return;
       }
 
@@ -248,7 +253,12 @@
 
   // v22p26: children table view.
   function renderChildrenTable(children, centreIdHint) {
-    var table = Dom.el('table', { style: 'width:100%;background:white;border-radius:12px;overflow:hidden;border-collapse:collapse;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
+    /* data-kt-no-search: this screen already has a search box, and it is the better
+       of the two — it queries the server for every child in the agency, while
+       kt-table-filter's can only see the rows currently loaded. Two boxes that look
+       identical and disagree is the bug; the attribute keeps the column sorting and
+       the row counter, which this screen does not provide itself. */
+    var table = Dom.el('table', { 'data-kt-no-search': '1', style: 'width:100%;background:white;border-radius:12px;overflow:hidden;border-collapse:collapse;box-shadow:0 1px 3px rgba(0,0,0,.04);' });
     var thead = Dom.el('thead', { style: 'background:#F9FAFB;' });
     var headRow = Dom.el('tr');
     ['Child', 'Age', 'Room', 'Family', 'Status', 'Last seen', 'Fee', ''].forEach(function (h) {
