@@ -27,6 +27,56 @@ use Illuminate\Support\Facades\Hash;
  */
 final class MfaController extends Controller
 {
+    /**
+     * Every enrolment step, recorded.
+     *
+     * This controller wrote nothing at all. Asked why two-factor was not working for
+     * somebody, the honest answer was that the log could not say whether she had tried
+     * — and she had not, because a gate deadlock meant the request was never made. An
+     * absent row and a failed row looked identical. See the same lesson in
+     * AuthController's login/reset reasons.
+     */
+    private function trail(Request $request, string $action, array $extra = []): void
+    {
+        try {
+            $u = $request->user();
+            \App\Support\Audit::write([
+                'user_id' => $u->id ?? null,
+                'agency_id' => $u ? \App\Support\AuditScope::resolve((int) $u->id, $request) : null,
+                'action' => $action,
+                'entity_type' => 'user',
+                'entity_id' => $u->id ?? null,
+                'payload' => json_encode($extra + ['summary' => $this->summarise($action, $extra)]),
+                'ip_address' => $request->ip(),
+                'user_agent' => substr((string) $request->userAgent(), 0, 500),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Auditing must never be the reason enrolment fails.
+        }
+    }
+
+    /** A sentence an auditor can read without knowing the action names. */
+    private function summarise(string $action, array $extra): string
+    {
+        switch ($action) {
+            case 'mfa.setup_started':
+                return 'Started two-factor setup (a new secret and recovery codes were issued)';
+            case 'mfa.enabled':
+                return 'Two-factor enabled';
+            case 'mfa.confirm_failed':
+                return 'Two-factor code did not match during setup';
+            case 'mfa.confirm_no_setup':
+                return 'Tried to confirm two-factor with no setup in progress';
+            case 'mfa.disabled':
+                return 'Two-factor disabled (' . ($extra['method'] ?? 'code') . ')';
+            case 'mfa.disable_failed':
+                return 'Two-factor could not be disabled — code did not match';
+            default:
+                return $action;
+        }
+    }
+
     public function status(Request $request): JsonResponse
     {
         $u = $request->user();
@@ -52,6 +102,8 @@ final class MfaController extends Controller
             'updated_at' => now(),
         ]);
 
+        $this->trail($request, 'mfa.setup_started', ['recovery_codes_issued' => count($codes)]);
+
         return response()->json([
             'secret' => $secret,
             'otpauth_uri' => Totp::otpauthUri($secret, $u->email),
@@ -64,16 +116,22 @@ final class MfaController extends Controller
         $data = $request->validate(['code' => ['required', 'digits:6']]);
         $u = $request->user();
         if (! $u->two_factor_secret) {
+            $this->trail($request, 'mfa.confirm_no_setup');
+
             return response()->json(['message' => 'No setup in progress'], 422);
         }
         $secret = decrypt($u->two_factor_secret);
         if (! Totp::verify($secret, $data['code'])) {
+            $this->trail($request, 'mfa.confirm_failed');
+
             return response()->json(['message' => 'Code did not match — try again'], 422);
         }
         DB::table('users')->where('id', $u->id)->update([
             'two_factor_enabled' => true,
             'updated_at' => now(),
         ]);
+        $this->trail($request, 'mfa.enabled');
+
         return response()->json(['message' => 'MFA enabled']);
     }
 
@@ -106,6 +164,8 @@ final class MfaController extends Controller
         }
 
         if (! $okWithTotp && ! $okWithRecovery) {
+            $this->trail($request, 'mfa.disable_failed');
+
             return response()->json(['message' => 'Code did not match'], 422);
         }
 
@@ -115,6 +175,8 @@ final class MfaController extends Controller
             'two_factor_enabled' => false,
             'updated_at' => now(),
         ]);
+        $this->trail($request, 'mfa.disabled', ['method' => $okWithTotp ? 'authenticator code' : 'recovery code']);
+
         return response()->json(['message' => 'MFA disabled']);
     }
 }

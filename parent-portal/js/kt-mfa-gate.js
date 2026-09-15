@@ -24,6 +24,32 @@
     return GATED.some(function (x) { return r.indexOf(x) !== -1; });
   }
 
+  /* ONBOARDING GOES FIRST, OR NEITHER GATE CAN BE SATISFIED (2026-09-15).
+
+     Two gates were forcing the route at once. This one sends an admin or director to
+     #mfa; the onboarding gate sends anyone whose onboarded_at is null to #onboarding.
+     For a NEW admin both are true, so pressing "Set up two-factor now" set the hash to
+     mfa, onboarding bounced it straight back, and the dialog reappeared unchanged —
+     from the outside, a button that does nothing. Both overlays were on screen at the
+     same time, this one on top at z-index 2147482000.
+
+     Lloydene King spent an afternoon on it (six sign-ins in twenty minutes, alternating
+     between her two accounts) and nothing reached the audit log, because no request was
+     ever made — she never got past the dialog.
+
+     Standing down while onboarding is incomplete makes the two gates sequential rather
+     than competing: finish onboarding, and the very next navigation hands over to this
+     gate. Nothing is relaxed — an admin still cannot use the portal without two-factor,
+     they simply reach it in an order that is possible.
+
+     Read from the SERVER's view of the user where we have it. The cached blob is the
+     thing that goes stale (see the notes on stale cached roles), and getting this wrong
+     in the permissive direction only delays the gate by one screen. */
+  function notOnboardedYet(u) {
+    if (!u) { return false; }
+    return !u.onboarded_at;
+  }
+
   var engaged = false, overlay = null, poll = null, done = false;
 
   function onMfaScreen() { return String(w.location.hash || '').replace(/^#/, '') === 'mfa'; }
@@ -56,6 +82,11 @@
   // Show the block on every screen except the MFA setup screen.
   function sync() {
     if (done) return;
+    /* Let the onboarding wizard finish first — see notOnboardedYet(). */
+    if (notOnboardedYet(user())) {
+      if (overlay) { overlay.style.display = 'none'; }
+      return;
+    }
     if (onMfaScreen()) { if (overlay) overlay.style.display = 'none'; return; }
     if (!overlay) { overlay = buildOverlay(); document.body.appendChild(overlay); }
     overlay.style.display = 'flex';
