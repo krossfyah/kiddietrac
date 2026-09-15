@@ -174,6 +174,18 @@ class AppServiceProvider extends ServiceProvider
                         if (! $logAgency && auth()->id()) $logAgency = \App\Support\AuditScope::resolve((int) auth()->id());
                     } catch (\Throwable $e) {}
                 }
+                /* The token the suppression listener minted when it put the pixel in.
+                   Without it the pixel reports an open against nothing and the row can
+                   never be marked opened — the two halves have to agree, and the message
+                   is the only thing that travels between the two listeners. */
+                $trackToken = null;
+                try {
+                    $th = $msg->getHeaders();
+                    if ($th && $th->has('X-KT-Track')) {
+                        $trackToken = trim((string) $th->get('X-KT-Track')->getBodyAsString()) ?: null;
+                    }
+                } catch (\Throwable $e) {}
+
                 DB::table('email_logs')->insert([
                     'to_email'   => $addr($msg->getTo()) ?: null,
                     'to_name'    => $name($msg->getTo()) ?: null,
@@ -188,6 +200,8 @@ class AppServiceProvider extends ServiceProvider
                     'mailer'     => config('mail.default'),
                     'status'     => 'sent',
                     'agency_id'  => $logAgency,
+                    'tracking_token' => Schema::hasColumn('email_logs', 'tracking_token') ? $trackToken : null,
+                    'opens'      => Schema::hasColumn('email_logs', 'opens') ? 0 : null,
                     'body_html'  => (function () use ($msg) { try { $h = $msg->getHtmlBody(); if (! is_string($h)) $h = $msg->getTextBody(); return (is_string($h) && $h !== '') ? mb_substr($h, 0, 500000) : null; } catch (\Throwable $e) { return null; } })(),
                     'created_at' => now()->format(\App\Support\Audit::TS),
                 ]);

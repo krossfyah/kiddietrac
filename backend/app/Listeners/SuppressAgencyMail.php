@@ -39,7 +39,94 @@ class SuppressAgencyMail
     private const CACHE_KEY = 'kt.mail.suppressed_recipients';
     private const CACHE_TTL = 120;   // seconds — long enough to matter, short enough to react
 
+    /* THE OPEN RATE WAS MEASURING TWO EMAILS.
+
+       Of 539 emails actually delivered in a week, exactly 2 carried a tracking pixel —
+       the platform invite and its resend, the only two senders that embed one. Every
+       other path (daily summaries, absence notices, invoices, reminders, every notice
+       built through EmailTemplate::wrap) went out untracked, so the Platform overview's
+       Open-rate card was the open rate of a 2-message sample and read 0%. Anthony,
+       2026-09-15: "emails opened etc in the platform overview the card doesnt update at
+       all." It was updating; it had almost nothing to count.
+
+       The mistake was putting the pixel at the SEND SITES. There are dozens and each new
+       one starts untracked. There is exactly one moment every email passes through on its
+       way out, and this listener already owns it.
+
+       It has to be MessageSending, not MessageSent — by MessageSent the body has already
+       gone down the wire. And it has to be INSIDE this listener rather than a second
+       MessageSending listener, because this one returns false to cancel and that stops
+       the others running at all (see the note on gates belonging inside this class).
+
+       So: decide() is the original gate, unchanged, with every one of its allow-paths
+       intact. handle() is a wrapper that runs it and, only on the ones that survive,
+       attaches the pixel. A suppressed message gets nothing — it is not going anywhere. */
     public function handle(MessageSending $event): bool
+    {
+        $send = $this->decide($event);
+        if ($send) {
+            $this->attachOpenPixel($event);
+        }
+
+        return $send;
+    }
+
+    /**
+     * Give this message a tracking token and a 1x1 pixel that reports it.
+     *
+     * Best-effort throughout: an email that cannot be tracked must still be sent.
+     * The token travels on an X-KT-Track header so the MessageSent logger in
+     * AppServiceProvider can write it onto the row it is about to insert — the row and
+     * the pixel have to agree, and only the message itself can carry that between two
+     * listeners (a static would leak across messages in a queue worker, which is a bug
+     * this codebase has already had once).
+     */
+    private function attachOpenPixel(MessageSending $event): void
+    {
+        try {
+            $msg = $event->message;
+            $hdrs = $msg->getHeaders();
+
+            /* The two senders that build their own pixel also insert their own
+               email_logs row and mark it X-KT-Logged. Adding a second pixel would give
+               one email two tokens and two rows' worth of opens. */
+            if ($hdrs && $hdrs->has('X-KT-Logged')) {
+                return;
+            }
+            if ($hdrs && $hdrs->has('X-KT-Track')) {
+                return;   // already done (a message re-entering the gate)
+            }
+
+            $html = $msg->getHtmlBody();
+            if (! is_string($html) || trim($html) === '') {
+                return;   // text-only mail has nowhere to put an image
+            }
+
+            $token = bin2hex(random_bytes(16));
+            $apiBase = preg_replace('#/api/v1/?$#', '', rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/'));
+            /* PATH-ONLY, no query string. A mail client that does not decode &amp; turns
+               a query-string token into a 403 — the same trap that broke every image in
+               already-sent mail once before. */
+            $pixel = '<img src="'.$apiBase.'/api/v1/e/o/'.$token.'" width="1" height="1" alt="" '
+                .'style="display:none;border:0;max-width:1px;max-height:1px;">';
+
+            // Just inside </body> where clients expect it; appended if there is no body tag.
+            if (stripos($html, '</body>') !== false) {
+                $html = preg_replace('#</body>#i', $pixel.'</body>', $html, 1);
+            } else {
+                $html .= $pixel;
+            }
+
+            $msg->html($html);
+            if ($hdrs) {
+                $hdrs->addTextHeader('X-KT-Track', $token);
+            }
+        } catch (\Throwable $e) {
+            // Tracking is never worth a failed send.
+        }
+    }
+
+    private function decide(MessageSending $event): bool
     {
 /* X-KT-Bypass-Suppression SKIPS THE SWITCHES, NEVER THE PERSON.
 
