@@ -141,10 +141,34 @@
       + 'What does this record cover?</label>'
       + '<div style="color:#64748B;font-size:12px;margin-bottom:8px;">'
       +   'Tick each dose the record shows. A date is optional — leave it blank if the '
-      +   'card is unclear, the dose still counts as recorded.</div>'
+      +   'card is unclear, the dose still counts as recorded. Anything the card shows '
+      +   'that is not on the list can be added underneath.</div>'
       + '<div class="fr-doses" style="border:1px solid #E2E8F0;border-radius:10px;max-height:260px;'
       +   'overflow:auto;" data-kt-scroll="1"></div>'
       + '<div class="fr-donenote" style="color:#64748B;font-size:12px;margin:6px 0 0;"></div>'
+
+      /* A CARD IS NOT LIMITED TO THE AGENCY'S SCHEDULE.
+
+         The list above is immunization_schedule — what this agency measures children
+         against. A real card routinely carries more: an influenza shot, a meningococcal
+         or COVID dose, a travel vaccine, a catch-up dose beyond the schedule's last row.
+         With only the ticklist, those were unrecordable here, so the person filing the
+         card had to file it, leave, and go type them in somewhere else — which is the
+         same split this wizard exists to close.
+
+         The server already accepted any {vaccine, dose_label, administered_on}; it never
+         checked the row against the schedule. This is only the half you can see.
+
+         Not on the schedule means not part of the due/overdue computation, which is
+         correct — an agency that does not require influenza should not start showing
+         children as overdue for it. The dose is recorded, appears in the child's history
+         and on the record it was read from. (Anthony, 2026-09-15) */
+      + '<div class="fr-extras"></div>'
+      + '<button type="button" class="fr-add" data-kt-iconized="1" '
+      +   'style="margin-top:8px;background:#fff;color:#1F6080;border:1px dashed #94A3B8;'
+      +   'border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;">'
+      +   '+ Add a dose that is not listed</button>'
+      + '<datalist id="fr-vaccines"></datalist>'
 
       + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin:16px 0 6px;">'
       + 'Notes</label>'
@@ -157,6 +181,50 @@
     var listEl = form.querySelector('.fr-doses');
     var pickEl = form.querySelector('.fr-child');
     var noteEl = form.querySelector('.fr-donenote');
+    var extraEl = form.querySelector('.fr-extras');
+    var addEl = form.querySelector('.fr-add');
+    var listId = 'fr-vaccines-' + Math.random().toString(36).slice(2, 9);
+    form.querySelector('#fr-vaccines').id = listId;   // unique: two dialogs can coexist
+
+    /* Suggest the vaccines this agency already names, so the common case is one click and
+       the spelling matches the schedule's — a free-text "DTaP IPV Hib" would otherwise
+       sit alongside "DTaP-IPV-Hib" as a different vaccine forever. Free text is still
+       allowed; a datalist suggests, it does not restrict. */
+    function fillVaccineList(items) {
+      var seen = {}, out = [];
+      (items || []).forEach(function (i) {
+        var v = (i.vaccine || '').trim();
+        if (v && !seen[v.toLowerCase()]) { seen[v.toLowerCase()] = 1; out.push(v); }
+      });
+      var dl = form.querySelector('#' + listId);
+      if (dl) {
+        dl.innerHTML = out.map(function (v) { return '<option value="' + esc(v) + '"></option>'; }).join('');
+      }
+    }
+
+    function addExtraRow() {
+      var row = document.createElement('div');
+      row.className = 'fr-extra';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;';
+      row.innerHTML =
+        '<input type="text" class="fr-x-vac" list="' + listId + '" placeholder="Vaccine" '
+        +   'style="flex:1 1 170px;min-width:0;padding:7px 10px;border:1px solid #CBD5E1;'
+        +   'border-radius:8px;font-size:13px;">'
+        + '<input type="text" class="fr-x-dose" placeholder="Dose (e.g. 1st dose)" maxlength="40" '
+        +   'style="flex:1 1 140px;min-width:0;padding:7px 10px;border:1px solid #CBD5E1;'
+        +   'border-radius:8px;font-size:13px;">'
+        + '<input type="date" class="fr-x-date" '
+        +   'style="flex:none;width:142px;padding:6px 8px;border:1px solid #CBD5E1;'
+        +   'border-radius:8px;font-size:12.5px;">'
+        + '<button type="button" class="fr-x-del" data-kt-iconized="1" aria-label="Remove this dose" '
+        +   'title="Remove this dose" style="flex:none;background:#fff;border:1px solid #E2E8F0;'
+        +   'border-radius:8px;width:32px;height:32px;cursor:pointer;color:#B91C1C;font-size:15px;">✕</button>';
+      row.querySelector('.fr-x-del').addEventListener('click', function () { row.remove(); });
+      extraEl.appendChild(row);
+      try { row.querySelector('.fr-x-vac').focus(); } catch (e) {}
+    }
+
+    addEl.addEventListener('click', addExtraRow);
 
     function currentChildId() {
       return child ? Number(child.id) : Number(pickEl && pickEl.value) || 0;
@@ -166,6 +234,7 @@
       items = items || [];
       listEl.innerHTML = '';
       noteEl.textContent = '';
+      fillVaccineList(items);
       if (!items.length) {
         listEl.innerHTML = '<div style="padding:14px;color:#64748B;font-size:13px;">'
           + 'No immunisation schedule has been set up for this agency, so there is nothing '
@@ -261,6 +330,24 @@
                 dose_label: t.getAttribute('data-dose'),
                 administered_on: (t.parentNode.querySelector('.fr-date') || {}).value || null,
               });
+            }
+
+            /* The typed-in ones. A row with no vaccine is somebody who clicked Add and
+               changed their mind — dropped silently. A row with a date but no vaccine is
+               a half-filled row, and saying so beats recording nothing without a word. */
+            var extras = form.querySelectorAll('.fr-extra');
+            for (var x = 0; x < extras.length; x++) {
+              var vac = (extras[x].querySelector('.fr-x-vac').value || '').trim();
+              var dl = (extras[x].querySelector('.fr-x-dose').value || '').trim();
+              var dt = extras[x].querySelector('.fr-x-date').value || null;
+              if (!vac) {
+                if (dl || dt) {
+                  err.textContent = 'One of the added doses has no vaccine name.';
+                  return false;
+                }
+                continue;
+              }
+              doses.push({ vaccine: vac, dose_label: dl, administered_on: dt });
             }
 
             var fd = new FormData();
