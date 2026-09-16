@@ -476,6 +476,38 @@
     ];
   }
 
+  /* WHERE PEOPLE ACTUALLY LOOK FOR A VERSION NUMBER.
+
+     "Which build am I on?" and "what does this say about licensing?" are answered on the
+     About tab of My profile & security — which is correct, and which nobody found,
+     because for an admin that screen is fourth inside a collapsed Settings group at the
+     bottom of a long sidebar. Reported by Anthony, 2026-09-16, as the About section
+     being MISSING for superadmin, admin and director. It was not missing; it was
+     unreachable in practice, and for this particular panel those are the same thing.
+
+     So the build sits in the foot of the sidebar, under the account, where a desktop
+     user looks for it — answering the common question outright and opening the panel
+     for the rest. One muted line; it must not compete with the navigation above it. */
+  function installBuildFoot() {
+    if (document.getElementById('kt-foot-build')) { return; }
+    if (!(window.KT && KT.sidebarFoot)) { return; }
+    var v = window.KT_VERSION || '';
+    var b = document.createElement('button');
+    b.id = 'kt-foot-build';
+    b.type = 'button';
+    /* data-kt-iconized: the icon engine swaps a short button label for a glyph, and a
+       version number rendered as a picture helps nobody. */
+    b.setAttribute('data-kt-iconized', '1');
+    b.setAttribute('aria-label', 'About KiddieTrac, build and diagnostics');
+    b.style.cssText = 'appearance:none;background:none;border:0;padding:4px 2px;cursor:pointer;'
+      + 'font:inherit;font-size:11px;line-height:1.4;color:#94A3B8;text-align:left;'
+      + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    b.textContent = 'KiddieTrac' + (v ? ' · build ' + v : '') + ' · About';
+    b.title = 'Build, licensing and diagnostics';
+    b.addEventListener('click', function () { window.location.hash = '#settings/about'; });
+    if (!KT.sidebarFoot(40, b)) { return; }
+  }
+
   function buildNav(user) {
     const links = Dom.$('#navLinks');
     if (!links) return;
@@ -483,6 +515,7 @@
 
     const role = Roles.primaryRoleOf(user);
     const sections = navItemsForRole(role);
+    try { installBuildFoot(); } catch (e) {}
     const isSidebar = (role === 'agency_admin' || role === 'centre_director');
 
     if (isSidebar) {

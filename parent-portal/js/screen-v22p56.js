@@ -27,10 +27,76 @@
     }
     try {
       const tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
-      return new Date(str.replace(' ', 'T')).toLocaleDateString(undefined,
+      return sdInstant(str).toLocaleDateString(undefined,
         { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz });
     } catch (e) { return str.slice(0, 10); }
   };
+
+  /* A ZONE-LESS SERVER TIMESTAMP IS UTC.
+
+     "2026-07-29 03:40:08" carries no zone, and `new Date()` reads that as the BROWSER's
+     local time — so the same row rendered a different day on a different desk. Safia
+     Ali's NDA is 03:40 UTC, which is the 28th in Toronto and the 29th on a machine set
+     to Mountain time, and both were being printed as fact.
+
+     KT.Fmt.parse already settles this for the rest of the portal ("treat zone-less as
+     UTC"); this file had its own formatter and never used it. */
+  function sdInstant(str) {
+    var F = window.KT && KT.Fmt;
+    if (F && F.parse) { var d = F.parse(str); if (d) { return d; } }
+    var v = String(str).replace(' ', 'T');
+    if (!/(Z|[+-]\d{2}:?\d{2})$/.test(v)) { v += 'Z'; }
+    return new Date(v);
+  }
+
+  /* THE HOST IS ALREADY ON IT.
+
+     doc_file_url and signature_data used to be stored paths — "/storage/agreements/…" —
+     and this screen glued the API host on the front. They are not any more: every
+     protected /storage URL leaving the API is replaced by SignProtectedMedia with a
+     complete signed link, so the concatenation produced
+
+       https://api.kiddietrac.comhttps://api.kiddietrac.com/api/v1/media/f?…
+
+     which resolves to nothing. That is the broken viewer on every privacy_nda row.
+     Absolute stays absolute; a data: URI is already a document; only a genuine path
+     gets a host. (Anthony, 2026-09-16) */
+  function sdAbs(u) {
+    var v = String(u == null ? '' : u).trim();
+    if (!v) { return ''; }
+    if (/^https?:\/\//i.test(v) || v.indexOf('data:') === 0) { return v; }
+    return esignApiHost() + (v.charAt(0) === '/' ? v : '/' + v);
+  }
+
+  /* Is there a file behind this row, whatever shape the URL arrives in? This asked
+     `signature_data.indexOf('/storage') === 0`, which stopped being true the day the
+     signing middleware shipped — so handbook rows lost their Download button while the
+     file sat on disk the whole time. */
+  function sdHasFile(s) {
+    if (!s) { return false; }
+    if (s.doc_file_url) { return true; }
+    var sig = String(s.signature_data || '');
+    if (!sig || sig.indexOf('data:') === 0) { return false; }
+    return /^https?:\/\//i.test(sig) || sig.indexOf('/storage') === 0 || sig.indexOf('storage/') === 0;
+  }
+
+  /* "privacy_nda" is a database value, not a document name. It was printed raw in the
+     one column whose job is to say what the document IS. */
+  const SD_TYPES = {
+    privacy_nda: 'Privacy policy & NDA',
+    privacy_nda_declined: 'Privacy policy & NDA — declined',
+    handbook: 'Handbook acknowledgement',
+    parent_handbook: 'Parent handbook acknowledgement',
+    enrollment_contract: 'Enrolment contract',
+    photo_consent: 'Photo consent',
+    medical_authorization: 'Medical authorisation',
+    field_trip: 'Field trip permission',
+  };
+  function sdTypeLabel(t) {
+    var k = String(t || '').trim();
+    if (SD_TYPES[k]) { return SD_TYPES[k]; }
+    return k ? k.replace(/[_-]+/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }) : 'Document';
+  }
   const fmtMoney = (n) => '$' + (Number(n) || 0).toFixed(2);
 
   // ============================ Closures =================================
@@ -76,10 +142,12 @@
     if (!ts) { return ''; }
     try {
       var tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
-      var s = String(ts).replace(' ', 'T');
-      if (!/[Zz]|[+-]\d\d:?\d\d$/.test(s)) { s += 'Z'; }
-      return new Date(s).toLocaleString('en-CA',
-        { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
+      /* THE YEAR, because this now stamps signatures as well as closures. A closure is
+         always about now; a signature record goes back years, and "Jul 29, 11:40 p.m."
+         with no year is not an audit trail. */
+      return sdInstant(ts).toLocaleString('en-CA',
+        { year: 'numeric', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit', timeZone: tz });
     } catch (e) { return String(ts).slice(0, 16); }
   }
 
@@ -499,25 +567,58 @@
       </a>`).join('')}
       <div style="height:8px;"></div>` : '';
 
-    const signedHtml = rows.length ? rows.map((s, i) => `
-      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:12px 14px;margin-bottom:10px;">
-        <span style="width:40px;height:40px;flex-shrink:0;border-radius:11px;background:#ECFDF5;display:flex;align-items:center;justify-content:center;font-size:20px;">✅</span>
-        <span style="flex:1;min-width:0;">
-          <span style="display:block;font-weight:800;color:#0F172A;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.document_type)}</span>
-          <span style="display:block;font-size:12px;color:#64748B;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Signed ${fmtDate(s.signed_at)}${s.signer_name ? ' · ' + esc(s.signer_name) : ''}</span>
-        </span>
-        <span style="flex-shrink:0;display:inline-flex;gap:6px;">${_sdActions(s, i)}</span>
-      </div>`).join('') : '<div style="text-align:center;padding:34px 16px;color:#64748B;background:#fff;border:1px dashed #CBD5E1;border-radius:14px;">No signed documents yet.</div>';
+    /* A TABLE, not a stack of cards.
+
+       Every signed document carries the same four facts — what it is, who signed it,
+       when, and how to open it — and a card repeats the labels for each one while
+       aligning none of them. Once a family has more than a handful, "which of these did
+       my partner sign in March" means reading every card in full. In columns the eye
+       runs down one axis, and the global table tools come free with it: the search box
+       and the column sort both attach themselves to any #appMain table, so this gains
+       both without a line of code here.
+
+       data-kt-paginate asks the shared pager for 25 rows a page. NOT data-kt-list —
+       that primitive is for card lists and mangles a table.
+       (Anthony, 2026-09-09) */
+    const th = (t, extra) => `<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;${extra || ''}">${t}</th>`;
+    const td = (v, extra) => `<td style="padding:11px 14px;border-top:1px solid #F1F5F9;${extra || ''}">${v}</td>`;
+
+    const signedHtml = rows.length ? `
+      <div style="overflow-x:auto;background:#fff;border:1px solid #E7EDF3;border-radius:14px;">
+        <table data-kt-paginate="25" style="width:100%;border-collapse:collapse;font-size:13.5px;">
+          <thead><tr style="background:#F8FAFC;">
+            ${th('Document')}${th('Signed by')}${th('Signed (agency time)')}${th('', 'text-align:right;')}
+          </tr></thead>
+          <tbody>
+            ${rows.map((s, i) => `<tr>
+              ${td(`<span style="display:inline-flex;align-items:center;gap:9px;min-width:0;">
+                      <span style="width:26px;height:26px;flex:0 0 auto;border-radius:8px;background:#ECFDF5;display:inline-flex;align-items:center;justify-content:center;font-size:14px;">✅</span>
+                      <span style="font-weight:700;color:#0F172A;">${esc(sdTypeLabel(s.document_type))}</span>
+                    </span>`)}
+              ${td(s.signer_name ? esc(s.signer_name) : '<span style="color:#CBD5E1;">—</span>', 'color:#334155;')}
+              ${td(esc(fmtStamp(s.signed_at)), 'color:#475569;white-space:nowrap;')}
+              ${td(`<span style="display:inline-flex;gap:6px;justify-content:flex-end;">${_sdActions(s, i)}</span>`, 'text-align:right;white-space:nowrap;')}
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`
+      : '<div style="text-align:center;padding:34px 16px;color:#64748B;background:#fff;border:1px dashed #CBD5E1;border-radius:14px;">No signed documents yet.</div>';
 
     main.innerHTML = `<div style="padding:18px 14px;max-width:900px;margin:0 auto;">
       <div class="kt-page-hero"><h2>📄 Documents</h2><p>Documents awaiting your signature, and your completed, audit-trailed signatures.</p></div>
       ${pendingHtml}
       <div style="font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin:2px 2px 10px;">Signed &amp; on file</div>
-      <div data-kt-list="1">${signedHtml}</div>
+      <div>${signedHtml}</div>
     </div>`;
     main.querySelectorAll('.kt-sd-view').forEach(b => { b.onclick = (e) => { e.preventDefault(); viewSignedDoc(rows[+b.dataset.i]); }; });
     main.querySelectorAll('.kt-sd-dl').forEach(b => { b.onclick = (e) => { e.preventDefault(); downloadSignedDoc(rows[+b.dataset.i]); }; });
-    // Collapse the per-row View/Download icons into the standard ⋮ kebab.
+    /* Collapse the per-row View/Download icons into the standard ⋮ kebab — the same one
+       every other row in the portal uses, so a signed document behaves like a family row
+       or a conversation row rather than growing its own pair of buttons.
+
+       Which is why this table must NOT carry data-kt-no-kebab: that attribute opts a
+       table OUT of the sweep, and setting it here would have left two loose icons per
+       row. (Anthony, 2026-09-09) */
     if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
   }
 
@@ -526,7 +627,7 @@
   const _SD_EYE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
   const _SD_DL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
   function _sdActions(s, i) {
-    const hasFile = !!(s.doc_file_url || (s.signature_data && String(s.signature_data).indexOf('/storage') === 0));
+    const hasFile = sdHasFile(s);
     let h = '<button class="kt-sd-view kt-icon-tip" data-i="' + i + '" title="View document" data-kttip="View document" aria-label="View document" style="' + _SD_BTN_STYLE + '">' + _SD_EYE + '</button>';
     if (hasFile) h += '<button class="kt-sd-dl kt-icon-tip" data-i="' + i + '" title="Download" data-kttip="Download" aria-label="Download" style="margin-left:6px;' + _SD_BTN_STYLE + '">' + _SD_DL + '</button>';
     return h;
@@ -570,17 +671,19 @@
   function viewSignedDoc(s) {
     if (!s) return;
     if (s.doc_file_url) {
-      var _u = esignApiHost() + s.doc_file_url;
-      if (window.KT && KT.viewDocument) { KT.viewDocument(_u, { title: s.doc_type || 'Signed document', label: 'Signed document' }); return; }
+      var _u = sdAbs(s.doc_file_url);
+      if (window.KT && KT.viewDocument) { KT.viewDocument(_u, { title: sdTypeLabel(s.document_type), label: 'Signed document' }); return; }
       window.open(_u, '_blank', 'noopener'); return;
     }
-    const sig = s.signature_data || '';
-    const src = sig.indexOf('data:') === 0 ? sig : (sig.charAt(0) === '/' ? esignApiHost() + sig : '');
+    /* The signature image, by the same rule. `charAt(0) === '/'` was the whole test, so
+       an absolute signed URL fell to the empty string and the dialog told the reader
+       "no downloadable document is stored" about a file that is stored. */
+    const src = sdAbs(s.signature_data);
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
     m.innerHTML = '<div style="background:#fff;padding:24px;border-radius:14px;max-width:520px;width:100%;">'
-      + '<h3 style="margin:0 0 4px;color:#0F172A;">✍ ' + esc(s.document_type || 'Signed document') + '</h3>'
-      + '<p style="margin:0 0 14px;color:#64748B;font-size:13px;">Signed by ' + esc(s.signer_name || '') + ' · ' + fmtDate(s.signed_at) + '</p>'
+      + '<h3 style="margin:0 0 4px;color:#0F172A;">✍ ' + esc(sdTypeLabel(s.document_type)) + '</h3>'
+      + '<p style="margin:0 0 14px;color:#64748B;font-size:13px;">Signed by ' + esc(s.signer_name || '') + ' · ' + fmtStamp(s.signed_at) + '</p>'
       + (src ? '<div style="border:1px solid #E2E8F0;border-radius:8px;padding:10px;text-align:center;background:#fff;"><img src="' + src + '" alt="Signature" style="max-width:100%;max-height:200px;"></div>'
              : '<p style="color:#64748B;">No downloadable document is stored for this signature — only the audit record below.</p>')
       + '<div style="margin-top:12px;font-size:12px;color:#64748B;font-family:ui-monospace,monospace;word-break:break-all;">SHA-256: ' + esc(s.document_hash || '—') + '<br>IP: ' + esc(s.ip_address || '—') + '</div>'

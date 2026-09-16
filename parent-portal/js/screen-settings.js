@@ -298,6 +298,24 @@
     wrap.appendChild(paneAbout);
     _t0.style.color = '#1F6080'; _t0.style.borderBottomColor = '#1F6080';
 
+    /* ASK FOR A TAB BY NAME.
+
+       #settings/about opens straight on About. The panel has always been here — build
+       numbers, the licence line, the diagnostics toggle — but it is the last tab of a
+       screen that sits fourth inside a collapsed Settings group, near the bottom of a
+       seventy-item sidebar. For an admin or a director that is indistinguishable from
+       not existing, which is exactly how it was reported.
+
+       Anything else after the slash is ignored and Profile opens, as before. */
+    try {
+      var _want = (location.hash.split('/')[1] || '').split('?')[0].trim().toLowerCase();
+      if (_want) {
+        for (var _i = 0; _i < _stabs.length; _i++) {
+          if (_stabs[_i].key === _want) { _stabs[_i].b.click(); break; }
+        }
+      }
+    } catch (e) {}
+
     /* OPEN THE TAB THE LINK ASKED FOR — #settings?tab=payroll.
 
        Sending somebody to Settings and letting them hunt is the same failure as a
