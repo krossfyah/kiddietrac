@@ -1498,6 +1498,52 @@
     }, 50);
   }
 
+  /* WHICH ELEMENT ACTUALLY SCROLLS.
+
+     Everything below used to read and write window.scrollY. On a desktop browser the
+     document scrolls and that is correct. ON A PHONE IT IS NOT: kt-mobile-app.css gives
+     #appMain `overflow-y: auto` and makes it the one scroller, the document never moves,
+     and window.scrollY is 0 for the whole session.
+
+     So the refresh was faithfully saving 0, clearing #appMain — which resets ITS
+     scrollTop to 0 — and then restoring 0. The position was never preserved at all, on
+     the platform where it matters most. Every silent refresh dumped the reader at the
+     top of the screen they were reading, and the machinery written to prevent exactly
+     that reported success. Anthony, 2026-09-16: "when looking at reports and refresh it
+     moves away from the screen".
+
+     Asked of the COMPUTED overflow rather than of scrollHeight, because immediately
+     after Dom.clear() the element is empty and does not overflow — it is still the
+     scroller, and that is precisely the moment this gets consulted. */
+  function __ktScrollHost() {
+    try {
+      var m = document.getElementById('appMain');
+      if (m && /auto|scroll/.test(getComputedStyle(m).overflowY || '')) { return m; }
+    } catch (e) {}
+    return null;                       // null = the document scrolls
+  }
+
+  function __ktScrollPos() {
+    var h = __ktScrollHost();
+    if (h) { return h.scrollTop || 0; }
+    return window.scrollY || (document.scrollingElement || {}).scrollTop || 0;
+  }
+
+  function __ktScrollSet(y) {
+    var h = __ktScrollHost();
+    if (h) { try { h.scrollTop = y; } catch (e) {} return; }
+    try { window.scrollTo(0, y); } catch (e) {}
+  }
+
+  /* How far it COULD scroll — the ceiling the restore clamps to while the screen is
+     still filling in. */
+  function __ktScrollMax() {
+    var h = __ktScrollHost();
+    if (h) { return Math.max(0, h.scrollHeight - h.clientHeight); }
+    var doc = document.documentElement;
+    return Math.max(0, (doc ? doc.scrollHeight : 0) - window.innerHeight);
+  }
+
   function __ktSettleScroll(y, releaseEl) {
     var tries = 0, aborted = false;
     var lastSet = -1;                      // the position WE last asked for
@@ -1514,9 +1560,29 @@
        is not the one we set, somebody else moved it, and they win. */
     function onScroll() {
       if (lastSet < 0) { return; }
-      var at = window.scrollY || (document.scrollingElement || {}).scrollTop || 0;
+
+      /* A SCROLLER THAT CANNOT YET HOLD THE POSITION HAS NOT BEEN SCROLLED BY ANYBODY.
+
+         Dom.clear(#appMain) empties the element that IS the scroller on a phone, so the
+         browser clamps its scrollTop to 0 and fires a scroll event. That looks identical
+         to the reader scrolling, and this guard — written to let a real swipe win —
+         treated it as one and gave up on the restore. Measured before this: a reader at
+         3000px came back at 215.
+
+         Pinning min-height does not help here the way it does for the document: on a
+         scrolling element min-height sizes the ELEMENT, while scrollHeight follows its
+         CONTENT, which is momentarily nothing.
+
+         So the question is only meaningful once the page is tall enough to be where we
+         asked: until then a reported position is the browser clamping, not a decision. */
+      if (__ktScrollMax() < lastSet - 4) { return; }
+
+      var at = __ktScrollPos();
       if (Math.abs(at - lastSet) > 4) { aborted = true; }
     }
+    /* Listened for on the window with capture:true so it catches the scroll event from
+       whichever element is doing the scrolling — a scroll on #appMain does not bubble,
+       but it does capture. */
     window.addEventListener('scroll', onScroll, opts);
 
     function release() {
@@ -1529,16 +1595,33 @@
     }
     function step() {
       if (aborted) { release(); return; }
-      var doc = document.documentElement;
-      var max = Math.max(0, (doc ? doc.scrollHeight : 0) - window.innerHeight);
+      var max = __ktScrollMax();
       var target = Math.min(y, max);
       lastSet = target;
-      try { window.scrollTo(0, target); } catch (e) {}
+      __ktScrollSet(target);
       // Tall enough to honour the request, or out of patience (~1.6s of async render).
       if (max >= y || ++tries > 32) { release(); return; }
       setTimeout(step, 50);
     }
-    requestAnimationFrame(step);
+
+    /* A FRAME THAT NEVER COMES IS NOT A DELAY, IT IS A CANCELLATION.
+
+       This started with requestAnimationFrame alone. rAF does not fire while the tab or
+       the app is in the background — the same trap that once left the refresh cover
+       frozen over a screen — so a refresh that happened while the phone was in a pocket,
+       or during the moment an APK is resuming, never restored the position at all. The
+       reader came back to the top and nothing had gone wrong as far as the code knew.
+
+       Measured while proving this: in a backgrounded context the restore never ran once,
+       and the scroller stayed wherever the browser had clamped it.
+
+       So the first step races a frame against a timer, whichever arrives first, and runs
+       exactly once either way. The frame keeps it smooth when visible; the timer
+       guarantees it happens when not. */
+    var started = false;
+    var kick = function () { if (started) { return; } started = true; step(); };
+    try { requestAnimationFrame(kick); } catch (e) {}
+    setTimeout(kick, 60);
   }
 
   async function renderScreen() {
@@ -1546,8 +1629,7 @@
        navigation. The resets below are correct for navigation and stay as they are;
        this records where you were so the same-screen case can be put back. */
     var _ktSameScreen = (location.hash === window.__ktLastHash);
-    var _ktPrevScroll = _ktSameScreen
-      ? (window.scrollY || (document.scrollingElement || {}).scrollTop || 0) : 0;
+    var _ktPrevScroll = _ktSameScreen ? __ktScrollPos() : 0;
     window.__ktLastHash = location.hash;
     const main = Dom.$('#appMain');
     // Reset scroll to the top BEFORE we clear + render. If we only reset after

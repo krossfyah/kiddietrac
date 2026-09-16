@@ -46,6 +46,25 @@
     'staff': 1, 'audit-logs': 1, 'email-logs': 1
   };
 
+  /* Screens that are a HISTORICAL RECORD rather than a live picture. They belong in
+     LIVE_SCREENS — an admin watching entries arrive wants them to arrive — but the
+     reading is the point, and new rows land at the TOP, so a reader who has scrolled
+     down gains nothing from a rebuild and loses their place to it. Refreshed only
+     while they are at the top; scrolling back up starts it again. Operational screens
+     (ratios, attendance, the users list) are deliberately NOT here: those refresh
+     wherever you are standing, which is the whole reason the old blanket scroll guard
+     was removed. */
+  var HISTORY_SCREENS = { 'audit-logs': 1, 'email-logs': 1 };
+  var HISTORY_TOP_PX = 120;
+
+  function readingHistory() {
+    try {
+      if (!HISTORY_SCREENS[currentHash()]) { return false; }
+      var y = window.scrollY || (document.scrollingElement || {}).scrollTop || 0;
+      return y > HISTORY_TOP_PX;
+    } catch (e) { return false; }
+  }
+
   function now() { return Date.now(); }
   function currentHash() {
     return (window.location.hash || '').replace('#', '').split('?')[0] || 'dashboard';
@@ -65,6 +84,12 @@
 
   function busy() {
     try {
+      /* The shared answer first. This file's own list missed .kt-modal-overlay (five
+         screens) and every dialog built with inline position:fixed and no class — which
+         is how a refresh could tear the screen down under an open dialog. The checks
+         below stay as a fallback for before the shell has loaded. */
+      if (window.KT && typeof KT.uiBusy === 'function' && KT.uiBusy()) return true;
+
       // Modal / overlay / menu open.
       var mr = document.getElementById('modalRoot');
       if (mr && mr.firstElementChild) return true;
@@ -93,18 +118,39 @@
   function refresh() {
     if (!shellReady() || booting() || busy()) return;
     refreshing = true;
+    // Tell the shell this one is ours, so it covers the blank moment instead of
+    // letting the screen visibly disappear and come back.
+    try { window.__ktSilentRefresh = true; } catch (e) {}
     try { KT.Shell.renderScreen(); } catch (e) {}
     // Cleared on a timer, not immediately: a screen's async part renders after
     // renderScreen() returns, and that is where the flag is read.
     setTimeout(function () { refreshing = false; }, 4000);
   }
 
-  // ── 1. Return-to-app visibility refresh ──────────────────────────
+  /* ── 1. Return-to-app visibility refresh ──────────────────────────
+
+     GLANCING AT ANOTHER APP IS NOT A REASON TO REBUILD THE PAGE YOU WERE READING.
+
+     This used to re-render whatever screen you were on after 12s away, on the reasoning
+     that data goes stale. True for a screen whose whole point is what is happening right
+     now — ratios, attendance, the users list — and a poor trade everywhere else: a
+     re-render resets in-screen tabs, collapses anything expanded, and rebuilds a report
+     somebody was halfway through reading. Only two screens in the portal bother to
+     remember their sub-tab, so for the rest "refreshed" and "moved away from what I was
+     looking at" are the same event.
+
+     Anthony, 2026-09-16: "when looking at reports and refresh it moves away from the
+     screen". Reports is not a live screen — the periodic poll never touched it — so this
+     was the one doing it.
+
+     Now it refreshes on return only for the screens that are actually about live data;
+     the rest are left exactly as they were found. Anything genuinely stale is still one
+     pull-to-refresh or one navigation away, and a write anywhere still rings kt-live. */
   var hiddenAt = 0;
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) { hiddenAt = now(); return; }
     var away = now() - (hiddenAt || 0);
-    if (hiddenAt && away >= MIN_HIDDEN_MS) refresh();
+    if (hiddenAt && away >= MIN_HIDDEN_MS && LIVE_SCREENS[currentHash()]) { refresh(); }
     hiddenAt = 0;
   });
 
@@ -114,6 +160,7 @@
     if (now() - started < START_DELAY_MS) return;
     if (document.hidden) return;
     if (!LIVE_SCREENS[currentHash()]) return;
+    if (readingHistory()) return;
     /* The old rule was "scrolled past 80px? do not refresh". Combined with the 45s
        cadence and the LIVE_SCREENS whitelist it meant a scrolled screen never refreshed
        at all until you navigated away, which is exactly what "it takes minutes to catch
@@ -131,6 +178,9 @@
   KT.autoRefresh = {
     refresh: refresh,
     LIVE_SCREENS: LIVE_SCREENS,
+    HISTORY_SCREENS: HISTORY_SCREENS,
+    // kt-live asks this too, so both refresh paths obey one rule rather than two.
+    readingHistory: readingHistory,
     isRefreshing: function () { return refreshing; },
   };
 })();
