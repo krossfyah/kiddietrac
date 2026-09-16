@@ -481,7 +481,8 @@
                       (r.uploaded_by_parent ? 'Parent' : 'Staff') + '</span></div></td>' +
                     '<td style="padding:12px;white-space:nowrap;">' + esc(fmtStamp(r.uploaded_at)) + '</td>' +
                     '<td style="padding:12px;text-align:right;"><button type="button" data-open="' + r.id +
-                      '" data-child="' + r.child_id + '" style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;' +
+                      '" data-child="' + r.child_id + '" data-print="' + esc(r.print_url || '') + '" ' +
+                      'style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;' +
                       'background:white;font-size:12.5px;font-weight:600;cursor:pointer;">View</button></td>' +
                   '</tr>';
                 }).join('') +
@@ -492,7 +493,8 @@
     wireImmUpload(container);
     container.querySelectorAll('[data-open]').forEach(function (b) {
       b.addEventListener('click', function () {
-        openStaffRecord(b.getAttribute('data-child'), b.getAttribute('data-open'));
+        openStaffRecord(b.getAttribute('data-child'), b.getAttribute('data-open'),
+          b.getAttribute('data-print') || null);
       });
     });
   }
@@ -611,7 +613,7 @@
 
   /* Staff read through /director/, parents through /parent/ — same controller and the
      same access check, different route prefix. */
-  async function openStaffRecord(childId, docId) {
+  async function openStaffRecord(childId, docId, printUrl) {
     try {
       var res = await fetch(apiBase() + '/director/children/' + childId + '/immunization-records/' + docId + '/download',
         { headers: { 'Authorization': 'Bearer ' + token() } });
@@ -623,6 +625,7 @@
         title: 'Immunization record',
         label: 'Immunization record',
         filename: 'immunization-record',
+        externalPrint: printUrl ? function () { return printUrl; } : null,
       }))) {
         var url = URL.createObjectURL(blob);
         window.open(url, '_blank');

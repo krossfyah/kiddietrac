@@ -695,6 +695,9 @@
           title: r.title || 'Immunization record',
           label: 'Immunization record',
           filename: 'immunization-record',
+          // Printing from the APK means handing the file to a real browser, which has
+          // no session — so it gets the signed URL, not the blob.
+          externalPrint: r.print_url ? function () { return r.print_url; } : null,
         }))) {
           // The viewer is not loaded — better a new tab than nothing.
           var u = URL.createObjectURL(b);

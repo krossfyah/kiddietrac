@@ -108,6 +108,14 @@ class ParentImmunizationRecordController extends Controller
             'child_name' => trim((($d->ch_pref ?: $d->ch_first) . ' ' . $d->ch_last)),
             'title' => $d->title,
             'notes' => $d->notes,
+            /* A URL THE DEVICE'S OWN BROWSER CAN OPEN.
+               Printing from inside the APK is impossible — neither web view implements
+               window.print() — so the only way to put this on paper is to hand it to the
+               real browser, and that browser has no session. ProtectedMedia::sign() is
+               the portal's answer to exactly that: signature-carrying, bearer-free, dead
+               when it expires. Same mechanism every <img src> in the portal already uses,
+               and stableExpiry() keeps it cacheable. */
+            'print_url' => \App\Support\ProtectedMedia::sign($d->file_url),
             'doses' => collect($covered->get($d->file_url, []))->map(fn ($r) => [
                 'vaccine' => $r->vaccine,
                 'dose_label' => $r->dose_label,

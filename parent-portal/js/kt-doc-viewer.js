@@ -199,7 +199,7 @@
       +     '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">' + esc(label) + '</div>'
       +     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
       +   '</div>'
-      +   '<button class="ktdv-new" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">Open in new tab</button>'
+      +   '<button class="ktdv-fprint" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🖨 Print</button>'
       +   '<button class="ktdv-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
       + '</div>'
       + inner
@@ -268,7 +268,85 @@
     }
 
     ov.querySelector('.ktdv-close').addEventListener('click', close);
-    ov.querySelector('.ktdv-new').addEventListener('click', function () { openExternally(url); });
+    /* PRINT, WHERE "OPEN IN NEW TAB" USED TO BE.
+
+       In the APK there was no way to print a record at all: the panel offered a new tab,
+       which on a phone is the wrong idea anyway, and window.print() is a no-op in both
+       web views — a host app has to drive the platform's print service, which needs a
+       native rebuild. So on a native platform the file is handed to the device's real
+       browser, where Print works normally. That needs a URL with no session on it, which
+       is what the caller's externalPrint supplies (ProtectedMedia::sign). A blob: URL is
+       useless to another app, so it is never what gets handed over.
+
+       On desktop the frame is printed directly — printing the FRAME prints the document
+       rather than the portal behind it — and an image is wrapped in a one-line document
+       so it prints on its own page instead of dragging the dashboard along with it.
+       (Anthony, 2026-09-15: "no print button in mobile apk, replace the open in new tab
+       with print".) */
+    ov.querySelector('.ktdv-fprint').addEventListener('click', function (ev) {
+      var btn = ev.currentTarget;
+
+      if (nativePrintUnavailable()) {
+        var was = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Opening…';
+        Promise.resolve()
+          .then(function () {
+            if (opts.externalPrint) { return opts.externalPrint(); }
+            // A plain http(s) URL can go straight out; a blob cannot.
+            return /^blob:/i.test(String(url)) ? null : url;
+          })
+          .then(function (out) {
+            if (!out) { throw new Error('no printable link'); }
+            openExternally(out);
+            btn.textContent = was; btn.disabled = false;
+          })
+          .catch(function () {
+            // Say so rather than appear to have worked.
+            btn.textContent = 'Cannot print';
+            w.setTimeout(function () { btn.textContent = was; btn.disabled = false; }, 2200);
+          });
+        return;
+      }
+
+      var f = ov.querySelector('iframe');
+      if (f) {
+        try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {}
+        return;
+      }
+      // An image, or pages drawn to canvas: print just the document.
+      var sheets = [];
+      var im = ov.querySelector('img');
+      if (im) { sheets.push(im.src); }
+      Array.prototype.forEach.call(ov.querySelectorAll('.ktdv-pdf canvas'), function (c) {
+        try { sheets.push(c.toDataURL('image/png')); } catch (e) {}
+      });
+      if (!sheets.length) { return; }
+      var pf = d.createElement('iframe');
+      pf.setAttribute('aria-hidden', 'true');
+      pf.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;';
+      d.body.appendChild(pf);
+      var doc = pf.contentDocument;
+      doc.open();
+      doc.write('<!doctype html><meta charset="utf-8"><title>' + esc(title) + '</title>'
+        + '<style>@page{margin:10mm}body{margin:0}img{display:block;width:100%;page-break-after:always}'
+        + 'img:last-child{page-break-after:auto}</style>'
+        + sheets.map(function (src) { return '<img src="' + src + '">'; }).join(''));
+      doc.close();
+      var go = function () {
+        try { pf.contentWindow.focus(); pf.contentWindow.print(); } catch (e) {}
+        w.setTimeout(function () { try { pf.remove(); } catch (e) {} }, 1000);
+      };
+      // Wait for the images to decode, or the sheet prints blank.
+      var imgs = doc.images ? Array.prototype.slice.call(doc.images) : [];
+      var left = imgs.length;
+      if (!left) { go(); return; }
+      imgs.forEach(function (i2) {
+        if (i2.complete) { if (--left === 0) { go(); } return; }
+        i2.addEventListener('load', function () { if (--left === 0) { go(); } });
+        i2.addEventListener('error', function () { if (--left === 0) { go(); } });
+      });
+    });
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     d.addEventListener('keydown', onKey, true);
     return { close: close, el: ov };
@@ -502,6 +580,8 @@
     var caller = opts.onClose;
     return view(url, Object.assign({}, opts, {
       mime: opts.mime || blob.type || '',
+      // The blob cannot be printed by another app; the caller's session-less URL can.
+      externalPrint: opts.externalPrint,
       image: opts.image != null ? opts.image : /^image\//i.test(blob.type || ''),
       onClose: function () {
         try { w.URL.revokeObjectURL(url); } catch (e) {}
