@@ -35,7 +35,7 @@
     { label: 'Centres',       icon: '🏫', hash: '#admin-centres',      kbd: null },
     { label: 'Users',         icon: '👥', hash: '#admin-users',        kbd: null },
     { label: 'Audit log',     icon: '📜', hash: '#audit-logs',         kbd: null },
-    { label: 'Billing',       icon: '💳', hash: '#admin-billing',      kbd: null },
+    { label: 'Billing',       icon: '💳', hash: '#billing-settings',   kbd: null },
     { label: 'Help & guides', icon: '📖', hash: '#help',               kbd: '?' },
     { label: 'Two-factor (MFA)', icon: '🔐', hash: '#mfa',             kbd: null },
   ];
@@ -167,7 +167,17 @@
 
     // While loading, still show filtered shortcuts at the top
     var ql = q.toLowerCase();
-    var staticMatches = SHORTCUTS.filter(function (s) { return s.label.toLowerCase().indexOf(ql) !== -1; });
+    /* THE REAL NAV, RANKED — not the eleven hand-written SHORTCUTS below.
+
+       That list was written once and never grew: Audit log happened to be on it, but
+       Immunizations, Payroll, Waitlist and eighty others were not, so the palette simply
+       could not find most of the portal. KT.navSearch reads the role's actual nav and
+       sorts by relevance, which is the same answer the sidebar widget and the admin
+       launcher now give. SHORTCUTS stays as the no-query "Jump to" list, which is what
+       it is actually good at. */
+    var staticMatches = (window.KT && KT.navSearch)
+      ? KT.navSearch(q, { limit: 8, extra: SHORTCUTS })
+      : SHORTCUTS.filter(function (s) { return s.label.toLowerCase().indexOf(ql) !== -1; });
 
     Api.get('/admin/search?q=' + encodeURIComponent(q)).then(function (data) {
       var r = (data && data.results) || {};
