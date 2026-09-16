@@ -421,6 +421,15 @@ final class EmailCatalogue
                 'preview' => 'none',
             ],
             [
+                'key' => 'provider-closed', 'audience' => 'office',
+                'name' => 'Provider closed',
+                'fires' => 'When a provider is closed through the off-boarding flow, after the work is done — it reports what actually happened, including anything that failed.',
+                'to' => 'The agency\'s admins and the closing centre\'s directors, minus whoever closed it',
+                'subject' => 'Provider closed — {centre}',
+                'source' => 'Http/Controllers/Api/CentreOffboardController.php:113',
+                'preview' => 'none',
+            ],
+            [
                 'key' => 'immunization-record-filed', 'audience' => 'office',
                 'name' => 'Immunization record filed',
                 'fires' => 'When anyone files an immunization record for a child — a parent sending the card in, or the centre filing it and recording the doses off it.',

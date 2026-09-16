@@ -552,12 +552,41 @@ class SuppressAgencyMail
                first, so a deactivated namesake could cancel a live person's mail.
                Block only when EVERY account on the address is switched off. */
             $uids = DB::table('users')->where('email', $addr)->pluck('id');
-            $allOff = $uids->isNotEmpty() && $uids->every(
-                fn ($id) => \App\Support\Suppression::isUser((int) $id)
-            );
+
+            /* FOR A CLOSURE NOTICE, accountOff IS THE WHOLE SUBJECT OF THE EMAIL.
+
+               Suppression::isUser() is true as soon as the account is deactivated or
+               suspended — the right answer for ordinary mail, and exactly backwards for
+               the message whose entire purpose is to say the account has been closed.
+               The X-KT-Account-Notice exemption above was written for this and only
+               guarded the gate above; this one runs afterwards and swallowed the notice
+               anyway.
+
+               Measured 2026-09-16: Chearstine Fitzpatrick's closure notice was blocked
+               here, while Safia Ali's went through — not because the rule was kinder to
+               her, but because her address carries a second, still-active account, and
+               this gate only fires when EVERY account on the address is off. Whether a
+               departing educator is told they have been off-boarded should not depend on
+               whether they happen to share an inbox with a colleague.
+
+               The .env kill-switch still applies: that one is a hard stop for testing and
+               is nobody's idea of a courtesy. (Anthony, 2026-09-16: "emails to closed
+               educators should not be supressed") */
+            $allOff = $uids->isNotEmpty() && $uids->every(function ($id) use ($isAccountNotice) {
+                if ($isAccountNotice) {
+                    return \App\Support\Suppression::enabled()
+                        && in_array((int) $id, \App\Support\Suppression::userIds(), true);
+                }
+
+                return \App\Support\Suppression::isUser((int) $id);
+            });
             if ($allOff) {
-                $this->cancel($event, [$addr],
-                    'Recipient belongs to an agency listed in MAIL_SUPPRESS_AGENCIES (.env kill-switch).');
+                $this->cancel($event, [$addr], $isAccountNotice
+                    ? 'Recipient is on the .env user kill-switch (MAIL_SUPPRESS_USERS).'
+                    /* The old wording named MAIL_SUPPRESS_AGENCIES for a check that
+                       usually fires on the account's own status — which sent anybody
+                       reading the log looking in the wrong file. */
+                    : 'Recipient\'s account is switched off, or is on the .env kill-switch.');
                 return false;
             }
         }

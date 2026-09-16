@@ -31,6 +31,105 @@ final class CentreOffboardController extends Controller
     use ResolvesCentreContext;
 
     /**
+     * Closing a provider produced no notice of its own.
+     *
+     * The educator heard because their own account was closed, and the office heard
+     * because they are BCC'd on that — so the closure of the PROVIDER, which is the
+     * bigger fact, was the one thing nobody was told. A centre closing changes ratios,
+     * rotas, billing and where children are expected tomorrow; it should not be
+     * something an admin discovers by noticing it has gone from a list.
+     *
+     * Addressed to the agency's admins and the closing centre's directors, minus
+     * whoever did it — they were there. Best-effort: a notice that fails must never
+     * roll back a closure that has already happened.
+     *
+     * (Anthony, 2026-09-16: "emails should have went out to directors/admins".)
+     */
+    private function notifyClosure(object $centre, string $effective, array $report, array $data): void
+    {
+        try {
+            $agencyId = (int) $centre->agency_id;
+            if (! $agencyId) {
+                return;
+            }
+            $actorId = (int) (request()->user()->id ?? 0);
+
+            $to = DB::table('role_assignments as ra')
+                ->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.active', 1)
+                ->where(function ($q) use ($agencyId, $centre) {
+                    $q->where(function ($x) use ($agencyId) {
+                        $x->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId);
+                    });
+                    $q->orWhere(function ($x) use ($centre) {
+                        $x->where('ra.role', 'centre_director')->where('ra.centre_id', $centre->id);
+                    });
+                })
+                ->where('u.id', '!=', $actorId)
+                ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                ->distinct()->pluck('u.email')->filter()->unique()->values()->all();
+            if (! $to) {
+                return;
+            }
+
+            $actor = DB::table('users')->where('id', $actorId)->first(['first_name', 'last_name']);
+            $actorName = trim(($actor->first_name ?? '').' '.($actor->last_name ?? '')) ?: 'An administrator';
+
+            $moved = count($report['transferred'] ?? []);
+            $left = count($report['withdrawn'] ?? []);
+            $staff = count($report['staff_closed'] ?? []);
+            $errors = $report['errors'] ?? [];
+
+            $line = function (string $label, string $value) {
+                return '<tr><td style="padding:7px 12px 7px 0;color:#64748B;white-space:nowrap;">'.e($label)
+                    .'</td><td style="padding:7px 0;color:#0F172A;font-weight:600;">'.e($value).'</td></tr>';
+            };
+
+            $body = '<p style="margin:0 0 14px;"><strong>'.e($actorName).'</strong> closed '
+                .'<strong>'.e($centre->name).'</strong>.</p>'
+                .'<table role="presentation" style="border-collapse:collapse;font-size:14px;margin:0 0 16px;">'
+                .$line('Last operating day', $effective)
+                .$line('Children transferred', (string) $moved)
+                .$line('Children withdrawn', (string) $left)
+                .$line('Staff accounts closed', (string) $staff)
+                .$line('Archived', ! empty($data['archive']) ? 'yes' : 'no')
+                .'</table>'
+                /* Say what did not work, in the same breath. A closure that half-happened
+                   and reported success is the one outcome nobody could act on. */
+                .($errors
+                    ? '<p style="margin:0 0 6px;font-weight:700;color:#B91C1C;">'
+                        .count($errors).' step(s) did not complete:</p>'
+                        .'<ul style="margin:0 0 14px;padding-left:18px;color:#0F172A;">'
+                        .implode('', array_map(function ($e) {
+                            return '<li style="margin:2px 0;">'.e(($e['stage'] ?? 'step').': '.($e['message'] ?? '')).'</li>';
+                        }, array_slice($errors, 0, 10)))
+                        .'</ul>'
+                    : '<p style="margin:0 0 14px;color:#166534;">Every step completed.</p>')
+                .'<p style="margin:0;font-size:12.5px;color:#64748B;">Closing a provider changes ratios, '
+                .'rotas and billing. The full detail is in the audit log.</p>';
+
+            $subject = 'Provider closed — '.$centre->name;
+
+            $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                'eyebrow' => 'Provider',
+                'title' => $subject,
+                'preheader' => $actorName.' closed '.$centre->name,
+            ]);
+
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject) {
+                $m->to($to[0])->subject($subject);
+                if (count($to) > 1) {
+                    $m->bcc(array_slice($to, 1));
+                }
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Provider closure notice failed', [
+                'centre' => $centre->id ?? null, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * POST /admin/centres/{centre}/offboard
      *
      * Carries out the plan. Decisions are per FAMILY, matching plan(), because a family
@@ -231,6 +330,11 @@ final class CentreOffboardController extends Controller
                 }
             }
         }
+
+        /* Tell the office what just happened. After the work, not before: the notice
+           reports what was ACTUALLY done — including anything that failed — rather than
+           what was asked for. */
+        $this->notifyClosure($centre, $effective, $report, $data);
 
         // ── archive LAST, and only if it is genuinely empty ─────────────────
         $archived = false;

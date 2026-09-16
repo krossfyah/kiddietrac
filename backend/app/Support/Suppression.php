@@ -350,7 +350,8 @@ final class Suppression
     }
 
     /** @return int[] */
-    private static function userIds(): array
+    /** Public because the mail gate asks it directly when exempting a closure notice. */
+    public static function userIds(): array
     {
         $ids = self::agencyIds();
         sort($ids);
