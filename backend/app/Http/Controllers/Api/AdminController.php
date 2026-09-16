@@ -5407,6 +5407,106 @@ final class AdminController extends Controller
                 . "will not work.\n";
     }
 
+    /**
+     * GET /admin/users/{user}/account-profile
+     *
+     * THE HALF OF A PERSON'S RECORD THAT LIVED ONLY ON THEIR OWN SCREEN.
+     *
+     * "My profile & security" and this user record had grown into two different views of
+     * one person: the first knew how they are paid and whether two-factor is on, the
+     * second knew their roles, rooms and shifts, and neither could answer a question
+     * belonging to the other. Anthony, 2026-09-16: migrate the profile and security into
+     * user management. This is what the shared panes read when they are rendering
+     * somebody OTHER than the person signed in.
+     *
+     * NOTHING SENSITIVE IS RETURNED, and that is the point rather than an oversight:
+     *
+     *  · Payout is the same masked shape the OWNER sees — "•••• 4821" — never the account
+     *    number, and with no way to change it from here. An admin needs to answer "are
+     *    the right details on file", which the hint answers; anything more is somebody
+     *    else's bank account. (StaffPayoutMethodController::reveal exists for the one
+     *    flow that genuinely needs the number, and is audited.)
+     *  · Two-factor reports whether it is on. The secret is never read, here or anywhere.
+     *  · The DATES come from the audit log rather than from columns, because there are no
+     *    such columns — users carries two_factor_enabled and no two_factor_enabled_at,
+     *    and no password_changed_at. Inventing them would mean a migration and a backfill
+     *    of dates nobody recorded; reading the log reports only what actually happened,
+     *    and says nothing when nothing was logged.
+     */
+    public function accountProfile(Request $request, int $userId): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if (! $this->userBelongsToAgency($userId, $agencyId)) {
+            return response()->json(['message' => 'User not in your agency'], 403);
+        }
+
+        $user = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
+        if (! $user) return response()->json(['message' => 'User not found'], 404);
+
+        // ── how they are paid, masked ──
+        $payout = null;
+        $row = DB::table('staff_payout_methods')->where('user_id', $userId)->first();
+        if ($row) {
+            $payout = [
+                'method' => $row->method,
+                'legal_name' => $row->legal_name,
+                'hint' => $row->method === 'interac'
+                    ? ($row->interac_email_hint ?: null)
+                    : ($row->account_hint ?: null),
+                'updated_at' => $row->updated_at,
+            ];
+        }
+
+        /* ── security, from facts and from the log ──
+           The newest row of each kind. `how` is worth carrying: "they chose it" and "an
+           admin reset it" are the same date and a different story, and the second is the
+           one that explains a lockout. */
+        $pwActions = [
+            'password_changed' => 'they changed it',
+            'password_reset_completed' => 'they used a reset link',
+            'password_set_via_invite' => 'they set it from their invite',
+            'user.password_reset' => 'an administrator reset it',
+        ];
+        $pw = DB::table('audit_logs')
+            ->whereIn('action', array_keys($pwActions))
+            ->where(function ($q) use ($userId) {
+                $q->where('user_id', $userId)
+                  ->orWhere(function ($w) use ($userId) {
+                      $w->where('entity_type', 'user')->where('entity_id', $userId);
+                  });
+            })
+            ->orderByDesc('created_at')->first(['action', 'created_at']);
+
+        $mfaOn = (bool) ($user->two_factor_enabled ?? false);
+        $mfaSince = $mfaOn
+            ? DB::table('audit_logs')->where('user_id', $userId)->where('action', 'mfa.enabled')
+                ->orderByDesc('created_at')->value('created_at')
+            : null;
+
+        return response()->json([
+            'user' => [
+                'id' => (int) $user->id,
+                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->email,
+                'email' => $user->email,
+                'username' => $user->username ?? null,
+                'locale' => $user->locale ?? null,
+                'status' => $user->status ?? null,
+            ],
+            'payout' => $payout,
+            'security' => [
+                'two_factor_enabled' => $mfaOn,
+                'two_factor_since' => $mfaSince,
+                'must_change_password' => (bool) ($user->must_change_password ?? false),
+                'password_changed_at' => $pw->created_at ?? null,
+                'password_changed_how' => $pw ? ($pwActions[$pw->action] ?? null) : null,
+                /* No IP. The pane does not show one, and a field nobody renders is a
+                   field that leaks the day somebody logs the response. */
+                'last_login_at' => $user->last_login_at ?? null,
+            ],
+        ]);
+    }
+
     public function resetUserPassword(Request $request, int $userId): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);

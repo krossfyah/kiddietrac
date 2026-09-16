@@ -1352,6 +1352,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/users/{user}/offboard',      [\App\Http\Controllers\Api\StaffOffboardController::class, 'execute'])->whereNumber('user');
         Route::delete('/users/{user}', [AdminController::class, 'destroyUser']);
         Route::post('/users/{user}/reactivate', [AdminController::class, 'reactivateUser']);
+        // The pay and security half of a person's record, for the shared account panes.
+        // Masked by design — see the controller.
+        Route::get('/users/{user}/account-profile', [AdminController::class, 'accountProfile'])->whereNumber('user');
         Route::post('/users/{user}/reset-password', [AdminController::class, 'resetUserPassword']);
         Route::post('/users/{user}/resend-welcome', [AdminController::class, 'resendWelcome']);
         // v22p3.2: avatars

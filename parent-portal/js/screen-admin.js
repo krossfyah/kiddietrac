@@ -2085,18 +2085,50 @@
     // Marked so the button normaliser below leaves the tabs alone — without this it
     // applied min-height + inline-flex to them and they grew to 65px.
     try { tabBar.setAttribute('data-kt-tabbar', '1'); } catch (e) {}
+    /* THE OTHER HALF OF THE SAME PERSON (2026-09-16).
+
+       This record knew their roles, rooms and shifts; their own profile screen knew how
+       they are paid and whether two-factor is on. Neither could answer a question
+       belonging to the other, which is how "is the right bank account on file for her?"
+       became a phone call. Rendered by KT.AccountPanes — the same component their own
+       screen uses, in admin mode, which is what keeps the two from drifting again.
+
+       Read-only by design, not by omission: see the module header. */
+    const paneAccount = Dom.el('div', { style: 'display:none;' });
+
     const _detailsTab = mkTab('Details', paneDetails);
     mkTab('📎 Files & documents', paneFiles);
     mkTab('💵 Pay & rooms', paneStaff);
     mkTab('🛡️ Background checks', paneChecks);
     mkTab('🕓 Clock in / out', paneClock);
+    mkTab('🔐 Account & pay', paneAccount);
     mkTab('🗄️ Data & retention', paneData);
+
+    /* Both panes, one subject, admin mode. They share a single read of
+       /admin/users/{id}/account-profile — three panes asking the same question three
+       times is three round trips for one answer. */
+    (function () {
+      var subject = { id: user.id, name: user.name || user.email };
+      if (!(window.KT && KT.AccountPanes)) {
+        paneAccount.appendChild(Dom.el('div', { style: 'padding:16px;color:#B45309;font-size:13px;' },
+          'The account panes are not loaded — reload the page.'));
+        return;
+      }
+      KT.AccountPanes.forget(subject.id);
+      var payHost = Dom.el('div', {});
+      var secHost = Dom.el('div', {});
+      paneAccount.appendChild(payHost);
+      paneAccount.appendChild(secHost);
+      KT.AccountPanes.payroll(payHost, subject, 'admin');
+      KT.AccountPanes.security(secHost, subject, 'admin');
+    })();
     root.appendChild(tabBar);
     root.appendChild(paneDetails);
     root.appendChild(paneFiles);
     root.appendChild(paneStaff);
     root.appendChild(paneChecks);
     root.appendChild(paneClock);
+    root.appendChild(paneAccount);
     root.appendChild(paneData);
     _detailsTab.style.color = '#1F6080'; _detailsTab.style.borderBottomColor = '#1F6080';
     // Existing sections all append to `body` → point it at the Details pane so the

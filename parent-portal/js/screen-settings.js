@@ -337,7 +337,12 @@
     }
 
     // ── PAYROLL (staff) — where their pay goes ──
-    if (isPaidStaff) { renderPayout(panePayroll); }
+    /* Through the shared component, so this pane and the one on somebody's user record
+       are the same code in two modes rather than two screens that drift. */
+    if (isPaidStaff) {
+      if (KT.AccountPanes) { KT.AccountPanes.payroll(panePayroll, { id: u.id }, 'self'); }
+      else { renderPayout(panePayroll); }
+    }
 
     // ── PROFILE ──
     var pc = el('div', { style: CARD });
@@ -1054,6 +1059,11 @@
     box.appendChild(p1); box.appendChild(p2); box.appendChild(st); box.appendChild(save);
     area.appendChild(box); p1.focus();
   }
+
+  /* The self mode of KT.AccountPanes.payroll. Named rather than inlined there because
+     this is the ONE place a payout method may be written, and the write path did not
+     move — an admin looking at the same pane gets the masked, read-only rendering. */
+  KT.renderPayoutEditor = renderPayout;
 
   Shell.registerScreen('guardian:settings', render);
   Shell.registerScreen('home_visitor:settings', render);
