@@ -2117,6 +2117,27 @@
     mkTab('🗄️ Data & retention', paneData);
     if (_isSelf) { mkTab('ℹ️ About', paneAbout); }
 
+    /* THIS IS YOU — said out loud, because otherwise a tab appears and disappears for
+       no visible reason.
+
+       Test Agency holds four accounts named "Anthony Hosein": the super admin, an
+       educator on a hotmail address, a guardian on outlook, and a second invited
+       educator. They are different people as far as this screen is concerned, and only
+       one of them is the person reading it. Open your own and About is there; open the
+       next one down and it is gone — which is correct, and looks exactly like a bug.
+
+       So the record says which one it is. Anthony, 2026-09-16: "i saw the about button
+       and now it disappeared." */
+    if (_isSelf) {
+      const youTag = Dom.el('div', {
+        style: 'display:inline-flex;align-items:center;gap:6px;margin:0 0 12px;padding:4px 11px;'
+             + 'border-radius:999px;background:#EFF6FF;border:1px solid #BFDBFE;'
+             + 'color:#1D4ED8;font-size:11.5px;font-weight:800;letter-spacing:.3px;',
+      }, '● This is your own record');
+      youTag.title = 'About shows your build and diagnostics, so it appears only here.';
+      paneDetails.appendChild(youTag);
+    }
+
     /* Both panes, one subject, admin mode. They share a single read of
        /admin/users/{id}/account-profile — three panes asking the same question three
        times is three round trips for one answer. */

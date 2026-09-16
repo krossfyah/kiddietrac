@@ -528,6 +528,24 @@
     if (!KT.sidebarFoot(40, b)) { return; }
   }
 
+  /* AND PUT ITSELF BACK IF SOMETHING TAKES IT AWAY.
+
+     installBuildFoot() runs once, from buildNav(), which itself runs once per sign-in.
+     Four controls from four different files share this foot — the agency switcher, both
+     view-as controls and this — and any of them rebuilding it, or a sweep clearing the
+     sidebar, would take the build line with it for the rest of the session with nothing
+     to notice and nothing to restore it.
+
+     Reported as exactly that shape: seen once, then gone. I could not reproduce it —
+     the button held through boot, navigation, both roles and phone width — so rather
+     than guess at a cause, it now checks after each navigation and re-places itself if
+     it has gone. A getElementById against a live document, on a hashchange, is not a
+     cost worth optimising; a control that vanishes and cannot come back is.
+     (Anthony, 2026-09-16) */
+  window.addEventListener('hashchange', function () {
+    try { if (!document.getElementById('kt-foot-build')) { installBuildFoot(); } } catch (e) {}
+  });
+
   function buildNav(user) {
     const links = Dom.$('#navLinks');
     if (!links) return;
