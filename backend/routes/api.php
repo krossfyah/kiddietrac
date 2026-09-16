@@ -752,6 +752,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Enter a shift by hand — there was no create, so a shift that was never clocked
             // could not be added at all and payroll had no way to be made whole.
             Route::post('/admin/users/{user}/punches', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'storePunch']);
+            // A correction answers "these times are wrong"; it has no answer for "this
+            // shift is not real". Shipped with the timesheet's row menu so a shift that
+            // can be entered by hand can also be taken back. Audited with the whole row.
+            Route::delete('/admin/users/{user}/punches/{punch}', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'destroyPunch']);
         });
         Route::put('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'update']);
 

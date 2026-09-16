@@ -885,6 +885,22 @@ final class SchedulingController extends Controller
             // yields a NEGATIVE value here (in precedes out) → every row was 0h.
             $minutes = $isOpen ? 0 : abs($out->diffInMinutes($in)) - $breakMin;
             return [
+                /* ADDRESSABLE ROWS (2026-09-16).
+
+                   The sheet was a picture of the hours and nothing more: no punch id, no
+                   user id, so a director who could SEE a wrong clock-out had nowhere on
+                   this screen to correct it and had to go and find the person's own user
+                   record. These three fields are what let the row carry a ⋮.
+
+                   in_local/out_local are the agency's wall clock formatted for
+                   <input type="datetime-local">. The display strings below are for
+                   people; parsing those back into a date in the browser is how
+                   off-by-one-day errors get into payroll. */
+                'id' => (int) $e->id,
+                'user_id' => (int) $e->user_id,
+                'centre_id' => (int) $e->centre_id,
+                'in_local' => $in->format('Y-m-d\\TH:i'),
+                'out_local' => $isOpen ? null : $out->format('Y-m-d\\TH:i'),
                 // The centre's date, not UTC's. An evening shift is stamped after midnight
                 // UTC and would otherwise be filed on the following day.
                 'date' => $in->toDateString(),
@@ -919,6 +935,27 @@ final class SchedulingController extends Controller
         $roleLabel = ['agency_admin' => 'Admin', 'platform_admin' => 'Admin', 'centre_director' => 'Director',
             'educator' => 'Educator', 'home_visitor' => 'Home visitor', 'auditor' => 'Auditor'];
         $agencyIds = DB::table('centres')->whereIn('id', $centreIds)->pluck('agency_id')->unique()->filter()->all();
+
+        /* NOT NAMING A CENTRE IS NOT THE SAME AS ASKING FOR THE AGENCY (2026-09-16).
+
+           The pull-in below is for people with no centre of their own — an agency admin's
+           role row carries an agency and no centre, so they would never appear on any
+           sheet. It was gated on "the request did not name a centre", which is true for an
+           agency admin looking at everything AND for a centre director who simply left the
+           filter on "All centres" — and for a director "all centres" means their own, not
+           the agency's.
+
+           So Rebecca Bright, director of one provider, was shown the whole agency's staff
+           at 0h: educators from the other two providers, by name and email, on a payroll
+           sheet whose actual hours are scoped to hers. Found while testing the row menu —
+           the ⋮ offered "Add a shift" for somebody who works at a centre the director
+           cannot file anything at, and the refusal is what exposed it.
+
+           Asked properly: does this sheet SPAN the agency? */
+        $agencySpan = $agencyIds
+            && ! $centreId
+            && count($centreIds) >= DB::table('centres')->whereIn('agency_id', $agencyIds)->count();
+
         $missing = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.active', true)
@@ -928,19 +965,34 @@ final class SchedulingController extends Controller
             // whole agency is being asked for. Naming ONE centre and still listing every
             // agency-level person put the entire agency's staff on a single provider's
             // sheet at 0h — noise that buries the people who actually work there.
-            ->where(function ($q) use ($centreIds, $agencyIds, $centreId) {
+            ->where(function ($q) use ($centreIds, $agencyIds, $agencySpan) {
                 $q->whereIn('ra.centre_id', $centreIds);
-                if ($agencyIds && ! $centreId) {
-                    $q->orWhereIn('ra.agency_id', $agencyIds);
+                /* AND a role row with no centre of its own. This said orWhereIn('agency_id')
+                   — which every centre-scoped row also satisfies, since a row carries both —
+                   so it matched the entire agency rather than the centre-less people it was
+                   written for. whereNull('centre_id') is the condition that was meant. */
+                if ($agencySpan) {
+                    $q->orWhere(function ($w) use ($agencyIds) {
+                        $w->whereNull('ra.centre_id')->whereIn('ra.agency_id', $agencyIds);
+                    });
                 }
             })
             ->when($seen, fn ($q) => $q->whereNotIn('u.email', $seen))
-            ->select('u.first_name', 'u.last_name', 'u.email', 'ra.role')
+            ->select('u.id as user_id', 'u.first_name', 'u.last_name', 'u.email', 'ra.role', 'ra.centre_id')
             ->distinct()->get()->unique('email');
 
         $rows = collect($rows);
         foreach ($missing as $m) {
             $rows->push([
+                /* A zero row is precisely the one somebody needs to add a shift to — the
+                   flat tablet, the forgotten press, the cover at short notice. Without a
+                   user id the ⋮ on that row would have nothing to act on, which is the
+                   row where action is most likely to be wanted. */
+                'id' => null,
+                'user_id' => (int) $m->user_id,
+                'centre_id' => $m->centre_id ? (int) $m->centre_id : ($centreIds[0] ?? null),
+                'in_local' => null,
+                'out_local' => null,
                 'date' => null,
                 'open' => false,
                 'status' => 'No hours logged',
@@ -969,6 +1021,9 @@ final class SchedulingController extends Controller
             'staff_count' => $rows->pluck('staff_email')->unique()->count(),
             // Stated outright so a payroll figure is never mistaken for break-adjusted.
             'breaks_tracked' => false,
+            // The clock these times are on, so the editor can say so rather than leave
+            // an admin in another zone guessing which midnight a shift belongs to.
+            'timezone' => $sheetTz,
         ]);
     }
 

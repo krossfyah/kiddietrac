@@ -32,6 +32,13 @@
     'zum.bank_account_saved': '🏦 Bank account saved for payments',
     'attendance.backdated': '⏱ Attendance corrected',
     'attendance.entry_removed': '⏱ Attendance entry removed',
+    /* Staff shifts, not children — the two read alike in a log and mean very different
+       things, so the wording says whose hours moved. Unlabelled until now, which the
+       fallback rendered as "Timepunch corrected": a word no director uses, on rows that
+       change what somebody is paid. */
+    'timepunch.corrected': '⏱ Staff hours corrected',
+    'timepunch.created': '⏱ Staff shift entered by hand',
+    'timepunch.deleted': '⏱ Staff shift removed',
     'chat.email_notified': 'Missed-message email sent',
     'message.sent': 'Message sent',
     'message.edited': 'Message edited',
@@ -225,14 +232,28 @@
     try {
       var d = parseTs(t);
       if (isNaN(d)) return t;
-      /* SECONDS, not 'short'. One request writes several rows in the same second —
-         a login and its device row, a send and its suppression note — and at minute
-         precision they all read as the same moment, which made a correctly ordered
-         list look arbitrary. The list itself now tie-breaks on id; this is what makes
-         that visible. */
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: auditTz(), dateStyle: 'medium', timeStyle: 'medium',
+      /* MILLISECONDS. One request writes several rows in the same second — a login
+         and its device row, a send and its suppression note — and a sync writes 25 of
+         them. At second precision those all read as one moment, which made a correctly
+         ordered list look arbitrary and left no way to line a row up against a server
+         log. The list tie-breaks on id; this is what makes the order visible.
+
+         The components are spelled out rather than using timeStyle because Intl treats
+         dateStyle/timeStyle and the individual fields as mutually exclusive families
+         and THROWS when they are mixed — including on fractionalSecondDigits, which
+         older WebViews (the Android and iOS builds load this page in one) do not
+         support at all. Appending from the Date sidesteps both. Milliseconds are
+         timezone-invariant, every offset being a whole number of minutes, so this
+         stays exact in the agency's zone. */
+      var base = new Intl.DateTimeFormat('en-CA', {
+        timeZone: auditTz(),
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
       }).format(d);
+      var ms = ('00' + d.getMilliseconds()).slice(-3);
+      // Straight after the seconds; if the locale ever stops matching, the time is
+      // still correct, just without the fraction.
+      return base.replace(/(\d{1,2}:\d{2}:\d{2})/, '$1.' + ms);
     } catch (e) { return t; }
   }
   function relTime(t) {

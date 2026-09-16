@@ -223,6 +223,14 @@ img { display: block; max-width: 100%; }
 .btn-success { background: var(--kt-green); color: white; }
 .btn-success:hover:not(:disabled) { background: var(--kt-green-dark); }
 
+/* The portal's own confirm dialog has emitted this class for every destructive action
+   since it was written — Shell.Modal.confirm({destructive:true}) sets style 'btn-danger'
+   — and no stylesheet has ever defined it. So "Delete", "Remove" and "Revoke" have been
+   rendering as a bare .btn: transparent, black text, indistinguishable from Cancel
+   sitting next to it. The one place a button most needs to look like what it does. */
+.btn-danger { background: var(--kt-danger); color: white; }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
+
 .btn-ghost { background: transparent; color: var(--kt-text-muted); }
 .btn-ghost:hover { color: var(--kt-text); background: var(--kt-bg); }
 

@@ -179,16 +179,34 @@ class EducatorRoomsController extends Controller
      */
     public function storePunch(Request $request, int $user): JsonResponse
     {
-        $centreId = $this->centreOf($user);
-        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
         $data = $request->validate([
             'punched_in_at'  => ['required', 'date'],
             'punched_out_at' => ['nullable', 'date'],
             'reason'         => ['required', 'string', 'max:200'],
+            // Optional, and only meaningful for somebody posted at more than one centre.
+            'centre_id'      => ['nullable', 'integer'],
         ]);
+
+        /* WHICH CENTRE THE SHIFT WAS WORKED AT — see updatePunch above for why picking
+           one arbitrarily is wrong. A hand-entered shift is filed somewhere, and filing
+           it at the wrong provider puts the hours on the wrong payroll. The timesheet
+           screen knows which centre it is looking at and now says so.
+
+           Asked for one: it must be a centre the person actually holds a role at, and one
+           the person doing the entering may access. Both ends, as everywhere else here —
+           otherwise "which centre" becomes a way to write into a centre you cannot see. */
+        $asked = (int) ($data['centre_id'] ?? 0);
+        if ($asked) {
+            if (! $this->worksAtCentre($user, $asked)) {
+                return response()->json(['message' => 'That person does not work at that centre.'], 422);
+            }
+            $centreId = $asked;
+        } else {
+            $centreId = $this->centreOf($user);
+        }
+        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         $tz = DB::table('centres as c')
             ->join('agencies as a', 'a.id', '=', 'c.agency_id')
@@ -235,18 +253,112 @@ class EducatorRoomsController extends Controller
             'created_at' => now(),
         ]);
 
+        /* A hand-entered shift is a claim about hours somebody will be paid for, and it
+           was going into the table with nothing in the audit log behind it. The notes
+           column carried who and why, which is visible on the row but is not a record
+           anybody can search; a correction two lines down has written an audit row since
+           the day it shipped, and creating the shift outright is the larger claim. */
+        try {
+            \App\Support\Audit::write([
+                'user_id'     => $request->user()->id,
+                'action'      => 'timepunch.created',
+                'entity_type' => 'time_punch',
+                'entity_id'   => $id,
+                'payload'     => json_encode([
+                    'staff_user_id' => $user,
+                    'centre_id' => $centreId,
+                    'in' => $in->toDateTimeString(),
+                    'out' => $out?->toDateTimeString(),
+                    'reason' => $data['reason'],
+                ]),
+                'created_at'  => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Punch creation audit failed', [
+                'punch' => $id, 'error' => $e->getMessage(),
+            ]);
+        }
+
         return response()->json(['id' => $id, 'created' => true], 201);
     }
 
-    public function updatePunch(Request $request, int $user, int $punch): JsonResponse
+    /**
+     * DELETE /admin/users/{user}/punches/{punch} — remove a shift that never happened.
+     *
+     * Added alongside the timesheet's ⋮ (2026-09-16). Correcting a punch answers "these
+     * times are wrong"; it has no answer for "this shift is not real" — a double entry, a
+     * clock-in on the wrong person's tablet, a manual entry typed against the wrong name.
+     * Until now the only way to remove one was in the database, so giving the portal a
+     * create button without a delete would have meant every mistyped entry stayed on
+     * payroll for good.
+     *
+     * Audited with the whole row, not a count: once it is gone there is nothing else left
+     * to read. A reason is required — this is the destructive one.
+     */
+    public function destroyPunch(Request $request, int $user, int $punch): JsonResponse
     {
-        $centreId = $this->centreOf($user);
+        $row = DB::table('time_punches')->where('id', $punch)->where('user_id', $user)->first();
+        if (! $row) return response()->json(['message' => 'Not found'], 404);
+
+        $centreId = $row->centre_id ? (int) $row->centre_id : $this->centreOf($user);
         if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        $data = $request->validate(['reason' => ['required', 'string', 'max:200']]);
+
+        DB::table('time_punches')->where('id', $punch)->delete();
+
+        try {
+            \App\Support\Audit::write([
+                'user_id'     => $request->user()->id,
+                'action'      => 'timepunch.deleted',
+                'entity_type' => 'time_punch',
+                'entity_id'   => $punch,
+                'payload'     => json_encode([
+                    'staff_user_id' => $user,
+                    'centre_id' => $centreId,
+                    // The deleted row in full — there is nothing else left to look at.
+                    'removed' => [
+                        'punched_in_at' => $row->punched_in_at,
+                        'punched_out_at' => $row->punched_out_at,
+                        'notes' => $row->notes,
+                    ],
+                    'reason' => $data['reason'],
+                ]),
+                'created_at'  => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Punch deletion audit failed', [
+                'punch' => $punch, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json(['ok' => true, 'deleted' => true]);
+    }
+
+    public function updatePunch(Request $request, int $user, int $punch): JsonResponse
+    {
         $row = DB::table('time_punches')->where('id', $punch)->where('user_id', $user)->first();
         if (! $row) return response()->json(['message' => 'Not found'], 404);
+
+        /* THE CENTRE THE SHIFT WAS WORKED AT (2026-09-16).
+
+           This asked centreOf($user) — ->value('centre_id'), whichever role row came back
+           first. For somebody posted at one centre that is the right answer and nothing
+           changes. For somebody posted across several it is arbitrary, and arbitrary here
+           is wrong in both directions: Safia Ali holds an active educator role at nine
+           centres, so a director of the centre where she actually worked the shift could
+           be refused permission to correct it, while a director of whichever centre sorted
+           first could correct a punch from a centre they cannot otherwise see.
+
+           The punch itself records where it was worked. That is the only centre whose
+           director has any business editing it, so that is what is checked. centreOf() is
+           kept only as a fallback for the handful of legacy rows with no centre_id. */
+        $centreId = $row->centre_id ? (int) $row->centre_id : $this->centreOf($user);
+        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         $data = $request->validate([
             'punched_in_at'  => ['nullable', 'date'],
@@ -381,6 +493,30 @@ class EducatorRoomsController extends Controller
             'total_hours' => round($total, 2),
             'timezone' => $tz,
         ]);
+    }
+
+    /**
+     * Can a shift for this person be filed at this centre?
+     *
+     * A role row either names a centre or is agency-wide, and an agency-wide role has no
+     * centre_id at all — which is not "nowhere", it is "anywhere in the agency". Asking
+     * only centreIdsOf() refused an agency admin covering a room outright, which is the
+     * person most likely to be covering one at short notice and least likely to have
+     * remembered a tablet.
+     */
+    private function worksAtCentre(int $userId, int $centreId): bool
+    {
+        if (in_array($centreId, $this->centreIdsOf($userId), true)) {
+            return true;
+        }
+        $agencyId = DB::table('centres')->where('id', $centreId)->value('agency_id');
+
+        return $agencyId && DB::table('role_assignments')
+            ->where('user_id', $userId)
+            ->where('active', true)
+            ->whereNull('centre_id')
+            ->where('agency_id', $agencyId)
+            ->exists();
     }
 
     private function centreOf(int $userId): ?int
