@@ -26,6 +26,10 @@
      earned. Cassandra Schnarr reported being shown as clocked out while punch #334 was
      open in the database all along — see refresh(). */
   var punchKnown = false;
+  /* The check has been tried and failed at least once — as opposed to simply not having
+     answered yet. The two look the same on screen otherwise, and only one of them is a
+     reason to offer a retry. */
+  var checkFailed = false;
   var nudgedAt = 0;
 
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
@@ -50,11 +54,33 @@
     } catch (e) { return false; }
   }
 
+  /* WHY THE CHECK FAILED, RATHER THAN JUST THAT IT DID.
+
+     This returned null for every failure — a 401, a 500, a dropped connection, a fetch
+     wrapper throwing — so a strip stuck on "Checking your shift…" was undiagnosable from
+     the outside and, because that state is deliberately not tappable, the educator had no
+     way to clock in at all. Sukhman Malhi, 2026-09-16, 9am: stuck there while five
+     colleagues clocked in from the same build, with /staff/punches/me answering 200 in
+     150ms to her own token from the server side. Whatever broke was on the device, and
+     nothing anywhere recorded a word about it.
+
+     The reason is kept so the strip can show it and so kt-crash-report picks it up in the
+     failed-HTTP breadcrumbs — the next time this happens it should be answerable. */
+  var lastCheckError = null;
+
   function get(path) {
-    var t = tok(); if (!t) return Promise.resolve(null);
+    var t = tok();
+    if (!t) { lastCheckError = 'not signed in'; return Promise.resolve(null); }
     return fetch(apiBase() + path, { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' } })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .catch(function () { return null; });
+      .then(function (r) {
+        if (!r.ok) { lastCheckError = 'HTTP ' + r.status; return null; }
+        lastCheckError = null;
+        return r.json();
+      })
+      .catch(function (e) {
+        lastCheckError = (e && e.message) ? e.message : 'network';
+        return null;
+      });
   }
 
   // MySQL timestamps are UTC with no zone marker — see kt-tz.js.
@@ -165,6 +191,23 @@
         .catch(function (e) {
           doneBusy(); openPunch = prev; paint();
           if (! KT.toast) return;
+          /* A CHILD LEFT SIGNED IN IS NOT AN "ℹ️".
+
+             Every refusal used to share one calm blue toast, and the detail the server
+             sends — each child, their room, how long they have been marked present —
+             never reached the screen. "Children are still signed in" to somebody who
+             believes they signed them all out is not something they can act on; a list
+             of names is. */
+          var body = (e && e.kt_body) || {};
+          if (body.reason === 'children_still_signed_in') {
+            var kids = body.children || [];
+            var lines = kids.map(function (c) { return '• ' + c.label; }).join('\n');
+            KT.toast('🛑', 'You cannot clock out yet',
+              e.message + (lines ? '\n\n' + lines : '')
+                + (body.what_to_do ? '\n\n' + body.what_to_do : ''),
+              '#B91C1C');
+            return;
+          }
           if (e && e.kt_refusal) { KT.toast('ℹ️', 'Still clocked in', e.message, '#0E7C90'); }
           else { KT.toast('⚠️', 'Could not clock out', 'Please try again.', '#B91C1C'); }
         });
@@ -272,13 +315,26 @@
        every screen render, before any request has returned, so without this it asserted
        "You're not clocked in" a beat before it knew, and again after any failed poll. */
     if (!punchKnown) {
+      /* A FAILED CHECK IS NOT A REASON TO STOP SOMEBODY WORKING.
+
+         "Checking your shift…" was deliberately not tappable, so that the strip could not
+         assert the wrong state before the first answer came back. Right for the half
+         second it was written for; a trap once the check fails, because nothing ever
+         retries into a tappable state and clocking in is the first thing an educator
+         does. Once it HAS failed, say so, make it tappable to try again, and let the tap
+         fall through to clocking in — the server is the authority on whether a punch is
+         allowed, and it refuses a second open punch on its own. */
+      var failed = checkFailed;
       el.innerHTML =
-        '<span style="' + ICON + '">⏱</span>'
+        '<span style="' + ICON + '">' + (failed ? '⚠️' : '⏱') + '</span>'
         + '<span style="' + MID + '">'
-        +   '<span style="font-size:15px;font-weight:800;">Checking your shift…</span>'
-        +   '<span style="font-size:12px;font-weight:600;opacity:.9;">One moment</span>'
-        + '</span>';
-      el.style.background = '#64748B';
+        +   '<span style="font-size:15px;font-weight:800;">'
+        +     (failed ? 'Couldn\'t check your shift' : 'Checking your shift…') + '</span>'
+        +   '<span style="font-size:12px;font-weight:600;opacity:.9;">'
+        +     (failed ? 'Tap to try again, or to clock in' : 'One moment') + '</span>'
+        + '</span>'
+        + (failed ? '<span style="' + CHIP + 'color:#B45309;">Retry</span>' : '');
+      el.style.background = failed ? '#B45309' : '#64748B';
       el.style.color = '#fff';
       el.style.border = 'none';
       return;
@@ -332,7 +388,15 @@
          the 60-second poll was enough to tell a working educator she was off the clock
          — and tapping that button would have opened a SECOND punch on top of her live
          one. A failed question is not a "no": keep the last state we actually know. */
-      if (!d || !d.punches) return;
+      if (!d || !d.punches) {
+        /* Still not a "no" — the last known state is kept. But it IS something to show:
+           repaint so a first failure turns into "Couldn't check" rather than an
+           indefinite "Checking…". */
+        if (!d) { checkFailed = true; paint(); }
+        return;
+      }
+      checkFailed = false;
+      lastCheckError = null;
       openPunch = d.punches.find(function (p) { return !p.punched_out_at; }) || null;
       punchKnown = true;
       paint();
