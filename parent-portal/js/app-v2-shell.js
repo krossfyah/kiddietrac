@@ -215,7 +215,18 @@
              This item points at that profile, and says "security" out loud: the thing
              people come here looking for is two-factor, and a bare "My profile" gives
              them no reason to think it is inside. */
-          { hash: 'settings',           label: 'My profile & security', icon: '👤' },
+          /* ONE PROFILE, AND IT IS THE USER RECORD (2026-09-16).
+
+             "My profile & security" was a second, separate account screen sitting beside
+             User management, which already holds a tabbed record for every person in the
+             agency — including this one. Two places to look at the same person is how
+             they drifted apart: one knew about two-factor and how somebody is paid, the
+             other knew their roles, rooms and shifts.
+
+             For an agency admin this now opens THEIR OWN row in User management, which
+             is the same dialog they open for anybody else. Anthony, 2026-09-16: migrate
+             it into user management and remove the section. */
+          { hash: 'my-profile',         label: 'My profile',           icon: '👤' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -335,7 +346,16 @@
              This item points at that profile, and says "security" out loud: the thing
              people come here looking for is two-factor, and a bare "My profile" gives
              them no reason to think it is inside. */
-          { hash: 'settings',           label: 'My profile & security', icon: '👤' },
+          /* THE SAME NAME AND THE SAME PANES, at a different address.
+
+             A centre director has no User management screen — it is registered for
+             agency admins only — so there is nowhere in it to send them. They get the
+             same profile, under the same label, rendered by the same component; the
+             Payroll pane is literally shared with the record an admin opens.
+
+             Giving directors their own row in User management would be a privilege
+             change rather than a layout one, so it is not made here. */
+          { hash: 'my-profile',         label: 'My profile',           icon: '👤' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
 
 

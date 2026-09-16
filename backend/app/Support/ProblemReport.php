@@ -258,6 +258,23 @@ final class ProblemReport
         if ($e instanceof \Illuminate\Auth\Access\AuthorizationException) return false;
         if ($e instanceof \Illuminate\Session\TokenMismatchException) return false;
 
+        /* A TYPO AT A SHELL PROMPT IS NOT A SERVER FAULT (ticket #75).
+
+           `php artisan something --columns=…` against a command with no such option
+           raises Symfony\Component\Console\Exception\RuntimeException, which fell
+           through to "true" below and filed a HIGH-PRIORITY ticket reading "Server
+           error: RuntimeException — The "--columns" option does not exist."
+
+           Nothing is wrong when that happens. The console is refusing an argument it
+           does not have, which is the console working. Every exception under that
+           namespace is an input error of that shape — an unknown option, an unknown
+           command, a missing argument — and none of them describes the application
+           failing at anything.
+
+           Matched on the namespace rather than the four class names, because the next
+           one Symfony adds is the same kind of thing and should not need a patch. */
+        if (strpos(get_class($e), 'Symfony\\Component\\Console\\Exception\\') === 0) return false;
+
         if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
             return $e->getStatusCode() >= 500;
         }

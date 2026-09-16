@@ -7581,6 +7581,18 @@
     try { showUserModal(u, content); } catch (e) { location.hash = '#onboarding'; }
   };
 
+  /* #my-profile — the signed-in admin's own record, in User management.
+
+     Renders the Users tab underneath and opens the same Manage dialog that any row
+     opens, on themselves. Not a copy of it: the same function, the same panes, the same
+     Account & pay. Closing the dialog leaves them on the list they are already entitled
+     to, which is a sensible place to land rather than a dead end. */
+  Shell.registerScreen('agency_admin:my-profile', async function (main, ctx) {
+    state.activeTab = 'users';
+    await renderAdmin(main, ctx);
+    try { KT.openMyAccount(); } catch (e) {}
+  });
+
   Shell.registerScreen('agency_admin:admin', renderAdmin);
   // v22p2.3: register deep-link hashes per tab so nav entries can land on a specific tab.
   ['centres', 'users', 'families', 'branding', 'billing'].forEach(function (tab) {

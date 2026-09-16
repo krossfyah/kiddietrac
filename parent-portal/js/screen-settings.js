@@ -1077,5 +1077,11 @@
      most needed somewhere personal to manage it. */
   Shell.registerScreen('agency_admin:settings', render);
   Shell.registerScreen('centre_director:settings', render);
+  /* The same profile under the label the nav now uses. `settings` stays registered for
+     every role because it is in bookmarks, in the sidebar's build line (#settings/about)
+     and in help articles — removing an address people already hold would break those to
+     no benefit. */
+  Shell.registerScreen('centre_director:my-profile', render);
+  Shell.registerScreen('platform_admin:my-profile', render);
   window.KT.renderSettings = render;
 })(window);

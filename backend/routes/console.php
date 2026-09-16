@@ -212,7 +212,19 @@ Schedule::command('invoices:issue-scheduled')
     ->dailyAt('06:00')
     ->withoutOverlapping();
 Schedule::command('expiry:warn')->dailyAt('08:00');
-Schedule::command('demo:seed-daily')->dailyAt('05:00')->withoutOverlapping();
+/* KEEP THE REASON (ticket #72).
+
+   05:00 today this exited 1 and filed a high-priority ticket saying exactly that and
+   nothing else — because a scheduled command's output goes to /dev/null unless it is
+   asked for, so the one thing that would explain the failure was discarded as it
+   happened. It has run clean every other day this week and runs clean by hand, which
+   makes it exactly the kind of intermittent failure that is unfixable without its
+   output.
+
+   Appended rather than overwritten, and only for this command: a scheduler that logs
+   every run of every command fills a disk, and this is the one that has failed. */
+Schedule::command('demo:seed-daily')->dailyAt('05:00')->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/schedule-output.log'));
 
 
 Schedule::command('drip:dispatch')->hourly();
@@ -281,7 +293,24 @@ Schedule::command('immunization:reminders')->hourly()->withoutOverlapping();
    --max-time=55 means a legitimate run cannot exceed about a minute, so a lock
    held beyond a few minutes is always wreckage. Five minutes gives a slow run
    room and caps the damage from a killed one at five minutes instead of a day. */
-Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=55 --tries=3 --sleep=2 --backoff=30")
+/* A WORKER THAT DIES OF EXHAUSTION CHARGES THE JOB FOR IT (tickets #73, #74).
+
+   2026-09-16 13:34: the worker hit PHP's 128 MB limit and was killed mid-send. The job
+   it was holding — a check-in reminder to a parent at iLearn — was not at fault and was
+   charged an attempt anyway. That happened three times, and at 13:36 the job was moved
+   to failed_jobs, so the reminder was never sent and the only trace was two
+   high-priority tickets about an exception nobody could tie to an email.
+
+   Measured while chasing it: the mail pipeline does not leak. 60 consecutive sends
+   through AgencyMailer, the suppression listener and the open pixel held flat at 32 MB,
+   so there is nothing here to fix at the send site. What is missing is a ceiling of the
+   worker's OWN, below PHP's, so it finishes the job in hand and retires rather than
+   being killed in the middle of one. --stop-when-empty already means a restart costs
+   nothing: the next tick is a minute away and picks up whatever is left.
+
+   100, not 128: the check is made BETWEEN jobs, so the headroom has to cover the
+   largest single job, and a send peaks at ~32 MB from a ~28 MB floor. */
+Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=55 --memory=100 --tries=3 --sleep=2 --backoff=30")
     ->everyMinute()->withoutOverlapping(5)->runInBackground();
 
 
