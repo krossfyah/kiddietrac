@@ -121,6 +121,7 @@ final class CheckinScanController extends Controller
             ->join('families', 'families.id', '=', 'guardians.family_id')
             ->join('children', 'children.family_id', '=', 'families.id')
             ->join('enrollments', 'enrollments.child_id', '=', 'children.id')
+            ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments'))
             ->where('guardians.user_id', $user->id)
             ->where('families.centre_id', $centreId)
             ->whereNull('enrollments.end_date')
@@ -138,10 +139,13 @@ final class CheckinScanController extends Controller
         // children to sign in/out; the app then re-posts with the chosen ids.
         $selected = $request->input('child_ids');
         if (empty($selected) && $children->count() > 1) {
-            $preview = $children->map(function ($c) {
+            // Agency day as instants: on the UTC date an evening scan offered
+            // "check in" for a child who was already inside.
+            [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForCentre($centreId);
+            $preview = $children->map(function ($c) use ($dayFrom, $dayTo) {
                 $last = DB::table('check_events')
                     ->where('child_id', $c->id)
-                    ->whereDate('occurred_at', now()->toDateString())
+                    ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
                     ->orderByDesc('occurred_at')->first();
                 $isIn = $last && $last->event_type === 'check_in';
                 return [
@@ -163,10 +167,13 @@ final class CheckinScanController extends Controller
         }
 
         $results = [];
+        // Same agency-day bound as the preview above, so the scan does not decide
+        // in/out on a different day from the one it just showed.
+        [$scanFrom, $scanTo] = \App\Support\AgencyTime::dayRangeForCentre($centreId);
         foreach ($children as $c) {
             $last = DB::table('check_events')
                 ->where('child_id', $c->id)
-                ->whereDate('occurred_at', now()->toDateString())
+                ->where('occurred_at', '>=', $scanFrom)->where('occurred_at', '<', $scanTo)
                 ->orderByDesc('occurred_at')->first();
             $isIn = $last && $last->event_type === 'check_in';
             $newType = $isIn ? 'check_out' : 'check_in';
@@ -185,7 +192,10 @@ final class CheckinScanController extends Controller
             // The QR scan is a check-in/out like any other — the other guardians
             // on the family should hear about it too.
             try {
-                app(\App\Services\CheckEventNotifier::class)->notify((int) $c->id, $newType, (int) $user->id);
+                $notifier = app(\App\Services\CheckEventNotifier::class);
+                $notifier->notify((int) $c->id, $newType, (int) $user->id, null, 'qr');
+                // Staff hear about it too — a scan at the door used to reach only the family.
+                $notifier->notifyStaff((int) $c->id, (int) ($c->room_id ?? 0), null, $newType, (int) $user->id, 'qr');
             } catch (\Throwable $e) {}
 
             $results[] = [
@@ -197,6 +207,26 @@ final class CheckinScanController extends Controller
             ];
         }
 
-        return response()->json(['results' => $results], 201);
+        /* WHO scanned, so the educator at the door can verify the person in front of
+           them rather than just the outcome. A QR code proves possession of a phone;
+           a face and a name is what actually confirms the right adult is collecting
+           the right child. (Anthony, 2026-08-26) */
+        return response()->json([
+            'results' => $results,
+            'scanned_by' => [
+                'id' => (int) $user->id,
+                'name' => trim(((string) $user->first_name) . ' ' . ((string) $user->last_name)),
+                'photo_url' => $user->photo_url ?? null,
+                /* Their relationship to the family AT THIS CENTRE. $famIds never
+                   existed in this scope — `?? []` silently made every lookup return
+                   null, which would have shipped a verification card that never showed
+                   "mother" or "grandfather". Resolved from the guardian row instead. */
+                'relationship' => DB::table('guardians as g')
+                    ->join('families as f', 'f.id', '=', 'g.family_id')
+                    ->where('g.user_id', $user->id)
+                    ->where('f.centre_id', $centreId)
+                    ->value('g.relationship'),
+            ],
+        ], 201);
     }
 }

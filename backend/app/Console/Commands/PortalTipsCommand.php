@@ -107,7 +107,7 @@ final class PortalTipsCommand extends Command
                 continue;
             }
             try {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $uid, 'type' => 'portal_tip',
                     'title' => $tip['title'], 'body' => $tip['body'],
                     'data' => json_encode(['link' => $tip['link']]),

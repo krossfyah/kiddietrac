@@ -271,7 +271,7 @@ final class MessageController extends Controller
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])->pluck('user_id')->unique();
         foreach ($staffIds as $sid) {
             if ((int) $sid === (int) $user->id) continue;
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $sid, 'type' => 'message',
                 // Name the parent AND the child: "New message from a parent" tells
                 // an educator with thirty families nothing they can act on.
@@ -350,7 +350,7 @@ final class MessageController extends Controller
         $body = $parentName . ' is waiting to hear back about ' . $childName . '.';
         foreach ($staffIds as $sid) {
             if ((int) $sid === (int) $user->id) continue;
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $sid, 'type' => 'nudge',
                 'title' => '👋 Nudge from ' . $parentName . ' · ' . $childName,
                 'body' => $body,
@@ -597,7 +597,7 @@ final class MessageController extends Controller
             foreach (DB::table('guardians')->where('family_id', $convo->family_id)->pluck('user_id') as $gid) {
                 if ((int) $gid === (int) $user->id) continue;
                 $guardianIds[] = (int) $gid;
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $gid, 'type' => 'message',
                     'title' => 'New message from your centre',
                     'body' => $preview,

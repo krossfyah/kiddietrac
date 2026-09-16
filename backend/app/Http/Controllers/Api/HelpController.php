@@ -94,7 +94,11 @@ final class HelpController extends Controller
     private function askAI(string $question, string $role): array
     {
         $corpus = $this->help->getCorpusForRole($role);
-        $apiKey = config('services.anthropic.api_key');
+        /* config/services.php defines this as `key`; `api_key` was never set, so the Help
+           assistant reported "not configured" while every other AI caller reached the API.
+           Same defensive order AnthropicService uses. (2026-08-30) */
+        $apiKey = config('services.anthropic.key')
+            ?: config('services.anthropic.api_key');
 
         if (!$apiKey) {
             throw new RuntimeException('Anthropic API key not configured');
@@ -271,6 +275,112 @@ PROMPT;
     /**
      * POST /api/v1/help/{slug}/view
      */
+    /**
+     * The agency a help view / piece of feedback belongs to.
+     *
+     * Same shape as the portal's other agency resolvers: honour X-Active-Agency-Id
+     * only for a platform_admin or somebody holding an active role in that agency,
+     * otherwise fall back to their own first active role. Returns null for a user with
+     * no agency at all (a guardian reading the parent help), which the scoped queries
+     * correctly treat as "not mine".
+     *
+     * Deliberately does NOT abort like the stricter resolvers do: this is called from
+     * view tracking, and a help article must still render for somebody whose agency
+     * cannot be worked out. Losing one analytics row is a fair price; a help page that
+     * 400s because of a missing header is not.
+     */
+    /** How long a follow-up comment still belongs to the vote that prompted it. */
+    /**
+     * Turn an explained thumbs-down into a support ticket.
+     *
+     * Feedback was write-only: it landed in a table nobody read, and the person was
+     * thanked for it. A ticket puts it in front of somebody who can rewrite the guide.
+     *
+     * Repeat complaints about the SAME article join the existing open ticket as a
+     * message instead of opening another. Five people confused by one paragraph is one
+     * problem with five witnesses, and five separate tickets would read as five
+     * problems while making the real one look no more urgent than the rest.
+     *
+     * Goes through SupportTicketController@create rather than inserting a row, so this
+     * cannot drift away from the notifications, the HQ routing and the emailing that
+     * every other ticket gets. Never allowed to break the feedback itself.
+     */
+    private function raiseDocTicket(\Illuminate\Http\Request $request, string $slug, string $comment): void
+    {
+        try {
+            $user = $request->user();
+            if (! $user) {
+                return;
+            }
+
+            $title = ucfirst(str_replace('-', ' ', $slug));
+            $subject = 'Help guide unclear: '.$title;
+
+            $existing = \Illuminate\Support\Facades\DB::table('support_tickets')
+                ->where('category', 'documentation')
+                ->where('subject', $subject)
+                ->whereIn('status', ['open', 'in_progress'])
+                ->orderByDesc('id')
+                ->first();
+
+            if ($existing) {
+                \Illuminate\Support\Facades\DB::table('support_ticket_messages')->insert([
+                    'ticket_id' => $existing->id,
+                    'user_id' => $user->id,
+                    'body' => $comment,
+                    'created_at' => now(),
+                ]);
+                \Illuminate\Support\Facades\DB::table('support_tickets')
+                    ->where('id', $existing->id)->update(['updated_at' => now()]);
+
+                return;
+            }
+
+            $sub = \Illuminate\Http\Request::create('/api/v1/support/tickets', 'POST', [
+                'category' => 'documentation',
+                'priority' => 'low',
+                'subject' => $subject,
+                'body' => "Marked \"not helpful\" on the guide \"{$title}\" (/help#/{$slug}).\n\n"
+                          ."What they were looking for:\n{$comment}",
+            ]);
+            $sub->setUserResolver(fn () => $user);
+            $sub->headers->set('X-Active-Agency-Id', (string) ($this->helpAgencyId($request) ?? ''));
+
+            app(\App\Http\Controllers\Api\SupportTicketController::class)->create($sub);
+        } catch (\Throwable $e) {
+            // The feedback is already saved; a ticket failure must not lose it.
+            \Illuminate\Support\Facades\Log::warning('Help feedback ticket failed: '.$e->getMessage());
+        }
+    }
+
+    private const RECENT_WINDOW_MIN = 30;
+
+    private function helpAgencyId(\Illuminate\Http\Request $request): ?int
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        $active = (int) $request->header('X-Active-Agency-Id');
+        if ($active) {
+            $allowed = \Illuminate\Support\Facades\DB::table('role_assignments')
+                ->where('user_id', $user->id)->where('active', true)
+                ->where(function ($w) use ($active) {
+                    $w->where('agency_id', $active)->orWhere('role', 'platform_admin');
+                })->exists();
+            if ($allowed) {
+                return $active;
+            }
+        }
+
+        $first = \Illuminate\Support\Facades\DB::table('role_assignments')
+            ->where('user_id', $user->id)->where('active', true)
+            ->whereNotNull('agency_id')->value('agency_id');
+
+        return $first ? (int) $first : null;
+    }
+
     public function trackView(\Illuminate\Http\Request $request, string $slug): \Illuminate\Http\JsonResponse
     {
         $user = $request->user();
@@ -278,7 +388,11 @@ PROMPT;
             'slug' => $slug,
             'user_id' => optional($user)->id,
             'role' => $this->resolveRole($user),
-            'agency_id' => optional($user)->agency_id,
+            /* `optional($user)->agency_id` read a property that does not exist — the
+               users table has no agency_id column and the model has no accessor — so
+               every one of the 153 rows recorded here was stamped NULL, and the
+               analytics filter below had nothing to filter on. */
+            'agency_id' => $this->helpAgencyId($request),
             'viewed_at' => now(),
             'ip' => $request->ip(),
         ]);
@@ -295,15 +409,59 @@ PROMPT;
             'comment' => ['nullable', 'string', 'max:1000'],
         ]);
         $user = $request->user();
+
+        /* The vote lands the moment the button is pressed, and the reason follows in a
+           second call once it has been typed. Both are the SAME piece of feedback, so
+           the second call updates the first row rather than inserting another —
+           otherwise every explained 👎 would count twice and drag the helpful
+           percentage down for the sin of being explained.
+
+           Bounded by time and by this user and article, so it can only ever attach a
+           comment to the vote that prompted it. Outside the window it is a fresh
+           opinion on a re-read, and gets its own row. */
+        $recent = optional($user)->id
+            ? \Illuminate\Support\Facades\DB::table('help_article_feedback')
+                ->where('slug', $slug)
+                ->where('user_id', $user->id)
+                ->where('created_at', '>=', now()->subMinutes(self::RECENT_WINDOW_MIN))
+                ->orderByDesc('id')
+                ->first()
+            : null;
+
+        if ($recent && $recent->helpful == $data['helpful']) {
+            \Illuminate\Support\Facades\DB::table('help_article_feedback')
+                ->where('id', $recent->id)
+                ->update([
+                    // Never blank a comment already given by re-sending without one.
+                    'comment' => $data['comment'] ?? $recent->comment,
+                    'updated_at' => now(),
+                ]);
+
+            if (! empty($data['comment']) && empty($recent->comment)) {
+                $this->raiseDocTicket($request, $slug, $data['comment']);
+            }
+
+            return response()->json(['ok' => true, 'updated' => true]);
+        }
+
         \Illuminate\Support\Facades\DB::table('help_article_feedback')->insert([
             'slug' => $slug,
             'user_id' => optional($user)->id,
+            'agency_id' => $this->helpAgencyId($request),
             'role' => $this->resolveRole($user),
             'helpful' => $data['helpful'],
             'comment' => $data['comment'] ?? null,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        /* Only a 👎 that came with an explanation. A bare thumbs-down says an article
+           failed and nothing about how — turning those into tickets would bury the ones
+           that can actually be acted on. */
+        if (! $data['helpful'] && ! empty($data['comment'])) {
+            $this->raiseDocTicket($request, $slug, $data['comment']);
+        }
+
         return response()->json(['ok' => true]);
     }
 
@@ -317,7 +475,12 @@ PROMPT;
         if (!in_array($role, ['agency_admin', 'platform_admin', 'centre_director'])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
-        $agencyId = $user->agency_id ?? null;
+        /* This was `$user->agency_id ?? null`, which is ALWAYS null. The
+           `when(!$isPlatform && $agencyId, ...)` guards below therefore never applied,
+           and any agency admin or centre director reading this endpoint would have seen
+           every agency's help activity. It has never been reachable from the UI, so
+           nothing leaked — but it is about to be, which is why it is fixed first. */
+        $agencyId = $this->helpAgencyId($request);
         $isPlatform = $role === 'platform_admin';
 
         // Top viewed (30d)
@@ -332,6 +495,7 @@ PROMPT;
 
         // Helpful vs not (per article)
         $feedback = \Illuminate\Support\Facades\DB::table('help_article_feedback')
+            ->when(! $isPlatform && $agencyId, fn ($q) => $q->where('agency_id', $agencyId))
             ->select('slug',
                 \Illuminate\Support\Facades\DB::raw('SUM(CASE WHEN helpful = 1 THEN 1 ELSE 0 END) as yes'),
                 \Illuminate\Support\Facades\DB::raw('SUM(CASE WHEN helpful = 0 THEN 1 ELSE 0 END) as no')
@@ -342,6 +506,7 @@ PROMPT;
 
         // Comments (negative only — actionable)
         $negComments = \Illuminate\Support\Facades\DB::table('help_article_feedback')
+            ->when(! $isPlatform && $agencyId, fn ($q) => $q->where('agency_id', $agencyId))
             ->where('helpful', false)
             ->whereNotNull('comment')
             ->orderByDesc('created_at')

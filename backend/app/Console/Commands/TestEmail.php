@@ -28,14 +28,17 @@ final class TestEmail extends Command
         $this->newLine();
 
         try {
-            Mail::to($email)->send(new WelcomeEmail(
+            Mail::to($email)->send((new WelcomeEmail(
                 recipientName: 'Test User',
                 recipientEmail: $email,
                 tempPassword: 'TestPass123',
                 centreName: 'Test Centre',
                 role: 'parent',
                 childNames: 'Test Child',
-            ));
+            ))->withSymfonyMessage(function ($msg) {
+                // A deliberate CLI test — it must arrive, or it is not a test.
+                \App\Support\MailScope::platform($msg);
+            }));
 
             $this->info('✓ Email sent successfully.');
             $this->line('Check the inbox at '.$email);

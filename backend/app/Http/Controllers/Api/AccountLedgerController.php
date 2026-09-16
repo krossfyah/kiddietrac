@@ -398,6 +398,24 @@ class AccountLedgerController extends Controller
         $overpaid = 0.0;
 
         // ── INVOICES, both kinds ────────────────────────────────────────────
+        /* What the payment rows claim against each native invoice.
+
+           Read BEFORE the invoices are walked, because the invoice loop needs to know
+           whether its settled figure is already going to be stated line-by-line further
+           down. Only native invoices can appear here: payments.invoice_id carries a
+           foreign key to invoices.id, so an external invoice has no payment rows. */
+        $paidByInvoice = [];
+        foreach (DB::table('payments')->whereIn('family_id', $famIds)
+            ->where(function ($q) { $q->whereNull('status')->orWhere('status', 'succeeded'); })
+            ->get(['invoice_id', 'external_invoice_id', 'amount']) as $p) {
+            $k = self::receiptKey($p->invoice_id, $p->external_invoice_id);
+            if ($k === null) { continue; }
+            $paidByInvoice[$k] = ($paidByInvoice[$k] ?? 0.0) + (float) $p->amount;
+        }
+        /* Filled in as the invoices are walked, then used to decide how much of each
+           payment row has already been counted. */
+        $settledByInvoice = [];
+
         $invoiceRows = [];
         foreach (DB::table('invoices')->whereIn('family_id', $famIds)
             ->get(['id', 'invoice_number', 'issued_at', 'due_at', 'total', 'amount_paid',
@@ -449,7 +467,16 @@ class AccountLedgerController extends Controller
             $recorded = (float) ($r->amount_paid ?? 0);
             $over = round($recorded - $total, 2);
 
+            /* Both kinds. An external invoice can now carry a receipt row too, and
+               the money it represents has already been counted from the invoice here. */
+            $settledByInvoice[
+                ($iv['source'] === 'native_invoice' ? 'n:' : 'x:') . $iv['entity_id']
+            ] = $settled;
+
             if ($settled > 0.005) {
+                /* Counted ONCE, and from here. The invoice is what the billing system
+                   says was settled against it, and it is the same figure the
+                   all-accounts list and the outstanding column use. */
                 $credited += $settled;
 
                 /* The receipt says more came in than was ever invoiced. Stated on the
@@ -467,15 +494,26 @@ class AccountLedgerController extends Controller
                         . ' more than was billed.';
                 }
 
-                $entries[] = [
-                    'date' => $r->external_updated_at ?? $r->due_at ?? $r->issued_at,
-                    'kind' => 'receipt', 'direction' => 'owed',
-                    'reference' => $iv['ref'],
-                    'description' => 'Payment received — ' . $iv['ref'],
-                    'status' => 'received', 'debit' => 0.0, 'credit' => $settled,
-                    'overpaid' => $over > 0.005 ? $over : null,
-                    'note' => $note,
-                ];
+                /* SAY IT ONCE. Where payment rows exist for this invoice they are
+                   listed individually below, with the method, reference and real date -
+                   better information than this line. Emitting both is what stated the
+                   same money twice. Only the part no payment row accounts for is
+                   summarised here. */
+                $key = ($iv['source'] === 'native_invoice' ? 'n:' : 'x:') . $iv['entity_id'];
+                $explained = min($settled, (float) ($paidByInvoice[$key] ?? 0.0));
+                $unexplained = round($settled - $explained, 2);
+
+                if ($unexplained > 0.005) {
+                    $entries[] = [
+                        'date' => $r->external_updated_at ?? $r->due_at ?? $r->issued_at,
+                        'kind' => 'receipt', 'direction' => 'owed',
+                        'reference' => $iv['ref'],
+                        'description' => 'Payment received — ' . $iv['ref'],
+                        'status' => 'received', 'debit' => 0.0, 'credit' => $unexplained,
+                        'overpaid' => $over > 0.005 ? $over : null,
+                        'note' => $note,
+                    ];
+                }
             }
 
             if ($due > 0.005) {
@@ -494,11 +532,31 @@ class AccountLedgerController extends Controller
         // ── RECEIPTS recorded natively ──────────────────────────────────────
         foreach (DB::table('payments as p')->leftJoin('invoices as i', 'i.id', '=', 'p.invoice_id')
             ->whereIn('p.family_id', $famIds)
-            ->get(['p.id', 'p.amount', 'p.method', 'p.status', 'p.paid_at', 'p.created_at',
-                   'p.reference_number', 'p.notes', 'i.invoice_number']) as $r) {
+            ->get(['p.id', 'p.invoice_id', 'p.external_invoice_id', 'p.amount', 'p.method',
+                   'p.status', 'p.paid_at', 'p.created_at', 'p.reference_number', 'p.notes',
+                   'i.invoice_number']) as $r) {
             $ok = $r->status === null || strtolower((string) $r->status) === 'succeeded';
             $amt = (float) $r->amount;
-            if ($ok) { $credited += $amt; $balance -= $amt; }
+
+            /* ALREADY COUNTED, USUALLY. The invoice above has already contributed
+               `settled` to the totals, and this row is the detail of how that money
+               arrived rather than a second receipt of it. Adding it again is what made
+               a $1,680 account report $3,360 collected.
+
+               So only the part of this payment that its invoice does NOT already
+               reflect is counted: nothing, normally; the excess where somebody paid
+               more than the invoice records; the whole amount where the invoice is not
+               on this statement at all. The line itself is always shown either way. */
+            $key = self::receiptKey($r->invoice_id ?? null, $r->external_invoice_id ?? null);
+            $onThisStatement = $key !== null && array_key_exists($key, $settledByInvoice);
+
+            /* Nothing, when the invoice is here. It has already contributed its settled
+               figure, and that figure is what the all-accounts list uses too — counting
+               any part of this row again is how the two came to disagree. Where more was
+               received than billed, the excess is reported as `overpaid` and noted on the
+               invoice line rather than quietly added to what the family has paid. */
+            $countable = $onThisStatement ? 0.0 : $amt;
+            if ($ok && $countable > 0.005) { $credited += $countable; $balance -= $countable; }
             $entries[] = [
                 'date' => $r->paid_at ?: $r->created_at, 'kind' => 'receipt', 'direction' => 'owed',
                 'reference' => $r->reference_number ?: ('RCPT-' . $r->id),
@@ -569,23 +627,64 @@ class AccountLedgerController extends Controller
            instalments already past their date are included and flagged rather than
            dropped — a missed instalment is the single most useful thing on this
            part of the statement. */
+        /* The external invoices this account holds, for matching instalments that
+           carry no invoice_id of their own. Read once rather than per row. */
+        $extForMatch = DB::table('external_invoices')->whereIn('family_id', $famIds)
+            ->whereNotIn(DB::raw('LOWER(status)'), ['void', 'voided', 'cancelled'])
+            ->get(['id', 'number', 'due_at', 'total', 'pdf_url'])
+            ->groupBy(fn ($e) => substr((string) $e->due_at, 0, 10));
+
         $upcoming = [];
         foreach (DB::table('payment_plan_installments as i')
             ->join('payment_plans as p', 'p.id', '=', 'i.payment_plan_id')
+            ->leftJoin('invoices as inv', 'inv.id', '=', 'i.invoice_id')
             ->whereIn('p.family_id', $famIds)
             ->whereNotIn(DB::raw('LOWER(i.status)'), ['paid', 'cancelled', 'void'])
             ->orderBy('i.due_date')
-            ->get(['i.id', 'i.due_date', 'i.amount', 'i.status',
+            ->get(['i.id', 'i.due_date', 'i.amount', 'i.status', 'i.invoice_id',
+                   'inv.invoice_number', 'inv.pdf_url as invoice_pdf_url', 'inv.total as invoice_total',
                    'p.id as plan_id', 'p.total_amount', 'p.installment_count']) as $r) {
             $d = Carbon::parse($r->due_date);
+
+            /* WHICH INVOICE THIS IS. Raised here → linked outright. Imported from
+               iLearn → no link at all, matched on (family, due date), which pairs 399
+               of them. A difference in amount is REPORTED, never used to reject: some
+               were adjusted at source after the schedule was agreed, and a row that has
+               drifted should say so rather than show nothing. */
+            $invoice = null;
+            if ($r->invoice_id && $r->invoice_number) {
+                $invoice = [
+                    'kind' => 'native', 'id' => (int) $r->invoice_id,
+                    'number' => (string) $r->invoice_number,
+                    'doc_url' => $r->invoice_pdf_url ?: null,
+                    'differs' => abs((float) $r->invoice_total - (float) $r->amount) >= 0.005,
+                    'matched_by' => 'raised here',
+                ];
+            } else {
+                $day = substr((string) $r->due_date, 0, 10);
+                $hit = ($extForMatch[$day] ?? collect())
+                    ->sortBy(fn ($e) => abs((float) $e->total - (float) $r->amount))->first();
+                if ($hit) {
+                    $invoice = [
+                        'kind' => 'external', 'id' => (int) $hit->id,
+                        'number' => (string) ($hit->number ?: ('#' . $hit->id)),
+                        'doc_url' => $hit->pdf_url ?: null,
+                        'differs' => abs((float) $hit->total - (float) $r->amount) >= 0.005,
+                        'matched_by' => 'due date',
+                    ];
+                }
+            }
+
             $upcoming[] = [
                 'kind' => 'installment', 'date' => $r->due_date, 'amount' => (float) $r->amount,
-                'description' => 'Payment plan instalment',
-                'detail' => 'Plan #' . $r->plan_id . ' — ' . (int) $r->installment_count
-                    . ' instalments against a $' . number_format((float) $r->total_amount, 2) . ' total',
+                // "Payment schedule", the name used everywhere else in the portal now.
+                'description' => 'Payment schedule',
+                'detail' => 'Schedule #' . $r->plan_id . ' — ' . (int) $r->installment_count
+                    . ' payments against a $' . number_format((float) $r->total_amount, 2) . ' total',
                 'status' => $r->status,
                 'days' => (int) $today->diffInDays($d, false),
                 'overdue' => $d->lt($today),
+                'invoice' => $invoice,
             ];
         }
         foreach (DB::table('billing_schedules')->whereIn('family_id', $famIds)->where('active', 1)
@@ -777,6 +876,160 @@ class AccountLedgerController extends Controller
      * invoices here are marked paid while carrying amount_paid = 0, and reading the
      * column literally would leave every one of them owing its full value forever.
      */
+    /**
+     * Which invoice a receipt belongs to, as 'n:12' or 'x:97'.
+     *
+     * Kind-prefixed because the two id ranges overlap - native invoices run 9..64 and
+     * external ones 2..464, so a bare integer would merge #22 of each into one account's
+     * figures. Returns null for a receipt naming neither, which is then counted on its
+     * own rather than silently attributed to something.
+     */
+    private static function receiptKey(mixed $invoiceId, mixed $externalInvoiceId): ?string
+    {
+        if ($invoiceId !== null && (int) $invoiceId > 0) {
+            return 'n:' . (int) $invoiceId;
+        }
+        if ($externalInvoiceId !== null && (int) $externalInvoiceId > 0) {
+            return 'x:' . (int) $externalInvoiceId;
+        }
+
+        return null;
+    }
+
+    /**
+     * Email one invoice to a named address, with the document attached.
+     *
+     * `kind` says which table: an external invoice belongs to the billing system that
+     * issued it, a native one to this platform, and their ids OVERLAP (native 9..64,
+     * external 2..464) — so the kind is required rather than guessed, or #22 fetches a
+     * different family's invoice.
+     */
+    public function emailInvoice(Request $request, string $kind, int $id): JsonResponse
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        abort_unless($agencyId, 403);
+        abort_unless(in_array($kind, ['native', 'external'], true), 422, 'Unknown invoice kind.');
+
+        $data = $request->validate([
+            'to' => 'required|email|max:180',
+            'message' => 'nullable|string|max:800',
+        ]);
+
+        $inv = $kind === 'external'
+            ? DB::table('external_invoices')->where('id', $id)->first()
+            : DB::table('invoices')->where('id', $id)->first();
+        abort_unless($inv, 404, 'That invoice no longer exists.');
+
+        // Tenant check on the FAMILY, not on the id the client sent.
+        $famAgency = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('f.id', $inv->family_id)->value('c.agency_id');
+        abort_unless((int) $famAgency === $agencyId, 404, 'That invoice no longer exists.');
+
+        if (! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) {
+            return response()->json([
+                'sent' => false,
+                'reason' => 'Email is switched off for this agency (Settings → "Send notifications and emails").',
+            ], 409);
+        }
+
+        $number = (string) ($kind === 'external' ? ($inv->number ?: '#' . $inv->id) : $inv->invoice_number);
+        $total = (float) $inv->total;
+        $due = $inv->due_at ? Carbon::parse($inv->due_at)->format('j F Y') : null;
+        $agency = DB::table('agencies')->where('id', $agencyId)->first(['name']);
+        $agencyName = $agency->name ?? 'your childcare provider';
+        $family = DB::table('families')->where('id', $inv->family_id)->value('family_name');
+
+        /* THE OFFICIAL DOCUMENT WHERE THERE IS ONE. An external invoice's pdf_url is the
+           file the family was actually sent; drawing our own would hand them a second,
+           differently-worded invoice for the same money. Falls back rather than fails. */
+        $pdfBytes = null;
+        if (! empty($inv->pdf_url)) {
+            try {
+                $res = \Illuminate\Support\Facades\Http::timeout(20)
+                    ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                    ->get((string) $inv->pdf_url);
+                $body = $res->successful() ? (string) $res->body() : '';
+                // A login page is a 200 too — an HTML file named .pdf is worse than none.
+                if ($body !== '' && str_starts_with($body, '%PDF')) { $pdfBytes = $body; }
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+        if ($pdfBytes === null && $kind === 'native') {
+            try {
+                $pdfBytes = app(\App\Services\InvoicePdfRenderer::class)->renderFromInvoiceId($id);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        $note = trim((string) ($data['message'] ?? ''));
+        $body = '<p>Hello' . ($family ? ' ' . e($family) : '') . ',</p>'
+            . '<p>Invoice <strong>' . e($number) . '</strong> for <strong>$' . number_format($total, 2)
+            . '</strong>' . ($due ? ', due ' . e($due) : '') . ', is attached.</p>'
+            . ($note !== '' ? '<p>' . nl2br(e($note)) . '</p>' : '')
+            . ($pdfBytes === null
+                ? '<p style="color:#92400e;font-size:13px;">The document could not be attached — please ask us for a copy.</p>'
+                : '');
+
+        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+            'eyebrow' => 'INVOICE',
+            'title' => $agencyName,
+            'subtitle' => 'Invoice ' . $number . ($due ? ' — due ' . $due : ''),
+            'preheader' => 'Invoice ' . $number . ' for $' . number_format($total, 2) . ' from ' . $agencyName,
+        ]);
+
+        $to = $data['to'];
+        $subject = 'Invoice ' . $number . ' — ' . $agencyName;
+        $sentAt = now();
+
+        try {
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
+                function ($m) use ($to, $family, $subject, $pdfBytes, $number) {
+                    $m->to($to, $family ?: null)->subject($subject);
+                    if ($pdfBytes !== null) {
+                        $m->attachData($pdfBytes, 'invoice-' . preg_replace('/[^A-Za-z0-9._-]/', '-', $number) . '.pdf',
+                            ['mime' => 'application/pdf']);
+                    }
+                });
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['sent' => false, 'reason' => 'The mail server refused it: ' . $e->getMessage()], 502);
+        }
+
+        /* What happened, not what was attempted — the suppression listener can hold this
+           back after the mailer has accepted it. */
+        $verdict = DB::table('email_logs')
+            ->whereRaw('LOWER(to_email) = ?', [mb_strtolower($to)])
+            ->where('created_at', '>=', $sentAt->copy()->subMinutes(2))
+            ->orderByDesc('id')->first(['status', 'error']);
+        $blocked = $verdict && strtolower((string) $verdict->status) === 'suppressed';
+
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id,
+            'agency_id' => $agencyId,
+            'action' => 'invoice.emailed',
+            'entity_type' => $kind === 'external' ? 'external_invoice' : 'invoice',
+            'entity_id' => $id,
+            'payload' => json_encode([
+                'summary' => ($blocked ? 'Tried to email' : 'Emailed') . ' invoice ' . $number
+                    . ' for $' . number_format($total, 2) . ' to ' . $to
+                    . ($blocked ? ' — held back by a mail switch' : ''),
+                'to' => $to, 'invoice' => $number, 'kind' => $kind, 'total' => $total,
+                'attachment' => $pdfBytes !== null, 'delivered' => ! $blocked,
+            ]),
+        ]);
+
+        return response()->json([
+            'sent' => ! $blocked,
+            'attachment' => $pdfBytes !== null,
+            'reason' => $blocked
+                ? 'The mail layer held it back: ' . ($verdict->error ?: 'a delivery switch is off for this recipient.')
+                : null,
+        ]);
+    }
+
     private function stillDue(object $r): float
     {
         if (! $this->isOpen($r->status)) {
@@ -897,7 +1150,7 @@ class AccountLedgerController extends Controller
         $sentAt = now();
 
         try {
-            \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($html,
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
                 function ($m) use ($to, $acct, $subject, $copyTo, $pdfBytes, $pdfName) {
                     $m->to($to, $acct['name'] !== '(no name)' ? $acct['name'] : null)->subject($subject);
                     if ($copyTo && strcasecmp($copyTo, $to) !== 0) {

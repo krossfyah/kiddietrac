@@ -342,7 +342,7 @@ final class AnnouncementController extends Controller
 
         $delivered = 0;
         foreach ($userIds as $uid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $uid,
                 'type' => 'announcement',
                 'title' => $notifTitle,
@@ -385,9 +385,9 @@ final class AnnouncementController extends Controller
                         $svc = $agencyId ? \App\Services\AgencyMailer::forAgency($agencyId) : null;
                         if ($svc) {
                             $m = $svc->mailer(); $from = $svc->fromAddress(); $fn = $svc->fromName();
-                            $m->html($html, function ($msg) use ($email, $from, $fn, $emailSubject) { $msg->to($email)->from($from, $fn)->subject($emailSubject); });
+                            $m->html($html, function ($msg) use ($email, $from, $fn, $emailSubject, $agencyId) { \App\Support\MailScope::agency($msg, $agencyId); $msg->to($email)->from($from, $fn)->subject($emailSubject); });
                         } else {
-                            \Illuminate\Support\Facades\Mail::html($html, function ($msg) use ($email, $emailSubject) { $msg->to($email)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($emailSubject); });
+                            \Illuminate\Support\Facades\Mail::html($html, function ($msg) use ($email, $emailSubject, $agencyId) { \App\Support\MailScope::agency($msg, $agencyId); $msg->to($email)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($emailSubject); });
                         }
                     } catch (\Throwable $e) {
                         \Illuminate\Support\Facades\Log::warning('Announcement email failed', ['email' => $email, 'error' => $e->getMessage()]);

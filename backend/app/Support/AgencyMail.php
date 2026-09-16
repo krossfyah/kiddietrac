@@ -193,18 +193,37 @@ class AgencyMail
      *  above can compare candidates without duplicating the lookup. */
     public static function agencyOfUser(int $uid): ?int
     {
-        $ra = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
-            ->orderByRaw('agency_id IS NULL')->first(['agency_id', 'centre_id']);
-        if ($ra) {
-            if ($ra->agency_id) {
-                return (int) $ra->agency_id;
-            }
-            if ($ra->centre_id) {
-                $aid = DB::table('centres')->where('id', $ra->centre_id)->value('agency_id');
-                if ($aid) {
-                    return (int) $aid;
-                }
-            }
+        /* ── ONE PERSON, TWO AGENCIES ─────────────────────────────────────────
+           This used to take ->first() of the user's active role assignments. That
+           is the same shape of bug as the duplicate-address one above, one level
+           down: where that guessed between two accounts sharing an address, this
+           guessed between two agencies held by ONE account, and the winner was
+           whatever the database returned first.
+
+           Nobody spans two agencies today, so this changes no current send — but
+           the arrangement is perfectly legal (a director at one agency doing home
+           visits for another) and the day someone is set up that way, their mail
+           would start being filed under whichever agency sorted first. Same rule
+           as above: when the candidates disagree there is no correct answer to
+           derive, so return nothing and let the row be unattributed. The sender
+           that actually knows should be stamping X-KT-Agency-Id. */
+        $assignments = DB::table('role_assignments as ra')
+            ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $uid)->where('ra.active', 1)
+            ->select(DB::raw('COALESCE(ra.agency_id, c.agency_id) as aid'))
+            ->get()->pluck('aid')
+            ->filter()->map(fn ($v) => (int) $v)->unique()->values();
+
+        if ($assignments->count() > 1) {
+            \Illuminate\Support\Facades\Log::warning('AgencyMail: user belongs to more than one agency; refusing to guess', [
+                'user_id' => $uid,
+                'agencies' => $assignments->all(),
+            ]);
+
+            return null;
+        }
+        if ($assignments->count() === 1) {
+            return $assignments->first();
         }
         $aid = DB::table('guardians as g')
             ->join('families as f', 'f.id', '=', 'g.family_id')

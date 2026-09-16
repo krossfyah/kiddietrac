@@ -47,6 +47,50 @@ final class PayrollController extends Controller
         });
 
         if ($request->query('format') === 'csv') return $this->csv($rows, $from, $to);
+
+        /* PAID, BUT NEVER CLOCKED IN.
+
+           These rows come from time_punches, so a person who is paid without punching a
+           clock — a home visitor paid per visit, a salaried manager, anyone on a flat
+           amount — has no row at all, and their payslips have nowhere to appear. That is
+           how attaching Lloydene King's documents to her account made her pay history
+           vanish from this screen: she stopped being a contractor and never became a
+           staff row.
+
+           So the rows are the union of "clocked in this period" and "was paid in this
+           period". The added ones carry 0 punches and 0 hours, which is true of them,
+           and their documents, which is what somebody came here to see.
+
+           After the CSV branch on purpose: that export is an hours report, and zero-hour
+           rows are noise in a file whose only subject is hours. */
+        $paidUserIds = DB::table('payroll_documents')
+            ->where('agency_id', $agencyId)
+            ->whereNotNull('user_id')
+            ->whereDate('period_end', '>=', $from->toDateString())
+            ->whereDate('period_start', '<=', $to->toDateString())
+            ->distinct()->pluck('user_id')->map(fn ($i) => (int) $i)->all();
+
+        $clockedIds = $rows->pluck('user_id')->map(fn ($i) => (int) $i)->all();
+        $paidOnly = array_values(array_diff($paidUserIds, $clockedIds));
+
+        if ($paidOnly) {
+            foreach (DB::table('users')->whereIn('id', $paidOnly)->whereNull('deleted_at')
+                ->get(['id', 'first_name', 'last_name', 'email']) as $u) {
+                $rows->push((object) [
+                    'user_id' => (int) $u->id,
+                    'user_name' => trim($u->first_name . ' ' . $u->last_name),
+                    'user_email' => $u->email,
+                    // No punches, so no centre came with them. Named by their documents.
+                    'centre_id' => null,
+                    'centre_name' => null,
+                    'total_minutes' => 0,
+                    'punch_count' => 0,
+                    'total_hours' => 0.0,
+                ]);
+            }
+            // Pushed rows land at the end; the report reads alphabetically.
+            $rows = $rows->sortBy('user_name')->values();
+        }
                 // Whose payroll line this is. The summary is grouped by person and centre and
         // carried no role, so payroll could not be separated into educators and everyone
         // else — which is the first cut anybody makes when reading it. Lowest rank wins,
@@ -75,8 +119,92 @@ final class PayrollController extends Controller
             $r->staff_group = in_array($raw, ['educator', 'home_visitor'], true) ? 'educators' : 'other';
         });
 
-return response()->json([
+        /* THE DOCUMENTS FOR THESE PEOPLE, in the same answer.
+
+           "How long did they work" and "what did we pay them" are the same question
+           asked twice, and they used to live on two different tabs — so matching one to
+           the other meant switching views and pairing names by eye. Fetched in one
+           query for everyone on the report rather than per row. */
+        $docsByUser = [];
+        $staffIds = $rows->pluck('user_id')->filter()->map(fn ($i) => (int) $i)->all();
+        if ($staffIds) {
+            foreach (DB::table('payroll_documents')
+                ->where('agency_id', $agencyId)
+                ->whereIn('user_id', $staffIds)
+                ->whereDate('period_end', '>=', $from->toDateString())
+                ->whereDate('period_start', '<=', $to->toDateString())
+                ->orderByDesc('period_end')
+                ->get(['id', 'user_id', 'kind', 'period_start', 'period_end', 'gross', 'net',
+                       'status', 'paid_at', 'issued_at', 'reference', 'payee_email']) as $d) {
+                $docsByUser[(int) $d->user_id][] = [
+                    'id' => (int) $d->id,
+                    'kind' => (string) ($d->kind ?: 'payslip'),
+                    'period_start' => $d->period_start,
+                    'period_end' => $d->period_end,
+                    'gross' => round((float) $d->gross, 2),
+                    'net' => round((float) $d->net, 2),
+                    'status' => (string) $d->status,
+                    'paid_at' => $d->paid_at,
+                    'reference' => $d->reference,
+                    'email' => $d->payee_email,
+                ];
+            }
+        }
+        $rows->each(function ($r) use ($docsByUser) {
+            $list = $docsByUser[(int) ($r->user_id ?? 0)] ?? [];
+            $r->documents = $list;
+            $r->paid_net = round(array_sum(array_column($list, 'net')), 2);
+        });
+
+        /* CONTRACTORS — paid, but never clocked.
+
+           This endpoint answers "how many hours did people work", and a contractor has
+           no answer to that: they hold no user account and punch no clock. They are
+           payees on payroll_documents identified by name alone. Reporting them beside
+           staff would put a blank punch count and zero hours against real money, so
+           what is reported instead is what they were actually paid in the period.
+
+           Keyed by name because that is the only identity they have — see
+           ManualPayrollController, where a payee name is checked against payees this
+           agency has already paid rather than accepted freely. */
+        $contractors = DB::table('payroll_documents')
+            ->where('agency_id', $agencyId)
+            ->whereNull('user_id')
+            ->whereNotNull('payee_name')
+            ->whereDate('period_end', '>=', $from->toDateString())
+            ->whereDate('period_start', '<=', $to->toDateString())
+            ->orderByDesc('period_end')
+            ->get(['id', 'payee_name', 'payee_email', 'kind', 'period_start', 'period_end',
+                   'gross', 'net', 'status', 'paid_at', 'reference'])
+            ->groupBy('payee_name')
+            ->map(fn ($docs, $name) => [
+                'payee_name' => (string) $name,
+                'payee_email' => $docs->first()->payee_email,
+                'documents_count' => $docs->count(),
+                'gross' => round((float) $docs->sum('gross'), 2),
+                'net' => round((float) $docs->sum('net'), 2),
+                'first_period' => $docs->min('period_start'),
+                'last_period' => $docs->max('period_end'),
+                /* The documents themselves, so a contractor's payslip can be printed,
+                   emailed and marked paid exactly like anybody else's. */
+                'documents' => $docs->map(fn ($d) => [
+                    'id' => (int) $d->id,
+                    'kind' => (string) ($d->kind ?: 'payslip'),
+                    'period_start' => $d->period_start,
+                    'period_end' => $d->period_end,
+                    'gross' => round((float) $d->gross, 2),
+                    'net' => round((float) $d->net, 2),
+                    'status' => (string) $d->status,
+                    'paid_at' => $d->paid_at,
+                    'reference' => $d->reference,
+                    'email' => $d->payee_email,
+                ])->values(),
+            ])->values();
+
+        return response()->json([
             'data' => $rows,
+            'contractors' => $contractors,
+            'contractors_total' => round((float) $contractors->sum('net'), 2),
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
             'total_hours' => round($rows->sum('total_hours'), 2),

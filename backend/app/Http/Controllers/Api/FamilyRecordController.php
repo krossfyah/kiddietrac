@@ -20,6 +20,98 @@ class FamilyRecordController extends Controller
 {
     use \App\Http\Controllers\Concerns\AuthorizesTenantAccess;
 
+    // ── Documents ───────────────────────────────────────────────────────────
+
+    /**
+     * GET /admin/families/{family}/documents -- everything filed about this family.
+     *
+     * Three sources, one list, because the person looking does not care which table a
+     * document happens to live in:
+     *
+     *   · the children's files      (scope child)  -- incident reports, medical notes
+     *   · the family's own files    (scope family) -- anything filed at that level
+     *   · the guardians' signed forms (scope user) -- consent, photo permission, policies
+     *
+     * The signed forms are RESOLVED through `guardians`, not copied to a family scope.
+     * A signature is one fact; two rows saying it would drift the first time one was
+     * deleted or a form renamed. The trade is a join, which is cheap, against a
+     * duplicate, which is permanent.
+     *
+     * Only the signed forms are pulled from the guardian's own record, deliberately:
+     * a user-scoped document can be anything an admin attached to that person
+     * (a contract, a disciplinary note), and their family has no business seeing it
+     * turn up here. An allowlist of one category, widened only on purpose.
+     *
+     * This also replaces a fan-out the family screen used to do -- one request per
+     * child, because "there is no endpoint that takes a family". Per-child fan-out is
+     * the shape that saturates this host at drop-off time.
+     */
+    public function documents(Request $request, int $familyId): JsonResponse
+    {
+        $this->assertFamily((int) $request->user()->id, $familyId);
+
+        $children = DB::table('children')->where('family_id', $familyId)
+            ->whereNull('deleted_at')->get(['id', 'first_name', 'last_name']);
+        $childIds = $children->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $childName = [];
+        foreach ($children as $c) {
+            $childName[(int) $c->id] = trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? ''));
+        }
+
+        $guardians = DB::table('guardians as g')
+            ->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $familyId)->whereNull('u.deleted_at')
+            ->get(['u.id', 'u.first_name', 'u.last_name']);
+        $guardianIds = $guardians->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $guardianName = [];
+        foreach ($guardians as $g) {
+            $guardianName[(int) $g->id] = trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? ''));
+        }
+
+        /* `?: [0]` on every list. A family with no children, or no guardian account yet,
+           must match NOTHING -- an empty whereIn would match every row in the table. */
+        $rows = DB::table('documents')
+            ->where(function ($q) use ($childIds, $familyId, $guardianIds) {
+                $q->where(function ($qq) use ($childIds) {
+                    $qq->where('scope_type', 'child')->whereIn('scope_id', $childIds ?: [0]);
+                })->orWhere(function ($qq) use ($familyId) {
+                    $qq->where('scope_type', 'family')->where('scope_id', $familyId);
+                })->orWhere(function ($qq) use ($guardianIds) {
+                    $qq->where('scope_type', 'user')
+                       ->whereIn('scope_id', $guardianIds ?: [0])
+                       ->where('category', \App\Support\SignedFormFiler::CATEGORY);
+                });
+            })
+            ->orderByDesc('created_at')
+            ->limit(500)
+            ->get(['id', 'scope_type', 'scope_id', 'category', 'title', 'file_url',
+                   'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at']);
+
+        return response()->json([
+            'documents' => $rows->map(function ($d) use ($childName, $guardianName) {
+                /* Who it is ABOUT, which is the column a reader scans. Left blank rather
+                   than guessed at when the scope has no name attached. */
+                $about = $d->scope_type === 'child'
+                    ? ($childName[(int) $d->scope_id] ?? null)
+                    : ($d->scope_type === 'user' ? ($guardianName[(int) $d->scope_id] ?? null) : null);
+
+                return [
+                    'id'         => (int) $d->id,
+                    'title'      => $d->title,
+                    'category'   => $d->category,
+                    'scope'      => $d->scope_type,
+                    'about'      => $about,
+                    'file_url'   => $d->file_url,
+                    'file_type'  => $d->file_type,
+                    'file_size'  => $d->file_size,
+                    'signed_at'  => $d->signed_at,
+                    'expires_at' => $d->expires_at,
+                    'created_at' => $d->created_at,
+                ];
+            })->values(),
+        ]);
+    }
+
     // ── Notes ───────────────────────────────────────────────────────────────
 
     /** GET /admin/families/{family}/notes */

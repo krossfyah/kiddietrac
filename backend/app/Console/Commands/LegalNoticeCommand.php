@@ -152,7 +152,7 @@ final class LegalNoticeCommand extends Command
 
     private function send(string $to, string $name, string $subject, string $html, ?int $agencyId): void
     {
-        AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($to, $name, $subject) {
+        AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $name, $subject) {
             $m->to($to, $name)->subject($subject);
         });
     }

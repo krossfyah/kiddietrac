@@ -23,6 +23,8 @@ final class AdminDigestHtml
         'late' => '#DC2626', 'timeoff' => '#F59E0B', 'tasks' => '#7C3AED', 'tours' => '#0EA5E9',
         'incidents' => '#DC2626', 'immunisations' => '#F59E0B', 'tickets' => '#64748B',
         'welcome' => '#16A34A', 'week' => '#1F6FB2', 'reportCards' => '#7C3AED',
+        'emergency' => '#DC2626',
+        'newFamilies' => '#16A34A',
     ];
 
     public static function render(array $s, string $periodLabel): string
@@ -45,6 +47,8 @@ final class AdminDigestHtml
             'Incidents' => $s['incidents']['count'] ?? 0,
             'Support' => $s['tickets']['count'] ?? 0,
             'To invite' => $s['welcome']['count'] ?? 0,
+            'No emergency contact' => $s['emergency']['count'] ?? 0,
+            'Families joined' => $s['newFamilies']['count'] ?? 0,
         ]);
         if ($counts) {
             $html .= self::barChart('Where things stand', $counts, '#1F6FB2');
@@ -60,6 +64,10 @@ final class AdminDigestHtml
 
         $html .= self::section('⏰ Late pick-ups awaiting your decision', $s['late'] ?? null, 'late',
             'Approve with a fee, waive, or decline — nothing is charged until you do.');
+        $html .= self::section('👪 Families who joined', $s['newFamilies'] ?? null, 'newFamilies',
+            'New this period. Check each has guardians invited, a room, and the forms you require.');
+        $html .= self::section('🚨 Families with no emergency contact', $s['emergency'] ?? null, 'emergency',
+            'Nobody to call for these families. The emergency card shows "Not recorded" until one is added.');
         $html .= self::section('🌴 Time off waiting on approval', $s['timeoff'] ?? null, 'timeoff');
         $html .= self::section('📋 Tasks still open', $s['tasks'] ?? null, 'tasks');
         $html .= self::section('🚸 New tour bookings', $s['tours'] ?? null, 'tours');

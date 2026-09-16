@@ -19,7 +19,7 @@ final class PaymentMethodsController extends Controller
 {
     public function __construct()
     {
-        if ($k = env('STRIPE_SECRET')) Stripe::setApiKey($k);
+        if ($k = \App\Support\StripeConfig::secret()) Stripe::setApiKey($k);
     }
 
     public function list(Request $request): JsonResponse
@@ -35,7 +35,7 @@ final class PaymentMethodsController extends Controller
 
     public function add(Request $request): JsonResponse
     {
-        abort_unless(env('STRIPE_SECRET'), 503, 'Stripe not configured');
+        abort_unless(\App\Support\StripeConfig::secret(), 503, 'Stripe not configured');
         $data = $request->validate([
             'payment_method' => 'required|string',
             'nickname' => 'nullable|string|max:60',
@@ -107,7 +107,7 @@ final class PaymentMethodsController extends Controller
         abort_unless($pm, 404);
         DB::table('payment_methods')->where('family_id', $family->id)->update(['is_default' => 0]);
         DB::table('payment_methods')->where('id', $id)->update(['is_default' => 1, 'updated_at' => now()]);
-        if (env('STRIPE_SECRET') && $family->stripe_customer_id) {
+        if (\App\Support\StripeConfig::secret() && $family->stripe_customer_id) {
             Customer::update($family->stripe_customer_id, [
                 'invoice_settings' => ['default_payment_method' => $pm->stripe_pm_id],
             ]);
@@ -126,7 +126,7 @@ final class PaymentMethodsController extends Controller
         $family = $this->parentFamily($request);
         $pm = DB::table('payment_methods')->where('id', $id)->where('family_id', $family->id)->first();
         abort_unless($pm, 404);
-        if (env('STRIPE_SECRET')) {
+        if (\App\Support\StripeConfig::secret()) {
             try { PaymentMethod::retrieve($pm->stripe_pm_id)->detach(); } catch (\Throwable $e) { /* swallow */ }
         }
         DB::table('payment_methods')->where('id', $id)->update(['active' => 0, 'is_default' => 0, 'updated_at' => now()]);
@@ -153,7 +153,7 @@ final class PaymentMethodsController extends Controller
 
     public function setupIntent(Request $request): JsonResponse
     {
-        abort_unless(env('STRIPE_SECRET'), 503);
+        abort_unless(\App\Support\StripeConfig::secret(), 503, \App\Support\StripeConfig::NOT_CONFIGURED);
         $data = $request->validate(['type' => 'required|in:card,acss_debit']);
         $family = $this->parentFamily($request);
         $customerId = $family->stripe_customer_id;
@@ -185,7 +185,7 @@ final class PaymentMethodsController extends Controller
             ];
         }
         $si = \Stripe\SetupIntent::create($params);
-        return response()->json(['client_secret' => $si->client_secret, 'publishable_key' => env('STRIPE_KEY')]);
+        return response()->json(['client_secret' => $si->client_secret, 'publishable_key' => \App\Support\StripeConfig::publishable()]);
     }
 
     private function parentFamily(Request $request)

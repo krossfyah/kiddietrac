@@ -61,8 +61,7 @@ final class DripDispatchCommand extends Command
                     $bodyHtml = EmailTemplate::wrap((int) $c->agency_id, $c->body_html, [
                         'eyebrow' => 'A NOTE FROM US', 'title' => $c->subject,
                     ]);
-                    AgencyMailer::forAgency((int) $c->agency_id)->mailer()
-                        ->html($bodyHtml, function ($m) use ($s, $c) {
+                    AgencyMailer::forAgency((int) $c->agency_id)->html($bodyHtml, function ($m) use ($s, $c) {
                             $m->to($s['email'])->subject($c->subject);
                         });
                     DB::table('drip_sends')->where('id', $sendId)->update([

@@ -190,8 +190,12 @@ final class ClockReminderCommand extends Command
      */
     private function remindMissingClockIn(Carbon $today): int
     {
-        $dow = (int) $today->dayOfWeekIso; // 1=Mon..7=Sun
-        if ($dow >= 6) return 0;           // skip weekends
+        /* NO $dow HERE ANY MORE, and no weekend early-return. Both were derived from
+           $today, which is Carbon::today() -- the APP timezone, UTC. From 8pm Toronto
+           that names tomorrow: it made this method return 0 all Friday evening, run on
+           Sunday evening as though it were Monday, and ask every guard below about the
+           wrong day. Centres also span timezones. The date is resolved per centre inside
+           the loop instead. (Anthony, 2026-09-07) */
 
         $staff = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
@@ -207,21 +211,53 @@ final class ClockReminderCommand extends Command
             if (! $this->agencyWants($s->centre_id ? (int) $s->centre_id : null, 'in')) {
                 continue;
             }
+            $centreId = $s->centre_id ? (int) $s->centre_id : null;
+
+            /* THE DAY, IN THIS CENTRE'S OWN ZONE. Every decision below hangs off this.
+               Closures::todayFor() is the same helper the closure rule uses, so the
+               reminder and the closure cannot disagree about which day it is. */
+            $cDate = \App\Support\Closures::todayFor($centreId);
+            $cDow  = (int) Carbon::parse($cDate)->dayOfWeekIso; // 1=Mon..7=Sun
+            if ($cDow >= 6) continue;      // their weekend, in their zone
+
+            /* Agency-day instants. On the UTC date an evening clock-in did not count as
+               "today", so this told somebody who HAD clocked in that they had not. */
+            [$remFrom, $remTo] = \App\Support\AgencyTime::dayRangeForCentre($centreId, $cDate);
             $clockedToday = DB::table('time_punches')
-                ->where('user_id', $s->user_id)->whereDate('punched_in_at', $today)->exists();
+                ->where('user_id', $s->user_id)
+                ->where('punched_in_at', '>=', $remFrom)->where('punched_in_at', '<', $remTo)
+                ->exists();
             if ($clockedToday) continue;
 
             // Approved vacation, sick or personal leave — they are not missing, they
             // are off, and the office already said so.
-            if ($this->isOnApprovedTimeOff((int) $s->user_id, $today)) continue;
+            if ($this->isOnApprovedTimeOff((int) $s->user_id, Carbon::parse($cDate))) continue;
+
+            /* Centre shut today — a stat holiday, a snow day, or simply not one of its
+               open days. Same class of fact as the leave check above: it says this
+               person is not expected in. Nobody books Labour Day off in the leave
+               table and Monday is a working weekday, so without this every
+               Monday-regular educator at a closed centre was told to clock in on a
+               holiday. isOperatingDay() is the helper the parent and educator
+               summaries use, so all three agree on what a working day is.
+               (Anthony, 2026-09-07) */
+            /* BOTH QUESTIONS. isOperatingDay() only says whether the centre runs on
+               this WEEKDAY -- it never reads centre_closures, so a stat holiday on a
+               Monday looks like an ordinary working day to it. isClosed() is the one
+               that sees the holiday. The parent summary has always tracked these as two
+               separate fields (is_open_day / is_closed) for exactly this reason. */
+            if (! \App\Support\Closures::isOperatingDay($centreId, $cDate)
+                || \App\Support\Closures::isClosed($centreId, $cDate)) {
+                continue;
+            }
 
             // Did they work this same weekday in the last 14 days? (regular pattern —
             // we still have no shift schedule table, so their own history is the
             // best available statement of when they are expected in)
             $worksThisWeekday = DB::table('time_punches')
                 ->where('user_id', $s->user_id)
-                ->where('punched_in_at', '>=', $today->copy()->subDays(14))
-                ->whereRaw('WEEKDAY(punched_in_at) = ?', [$dow - 1]) // MySQL WEEKDAY: 0=Mon
+                ->where('punched_in_at', '>=', Carbon::parse($cDate)->subDays(14))
+                ->whereRaw('WEEKDAY(punched_in_at) = ?', [$cDow - 1]) // MySQL WEEKDAY: 0=Mon
                 ->exists();
             if (! $worksThisWeekday) continue;
 
@@ -290,7 +326,7 @@ final class ClockReminderCommand extends Command
         // APK, not only by email. FcmService handles device-token lookup and the
         // do-not-contact suppression for live agencies.
         try {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $userId, 'type' => 'clock_reminder',
                 'title' => $subject, 'body' => $lead,
                 'data' => json_encode(['link' => '#dashboard']),

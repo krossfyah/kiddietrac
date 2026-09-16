@@ -79,9 +79,13 @@ final class WidgetsController extends Controller
 
         // Latest check event today for any of the user's children
         $today = Carbon::now()->startOfDay();
+        /* Same rule as the roster: a future-dated row cannot describe where a child
+           is now, and this one would have told a PARENT their child was signed out
+           hours before it happened. */
         $latest = DB::table('check_events')
             ->whereIn('child_id', $childIds)
             ->where('occurred_at', '>=', $today)
+            ->where('occurred_at', '<=', now())
             ->orderByDesc('occurred_at')
             ->first();
         $statusValue = $latest

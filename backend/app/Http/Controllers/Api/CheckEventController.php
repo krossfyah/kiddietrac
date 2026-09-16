@@ -68,10 +68,19 @@ final class CheckEventController extends Controller
         // child at another agency is currently checked in.
         $this->assertChild((int) $request->user()->id, (int) $data['child_id']);
 
-        $today = now()->toDateString();
+        /* The agency's day, as instants. This lookup decides whether a check-OUT is
+           allowed, and on the UTC date it found nothing from 8pm Toronto onward —
+           an 8pm pickup was refused with "Child is not currently checked in." */
+        [$dayFrom, $dayTo] = AgencyTime::dayRangeForRoom((int) $data['room_id']);
         $existing = DB::table('check_events')
             ->where('child_id', $data['child_id'])
-            ->whereDate('occurred_at', $today)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
+            /* ONLY WHAT HAS ALREADY HAPPENED. A row dated later today — a mistyped
+               correction, a wrong device clock, an import — must not describe where a
+               child is NOW. One such row (a check_out stamped 20:20, read at 05:16)
+               refused a real pickup and held the child as OUT on the roster all day.
+               (Anthony, 2026-09-08) */
+            ->where('occurred_at', '<=', now())
             ->orderByDesc('occurred_at')
             ->first();
 
@@ -174,10 +183,17 @@ final class CheckEventController extends Controller
             return ['error' => 'Child not found'];
         }
 
-        $today = now()->toDateString();
+        // Same agency-day bound as checkOut() — see the note there.
+        [$dayFrom, $dayTo] = AgencyTime::dayRangeForRoom($roomId);
         $existing = DB::table('check_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', $today)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
+            /* ONLY WHAT HAS ALREADY HAPPENED. A row dated later today — a mistyped
+               correction, a wrong device clock, an import — must not describe where a
+               child is NOW. One such row (a check_out stamped 20:20, read at 05:16)
+               refused a real pickup and held the child as OUT on the roster all day.
+               (Anthony, 2026-09-08) */
+            ->where('occurred_at', '<=', now())
             ->orderByDesc('occurred_at')
             ->first();
 

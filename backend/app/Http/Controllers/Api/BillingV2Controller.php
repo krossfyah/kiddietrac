@@ -61,7 +61,7 @@ final class BillingV2Controller extends Controller
             ->where('active', 1)
             ->pluck('user_id')->unique();
         foreach ($directorIds as $did) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $did, 'type' => 'vacation_hold',
                 'title' => "Vacation hold requested by " . ($family->family_name ?? 'a family'),
                 'body' => Carbon::parse($data['start_date'])->format('M j') . ' – ' . Carbon::parse($data['end_date'])->format('M j'),
@@ -100,7 +100,7 @@ final class BillingV2Controller extends Controller
         ]);
         $gids = DB::table('guardians')->where('family_id', $data['family_id'])->pluck('user_id');
         foreach ($gids as $gid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'vacation_hold',
                 'title' => 'A vacation hold was added to your account',
                 'body' => Carbon::parse($data['start_date'])->format('M j') . ' – ' . Carbon::parse($data['end_date'])->format('M j'),
@@ -138,7 +138,7 @@ final class BillingV2Controller extends Controller
         // Notify requester
         $gids = DB::table('guardians')->where('family_id', $hold->family_id)->pluck('user_id');
         foreach ($gids as $gid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'vacation_hold',
                 'title' => "Vacation hold " . $data['status'],
                 'body' => $data['status'] === 'approved' ? "Credit of $" . number_format((float) $credit, 2) . " will be applied." : ($data['notes'] ?? 'Unable to approve at this time.'),

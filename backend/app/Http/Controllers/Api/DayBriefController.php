@@ -28,6 +28,10 @@ final class DayBriefController extends Controller
         $user = $request->user();
         $tz = AgencyTime::tz($this->callerAgencyId($request));
         $todayStr = now($tz)->toDateString();
+        /* $todayStr is already the agency's date, which is why this one looked
+           correct — but whereDate() buckets occurred_at by its UTC date, so the
+           window was still shifted. An instant needs instant bounds. */
+        [$dayFrom, $dayTo] = AgencyTime::dayRange($this->callerAgencyId($request));
 
         // Centres the caller works in (educator: assigned centres; director/admin:
         // agency centres). Rooms follow from those centres.
@@ -91,7 +95,7 @@ final class DayBriefController extends Controller
             $lastByChild = [];
             if ($childIds) {
                 foreach (DB::table('check_events')->whereIn('child_id', $childIds)
-                    ->whereDate('occurred_at', $todayStr)->orderBy('occurred_at')
+                    ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)->orderBy('occurred_at')
                     ->get(['child_id', 'event_type', 'occurred_at']) as $e) {
                     $lastByChild[$e->child_id] = $e;
                 }
@@ -159,7 +163,7 @@ final class DayBriefController extends Controller
         try {
             $mealCount = DB::table('daily_events')
                 ->whereIn('room_id', $roomIds ?: [0])
-                ->whereDate('occurred_at', $todayStr)
+                ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
                 ->whereIn('event_type', ['meal', 'snack'])->count();
             $add('meals', '🍽️', 'Meals logged', $mealCount . ' today', '', 'info', '#care-log');
         } catch (\Throwable $e) {}
@@ -235,7 +239,7 @@ final class DayBriefController extends Controller
         // ── Today's incidents in the centre ─────────────────────────────
         try {
             $inc = DB::table('incidents')->whereIn('room_id', $roomIds ?: [0])
-                ->whereDate('occurred_at', $todayStr)->count();
+                ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)->count();
             if ($inc > 0) $add('incidents', '⚠️', 'Incidents today', (string) $inc, '', 'warn', '#incidents');
         } catch (\Throwable $e) {}
 
@@ -307,7 +311,11 @@ final class DayBriefController extends Controller
         $children = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
             ->where('f.centre_id', $centreId)->whereNull('c.deleted_at')
             ->whereNull('f.suspended_at')
-            ->get(['c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.photo_url', 'c.gender']);
+            /* primary_room_id so the roster can offer a manual sign in/out —
+               POST /provider/check-in needs a room, and the Daily Overview is the only
+               attendance screen an agency admin can actually reach. (2026-08-26) */
+            ->get(['c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.photo_url',
+                   'c.gender', 'c.primary_room_id']);
         $nameById = [];
         foreach ($children as $c) {
             $nameById[$c->id] = $c->preferred_name ?: trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? ''));
@@ -453,6 +461,48 @@ final class DayBriefController extends Controller
                 $checksByChild[$ce->child_id][] = $ce;
             }
         }
+        /* Not every child carries primary_room_id (5 of 20 in Test Agency), and without
+           a room the roster cannot offer a sign in/out. Fall back to the room of their
+           OPEN enrolment — the same room the educator roster uses. One grouped query,
+           not one per child. (2026-08-26) */
+        /* THE DAY BEING VIEWED, not today.
+
+           constrain() defaults to today's day key, which was right while this screen only
+           ever showed today. It takes a date, the Daily Overview has a date picker (and
+           now day arrows), and a family can split its week across providers -- so looking
+           back at last Wednesday resolved every child to whichever provider has them
+           TODAY. Exactly the case CareSchedule exists for, answered wrongly.
+           (Anthony, 2026-09-10) */
+        $dayKey = \App\Support\CareSchedule::dayKey($tz, $date);
+
+        $roomByChild = [];
+        $scheduledIds = [];
+        if ($childIds) {
+            foreach (DB::table('enrollments')->whereIn('child_id', $childIds)
+                ->whereNull('end_date')->orderBy('start_date')
+                ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments', $dayKey))
+                ->get(['child_id', 'room_id']) as $en) {
+                $scheduledIds[(int) $en->child_id] = true;
+                if ($en->room_id) { $roomByChild[$en->child_id] = (int) $en->room_id; }
+            }
+        }
+
+        /* WHO IS DUE IN, as opposed to who is on the books.
+
+           The roster is every child at the centre and stays that way: a child can be
+           signed in on a day they were not booked (a swap, a parent working late), and a
+           screen that hid them would hide a real attendance record. So this MARKS rather
+           than filters — `scheduled` false means "not expected today", which is what makes
+           an unexpected arrival worth noticing instead of invisible.
+
+           A child with no open enrolment at all is left as expected (true) rather than
+           flagged: they are unplaced, which is a different problem with its own warning,
+           and calling them "not due in" would be a guess. */
+        $hasEnrolment = $childIds
+            ? DB::table('enrollments')->whereIn('child_id', $childIds)->whereNull('end_date')
+                ->pluck('child_id')->map(fn ($v) => (int) $v)->flip()->all()
+            : [];
+
         $roster = [];
         $qr = 0; $manual = 0;
         foreach ($children as $c) {
@@ -466,7 +516,12 @@ final class DayBriefController extends Controller
             $status = ! $evs ? 'away' : ($last->event_type === 'check_in' ? 'in' : 'out');
             $roster[] = [
                 'id' => $c->id, 'name' => $nameById[$c->id], 'photo_url' => $c->photo_url, 'gender' => $c->gender,
+                /* The enrolment for THIS day wins over primary_room_id: primary_room_id is
+                   one room and a split week has several, so preferring it put a child in
+                   the wrong provider's list on the days they are elsewhere. */
+                'room_id' => ($roomByChild[$c->id] ?? null) ?: $c->primary_room_id,
                 'status' => $status,
+                'scheduled' => ! isset($hasEnrolment[(int) $c->id]) || isset($scheduledIds[(int) $c->id]),
                 'in' => $inEv ? AgencyTime::fmt($inEv->occurred_at, $tz) : null,
                 'out' => $outEv ? AgencyTime::fmt($outEv->occurred_at, $tz) : null,
                 'source' => $inEv ? ((int) ($inEv->kiosk_source ?? 0) > 0 ? 'QR' : 'Manual') : null,

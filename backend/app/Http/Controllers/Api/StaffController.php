@@ -121,13 +121,15 @@ final class StaffController extends Controller
         $emailSent = false;
         if ($isNewUser && ($data['send_email'] ?? true)) {
             try {
-                Mail::to($data['email'])->send(new WelcomeEmail(
+                Mail::to($data['email'])->send((new WelcomeEmail(
                     recipientName: $data['first_name'],
                     recipientEmail: $data['email'],
                     tempPassword: $tempPassword,
                     centreName: $centre->name,
                     role: $data['role'] === 'centre_director' ? 'director' : 'educator',
-                ));
+                ))->withSymfonyMessage(function ($msg) use ($centre) {
+                    \App\Support\MailScope::centre($msg, (int) $centre->id);
+                }));
                 $emailSent = true;
             } catch (Throwable $e) {
                 Log::warning('Welcome email failed', ['error' => $e->getMessage(), 'recipient' => $data['email']]);

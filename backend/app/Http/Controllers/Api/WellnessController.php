@@ -83,7 +83,7 @@ final class WellnessController extends Controller
                 ? "🚫 {$child->first_name}: do not admit today"
                 : "⚠ {$child->first_name}: review symptoms before admit";
             foreach ($staff as $sid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $sid, 'type' => 'wellness',
                     'title' => $title,
                     'body' => 'Parent reported: ' . trim(implode(', ', array_keys(array_filter([

@@ -74,7 +74,7 @@ class NewFamilyNotice
             $subject = 'New family to set up: '.$family->family_name;
 
             if ($overrideTo) {
-                AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($overrideTo, $subject) {
+                AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($overrideTo, $subject) {
                     $m->to($overrideTo)->subject('[SAMPLE] '.$subject);
                     $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
                 });
@@ -90,7 +90,7 @@ class NewFamilyNotice
             $sent = 0;
             foreach ($recipients as $r) {
                 try {
-                    AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($r, $subject) {
+                    AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($r, $subject) {
                         $m->to($r->email)->subject($subject);
                     });
                     $sent++;

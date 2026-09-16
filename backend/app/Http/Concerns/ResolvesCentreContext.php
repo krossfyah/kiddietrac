@@ -54,6 +54,29 @@ trait ResolvesCentreContext
             return (int) $direct;
         }
 
+        /* PUT IN A ROOM HERE, SO THIS IS HER CENTRE.
+
+           An agency-attached role — home_visitor — is stored with centre_id NULL and is
+           not in the list above, so a home visitor resolved to no centre at all and
+           RoomController::bootstrap() answered 403 "No centre access". The roster and
+           ratio routes were open to her; the screen that loads first was not.
+
+           authorizeCentreAccess() already grants on exactly this basis. This is the same
+           rule for the other guard, with the same tenant condition: the room must sit in
+           a centre of the ACTIVE agency, so a stale educator_rooms row cannot carry
+           somebody into an agency they have left. Only ever grants. */
+        $viaRoom = DB::table('educator_rooms as er')
+            ->join('rooms as r', 'r.id', '=', 'er.room_id')
+            ->join('centres as c', 'c.id', '=', 'r.centre_id')
+            ->where('er.user_id', $user->id)
+            ->where('c.agency_id', $agencyId)
+            ->whereNull('c.deleted_at')
+            ->orderBy('c.id')
+            ->value('c.id');
+        if ($viaRoom) {
+            return (int) $viaRoom;
+        }
+
         // An agency_admin (or platform_admin) of the ACTIVE agency, with no direct
         // centre assignment, falls through to that agency's first centre. (Prefer
         // an 'active' centre but accept onboarding ones so a new agency still
@@ -135,6 +158,43 @@ trait ResolvesCentreContext
             })
             ->exists();
         if ($has) return true;
+
+        /* PUT IN A ROOM HERE, SO ALLOWED IN THIS CENTRE.
+
+           An agency-attached role — home_visitor is the one that matters — is stored with
+           centre_id NULL, so the check above finds nothing and refuses a centre the person
+           was deliberately given rooms in. Lloydene King held nine room assignments and
+           was 403'd on every roster.
+
+           canAccessChildId() below already grants on exactly this basis, and says why:
+           "It requires an EXPLICIT room assignment (somebody put this person in that
+           room)". The same fact means the same thing one level up.
+
+           TWO conditions, both required. The room assignment alone is not enough: the
+           person must also hold an ACTIVE role in that centre's agency, so a stale
+           educator_rooms row cannot outlive the role that justified it and carry somebody
+           into an agency they have left. Only ever grants — every refusal above still
+           refuses. */
+        $centreAgencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        if ($centreAgencyId > 0) {
+            $assignedHere = DB::table('educator_rooms as er')
+                ->join('rooms as r', 'r.id', '=', 'er.room_id')
+                ->where('er.user_id', $user->id)
+                ->where('r.centre_id', $centreId)
+                ->exists();
+
+            if ($assignedHere) {
+                $inAgency = DB::table('role_assignments')
+                    ->where('user_id', $user->id)
+                    ->where('active', true)
+                    ->where('agency_id', $centreAgencyId)
+                    ->exists();
+
+                if ($inAgency) {
+                    return true;
+                }
+            }
+        }
 
         // v22p98: a platform_admin may access a centre in the agency they have
         // SWITCHED INTO (X-Active-Agency-Id). Without this, director-scoped screens
@@ -255,9 +315,52 @@ trait ResolvesCentreContext
         if (DB::table('guardians')->where('user_id', $user->id)->where('family_id', $child->family_id)->exists()) {
             return true;
         }
-        // Staff of the child's centre (or agency_admin of its agency)
         $family = DB::table('families')->where('id', $child->family_id)->first();
-        if ($family && $this->authorizeCentreAccess($user, (int) $family->centre_id)) {
+
+        /* ROOM-SCOPED PEOPLE DO NOT GET THE CENTRE GRANT.
+
+           The check below is centre-wide ("staff of the child's centre"), and it was the
+           reason an educator correctly refused room 23's ROSTER could still open the file
+           of a child sitting in room 23. Rosters were scoped by room, records by centre,
+           and the two disagreed.
+
+           Anyone whose access is defined by rooms is answered instead by SHARED CARE
+           further down — an explicit assignment to the room the child is in today, with
+           primary_room_id as the fallback when the schedule names no room, so a weekend
+           still resolves.
+
+           WHO IS ROOM-SCOPED:
+             - a home visitor, always. Rooms are her entire basis; with none she should
+               see nothing ("she must be able to access those rooms to perform her role").
+             - an educator WHO HOLDS AT LEAST ONE ROOM.
+
+           That last condition is the safety of the whole change. Shared care demands an
+           EXPLICIT assignment, so an educator nobody has assigned yet has nothing to fall
+           back on and would lose every child at once. Restricting only those who have
+           been given rooms is exactly the rule assignedRoomIds() already applies to the
+           roster: "no assignments yet -> not restricted".
+
+           Directors and admins keep the centre grant — they are not room-scoped anywhere
+           else, and scoping them would break the people whose job is the whole centre.
+
+           Measured before shipping: iLearn 0 child-accesses removed (one room per centre,
+           so the two scopes already coincided), Test Agency 48 removed (four rooms per
+           centre) — which is the point. */
+        $activeRoles = DB::table('role_assignments')
+            ->where('user_id', $user->id)->where('active', true)
+            ->pluck('role')->all();
+
+        $privileged = (bool) array_intersect($activeRoles, ['centre_director', 'agency_admin', 'platform_admin']);
+        $isHomeVisitor = in_array('home_visitor', $activeRoles, true);
+        $isEducator = in_array('educator', $activeRoles, true);
+        $holdsRooms = DB::table('educator_rooms')->where('user_id', $user->id)->exists();
+
+        $roomScoped = ! $privileged && ($isHomeVisitor || ($isEducator && $holdsRooms));
+
+        // Staff of the child's centre (or agency_admin of its agency)
+        if (! $roomScoped
+            && $family
+            && $this->authorizeCentreAccess($user, (int) $family->centre_id)) {
             return true;
         }
 
@@ -277,18 +380,46 @@ trait ResolvesCentreContext
             return false;
         }
         try {
-            $todayRoom = \App\Support\CareSchedule::roomToday($childId) ?: ($child->primary_room_id ?? null);
-            if (! $todayRoom) {
+            /* EVERY room this child is enrolled in, not just today's.
+
+               This began as a narrow addition on top of the centre grant, keyed on the
+               room the child is in TODAY — right for an addition, wrong as the primary
+               rule, which is what the room-scoping made it. A child's record must not
+               blink in and out by day of week: u146 teaches room 39 and lost child 33
+               (hers Monday to Thursday) every Sunday, because roomToday() returns null
+               at the weekend and primary_room_id then names FRIDAY's provider instead.
+
+               So: a room where this child holds an OPEN enrolment, which this person is
+               explicitly assigned to. primary_room_id stays as an extra candidate — not
+               a fallback — for a child whose enrolments are not written yet. */
+            $childRooms = DB::table('enrollments')
+                ->where('child_id', $childId)
+                ->whereNull('end_date')
+                ->pluck('room_id')
+                ->map(fn ($r) => (int) $r)
+                ->all();
+
+            if (! empty($child->primary_room_id)) {
+                $childRooms[] = (int) $child->primary_room_id;
+            }
+            $childRooms = array_values(array_unique(array_filter($childRooms)));
+            if (! $childRooms) {
                 return false;
             }
-            $assigned = DB::table('educator_rooms')
-                ->where('user_id', $user->id)->where('room_id', $todayRoom)->exists();
-            if (! $assigned) {
+
+            // A room this person was actually put in.
+            $matched = DB::table('educator_rooms')
+                ->where('user_id', $user->id)
+                ->whereIn('room_id', $childRooms)
+                ->value('room_id');
+            if (! $matched) {
                 return false;
             }
+
+            // The schedule must never reach across tenants.
             $roomAgency = DB::table('rooms as r')
                 ->join('centres as ce', 'ce.id', '=', 'r.centre_id')
-                ->where('r.id', $todayRoom)->value('ce.agency_id');
+                ->where('r.id', $matched)->value('ce.agency_id');
             $childAgency = DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
 
             return $roomAgency && $childAgency && (int) $roomAgency === (int) $childAgency;

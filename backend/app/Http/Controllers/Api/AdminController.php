@@ -4888,8 +4888,7 @@ final class AdminController extends Controller
                 $bcc = array_slice($bcc, 0, 15);
 
                 try {
-                    \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
-                        ->html($html, function ($m) use ($u, $subject, $bcc) {
+                    \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($u, $subject, $bcc) {
                             $m->to($u->email)->subject($subject);
                             if ($bcc) $m->bcc($bcc);
                             // This notice is ABOUT the suspension, so it has to reach
@@ -5257,7 +5256,7 @@ final class AdminController extends Controller
                 })));
                 $bcc = array_slice($bcc, 0, 15);
 
-                \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($user, $agencyName, $bcc) {
+                \App\Services\AgencyMailer::forAgency($agencyId)->html($body, function ($m) use ($user, $agencyName, $bcc) {
                     $m->to($user->email)->subject('Your ' . $agencyName . ' account has been deactivated');
                     if ($bcc) $m->bcc($bcc);
                     // Same reason as the suspension notice: it is addressed to someone

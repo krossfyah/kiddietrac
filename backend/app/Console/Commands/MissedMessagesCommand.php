@@ -75,7 +75,7 @@ final class MissedMessagesCommand extends Command
                 $mailer = AgencyMailer::forAgency($agencyId ? (int) $agencyId : null);
                 foreach ($recips as $r) {
                     try {
-                        $mailer->mailer()->html($html, function ($mm) use ($subject, $r) {
+                        $mailer->html($html, function ($mm) use ($subject, $r) {
                             $mm->to($r->email, trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')))->subject($subject);
                         });
                         $sent++;

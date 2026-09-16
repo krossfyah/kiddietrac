@@ -55,17 +55,15 @@ class ChildHealthController extends Controller
             return response()->json(['message' => 'Child not found'], 404);
         }
 
-        // For staff: confirm child is enrolled at user's centre.
-        // enrollments has room_id, not centre_id - join through rooms.
-        if (! $isGuardian) {
-            $enrolled = DB::table('enrollments')
-                ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
-                ->where('enrollments.child_id', $childId)
-                ->where('rooms.centre_id', $centreId)
-                ->exists();
-            if (! $enrolled) {
-                return response()->json(['message' => 'Child not in your centre'], 403);
-            }
+        /* Staff: the same question update() asks -- "can I see this child" rather than
+           "is this child at my one centre". Matching a single resolved centre meant an
+           agency admin could read the health record of children at one of their nine
+           centres and got a 403 for the rest, and any enrolled child not yet placed in a
+           room was unreachable from either side. canAccessChildScoped() honours the active
+           agency, a director's centres and an educator's rooms, and fails closed.
+           (Anthony, 2026-09-10) */
+        if (! $isGuardian && ! $this->canAccessChildScoped($request, $childId)) {
+            return response()->json(['message' => 'You do not have access to that child.'], 403);
         }
 
         $activeMeds = Medication::where('child_id', $childId)
@@ -104,17 +102,23 @@ class ChildHealthController extends Controller
 
     public function update(Request $request, int $childId): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
-        $enrolled = DB::table('enrollments')
-            ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
-            ->where('enrollments.child_id', $childId)
-            ->where('rooms.centre_id', $centreId)
-            ->exists();
-        if (! $enrolled) {
-            return response()->json(['message' => 'Child not in your centre'], 403);
+        /* "CAN I SEE THIS CHILD", NOT "IS THIS CHILD AT MY ONE CENTRE".
+
+           This used to resolve a SINGLE centre for the caller and require the child to be
+           enrolled in a room there. For a director of one centre that is the same
+           question. For an agency admin it is not: resolveCentreId() hands back one centre
+           out of the nine iLearn runs, so eight centres' children were unreachable —
+           saving an allergy for a child at any other centre answered "Child not in your
+           centre" with no way forward. It also refused any enrolled child who has not been
+           placed in a room yet, which is exactly when somebody is filling in their health
+           details.
+
+           canAccessChildScoped() is the guard the rest of the portal uses for a child's
+           records: it honours the active agency, a director's centres, and an educator's
+           rooms, and it fails closed. Same answer as before for a director; the right one
+           for everybody else. (Anthony, 2026-09-10) */
+        if (! $this->canAccessChildScoped($request, $childId)) {
+            return response()->json(['message' => 'You do not have access to that child.'], 403);
         }
 
         $data = $request->validate([

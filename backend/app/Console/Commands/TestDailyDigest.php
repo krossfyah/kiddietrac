@@ -69,7 +69,8 @@ class TestDailyDigest extends Command
             }
         } else {
             $row = DB::table('daily_events')
-                ->whereDate('occurred_at', $date)
+                ->where('occurred_at', '>=', \App\Support\AgencyTime::dayRange(null, $date)[0])
+                ->where('occurred_at', '<', \App\Support\AgencyTime::dayRange(null, $date)[1])
                 ->select('child_id', DB::raw('COUNT(*) as event_count'))
                 ->groupBy('child_id')
                 ->orderByDesc('event_count')
@@ -88,7 +89,8 @@ class TestDailyDigest extends Command
 
         $eventCount = DB::table('daily_events')
             ->where('child_id', $child->id)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', \App\Support\AgencyTime::dayRange(null, $date)[0])
+                ->where('occurred_at', '<', \App\Support\AgencyTime::dayRange(null, $date)[1])
             ->count();
 
         $this->line("  ✓ Child:    #{$child->id} {$child->display_name}");

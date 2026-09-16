@@ -55,8 +55,10 @@ class AiDigestService
         $date ??= today()->toDateString();
 
         // Skip if no events that day
+        // That day in the child's own agency, as instants — see AgencyTime::dayRange.
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForChild((int) $child->id, $date);
         $events = DailyEvent::where('child_id', $child->id)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->orderBy('occurred_at')
             ->get();
 
@@ -313,8 +315,11 @@ class AiDigestService
         }
 
         // Include any observations made today
+        /* observed_at is an INSTANT: on the UTC date an observation written after 8pm
+           was filed under tomorrow and missed the digest it belonged to. Same child, same
+           agency day as the events above. */
         $observations = $child->observations()
-            ->whereDate('observed_at', $date)
+            ->where('observed_at', '>=', $dayFrom)->where('observed_at', '<', $dayTo)
             ->where('shared_with_family', true)
             ->get(['domain', 'body']);
         foreach ($observations as $o) {

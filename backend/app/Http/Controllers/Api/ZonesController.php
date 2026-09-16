@@ -17,10 +17,17 @@ use Illuminate\Support\Facades\DB;
  */
 final class ZonesController extends Controller
 {
+    /* SECURITY (2026-08-25): every method here took centre_id / child_id / zone_id
+       straight from the request and trusted it. Being signed in was the only gate, so
+       any authenticated user could read another agency's zones and log visits against
+       another agency's children. Found by the re-parenting sweep after enr#66. */
+    use \App\Http\Controllers\Concerns\AuthorizesTenantAccess;
+
     public function listZones(Request $request): JsonResponse
     {
         $centreId = (int) $request->query('centre_id', 0);
         abort_unless($centreId, 400, 'centre_id required');
+        $this->assertCentre((int) $request->user()->id, $centreId);
         $rows = DB::table('activity_zones')
             ->where('centre_id', $centreId)
             ->where('active', 1)
@@ -39,6 +46,15 @@ final class ZonesController extends Controller
             'color' => 'nullable|string|max:20',
             'display_order' => 'nullable|integer',
         ]);
+        $this->assertCentre((int) $request->user()->id, (int) $data['centre_id']);
+
+        // A zone pinned to a room must be a room of that same centre, or the zone
+        // straddles two tenants and its visits are unattributable.
+        if (! empty($data['room_id'])) {
+            $roomCentre = (int) DB::table('rooms')->where('id', (int) $data['room_id'])->value('centre_id');
+            abort_unless($roomCentre === (int) $data['centre_id'], 422, 'That room is not in this centre.');
+        }
+
         $id = DB::table('activity_zones')->insertGetId([
             'centre_id' => $data['centre_id'],
             'room_id' => $data['room_id'] ?? null,
@@ -60,6 +76,16 @@ final class ZonesController extends Controller
             'duration_minutes' => 'nullable|integer|min:1|max:240',
             'notes' => 'nullable|string|max:500',
         ]);
+
+        // Both ends, not just one: the child must be reachable by this user, and the
+        // zone must belong to a centre they can reach. Guarding only the child would
+        // still let a visit be filed into another agency's zone, and vice versa.
+        $this->assertChild((int) $request->user()->id, (int) $data['child_id']);
+
+        $zoneCentre = (int) DB::table('activity_zones')->where('id', (int) $data['zone_id'])->value('centre_id');
+        abort_unless($zoneCentre > 0, 422, 'That zone does not exist.');
+        $this->assertCentre((int) $request->user()->id, $zoneCentre);
+
         $now = Carbon::now();
         $endedAt = isset($data['duration_minutes']) ? $now->copy()->addMinutes($data['duration_minutes']) : null;
         $id = DB::table('zone_visits')->insertGetId([

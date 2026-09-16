@@ -140,6 +140,9 @@ final class MarketingSiteController extends Controller
             'recaptcha_enabled' => 'nullable|boolean',
             'recaptcha_site_key' => 'nullable|string|max:120',
             'recaptcha_secret'  => 'nullable|string|max:120',
+            // Where a finished website chat is emailed. Blank falls back to the contact
+            // address, then to sales@kiddietrac.com.
+            'chat_transcript_to' => 'nullable|string|max:160',
         ]);
         $merged = array_merge($this->load(), $data);
         Storage::disk('local')->put('marketing-site.json', json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
@@ -636,6 +639,212 @@ final class MarketingSiteController extends Controller
     }
 
     /** PUBLIC — log a marketing-site chat message (visitor or bot reply). */
+    /**
+     * Roughly where a visitor is, from their IP.
+     *
+     * City and province is what a salesperson actually needs — whether this is an Ontario
+     * agency subject to CWELCC, or someone in another country entirely. Nothing more
+     * precise than that is asked for or kept.
+     *
+     * Best-effort throughout: a lookup that fails must never cost the transcript. Cached
+     * per address for a day so a chat does not cause one call per message, and skipped
+     * for private addresses, which resolve to nothing useful anyway.
+     */
+    private function geoFromIp(?string $ip): array
+    {
+        $ip = trim((string) $ip);
+        if ($ip === '' || ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return [];
+        }
+
+        return \Illuminate\Support\Facades\Cache::remember('mkt-geo:'.$ip, 86400, function () use ($ip) {
+            try {
+                $ch = curl_init('http://ip-api.com/json/'.urlencode($ip)
+                    .'?fields=status,country,regionName,city,zip,timezone,isp,org,mobile,proxy,hosting');
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 4,
+                    CURLOPT_CONNECTTIMEOUT => 3,
+                    // This host has no working IPv6 route; without forcing v4 the call
+                    // hangs until it times out and the visitor waits for nothing.
+                    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+                ]);
+                $body = curl_exec($ch);
+                curl_close($ch);
+                $j = json_decode((string) $body, true);
+                if (! is_array($j) || ($j['status'] ?? '') !== 'success') {
+                    return [];
+                }
+                unset($j['status']);
+
+                return $j;
+            } catch (\Throwable $e) {
+                return [];
+            }
+        });
+    }
+
+    /**
+     * A chat ended — send it to sales.
+     *
+     * The transcript comes from the browser because that is where the conversation is;
+     * every line was independently logged to marketing-chats.jsonl as it happened, so the
+     * server copy is there to check against if a transcript ever looks wrong.
+     */
+    public function endChat(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'session'    => 'required|string|max:60',
+            'name'       => 'nullable|string|max:120',
+            'email'      => 'nullable|string|max:160',
+            'agency'     => 'nullable|string|max:160',
+            'transcript' => 'required|array|min:1|max:300',
+            'transcript.*.sender'  => 'required|string|in:visitor,bot',
+            'transcript.*.message' => 'required|string|max:2000',
+            'transcript.*.at'      => 'nullable|string|max:40',
+            'context'    => 'nullable|array',
+        ]);
+
+        $session = preg_replace('/[^a-zA-Z0-9_-]/', '', $data['session']);
+
+        // One email per conversation. Reopening the widget, or a keepalive send that
+        // arrives twice on a flaky connection, must not mail sales the same chat again.
+        $lock = 'mkt-chat-sent:'.$session;
+        if (\Illuminate\Support\Facades\Cache::has($lock)) {
+            return response()->json(['ok' => true, 'duplicate' => true])
+                ->header('Access-Control-Allow-Origin', '*');
+        }
+        \Illuminate\Support\Facades\Cache::put($lock, 1, 86400);
+
+        $name   = trim((string) ($data['name'] ?? ''));
+        $email  = strtolower(trim((string) ($data['email'] ?? '')));
+        $agency = trim((string) ($data['agency'] ?? ''));
+        $ctx    = is_array($data['context'] ?? null) ? $data['context'] : [];
+        $ip     = substr((string) $request->ip(), 0, 45);
+        $geo    = $this->geoFromIp($ip);
+
+        // A visitor who only watched the greeting is not a lead. Sales should not be
+        // mailed a conversation that never happened.
+        $visitorLines = array_values(array_filter($data['transcript'], function ($m) {
+            return ($m['sender'] ?? '') === 'visitor';
+        }));
+        if (count($visitorLines) === 0) {
+            return response()->json(['ok' => true, 'skipped' => 'no visitor messages'])
+                ->header('Access-Control-Allow-Origin', '*');
+        }
+
+        $e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+
+        $where = trim(implode(', ', array_filter([
+            $geo['city'] ?? null, $geo['regionName'] ?? null, $geo['country'] ?? null,
+        ])));
+
+        $facts = [
+            'Name'        => $name ?: '—',
+            'Email'       => $email ?: '—',
+            'Agency'      => $agency ?: '—',
+            'Location'    => $where ?: 'Could not be determined',
+            'IP address'  => $ip,
+            'Network'     => trim((string) (($geo['isp'] ?? '') ?: ($geo['org'] ?? ''))) ?: '—',
+            'Local time'  => $geo['timezone'] ?? ($ctx['timezone'] ?? '—'),
+            'Language'    => $ctx['language'] ?? '—',
+            'Landed on'   => $ctx['page'] ?? '—',
+            'Came from'   => ($ctx['referrer'] ?? '') ?: 'Direct / typed the address',
+            'Device'      => $ctx['screen'] ?? '—',
+            'Browser'     => mb_substr((string) $request->userAgent(), 0, 180),
+            'Chat length' => count($data['transcript']).' messages, '.count($visitorLines).' from them',
+        ];
+        if (! empty($geo['proxy']) || ! empty($geo['hosting'])) {
+            // Worth saying plainly rather than quietly reporting a datacentre as a city.
+            $facts['Location'] .= ' — via a VPN or datacentre, so treat it as approximate';
+        }
+
+        $factRows = '';
+        foreach ($facts as $k => $v) {
+            $factRows .= '<tr><td style="padding:6px 14px 6px 0;color:#64748b;font-size:13px;'
+                .'white-space:nowrap;vertical-align:top;">'.$e($k).'</td>'
+                .'<td style="padding:6px 0;color:#0f172a;font-size:13px;font-weight:600;">'.$e($v).'</td></tr>';
+        }
+
+        $lines = '';
+        foreach ($data['transcript'] as $m) {
+            $isVisitor = ($m['sender'] ?? '') === 'visitor';
+            $who = $isVisitor ? ($name ?: 'Visitor') : 'Maya (assistant)';
+            $lines .= '<div style="margin-bottom:12px;">'
+                .'<div style="font-size:11.5px;font-weight:700;color:'.($isVisitor ? '#0e7490' : '#94a3b8').';'
+                .'margin-bottom:3px;">'.$e($who)
+                .($m['at'] ?? null ? ' <span style="font-weight:400;color:#b6c2ce;">'.$e($m['at']).'</span>' : '')
+                .'</div>'
+                .'<div style="background:'.($isVisitor ? '#ecfeff' : '#f8fafc').';border:1px solid '
+                .($isVisitor ? '#a5f3fc' : '#e2e8f0').';border-radius:9px;padding:10px 12px;font-size:14px;'
+                .'line-height:1.55;color:#1e293b;white-space:pre-wrap;">'.$e($m['message']).'</div></div>';
+        }
+
+        $subject = 'Website chat'.($name ? ' — '.$name : '').($where ? ' ('.$where.')' : '');
+
+        // Configurable, because whether a given mailbox exists is a fact about Microsoft
+        // 365 rather than about this code. Falls back to the site contact address.
+        $cfg = $this->load();
+        $to = trim((string) ($cfg['chat_transcript_to'] ?? ''))
+            ?: trim((string) ($cfg['contact_email'] ?? ''))
+            ?: 'sales@kiddietrac.com';
+
+        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px;">'
+            .'<h2 style="margin:0 0 4px;color:#0f172a;font-size:19px;">Somebody chatted with us on the website</h2>'
+            .'<p style="margin:0 0 18px;color:#64748b;font-size:13.5px;">'
+            .'They have left the page. Everything they told us is below.</p>'
+            .'<table style="border-collapse:collapse;margin-bottom:22px;">'.$factRows.'</table>'
+            .'<h3 style="margin:0 0 10px;color:#0f172a;font-size:15px;">The conversation</h3>'
+            .$lines
+            .'<p style="margin:20px 0 0;color:#94a3b8;font-size:11.5px;">'
+            .'Session '.$e($session).'. Location is approximate, from the IP address.</p></div>';
+
+        try {
+            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($subject, $email, $name, $to) {
+                $m->to($to)->subject($subject);
+                // So a reply goes straight back to them rather than to nobody.
+                if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $m->replyTo($email, $name ?: $email);
+                }
+                // Sales notifications are operational and must not be dropped by the
+                // agency bulk-mail suppression gate.
+                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            });
+        } catch (\Throwable $ex) {
+            \Illuminate\Support\Facades\Log::warning('marketing chat transcript mail failed: '.$ex->getMessage());
+        }
+
+        // Into the pipeline too, so the follow-up is tracked rather than remembered.
+        if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            try {
+                if (! \App\Models\SalesLead::where('email', $email)->where('status', 'open')->exists()) {
+                    $lead = \App\Models\SalesLead::create([
+                        'name' => $name ?: $email,
+                        'company' => $agency ?: null,
+                        'email' => $email,
+                        'source' => 'website-chat',
+                        'stage' => 'new',
+                        'status' => 'open',
+                        'last_activity_at' => now(),
+                        'notes' => 'Chatted on the website'.($where ? ' from '.$where : '').'.',
+                    ]);
+                    \App\Models\SalesActivity::create([
+                        'lead_id' => $lead->id,
+                        'type' => 'note',
+                        'body' => "Website chat:\n\n".collect($data['transcript'])->map(function ($m) use ($name) {
+                            return (($m['sender'] ?? '') === 'visitor' ? ($name ?: 'Them') : 'Maya').': '.$m['message'];
+                        })->implode("\n"),
+                        'done' => true,
+                    ]);
+                }
+            } catch (\Throwable $ex) {
+                \Illuminate\Support\Facades\Log::warning('marketing chat lead capture failed: '.$ex->getMessage());
+            }
+        }
+
+        return response()->json(['ok' => true])->header('Access-Control-Allow-Origin', '*');
+    }
+
     public function logChat(Request $request): JsonResponse
     {
         $data = $request->validate([

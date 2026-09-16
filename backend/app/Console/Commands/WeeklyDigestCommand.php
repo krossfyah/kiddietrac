@@ -49,7 +49,7 @@ final class WeeklyDigestCommand extends Command
             $mailer = AgencyMailer::forAgency((int) $a->id);
             foreach ($rcpts as $r) {
                 try {
-                    $mailer->mailer()->html($body, function ($m) use ($subject, $r) {
+                    $mailer->html($body, function ($m) use ($subject, $r) {
                         // Engagement mail: withheld from accounts nobody has claimed.
                         try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); }
                         catch (\Throwable $e) {}

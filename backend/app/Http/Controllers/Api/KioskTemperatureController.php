@@ -59,7 +59,7 @@ final class KioskTemperatureController extends Controller
                 ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])
                 ->where('active', 1)->pluck('user_id')->unique();
             foreach ($staff as $sid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $sid, 'type' => 'fever_alert',
                     'title' => '🌡 Elevated temperature: ' . $child->first_name,
                     'body' => number_format((float) $data['temperature_c'], 1) . '°C recorded via ' . $data['method'],

@@ -206,6 +206,7 @@ class AgreementController extends Controller
         // records WHY. (An invented value would be silently rejected by MySQL.)
         try {
             DB::table('users')->where('id', $user->id)->update(['status' => 'suspended']);
+            \App\Support\AccountStatus::closeRoles([(int) $user->id]);
         } catch (\Throwable $e) {
             // Never fail the request over this — the decline is already recorded.
         }
@@ -256,6 +257,9 @@ class AgreementController extends Controller
 
         dispatch(function () use ($email, $toName, $html, $subject, $absPdf, $attachName) {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($email, $toName, $subject, $absPdf, $attachName) {
+                // The signer's copy of KiddieTrac's OWN terms — a legal record, and not
+                // an agency's mail to withhold.
+                \App\Support\MailScope::platform($m);
                 $m->to($email, $toName)
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
@@ -316,7 +320,8 @@ class AgreementController extends Controller
         $to = $recipients;
 
         dispatch(function () use ($to, $html, $subject) {
-            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $subject) {
+            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $subject, $agencyId) {
+                \App\Support\MailScope::agency($m, $agencyId);
                 if ($to) $m->to($to);
                 else $m->to('info@kiddietrac.com', 'KiddieTrac');
                 // KiddieTrac always gets a copy, quietly.

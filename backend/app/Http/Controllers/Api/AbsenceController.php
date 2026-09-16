@@ -263,8 +263,7 @@ class AbsenceController extends Controller
                 // Same reason as the staff notice below — resolved before dispatch.
                 $mailAgencyId = (int) ($child->agency_id ?? 0);
                 dispatch(function () use ($mailAgencyId, $to, $html, $subject) {
-                    \App\Services\AgencyMailer::forAgency($mailAgencyId)->mailer()
-                        ->html($html, function ($m) use ($to, $subject) {
+                    \App\Services\AgencyMailer::forAgency($mailAgencyId)->html($html, function ($m) use ($to, $subject) {
                             $m->to($to)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($subject);
                         });
                 })->onQueue('mail');
@@ -391,8 +390,7 @@ class AbsenceController extends Controller
                    Captured here, the closure cannot fail that way at all. */
                 $mailAgencyId = (int) ($child->agency_id ?? 0);
                 dispatch(function () use ($mailAgencyId, $emails, $html, $subject) {
-                    \App\Services\AgencyMailer::forAgency($mailAgencyId)->mailer()
-                        ->html($html, function ($m) use ($emails, $subject) {
+                    \App\Services\AgencyMailer::forAgency($mailAgencyId)->html($html, function ($m) use ($emails, $subject) {
                             $m->to($emails)
                               ->from('noreply@kiddietrac.com', 'KiddieTrac')
                               ->subject($subject);

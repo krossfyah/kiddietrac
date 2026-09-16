@@ -28,9 +28,7 @@ final class EnforceAuditorReadOnly
         // Resolve the bearer user independently of route-level auth ordering.
         $user = $request->user() ?: auth('sanctum')->user();
         if ($user) {
-            $roles = DB::table('role_assignments')
-                ->where('user_id', $user->id)->where('active', true)
-                ->pluck('role')->unique()->all();
+            $roles = \App\Support\UserRoles::names($request);
             if (in_array('auditor', $roles, true) && count(array_diff($roles, ['auditor'])) === 0) {
                 return response()->json(['message' => 'Auditor accounts are read-only.'], 403);
             }

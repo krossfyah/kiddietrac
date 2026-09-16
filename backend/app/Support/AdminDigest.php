@@ -39,8 +39,9 @@ final class AdminDigest
             'tours' => 'tours', 'incidents' => 'incidents', 'immunisations' => 'immunisations',
             'tickets' => 'tickets', 'invoicing' => 'invoicing', 'welcome' => 'welcome',
             'week' => 'weekAhead', 'reportCards' => 'reportCards', 'forms' => 'forms',
+            'emergency' => 'emergencyContacts',
             'openDays' => 'openDays', 'scorecard' => 'scorecard',
-            'educators' => 'educators',
+            'educators' => 'educators', 'newFamilies' => 'newFamilies',
         ] as $key => $method) {
             try {
                 $v = self::$method($ctx);
@@ -137,7 +138,9 @@ final class AdminDigest
         if (! Schema::hasTable('incidents')) return null;
         $rows = DB::table('incidents as i')->join('children as ch', 'ch.id', '=', 'i.child_id')
             ->join('families as f', 'f.id', '=', 'ch.family_id')->whereIn('f.centre_id', $c['centres'])
-            ->whereDate('i.occurred_at', '>=', $c['from'])->whereDate('i.occurred_at', '<=', $c['to'])
+            // Agency-day instants, not UTC dates — see AgencyTime::spanRange.
+            ->where('i.occurred_at', '>=', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[0])
+            ->where('i.occurred_at', '<', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[1])
             ->orderByDesc('i.occurred_at')->limit(6)
             ->get(['i.incident_type', 'i.severity', 'i.occurred_at', 'ch.first_name', 'ch.last_name']);
         if ($rows->isEmpty()) return null;
@@ -150,6 +153,42 @@ final class AdminDigest
     }
 
     /** Immunisations are reported by ABSENCE — the children with no record are the risk. */
+    /**
+     * Families with nobody to call.
+     *
+     * An emergency contact is the record you need on the one day nobody has time to look
+     * for it, and 39 of 41 families at one agency had none (2026-08-30). The emergency
+     * card already says "Not recorded" honestly; this is what tells somebody to fix it.
+     *
+     * Counts families with ZERO contacts — not families whose contacts are incomplete,
+     * which would be a different and much noisier question.
+     */
+    private static function emergencyContacts(array $c): ?array
+    {
+        if (! Schema::hasTable('emergency_contacts')) return null;
+
+        $base = fn () => DB::table('families as f')
+            ->whereIn('f.centre_id', $c['centres'])
+            ->whereNull('f.deleted_at')
+            ->whereNull('f.suspended_at')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))->from('emergency_contacts as ec')
+                  ->whereColumn('ec.family_id', 'f.id');
+            });
+
+        $rows = $base()->orderBy('f.family_name')->limit(8)->get(['f.family_name']);
+        if ($rows->isEmpty()) return null;
+
+        return [
+            'count' => $base()->count(),
+            'rows' => $rows->map(fn ($r) => [
+                'who' => (string) ($r->family_name ?: 'Family'),
+                'what' => 'No emergency contact',
+                'detail' => 'nobody to call',
+            ])->all(),
+        ];
+    }
+
     private static function immunisations(array $c): ?array
     {
         if (! Schema::hasTable('immunizations')) return null;
@@ -216,6 +255,44 @@ final class AdminDigest
     }
 
     /** Families on file that nobody has invited yet — the welcome-package reminder. */
+    /**
+     * Families who joined inside the period.
+     *
+     * Deliberately counts by created_at rather than by enrolment start: this section
+     * answers "what happened while I was not looking", and a family entered today for a
+     * September start is exactly the thing the office needs to see today.
+     *
+     * Excludes families already gone — a record created and de-enrolled inside the same
+     * window is not an arrival, and reporting it as one sends somebody to look for a
+     * family who is not there.
+     */
+    private static function newFamilies(array $c): ?array
+    {
+        $rows = DB::table('families as f')
+            ->leftJoin('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->whereIn('f.centre_id', $c['centres'])
+            ->whereNull('f.deleted_at')
+            ->whereBetween('f.created_at', [$c['from'] . ' 00:00:00', $c['to'] . ' 23:59:59'])
+            ->orderBy('f.created_at')
+            ->limit(12)
+            ->get(['f.id', 'f.family_name', 'ce.name as centre_name']);
+        if ($rows->isEmpty()) return null;
+
+        $kids = DB::table('children')
+            ->whereIn('family_id', $rows->pluck('id'))->whereNull('deleted_at')
+            ->select('family_id', DB::raw('COUNT(*) as n'))
+            ->groupBy('family_id')->pluck('n', 'family_id');
+
+        return ['count' => $rows->count(), 'rows' => $rows->map(function ($r) use ($kids) {
+            $n = (int) ($kids[$r->id] ?? 0);
+            return [
+                'who' => (string) ($r->family_name ?: 'Family'),
+                'what' => $r->centre_name ?: 'No provider set',
+                'detail' => $n === 1 ? '1 child' : $n . ' children',
+            ];
+        })->all()];
+    }
+
     private static function welcome(array $c): ?array
     {
         $rows = DB::table('families as f')
@@ -344,8 +421,8 @@ final class AdminDigest
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
             ->whereIn('f.centre_id', $c['centres'])
-            ->whereDate('e.occurred_at', '>=', $c['from'])
-            ->whereDate('e.occurred_at', '<=', $c['to'])
+            ->where('e.occurred_at', '>=', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[0])
+            ->where('e.occurred_at', '<', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[1])
             ->whereNull('ch.deleted_at')
             ->orderBy('e.occurred_at')
             ->get(['e.child_id', 'e.event_type', 'e.occurred_at', 'ch.first_name', 'ch.last_name', 'ce.name as centre']);
@@ -368,8 +445,8 @@ final class AdminDigest
         $punches = DB::table('time_punches as p')
             ->join('users as u', 'u.id', '=', 'p.user_id')
             ->whereIn('p.centre_id', $c['centres'])
-            ->whereDate('p.punched_in_at', '>=', $c['from'])
-            ->whereDate('p.punched_in_at', '<=', $c['to'])
+            ->where('p.punched_in_at', '>=', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[0])
+            ->where('p.punched_in_at', '<', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[1])
             ->where(function ($q) {
                 $q->whereNull('p.punched_out_at')->orWhere('p.source', 'auto');
             })
@@ -418,24 +495,28 @@ final class AdminDigest
 
         $from = $c['from'];
         $to = $c['to'];
+        /* Resolved ONCE for the whole scorecard: these columns are instants and this
+           method loops over every educator, so an inline call per bound would be two
+           extra queries per person. */
+        [$spanFrom, $spanTo] = \App\Support\AgencyTime::spanRange($c['agency'], $from, $to);
         $stats = [];
 
         foreach ($educators as $u) {
             $obs = DB::table('observations')->where('recorded_by_id', $u->id)
-                ->whereDate('observed_at', '>=', $from)->whereDate('observed_at', '<=', $to)->count();
+                ->where('observed_at', '>=', $spanFrom)->where('observed_at', '<', $spanTo)->count();
 
             $care = 0;
             if (Schema::hasTable('daily_care_logs')) {
                 $care += DB::table('daily_care_logs')->where('recorded_by_id', $u->id)
-                    ->whereDate('occurred_at', '>=', $from)->whereDate('occurred_at', '<=', $to)->count();
+                    ->where('occurred_at', '>=', $spanFrom)->where('occurred_at', '<', $spanTo)->count();
             }
             $care += DB::table('daily_events')->where('recorded_by_id', $u->id)
-                ->whereDate('occurred_at', '>=', $from)->whereDate('occurred_at', '<=', $to)->count();
+                ->where('occurred_at', '>=', $spanFrom)->where('occurred_at', '<', $spanTo)->count();
 
             $punches = DB::table('time_punches')->where('user_id', $u->id)
-                ->whereDate('punched_in_at', '>=', $from)->whereDate('punched_in_at', '<=', $to)->count();
+                ->where('punched_in_at', '>=', $spanFrom)->where('punched_in_at', '<', $spanTo)->count();
             $clean = DB::table('time_punches')->where('user_id', $u->id)
-                ->whereDate('punched_in_at', '>=', $from)->whereDate('punched_in_at', '<=', $to)
+                ->where('punched_in_at', '>=', $spanFrom)->where('punched_in_at', '<', $spanTo)
                 ->whereNotNull('punched_out_at')->where(fn ($q) => $q->where('source', '!=', 'auto')->orWhereNull('source'))
                 ->count();
 
@@ -466,13 +547,13 @@ final class AdminDigest
                 ->join('children as ch', 'ch.id', '=', 'e.child_id')
                 ->join('families as f', 'f.id', '=', 'ch.family_id')
                 ->where('f.centre_id', $centreId)->where('e.event_type', 'check_in')
-                ->whereDate('e.occurred_at', '>=', $from)->whereDate('e.occurred_at', '<=', $to)
+                ->where('e.occurred_at', '>=', $spanFrom)->where('e.occurred_at', '<', $spanTo)
                 ->count();
             $byHand = DB::table('check_events as e')
                 ->join('children as ch', 'ch.id', '=', 'e.child_id')
                 ->join('families as f', 'f.id', '=', 'ch.family_id')
                 ->where('f.centre_id', $centreId)->where('e.event_type', 'check_out')
-                ->whereDate('e.occurred_at', '>=', $from)->whereDate('e.occurred_at', '<=', $to)
+                ->where('e.occurred_at', '>=', $spanFrom)->where('e.occurred_at', '<', $spanTo)
                 ->where(function ($q) {
                     $q->whereNull('e.notes')->orWhere('e.notes', 'not like', '%Auto sign-off%');
                 })

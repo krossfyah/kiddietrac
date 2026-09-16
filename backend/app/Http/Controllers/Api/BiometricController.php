@@ -192,8 +192,7 @@ final class BiometricController extends Controller
         ]);
 
         try {
-            AgencyMailer::forAgency($agencyId ? (int) $agencyId : null)->mailer()
-                ->html($html, function ($m) use ($to, $name) {
+            AgencyMailer::forAgency($agencyId ? (int) $agencyId : null)->html($html, function ($m) use ($to, $name) {
                     $m->to($to, $name !== 'there' ? $name : null)
                       ->subject('🔐 Biometric unlock was enabled on your KiddieTrac account');
                     // A security alert about an account is addressed to the account

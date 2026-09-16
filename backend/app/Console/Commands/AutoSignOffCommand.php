@@ -264,8 +264,12 @@ class AutoSignOffCommand extends Command
             // checked this child IN — the person who should have signed them out, and the
             // one a director needs to see against it. Without a room or a user there is
             // nothing honest to write, so nothing is written.
+            /* The room and the recording user come off this row, so a check_in dated
+               later today would file the sign-off against the wrong room. Same rule as
+               CheckEventController: only what has already happened. */
             $lastIn = DB::table('check_events')->where('child_id', $childId)
-                ->where('event_type', 'check_in')->orderByDesc('occurred_at')
+                ->where('event_type', 'check_in')->where('occurred_at', '<=', now())
+                ->orderByDesc('occurred_at')
                 ->first(['room_id', 'by_user_id', 'recorded_by_id']);
             $roomId = $roomId ?: ($lastIn->room_id ?? null);
             $by = $lastIn->recorded_by_id ?? $lastIn->by_user_id ?? null;

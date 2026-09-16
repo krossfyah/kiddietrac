@@ -23,12 +23,146 @@ final class DailyEventController extends Controller
         private readonly AnthropicService $ai = new AnthropicService()
     ) {}
 
+    /** Exactly the daily_events.event_type ENUM. One list, so the two cannot drift. */
+    public const EVENT_TYPES = [
+        'meal', 'snack', 'bottle', 'nap_start', 'nap_end', 'diaper', 'bathroom',
+        'activity', 'mood', 'note', 'incident', 'medication', 'sunscreen', 'outdoor', 'walk',
+    ];
+
+    /**
+     * POST /provider/events/bulk — log the same thing for several children at once.
+     *
+     * Sunscreen before going out, the afternoon snack, everyone down for a nap: these are
+     * one action about a whole room, and doing them one child at a time is the single
+     * most repetitive thing an educator does in a day. Ten children meant ten dialogs.
+     *
+     * Every row is stamped with a shared `bulk_log_id` — the column has existed since the
+     * table was created and nothing has ever written it. That makes a bulk entry
+     * correctable and undoable as one thing later, rather than ten rows nobody can tell
+     * were the same action.
+     *
+     * Children are guarded INDIVIDUALLY. A room is not a permission: the caller must be
+     * able to reach each child, and one they cannot reach is reported rather than
+     * silently dropped, so a partial save never looks like a complete one.
+     */
+    public function storeBulk(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'child_ids'   => ['required', 'array', 'min:1', 'max:60'],
+            'child_ids.*' => ['integer'],
+            'room_id'     => ['required', 'integer'],
+            'event_type'  => ['required', 'in:'.implode(',', self::EVENT_TYPES)],
+            'payload'     => ['nullable', 'array'],
+            'occurred_at' => ['nullable', 'date'],
+            'notes'       => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $user = $request->user();
+        $ids = array_values(array_unique(array_map('intval', $data['child_ids'])));
+
+        /* Children must actually be IN the room being logged. canAccessChildId alone is
+           not enough: an agency admin can legitimately reach children right across their
+           agency, so without this a room log could quietly pick up a child from another
+           centre entirely. Caught in testing when a bulk log for one room accepted a
+           child from a different agency the caller also administers. A room bulk-log is
+           a statement about that room. */
+        /* ...and only the children who are with THIS room today. A bulk log is a
+           statement about a room on a day, so a child who is with another provider today
+           is not part of it. */
+        /* Enrolment AND status, not enrolment alone. A withdrawn child can still carry an
+           open enrolment row (8 did, found 2026-08-30), and this is a write path — a
+           room-wide log would have attached an entry to a child who had left. The roster
+           endpoint has always checked both; this matches it. */
+        $inRoom = DB::table('enrollments')
+            ->join('children as chk', 'chk.id', '=', 'enrollments.child_id')
+            ->whereIn('enrollments.child_id', $ids)
+            ->where('enrollments.room_id', (int) $data['room_id'])
+            ->whereNull('enrollments.end_date')
+            ->where('chk.enrollment_status', 'enrolled')
+            ->whereNull('chk.deleted_at')
+            ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments'))
+            ->pluck('enrollments.child_id')->map(fn ($v) => (int) $v)->all();
+
+        $allowed = [];
+        $refused = [];
+        foreach ($ids as $cid) {
+            if (in_array($cid, $inRoom, true) && $this->canAccessChildId($user, $cid)) {
+                $allowed[] = $cid;
+            } else {
+                $refused[] = $cid;
+            }
+        }
+        if (! $allowed) {
+            return response()->json(['message' => 'None of those children are yours to log for.'], 403);
+        }
+
+        $occurredAt = ! empty($data['occurred_at']) ? Carbon::parse($data['occurred_at']) : now();
+        $payload = json_encode($data['payload'] ?? [], JSON_THROW_ON_ERROR);
+
+        // Groups the rows without needing a new table: the id of the first row written.
+        $bulkId = null;
+        $saved = [];
+
+        try {
+            DB::transaction(function () use ($allowed, $data, $occurredAt, $payload, $user, &$bulkId, &$saved) {
+                foreach ($allowed as $cid) {
+                    $row = [
+                        'child_id' => $cid,
+                        'room_id' => $data['room_id'],
+                        'event_type' => $data['event_type'],
+                        'occurred_at' => $occurredAt,
+                        'payload' => $payload,
+                        'notes' => $data['notes'] ?? null,
+                        'recorded_by_id' => $user->id,
+                        'voice_logged' => false,
+                        'synced_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                    if ($bulkId !== null) { $row['bulk_log_id'] = $bulkId; }
+                    $id = DB::table('daily_events')->insertGetId($row);
+                    if ($bulkId === null) {
+                        $bulkId = $id;
+                        DB::table('daily_events')->where('id', $id)->update(['bulk_log_id' => $bulkId]);
+                    }
+                    $saved[] = $id;
+                }
+            });
+        } catch (\Throwable $e) {
+            \Log::error('daily_events bulk store failed', ['err' => $e->getMessage(), 'input' => $data]);
+
+            return response()->json(['message' => 'Could not save these entries. Please try again.'], 422);
+        }
+
+        // Today's digest is stale for everyone who was logged. Best-effort, as in store().
+        try {
+            DB::table('ai_daily_digests')->whereIn('child_id', $allowed)
+                ->whereDate('digest_date', $occurredAt->toDateString())->delete();
+        } catch (\Throwable $e) { /* a stale digest is not worth failing the log for */ }
+
+        return response()->json([
+            'ok' => true,
+            'bulk_log_id' => $bulkId,
+            'saved' => count($saved),
+            'event_ids' => $saved,
+            'refused' => $refused,
+            'message' => count($saved).' '.(count($saved) === 1 ? 'child' : 'children').' logged.',
+        ], 201);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
             'child_id' => ['required', 'integer'],
             'room_id' => ['required', 'integer'],
-            'event_type' => ['required', 'in:meal,snack,nap_start,nap_end,diaper,bathroom,activity,mood,note,milestone,bottle,medication_given,outdoor'],
+            /* This list must match the daily_events.event_type ENUM exactly. It did not
+               (2026-08-25): it allowed `milestone` and `medication_given`, neither of
+               which exists in the column, so those logs passed validation and then died
+               at the insert as "Could not save this entry"; and it REJECTED `sunscreen`,
+               which the column has always accepted - so sunscreen could not be logged at
+               all. Same shape as the phantom 'inactive' status: a value that is simply
+               absent fails silently or confusingly. */
+            'event_type' => ['required', 'in:'.implode(',', self::EVENT_TYPES)],
             'payload' => ['nullable', 'array'],
             'occurred_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -199,7 +333,14 @@ final class DailyEventController extends Controller
             'checks' => $checks->map(fn ($c) => [
                 'type' => $c->event_type,
                 'occurred_at' => $c->occurred_at,
-                'time_display' => AgencyTime::fmt($c->occurred_at, $tz),
+                /* " (auto)" when the nightly job closed this, not a person.
+                   check_events.recorded_by_id borrows a real educator's id because
+                   the column is NOT NULL, so without this the row asserts that
+                   somebody signed the child out when nobody did. */
+                'time_display' => AgencyTime::fmt($c->occurred_at, $tz)
+                    . \App\Support\SystemAction::label($c->notes ?? null),
+                'automatic' => \App\Support\SystemAction::isAuto($c->notes ?? null),
+                'automatic_reason' => \App\Support\SystemAction::explain($c->notes ?? null),
                 'by' => $c->notes,
                 'mood' => $c->mood_at_event,
             ])->all(),
@@ -329,23 +470,28 @@ final class DailyEventController extends Controller
     private function buildDigestContext(int $childId, string $date): array
     {
         $child = DB::table('children')->where('id', $childId)->first();
+        // Today's provider, not whichever enrolment happens to sort first.
         $enrollment = DB::table('enrollments')
             ->where('child_id', $childId)
             ->whereNull('end_date')
+            ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments'))
             ->first();
         $room = $enrollment
             ? DB::table('rooms')->where('id', $enrollment->room_id)->first()
             : null;
 
+        // That day in the CHILD's agency, as instants — see AgencyTime::dayRange.
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForChild($childId, $date);
+
         $events = DB::table('daily_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->orderBy('occurred_at')
             ->get();
 
         $checks = DB::table('check_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->orderBy('occurred_at')
             ->get();
 
@@ -395,15 +541,18 @@ final class DailyEventController extends Controller
         $child = DB::table('children')->where('id', $childId)->first();
         $name = $child->preferred_name ?: $child->first_name;
 
+        // That day in the CHILD's agency, as instants — see AgencyTime::dayRange.
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForChild($childId, $date);
+
         $events = DB::table('daily_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->orderBy('occurred_at')
             ->get();
 
         $checks = DB::table('check_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', $date)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->orderBy('occurred_at')
             ->get();
 

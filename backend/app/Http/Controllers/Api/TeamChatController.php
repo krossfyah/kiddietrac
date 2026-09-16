@@ -67,6 +67,60 @@ final class TeamChatController extends Controller
     }
 
     /** User ids of staff colleagues in the given agencies (excludes $exclude). */
+    /**
+     * 1:1 threads whose counterpart no longer holds ANY active role.
+     *
+     * One human legitimately has several accounts here — educator, admin, parent — and
+     * Messenger shows one row per THREAD, so the same name appears several times. That is
+     * survivable while the rows are distinguishable. It stopped being survivable because
+     * the role label falls back to the literal word 'Staff' when a person has no active
+     * role at all: an account nobody can sign into and use looked exactly like the account
+     * they actually use.
+     *
+     * Anthony had four "Safia Ali" threads. Six of his messages went to the one attached
+     * to an account with no roles. They were accepted, stored, and ticked as sent — and
+     * were never read by anybody, because that account has no way into the portal. A
+     * message that is delivered and unreadable is worse than one that fails.
+     *
+     * So a thread to such an account leaves the list. The history is untouched in the
+     * database, and nothing is deleted; it simply stops being offered as somewhere to
+     * write. Groups are never hidden — a room stays useful even if one member has left —
+     * and a thread is only hidden when it has exactly ONE counterpart, so nothing with a
+     * live participant can disappear. Giving somebody a role back brings the thread
+     * straight back too. (Anthony, 2026-09-09)
+     */
+    private function threadsWithInactiveCounterpart(int $uid, array $threadIds): array
+    {
+        if (! $threadIds) return [];
+
+        $groupIds = DB::table('staff_threads')->whereIn('id', $threadIds)
+            ->where('is_group', 1)->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $oneToOne = array_values(array_diff($threadIds, $groupIds));
+        if (! $oneToOne) return [];
+
+        $rows = DB::table('staff_thread_participants')->whereIn('thread_id', $oneToOne)
+            ->where('user_id', '!=', $uid)->get(['thread_id', 'user_id']);
+
+        // Only threads with a single counterpart; anything else is a room in all but name.
+        $byThread = [];
+        foreach ($rows as $r) { $byThread[(int) $r->thread_id][] = (int) $r->user_id; }
+
+        $others = $rows->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all();
+        if (! $others) return [];
+        $active = array_flip(
+            DB::table('role_assignments')->whereIn('user_id', $others)->where('active', true)
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all()
+        );
+
+        $hidden = [];
+        foreach ($byThread as $tid => $people) {
+            if (count($people) !== 1) continue;
+            if (! isset($active[$people[0]])) { $hidden[] = (int) $tid; }
+        }
+
+        return $hidden;
+    }
+
     private function staffUserIds(array $agencyIds, int $exclude): array
     {
         if (! $agencyIds) return [];
@@ -256,8 +310,12 @@ final class TeamChatController extends Controller
             ->map(fn ($v) => (int) $v)->all();
 
         $threads = DB::table('staff_threads')->whereIn('id', $mine)->orderByDesc('last_message_at')->get();
+        // Threads to an account with no active role never reach the list — see the note
+        // on the helper for why a delivered-but-unreadable message is the worst outcome.
+        $hiddenThreads = array_flip($this->threadsWithInactiveCounterpart($uid, $mine));
         $out = [];
         foreach ($threads as $t) {
+            if (isset($hiddenThreads[(int) $t->id])) continue;
             $o = $others[$t->id] ?? null;
             $last = DB::table('staff_messages')->where('thread_id', $t->id)->orderByDesc('id')->first(['body', 'created_at', 'sender_id', 'is_system']);
             $readAt = $myPart[$t->id] ?? null;
@@ -560,7 +618,7 @@ final class TeamChatController extends Controller
            the conversation gone — while a phone banner announcing it would be a needless
            sting. The in-app row is the honest middle. */
         try {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $user, 'type' => 'team_message',
                 'title'   => '👥 Removed from a group',
                 'body'    => $this->nameOf($uid) . ' removed you from “' . ($row->title ?: 'a group conversation') . '”.',
@@ -672,16 +730,16 @@ final class TeamChatController extends Controller
                     'title' => '👥 Added to ' . $title,
                     'body'  => $by . ' added you to ' . $title . '.',
                     'icon'  => '/icon-192.png',
-                    'url'   => '/dashboard.html#team-messages',
+                    'url'   => '/dashboard.html#chat?c=staff:' . $thread,
                     'tag'   => 'team-' . $thread,
                 ]);
             } catch (\Throwable $e) { /* best-effort */ }
             try {
                 app(\App\Services\FcmService::class)->sendToUser((int) $pid,
-                    '👥 Added to ' . $title, $by . ' added you to ' . $title . '.', '#team-messages', true, true);
+                    '👥 Added to ' . $title, $by . ' added you to ' . $title . '.', '#chat?c=staff:' . $thread, true, true);
             } catch (\Throwable $e) { /* best-effort */ }
 
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => (int) $pid, 'type' => 'team_message',
                 'title'   => '👥 Added to a group',
                 'body'    => $by . ' added you to “' . $title . '”.',
@@ -853,8 +911,15 @@ final class TeamChatController extends Controller
     {
         $uid = (int) $request->user()->id;
         $parts = DB::table('staff_thread_participants')->where('user_id', $uid)->get(['thread_id', 'last_read_at']);
+        /* The badge must count exactly what the list shows. A hidden thread still holding
+           an unread message would put a number on the nav that no amount of reading could
+           ever clear, because there is nothing to open. */
+        $hidden = array_flip($this->threadsWithInactiveCounterpart(
+            $uid, $parts->pluck('thread_id')->map(fn ($v) => (int) $v)->all()
+        ));
         $total = 0;
         foreach ($parts as $p) {
+            if (isset($hidden[(int) $p->thread_id])) continue;
             $total += DB::table('staff_messages')->where('thread_id', $p->thread_id)->where('sender_id', '!=', $uid)
                 ->when($p->last_read_at, fn ($q) => $q->where('created_at', '>', $p->last_read_at))->count();
         }
@@ -895,7 +960,12 @@ final class TeamChatController extends Controller
                         'title' => '💬 ' . $meName,
                         'body'  => $preview,
                         'icon'  => '/icon-192.png',
-                        'url'   => '/dashboard.html#team-messages',
+                        /* THE THREAD, in Messenger. This pointed at '#team-messages',
+                           which is a HIDDEN screen — the colleague UI lives in Messenger —
+                           so tapping a team message notification landed nowhere at all.
+                           screen-chat.js now understands the staff: form of the deep link.
+                           (Anthony, 2026-09-09) */
+                        'url'   => '/dashboard.html#chat?c=staff:' . $thread,
                         'tag'   => 'team-' . $thread,
                     ]);
                 } catch (\Throwable $pe) {
@@ -906,21 +976,31 @@ final class TeamChatController extends Controller
                    Separate try so an FCM fault cannot suppress web push. */
                 try {
                     app(\App\Services\FcmService::class)
-                        // #team-messages, not #chat: this push opened the FAMILY messenger,
-                        // where the team message it was announcing does not exist.
-                        ->sendToUser((int) $oid, '💬 ' . $meName, $preview, '#team-messages', true, true);
+                        /* '#chat?c=staff:<id>', not a bare '#chat' and not '#team-messages'.
+                           A bare '#chat' was rightly reverted once — it opened the family
+                           messenger, where this message does not exist — but the answer was
+                           a deep link that NAMES the thread, not a hidden screen. */
+                        ->sendToUser((int) $oid, '💬 ' . $meName, $preview, '#chat?c=staff:' . $thread, true, true);
                 } catch (\Throwable $fe) {
                     \Illuminate\Support\Facades\Log::warning('Team-chat FCM push failed',
                         ['user' => (int) $oid, 'error' => $fe->getMessage()]);
                 }
 
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => (int) $oid, 'type' => 'team_message',
-                    'title'   => '💬 New team message',
+                    // Who it is from, like a family chat row — "New team message" made
+                    // every colleague in the inbox look identical.
+                    'title'   => '💬 ' . $meName,
                     'body'    => $meName . ': ' . (trim($body) !== ''
                         ? mb_substr(strip_tags($body), 0, 140)
                         : ($attachments ? '📎 sent an attachment' : 'New message')),
-                    'data'    => json_encode(['thread_id' => $thread]),
+                    /* 'url' was MISSING here. The inbox renderer navigates to data.url, so
+                       this row carried a thread_id nothing read, and clicking it in the
+                       bell did nothing at all. */
+                    'data'    => json_encode([
+                        'url' => '/dashboard.html#chat?c=staff:' . $thread,
+                        'thread_id' => $thread,
+                    ]),
                     'created_at' => $now,
                 ]);
             }

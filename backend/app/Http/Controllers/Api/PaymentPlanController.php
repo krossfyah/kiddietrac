@@ -72,6 +72,9 @@ final class PaymentPlanController extends Controller
                 $exact = $candidates->first(fn ($c) => abs((float) $c->total - (float) $i->amount) < 0.005);
                 $hit = $exact ?: $candidates->first();
 
+                // The id travels too, so the row can offer to OPEN the invoice and not
+                // just name it — an instalment matched by due date has no invoice_id.
+                $i->external_invoice_id = $hit->id;
                 $i->invoice_number = $hit->number;
                 $i->invoice_status = $hit->status;
                 $i->invoice_balance = $hit->balance_due;
@@ -189,9 +192,9 @@ final class PaymentPlanController extends Controller
         // Notify guardians
         $gids = DB::table('guardians')->where('family_id', $data['family_id'])->pluck('user_id');
         foreach ($gids as $gid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'payment_plan',
-                'title' => 'Payment plan created',
+                'title' => 'Payment schedule created',
                 'body' => '$' . number_format((float) $data['total_amount'], 2) . ' over ' . $data['installment_count'] . ' ' . $data['cadence'] . ' installments',
                 'data' => json_encode(['link' => '#payment-plans', 'plan_id' => $planId]),
                 'created_at' => now(),

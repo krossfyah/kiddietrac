@@ -26,6 +26,8 @@ final class CalendarSettingsController extends Controller
 {
     public const DEFAULTS = [
         'show_closures' => true,
+        // Last days: families leaving, children withdrawing, staff finishing.
+        'show_departures' => true,
         'show_birthdays' => true,
         'show_absences' => true,
         'show_timeoff' => true,

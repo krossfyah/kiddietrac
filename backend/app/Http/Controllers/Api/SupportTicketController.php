@@ -202,7 +202,7 @@ final class SupportTicketController extends Controller
             ->whereIn('role', ['agency_admin', 'centre_director'])
             ->where('active', 1)->pluck('user_id')->unique();
         foreach ($adminIds as $aid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $aid, 'type' => 'support_ticket',
                 'title' => "[{$data['category']}] {$data['subject']}",
                 'body' => substr((string) ($data['body'] ?? ''), 0, 200),
@@ -375,7 +375,7 @@ final class SupportTicketController extends Controller
         // Notify the other side
         $otherId = $isStaff ? $ticket->raised_by_user_id : ($ticket->assigned_user_id ?? null);
         if ($otherId) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $otherId, 'type' => 'support_ticket',
                 'title' => "Reply on ticket: {$ticket->subject}",
                 'body' => substr($data['body'], 0, 200),
@@ -464,8 +464,7 @@ final class SupportTicketController extends Controller
                 ]
             );
 
-            \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
-                ->html($html, function ($m) use ($recipients, $ticket) {
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($recipients, $ticket) {
                     $m->to($recipients[0])->subject('New reply on your ticket #' . (int) $ticket->id
                         . ' — ' . mb_strimwidth((string) $ticket->subject, 0, 60, '…'));
                     if (count($recipients) > 1) { $m->bcc(array_slice($recipients, 1, 20)); }
@@ -616,7 +615,7 @@ final class SupportTicketController extends Controller
             );
 
             \App\Services\AgencyMailer::forAgency($ticket->agency_id ? (int) $ticket->agency_id : null)
-                ->mailer()->html($html, function ($m) use ($user, $ticket, $word) {
+                ->html($html, function ($m) use ($user, $ticket, $word) {
                     $m->to($user->email)
                       ->bcc('info@kiddietrac.com')
                       ->subject('Your request has been ' . $word . ' — ticket #' . (int) $ticket->id);

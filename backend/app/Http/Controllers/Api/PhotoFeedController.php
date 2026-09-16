@@ -53,8 +53,16 @@ final class PhotoFeedController extends Controller
             $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->where('role', 'platform_admin')->exists();
             $allowed = $hdr && ($isPlatform || DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->where('agency_id', $hdr)->exists());
             $agencyId = $allowed ? $hdr : (int) DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id');
-            $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
-            $q->whereIn('p.centre_id', $centreIds);
+            /* THE CENTRES THEY WORK AT, not every centre the agency owns. The check
+               above stops another AGENCY's photos being read; it did nothing about
+               another CENTRE's. Measured 2026-09-03: an educator at centre 18 was
+               served 12 photographs of children at centre 16.
+
+               visibleCentreIds() answers this by role and fails closed — an admin
+               still gets the whole agency. `?: [0]` so an empty list means no rows
+               rather than no filter. */
+            $centreIds = $this->visibleCentreIds($request);
+            $q->whereIn('p.centre_id', $centreIds ?: [0]);
         }
         $rows = $q->get();
         $allChildIds = $rows->pluck('child_ids')->flatMap(fn ($v) => $v ? (json_decode($v, true) ?: []) : [])->unique();
@@ -98,9 +106,19 @@ final class PhotoFeedController extends Controller
         $childIds = $request->input('child_ids');
         if (is_string($childIds)) $childIds = json_decode($childIds, true);
         if (!is_array($childIds)) $childIds = [];
+        /* Flatten, and keep only real ids.
+           A client that wrapped the list twice sent [[92,44,48]]; the loop below then
+           cast that inner array with (int), which in PHP is 1, and cheerfully ran the
+           access check against child #1. It happened to fail closed only because no
+           child #1 exists — had one existed and been reachable, the guard would have
+           PASSED and the photo would have been filed against a nonsense list. An id
+           this code cannot recognise must be rejected, never coerced. */
+        $childIds = collect($childIds)->flatten()
+            ->filter(fn ($v) => is_numeric($v) && (int) $v > 0)
+            ->map(fn ($v) => (int) $v)->unique()->values()->all();
         // SECURITY (v22p94): the uploader must have access to every tagged child.
         foreach ($childIds as $cid) {
-            abort_unless($this->canAccessChildId($u, (int) $cid), 403);
+            abort_unless($this->canAccessChildId($u, $cid), 403);
         }
 
         // A video has no still to use as its thumbnail (no ffmpeg here), so the
@@ -172,7 +190,9 @@ final class PhotoFeedController extends Controller
         foreach ($childIds as $cid) {
             try {
                 $roomId = DB::table('enrollments')->where('child_id', $cid)
-                    ->whereNull('end_date')->value('room_id');
+                    ->whereNull('end_date')
+                    ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments'))
+                    ->value('room_id');
                 DB::table('daily_events')->insert([
                     'child_id' => (int) $cid,
                     'room_id' => $roomId,
@@ -201,7 +221,7 @@ final class PhotoFeedController extends Controller
             $guardianIds = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id');
             $photoBody = $request->input('caption') ?: 'A new moment was added.';
             foreach ($guardianIds as $gid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $gid, 'type' => 'photo',
                     'title' => 'New photo shared', 'body' => $photoBody,
                     'data' => json_encode(['link' => '#photos', 'photo_id' => $id]),

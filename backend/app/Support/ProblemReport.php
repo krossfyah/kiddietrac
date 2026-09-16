@@ -108,6 +108,12 @@ final class ProblemReport
             if (! self::isServerFault($e)) {
                 return null;
             }
+            if (! self::isTheApplication()) {
+                return null;
+            }
+            if (self::isFirstTransientBlip($e)) {
+                return null;
+            }
 
             $class = class_basename($e);
             $msg = trim((string) $e->getMessage());
@@ -153,6 +159,88 @@ final class ProblemReport
         } catch (Throwable $inner) {
             Log::error('ProblemReport: could not report an exception', ['error' => $inner->getMessage()]);
             return null;
+        }
+    }
+
+    /**
+     * Is this the application running, or somebody poking at it?
+     *
+     * A ticket is a request for a person to do something. An exception thrown by a
+     * throwaway maintenance script — a one-off query at the console, a debugging
+     * snippet — is not that: nobody is going to fix `/tmp/check-something.php`, and
+     * it arrives at "technical / high" alongside the faults that matter.
+     *
+     * The web has no ambiguity here. On the console the discriminator is the entry
+     * point: everything the application itself runs — every scheduled command, every
+     * queue worker — is started through `artisan`. A script run as `php whatever.php`
+     * that happens to boot the kernel is a person at a keyboard, and their typo is
+     * not an incident. Filed on 2026-09-01: three high-priority tickets, all of them
+     * a debugging script failing.
+     */
+    private static function isTheApplication(): bool
+    {
+        try {
+            if (! app()->runningInConsole()) {
+                return true;                      // an HTTP request is always the app
+            }
+            $entry = (string) ($_SERVER['argv'][0] ?? '');
+            if ($entry === '') {
+                return true;                      // cannot tell — report it
+            }
+
+            return basename($entry) === 'artisan';
+        } catch (Throwable $e) {
+            return true;                          // never suppress on uncertainty
+        }
+    }
+
+    /**
+     * A network hiccup that the retry policy is about to paper over.
+     *
+     * Queued mail runs under `--tries=3 --backoff=30`, so a DNS resolve that times out
+     * on the first attempt usually succeeds on the second and nothing is lost. Laravel
+     * reports the exception on EVERY attempt though, so a blip that cost nothing left a
+     * permanent high-priority ticket — one was filed on 2026-09-01 for a send that was
+     * retried and delivered a minute later.
+     *
+     * So a transport-level failure gets one free pass per hour per fault: if it happens
+     * once, it was weather. If it happens again while the first is still remembered,
+     * something is actually wrong and the ticket opens as before. Nothing is hidden —
+     * the exception is in the log either way.
+     */
+    private static function isFirstTransientBlip(Throwable $e): bool
+    {
+        $transient = [
+            \Illuminate\Http\Client\ConnectionException::class,
+            \GuzzleHttp\Exception\ConnectException::class,
+            \Symfony\Component\Mailer\Exception\TransportException::class,
+        ];
+        $isTransient = false;
+        foreach ($transient as $class) {
+            if (class_exists($class) && $e instanceof $class) {
+                $isTransient = true;
+                break;
+            }
+        }
+        if (! $isTransient) {
+            return false;
+        }
+
+        try {
+            $key = 'problemreport.transient.' . md5(get_class($e) . '|'
+                . trim((string) (explode("\n", (string) $e->getMessage())[0] ?? '')));
+            if (\Illuminate\Support\Facades\Cache::has($key)) {
+                return false;                     // seen before — this one is real
+            }
+            \Illuminate\Support\Facades\Cache::put($key, 1, now()->addHour());
+            Log::warning('ProblemReport: transient failure not ticketed on first occurrence', [
+                'exception' => get_class($e),
+                'message' => mb_substr((string) $e->getMessage(), 0, 200),
+            ]);
+
+            return true;
+        } catch (Throwable $inner) {
+            return false;                         // cache unavailable — file it
         }
     }
 

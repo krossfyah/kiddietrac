@@ -233,14 +233,16 @@ final class FamilyController extends Controller
                     ->pluck('first_name')
                     ->implode(', ');
 
-                Mail::to($data['email'])->send(new WelcomeEmail(
+                Mail::to($data['email'])->send((new WelcomeEmail(
                     recipientName: $data['first_name'],
                     recipientEmail: $data['email'],
                     tempPassword: $tempPassword,
                     centreName: $centre->name,
                     role: 'parent',
                     childNames: $childNames ?: null,
-                ));
+                ))->withSymfonyMessage(function ($msg) use ($centre) {
+                    \App\Support\MailScope::centre($msg, (int) $centre->id);
+                }));
                 $emailSent = true;
             } catch (Throwable $e) {
                 Log::warning('Welcome email failed', ['error' => $e->getMessage(), 'recipient' => $data['email']]);
@@ -327,10 +329,14 @@ final class FamilyController extends Controller
             ->get()
             ->keyBy('child_id');
 
-        $today = now()->toDateString();
+        /* Agency day as instants. The centre comes from the family's own enrolments;
+           a parent with children at one agency gets that agency's midnight. */
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForCentre(
+            optional($enrollments->first())->centre_id ? (int) $enrollments->first()->centre_id : null
+        );
         $checkEvents = DB::table('check_events')
             ->whereIn('child_id', $childIds)
-            ->whereDate('occurred_at', $today)
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->orderByDesc('occurred_at')
             ->get()
             ->groupBy('child_id');

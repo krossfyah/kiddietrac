@@ -352,7 +352,7 @@ final class AttendanceCorrectionController extends Controller
                 'preheader' => $actorName . ' ' . $verb . ' an attendance entry for ' . $childName,
             ]);
 
-            \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($to, $subject, $agencyId) {
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject, $agencyId) {
                 $m->to($to[0])->subject($subject);
                 if (count($to) > 1) {
                     $m->bcc(array_slice($to, 1));

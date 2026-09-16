@@ -109,7 +109,8 @@ class AttendanceReminder
                     || str_starts_with($a, 'noreply@') || str_starts_with($a, 'no-reply@');
             })->values()->all();
 
-        Mail::html($html, function ($m) use ($educator, $bcc) {
+        Mail::html($html, function ($m) use ($educator, $bcc, $agencyId) {
+            \App\Support\MailScope::agency($m, $agencyId);
             $m->to($educator->email, trim($educator->first_name.' '.$educator->last_name) ?: null)
               ->subject('Reminder: daily moments logged for signed-out children');
             if ($bcc) {
@@ -117,7 +118,7 @@ class AttendanceReminder
             }
         });
 
-        DB::table('notifications')->insert([
+        \App\Support\Notify::write([
             'user_id' => $educatorId,
             'type' => 'attendance',
             'title' => 'Children not signed in',

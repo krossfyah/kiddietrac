@@ -45,4 +45,52 @@ final class Presence
         }
         return $out;
     }
+
+    /** Seen this recently: online. */
+    public const ONLINE_WITHIN = 120;
+
+    /** Seen this recently: signed in, but not at the screen. */
+    public const AWAY_WITHIN = 900;
+
+    /**
+     * Presence for ONE person, from users.last_seen_at (2026-08-24).
+     *
+     * Separate from forUsers() above on purpose. forUsers() reads token traffic and
+     * answers "is this staff member at the app right now" for the floor widget;
+     * this reads last_seen_at, which TrackPresence stamps from ordinary API traffic,
+     * and is what the conversation lists show as a dot.
+     *
+     * Thresholds are deliberately generous: TrackPresence only writes once a minute
+     * per user, so a two-minute window is the smallest that will not flicker someone
+     * offline between their own writes.
+     *
+     * @param  \DateTimeInterface|string|null  $lastSeenAt
+     * @return string  online | away | offline
+     */
+    public static function state($lastSeenAt): string
+    {
+        if (! $lastSeenAt) {
+            return 'offline';
+        }
+
+        try {
+            $seen = $lastSeenAt instanceof \DateTimeInterface
+                ? Carbon::instance($lastSeenAt)
+                : Carbon::parse((string) $lastSeenAt, config('app.timezone'));
+        } catch (\Throwable $e) {
+            return 'offline';
+        }
+
+        // Negative for a future stamp; clock skew between web nodes should read as
+        // "just seen", not as offline.
+        $age = $seen->diffInSeconds(Carbon::now(), false);
+        if ($age < 0 || $age <= self::ONLINE_WITHIN) {
+            return 'online';
+        }
+        if ($age <= self::AWAY_WITHIN) {
+            return 'away';
+        }
+
+        return 'offline';
+    }
 }

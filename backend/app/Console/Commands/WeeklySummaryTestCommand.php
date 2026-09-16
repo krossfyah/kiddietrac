@@ -112,7 +112,7 @@ class WeeklySummaryTestCommand extends Command
             $mailer = AgencyMailer::forAgency((int) $child->agency_id);
             $fromA = $mailer->fromAddress();
             $fromN = $mailer->fromName();
-            $mailer->mailer()->html($html, function ($m) use ($email, $subject, $fromA, $fromN) {
+            $mailer->html($html, function ($m) use ($email, $subject, $fromA, $fromN) {
                 $m->to($email)->from($fromA, $fromN)->subject($subject);
                 // Explicit test send — exempt from the live-agency kill-switch.
                 try { $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1'); } catch (\Throwable $e) {}

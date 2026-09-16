@@ -100,7 +100,7 @@ final class ConferenceController extends Controller
         ]);
         // Notify teacher
         if ($slot->teacher_user_id) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $slot->teacher_user_id, 'type' => 'conference',
                 'title' => 'Conference booked: ' . $child->first_name,
                 'body' => Carbon::parse($slot->slot_at)->format('M j \a\t g:i A'),

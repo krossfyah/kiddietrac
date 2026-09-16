@@ -112,7 +112,7 @@ class BirthdayEmailCommand extends Command
                 if ($cfg['children_notify_guardians']) {
                     $to = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
                         ->where('g.family_id', $ch->family_id)->whereNull('u.deleted_at')
-                        ->whereNotNull('u.email')->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
+                        ->whereNotNull('u.email')->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
                     foreach ($to as $r) {
                         $sent += $this->deliver($agency, $r, 'child_guardian', (int) $ch->id, $year,
                             '🎂 ' . $ch->first_name . ' turns ' . $turning . ' ' . $when,
@@ -125,7 +125,7 @@ class BirthdayEmailCommand extends Command
                     $staff = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
                         ->where('ra.centre_id', $ch->centre_id)->where('ra.active', 1)
                         ->whereIn('ra.role', ['educator', 'centre_director'])
-                        ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                        ->whereNull('u.deleted_at')->whereNotNull('u.email')->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)
                         ->distinct()->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
                     foreach ($staff as $r) {
                         $sent += $this->deliver($agency, $r, 'child_educator', (int) $ch->id, $year,
@@ -145,7 +145,7 @@ class BirthdayEmailCommand extends Command
                 ->where(function ($q) use ($agency, $centreIds) {
                     $q->where('ra.agency_id', $agency->id)->orWhereIn('ra.centre_id', $centreIds);
                 })
-                ->whereNull('u.deleted_at')->whereNotNull('u.date_of_birth')->whereNotNull('u.email')
+                ->whereNull('u.deleted_at')->whereNotNull('u.date_of_birth')->whereNotNull('u.email')->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)
                 ->whereRaw("DATE_FORMAT(u.date_of_birth, '%m-%d') = ?", [$mmdd])
                 ->distinct()->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
 
@@ -167,7 +167,7 @@ class BirthdayEmailCommand extends Command
                             $q->where('ra.agency_id', $agency->id)->orWhereIn('ra.centre_id', $centreIds);
                         })
                         ->where('u.id', '!=', $p->id)
-                        ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                        ->whereNull('u.deleted_at')->whereNotNull('u.email')->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)
                         ->distinct()->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
                     foreach ($leads as $r) {
                         $sent += $this->deliver($agency, $r, 'staff_lead', (int) $p->id, $year,
@@ -201,7 +201,7 @@ class BirthdayEmailCommand extends Command
         ]);
 
         try {
-            AgencyMailer::forAgency((int) $agency->id)->mailer()->html($html, function ($m) use ($recipient, $subject) {
+            AgencyMailer::forAgency((int) $agency->id)->html($html, function ($m) use ($recipient, $subject) {
                 $m->to($recipient->email, trim(($recipient->first_name ?? '') . ' ' . ($recipient->last_name ?? '')))
                   ->subject($subject);
             });
@@ -245,7 +245,7 @@ class BirthdayEmailCommand extends Command
                 . $this->bodyHtml($heading, $message),
                 ['preheader' => $subject, 'eyebrow' => 'Birthday']);
 
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($to, $subject, $label) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject, $label) {
                 $m->to($to)->subject('[Sample: ' . $label . '] ' . $subject);
                 // Operational sample — must reach the address regardless of agency suppression.
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');

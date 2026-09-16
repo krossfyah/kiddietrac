@@ -159,13 +159,15 @@ final class SignupController extends Controller
 
         // Send welcome email (best effort)
         try {
-            Mail::to($data['director_email'])->send(new WelcomeEmail(
+            Mail::to($data['director_email'])->send((new WelcomeEmail(
                 recipientName: $data['director_first_name'],
                 recipientEmail: $data['director_email'],
                 tempPassword: '(use the password you just set during signup)',
                 centreName: $data['centre_name'],
                 role: 'director',
-            ));
+            ))->withSymfonyMessage(function ($msg) use ($agencyId) {
+                \App\Support\MailScope::agency($msg, $agencyId);
+            }));
         } catch (Throwable $e) {
             Log::warning('Signup welcome email failed', ['error' => $e->getMessage()]);
         }

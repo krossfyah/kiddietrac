@@ -83,7 +83,7 @@ class BillingReminders extends Command
                             continue;
                         }
                         try {
-                            $am->mailer()->raw($body, function ($m) use ($to, $subject) {
+                            $am->raw($body, function ($m) use ($to, $subject) {
                                 $m->to($to)->subject($subject);
                             });
                             $sent++;

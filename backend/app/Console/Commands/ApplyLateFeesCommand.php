@@ -101,7 +101,7 @@ final class ApplyLateFeesCommand extends Command
 
                 $guardianIds = DB::table('guardians')->where('family_id', $inv->family_id)->pluck('user_id');
                 foreach ($guardianIds as $gid) {
-                    DB::table('notifications')->insert([
+                    \App\Support\Notify::write([
                         'user_id' => $gid,
                         'type' => 'late_fee',
                         'title' => "Late fee applied to invoice {$inv->invoice_number}",

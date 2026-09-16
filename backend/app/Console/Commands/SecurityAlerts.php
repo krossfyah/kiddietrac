@@ -97,6 +97,8 @@ class SecurityAlerts extends Command
         $body .= "\nReview the audit log in the portal. This is an automated SOC 2 monitoring alert.\n";
 
         Mail::raw($body, function ($m) use ($to) {
+            // SOC 2 monitoring. A tenant switch must never be able to mute security alerts.
+            \App\Support\MailScope::platform($m);
             $m->to($to)->subject('[KiddieTrac] Security alert — anomalous authentication activity');
         });
     }

@@ -67,7 +67,11 @@ final class AgencyMailer
         }
 
         $dsn = $this->dsn();
-        $transport = Transport::fromDsn($dsn);
+        /* A white-label agency sends through its own M365/Google, on a transport built
+           here rather than by the MailManager — so it needs the failure auditing applied
+           explicitly, or a bounce on an agency's own mailbox would be the one kind of
+           failure still invisible. */
+        $transport = \App\Mail\FailureAuditingTransport::wrap(Transport::fromDsn($dsn));
 
         $mailer = new Mailer(
             'kt-agency-' . ($this->agency->id ?? 'na'),
@@ -78,6 +82,66 @@ final class AgencyMailer
         $mailer->alwaysFrom($this->fromAddress(), $this->fromName());
 
         return $mailer;
+    }
+
+    /**
+     * Send pre-built HTML AS THIS AGENCY — and say so on the message.
+     *
+     * WHY THIS EXISTS RATHER THAN `->html(...)`.
+     *
+     * SuppressAgencyMail decides whose mail a message is by reading X-KT-Agency-Id.
+     * Without that header it falls back to judging the send by EVERY account that
+     * shares a recipient's address — so a message to somebody who holds a role in a
+     * switched-off agency is cancelled no matter which agency actually sent it.
+     *
+     * That is not hypothetical. mr.anthonyhosein@gmail.com is an agency_admin at iLearn
+     * and also holds a role at Test Agency, and he is BCC'd on iLearn's oversight
+     * notices. Test Agency's master switch is off by design. Result, measured
+     * 2026-09-16: 50 real iLearn emails cancelled — de-enrolment confirmations to
+     * families, absence alerts, leaving notices, account deactivations — including
+     * every notice for the Chearstine Fitzpatrick provider closure. Nothing failed
+     * loudly; they are all sitting in email_logs as 'suppressed' against the WRONG
+     * agency.
+     *
+     * 31 of the 38 send sites had simply forgotten the header. Asking each one to
+     * remember is how it got to 31, so the stamp moves here, where the agency is not in
+     * doubt — this object was built from it. A caller's own closure still runs first and
+     * can override the header if it genuinely needs to.
+     *
+     * (Anthony, 2026-09-16: "emails should have went out to directors/admins and the
+     * educator themselves" — they were composed correctly and then cancelled.)
+     */
+    public function html(string $body, ?\Closure $build = null)
+    {
+        $agencyId = $this->agency->id ?? self::$lastAgencyId;
+
+        return $this->mailer()->html($body, function ($m) use ($build, $agencyId) {
+            if ($build) {
+                $build($m);
+            }
+            try {
+                if ($agencyId && ! $m->getHeaders()->has('X-KT-Agency-Id')) {
+                    $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId);
+                }
+            } catch (\Throwable $e) {
+                // A header must never be the reason a notice fails to send.
+            }
+        });
+    }
+
+    /** Plain text, same stamp. One sender still uses raw() and it must not be the gap. */
+    public function raw(string $text, ?\Closure $build = null)
+    {
+        $agencyId = $this->agency->id ?? self::$lastAgencyId;
+
+        return $this->mailer()->raw($text, function ($m) use ($build, $agencyId) {
+            if ($build) { $build($m); }
+            try {
+                if ($agencyId && ! $m->getHeaders()->has('X-KT-Agency-Id')) {
+                    $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId);
+                }
+            } catch (\Throwable $e) {}
+        });
     }
 
     /**

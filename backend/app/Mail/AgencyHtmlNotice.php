@@ -18,7 +18,7 @@ use Illuminate\Queue\SerializesModels;
  * the EmailTemplate wrap step (named without the :: here on purpose — email:catalogue
  * walks app/ for that literal to find every place an email is COMPOSED, and this class
  * composes nothing, it only carries) and then handed to
- * `AgencyMailer::forAgency($id)->mailer()->html($html, function ($m) { ... })`,
+ * `AgencyMailer::forAgency($id)->html($html, function ($m) { ... })`,
  * which SENDS SYNCHRONOUSLY — the caller waits for the transport. That is correct in a
  * console command, where nobody is waiting, and wrong in a request, where somebody is.
  *

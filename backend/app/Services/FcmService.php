@@ -96,9 +96,22 @@ class FcmService
                 // KtMessagingService.onMessageReceived, which builds the insistent
                 // notification (repeating sound + long vibration) on kt_urgent_v1.
                 // The title/body therefore have to travel inside data.
+                /* kt_fullscreen is a SEPARATE flag from kt_urgent on purpose.
+                   kt_urgent already means "build the insistent notification". Taking over
+                   a locked screen is a bigger claim, it needs a permission the user can
+                   revoke, and Android 14 downgrades it to a heads-up when that permission
+                   is missing. Keeping it as its own flag means the behaviour can be turned
+                   off from the server without shipping a new APK — and an older handset
+                   that does not know the key simply ignores it. See
+                   docs/ANDROID-FULLSCREEN-INTENT.md. (Anthony, 2026-09-09) */
                 $payload = ['message' => [
                     'token' => $t,
-                    'data' => $strData + ['title' => $title, 'body' => $body, 'kt_urgent' => '1'],
+                    'data' => $strData + [
+                        'title' => $title,
+                        'body' => $body,
+                        'kt_urgent' => '1',
+                        'kt_fullscreen' => '1',
+                    ],
                     'android' => ['priority' => 'high'],
                     // iOS has no FLAG_INSISTENT and will NOT display a data-only push
                     // at all (it is a silent background wake, and throttled). So an
@@ -178,13 +191,32 @@ class FcmService
      * applied ONLY to staff: the same code path pushes invoices and photos to
      * parents, and nobody wants their phone screaming about a nap photo.
      */
-    public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false): array
+    /**
+     * @param bool $webFallback When this user has no android/ios handset, deliver the
+     *        same message by WEB push instead of dropping it.
+     *
+     *        This method queries device_tokens WHERE platform IN ('android','ios') — it
+     *        cannot reach a web subscriber, by design. Measured 2026-08-26: every one of
+     *        the guardians with a registered token has a `web` one, so ~11 callers
+     *        (absences, invoices, photo feed, report cards, walks, withdrawals, check-in
+     *        reminders…) were sending pushes that always found no device and did nothing
+     *        else. Rather than patch each of them, the fallback lives here.
+     *
+     *        Pass FALSE from the three callers that already send web push themselves
+     *        (ChatController, MessageController, CheckEventNotifier) — they build a
+     *        richer payload, and a second send here would double the notification.
+     */
+    public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false, bool $webFallback = true): array
     {
         // Do-not-contact: a user at a suppressed (live) agency gets NOTHING while we
         // are testing. The email kill-switch didn't cover push, which is how 16
         // real iLearn parents received a phone notification on 2026-07-14.
         if (\App\Support\Suppression::isUser($userId)) {
             \App\Support\Suppression::note('push', $userId, $title);
+            // Audited even though nothing was sent: "we deliberately did not tell them"
+            // is exactly the fact somebody will need later.
+            \App\Support\PushAudit::record('fcm', [$userId], $title, $body, 'suppressed');
+
             return ['sent' => 0, 'failed' => 0, 'suppressed' => true];
         }
 
@@ -199,15 +231,67 @@ class FcmService
         if ($link !== '') $data['link'] = $link;
         if ($urgent) $data['kt_urgent'] = '1';
 
-        return $this->sendToTokens($tokens, $title, $body, $data, $urgent);
+        if (! $tokens) {
+            // No registered handset. Worth recording: a parent who "never got a push"
+            // usually never had the app, and this is the only place that shows it.
+            \App\Support\PushAudit::record('fcm', [$userId], $title, $body, 'no_device', [
+                'link' => $link ?: null, 'urgent' => $urgent,
+            ]);
+
+            // The message still matters; only the transport was wrong.
+            if ($webFallback) {
+                try {
+                    $n = app(\App\Services\WebPushService::class)->sendToUser($userId, [
+                        'title' => $title,
+                        'body'  => $body,
+                        'icon'  => '/icon-192.png',
+                        'url'   => '/dashboard.html' . ($link ?: ''),
+                    ]);
+                    if ($n > 0) {
+                        return ['sent' => $n, 'failed' => 0, 'via' => 'web'];
+                    }
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Web-push fallback failed', [
+                        'user' => $userId, 'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            return ['sent' => 0, 'failed' => 0];
+        }
+
+        $result = $this->sendToTokens($tokens, $title, $body, $data, $urgent);
+
+        \App\Support\PushAudit::record('fcm', [$userId], $title, $body,
+            (($result['sent'] ?? 0) > 0 ? 'sent' : 'failed'), [
+                'link' => $link ?: null,
+                'urgent' => $urgent,
+                'devices' => count($tokens),
+                'sent' => $result['sent'] ?? 0,
+                'failed' => $result['failed'] ?? 0,
+            ]);
+
+        return $result;
     }
 
-    /** Educators and directors only — the people who need to react on the floor. */
+    /**
+     * Anybody on staff — which is not the same as "an educator or a director".
+     *
+     * This named two role strings, so an agency_admin, a platform_admin or a home visitor
+     * was never treated as urgent and got the quiet notification instead. The identical
+     * omission was in kt-urgent-alert.js's isStaffView(), which is why an admin also never
+     * saw the in-app takeover. Both are the failure described in the role-guard sweep: ask
+     * whether somebody is staff, never enumerate roles, because the list rots silently
+     * every time a role is added. Guardians are excluded here deliberately — a parent gets
+     * urgent treatment only when the caller passes forceUrgent, which chat does.
+     * (Anthony, 2026-09-09)
+     */
     private function isStaff(int $userId): bool
     {
         return DB::table('role_assignments')
             ->where('user_id', $userId)
-            ->whereIn('role', ['educator', 'centre_director'])
+            ->whereIn('role', ['educator', 'centre_director', 'agency_admin',
+                               'platform_admin', 'home_visitor', 'auditor'])
             ->where('active', 1)
             ->exists();
     }

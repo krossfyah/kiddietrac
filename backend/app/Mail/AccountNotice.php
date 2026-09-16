@@ -27,6 +27,14 @@ final class AccountNotice extends Mailable
         public readonly string $bodyText,
         public readonly ?string $ctaLabel = null,
         public readonly ?string $ctaUrl = null,
+        /* WHICH AGENCY IS SENDING.
+
+           This is a plain int and not a withSymfonyMessage() closure on purpose:
+           these notices are QUEUED, a queued mailable is serialized, and
+           "Serialization of 'Closure' is not allowed" fails the send outright —
+           which is exactly how two sign-in emails were lost before this was moved
+           here. A scalar serializes; a closure does not. */
+        public readonly ?int $agencyId = null,
     ) {}
 
     public function envelope(): Envelope
@@ -39,7 +47,17 @@ final class AccountNotice extends Mailable
     // not-onboarded suppression gate.
     public function headers(): Headers
     {
-        return new Headers(text: ['X-KT-Invite' => '1']);
+        $text = ['X-KT-Invite' => '1'];
+
+        /* Name the sending tenant so the suppression gate applies THAT agency's
+           switches, rather than judging the address against every account carrying
+           it — one address can hold accounts in several agencies, and any one of
+           them switched off would otherwise cancel this. See App\Support\MailScope. */
+        if ($this->agencyId) {
+            $text['X-KT-Agency-Id'] = (string) $this->agencyId;
+        }
+
+        return new Headers(text: $text);
     }
 
     public function content(): Content

@@ -1186,7 +1186,7 @@ class ManagedFormController extends Controller
             ? 'A form needs your signature'
             : $count . ' forms need your signature';
 
-        AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($user, $name, $subject, $agencyId) {
+        AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($user, $name, $subject, $agencyId) {
             $m->to($user->email, $name ?: null)->subject($subject);
             /* The gate is agency-scoped and reads this header; without it one agency's
                OFF switch can silence another agency's mail to a shared address. */

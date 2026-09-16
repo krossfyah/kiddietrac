@@ -122,6 +122,19 @@ final class XlsxExportService
                     } elseif ($col['format'] === 'date') {
                         $sheet->setCellValue($cell, $value ? \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel(strtotime($value)) : '');
                         $sheet->getStyle($cell)->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+                    } elseif ($col['format'] === 'datetime_ms') {
+                        /* Written as TEXT on purpose. Excel holds a date as a float
+                           count of days, where one millisecond is about 1.16e-8 of the
+                           unit — near enough the edge of a double's precision that a
+                           value can land on the neighbouring millisecond. For the audit
+                           log that would silently reorder rows, which is the entire
+                           thing the milliseconds are there to prevent. The ISO-ish
+                           string sorts correctly as text and cannot be rounded. */
+                        $sheet->setCellValueExplicit(
+                            $cell,
+                            (string) ($value ?: ''),
+                            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+                        );
                     } elseif ($col['format'] === 'datetime') {
                         $sheet->setCellValue($cell, $value ? \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel(strtotime($value)) : '');
                         $sheet->getStyle($cell)->getNumberFormat()->setFormatCode('yyyy-mm-dd hh:mm');

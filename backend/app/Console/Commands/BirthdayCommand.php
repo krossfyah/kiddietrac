@@ -57,7 +57,7 @@ final class BirthdayCommand extends Command
             // Notify guardians
             $gids = DB::table('guardians')->where('family_id', $ch->family_id)->pluck('user_id');
             foreach ($gids as $gid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $gid, 'type' => 'birthday',
                     'title' => "Happy birthday {$ch->first_name}! 🎉",
                     'body' => "{$ch->first_name} is turning {$turning} today. Your centre is celebrating!",
@@ -70,7 +70,7 @@ final class BirthdayCommand extends Command
                 ->whereIn('role', ['educator', 'centre_director'])->where('active', 1)
                 ->pluck('user_id')->unique();
             foreach ($staffIds as $sid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $sid, 'type' => 'birthday',
                     'title' => "🎂 {$ch->first_name}'s birthday today",
                     'body' => "Turning {$turning} · {$ch->centre_name}",

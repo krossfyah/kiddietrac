@@ -33,7 +33,13 @@ class CheckEventNotifier
     /** Defaults for a parent who has never touched their settings. */
     public const DEFAULTS = ['email' => true, 'push' => true, 'sms' => false];
 
-    public function notify(int $childId, string $eventType, ?int $byUserId, $occurredAt = null): void
+    /**
+     * @param string|null $source How the event was recorded — 'qr', 'kiosk', or null for
+     *        a staff member tapping it in. "Aria arrived" and "Aria arrived, scanned at
+     *        the door by her mother" answer different questions, and the second is the one
+     *        asked when something looks wrong. (Anthony, 2026-08-26)
+     */
+    public function notify(int $childId, string $eventType, ?int $byUserId, $occurredAt = null, ?string $source = null): void
     {
         try {
             $child = DB::table('children as c')
@@ -62,10 +68,15 @@ class CheckEventNotifier
 
             $isIn = $eventType === 'check_in';
             $verb = $isIn ? 'signed in' : 'signed out';
+            $how = $source === 'qr' ? ' · 📱 via QR code'
+                 : ($source === 'kiosk' ? ' · 📱 at the kiosk' : '');
             $title = $isIn ? "✅ {$name} arrived" : "👋 {$name} left";
+            if ($source === 'qr') {
+                $title .= ' (QR)';
+            }
             $line = "{$name} was {$verb} at " . $when->format('g:i A')
                 . ($by ? " by {$by}" : '')
-                . ' · ' . $child->centre_name;
+                . ' · ' . $child->centre_name . $how;
 
             $guardians = DB::table('guardians as g')
                 ->join('users as u', 'u.id', '=', 'g.user_id')
@@ -113,10 +124,85 @@ class CheckEventNotifier
         ];
     }
 
+    /**
+     * The same event, for the people working the room.
+     *
+     * notify() above reaches GUARDIANS only, so until now a QR scan at the door told the
+     * family and nobody on staff — the educator had to be watching the roster to know a
+     * child had arrived. Separate method rather than a flag inside notify(), because the
+     * audience, the wording and the delivery are all different.
+     */
+    public function notifyStaff(int $childId, ?int $roomId, ?int $centreId, string $eventType, ?int $byUserId, ?string $source = null): void
+    {
+        try {
+            $child = DB::table('children')->where('id', $childId)
+                ->first(['first_name', 'preferred_name', 'last_name', 'primary_room_id', 'family_id']);
+            if (! $child) return;
+
+            $roomId = $roomId ?: (int) ($child->primary_room_id ?? 0);
+            if (! $centreId) {
+                $centreId = (int) DB::table('families')->where('id', $child->family_id)->value('centre_id');
+            }
+            $name = trim((string) (($child->preferred_name ?: $child->first_name) . ' ' . ($child->last_name ?? ''))) ?: 'A child';
+
+            $by = $byUserId
+                ? DB::table('users')->where('id', $byUserId)
+                    ->selectRaw("TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) as n")->value('n')
+                : null;
+
+            $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+            $tz = \App\Support\AgencyTime::tz($agencyId ?: null);
+            $at = Carbon::now()->timezone($tz)->format('g:i A');
+
+            $isIn = $eventType === 'check_in';
+            $how = $source === 'qr' ? "\u{1F4F1} QR " : ($source === 'kiosk' ? "\u{1F4F1} Kiosk " : '');
+            $title = $how . ($isIn ? 'check-in' : 'check-out') . " \u{2014} {$name}";
+            $body = $name . ($isIn ? ' was signed in' : ' was signed out') . ' at ' . $at
+                . ($source === 'qr' ? ' by QR scan' : ($source === 'kiosk' ? ' at the kiosk' : ''))
+                . ($by ? ' by ' . $by : '') . '.';
+
+            $recipients = [];
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('educator_rooms') && $roomId) {
+                    $recipients = DB::table('educator_rooms as er')
+                        ->join('users as u', 'u.id', '=', 'er.user_id')
+                        ->where('er.room_id', $roomId)
+                        ->whereNull('u.deleted_at')->where('u.status', 'active')
+                        ->pluck('u.id')->all();
+                }
+            } catch (\Throwable $e) { /* fall through to centre staff */ }
+
+            if ($centreId) {
+                $recipients = array_merge($recipients, DB::table('role_assignments')
+                    ->whereIn('role', ['centre_director', 'agency_admin'])
+                    ->where('centre_id', $centreId)->where('active', 1)
+                    ->pluck('user_id')->all());
+            }
+
+            foreach (array_unique(array_filter(array_map('intval', $recipients))) as $uid) {
+                \App\Support\Notify::write([
+                    'user_id' => $uid,
+                    'type' => 'attendance',
+                    'title' => $title,
+                    'body' => mb_substr($body, 0, 200),
+                    'data' => json_encode([
+                        'link' => '#child-detail?id=' . $childId,
+                        'child_id' => $childId, 'source' => $source ?: 'staff',
+                        'event_type' => $eventType,
+                    ]),
+                    'created_at' => now(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            /* Announcing an arrival must never fail the arrival itself. */
+            Log::warning('Staff check-event notification failed', ['child' => $childId, 'error' => $e->getMessage()]);
+        }
+    }
+
     private function push(int $userId, string $title, string $body): void
     {
         try {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $userId,
                 'type' => 'checkin',
                 'title' => $title,
@@ -124,7 +210,24 @@ class CheckEventNotifier
                 'data' => json_encode(['link' => '#today']),
                 'created_at' => now(),
             ]);
-            app(FcmService::class)->sendToUser($userId, $title, $body, '#today');
+            app(FcmService::class)->sendToUser($userId, $title, $body, '#today', false, false, false);   // web push sent below
+
+            /* FcmService only queries device_tokens WHERE platform IN ('android','ios').
+               Measured 2026-08-26: every one of the 9 guardians with a registered token
+               has a `web` one, so the FCM call above always found no device and the
+               parent was never told their child had arrived. Both transports, each in
+               its own try, so a fault in one cannot silence the other. */
+            try {
+                app(\App\Services\WebPushService::class)->sendToUsers([$userId], [
+                    'title' => $title,
+                    'body'  => $body,
+                    'icon'  => '/icon-192.png',
+                    'url'   => '/dashboard.html#today',
+                    'tag'   => 'checkin-' . $userId,
+                ]);
+            } catch (\Throwable $we) {
+                Log::warning('Web push for check-event failed', ['user' => $userId, 'error' => $we->getMessage()]);
+            }
         } catch (\Throwable $e) {
         }
     }
@@ -154,7 +257,7 @@ class CheckEventNotifier
         $subject = $title . ' — ' . $time;
 
         dispatch(function () use ($agencyId, $to, $toName, $html, $subject) {
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($to, $toName, $subject) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $subject) {
                 $m->to($to, $toName ?: null)
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')

@@ -102,6 +102,8 @@ final class MarketingController extends Controller
             'title' => ['required', 'string', 'max:200'],
             'subject' => ['nullable', 'string', 'max:200'],
             'body_html' => ['required', 'string', 'max:200000'],
+            'header_asset_id' => ['nullable', 'integer'],
+            'footer_asset_id' => ['nullable', 'integer'],
             'hero_image_url' => ['nullable', 'string', 'max:500'],
             'audience' => ['required', 'in:all_families,active_families,waitlist,prospects,staff,custom'],
             'channel' => ['required', 'in:email,in_portal,both'],
@@ -152,6 +154,8 @@ final class MarketingController extends Controller
             'title' => ['sometimes', 'string', 'max:200'],
             'subject' => ['sometimes', 'nullable', 'string', 'max:200'],
             'body_html' => ['sometimes', 'string', 'max:200000'],
+            'header_asset_id' => ['nullable', 'integer'],
+            'footer_asset_id' => ['nullable', 'integer'],
             'hero_image_url' => ['sometimes', 'nullable', 'string', 'max:500'],
             'audience' => ['sometimes', 'in:all_families,active_families,waitlist,prospects,staff,custom'],
             'channel' => ['sometimes', 'in:email,in_portal,both'],
@@ -195,7 +199,9 @@ final class MarketingController extends Controller
                 'scope_type' => $row->centre_id ? 'centre' : 'agency',
                 'scope_id' => $row->centre_id ?: $agencyId,
                 'title' => $row->title,
-                'body' => strip_tags($row->body_html, '<p><br><a><img><ul><ol><li><strong><em><h1><h2><h3>'),
+                // The header and footer go out with it, so the in-portal copy reads
+                // the same as the emailed one.
+                'body' => strip_tags($this->composeBody($row), '<p><br><a><img><ul><ol><li><strong><em><h1><h2><h3>'),
                 'send_email' => 0,
                 'send_push' => 1,
                 'sent_at' => now(),
@@ -305,4 +311,140 @@ final class MarketingController extends Controller
         $html = preg_replace('#src\s*=\s*("|\')\s*javascript:#i', 'src=$1about:blank#blocked-js-', $html);
         return $html;
     }
+
+    /**
+     * GET /marketing/assets?kind=header|footer — this agency's saved blocks.
+     */
+    /* HEADER, FOOTER — AND NOW HERO.
+
+       A hero image used to be uploaded per campaign through /marketing/images, which
+       returns a URL and keeps no record: the picture existed, nothing listed it, and the
+       next campaign that wanted the same banner had to find the original file again. It is
+       the same thing a header is — an image an agency reuses — so it is stored the same
+       way and picked from the same list. (Anthony, 2026-09-10) */
+    private const ASSET_KINDS = ['header', 'footer', 'hero'];
+
+    public function assetsIndex(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        $q = DB::table('marketing_assets')->where('agency_id', $agencyId)->whereNull('deleted_at');
+        if ($kind = $request->query('kind')) {
+            /* Was `$kind === 'footer' ? 'footer' : 'header'`, which quietly answered
+               "header" for anything it did not recognise — so asking for heroes would
+               have returned headers rather than nothing, which is the worse failure.
+               An unknown kind now matches nothing. */
+            $q->whereIn('kind', in_array($kind, self::ASSET_KINDS, true) ? [$kind] : ['__none__']);
+        }
+
+        $rows = $q->orderBy('kind')->orderByDesc('id')
+            ->get(['id', 'kind', 'name', 'image_path', 'html', 'created_at'])
+            ->map(function ($a) {
+                $a->image_url = $a->image_path
+                    ? rtrim((string) config('app.url'), '/').'/'.$a->image_path
+                    : null;
+
+                return $a;
+            });
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * POST /marketing/assets — save a header or footer for reuse.
+     *
+     * An image, a block of HTML, or both: a footer is often words (an address, the
+     * unsubscribe wording) rather than a picture, and a header is usually a banner.
+     */
+    public function assetsStore(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+
+        $data = $request->validate([
+            'kind' => ['required', 'in:header,footer,hero'],
+            'name' => ['required', 'string', 'max:120'],
+            'html' => ['nullable', 'string', 'max:20000'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
+        ]);
+
+        $stored = null;
+        if ($request->hasFile('image')) {
+            $stored = \App\Support\AnnouncementImage::store($request->file('image'), 'campaign-assets');
+            if (! $stored) {
+                return response()->json([
+                    'message' => 'That image could not be prepared. Use a JPEG, PNG or GIF under 5 MB.',
+                ], 422);
+            }
+        }
+
+        if (! $stored && empty($data['html'])) {
+            return response()->json(['message' => 'Add an image or some text — an empty block is not much use.'], 422);
+        }
+
+        $id = DB::table('marketing_assets')->insertGetId([
+            'agency_id' => $agencyId,
+            'kind' => $data['kind'],
+            'name' => $data['name'],
+            'image_path' => $stored['path'] ?? null,
+            // Same sanitiser the campaign body goes through: this HTML is emailed out
+            // and must not be able to carry a script.
+            'html' => ! empty($data['html']) ? $this->sanitiseHtml($data['html']) : null,
+            'created_by_id' => $request->user()->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'id' => $id,
+            'kind' => $data['kind'],
+            'name' => $data['name'],
+            'image_url' => $stored['url'] ?? null,
+        ], 201);
+    }
+
+    /** DELETE /marketing/assets/{id} */
+    public function assetsDestroy(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        $n = DB::table('marketing_assets')->where('id', $id)->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')->update(['deleted_at' => now()]);
+
+        // Soft-deleted rather than removed: campaigns already sent still reference it,
+        // and their record should keep showing what actually went out.
+        return response()->json(['ok' => (bool) $n]);
+    }
+
+    /**
+     * A campaign's body with its header and footer wrapped around it.
+     *
+     * Kept here so the preview, the in-portal copy and the email all compose the same
+     * way — a preview that does not match what is sent is worse than no preview.
+     */
+    public function composeBody($row): string
+    {
+        $part = function ($assetId) {
+            if (! $assetId) {
+                return '';
+            }
+            $a = DB::table('marketing_assets')->where('id', $assetId)->whereNull('deleted_at')->first();
+            if (! $a) {
+                return '';
+            }
+            $out = '';
+            if ($a->image_path) {
+                $url = rtrim((string) config('app.url'), '/').'/'.$a->image_path;
+                // Inline width, not a stylesheet — most email clients discard <style>.
+                $out .= '<img src="'.e($url).'" alt="" style="display:block;width:100%;max-width:600px;border:0;">';
+            }
+            if ($a->html) {
+                $out .= $a->html;
+            }
+
+            return $out;
+        };
+
+        return $part($row->header_asset_id ?? null)
+            .($row->body_html ?? '')
+            .$part($row->footer_asset_id ?? null);
+    }
+
 }

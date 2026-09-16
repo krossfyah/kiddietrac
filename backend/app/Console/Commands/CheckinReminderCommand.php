@@ -99,6 +99,9 @@ class CheckinReminderCommand extends Command
             $events = DB::table('check_events')
                 ->where('child_id', $child->id)
                 ->whereBetween('occurred_at', [$start, $end])
+                // A check_in dated later today would silence a reminder for a child who
+                // has not actually arrived. See CheckEventController for the rule.
+                ->where('occurred_at', '<=', now())
                 ->orderByDesc('occurred_at')
                 ->get(['event_type', 'occurred_at']);
 
@@ -139,7 +142,7 @@ class CheckinReminderCommand extends Command
 
                 if ($prefs['push']) {
                     try {
-                        DB::table('notifications')->insert([
+                        \App\Support\Notify::write([
                             'user_id' => $g->id, 'type' => 'checkin_reminder',
                             'title' => $title, 'body' => $body,
                             'data' => json_encode(['link' => '#today', 'child_id' => $child->id]),
@@ -189,7 +192,7 @@ class CheckinReminderCommand extends Command
             ]);
 
         dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($to, $toName, $title) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title) {
                 $m->to($to, $toName ?: null)
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->subject($title);

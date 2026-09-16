@@ -110,7 +110,11 @@ final class ExportsController extends Controller
                 $q->select(DB::raw(1))->from('role_assignments as ra')
                   ->whereColumn('ra.user_id', 'al.user_id')->where('ra.agency_id', $agencyId);
             })
-            ->orderByDesc('al.created_at')
+            /* id, not just the timestamp. 241 of the 300 newest rows share their
+               second, so ordering on created_at alone leaves 25 rows comparing equal
+               and returned in whatever order the engine likes — in the one copy of
+               the log that gets filed and handed to somebody. Matches the screen. */
+            ->orderByDesc('al.created_at')->orderByDesc('al.id')
             ->limit(5000)
             ->select('al.created_at', 'al.action', 'al.entity_type', 'al.entity_id',
                 DB::raw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) as actor"),
@@ -118,7 +122,9 @@ final class ExportsController extends Controller
             ->get();
         return $this->xlsx->download($agencyId, 'Audit log', 'audit-log-' . now()->format('Y-m-d') . '.xlsx',
             [
-                ['header' => 'When', 'key' => 'created_at', 'width' => 20, 'format' => 'datetime'],
+                // datetime_ms: 'datetime' truncates to the second, which is the
+                // resolution this log outgrew. See XlsxExportService.
+                ['header' => 'When', 'key' => 'created_at', 'width' => 26, 'format' => 'datetime_ms'],
                 ['header' => 'Action', 'key' => 'action', 'width' => 28],
                 ['header' => 'Entity', 'key' => 'entity_type', 'width' => 16],
                 ['header' => 'Entity ID', 'key' => 'entity_id', 'width' => 10],

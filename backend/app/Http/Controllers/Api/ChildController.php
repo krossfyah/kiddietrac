@@ -101,12 +101,41 @@ final class ChildController extends Controller
             $q->where('children.enrollment_status', $status);
         }
 
-        if ($search = $request->input('search')) {
+        $search = $request->input('search');
+        if ($search) {
             $term = '%'.$search.'%';
             $q->where(fn ($w) => $w
                 ->where('children.first_name', 'LIKE', $term)
                 ->orWhere('children.last_name', 'LIKE', $term)
                 ->orWhere('families.family_name', 'LIKE', $term));
+        }
+
+        /* SEARCH RESULTS COME BACK BEST-FIRST.
+
+           The filter above is a plain LIKE %term%, and the only ordering was
+           first_name A-Z — so searching a child's name returned every partial match in
+           alphabetical order and the child you actually typed sat wherever the alphabet
+           put them. On a phone, with a handful of rows on screen, that reads as the
+           search not working at all.
+
+           Ranked: the name IS the term, then a name that starts with it, then the family
+           name, then everything else. Alphabetical still decides ties, so the list is
+           stable and nothing jumps around between equally good matches.
+           (Anthony, 2026-09-08) */
+        if ($search) {
+            $lc = mb_strtolower(trim($search));
+            $starts = $lc.'%';
+            $q->orderByRaw(
+                'CASE'
+                .' WHEN LOWER(children.first_name) = ? THEN 0'
+                .' WHEN LOWER(children.last_name) = ? THEN 0'
+                ." WHEN LOWER(CONCAT(children.first_name, ' ', children.last_name)) = ? THEN 0"
+                .' WHEN LOWER(children.first_name) LIKE ? THEN 1'
+                .' WHEN LOWER(children.last_name) LIKE ? THEN 2'
+                .' WHEN LOWER(families.family_name) LIKE ? THEN 3'
+                .' ELSE 4 END',
+                [$lc, $lc, $lc, $starts, $starts, $starts]
+            );
         }
 
         $children = $q->orderBy('children.first_name')->get();
@@ -139,8 +168,10 @@ final class ChildController extends Controller
             });
         }
 
+        [$presentFrom, $presentTo] = \App\Support\AgencyTime::dayRange($this->resolveAgencyId($request));
         $presentChildIds = DB::table('check_events as ci')
-            ->whereDate('ci.occurred_at', now())
+            // Agency day as instants — see AgencyTime::dayRange.
+            ->where('ci.occurred_at', '>=', $presentFrom)->where('ci.occurred_at', '<', $presentTo)
             ->where('ci.event_type', 'check_in')
             ->whereNotExists(fn ($qq) => $qq->select(DB::raw(1))
                 ->from('check_events as co')
@@ -202,9 +233,12 @@ final class ChildController extends Controller
             ->where('active', true)
             ->get();
 
+        // Agency day as instants — see AgencyTime::dayRange. On the UTC date this
+        // flag read 'not here' for the last four hours of every day.
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForCentre($room ? (int) $room->centre_id : null);
         $lastCheck = DB::table('check_events')
             ->where('child_id', $childId)
-            ->whereDate('occurred_at', now())
+            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
             ->orderByDesc('occurred_at')
             ->first();
         $isAtCentre = $lastCheck && $lastCheck->event_type === 'check_in';
@@ -634,7 +668,7 @@ final class ChildController extends Controller
                     'data' => json_encode(['link' => '#home']), 'created_at' => now()];
             }
             if ($rows) {
-                DB::table('notifications')->insert($rows);
+                \App\Support\Notify::write($rows);
             }
 
             // A bell is what a parent sees next time they open the app. Who is caring for

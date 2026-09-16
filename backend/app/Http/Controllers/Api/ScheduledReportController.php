@@ -123,6 +123,7 @@ class ScheduledReportController extends Controller
                         bodyText:      $body,
                         ctaLabel:      'Manage scheduled reports',
                         ctaUrl:        config('app.url', 'https://app.kiddietrac.com'),
+                        agencyId:      $agencyId,
                     ))->onQueue('mail')
                 );
             }

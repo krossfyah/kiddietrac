@@ -208,7 +208,7 @@ final class DashboardExtrasController extends Controller
             $link = $this->quickMessageToThread((int) $sender->id, (int) $data['user_id'], (string) $data['message']);
         }
 
-        DB::table('notifications')->insert([
+        \App\Support\Notify::write([
             'user_id' => $data['user_id'], 'type' => 'message',
             'title' => 'Message from ' . $senderName,
             'body' => $data['message'],
@@ -229,25 +229,13 @@ final class DashboardExtrasController extends Controller
     private function quickMessageToThread(int $senderId, int $recipientId, string $body): string
     {
         $now = now();
-        $threadId = DB::table('staff_thread_participants as a')
-            ->join('staff_thread_participants as b', 'a.thread_id', '=', 'b.thread_id')
-            ->where('a.user_id', $senderId)->where('b.user_id', $recipientId)
-            ->whereRaw('(SELECT COUNT(*) FROM staff_thread_participants p WHERE p.thread_id = a.thread_id) = 2')
-            ->value('a.thread_id');
-
-        if (! $threadId) {
-            $agencyId = DB::table('role_assignments')->where('user_id', $senderId)->where('active', true)
-                ->whereNotNull('agency_id')->value('agency_id');
-            $threadId = DB::table('staff_threads')->insertGetId([
-                'agency_id' => $agencyId, 'created_by' => $senderId, 'last_message_at' => $now,
-                'created_at' => $now, 'updated_at' => $now,
-            ]);
-            foreach ([$senderId, $recipientId] as $p) {
-                DB::table('staff_thread_participants')->insert([
-                    'thread_id' => $threadId, 'user_id' => $p, 'created_at' => $now, 'updated_at' => $now,
-                ]);
-            }
-        }
+        /* Shared with the chat + broadcast paths. The copy that used to live here
+           took the agency from the SENDER's first role assignment — for a platform
+           admin that is an arbitrary agency, filing the thread under the wrong one.
+           PrivateThreads takes the agency it is given. */
+        $agencyId = DB::table('role_assignments')->where('user_id', $recipientId)->where('active', true)
+            ->whereNotNull('agency_id')->value('agency_id');
+        $threadId = \App\Support\PrivateThreads::findOrCreate($senderId, $recipientId, $agencyId ? (int) $agencyId : null);
 
         DB::table('staff_messages')->insert([
             'thread_id' => $threadId, 'sender_id' => $senderId, 'body' => trim($body),

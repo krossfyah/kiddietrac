@@ -27,12 +27,32 @@ final class CacfpController extends Controller
         abort_unless($centreAgency && $centreAgency === (int) $this->resolveAgencyId($request), 403);
         $date = Carbon::parse($request->query('date', Carbon::today()->toDateString()))->toDateString();
 
+        /* Who is at THIS centre on THIS date — resolved through the enrolment, not
+           through the family.
+
+           This used to select on families.centre_id, which is the family's single
+           anchor: every child of that family counted at that one centre every day. Once
+           a family can split its week across providers that is wrong in both directions
+           and it is a meal claim, so it is wrong with money attached — the anchor centre
+           would claim for a child who was not there, and the other provider could not
+           claim for a child who was. Aydan Rappitt is with Amna every day while his
+           family is anchored to Cassandra; before this he appeared on Cassandra's
+           claim sheet and never on Amna's. (2026-08-27) */
+        $dayKey = \App\Support\CareSchedule::dayKey(
+            \App\Support\AgencyTime::tzForCentre($centreId), $date
+        );
+
         $children = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
-            ->where('f.centre_id', $centreId)
+            ->join('enrollments as e', 'e.child_id', '=', 'ch.id')
+            ->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->where('r.centre_id', $centreId)
+            ->whereNull('e.end_date')
+            ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'e', $dayKey))
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'f.cacfp_tier')
+            ->distinct()
             ->orderBy('ch.last_name')->get();
 
         $meals = DB::table('cacfp_meals')->where('centre_id', $centreId)->where('meal_date', $date)->get();

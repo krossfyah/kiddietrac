@@ -47,6 +47,20 @@ final class WebPushService
     public function sendToUser(int $userId, array $payload): int
     {
         if (! $this->validatePayload($payload)) return 0;
+
+        /* DO-NOT-CONTACT. FcmService has carried this guard since 16 real iLearn
+           parents were pushed by accident on 2026-07-14; web push never had it, so the
+           kill-switch only ever covered half the transports. Anything that reached a
+           suppressed family through this service was bypassing the switch entirely.
+           Audited even though nothing is sent — "we deliberately did not tell them" is
+           exactly the fact somebody needs later. (2026-08-26) */
+        if (\App\Support\Suppression::isUser($userId)) {
+            \App\Support\Suppression::note('webpush', $userId, (string) ($payload['title'] ?? ''));
+            \App\Support\PushAudit::record('webpush', [$userId],
+                (string) ($payload['title'] ?? ''), (string) ($payload['body'] ?? ''), 'suppressed');
+
+            return 0;
+        }
         if (! $this->isConfigured()) {
             Log::debug('WebPushService: skipped (not configured)', ['user_id' => $userId]);
             return 0;
@@ -58,9 +72,20 @@ final class WebPushService
             ->pluck('token', 'id')
             ->all();
 
-        if (empty($tokens)) return 0;
+        if (empty($tokens)) {
+            \App\Support\PushAudit::record('webpush', [$userId],
+                (string) ($payload['title'] ?? ''), (string) ($payload['body'] ?? ''), 'no_device');
 
-        return $this->sendBatch($tokens, $payload);
+            return 0;
+        }
+
+        $n = $this->sendBatch($tokens, $payload);
+        \App\Support\PushAudit::record('webpush', [$userId],
+            (string) ($payload['title'] ?? ''), (string) ($payload['body'] ?? ''),
+            $n > 0 ? 'sent' : 'failed',
+            ['devices' => count($tokens), 'sent' => $n, 'url' => $payload['url'] ?? null]);
+
+        return $n;
     }
 
     public function sendToUsers(array $userIds, array $payload): int
@@ -68,14 +93,47 @@ final class WebPushService
         if (! $this->validatePayload($payload)) return 0;
         if (! $this->isConfigured() || empty($userIds)) return 0;
 
+        /* Same do-not-contact gate as the single-user path. Filtered per RECIPIENT
+           rather than all-or-nothing: a broadcast that happens to include one
+           suppressed family must still reach everybody else. */
+        $suppressed = [];
+        $userIds = array_values(array_filter($userIds, function ($uid) use (&$suppressed) {
+            if (\App\Support\Suppression::isUser((int) $uid)) {
+                $suppressed[] = (int) $uid;
+
+                return false;
+            }
+
+            return true;
+        }));
+        if ($suppressed) {
+            \App\Support\PushAudit::record('webpush', $suppressed,
+                (string) ($payload['title'] ?? ''), (string) ($payload['body'] ?? ''), 'suppressed');
+        }
+        if (empty($userIds)) return 0;
+
         $tokens = DB::table('device_tokens')
             ->whereIn('user_id', $userIds)
             ->where('platform', 'web')
             ->pluck('token', 'id')
             ->all();
 
-        if (empty($tokens)) return 0;
-        return $this->sendBatch($tokens, $payload);
+        if (empty($tokens)) {
+            \App\Support\PushAudit::record('webpush', $userIds,
+                (string) ($payload['title'] ?? ''), (string) ($payload['body'] ?? ''), 'no_device');
+
+            return 0;
+        }
+
+        $n = $this->sendBatch($tokens, $payload);
+        // A broadcast lands one row per recipient, so "was this person told?" stays a
+        // question the audit log can answer for any single family.
+        \App\Support\PushAudit::record('webpush', $userIds,
+            (string) ($payload['title'] ?? ''), (string) ($payload['body'] ?? ''),
+            $n > 0 ? 'sent' : 'failed',
+            ['devices' => count($tokens), 'sent' => $n, 'url' => $payload['url'] ?? null]);
+
+        return $n;
     }
 
     /**

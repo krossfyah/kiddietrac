@@ -81,7 +81,7 @@ class MailHealthCheck extends Command
             $now = now();
             $body = implode(' ', $problems);
             foreach ($adminIds as $uid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => (int) $uid, 'type' => 'mail_health',
                     'title' => '⚠️ Email delivery needs attention',
                     'body' => mb_substr($body, 0, 500),

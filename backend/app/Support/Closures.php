@@ -78,6 +78,12 @@ final class Closures
             ->where(function ($q) use ($start) {
                 $q->whereNull('end_date')->orWhereDate('end_date', '>=', $start);
             })
+            /* SAME WINNER AS forDate(), which ends orderByDesc('closure_date')->first():
+               where two closures cover one day, the later-starting one wins. Rows are
+               written into the map in ascending order so the last write is that one.
+               Without this the winner was whichever row the engine returned last, which
+               is arbitrary and could disagree with every other caller. */
+            ->orderBy('closure_date')
             ->get()
             ->filter(function ($r) use ($start, $end) {
                 $a = $r->closure_date;

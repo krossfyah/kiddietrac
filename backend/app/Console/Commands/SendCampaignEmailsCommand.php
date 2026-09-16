@@ -95,7 +95,7 @@ final class SendCampaignEmailsCommand extends Command
             $delivered = 0; $failed = 0;
             foreach ($recipients as $r) {
                 try {
-                    $mailer->mailer()->html($bodyHtml, function ($m) use ($subject, $r) {
+                    $mailer->html($bodyHtml, function ($m) use ($subject, $r) {
                         $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
                         $m->to($r->email, $name ?: $r->email)->subject($subject);
                     });
@@ -150,7 +150,7 @@ final class SendCampaignEmailsCommand extends Command
             if (!empty($notifRows)) {
                 // Chunk to keep INSERT statements bounded
                 foreach (array_chunk($notifRows, 500) as $chunk) {
-                    DB::table('notifications')->insert($chunk);
+                    \App\Support\Notify::write($chunk);
                 }
             }
 

@@ -24,12 +24,7 @@ final class EnsureRole
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        $userRoles = DB::table('role_assignments')
-            ->where('user_id', $user->id)
-            ->where('active', true)
-            ->pluck('role')
-            ->unique()
-            ->all();
+        $userRoles = \App\Support\UserRoles::names($request);
 
         // v22p21: platform_admin is above all standard tenant roles.
         // It passes any role check, no matter what is listed in the

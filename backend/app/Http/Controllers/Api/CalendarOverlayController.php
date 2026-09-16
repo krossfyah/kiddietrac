@@ -43,7 +43,9 @@ final class CalendarOverlayController extends Controller
             $to = $from->copy()->addDays(self::MAX_DAYS);
         }
 
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        /* Same rule. This overlay carries children's names and birthdays, and a
+           centre-18 director was seeing centre-16 children on it. */
+        $centreIds = \App\Support\Visibility::centreIds((int) $agencyId, $request->user());
         if (! $centreIds) {
             return response()->json(['events' => []]);
         }
@@ -337,13 +339,33 @@ final class CalendarOverlayController extends Controller
     /** Closed days, from the same helper the rest of the platform reads. */
     private function closures(array $centreIds, Carbon $from, Carbon $to): array
     {
+        /* ONE QUERY, NOT ONE PER DAY PER CENTRE.
+
+           This loop used to call Closures::forDate() for every (day, centre) pair — 270
+           SELECTs for a month across agency 2's nine centres, which is what made this
+           endpoint show up in perf.slow_request at 3.5s, 4.0s and 5.4s. They were never
+           slow queries; there were simply hundreds of round trips.
+
+           Closures::map() was written for exactly this and had no callers. It returns
+           ['centreId' => ['Y-m-d' => row]], so the lookup below is an array read. */
+        $closureMap = Closures::map(
+            array_map('intval', $centreIds),
+            $from->toDateString(),
+            $to->toDateString()
+        );
+
+        // Centre names in one query as well: closureMeta() cached per closure row but
+        // still issued a lookup for each distinct one.
+        $this->centreNames = DB::table('centres')->whereIn('id', $centreIds ?: [0])
+            ->pluck('name', 'id')->all();
+
         $out = [];
         for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
             $date = $d->toDateString();
             foreach ($centreIds as $cid) {
-                // forDate returns the closure ROW (or null); reason() turns that row into
-                // words. Passing ids straight to reason() is a type error, not a miss.
-                $row = Closures::forDate((int) $cid, $date);
+                // reason() turns the closure ROW into words. Passing ids straight to
+                // reason() is a type error, not a miss.
+                $row = $closureMap[(int) $cid][$date] ?? null;
                 if (! $row) {
                     continue;
                 }
@@ -387,6 +409,9 @@ final class CalendarOverlayController extends Controller
     /** Centre name, readable type, range and who entered it — cached per closure row. */
     private array $closureMetaCache = [];
 
+    /** id => name, loaded once per request rather than per closure. */
+    private array $centreNames = [];
+
     private function closureMeta(object $row, int $centreId): array
     {
         $key = (int) $row->id;
@@ -408,7 +433,11 @@ final class CalendarOverlayController extends Controller
         }
 
         return $this->closureMetaCache[$key] = [
-            'centre_name' => (string) (DB::table('centres')->where('id', $centreId)->value('name') ?: 'Centre'),
+            // Preloaded in closures(); the query remains as a fallback for any other
+            // caller that reaches this without one.
+            'centre_name' => (string) ($this->centreNames[$centreId]
+                ?? DB::table('centres')->where('id', $centreId)->value('name')
+                ?: 'Centre'),
             'type_label' => $labels[$row->closure_type] ?? 'Closure',
             'date_label' => \App\Support\Closures::dateLabel($row),
             'added_by' => $addedBy,

@@ -100,8 +100,11 @@ final class MediaV2Controller extends Controller
         } else {
             $agencyId = (int) ($request->header('X-Active-Agency-Id')
                 ?: DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id'));
-            $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
-            $q->whereIn('v.centre_id', $centreIds);
+            /* Same fix as the photo feed, and for the same reason: an educator at
+               centre 18 was served every video belonging to centre 16. Scoped to the
+               centres this person is actually assigned to; fails closed. */
+            $centreIds = $this->visibleCentreIds($request);
+            $q->whereIn('v.centre_id', $centreIds ?: [0]);
         }
         $rows = $q->get();
         $videoIds = $rows->pluck('id');
@@ -164,7 +167,7 @@ final class MediaV2Controller extends Controller
             $familyIds = DB::table('children')->whereIn('id', $childIds)->pluck('family_id')->unique();
             $gids = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id');
             foreach ($gids as $gid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $gid, 'type' => 'video',
                     'title' => 'New video shared',
                     'body' => $request->input('caption') ?: 'A new moment is on the feed.',

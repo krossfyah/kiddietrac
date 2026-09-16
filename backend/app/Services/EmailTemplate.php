@@ -410,6 +410,12 @@ final class EmailTemplate
 
     private static function absoluteUrl(string $maybeRelative): string
     {
+        /* A protected upload needs a signature to be fetchable at all — the raw
+           /storage path is refused now. Signed for 30 days so the image still
+           renders when the email is opened next week. */
+        if (\App\Support\ProtectedMedia::isProtected($maybeRelative)) {
+            return (string) \App\Support\ProtectedMedia::signForEmail($maybeRelative);
+        }
         if (preg_match('#^https?://#i', $maybeRelative)) return $maybeRelative;
         // Relative — assume it's served from the api host's /storage path
         $base = rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/');

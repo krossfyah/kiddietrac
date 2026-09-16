@@ -157,7 +157,7 @@ final class WaitlistController extends Controller
                 ->pluck('user_id')
                 ->all();
             foreach ($guardianUserIds as $uid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $uid,
                     'type' => 'waitlist.promoted',
                     'title' => '🎉 Your spot is confirmed!',
@@ -252,7 +252,7 @@ final class WaitlistController extends Controller
             $mailer = \App\Services\AgencyMailer::forAgency($agencyId);
             $fromA = $mailer->fromAddress();
             $fromN = $mailer->fromName();
-            $mailer->mailer()->html($html, function ($m) use ($email, $family, $fromA, $fromN) {
+            $mailer->html($html, function ($m) use ($email, $family, $fromA, $fromN) {
                 $m->to($email, $family->family_name ?? null)->from($fromA, $fromN)->subject('You are still on our waitlist');
             });
         } catch (\Throwable $e) {

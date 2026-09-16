@@ -54,6 +54,90 @@ final class LedgerController extends Controller
                 ]);
             });
 
+        /* EXTERNAL INVOICES — for iLearn this is where the money actually is.
+           Of 47 iLearn families, exactly ONE has a row in `invoices`; 38 have rows in
+           `external_invoices` (462 of them). This builder only ever read `invoices`, so
+           every one of those parents opened their account ledger to no transactions and
+           a zero in every total. Same shape as the outstanding-balance work: owed money
+           spans two tables that use different status words.
+
+           There are also NO `payments` rows for iLearn — what was received is
+           `amount_paid` on the invoice itself — so the credit is taken from there rather
+           than from the payments table, which would have contributed nothing.
+
+           Deduped by invoice number so a family holding both an internal and an imported
+           copy of one invoice is not billed twice on screen; the internal row wins
+           because it is the one with a PDF and a payable action behind it. */
+        $internalNumbers = DB::table('invoices')->where('family_id', $familyId)
+            ->pluck('invoice_number')->filter()->map(fn ($v) => (string) $v)->all();
+
+        DB::table('external_invoices')->where('family_id', $familyId)
+            ->orderBy('issued_at')
+            ->select('id', 'number', 'issued_at', 'due_at', 'total', 'amount_paid',
+                     'balance_due', 'status', 'description', 'external_updated_at')
+            ->get()->each(function ($inv) use ($entries, $internalNumbers) {
+                // A void invoice is not money owed and never was.
+                if (in_array(strtolower((string) $inv->status), ['void', 'cancelled', 'voided'], true)) {
+                    return;
+                }
+                if ($inv->number && in_array((string) $inv->number, $internalNumbers, true)) {
+                    return;
+                }
+
+                $issued = $inv->issued_at ?: ($inv->due_at ?: $inv->external_updated_at);
+                $daysLate = 0;
+                if ((float) $inv->balance_due > 0.005 && $inv->due_at && Carbon::parse($inv->due_at)->isPast()) {
+                    $daysLate = (int) Carbon::parse($inv->due_at)->startOfDay()->diffInDays(now()->startOfDay());
+                }
+
+                $entries->push([
+                    'date' => $issued,
+                    'type' => 'invoice',
+                    // Deliberately null: the per-invoice PDF and email actions are routes
+                    // over OUR invoices table, and would 404 for one of these.
+                    'invoice_id' => null,
+                    'reference' => $inv->number,
+                    'description' => 'Invoice ' . $inv->number
+                        . ($inv->description ? ' — ' . $inv->description : ''),
+                    'debit' => (float) $inv->total,
+                    'credit' => 0,
+                    'status' => $inv->status,
+                    'due_at' => $inv->due_at,
+                    'days_late' => $daysLate,
+                ]);
+
+                /* SETTLED = total - balance_due, NOT amount_paid.
+                   The provider's amount_paid cannot be trusted: on 20 of 402 live
+                   invoices it exceeds the invoice total, several at exactly double it
+                   (a $189 invoice carrying $378 "paid"). Crediting that would have told
+                   parents they had paid $2,860.74 more than they actually had, and a
+                   ledger that overstates what somebody has paid is worse than one that
+                   shows nothing. balance_due agrees with each invoice's own status in
+                   every case, so deriving the credit from it makes every row net to
+                   exactly what the provider says is still owed. */
+                $paid = round((float) $inv->total - (float) $inv->balance_due, 2);
+                if ($paid > 0.005) {
+                    /* The provider records what was paid but not when. external_updated_at
+                       is the closest thing to a settlement date; it is used only when it
+                       is not BEFORE the invoice, so the running balance can never show a
+                       payment arriving ahead of the charge it settles. */
+                    $paidAt = $issued;
+                    if ($inv->external_updated_at && $issued
+                        && Carbon::parse($inv->external_updated_at)->gte(Carbon::parse($issued))) {
+                        $paidAt = $inv->external_updated_at;
+                    }
+                    $entries->push([
+                        'date' => $paidAt,
+                        'type' => 'payment',
+                        'reference' => $inv->number,
+                        'description' => 'Payment received — ' . $inv->number,
+                        'debit' => 0,
+                        'credit' => $paid,
+                        'status' => 'received',
+                    ]);
+                }
+            });
+
         // Payments = credits
         DB::table('payments')->where('family_id', $familyId)
             ->whereNotNull('paid_at')
@@ -118,7 +202,15 @@ final class LedgerController extends Controller
     {
         // v22p98: the /parent/ledger/pdf route passes no familyId — resolve the
         // signed-in guardian's own family (was a "too few arguments" 500).
-        $familyId = $familyId ?: (int) DB::table('guardians')->where('user_id', $request->user()->id)->value('family_id');
+        if (! $familyId) {
+            /* The statement has to be for the family the parent is LOOKING at, so the
+               same family_id the screen is showing is honoured here — validated against
+               their own families, never trusted from the query string. */
+            $famIds = DB::table('guardians')->where('user_id', $request->user()->id)
+                ->pluck('family_id')->filter()->map(fn ($v) => (int) $v)->all();
+            $requested = (int) $request->query('family_id', 0);
+            $familyId = in_array($requested, $famIds, true) ? $requested : (int) ($famIds[0] ?? 0);
+        }
         abort_unless($familyId, 404);
         $this->assertAccess($request, (int) $familyId);
         $resp = $this->familyLedger($request, $familyId);
@@ -151,9 +243,42 @@ final class LedgerController extends Controller
     public function myLedger(Request $request): JsonResponse
     {
         $u = $request->user();
-        $famId = DB::table('guardians')->where('user_id', $u->id)->value('family_id');
-        abort_unless($famId, 404, 'No family linked');
-        return $this->familyLedger($request, (int) $famId);
+        /* EVERY family they belong to, not whichever guardians row came back first.
+           ->value('family_id') returns one arbitrarily, and two guardians here belong to
+           two families each — so one family's invoices were unreachable, with nothing on
+           screen to say a second account existed at all. */
+        $famIds = DB::table('guardians')->where('user_id', $u->id)
+            ->pluck('family_id')->filter()->unique()->map(fn ($v) => (int) $v)->values();
+        abort_unless($famIds->isNotEmpty(), 404, 'No family linked');
+
+        /* ONLY families that actually hold money.
+           Both multi-family guardians here turned out to be duplicate records rather
+           than second households — the same name twice (18/106 "Deborah Black",
+           28/107 "Yashika Bajaj"), the duplicate carrying nothing at all. Offering a
+           parent two identically-named tabs, one of them blank, reads as a broken
+           screen. A family with no invoices and no payments has no ledger to show, so
+           it is not something to switch to; the duplicates want merging in the data,
+           which is not this endpoint's job to guess at. */
+        $withActivity = $famIds->filter(function ($id) {
+            return DB::table('invoices')->where('family_id', $id)->exists()
+                || DB::table('external_invoices')->where('family_id', $id)->exists()
+                || DB::table('payments')->where('family_id', $id)->exists();
+        })->values();
+        $choosable = $withActivity->isNotEmpty() ? $withActivity : $famIds;
+
+        $requested = (int) $request->query('family_id', 0);
+        // A requested family is honoured if it is theirs at all, so a bookmarked link to
+        // an empty one still resolves rather than silently showing a different account.
+        $famId = $famIds->contains($requested) ? $requested : (int) $choosable->first();
+
+        $payload = json_decode($this->familyLedger($request, $famId)->getContent(), true);
+        // The switcher is drawn only when there is more than one real account.
+        $listIds = $choosable->contains($famId) ? $choosable : $choosable->concat([$famId])->unique()->values();
+        $payload['families'] = DB::table('families')->whereIn('id', $listIds)
+            ->orderBy('family_name')->get(['id', 'family_name'])->all();
+        $payload['family_id'] = $famId;
+
+        return response()->json($payload);
     }
 
     /* ─────────────────────────────────────────────────────────────────

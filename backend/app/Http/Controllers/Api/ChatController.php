@@ -773,7 +773,14 @@ final class ChatController extends Controller
                         'title' => '💬 ' . $senderName,
                         'body'  => $preview,
                         'icon'  => '/icon-192.png',
-                        'url'   => '/dashboard.html#chat',
+                        /* THE CONVERSATION ID, so the tap lands in the THREAD.
+                           This said just '#chat', which opens the conversation LIST — so
+                           someone tapped "Anthony: hello", arrived at a list, and did not
+                           see the message they were told about. The screen has had
+                           deep-link support all along (#chat?c=<id> → openThread); the
+                           notification simply never supplied the id, which was sitting
+                           right here in the tag. (Anthony, 2026-09-09) */
+                        'url'   => '/dashboard.html#chat?c=' . $conversationId,
                         'tag'   => 'chat-' . $conversationId,
                     ]);
 
@@ -787,7 +794,8 @@ final class ChatController extends Controller
                     try {
                         $fcm = app(\App\Services\FcmService::class);
                         foreach ($recipients as $rid) {
-                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat', true, true, false);   // false: web push already sent above; urgent+forceUrgent = takeover for staff AND parents
+                            // Same deep link as web push — the APK opens this directly.
+                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat?c=' . $conversationId, true, true, false);   // false: web push already sent above; urgent+forceUrgent = takeover for staff AND parents
                         }
                     } catch (\Throwable $fe) {
                         \Illuminate\Support\Facades\Log::warning('FCM push from chat failed', ['error' => $fe->getMessage()]);
@@ -826,13 +834,15 @@ final class ChatController extends Controller
                             'title' => '💬 ' . $senderName . $ctxSuffix,
                             'body' => $preview,
                             'data' => json_encode([
-                                'url' => '/dashboard.html#chat',
+                                // The inbox renderer navigates to data.url; it carried the
+                                // conversation_id beside it but never used it.
+                                'url' => '/dashboard.html#chat?c=' . $conversationId,
                                 'conversation_id' => $conversationId,
                             ]),
                             'created_at' => $nowTs,
                         ];
                     }
-                    if (!empty($rows)) DB::table('notifications')->insert($rows);
+                    if (!empty($rows)) \App\Support\Notify::write($rows);
                 }
             }
         } catch (\Throwable $e) {
@@ -1106,7 +1116,7 @@ final class ChatController extends Controller
                     \App\Support\PrivateThreads::post((int) $user->id, $threadId, $body);
 
                     $pushParents[] = $gid;
-                    DB::table('notifications')->insert([
+                    \App\Support\Notify::write([
                         'user_id' => $gid,
                         'type' => 'message',
                         'title' => 'Message from your centre',
@@ -1143,7 +1153,7 @@ final class ChatController extends Controller
                     $threadId = \App\Support\PrivateThreads::findOrCreate((int) $user->id, (int) $uid, $agencyId);
                     \App\Support\PrivateThreads::post((int) $user->id, $threadId, $body);
 
-                    DB::table('notifications')->insert([
+                    \App\Support\Notify::write([
                         'user_id' => $uid,
                         'type' => 'message',
                         'title' => $subject ?: 'Message from '.trim(($user->first_name ?? '').' '.($user->last_name ?? '')),

@@ -39,11 +39,59 @@ final class ChatArchiveController extends Controller
         });
     }
 
+    /**
+     * A new message wakes an archived conversation back up.
+     *
+     * Archiving means "I am done with this thread", which is only true until somebody
+     * says something else. Until 2026-08-25 it was permanent in practice: the list
+     * filters archived rows out, nothing ever removed them, so a reply into an archived
+     * thread was invisible and stayed invisible. Anthony archived 57 conversations at
+     * 00:26; Eisha Wright replied to one of them at 19:07 and he never saw it. A
+     * messaging system that can silently swallow a reply is not a messaging system.
+     *
+     * Done here, once, rather than in the seven places a message can be inserted:
+     * every one of those paths already bumps last_message_at on the parent row, so that
+     * column is the reliable signal. The archive row is genuinely DELETED rather than
+     * just skipped, so the state stays honest — the thread is back in the inbox and the
+     * "Archived" filter agrees.
+     *
+     * Idempotent, and cheap: two indexed joins over one person's archive rows.
+     */
+    private function wakeArchived(int $uid): void
+    {
+        foreach ([['staff', 'staff_threads'], ['family', 'conversations']] as [$kind, $table]) {
+            try {
+                $stale = DB::table('chat_archives as a')
+                    ->join($table.' as t', 't.id', '=', 'a.ref_id')
+                    ->where('a.user_id', $uid)
+                    ->where('a.kind', $kind)
+                    ->whereNotNull('t.last_message_at')
+                    ->whereColumn('t.last_message_at', '>', 'a.archived_at')
+                    ->pluck('a.ref_id')->all();
+
+                if ($stale) {
+                    DB::table('chat_archives')->where('user_id', $uid)->where('kind', $kind)
+                        ->whereIn('ref_id', $stale)->delete();
+                }
+            } catch (\Throwable $e) {
+                // Waking a thread is a courtesy; it must never break the inbox loading.
+                \Illuminate\Support\Facades\Log::warning('chat archive wake failed', [
+                    'user' => $uid, 'kind' => $kind, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
     /** GET /provider/chat-archive — what this person has archived. */
     public function index(Request $request): JsonResponse
     {
         $this->ensureTable();
-        $rows = DB::table('chat_archives')->where('user_id', $request->user()->id)
+        $uid = (int) $request->user()->id;
+
+        // Anything that has been spoken in since it was archived comes back first.
+        $this->wakeArchived($uid);
+
+        $rows = DB::table('chat_archives')->where('user_id', $uid)
             ->get(['kind', 'ref_id']);
 
         return response()->json([

@@ -83,8 +83,7 @@ final class YearEndPortfolioCommand extends Command
                     'subtitle' => $ch->centre_name,
                 ]);
 
-                AgencyMailer::forAgency((int) $ch->agency_id)->mailer()
-                    ->html($body, function ($m) use ($ch, $year, $pdfBytes) {
+                AgencyMailer::forAgency((int) $ch->agency_id)->html($body, function ($m) use ($ch, $year, $pdfBytes) {
                         $m->to($ch->primary_email, $ch->family_name)
                           ->subject("[$year Portfolio] {$ch->first_name}'s year-end memories")
                           ->attachData($pdfBytes, "{$ch->first_name}-{$year}-portfolio.pdf", ['mime' => 'application/pdf']);

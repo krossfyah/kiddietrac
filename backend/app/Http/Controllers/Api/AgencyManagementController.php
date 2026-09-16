@@ -95,6 +95,10 @@ final class AgencyManagementController extends Controller
                 'settings' => [
                     'notifications_enabled' => ($settings['notifications_enabled'] ?? true) !== false,
                     'schedule_autofill' => (bool) ($settings['schedule_autofill'] ?? false),
+                    // Minutes a chat message may sit unread before it is emailed.
+                    'chat_email_delay_minutes' => \App\Console\Commands\EmailMissedMessagesCommand::delayForAgency(
+                        (object) ['settings' => $a->settings ?? '{}']
+                    ),
                 ],
                 'created_at' => $a->created_at,
             ];
@@ -313,6 +317,11 @@ final class AgencyManagementController extends Controller
             'notifications_enabled' => ['sometimes', 'boolean'],
             // Nightly staff-schedule autofill; read by schedule:autofill.
             'schedule_autofill' => ['sometimes', 'boolean'],
+            /* How long a chat message may sit unread before the missed-message email goes
+               out. Bounded here as well as in the command: the scheduler ticks every five
+               minutes, so anything under that is just "next tick" with extra confusion,
+               and a delay over a day is not a notification any more. */
+            'chat_email_delay_minutes' => ['sometimes', 'integer', 'min:1', 'max:1440'],
         ]);
 
         // Read BEFORE the write, so the audit can say what each field changed from.
@@ -331,12 +340,14 @@ final class AgencyManagementController extends Controller
         }
 
         if (isset($data['plan']) || array_key_exists('notifications_enabled', $data)
-            || array_key_exists('schedule_autofill', $data)) {
+            || array_key_exists('schedule_autofill', $data)
+            || array_key_exists('chat_email_delay_minutes', $data)) {
             $agency = DB::table('agencies')->where('id', $id)->first();
             $settings = json_decode($agency->settings ?? '{}', true) ?: [];
             if (isset($data['plan'])) $settings['plan'] = $data['plan'];
             if (array_key_exists('notifications_enabled', $data)) $settings['notifications_enabled'] = (bool) $data['notifications_enabled'];
             if (array_key_exists('schedule_autofill', $data)) $settings['schedule_autofill'] = (bool) $data['schedule_autofill'];
+            if (array_key_exists('chat_email_delay_minutes', $data)) $settings['chat_email_delay_minutes'] = (int) $data['chat_email_delay_minutes'];
             $update['settings'] = json_encode($settings);
             \Illuminate\Support\Facades\Cache::forget('kt.agency_notifications:' . $id);
         }
@@ -494,6 +505,8 @@ final class AgencyManagementController extends Controller
 
         try {
             Mail::raw($body, function ($m) use ($data) {
+                // KiddieTrac welcoming a brand-new agency's admin — no tenant owns this.
+                \App\Support\MailScope::platform($m);
                 $m->to($data['admin_email'], $data['admin_first_name'] . ' ' . $data['admin_last_name'])
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->subject('Welcome to Kiddietrac — set your password');

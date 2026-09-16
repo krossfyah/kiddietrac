@@ -30,7 +30,15 @@ final class ProviderWelcomeMailer
      * @param  array<int,string>  $childFirstNames
      * @return int  how many addresses it went to (0 = nothing sent)
      */
-    public static function sendToFamily(int $centreId, ?int $agencyId, array $guardians, array $childFirstNames): int
+    /**
+     * @param string|null $previewTo  Send to this address ALONE — no parents, no
+     *                                BCC to the care team. Used by the template
+     *                                editor's test button so that a preview goes
+     *                                through this exact code path instead of a
+     *                                second, quietly diverging copy of it.
+     * @param array $draftBlocks      Unsaved editor blocks to render with.
+     */
+    public static function sendToFamily(int $centreId, ?int $agencyId, array $guardians, array $childFirstNames, ?string $previewTo = null, array $draftBlocks = []): int
     {
         $parents = [];
         foreach ($guardians as $g) {
@@ -54,7 +62,32 @@ final class ProviderWelcomeMailer
         $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
         $s = ($agency && $agency->settings) ? (json_decode($agency->settings, true) ?: []) : [];
         $brand = $s['branding'] ?? [];
-        $abs = fn ($u) => $u ? (preg_match('#^https?://#', (string) $u) ? $u : ('https://api.kiddietrac.com' . $u)) : null;
+        /* BUG (fixed 2026-09-10): this only ever prefixed the host, and `avatars` is a
+           PROTECTED folder — so the provider's photo went out as
+           https://api.kiddietrac.com/storage/avatars/….jpg, which answers 403 to
+           anyone without a signature. Every mail client fetching it got 403 and drew a
+           broken image, while the agency logo (an unprotected folder) rendered fine,
+           which is why it looked like a problem with that one picture.
+
+           `ProtectedMedia::signForEmail` is the existing answer — a 30-day signature
+           that outlives the email — and it returns the URL untouched when the path is
+           not protected. Emails built through EmailTemplate::wrap already sign this
+           way; this mailer renders its own blade directly and so missed it.
+
+           A signed URL is returned AS IS. Its host is part of what was signed, and
+           rewriting it is what previously turned signed media into 404s
+           ([[kiddietrac-signed-url-host-rewrite]]). */
+        $abs = function ($u) {
+            if (! $u) {
+                return null;
+            }
+            $signed = \App\Support\ProtectedMedia::signForEmail($u);
+            if ($signed && preg_match('#^https?://#', (string) $signed)) {
+                return $signed;
+            }
+
+            return preg_match('#^https?://#', (string) $u) ? $u : ('https://api.kiddietrac.com' . $u);
+        };
         $childName = $childFirstNames[0] ?? '';
         // Country included: the agency's own address names one, and a contact block
         // that gives it for the agency but not the provider reads like an oversight.
@@ -79,7 +112,20 @@ final class ProviderWelcomeMailer
 
         $view = [
             'agencyName'      => $s['name'] ?? ($agency->name ?? 'Your childcare agency'),
-            'agencyLogoUrl'   => $abs($brand['logo_url'] ?? null),
+            /* The banner is a dark gradient, so it wants the reverse logo.
+               agency-2's file turned out to be RGBA with every pixel opaque and a
+               solid white surround — the transparency was nominal, which is why
+               dropping the white badge from the template changed nothing. The
+               background is genuinely cut now, and the tagline (dark teal, 1.87:1
+               against the banner) is lightened for dark. Kept as a SEPARATE asset:
+               the original is still correct everywhere it sits on white. */
+            'agencyLogoUrl'   => $abs($brand['logo_dark_url'] ?? $brand['logo_url'] ?? null),
+            /* The banner logo above. This one is for the white panel that now sits
+               above the gradient, so it wants the ORIGINAL upload — the artwork as
+               the agency drew it, on the white it was drawn for — not the on-dark
+               cut-out, whose whole purpose was surviving the gradient. Falls back
+               to the cut-out only if an agency has no original on file. */
+            'agencyLogoPanelUrl' => $abs($brand['logo_url'] ?? $brand['logo_dark_url'] ?? null),
             'agencyPhone'     => self::firstFilled([$s['phone'] ?? null, $agency->contact_phone ?? null]),
             /* "Who to contact" had no agency email on it at all. It read
                settings.data_contact_email — a key that does not exist on any agency —
@@ -110,19 +156,43 @@ final class ProviderWelcomeMailer
             'providerAddress' => $providerAddress,
             'websiteUrl'      => self::firstFilled([$s['brand_website_url'] ?? null, $s['website'] ?? null, $agency->website ?? null]),
         ];
+        // Unsaved blocks from the template editor win over the stored ones, so the
+        // test shows what is on screen rather than what was last saved.
+        if ($draftBlocks) {
+            $s['provider_welcome'] = $draftBlocks;
+        }
         $view = ProviderWelcomeTemplate::viewData($view, $s);
 
         try {
             $html = view('emails.provider-welcome', $view)->render();
-            $to = array_column($parents, 'email');
-            Mail::html($html, function ($m) use ($to, $bcc, $centre) {
-                $m->to($to)->subject('Welcome to ' . $centre->name . " \u{2014} meet your child's provider");
+            $to = $previewTo ? [$previewTo] : array_column($parents, 'email');
+            $bcc = $previewTo ? [] : $bcc;
+            $subject = 'Welcome to ' . $centre->name . " \u{2014} meet your child's provider";
+            if ($previewTo) {
+                $subject = '[Test] ' . $subject;
+            }
+            Mail::html($html, function ($m) use ($to, $bcc, $subject, $previewTo, $agencyId) {
+                $m->to($to)->subject($subject);
                 if ($bcc) {
                     $m->bcc($bcc);
                 }
-                // Reaches parents who have not onboarded yet; agency suppression
-                // still applies on top of this.
-                $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
+                /* BUG (fixed 2026-09-09): without this the suppression gate cannot tell
+                   which tenant is sending, so it judges the address against EVERY account
+                   that carries it. One address held three accounts across two agencies;
+                   Test Agency's master switch being OFF silently cancelled iLearn's real
+                   welcome emails, which then showed as "sent" in the audit log. */
+                if ($agencyId) {
+                    $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId);
+                }
+                if ($previewTo) {
+                    // An admin asked for this one on purpose; agency suppression
+                    // would otherwise swallow it and look like a broken button.
+                    $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+                } else {
+                    // Reaches parents who have not onboarded yet; agency suppression
+                    // still applies on top of this.
+                    $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
+                }
             });
 
             return count($to);

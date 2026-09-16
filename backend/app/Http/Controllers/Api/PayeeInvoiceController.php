@@ -130,7 +130,9 @@ final class PayeeInvoiceController extends Controller
         $minutes = 0;
         foreach (DB::table('time_punches')->where('user_id', $uid)->whereIn('centre_id', $centreIds)
             ->whereNotNull('punched_out_at')
-            ->whereDate('punched_in_at', '>=', $from)->whereDate('punched_in_at', '<=', $to)
+            // Agency-day instants — see AgencyTime::spanRange. These minutes are billed.
+            ->where('punched_in_at', '>=', \App\Support\AgencyTime::spanRangeForCentre((int) ($centreIds[0] ?? 0), $from, $to)[0])
+            ->where('punched_in_at', '<', \App\Support\AgencyTime::spanRangeForCentre((int) ($centreIds[0] ?? 0), $from, $to)[1])
             ->get(['punched_in_at', 'punched_out_at']) as $p) {
             $minutes += Carbon::parse($p->punched_in_at)->diffInMinutes(Carbon::parse($p->punched_out_at));
         }
@@ -356,7 +358,7 @@ final class PayeeInvoiceController extends Controller
 
         try {
             $pdf = $this->documentPdf($row);
-            \App\Services\AgencyMailer::forAgency((int) $agencyId)->mailer()->html($html, function ($m) use ($to, $row, $pdf) {
+            \App\Services\AgencyMailer::forAgency((int) $agencyId)->html($html, function ($m) use ($to, $row, $pdf) {
                 $m->to($to)->subject('Invoice ' . $row->reference . ' - ' . number_format((float) $row->amount, 2));
                 // The identical bytes the preview shows, so "what did we send them" and
                 // "what does the screen show" can never be different documents.

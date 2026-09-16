@@ -98,7 +98,7 @@ final class FamilyOperationsController extends Controller
             $payload = json_encode(['pickup_id' => $id, 'child_id' => (int) $data['child_id']]);
             $now = now();
             foreach ($recipients as $uid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $uid,
                     'type' => 'pickup_auth',
                     'title' => $title,
@@ -168,7 +168,7 @@ final class FamilyOperationsController extends Controller
                 ->whereIn('role', ['educator', 'centre_director'])
                 ->where('active', 1)->pluck('user_id')->unique();
             foreach ($staffIds as $sid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $sid, 'type' => 'checkin',
                     'title' => "Daily check-in: {$child->first_name}",
                     'body' => "Mood: " . ($data['mood'] ?? '—') . ' · Sleep: ' . ($data['sleep_quality'] ?? '—'),
@@ -278,7 +278,7 @@ final class FamilyOperationsController extends Controller
             . ($refName ?: $refEmail) . ' to join. Review it under Referrals.';
         $now = now();
         foreach ($recipients as $r) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => (int) $r->id,
                 'type' => 'referral',
                 'title' => $title,

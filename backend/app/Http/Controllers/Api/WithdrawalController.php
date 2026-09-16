@@ -174,19 +174,46 @@ final class WithdrawalController extends Controller
         $roomIds = DB::table('enrollments')->where('child_id', $child->id)->whereNull('end_date')
             ->pluck('room_id')->filter()->unique()->values()->all();
 
-        // End enrolments (child drops off the educator roster) + mark withdrawn.
-        DB::table('enrollments')->where('child_id', $child->id)->whereNull('end_date')->update(['end_date' => $effective]);
-        DB::table('children')->where('id', $child->id)->update(['enrollment_status' => 'withdrawn', 'updated_at' => now()]);
+        /* ALL FOUR WRITES OR NONE (fixed 2026-08-25).
 
-        // No enrolled children left in the family → deactivate the guardian users.
-        $remaining = DB::table('children')->where('family_id', $child->family_id)
-            ->where('enrollment_status', 'enrolled')->whereNull('deleted_at')->count();
-        if ($remaining === 0) {
-            $guardianIds = DB::table('guardians')->where('family_id', $child->family_id)->pluck('user_id')->all();
-            if ($guardianIds) DB::table('users')->whereIn('id', $guardianIds)->update(['status' => 'inactive', 'updated_at' => now()]);
-        }
+           This block used to run as four loose statements, and the third one threw every
+           single time: it set users.status = 'inactive', but that column is
+           enum('active','invited','not_invited','suspended','deactivated') and has no such
+           member. MySQL raised "Data truncated for column 'status'", the exception escaped,
+           and applied_at — the last statement — was never reached.
 
-        DB::table('withdrawal_requests')->where('id', $id)->update(['applied_at' => now(), 'updated_at' => now()]);
+           The result was a withdrawal that half-happened and never admitted it: the child
+           was marked withdrawn and off the roster, the guardians kept full access, and
+           because applied_at stayed NULL the nightly cron picked the same request up again
+           the next night, and the next, failing identically and reporting "Applied 0".
+           Educators were never told either, since the notify block sits after this.
+
+           Every other de-activation path in the codebase writes 'deactivated'. This was the
+           only caller spelling it 'inactive', which is why nothing else showed the fault.
+           Wrapped in a transaction so a future failure here can never again leave a child
+           withdrawn-but-not-really. */
+        DB::transaction(function () use ($child, $effective, $id) {
+            DB::table('enrollments')->where('child_id', $child->id)->whereNull('end_date')
+                ->update(['end_date' => $effective]);
+            DB::table('children')->where('id', $child->id)
+                ->update(['enrollment_status' => 'withdrawn', 'updated_at' => now()]);
+
+            // No enrolled children left in the family → deactivate the guardian users.
+            $remaining = DB::table('children')->where('family_id', $child->family_id)
+                ->where('enrollment_status', 'enrolled')->whereNull('deleted_at')->count();
+            if ($remaining === 0) {
+                $guardianIds = DB::table('guardians')->where('family_id', $child->family_id)
+                    ->whereNotNull('user_id')->pluck('user_id')->all();
+                if ($guardianIds) {
+                    DB::table('users')->whereIn('id', $guardianIds)
+                        ->update(['status' => 'deactivated', 'updated_at' => now()]);
+                    \App\Support\AccountStatus::closeRoles($guardianIds);
+                }
+            }
+
+            DB::table('withdrawal_requests')->where('id', $id)
+                ->update(['applied_at' => now(), 'updated_at' => now()]);
+        });
 
         // Notify the room's educators (fallback: centre educators) — app + push + email.
         $eduIds = ! empty($roomIds)
@@ -340,7 +367,7 @@ final class WithdrawalController extends Controller
     private function notify(int $userId, string $title, string $body, string $link): void
     {
         try {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $userId, 'type' => 'withdrawal', 'title' => $title, 'body' => $body,
                 'data' => json_encode(['link' => $link]), 'created_at' => now(),
             ]);
@@ -355,7 +382,7 @@ final class WithdrawalController extends Controller
             $mailer = \App\Services\AgencyMailer::forAgency($agencyId);
             $fromA = $mailer->fromAddress();
             $fromN = $mailer->fromName();
-            $mailer->mailer()->html($html, function ($m) use ($email, $name, $fromA, $fromN, $subject) {
+            $mailer->html($html, function ($m) use ($email, $name, $fromA, $fromN, $subject) {
                 $m->to($email, $name)->from($fromA, $fromN)->subject($subject);
             });
         } catch (\Throwable $e) { Log::warning('Withdrawal mail failed: ' . $e->getMessage()); }

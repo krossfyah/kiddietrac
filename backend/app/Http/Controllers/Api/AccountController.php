@@ -72,7 +72,7 @@ final class AccountController extends Controller
 
         foreach ($adminIds as $uid) {
             try {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => (int) $uid, 'type' => 'account_deletion',
                     'title'   => '🗑️ Account deletion request',
                     'body'    => $name . ' has asked to delete their KiddieTrac account and data. Please review in the Users screen.',
@@ -91,7 +91,7 @@ final class AccountController extends Controller
                     $mailer = \App\Services\AgencyMailer::forAgency($agencyId);
                     $fromA = $mailer->fromAddress();
                     $fromN = $mailer->fromName();
-                    $mailer->mailer()->html($html, function ($m) use ($u, $fromA, $fromN) {
+                    $mailer->html($html, function ($m) use ($u, $fromA, $fromN) {
                         $m->to($u->email, trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')))->from($fromA, $fromN)->subject('Account deletion request');
                     });
                 } catch (\Throwable $e) {}

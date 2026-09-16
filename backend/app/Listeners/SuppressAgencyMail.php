@@ -44,7 +44,7 @@ class SuppressAgencyMail
        Of 539 emails actually delivered in a week, exactly 2 carried a tracking pixel —
        the platform invite and its resend, the only two senders that embed one. Every
        other path (daily summaries, absence notices, invoices, reminders, every notice
-       built through EmailTemplate::wrap) went out untracked, so the Platform overview's
+       built through the EmailTemplate wrap step) went out untracked, so the Platform overview's
        Open-rate card was the open rate of a 2-message sample and read 0%. Anthony,
        2026-09-15: "emails opened etc in the platform overview the card doesnt update at
        all." It was updating; it had almost nothing to count.
@@ -388,6 +388,37 @@ class SuppressAgencyMail
                 if ($raw !== '' && ctype_digit($raw)) { $sendingAgencyId = (int) $raw; }
             }
         } catch (\Throwable $e) { /* never break the mail layer over a header */ }
+
+        /* THE SENDER'S OWN SWITCH, BEFORE ANY QUESTION ABOUT THE RECIPIENT.
+
+           The gate below asks "does this recipient hold an account in a switched-off
+           agency?", which answers a different question than the switch does. A message
+           FROM a switched-off agency to somebody who happens to have no account there
+           sailed straight out — a demo tenant mailing a real person is exactly what the
+           switch exists to prevent, and it was the one case it did not cover.
+
+           It could not be fixed before this was reliable: the header was absent on 31 of
+           38 send sites, so acting on it would have blocked whatever the stale
+           AgencyMailer::$lastAgencyId happened to be pointing at. Now every send stamps
+           (AgencyMailer::html/raw do it), so the switch can finally mean what it says.
+
+           X-KT-Bypass-Suppression still skips it — that header is how operational mail
+           gets out of an agency with bulk notifications turned off, and the
+           account-level gates above have already had their say. (2026-09-16) */
+        if (! $bypassSwitches && $sendingAgencyId) {
+            try {
+                /* The SETTINGS switch, not suppressedAgencyIds() — that one is the
+                   .env denylist and is empty here, which is why the first cut of this
+                   check did nothing. agencyNotificationsEnabled() is what the Settings
+                   toggle actually writes, and what the per-recipient rule below reads. */
+                $senderOff = ! \App\Support\Suppression::agencyNotificationsEnabled($sendingAgencyId);
+                if ($senderOff || in_array($sendingAgencyId, $this->suppressedAgencyIds(), true)) {
+                    $this->cancel($event, $recipients);
+
+                    return false;
+                }
+            } catch (\Throwable $e) { /* never break the mail layer */ }
+        }
 
         // 1) The agency's OWN toggle ("Send notifications and emails") is
         //    ABSOLUTE — off means off, even for allowlisted addresses. This is

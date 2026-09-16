@@ -47,12 +47,16 @@ final class ExpiryWarningCommand extends Command
                 ? "Background check expired ({$bgc->check_type})"
                 : "Background check expires in {$daysOut} day(s) ({$bgc->check_type})";
 
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id'    => $bgc->user_id,
                 'type'       => 'compliance',
                 'title'      => $title,
                 'body'       => "Reference: {$bgc->reference}. Expires: " . $exp->format('M j, Y') . " [{$dedupe}]",
-                'link_url'   => '#background-checks',
+                /* Was 'link_url' => '#background-checks' — notifications has no such
+                   column, so every insert here threw and not one expiry warning has
+                   ever been delivered. The destination belongs in the data blob under
+                   'hash', which is what the bell actually reads. */
+                'data'       => json_encode(['hash' => 'background-checks']),
                 'created_at' => now(),
             ]);
             $sent++;

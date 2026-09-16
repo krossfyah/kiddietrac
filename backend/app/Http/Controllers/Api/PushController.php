@@ -101,7 +101,7 @@ final class PushController extends Controller
             'platform' => ['nullable', 'string', 'max:20'],
         ]);
         $user = $request->user();
-        $platform = in_array($data['platform'] ?? '', ['android', 'ios'], true) ? $data['platform'] : 'android';
+        $platform = $this->platformFor($data['platform'] ?? null, (string) $request->header('User-Agent'));
 
         $existing = DB::table('device_tokens')->where('token', $data['token'])->first();
         if ($existing) {
@@ -124,6 +124,35 @@ final class PushController extends Controller
             return response()->json(['message' => 'Could not save device'], 500);
         }
         return response()->json(['success' => true, 'token_id' => $tokenId]);
+    }
+
+    /**
+     * Which platform is this device, really?
+     *
+     * An explicit, valid value from the client wins — Capacitor.getPlatform() is
+     * authoritative and kt-native-push.js sends it. The fallback exists for the cases
+     * that used to be silently called 'android': a missing field, an older build, or a
+     * value we do not recognise.
+     *
+     * This is not cosmetic. FcmService sends a different payload per platform (Android
+     * gets the notification channel, iOS the apns alert block), and mislabelling also
+     * destroys the one signal that tells us whether iOS registration is working at all.
+     */
+    private function platformFor(?string $claimed, string $userAgent): string
+    {
+        if (in_array($claimed, ['android', 'ios'], true)) {
+            return $claimed;
+        }
+        if (preg_match('/iPhone|iPad|iPod/i', $userAgent)) {
+            return 'ios';
+        }
+        if (stripos($userAgent, 'Android') !== false) {
+            return 'android';
+        }
+        /* Genuinely unknown. 'android' remains the fallback only because that is what
+           every existing row was written with, so this changes nothing for them — but
+           it is now reached only when the user agent says nothing either. */
+        return 'android';
     }
 
     /**

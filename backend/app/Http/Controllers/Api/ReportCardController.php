@@ -362,7 +362,7 @@ final class ReportCardController extends Controller
         // Let the educator know it was approved.
         if ($row->submitted_by_user_id) {
             $child = DB::table('children')->where('id', $row->child_id)->first();
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $row->submitted_by_user_id, 'type' => 'report_card_approved',
                 'title' => 'Report card approved & sent',
                 'body' => ($child->first_name ?? 'The') . "'s {$row->term} report card was approved and sent to the family.",
@@ -386,7 +386,7 @@ final class ReportCardController extends Controller
         ]);
         if ($row->submitted_by_user_id) {
             $child = DB::table('children')->where('id', $row->child_id)->first();
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $row->submitted_by_user_id, 'type' => 'report_card_changes',
                 'title' => 'Report card needs changes',
                 'body' => ($child->first_name ?? 'A') . "'s {$row->term} report card: {$note}",
@@ -422,7 +422,7 @@ final class ReportCardController extends Controller
             ->pluck('user_id')->unique();
         $by = trim(($submitter->first_name ?? '') . ' ' . ($submitter->last_name ?? '')) ?: 'an educator';
         foreach ($ids as $uid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $uid, 'type' => 'report_card_review',
                 'title' => 'Report card awaiting approval',
                 'body' => "{$child->first_name}'s {$row->term} report card — submitted by {$by} for your review & signature.",
@@ -449,7 +449,7 @@ final class ReportCardController extends Controller
             if (! $gid) {
                 continue;
             }
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'report_card',
                 'title' => "{$child->first_name}'s report card is ready",
                 'body' => "Term: {$row->term}",

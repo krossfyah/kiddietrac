@@ -22,7 +22,7 @@ final class AutopayChargeCommand extends Command
 
     public function handle(): int
     {
-        $key = env('STRIPE_SECRET');
+        $key = \App\Support\StripeConfig::secret();
         if (!$key) { $this->warn('STRIPE_SECRET not set; skipping'); return 0; }
         Stripe::setApiKey($key);
 
@@ -78,7 +78,7 @@ final class AutopayChargeCommand extends Command
                 $failed++;
                 Log::warning('autopay charge failed', ['inv' => $c->id, 'msg' => $e->getMessage()]);
                 $this->warn(" x inv #{$c->invoice_number}: " . $e->getMessage());
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => DB::table('guardians')->where('family_id', $c->family_id)->where('is_primary', 1)->value('user_id'),
                     'type' => 'payment_failed',
                     'title' => 'Auto-pay failed on invoice ' . $c->invoice_number,

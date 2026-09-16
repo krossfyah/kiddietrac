@@ -53,6 +53,9 @@ class ParentDailySummaryCommand extends Command
             ->when(!$onlyChild, fn ($q) => $q->where('c.enrollment_status', 'enrolled'))
             ->select([
                 'c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.photo_url', 'c.family_id',
+                /* Needed by refer(): without them every child falls to they/them no
+                   matter what the record says. */
+                'c.pronouns', 'c.gender',
                 'ce.id as centre_id', 'ce.name as centre_name',
                 'a.id as agency_id', 'a.name as agency_name', 'a.timezone as agency_tz',
             ])
@@ -92,10 +95,27 @@ class ParentDailySummaryCommand extends Command
             $day['closed_today'] = $open['is_closed'];
             $day['closure_reason'] = $open['closure_reason'] ?? null;
 
-            // Empty operating day → don't email (noise). But a CLOSURE day we DO send
-            // (with the banner) even when nothing was logged.
-            if (!$override && !$open['is_closed'] && !$day['has_anything']) {
-                $this->line("· {$child->first_name}: nothing logged, skipping");
+            /* NOTHING LOGGED → NO EMAIL. No exception for a closure.
+
+               This used to read `!$open['is_closed'] && !$day['has_anything']` — an
+               exception that re-enabled the email precisely when the centre was SHUT,
+               so that parents "know why". On Labour Day 2026 that sent 20 per-child
+               recaps for a day with zero attendance, to families who had already been
+               told twice: closures:remind announces a holiday on the last WORKING day
+               before it, and announceClosure() mails the moment one is added.
+
+               `has_anything` is made only of CHILD-SPECIFIC facts (check-in, logs,
+               photos, messages, awards, late pickup, digest), so dropping the exception
+               also answers the second half of the report — a child who was not scheduled
+               that day has nothing logged either, and no longer gets a write-up from a
+               provider who did not have them.
+
+               The case the exception was built for still works: if anything WAS logged
+               on a closed day, has_anything is true, the email sends, and the "closed
+               today" banner still explains itself. (Anthony, 2026-09-07) */
+            if (!$override && !$day['has_anything']) {
+                $why = $open['is_closed'] ? 'centre closed, nothing logged' : 'nothing logged';
+                $this->line("· {$child->first_name}: {$why}, skipping");
                 continue;
             }
 
@@ -379,7 +399,20 @@ class ParentDailySummaryCommand extends Command
             'educators' => $educators,
             'absence' => $absence,
             'digest' => $digest,
-            'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $awards->count() || $latePickup || $digest),
+            /* DID ANYTHING ACTUALLY HAPPEN TO THIS CHILD TODAY?
+
+               `$digest` used to be one of the terms, and that made this a tautology:
+               $digest is SYNTHESISED, never absent — when the AI is unconfigured or
+               fails, writeSummary() below composes prose from whatever facts exist, and
+               on a day with no facts at all it still returns "Here is how <name>'s day
+               went. ... See you tomorrow!". So has_anything was true for every child on
+               every day, and the "empty day → don't email" guard this feeds has never
+               once fired since it was written. Labour Day 2026 is what made it visible:
+               nine centres closed, zero attendance, 20 emails.
+
+               The digest is a RENDERING of the facts below, not a fact of its own.
+               Judge the day by the facts. (Anthony, 2026-09-07) */
+            'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $awards->count() || $latePickup),
         ];
     }
 
@@ -391,9 +424,30 @@ class ParentDailySummaryCommand extends Command
      * happened: what they ate, how they slept, what the photos show, how the day
      * ran. It never claims anything the data doesn't say.
      */
+    /** How to refer to this child. `children.pronouns` is authoritative when set;
+     *  `gender` is consulted only when it actually states one. 'prefer_not_to_say' is an
+     *  ANSWER, not a gap -- for those children (70 of 97 today) and for anyone with
+     *  nothing recorded we use they/them and lead with their name. A first name is never
+     *  used to infer this: that is precisely how every child came to be called "she". */
+    private function refer($child): array
+    {
+        $p = strtolower(trim((string) ($child->pronouns ?? '')));
+        if ($p === '') {
+            $g = strtolower(trim((string) ($child->gender ?? '')));
+            if ($g === 'female') { $p = 'she/her'; }
+            elseif ($g === 'male') { $p = 'he/him'; }
+        }
+        if (str_starts_with($p, 'she')) { return ['she', 'her', 'her']; }
+        if (str_starts_with($p, 'he')) { return ['he', 'him', 'his']; }
+
+        return ['they', 'them', 'their'];
+    }
+
     private function writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, string $tz): string
     {
         $name = $child->preferred_name ?: $child->first_name;
+        [$sub, $obj, $pos] = $this->refer($child);
+        $Sub = ucfirst($sub);
         $t = fn ($ts) => Carbon::parse($ts)->timezone($tz)->format('g:i A');
 
         $of = fn (string $type) => $logs->filter(fn ($l) => $l->type === $type)->values();
@@ -409,6 +463,11 @@ class ParentDailySummaryCommand extends Command
         $nappies = $of('diaper')->concat($of('bathroom'));
         $moods = $of('mood');
 
+        /* EVERY SENTENCE BELOW NAMES SOMETHING THAT WAS ACTUALLY RECORDED. There is no
+           `else` anywhere in this method saying what did NOT happen: a missing row means
+           nobody wrote one down, which is not the same as it not happening, and saying
+           otherwise puts something in a parent's inbox that nobody observed. */
+
         // ── Opening: how the day ran ──
         $para1 = [];
         if ($checkIn) {
@@ -422,14 +481,17 @@ class ParentDailySummaryCommand extends Command
                         : ' and went home at ' . $t($checkOut->occurred_at) . '.')
                     : ' and is still with us.');
         } else {
-            $para1[] = "Here is how {$name}'s day went.";
+            /* No sign-in: there is no day to describe, so do not open as though there
+               were. This email now only goes out at all because something WAS recorded,
+               so say that plainly and let it stand on its own. */
+            $para1[] = "We don't have a sign-in recorded for {$name} today, but here is what we have.";
         }
         if ($moods->count()) {
             $m = $detailsOf($moods);
             if ($m) {
                 $para1[] = count($m) === 1
-                    ? "She seemed " . $m[0] . " today."
-                    : "Her mood moved through " . $this->list($m) . " across the day.";
+                    ? "{$Sub} seemed " . $m[0] . " today."
+                    : ucfirst($pos) . " mood moved through " . $this->list($m) . " across the day.";
             }
         }
 
@@ -438,30 +500,31 @@ class ParentDailySummaryCommand extends Command
         if ($meals->count()) {
             $d = $detailsOf($meals);
             $para2[] = $d
-                ? "At mealtimes she " . $this->list(array_unique($d)) . " (" . $meals->count() . ' '
+                ? "At mealtimes {$sub} " . $this->list(array_unique($d)) . " (" . $meals->count() . ' '
                     . ($meals->count() === 1 ? 'sitting' : 'sittings') . ")."
-                : "She ate with the group " . $meals->count() . " times.";
+                : "{$Sub} ate with the group " . $meals->count() . " times.";
             $notes = $meals->pluck('note')->filter()->values()->all();
             if ($notes) $para2[] = (string) $notes[0] . '.';
         }
         if ($bottles->count()) {
             $d = $detailsOf($bottles);
             $para2[] = $bottles->count() === 1
-                ? "She had a bottle" . ($d ? " and " . $d[0] : '') . "."
-                : "She had " . $bottles->count() . " bottles" . ($d ? " (" . $this->list(array_unique($d)) . ")" : '') . ".";
+                ? "{$Sub} had a bottle" . ($d ? " and " . $d[0] : '') . "."
+                : "{$Sub} had " . $bottles->count() . " bottles" . ($d ? " (" . $this->list(array_unique($d)) . ")" : '') . ".";
         }
+        /* Naps are mentioned ONLY when one was logged. This carried an `else` reading
+           "She didn't settle for a nap today", asserted whenever the nap list was empty
+           — including for a child never signed in, on a day the centre was shut. */
         if ($naps->count()) {
             $d = $detailsOf($naps);
             $para2[] = $naps->count() === 1
-                ? "She napped at " . $t($naps[0]->at) . ($d ? " and " . $d[0] : '') . "."
-                : "She had " . $naps->count() . " naps" . ($d ? " (" . $this->list(array_unique($d)) . ")" : '') . ".";
+                ? "{$Sub} napped at " . $t($naps[0]->at) . ($d ? " and " . $d[0] : '') . "."
+                : "{$Sub} had " . $naps->count() . " naps" . ($d ? " (" . $this->list(array_unique($d)) . ")" : '') . ".";
             $notes = $naps->pluck('note')->filter()->values()->all();
             if ($notes) $para2[] = (string) $notes[0] . '.';
-        } else {
-            $para2[] = "She didn't settle for a nap today.";
         }
         if ($nappies->count()) {
-            $para2[] = "We changed her " . $nappies->count() . ' '
+            $para2[] = "We changed {$obj} " . $nappies->count() . ' '
                 . ($nappies->count() === 1 ? 'time' : 'times') . '.';
         }
 
@@ -477,12 +540,21 @@ class ParentDailySummaryCommand extends Command
         if ($messages->count()) {
             $para3[] = "Thank you for chatting with us today.";
         }
-        $para3[] = "See you tomorrow!";
+        /* Only when they were actually here — it reads as a taunt on a day nobody
+           signed the child in. */
+        if ($checkIn) {
+            $para3[] = "See you tomorrow!";
+        }
 
-        return implode(' ', $para1) . "\n\n" . implode(' ', $para2) . "\n\n" . implode(' ', $para3);
+        /* Join only the paragraphs that HAVE something, so an empty middle section no
+           longer leaves a blank gap down the middle of the email. */
+        return implode("\n\n", array_filter([
+            implode(' ', $para1),
+            implode(' ', $para2),
+            implode(' ', $para3),
+        ], fn ($para) => trim($para) !== ''));
     }
 
-    /** "a, b and c" — an Oxford-comma-free list that reads like a person wrote it. */
     private function list(array $items): string
     {
         $items = array_values(array_filter($items));
@@ -515,7 +587,7 @@ class ParentDailySummaryCommand extends Command
     private function send(int $agencyId, string $email, string $name, string $subject, string $html): void
     {
         dispatch(function () use ($agencyId, $email, $name, $subject, $html) {
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($email, $name, $subject, $agencyId) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($email, $name, $subject, $agencyId) {
                 // Engagement mail: withheld from anyone who has not accepted
                 // their invite. Transactional mail carries no such tag.
                 try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); } catch (\Throwable $e) {}

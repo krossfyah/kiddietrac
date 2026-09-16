@@ -68,6 +68,13 @@ class OnboardingReminderCommand extends Command
             $users = DB::table('users as u')
                 ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
                 ->whereNull('u.onboarded_at')
+                /* Only accounts that have NOT been claimed. This email carries a
+                   set-password link, which is meaningless to someone who already
+                   has a password and signs in -- and minting them an unrequested
+                   reset token is worse than meaningless. onboarded_at alone does
+                   not distinguish the two: it stays null for anyone who signs in
+                   without finishing the wizard. */
+                ->whereIn('u.status', ['invited', 'not_invited'])
                 ->whereNull('u.deleted_at')
                 ->whereNotNull('u.email')
                 ->where('ra.active', 1)
@@ -164,13 +171,17 @@ class OnboardingReminderCommand extends Command
         $name    = $firstName;
 
         $sendClosure = function () use ($agencyId, $email, $name, $subject, $html) {
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($email, $name, $subject) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($email, $name, $subject) {
                 $m->to($email, $name ?: null)
                     ->from('noreply@kiddietrac.com', 'KiddieTrac')
                     ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                     ->subject($subject);
                 // Reaches a not-yet-onboarded user (exempt from the not-onboarded gate).
                 $m->getHeaders()->addTextHeader('X-KT-Invite', '1');
+                /* This mail carries a first-password link. The mail layer refuses
+                   to deliver it to an account that has already been claimed, so a
+                   wrong audience query here cannot reach the wrong people. */
+                $m->getHeaders()->addTextHeader('X-KT-Onboarding-Invite', '1');
                 $m->getHeaders()->addTextHeader('List-Unsubscribe', '<mailto:support@kiddietrac.com>');
             });
         };

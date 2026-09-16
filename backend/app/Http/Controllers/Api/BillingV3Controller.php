@@ -22,12 +22,12 @@ final class BillingV3Controller extends Controller
 {
     public function __construct()
     {
-        if ($k = env('STRIPE_SECRET')) Stripe::setApiKey($k);
+        if ($k = \App\Support\StripeConfig::secret()) Stripe::setApiKey($k);
     }
 
     public function achSetupIntent(Request $request): JsonResponse
     {
-        abort_unless(env('STRIPE_SECRET'), 503, 'Stripe not configured');
+        abort_unless(\App\Support\StripeConfig::secret(), 503, 'Stripe not configured');
         $family = $this->parentFamily($request);
         // Ensure Stripe customer exists
         $customerId = $family->stripe_customer_id;
@@ -57,13 +57,13 @@ final class BillingV3Controller extends Controller
         ]);
         return response()->json([
             'client_secret' => $si->client_secret,
-            'publishable_key' => env('STRIPE_KEY'),
+            'publishable_key' => \App\Support\StripeConfig::publishable(),
         ]);
     }
 
     public function saveAch(Request $request): JsonResponse
     {
-        abort_unless(env('STRIPE_SECRET'), 503);
+        abort_unless(\App\Support\StripeConfig::secret(), 503, \App\Support\StripeConfig::NOT_CONFIGURED);
         $data = $request->validate(['payment_method' => 'required|string']);
         $family = $this->parentFamily($request);
 

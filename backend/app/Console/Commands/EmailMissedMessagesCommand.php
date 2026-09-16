@@ -13,9 +13,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * v22p40 — Email recipients about chat messages they haven't read.
  *
- * Runs every 15 minutes via routes/console.php. Picks up messages that
+ * Runs every 5 minutes via routes/console.php. Picks up messages that
  * are:
- *   - older than the per-agency delay (default 30 minutes)
+ *   - older than the per-agency delay, agencies.settings.chat_email_delay_minutes,
+ *     default 5 minutes (see delayForAgency)
  *   - never email_notified_at-stamped
  *   - never read_at-stamped
  *
@@ -35,18 +36,62 @@ use Illuminate\Support\Facades\DB;
  */
 final class EmailMissedMessagesCommand extends Command
 {
-    protected $signature = 'kiddietrac:chat-emails {--dry-run : Print to console, do not send} {--delay= : Override delay minutes (default 30)}';
+    protected $signature = 'kiddietrac:chat-emails {--dry-run : Print to console, do not send} {--delay= : Override delay minutes for EVERY agency}';
+
+    /** Used when an agency has not chosen its own. */
+    public const DEFAULT_DELAY_MINUTES = 5;
+
+    /** Sane bounds: under a minute is a stampede, over a day is not a notification. */
+    private const MIN_DELAY = 1;
+    private const MAX_DELAY = 1440;
+
+    /**
+     * How long a message may sit unread at this agency before it is emailed.
+     *
+     * Per agency, in `agencies.settings.chat_email_delay_minutes`, because the right
+     * answer differs: a home-visiting service may want half an hour, a busy centre wants
+     * five minutes. The docblock above this class claimed a per-agency delay for months
+     * while the code used a flat 30 for everybody — this is that promise actually kept.
+     * (Anthony, 2026-09-09)
+     */
+    public static function delayForAgency($agency): int
+    {
+        $raw = null;
+        try {
+            $s = json_decode((string) ($agency->settings ?? '{}'), true) ?: [];
+            $raw = $s['chat_email_delay_minutes'] ?? null;
+        } catch (\Throwable $e) {
+        }
+        if ($raw === null || $raw === '') return self::DEFAULT_DELAY_MINUTES;
+
+        $n = (int) $raw;
+        if ($n < self::MIN_DELAY) return self::MIN_DELAY;
+        if ($n > self::MAX_DELAY) return self::MAX_DELAY;
+
+        return $n;
+    }
     protected $description = 'Email recipients about chat messages that have been unread for too long';
 
     public function handle(): int
     {
         $dry = (bool) $this->option('dry-run');
-        $defaultDelay = (int) ($this->option('delay') ?: 30);
+        $override = $this->option('delay') !== null && $this->option('delay') !== ''
+            ? (int) $this->option('delay') : null;
         $now = Carbon::now();
+
+        /* Delays vary per agency now, and the SQL below can only take one cutoff — so it
+           casts the widest net (the shortest delay in use) and each message is then held
+           against its own agency's setting further down. Fetching with the longest delay
+           instead would silently never email the agencies that chose a short one. */
+        $delays = [];
+        foreach (DB::table('agencies')->get(['id', 'settings']) as $ag) {
+            $delays[(int) $ag->id] = $override ?? self::delayForAgency($ag);
+        }
+        $defaultDelay = $override ?? (empty($delays) ? self::DEFAULT_DELAY_MINUTES : min($delays));
 
         // Pick up candidates that are stale enough and not yet emailed.
         // We over-fetch a bit (200 max per run) so even busy installs don't
-        // pile up; if more than 200 are queued, the next 15-min tick gets them.
+        // pile up; if more than 200 are queued, the next tick gets them.
         $candidates = DB::table('messages')
             ->whereNull('email_notified_at')
             ->whereNull('read_at')
@@ -79,6 +124,16 @@ final class EmailMissedMessagesCommand extends Command
         foreach ($byConv as $convId => $msgs) {
             $conv = DB::table('conversations')->where('id', $convId)->first();
             if (!$conv) continue;
+
+            /* Now hold each message against ITS OWN agency's delay. The query above used
+               the shortest delay in use, so a thread at an agency that chose a longer one
+               is still waiting and must not be emailed yet. */
+            $convAgency = $this->agencyForConversation($conv);
+            $convDelay = $override ?? ($convAgency ? ($delays[(int) $convAgency->id] ?? self::DEFAULT_DELAY_MINUTES) : self::DEFAULT_DELAY_MINUTES);
+            $convCutoff = $now->copy()->subMinutes($convDelay);
+            $msgs = $msgs->filter(fn ($m) => strtotime((string) $m->created_at) <= $convCutoff->getTimestamp());
+            if ($msgs->isEmpty()) continue;
+
             $recipients = $this->resolveRecipients($conv);
             if (empty($recipients)) continue;
 
@@ -136,7 +191,7 @@ final class EmailMissedMessagesCommand extends Command
 
             try {
                 $mailer = AgencyMailer::forAgency($agency ? (int) $agency->id : null);
-                $mailer->mailer()->html($body, function ($m) use ($subject, $r) {
+                $mailer->html($body, function ($m) use ($subject, $r) {
                     $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
                     $m->to($r->email, $name ?: $r->email)->subject($subject);
                 });
@@ -441,7 +496,9 @@ final class EmailMissedMessagesCommand extends Command
                     'preheader' => $count.' unread message'.($count === 1 ? '' : 's').' in Team chat.',
                 ]);
 
-                \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($p, $subject) {
+                $digestAgencyId = (int) ($job['agency_id'] ?? 0);
+                \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($p, $subject, $digestAgencyId) {
+                    \App\Support\MailScope::agency($m, $digestAgencyId ?: null);
                     try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); } catch (\Throwable $e) {}
                     $m->to($p->email)->subject($subject);
                 });

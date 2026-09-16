@@ -74,6 +74,107 @@ class MedicationController extends Controller
         return response()->json(['medications' => $this->hydrate($rows)]);
     }
 
+    /**
+     * POST /parent/children/{child}/medications — a parent asks the centre to administer
+     * something.
+     *
+     * Files into the SAME queue as a staff-created medication: status 'pending_auth',
+     * waiting on a director. A parent asking is not the centre agreeing, and nothing here
+     * can make a medication administrable without that authorisation step.
+     */
+    public function parentStore(Request $request, int $child): JsonResponse
+    {
+        // Their OWN child, or nothing. A guardian row is the only claim we accept.
+        $famId = DB::table('guardians')->where('user_id', $request->user()->id)->value('family_id');
+        abort_unless($famId, 403, 'No family linked');
+        $childRow = DB::table('children')->where('id', $child)->whereNull('deleted_at')
+            ->where('family_id', $famId)->first(['id', 'first_name', 'preferred_name', 'family_id']);
+        abort_unless($childRow, 404, 'Child not found');
+
+        $data = $request->validate([
+            'name'                   => 'required|string|max:200',
+            'strength'               => 'nullable|string|max:100',
+            'route'                  => 'nullable|string|max:40',
+            'dosage'                 => 'required|string|max:200',
+            'frequency'              => 'required|string|max:200',
+            'reason'                 => 'nullable|string|max:200',
+            'starts_on'              => 'required|date',
+            'expires_on'             => 'nullable|date|after_or_equal:starts_on',
+            'special_instructions'   => 'nullable|string|max:2000',
+            'requires_refrigeration' => 'nullable|boolean',
+            'is_prescription'        => 'nullable|boolean',
+            'prescribing_physician'  => 'nullable|string|max:160',
+            'parent_signature_data'  => 'nullable|string|max:200000',
+        ]);
+
+        /* The CHILD's centre, never the request's. A parent carries no centre context worth
+           trusting, and this is what puts the row in front of the right staff. */
+        $centreId = DB::table('families')->where('id', $childRow->family_id)->value('centre_id');
+        abort_unless($centreId, 422, 'This child is not linked to a centre yet');
+
+        $data['child_id']      = (int) $childRow->id;
+        $data['centre_id']     = (int) $centreId;
+        $data['created_by_id'] = $request->user()->id;
+        $data['route']         = $data['route'] ?? 'oral';
+        $data['status']        = 'pending_auth';
+
+        $med = Medication::create($data);
+
+        $childName = $childRow->preferred_name ?: $childRow->first_name;
+        $this->notifyStaffOfRequest((int) $centreId, (string) $childName, (string) $data['name'], (int) $med->id);
+
+        try {
+            \App\Support\Audit::write('medication.requested', [
+                'summary' => trim($childName) . ' — ' . $data['name'] . ' ' . ($data['dosage'] ?? ''),
+                'input'   => $data,
+            ]);
+        } catch (\Throwable $e) { /* an audit gap must never cost the request */ }
+
+        return response()->json(['medication' => $med], 201);
+    }
+
+    /**
+     * Tell the centre's staff a parent has asked for something to be administered.
+     *
+     * Directors, agency admins and educators who can reach that centre — the roles Anthony
+     * named. In-app only: this lands in a queue somebody works through, and it is not
+     * urgent enough to mail or push at whatever hour a parent happens to file it. Wrapped
+     * so a notification failure can never lose the request itself.
+     */
+    private function notifyStaffOfRequest(int $centreId, string $childName, string $medName, int $medId): void
+    {
+        try {
+            $agencyId = DB::table('centres')->where('id', $centreId)->value('agency_id');
+            $staff = DB::table('role_assignments')
+                ->where('active', true)
+                ->whereIn('role', ['centre_director', 'agency_admin', 'educator', 'platform_admin'])
+                ->where(function ($q) use ($centreId, $agencyId) {
+                    $q->where('centre_id', $centreId);
+                    if ($agencyId) {
+                        // Agency-wide roles carry no centre_id but still own this centre.
+                        $q->orWhere(function ($q2) use ($agencyId) {
+                            $q2->whereNull('centre_id')->where('agency_id', $agencyId);
+                        });
+                    }
+                })
+                ->pluck('user_id')->unique()->values();
+
+            if ($staff->isEmpty()) { return; }
+
+            $now  = now();
+            $rows = $staff->map(fn ($uid) => [
+                'user_id'    => (int) $uid,
+                'type'       => 'medication.requested',
+                'title'      => 'Medication request from a parent',
+                'body'       => $childName . ' — ' . $medName . '. Needs authorisation before it can be given.',
+                'data'       => json_encode(['medication_id' => $medId, 'centre_id' => $centreId]),
+                'created_at' => $now,
+            ])->all();
+
+            DB::table('notifications')->insert($rows);
+        } catch (\Throwable $e) { /* never let the notification cost the medication */ }
+    }
+
     public function store(Request $request): JsonResponse
     {
         $centreId = $this->resolveCentreId($request->user());

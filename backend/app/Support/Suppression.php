@@ -264,6 +264,18 @@ final class Suppression
             return false;
         }
 
+        /* The account itself is switched off.
+           First, and most absolute: an agency can re-enable notifications and the .env
+           kill-switch can be lifted, but a deactivated or suspended person should be
+           contacted by nothing until somebody turns them back on.
+
+           It lives here because ten call sites already ask this before contacting
+           anybody. Answering it per-sender is how a deactivated parent kept receiving
+           mail from the senders nobody remembered to patch. */
+        if (self::accountOff((int) $userId)) {
+            return true;
+        }
+
         // The .env kill-switch.
         if (self::enabled() && in_array((int) $userId, self::userIds(), true)) {
             return true;
@@ -276,7 +288,34 @@ final class Suppression
     }
 
     /** Which agency is this user reachable at? (staff role, else their family's centre) */
-    private static function agencyOfUser(int $userId): ?int
+    /**
+     * Is this account deactivated, suspended, or deleted?
+     *
+     * NOT invited / not_invited: 27 of 44 parents at one agency carry `not_invited`,
+     * meaning nobody has invited them yet rather than that they are disabled. Treating
+     * those as switched off would silence most families at an agency mid-onboarding.
+     */
+    public static function accountOff(int $userId): bool
+    {
+        static $cache = [];
+        if (array_key_exists($userId, $cache)) {
+            return $cache[$userId];
+        }
+        try {
+            $u = DB::table('users')->where('id', $userId)->first(['status', 'deleted_at']);
+        } catch (\Throwable $e) {
+            return $cache[$userId] = false;   // never block a send on a lookup failure
+        }
+        if (! $u) {
+            return $cache[$userId] = true;    // no such account
+        }
+
+        return $cache[$userId] = ($u->deleted_at !== null)
+            || in_array((string) $u->status, ['deactivated', 'suspended'], true);
+    }
+
+    /** Public so the mail listener can scope a gate to the SENDING agency. */
+    public static function agencyOfUser(int $userId): ?int
     {
         return Cache::remember('kt.agency_of_user:' . $userId, self::CACHE_TTL, function () use ($userId) {
             $id = DB::table('role_assignments')

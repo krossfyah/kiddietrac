@@ -35,8 +35,21 @@ class DailyEvent extends Model
 
     // ──────────────── Scopes ────────────────
 
-    public function scopeToday($query) { return $query->whereDate('occurred_at', today()); }
-    public function scopeOnDate($query, $date) { return $query->whereDate('occurred_at', $date); }
+    /* occurred_at is an INSTANT stored in UTC, so whereDate() buckets it by the UTC
+       date and cannot express an agency day (see AgencyTime::dayRange). $agencyId is
+       optional: omitted, it falls back to the platform's Toronto default, which is what
+       today() already gave these callers — so no existing call changes meaning. */
+    public function scopeToday($query, ?int $agencyId = null)
+    {
+        [$from, $to] = \App\Support\AgencyTime::dayRange($agencyId);
+        return $query->where('occurred_at', '>=', $from)->where('occurred_at', '<', $to);
+    }
+
+    public function scopeOnDate($query, $date, ?int $agencyId = null)
+    {
+        [$from, $to] = \App\Support\AgencyTime::dayRange($agencyId, $date);
+        return $query->where('occurred_at', '>=', $from)->where('occurred_at', '<', $to);
+    }
     public function scopeOfType($query, string|array $types) {
         return $query->whereIn('event_type', is_array($types) ? $types : [$types]);
     }

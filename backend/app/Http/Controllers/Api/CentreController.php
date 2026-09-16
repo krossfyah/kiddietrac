@@ -36,10 +36,14 @@ final class CentreController extends Controller
         $totalEnrolled = DB::table('children')
             ->join('enrollments', 'enrollments.child_id', '=', 'children.id')
             ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
+            ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments'))
             ->where('rooms.centre_id', $centre->id)
             ->where('children.enrollment_status', 'enrolled')
             ->whereNull('enrollments.end_date')
             ->whereNull('children.deleted_at')
+            // DISTINCT: a child with a split week has one open enrolment per provider,
+            // and joining enrolments would otherwise count them once per provider.
+            ->distinct()
             ->distinct()
             ->count('children.id');
 
@@ -49,9 +53,11 @@ final class CentreController extends Controller
         // and nothing has written the legacy table since 23 July, so this reported ZERO
         // staff on the floor at every centre regardless of who was actually clocked in
         // — checked against production, a centre with one educator on shift read 0.
+        // Agency-day instants — see AgencyTime::dayRange.
+        [$floorFrom, $floorTo] = \App\Support\AgencyTime::dayRangeForCentre((int) $centre->id, $today);
         $staffOnFloor = DB::table('time_punches')
             ->where('centre_id', $centre->id)
-            ->whereDate('punched_in_at', $today)
+            ->where('punched_in_at', '>=', $floorFrom)->where('punched_in_at', '<', $floorTo)
             ->whereNull('punched_out_at')
             ->count();
 
@@ -176,13 +182,18 @@ final class CentreController extends Controller
             ];
         });
 
+        /* Deliberately NOT day-scoped: a child with no immunization record is missing it
+           on every day of the week, not only the days they attend. But it must count each
+           child ONCE — a split week means one open enrolment per provider, and this join
+           would otherwise report a child twice and inflate the compliance gap. */
         $missingImmunizations = DB::table('children')
             ->join('enrollments', 'enrollments.child_id', '=', 'children.id')
             ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
             ->where('rooms.centre_id', $centre->id)
             ->where('children.enrollment_status', 'enrolled')
             ->whereNotIn('children.id', fn ($q) => $q->select('child_id')->from('immunizations'))
-            ->count();
+            ->distinct()
+            ->count('children.id');
 
         $certStats = DB::table('staff_certifications')
             ->join('role_assignments', 'role_assignments.user_id', '=', 'staff_certifications.user_id')
@@ -290,15 +301,22 @@ final class CentreController extends Controller
 
     private function countCurrentlyPresent(int $centreId, string $date): int
     {
+        /* Still takes a date — it is asked about a particular day — but resolves it
+           to that day's instants in the CENTRE's zone. occurred_at is UTC, so a date
+           comparison buckets it by UTC and shifts the window by four hours. */
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForCentre($centreId, $date);
+
         return DB::table('check_events as ci')
-            ->whereDate('ci.occurred_at', $date)
+            ->where('ci.occurred_at', '>=', $dayFrom)->where('ci.occurred_at', '<', $dayTo)
             ->where('ci.event_type', 'check_in')
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
                 ->from('check_events as co')
                 ->whereColumn('co.child_id', 'ci.child_id')
                 ->where('co.event_type', 'check_out')
                 ->where('co.occurred_at', '>', DB::raw('ci.occurred_at'))
-                ->whereDate('co.occurred_at', $date))
+                // The same bounds as the arrival above: two halves of one test must
+                // not bound different days.
+                ->where('co.occurred_at', '>=', $dayFrom)->where('co.occurred_at', '<', $dayTo))
             ->join('rooms', 'rooms.id', '=', 'ci.room_id')
             ->where('rooms.centre_id', $centreId)
             ->distinct('ci.child_id')
@@ -307,10 +325,13 @@ final class CentreController extends Controller
 
     private function getRoomStats(object $room, string $date): array
     {
+        // That day's instants in the room's own centre zone — see AgencyTime::dayRange.
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForCentre((int) $room->centre_id, $date);
+
         $childrenPresent = DB::table('check_events as ci')
             ->where('ci.room_id', $room->id)
             ->where('ci.event_type', 'check_in')
-            ->whereDate('ci.occurred_at', $date)
+            ->where('ci.occurred_at', '>=', $dayFrom)->where('ci.occurred_at', '<', $dayTo)
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
                 ->from('check_events as co')
                 ->whereColumn('co.child_id', 'ci.child_id')
@@ -329,9 +350,11 @@ final class CentreController extends Controller
         if ($educatorsPresent === 0) {
             // Same correction as RoomController's copy of this fallback, which was
             // fixed earlier; this second copy was missed and stayed on the dead table.
+            // Agency-day instants — the same correction as RoomController's copy.
+            [$ciFrom, $ciTo] = \App\Support\AgencyTime::dayRangeForCentre((int) $room->centre_id, $date);
             $clockedIn = DB::table('time_punches')
                 ->where('centre_id', $room->centre_id)
-                ->whereDate('punched_in_at', $date)
+                ->where('punched_in_at', '>=', $ciFrom)->where('punched_in_at', '<', $ciTo)
                 ->whereNull('punched_out_at')
                 ->count();
             $totalRooms = DB::table('rooms')

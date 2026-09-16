@@ -305,6 +305,12 @@ class EducatorDailySummaryCommand extends Command
         // only when that was ZERO, so checking in 3 children while logging care for 8
         // credited 3.
         $children = DB::table('check_events')->where('recorded_by_id', $uid)
+            /* Not the nightly auto sign-off. That job borrows whoever last touched
+               the room, so without this an educator is told she covered children
+               the system closed after she had gone home. */
+            ->where(function ($q) {
+                $q->whereNull('notes')->orWhere('notes', 'not like', '%uto sign-off%');
+            })
             ->whereBetween('occurred_at', [$start, $end])->pluck('child_id')
             ->merge($events->pluck('child_id'))
             ->merge($careLogs->pluck('child_id'))
@@ -493,6 +499,60 @@ class EducatorDailySummaryCommand extends Command
             return [];
         }
     }
+    /** When the parent daily summary goes out, in the agency's own timezone.
+     *  Mirrors routes/console.php: kiddietrac:parent-summary, dailyAt('18:30'). */
+    private const PARENT_EMAIL_TIME = '18:30';
+
+    /**
+     * A note about the parent email cut-off — printed ONLY when it would have mattered.
+     *
+     * Families are emailed at 18:30; this summary is scheduled for 19:00, so anything
+     * said here can only ever apply to tomorrow. That is exactly why it is not printed
+     * every night: a line that appears unconditionally stops being read, and telling an
+     * educator who filed everything on time that they should file on time is nagging,
+     * not help. It appears when they actually added something after the cut-off — the
+     * one case where the timing cost a parent something.
+     */
+    private function cutoffNote(int $uid, string $tz, Carbon $date): string
+    {
+        try {
+            $cutoff = Carbon::parse($date->toDateString() . ' ' . self::PARENT_EMAIL_TIME . ':00', $tz)->utc();
+            $end    = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
+
+            /* created_at, not occurred_at: the question is when it was WRITTEN DOWN,
+               not when the nap happened. Both columns round-trip as UTC-labelled
+               values, so the same bounds convention the rest of this file uses holds. */
+            $late = DB::table('daily_events')->where('recorded_by_id', $uid)
+                ->whereNull('deleted_at')
+                ->whereBetween('created_at', [$cutoff, $end])->count();
+            if (Schema::hasTable('daily_care_logs')) {
+                $late += DB::table('daily_care_logs')->where('recorded_by_id', $uid)
+                    ->whereBetween('created_at', [$cutoff, $end])->count();
+            }
+            if ($late < 1) {
+                return '';
+            }
+
+            $when = Carbon::parse($date->toDateString() . ' ' . self::PARENT_EMAIL_TIME . ':00', $tz)->format('g:i a');
+            $clause = $late === 1
+                ? 'one entry was added after it had gone out, so it will reach parents'
+                : $late . ' entries were added after it had gone out, so they will reach parents';
+
+            return $this->sectionHead("\u{1F4EC}", 'A note on timing')
+                . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                .   'style="border-collapse:separate;background:#FFF8EC;border-radius:14px;">'
+                . '<tr><td style="padding:14px 16px;">'
+                . '<div style="font-size:13.5px;line-height:1.65;color:#7A4E10;">'
+                .   'Families get their daily update at <strong>' . htmlspecialchars($when) . '</strong>. '
+                .   'Today ' . htmlspecialchars($clause) . ' in tomorrow&rsquo;s note instead. '
+                .   'Nothing is lost &mdash; and if you get a chance to pop them in before '
+                .   htmlspecialchars($when) . ', families get to read about their child&rsquo;s day the same evening.'
+                . '</div></td></tr></table>';
+        } catch (\Throwable $e) {
+            return '';   // a kindness must never cost the email
+        }
+    }
+
     private function sectionHead(string $icon, string $text): string
     {
         return '<div style="margin:26px 0 12px;">'
@@ -927,6 +987,9 @@ class EducatorDailySummaryCommand extends Command
         }
 
         // ── Ideas for tomorrow ─────────────────────────────────────────────
+        // When families were emailed — only speaks up if the timing cost something.
+        $body .= $this->cutoffNote((int) $ed->id, $tz, $date);
+
         $ideas = $this->tomorrowIdeas($t, $kids, $shift);
         if ($ideas) {
             $body .= $this->sectionHead("\u{1F31E}", 'A couple of ideas for tomorrow')
@@ -1080,7 +1143,17 @@ class EducatorDailySummaryCommand extends Command
     private function send(int $agencyId, string $email, string $name, string $subject, string $html): void
     {
         dispatch(function () use ($agencyId, $email, $name, $subject, $html) {
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($email, $name, $subject) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($email, $name, $subject, $agencyId) {
+                // Engagement mail: withheld from accounts nobody has claimed.
+                try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); }
+                catch (\Throwable $e) {}
+                // Say which agency this belongs to. Without it the mail layer falls
+                // back to resolving a tenant from the recipient's ADDRESS, and an
+                // address that exists in two agencies then resolves to whichever was
+                // found first — which is how one agency's send was logged under
+                // another's audit trail. A sender that knows its agency must say so.
+                try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); }
+                catch (\Throwable $e) {}
                 $m->to($email, $name)
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')

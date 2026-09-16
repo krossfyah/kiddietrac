@@ -503,6 +503,7 @@ class SalesController extends Controller
                 . '<p>Happy to walk you through it — just reply to this email.</p>'
                 . '<p>Warm regards,<br>The KiddieTrac Team</p></div>';
             Mail::html($body, function ($m) use ($lead, $q, $bytes) {
+                \App\Support\MailScope::platform($m);   // sales, not tenant mail
                 $m->to($lead->email, $lead->name ?: null)->subject('Your KiddieTrac proposal ' . ($q->number ?: ''));
                 $m->attachData($bytes, ($q->number ?: 'proposal') . '.pdf', ['mime' => 'application/pdf']);
             });
@@ -895,6 +896,7 @@ class SalesController extends Controller
                 . '</div>';
 
             Mail::html($html, function ($m) use ($to, $cc, $lead) {
+                \App\Support\MailScope::platform($m);   // sales, not tenant mail
                 $m->to($to)->subject('🎯 New sales lead: ' . ($lead->company ?: $lead->name));
                 if (! empty($cc)) {
                     $m->cc($cc);

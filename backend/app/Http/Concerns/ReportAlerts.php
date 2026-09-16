@@ -73,7 +73,7 @@ trait ReportAlerts
         $mailer = AgencyMailer::forAgency($agencyId);
         $fromA = $mailer->fromAddress();
         $fromN = $mailer->fromName();
-        $mailer->mailer()->html($html, function ($m) use ($recipients, $subject, $fromA, $fromN, $bypass, $pdf, $pdfName) {
+        $mailer->html($html, function ($m) use ($recipients, $subject, $fromA, $fromN, $bypass, $pdf, $pdfName) {
             $m->to($recipients)->from($fromA, $fromN)->subject($subject);
             if ($pdf !== null) {
                 $m->attachData($pdf, $pdfName ?: 'report.pdf', ['mime' => 'application/pdf']);

@@ -213,7 +213,7 @@ final class OperationsController extends Controller
             ->where('f.centre_id', $centreId)
             ->pluck('g.user_id')->unique();
         foreach ($guardianIds as $gid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid,
                 'type' => 'menu',
                 'title' => 'This week\'s menu is published',
@@ -279,7 +279,44 @@ final class OperationsController extends Controller
             $r->tags = $tags;
             return $r;
         });
-        return response()->json(['data' => $rows, 'count' => $rows->count()]);
+
+        /* "No alerts" and "nobody has been asked" are not the same statement, and on a
+           meal plan the difference matters. Every enrolled child in this agency currently
+           has NO allergy, dietary or health information on file at all — so the panel that
+           said "No active allergy or dietary alerts" was reporting an empty table as
+           though it were a clean bill of health. An educator planning a menu reads that as
+           "nothing to avoid".
+
+           So return the children nobody has recorded anything for, alongside the alerts.
+           The caller can then say the true thing: not that there are no allergies, but
+           that we do not know. (Anthony, 2026-08-26) */
+        $unrecordedQ = DB::table('children as c')
+            ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->where('ce.agency_id', $agencyId)
+            ->whereNull('c.deleted_at')
+            ->whereNull('f.deleted_at')
+            ->where('c.enrollment_status', 'enrolled')
+            ->where(function ($q) {
+                foreach (['allergies', 'health_alerts', 'dietary_restrictions', 'dietary_notes'] as $col) {
+                    $q->where(function ($x) use ($col) {
+                        // null, empty string, or an empty JSON array all mean "not recorded"
+                        $x->whereNull('c.'.$col)->orWhere('c.'.$col, '')->orWhere('c.'.$col, '[]');
+                    });
+                }
+            })
+            ->select('c.id', 'c.first_name', 'c.last_name', 'f.centre_id');
+        if ($centreId) {
+            $unrecordedQ->where('f.centre_id', $centreId);
+        }
+        $unrecorded = $unrecordedQ->orderBy('c.first_name')->get();
+
+        return response()->json([
+            'data' => $rows,
+            'count' => $rows->count(),
+            'unrecorded' => $unrecorded,
+            'unrecorded_count' => $unrecorded->count(),
+        ]);
     }
 
     // =========================================================
@@ -359,7 +396,7 @@ final class OperationsController extends Controller
                 ->where('family_id', DB::table('children')->where('id', $childId)->value('family_id'))
                 ->pluck('user_id');
             foreach ($guardianIds as $gid) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $gid,
                     'type' => 'field_trip',
                     'title' => "Permission slip: {$data['title']}",
@@ -496,7 +533,7 @@ final class OperationsController extends Controller
             ->where('agency_id', $agencyId)->where('active', 1)
             ->pluck('user_id');
         foreach ($subIds as $uid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $uid,
                 'type' => 'sub_request',
                 'title' => 'New substitute request',
@@ -533,7 +570,7 @@ final class OperationsController extends Controller
             'filled_at' => now(),
             'updated_at' => now(),
         ]);
-        DB::table('notifications')->insert([
+        \App\Support\Notify::write([
             'user_id' => $req->requested_by_id,
             'type' => 'sub_request',
             'title' => 'Substitute claimed',

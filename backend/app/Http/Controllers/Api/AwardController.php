@@ -72,7 +72,7 @@ class AwardController extends Controller
                     . ' the “' . $data['title'] . '” award.';
                 $now = now();
                 foreach ($recipients as $uid) {
-                    DB::table('notifications')->insert([
+                    \App\Support\Notify::write([
                         'user_id' => $uid,
                         'type' => 'award',
                         'title' => $title,
@@ -91,12 +91,16 @@ class AwardController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $agencyId  = $this->resolveAgencyId($request);
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
-        $childIds  = DB::table('children as c')
-            ->join('families as f', 'f.id', '=', 'c.family_id')
-            ->whereIn('f.centre_id', $centreIds ?: [0])
-            ->pluck('c.id')->all();
+        /* Two different questions that used to share one variable: which awards may
+           this person SEE (the centres they work at), and whose name goes on the
+           certificate (the resolved agency). */
+        $agencyId = $this->resolveAgencyId($request);
+
+        /* The centres this person works at, not every centre in the agency. An
+           educator at centre 18 was being served an award for a child at centre 19
+           (2026-09-03) — the same tenant-boundary-for-person-boundary substitution
+           that leaked incident reports and children's photographs. */
+        $childIds = $this->visibleChildIds($request);
 
         $q = ChildAward::with(self::WITH)
             ->whereIn('child_id', $childIds ?: [0])

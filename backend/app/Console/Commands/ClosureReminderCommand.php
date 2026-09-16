@@ -72,13 +72,45 @@ class ClosureReminderCommand extends Command
             if (! $cfg['enabled']) {
                 continue;   // this agency has closure reminders switched off
             }
-            $leads = $override ?: $cfg['days'];
-            if (! in_array($away, $leads, true)) {
+
+            /* A generated statutory holiday gets its own lead time -- one notice, the day
+               before, by default. The generic 5/3/1 would send three letters about
+               Christmas Day, which is nagging rather than reminding. */
+            $isHoliday = $row->closure_type === \App\Console\Commands\HolidaySyncCommand::GENERATED_TYPE;
+            if ($isHoliday) {
+                $hcfg = \App\Console\Commands\HolidaySyncCommand::configFor(
+                    DB::table('agencies')->where('id', $row->agency_id)->first()
+                );
+                if (! $hcfg['enabled']) {
+                    continue;   // holiday closures exist but announcements are switched off
+                }
+            }
+            $leads = $override ?: ($isHoliday ? $hcfg['notice_days'] : $cfg['days']);
+
+            /* A holiday's lead time is counted in WORKING days at this centre, so "1" is
+               the last day anyone is in before the holiday. Counted in calendar days, the
+               notice for a Monday holiday fell on the Sunday, when the centre is shut and
+               nobody reads it -- and most statutory holidays are Mondays. */
+            $matched = null;
+            if ($isHoliday) {
+                foreach ($leads as $lead) {
+                    if ($this->noticeDateFor((int) $row->centre_id, $start, (int) $lead) === $today->toDateString()) {
+                        $matched = (int) $lead;
+                        break;
+                    }
+                }
+                if ($matched === null) {
+                    continue;
+                }
+            } elseif (! in_array($away, $leads, true)) {
                 continue;
             }
 
             $already = array_filter(explode(',', (string) ($row->reminders_sent ?? '')));
-            if (in_array((string) $away, $already, true)) {
+            /* Business-day leads are stamped "b1" so they cannot be confused with the
+               calendar-day "1" a generic closure records -- the two mean different days. */
+            $stamp = $isHoliday ? ('b' . $matched) : (string) $away;
+            if (in_array($stamp, $already, true)) {
                 continue;   // this lead time has already gone out
             }
 
@@ -86,7 +118,7 @@ class ClosureReminderCommand extends Command
             $sent += $n;
 
             if (! $dry && $n > 0) {
-                $already[] = (string) $away;
+                $already[] = $stamp;
                 DB::table('centre_closures')->where('id', $row->id)
                     ->update(['reminders_sent' => implode(',', array_unique($already))]);
             }
@@ -131,25 +163,39 @@ class ClosureReminderCommand extends Command
         $dates = Closures::dateLabel($row);
         $reason = Closures::reason($row);
 
+        /* What the day is for. Blank for an ordinary closure, which is correct -- there is
+           nothing warm to say about a boiler failure. */
+        $meaning = $row->closure_type === \App\Console\Commands\HolidaySyncCommand::GENERATED_TYPE
+            ? \App\Support\StatHolidays::meaningOf($reason)
+            : '';
+
+        // Who the family is actually with. See the note on providerNameFor().
+        $provider = $this->providerNameFor($centreId);
+
         // Families at the centre, and the staff who work there.
         $familyIds = DB::table('families')->where('centre_id', $centreId)->whereNull('deleted_at')->pluck('id');
-        $parents = DB::table('users as u')->join('guardians as g', 'g.user_id', '=', 'u.id')
-            ->whereIn('g.family_id', $familyIds)->whereNull('u.deleted_at')
+        // Deborah Black is deactivated and was still on this list — a switched-off
+        // account is not soft-deleted, so deleted_at alone does not catch it.
+        $parents = \App\Support\Audience::excludeOff(
+            DB::table('users as u')->join('guardians as g', 'g.user_id', '=', 'u.id')
+                ->whereIn('g.family_id', $familyIds)->whereNull('u.deleted_at'))
             ->distinct()->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
 
-        $educators = DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-            ->where('ra.active', true)->where('ra.centre_id', $centreId)
-            ->whereIn('ra.role', ['educator', 'home_visitor'])
-            ->whereNull('u.deleted_at')
+        $educators = \App\Support\Audience::excludeOff(
+            DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                ->where('ra.active', true)->where('ra.centre_id', $centreId)
+                ->whereIn('ra.role', ['educator', 'home_visitor'])
+                ->whereNull('u.deleted_at'))
             ->distinct()->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
 
-        // Seen by the people accountable, without a third version of the same letter.
-        $bcc = DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-            ->where('ra.active', true)->where('ra.agency_id', $agencyId)
-            ->whereIn('ra.role', ['agency_admin', 'centre_director'])
-            ->whereNull('u.deleted_at')
-            ->distinct()->pluck('u.email')
-            ->filter(fn ($e) => filter_var((string) $e, FILTER_VALIDATE_EMAIL))->unique()->values()->all();
+        /* Seen by the people accountable, without a third version of the same letter.
+           Resolved through the one shared helper (2026-08-25) rather than a local copy:
+           the inline version required ra.agency_id on BOTH roles, so a centre_director
+           whose role row carries centre_id and no agency_id was silently never copied. */
+        $bcc = \App\Support\MailOversight::bccFor(
+            $agencyId, $centreId,
+            $parents->pluck('email')->merge($educators->pluck('email'))->all()
+        );
 
         if ($dry) {
             $this->line(sprintf('  [dry] %-26s %-22s in %d day(s) → %d parents, %d educators, bcc %d',
@@ -159,6 +205,10 @@ class ClosureReminderCommand extends Command
         }
 
         $n = 0;
+        /* The blind copy rides on the FIRST message only. It used to be attached inside
+           this loop, so a centre with ten families sent its director ten identical copies
+           of one reminder - oversight becomes a filter rule at that point. */
+        $bccIndex = 0;
         foreach ([['parent', $parents], ['educator', $educators]] as [$role, $people]) {
             foreach ($people as $u) {
                 if (! filter_var((string) $u->email, FILTER_VALIDATE_EMAIL)
@@ -167,7 +217,10 @@ class ClosureReminderCommand extends Command
                 }
                 try {
                     $this->send($agencyId, $u, $role, (string) $row->centre_name, $dates, $reason,
-                        $away, (bool) $row->affects_billing, $bcc);
+                        $away, (bool) $row->affects_billing,
+                        \App\Support\MailOversight::firstOnly($bcc, $bccIndex++),
+                        false, $meaning, $provider,
+                        $meaning !== '' ? substr((string) $row->closure_date, 0, 10) : '');
                     $n++;
                 } catch (\Throwable $e) {
                     // One bad address must not stop the rest of the centre being told.
@@ -181,18 +234,147 @@ class ClosureReminderCommand extends Command
         return $n;
     }
 
+    /**
+     * The date a holiday notice should go out: $n working days before the closure.
+     *
+     * Working is judged against the CENTRE's own open days, not Monday-to-Friday, because
+     * they differ -- a Monday-to-Thursday centre's last working day before a Monday
+     * holiday is the Thursday. Days that are themselves closures are stepped over as well,
+     * so the Boxing Day notice in a Christmas week does not get scheduled for Christmas
+     * Day itself.
+     *
+     * Returns null if no working day can be found within a fortnight, and the caller then
+     * simply does not send -- inventing a date would put the notice somewhere arbitrary.
+     */
+    private function noticeDateFor(int $centreId, Carbon $closureStart, int $n): ?string
+    {
+        if ($n < 1) {
+            $n = 1;
+        }
+
+        static $meta = [];
+        if (! isset($meta[$centreId])) {
+            $centre = DB::table('centres')->where('id', $centreId)->first(['settings']);
+            $cs = json_decode((string) ($centre->settings ?? ''), true);
+            $open = is_array($cs) ? ($cs['open_days'] ?? null) : null;
+            if (! is_array($open) || ! count($open)) {
+                $open = [1, 2, 3, 4, 5];
+            }
+            $meta[$centreId] = [
+                'open' => array_map('intval', $open),
+                'closed' => DB::table('centre_closures')->where('centre_id', $centreId)
+                    ->pluck('end_date', 'closure_date')->toArray(),
+            ];
+        }
+        $open = $meta[$centreId]['open'];
+        $closures = $meta[$centreId]['closed'];
+
+        $isClosed = function (Carbon $d) use ($closures) {
+            $s = $d->toDateString();
+            foreach ($closures as $from => $to) {
+                $f = substr((string) $from, 0, 10);
+                $t = substr((string) ($to ?: $from), 0, 10);
+                if ($s >= $f && $s <= $t) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        $d = $closureStart->copy()->startOfDay();
+        $found = 0;
+        for ($i = 0; $i < 21; $i++) {
+            $d->subDay();
+            if (! in_array((int) $d->isoWeekday(), $open, true)) {
+                continue;
+            }
+            if ($isClosed($d)) {
+                continue;
+            }
+            if (++$found === $n) {
+                return $d->toDateString();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The person a family is with at this centre.
+     *
+     * The centre's supervisor field is preferred, and for a home provider -- which is
+     * every centre at iLearn -- it IS the answer: centre #7 is Bruni Meeser's home and
+     * her name is on the record. educator_rooms is only the fallback, because it is
+     * currently noisy: one agency staff member is attached to every room, so building the
+     * sentence from it would tell all nine providers' families they are also with her.
+     *
+     * Returns '' when nothing can be said with confidence, and the letter then simply
+     * omits the line rather than guessing at it.
+     */
+    private function providerNameFor(int $centreId): string
+    {
+        static $cache = [];
+        if (array_key_exists($centreId, $cache)) {
+            return $cache[$centreId];
+        }
+
+        $c = DB::table('centres')->where('id', $centreId)
+            ->first(['supervisor_first_name', 'supervisor_last_name']);
+        $name = trim(($c->supervisor_first_name ?? '') . ' ' . ($c->supervisor_last_name ?? ''));
+        if ($name !== '') {
+            return $cache[$centreId] = $name;
+        }
+
+        $eds = \App\Support\Audience::excludeOff(
+            DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                ->where('ra.active', true)->where('ra.centre_id', $centreId)
+                ->where('ra.role', 'educator')->whereNull('u.deleted_at'))
+            ->distinct()->limit(3)->get(['u.first_name', 'u.last_name'])
+            ->map(fn ($u) => trim($u->first_name . ' ' . $u->last_name))
+            ->filter()->values()->all();
+
+        return $cache[$centreId] = count($eds) === 1 ? $eds[0] : '';
+    }
+
     /** The letter itself, worded for who is reading it. */
     public function send(?int $agencyId, object $u, string $role, string $centreName, string $dates,
                          string $reason, int $away, bool $affectsBilling, array $bcc = [],
-                         bool $bypassSuppression = false): void
+                         bool $bypassSuppression = false, string $meaning = '', string $provider = '',
+                         string $closureDate = ''): void
     {
         $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
         $when = $away === 0 ? 'today' : ($away === 1 ? 'tomorrow' : 'in ' . $away . ' days');
         $isParent = $role === 'parent';
 
-        $lead = $isParent
-            ? 'This is a reminder that <strong>' . $e($centreName) . '</strong> will be closed ' . $e($when) . '.'
-            : 'A reminder that <strong>' . $e($centreName) . '</strong> is closed ' . $e($when) . ', so you are not expected in.';
+        /* Naming the day beats counting to it. A notice sent on Friday about a Monday
+           holiday reads "closed on Monday"; "closed in 3 days" makes the reader do
+           arithmetic to reach the same fact. Only for holidays, where the notice lands on
+           the last working day and the gap is usually a weekend. */
+        if ($closureDate !== '' && $away > 1) {
+            try {
+                $when = 'on ' . Carbon::parse($closureDate)->format('l');
+            } catch (\Throwable $e) {
+                // keep the counted form
+            }
+        }
+
+        $isHoliday = $meaning !== '';
+
+        /* A holiday opens differently from a burst pipe. Same facts, but a family reading
+           "closed tomorrow" about Christmas should not get the same sentence they would
+           get about an emergency. */
+        if ($isHoliday) {
+            $lead = $isParent
+                ? 'A gentle reminder that <strong>' . $e($centreName) . '</strong> will be closed '
+                    . $e($when) . ' for <strong>' . $e($reason) . '</strong>.'
+                : '<strong>' . $e($centreName) . '</strong> is closed ' . $e($when) . ' for <strong>'
+                    . $e($reason) . '</strong>, so you are not expected in.';
+        } else {
+            $lead = $isParent
+                ? 'This is a reminder that <strong>' . $e($centreName) . '</strong> will be closed ' . $e($when) . '.'
+                : 'A reminder that <strong>' . $e($centreName) . '</strong> is closed ' . $e($when) . ', so you are not expected in.';
+        }
 
         // What each reader actually needs to do about it.
         //
@@ -213,28 +395,55 @@ class ClosureReminderCommand extends Command
             ? 'There is nothing you need to do — sign-in is switched off and we will see you when we reopen.'
             : 'If you believe you are scheduled to work during the closure, speak to your director before the date.';
 
+        /* Who they are with. Named for a parent because "your provider" is a person to
+           them; an educator already knows where they work. */
+        $withWhom = ($isParent && $provider !== '')
+            ? '<tr><td style="padding:0 0 12px;font-size:15px;line-height:1.6;color:#334155;">'
+                . 'Your child is with <strong>' . $e($provider) . '</strong>, and they will be back to '
+                . 'their usual hours the day after.</td></tr>'
+            : '';
+
+        /* The meaning of the day, set apart so it reads as a note rather than as more
+           logistics. Only ever present for a statutory holiday. */
+        $meaningBlock = $isHoliday
+            ? '<tr><td style="padding:14px 0 2px;"><div style="border-left:3px solid #8EC73C;background:#F6FBEF;'
+                . 'border-radius:0 10px 10px 0;padding:14px 16px;">'
+                . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4D7C0F;">'
+                . 'About ' . $e($reason) . '</div>'
+                . '<div style="font-size:14.5px;line-height:1.65;color:#1F2937;margin-top:6px;">' . $e($meaning) . '</div>'
+                . '</div></td></tr>'
+            : '';
+
         $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
             . '<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">' . $lead . '</td></tr>'
+            . $withWhom
             . '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
             . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">When</div>'
             . '<div style="font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 10px;">' . $e($dates) . '</div>'
             . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">Why</div>'
             . '<div style="font-size:15px;color:#0F172A;margin-top:2px;">' . $e($reason) . '</div></div></td></tr>'
+            . $meaningBlock
             . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#334155;">' . $e($note) . '</td></tr>'
             . '<tr><td style="padding:10px 0 0;font-size:14px;line-height:1.6;color:#64748B;">' . $e($close) . '</td></tr>'
             . '</table>';
 
         $html = EmailTemplate::wrap($agencyId, $body, [
-            'eyebrow' => $isParent ? 'CLOSURE REMINDER' : 'CLOSURE REMINDER · STAFF',
-            'title' => $centreName . ' is closed ' . $when,
-            'subtitle' => $dates . ' · ' . $reason,
+            'eyebrow' => $isHoliday
+                ? ('HOLIDAY CLOSURE' . ($isParent ? '' : ' · STAFF'))
+                : ($isParent ? 'CLOSURE REMINDER' : 'CLOSURE REMINDER · STAFF'),
+            'title' => $isHoliday
+                ? ($reason . ' — we are closed ' . $when)
+                : ($centreName . ' is closed ' . $when),
+            'subtitle' => $dates . ' · ' . ($isHoliday ? $centreName : $reason),
             'preheader' => $centreName . ' closed ' . $dates . ' — ' . $reason,
         ]);
 
         $name = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''));
-        $subject = 'Reminder: ' . $centreName . ' is closed ' . $when . ' (' . $dates . ')';
+        $subject = $isHoliday
+            ? ($reason . ': ' . $centreName . ' is closed ' . $when . ' (' . $dates . ')')
+            : ('Reminder: ' . $centreName . ' is closed ' . $when . ' (' . $dates . ')');
 
-        AgencyMailer::forAgency($agencyId)->mailer()->html($html,
+        AgencyMailer::forAgency($agencyId)->html($html,
             function ($m) use ($u, $name, $subject, $bcc, $bypassSuppression) {
                 $m->to($u->email, $name ?: null)->subject($subject);
                 if ($bcc) {
@@ -270,6 +479,55 @@ class ClosureReminderCommand extends Command
             $this->send((int) $row->agency_id, $u, $role, (string) $row->centre_name, $dates,
                 $reason, $away, (bool) $row->affects_billing, [], true);
             $this->line("  sent {$role} variant ({$away} day lead) to {$to}");
+        }
+
+        /* The holiday variants, built from the next real statutory holiday rather than
+           from a database row -- so the sample can be reviewed before the feature has been
+           switched on for anybody, which is the point at which somebody wants to see it. */
+        $agencyId = (int) $row->agency_id;
+        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+        $cfg = \App\Console\Commands\HolidaySyncCommand::configFor($agency);
+        $tz = $agency->timezone ?: 'America/Toronto';
+        $next = \App\Support\StatHolidays::between(
+            Carbon::now($tz)->startOfDay(),
+            Carbon::now($tz)->addMonths(14),
+            $cfg['country'],
+            $cfg['optional']
+        );
+        if (! $next) {
+            $this->warn('  no upcoming statutory holiday to build a sample from');
+
+            return self::SUCCESS;
+        }
+
+        $h = $next[0];
+        $when = Carbon::parse($h['observed'] ?? $h['date'], $tz);
+        $label = $when->format('D j M Y');
+        // A real centre from this agency, so the provider line shows a real name.
+        $centre = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->orderBy('id')->first(['id', 'name']);
+        $provider = $centre ? $this->providerNameFor((int) $centre->id) : '';
+
+        /* The real gap between the notice and the holiday, not a hardcoded 1. The notice
+           goes out on the last working day, so a Monday holiday is announced on the Friday
+           and the letter says "closed on Monday" -- which is what the sample must show. */
+        $holidayAway = 1;
+        $noticeOn = null;
+        if ($centre) {
+            $nd = $this->noticeDateFor((int) $centre->id, $when->copy(), 1);
+            if ($nd) {
+                $noticeOn = $nd;
+                $holidayAway = (int) Carbon::parse($nd, $tz)->startOfDay()->diffInDays($when->copy()->startOfDay(), false);
+            }
+        }
+
+        foreach ([['parent'], ['educator']] as [$role]) {
+            $this->send($agencyId, $u, $role, (string) ($centre->name ?? $row->centre_name), $label,
+                $h['name'], $holidayAway, false, [], true, $h['meaning'], $provider,
+                $h['observed'] ?? $h['date']);
+            $this->line(sprintf('  sent %s HOLIDAY variant (%s, %s) to %s%s',
+                $role, $h['name'], $label, $to,
+                $noticeOn ? ' — as it would go out on ' . Carbon::parse($noticeOn)->format('D j M') : ''));
         }
 
         return self::SUCCESS;

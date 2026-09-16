@@ -63,9 +63,11 @@ final class SeedDemoV4 extends Command
 
         foreach ($educators as $ed) {
             // Skip if already clocked in today
+            // Agency-day instants, like the code this seeds data for.
+            [$sdFrom, $sdTo] = \App\Support\AgencyTime::dayRange(null);
             $existing = DB::table('time_punches')
                 ->where('user_id', $ed->id)
-                ->whereDate('punched_in_at', now())
+                ->where('punched_in_at', '>=', $sdFrom)->where('punched_in_at', '<', $sdTo)
                 ->whereNull('punched_out_at')
                 ->exists();
 

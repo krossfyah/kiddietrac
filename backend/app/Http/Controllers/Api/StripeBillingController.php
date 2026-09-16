@@ -252,6 +252,14 @@ final class StripeBillingController extends Controller
 
         $settings['stripe']['customer_id'] = $customerId;
         $settings['stripe']['subscription_id'] = $subId;
+        /* Also into real columns. The webhook has to look an agency up BY
+           subscription id, and against JSON that is a full scan with a parse per
+           row. settings.stripe.* stays written so existing readers are unaffected. */
+        DB::table('agencies')->where('id', $agencyId)->update([
+            'stripe_subscription_id'     => $subId,
+            'stripe_subscription_status' => $subStatus,
+            'stripe_account_id'          => $connectId,
+        ]);
         $settings['stripe']['subscription_status'] = $subStatus;
 
         DB::table('agencies')->where('id', $agencyId)->update([
@@ -339,7 +347,14 @@ final class StripeBillingController extends Controller
                 $subId = $object['id'] ?? null;
                 if ($subId) {
                     // Find the agency by stripe subscription_id in settings JSON
-                    $agency = DB::table('agencies')->whereRaw("JSON_EXTRACT(settings, '$.stripe.subscription_id') = ?", [$subId])->first();
+                    /* Indexed column first; the JSON scan stays as a fallback for
+                       subscriptions recorded before the columns existed. */
+                    $agency = DB::table('agencies')->where('stripe_subscription_id', $subId)->first();
+                    if (! $agency) {
+                        $agency = DB::table('agencies')
+                            ->whereRaw("JSON_EXTRACT(settings, '$.stripe.subscription_id') = ?", [$subId])
+                            ->first();
+                    }
                     if ($agency) {
                         DB::table('agencies')->where('id', $agency->id)->update(['billing_status' => 'suspended']);
                     }

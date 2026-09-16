@@ -79,7 +79,7 @@ final class DocumentWorkflowController extends Controller
             ]);
             // Notify first-step signer immediately
             if ($i === 0 && !empty($s['signer_user_id'])) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $s['signer_user_id'], 'type' => 'document_workflow',
                     'title' => 'Awaiting your signature: ' . $data['title'],
                     'body' => 'Please review and sign.',
@@ -149,7 +149,7 @@ final class DocumentWorkflowController extends Controller
             DB::table('document_workflow_steps')->where('id', $nextStep->id)
                 ->update(['status' => 'awaiting']);
             if ($nextStep->signer_user_id) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $nextStep->signer_user_id, 'type' => 'document_workflow',
                     'title' => 'Your turn to sign: ' . $workflow->title,
                     'body' => 'Previous step complete.',
@@ -162,7 +162,7 @@ final class DocumentWorkflowController extends Controller
                 'status' => 'complete', 'completed_at' => now(), 'updated_at' => now(),
             ]);
             // Notify the originator
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $workflow->started_by_user_id, 'type' => 'document_workflow',
                 'title' => 'Document fully signed: ' . $workflow->title,
                 'body' => 'All signers have completed.',

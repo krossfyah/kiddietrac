@@ -78,7 +78,7 @@ final class EngagementController extends Controller
         $familyIds = $kids->pluck('family_id')->unique();
         $gids = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id')->unique();
         foreach ($gids as $gid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'reenrollment',
                 'title' => "Re-enrol for {$data['target_term']}",
                 'body' => "Confirm by " . Carbon::parse($data['deadline'])->format('M j'),
@@ -214,7 +214,7 @@ final class EngagementController extends Controller
                 ->whereIn('role', ['centre_director', 'agency_admin'])->where('active', 1)
                 ->pluck('user_id')->unique();
             foreach ($dids as $did) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $did, 'type' => 'nps',
                     'title' => "NPS detractor: {$data['score']}/10 from " . ($family->family_name ?? 'family'),
                     'body' => substr((string) ($data['comment'] ?? ''), 0, 200),

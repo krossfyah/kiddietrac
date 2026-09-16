@@ -67,7 +67,9 @@ final class KioskController extends Controller
             ->join('children as ch', 'ch.id', '=', 'ci.child_id')
             ->join('families as fa', 'fa.id', '=', 'ch.family_id')
             ->where('fa.centre_id', $centre->id)
-            ->whereDate('ci.occurred_at', now())
+            // Agency day as instants — the kiosk showed an empty building after 8pm.
+            ->where('ci.occurred_at', '>=', \App\Support\AgencyTime::dayRangeForCentre((int) $centre->id)[0])
+            ->where('ci.occurred_at', '<', \App\Support\AgencyTime::dayRangeForCentre((int) $centre->id)[1])
             ->where('ci.event_type', 'check_in')
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
                 ->from('check_events as co')
@@ -140,10 +142,13 @@ final class KioskController extends Controller
             return response()->json(['message' => 'Invalid PIN'], 403);
         }
 
-        // Resolve current room from active enrollment.
+        /* Resolve the room from the enrolment that applies TODAY. A child with a split
+           week has one open enrolment per provider, so "the newest" would let a Friday
+           child be checked in at the wrong provider on a Tuesday. */
         $enrollment = DB::table('enrollments')
             ->where('child_id', $child->id)
             ->whereNull('end_date')
+            ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'enrollments'))
             ->orderByDesc('start_date')
             ->first(['room_id']);
 
@@ -162,16 +167,22 @@ final class KioskController extends Controller
             'created_at' => now(),
         ]);
 
+        /* One notifier for every arrival path. The local copy this replaced was a
+           second implementation that had already drifted (a broken unicode escape in
+           its title). Guardians AND the room's staff, both told how it happened. */
+        try {
+            $notifier = app(\App\Services\CheckEventNotifier::class);
+            $notifier->notify((int) $child->id, (string) $data['event_type'], $matchUserId, null, 'kiosk');
+            $notifier->notifyStaff((int) $child->id, (int) $enrollment->room_id, (int) $centre->id,
+                (string) $data['event_type'], $matchUserId, 'kiosk');
+        } catch (\Throwable $e) { /* the attendance row is already written */ }
+
         return response()->json([
             'message' => 'Recorded',
             'event_type' => $data['event_type'],
             'occurred_at' => now()->toIso8601String(),
         ], 201);
     }
-
-    // ────────────────────────────────────────────────────────────────
-    //   Director surface (sanctum + role middleware applied by route group)
-    // ────────────────────────────────────────────────────────────────
 
     public function rotateToken(Request $request, int $centreId): JsonResponse
     {

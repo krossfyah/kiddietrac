@@ -98,7 +98,7 @@ final class FeedbackController extends Controller
                 ->where('active', 1)
                 ->pluck('user_id')->unique();
             foreach ($directorIds as $did) {
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id' => $did, 'type' => 'feedback',
                     'title' => "{$data['rating']}-star feedback from " . ($family->family_name ?? 'a parent'),
                     'body' => substr((string) ($data['comment'] ?? ''), 0, 200),

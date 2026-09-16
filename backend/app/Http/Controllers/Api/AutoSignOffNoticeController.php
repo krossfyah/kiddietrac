@@ -49,7 +49,12 @@ final class AutoSignOffNoticeController extends Controller
             ->where('id', '>', $this->seenUpTo($uid))
             // Only recent ones: a closure from three months ago is history, not a nudge,
             // and nobody can usefully correct a shift they cannot remember.
-            ->whereDate('punched_in_at', '>=', Carbon::now()->subDays(30)->toDateString())
+            /* Start of that day in the platform's default zone. A 30-day nudge window
+               does not care about four hours at the far edge, but the comparison is an
+               instant one either way — see AgencyTime::dayRange. */
+            ->where('punched_in_at', '>=', \App\Support\AgencyTime::dayRange(
+                null, Carbon::now()->subDays(30)->toDateString()
+            )[0])
             ->orderByDesc('id')->limit(10)
             ->get(['id', 'centre_id', 'punched_in_at', 'punched_out_at']);
 

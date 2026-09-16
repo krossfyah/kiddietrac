@@ -56,7 +56,7 @@ final class DailyDigestCommand extends Command
             $mailer = AgencyMailer::forAgency((int) $a->id);
             foreach ($recipients as $rcpt) {
                 try {
-                    $mailer->mailer()->html($body, function ($m) use ($subject, $rcpt, $a) {
+                    $mailer->html($body, function ($m) use ($subject, $rcpt, $a) {
                         // Engagement mail: withheld from accounts nobody has claimed.
                         try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); }
                         catch (\Throwable $e) {}
@@ -198,10 +198,14 @@ final class DailyDigestCommand extends Command
         // Who is clocked in to start the day.
         $staffClockedToday = 0; $staffOnFloor = 0;
         try {
+            // Agency-day instants — see AgencyTime::dayRange.
+            [$dFrom, $dTo] = \App\Support\AgencyTime::dayRangeForCentre((int) ($centreIds[0] ?? 0), $today);
             $staffClockedToday = (int) DB::table('time_punches')->whereIn('centre_id', $centreIds)
-                ->whereDate('punched_in_at', $today)->distinct('user_id')->count('user_id');
+                ->where('punched_in_at', '>=', $dFrom)->where('punched_in_at', '<', $dTo)
+                ->distinct('user_id')->count('user_id');
             $staffOnFloor = (int) DB::table('time_punches')->whereIn('centre_id', $centreIds)
-                ->whereDate('punched_in_at', $today)->whereNull('punched_out_at')->distinct('user_id')->count('user_id');
+                ->where('punched_in_at', '>=', $dFrom)->where('punched_in_at', '<', $dTo)
+                ->whereNull('punched_out_at')->distinct('user_id')->count('user_id');
         } catch (\Throwable $e) {}
 
         // Enrolment pipeline.

@@ -44,6 +44,64 @@ class ParentChildOnboardingController extends Controller
      * and is the right answer for "nothing to declare", because an empty array would
      * read to the allergy screens as a list that exists and happens to be empty.
      */
+    /**
+     * Fold what a parent submitted into what is already on file.
+     *
+     * Entries are matched by NAME, case-insensitively and trimmed, because that is the
+     * only thing the two sides reliably share — a parent types "peanuts", the record says
+     * "Peanuts". Where they match, the stored row wins on every field the parent did not
+     * supply, so detail entered by staff is never lost to a shorter answer.
+     *
+     * Anything the parent leaves out is DROPPED, which is the point of the screen: it is
+     * how somebody removes an allergy their child has outgrown.
+     *
+     * @param  string|null  $storedJson  the column as it stands
+     * @param  array  $incoming  strings and/or structured rows
+     * @param  string  $key  'allergen' or 'restriction'
+     */
+    private static function mergeList(?string $storedJson, array $incoming, string $key): ?string
+    {
+        $stored = [];
+        if ($storedJson) {
+            $decoded = json_decode($storedJson, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $row) {
+                    $name = is_array($row) ? ($row[$key] ?? '') : (string) $row;
+                    $name = trim((string) $name);
+                    if ($name !== '') {
+                        $stored[mb_strtolower($name)] = is_array($row) ? $row : [$key => $name];
+                    }
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($incoming as $row) {
+            $given = is_array($row) ? $row : [$key => (string) $row];
+            $name = trim((string) ($given[$key] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $prior = $stored[mb_strtolower($name)] ?? [];
+
+            /* The parent's values win where they gave one; the stored row fills the rest.
+               array_filter drops nulls and empty strings so a blank box cannot erase a
+               field somebody else filled in. */
+            $given = array_filter($given, fn ($v) => $v !== null && $v !== '');
+            $merged = array_merge($prior, $given);
+            /* Keep the stored spelling when the only difference is case. A parent typing
+               "peanuts" should not turn a staff-entered "Peanuts" lower-case in the alert
+               chips an educator reads. */
+            $priorName = trim((string) ($prior[$key] ?? ''));
+            $merged[$key] = ($priorName !== '' && mb_strtolower($priorName) === mb_strtolower($name))
+                ? $priorName
+                : $name;
+            $out[] = $merged;
+        }
+
+        return $out ? json_encode(array_values($out)) : null;
+    }
+
     private static function jsonList(?array $items): ?string
     {
         if (! $items) {
@@ -134,12 +192,18 @@ class ParentChildOnboardingController extends Controller
         abort_unless(in_array($child, $this->ownChildIds((int) $request->user()->id), true), 403, 'Not your child.');
 
         $data = $request->validate([
-            // Lists, not prose: both columns are JSON arrays behind a json_valid()
-            // CHECK, and the educator allergy chips render one per entry.
+            /* Lists, not prose: both columns are JSON arrays behind a json_valid()
+               CHECK, and the educator allergy chips render one per entry.
+
+               An entry may be a bare string ("Peanuts") or the structured row the rest of
+               the portal now uses ({allergen, severity, reaction, epipen_required,
+               epipen_location, action_plan}). Both are accepted because a parent filling
+               in onboarding on a phone should not be forced through a form that asks for
+               an action plan — but when they DO give the detail, it must survive. */
             'allergies' => 'nullable|array|max:40',
-            'allergies.*' => 'string|max:120',
+            'allergies.*' => 'nullable',
             'dietary_restrictions' => 'nullable|array|max:40',
-            'dietary_restrictions.*' => 'string|max:120',
+            'dietary_restrictions.*' => 'nullable',
             'medical_notes' => 'nullable|string|max:2000',
             'immunizations' => 'present|array|max:60',
             'immunizations.*.vaccine' => 'required|string|max:120',
@@ -150,12 +214,34 @@ class ParentChildOnboardingController extends Controller
         ]);
 
         DB::transaction(function () use ($child, $data, $request) {
-            DB::table('children')->where('id', $child)->update([
-                'allergies' => self::jsonList($data['allergies'] ?? null),
-                'dietary_restrictions' => self::jsonList($data['dietary_restrictions'] ?? null),
-                'medical_notes' => $data['medical_notes'] ?? null,
-                'updated_at' => now(),
-            ]);
+            /* MERGE, DO NOT CLOBBER.
+
+               A parent re-running onboarding used to overwrite these columns outright with
+               a list of plain strings. If a director had already recorded "Peanuts —
+               anaphylactic — EpiPen in Room 2 cupboard", a parent typing "peanuts" in the
+               onboarding box replaced all of it with ["peanuts"] — silently deleting the
+               severity, the action plan and the location of the pen, from the one screen
+               an educator reads in an emergency.
+
+               So an incoming entry that names something already on file keeps whatever
+               detail is on file, and only adds what the parent actually supplied.
+               (Anthony, 2026-09-10) */
+            $existingChild = DB::table('children')->where('id', $child)
+                ->first(['allergies', 'dietary_restrictions']);
+
+            $update = ['updated_at' => now()];
+            if (array_key_exists('allergies', $data)) {
+                $update['allergies'] = self::mergeList(
+                    $existingChild->allergies ?? null, $data['allergies'] ?? [], 'allergen');
+            }
+            if (array_key_exists('dietary_restrictions', $data)) {
+                $update['dietary_restrictions'] = self::mergeList(
+                    $existingChild->dietary_restrictions ?? null, $data['dietary_restrictions'] ?? [], 'restriction');
+            }
+            if (array_key_exists('medical_notes', $data)) {
+                $update['medical_notes'] = $data['medical_notes'] ?? null;
+            }
+            DB::table('children')->where('id', $child)->update($update);
 
             foreach ($data['immunizations'] as $row) {
                 $exempt = ! empty($row['exempt']);

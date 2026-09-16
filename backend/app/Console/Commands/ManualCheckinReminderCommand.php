@@ -151,7 +151,7 @@ class ManualCheckinReminderCommand extends Command
         $name = $parentFirst;
 
         $sendClosure = function () use ($agencyId, $email, $name, $subject, $html, $ccAdmin) {
-            AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($email, $name, $subject, $ccAdmin) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($email, $name, $subject, $ccAdmin) {
                 $m->to($email, $name ?: null)
                     ->from('noreply@kiddietrac.com', 'KiddieTrac')
                     ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')

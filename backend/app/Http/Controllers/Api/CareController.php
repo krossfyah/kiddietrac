@@ -573,6 +573,87 @@ final class CareController extends Controller
             ->first();
 
         if ($open) {
+            /* NOBODY CLOCKS OUT LEAVING A CHILD SIGNED IN.
+
+               A child still marked present after the last adult has gone is the failure
+               this exists to prevent: the roster says they are here, the ratio counts
+               them, and the record of when they left is lost. Caught at the one moment
+               somebody can still fix it in seconds.
+
+               Scoped to rooms this person can act on — their assignments if they have
+               any, otherwise their centre's, the same rule assignedRoomIds() uses.
+               Blocking somebody over a child in a room they cannot open would trap them.
+
+               The message names every child, because "sign the children out first" to
+               somebody who believes they already did is not actionable. */
+            $myRooms = DB::table('educator_rooms')->where('user_id', $userId)
+                ->pluck('room_id')->map(fn ($i) => (int) $i)->all();
+            if (! $myRooms) {
+                $myRooms = DB::table('rooms')
+                    ->where('centre_id', (int) ($open->centre_id ?: $centreId))
+                    ->pluck('id')->map(fn ($i) => (int) $i)->all();
+            }
+
+            $stillIn = $myRooms ? DB::table('check_events as ci')
+                ->join('children as ch', 'ch.id', '=', 'ci.child_id')
+                ->leftJoin('rooms as r', 'r.id', '=', 'ci.room_id')
+                ->whereIn('ci.room_id', $myRooms)
+                ->where('ci.event_type', 'check_in')
+                /* Agency day as instants. This is the guard that refuses a clock-out
+                   while children are still signed in; on the UTC date it found nobody
+                   from 8pm and let an educator leave a room still marked occupied. */
+                ->where('ci.occurred_at', '>=', \App\Support\AgencyTime::dayRangeForCentre((int) ($open->centre_id ?: $centreId))[0])
+                ->where('ci.occurred_at', '<', \App\Support\AgencyTime::dayRangeForCentre((int) ($open->centre_id ?: $centreId))[1])
+                /* Same tie-break as RoomController::presentCount: a check-out is "later"
+                   on a greater timestamp, or the same second with a higher id, so a rapid
+                   re-scan does not read as still-present. */
+                ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
+                    ->from('check_events as co')
+                    ->whereColumn('co.child_id', 'ci.child_id')
+                    ->where('co.event_type', 'check_out')
+                    ->where(fn ($w) => $w->whereColumn('co.occurred_at', '>', 'ci.occurred_at')
+                        ->orWhere(fn ($w2) => $w2->whereColumn('co.occurred_at', 'ci.occurred_at')
+                            ->whereColumn('co.id', '>', 'ci.id'))))
+                ->orderBy('ci.occurred_at')
+                ->get(['ci.child_id', 'ci.occurred_at', 'ch.first_name', 'ch.preferred_name',
+                       'ch.last_name', 'r.name as room_name'])
+                ->unique('child_id')->values() : collect();
+
+            if ($stillIn->isNotEmpty()) {
+                $tz = \App\Support\AgencyTime::tzForCentre((int) ($open->centre_id ?: $centreId));
+                $children = $stillIn->map(function ($c) use ($tz) {
+                    $name = trim(($c->preferred_name ?: $c->first_name) . ' ' . $c->last_name);
+                    $since = \App\Support\AgencyTime::fmt($c->occurred_at, $tz, 'g:i A');
+
+                    return [
+                        'child_id' => (int) $c->child_id,
+                        'name' => $name,
+                        'room' => $c->room_name,
+                        'since' => $since,
+                        'label' => $name . ($c->room_name ? ' — ' . $c->room_name : '')
+                            . ($since ? ' — in since ' . $since : ''),
+                    ];
+                })->values();
+
+                $n = $children->count();
+
+                return response()->json([
+                    'message' => $n . ' ' . ($n === 1 ? 'child is' : 'children are')
+                        . ' still signed in. Sign ' . ($n === 1 ? 'them' : 'them all')
+                        . ' out before you clock out — until you do, '
+                        . ($n === 1 ? 'they are' : 'they are')
+                        . ' counted as present and in your ratio.',
+                    'blocked' => true,
+                    'reason' => 'children_still_signed_in',
+                    'children' => $children,
+                    // Somebody who believes they already signed out needs a way forward,
+                    // not just a refusal.
+                    'what_to_do' => 'Sign each child out on the roster, then clock out. '
+                        . 'If a colleague is taking over, they must be signed over to that room first — '
+                        . 'a director can sign a child out if you cannot.',
+                ], 409);
+            }
+
             DB::table('time_punches')->where('id', $open->id)->update([
                 'punched_out_at' => now(),
                 'notes' => $request->input('notes') ?: $open->notes,
@@ -730,7 +811,7 @@ final class CareController extends Controller
 
             foreach ($recipients as $rid) {
                 if ((int) $rid === (int) ($actor->id ?? 0)) continue;   // don't notify the actor
-                DB::table('notifications')->insert([
+                \App\Support\Notify::write([
                     'user_id'    => $rid,
                     'type'       => 'clock',
                     'title'      => $title,
@@ -835,7 +916,7 @@ final class CareController extends Controller
                     'created_at' => now(),
                 ];
             }
-            DB::table('notifications')->insert($rows);
+            \App\Support\Notify::write($rows);
         }
 
         return response()->json(['id' => $id, 'message' => 'Tour requested. We will be in touch shortly.'], 201);

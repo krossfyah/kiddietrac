@@ -25,7 +25,9 @@ final class OperationsV2Controller extends Controller
     public function closures(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
+        /* Operational rather than personal, but still not theirs: a centre-18
+           director was shown centre 16's closure calendar. */
+        $centreIds = \App\Support\Visibility::centreIds((int) $agencyId, $request->user());
         // Who scheduled it, joined here rather than looked up per row on the screen.
         // Both columns already existed; nothing ever read them.
         $rows = DB::table('centre_closures as cc')
@@ -110,8 +112,27 @@ final class OperationsV2Controller extends Controller
         $recipients = DB::table('users')->whereIn('id', $userIds)->whereNull('deleted_at')
             ->select('id', 'email', 'first_name', 'last_name')->get();
 
+        // One blind copy of this announcement for the people accountable for it.
+        $__bcc = \App\Support\MailOversight::bccFor($agencyId, $centreId, $recipients->pluck('email')->all());
+        $__bccIndex = 0;
+
+        /* Where TODAY sits relative to this closure, in the CENTRE's timezone.
+           A closure can be entered before it starts, while it is running, or after it has
+           finished, and the notice was written as though it were always the first:
+           "will be closed". Mareena Matthew's closure of 11-26 Aug was entered on the
+           18th, so her families were told a closure they were already living through
+           "will" happen. A notice that describes the wrong point in time reads as a
+           mistake and costs the next one its credibility. (2026-08-25) */
+        $__tz = \App\Support\AgencyTime::tzForCentre($centreId);
+        $__today = \Illuminate\Support\Carbon::today($__tz);
+        $__start = \Illuminate\Support\Carbon::parse(substr((string) $row->closure_date, 0, 10), $__tz)->startOfDay();
+        $__end = $row->end_date
+            ? \Illuminate\Support\Carbon::parse(substr((string) $row->end_date, 0, 10), $__tz)->startOfDay()
+            : $__start->copy();
+        $__phase = $__today->lt($__start) ? 'upcoming' : ($__today->gt($__end) ? 'past' : 'current');
+
         foreach ($recipients as $u) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $u->id, 'type' => 'closure',
                 'title' => $centreName . ' closed: ' . $dates,
                 'body' => $reason,
@@ -127,7 +148,8 @@ final class OperationsV2Controller extends Controller
             // One recipient's bad address must not abort the announcement for everybody
             // after them in the loop.
             try {
-                $this->mailClosure($agencyId, $u, $centreName, $dates, $reason);
+                $this->mailClosure($agencyId, $u, $centreName, $dates, $reason,
+                    \App\Support\MailOversight::firstOnly($__bcc, $__bccIndex++), $__phase);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Closure email failed', [
                     'user' => $u->id, 'closure' => $closureId, 'error' => $e->getMessage(),
@@ -136,30 +158,68 @@ final class OperationsV2Controller extends Controller
         }
     }
 
-    private function mailClosure(?int $agencyId, object $u, string $centreName, string $dates, string $reason): void
+    private function mailClosure(?int $agencyId, object $u, string $centreName, string $dates,
+                                string $reason, array $bcc = [], string $phase = 'upcoming'): void
     {
         $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+
+        /* Three tenses, because a closure can be entered at any point relative to itself.
+           `past` is deliberately worded as a record rather than a notice - telling a
+           parent about a closure that has already finished is a correction to the
+           calendar, not news, and pretending otherwise is worse than saying so. */
+        [$opening, $closing, $title, $subjectVerb] = [
+            'upcoming' => [
+                'We are letting you know that <strong>' . $e($centreName) . '</strong> will be closed.',
+                'There is nothing you need to do. Sign-in is switched off for those days, and we will see you when we reopen.',
+                $centreName . ' will be closed',
+                'is closed',
+            ],
+            'current' => [
+                '<strong>' . $e($centreName) . '</strong> is closed at the moment. Apologies for the '
+                    . 'late notice &mdash; this has only just been added to the calendar.',
+                'There is nothing you need to do. Sign-in is switched off for these days, and we will see you when we reopen.',
+                $centreName . ' is closed',
+                'is closed',
+            ],
+            'past' => [
+                'For your records: <strong>' . $e($centreName) . '</strong> was closed on the dates below. '
+                    . 'This has just been added to the calendar, so it may be the first you have heard of it.',
+                'Nothing is needed from you &mdash; this is a record of a closure that has already passed.',
+                $centreName . ' was closed',
+                'was closed',
+            ],
+        ][$phase] ?? [
+            'We are letting you know that <strong>' . $e($centreName) . '</strong> will be closed.',
+            'There is nothing you need to do. Sign-in is switched off for those days, and we will see you when we reopen.',
+            $centreName . ' will be closed',
+            'is closed',
+        ];
+
         $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
             . '<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
-            . 'We are letting you know that <strong>' . $e($centreName) . '</strong> will be closed.</td></tr>'
+            . $opening . '</td></tr>'
             . '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
             . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">When</div>'
             . '<div style="font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 10px;">' . $e($dates) . '</div>'
             . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">Why</div>'
             . '<div style="font-size:15px;color:#0F172A;margin-top:2px;">' . $e($reason) . '</div></div></td></tr>'
             . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
-            . 'There is nothing you need to do. Sign-in is switched off for those days, and we will '
-            . 'see you when we reopen.</td></tr></table>';
+            . $closing . '</td></tr></table>';
 
         $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
             'eyebrow' => 'CENTRE CLOSURE',
-            'title' => $centreName . ' will be closed',
+            'title' => $title,
             'subtitle' => $dates . ' · ' . $reason,
             'preheader' => $centreName . ' closed ' . $dates . ' — ' . $reason,
         ]);
         $name = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''));
-        \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($html, function ($m) use ($u, $name, $centreName, $dates) {
-            $m->to($u->email, $name ?: null)->subject($centreName . ' is closed ' . $dates);
+        \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($u, $name, $centreName, $dates, $bcc, $subjectVerb) {
+            $m->to($u->email, $name ?: null)->subject($centreName . ' ' . $subjectVerb . ' ' . $dates);
+            // The director and agency admin see what their families were told, as it is
+            // sent. The reminder path has always done this; the announcement never did.
+            if ($bcc) {
+                $m->bcc($bcc);
+            }
         });
     }
 
@@ -234,7 +294,7 @@ final class OperationsV2Controller extends Controller
         $reason = \App\Support\Closures::reason($row);
 
         foreach ($this->closureWatchers((int) $centre->agency_id, $centreId) as $uid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $uid,
                 'type' => 'closure',
                 'title' => ($verb === 'removed' ? 'Closure removed: '
@@ -349,7 +409,7 @@ final class OperationsV2Controller extends Controller
         // Notify guardians
         $gids = DB::table('guardians')->where('family_id', $family->id)->pluck('user_id');
         foreach ($gids as $gid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'late_pickup',
                 'title' => "Late pickup fee \${$fee}",
                 'body' => "{$chargeable} minute(s) late on " . $pickup->format('M j') . '. Added to your next invoice.',
@@ -581,7 +641,7 @@ final class OperationsV2Controller extends Controller
         // notify family
         $gids = DB::table('guardians')->where('family_id', $child->family_id)->pluck('user_id');
         foreach ($gids as $gid) {
-            DB::table('notifications')->insert([
+            \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'room_rotation',
                 'title' => "{$child->first_name} moving rooms on " . Carbon::parse($data['rotation_date'])->format('M j'),
                 'body' => "Your child is being moved to the next age room.",
@@ -609,6 +669,192 @@ final class OperationsV2Controller extends Controller
             ->value('agency_id');
         abort_unless($first, 400);
         return (int) $first;
+    }
+
+    /**
+     * GET /operations/closure-targets — who a holiday can be applied to.
+     *
+     * Returns the agency's centres and its staff, each staff member carrying the centres
+     * they belong to, so the picker can list PEOPLE (which is how an administrator thinks
+     * about a provider holiday) while the closure is still written per CENTRE.
+     *
+     * A staff member belongs to a centre by their role row, or by an explicit room
+     * assignment — the same two facts used everywhere else to decide where somebody works.
+     */
+    public function closureTargets(Request $request): JsonResponse
+    {
+        $agencyId = (int) $request->header('X-Active-Agency-Id');
+        if (! $agencyId) {
+            $agencyId = (int) DB::table('role_assignments')->where('user_id', $request->user()->id)
+                ->where('active', true)->whereNotNull('agency_id')->value('agency_id');
+        }
+        abort_unless($agencyId, 403);
+
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->orderBy('name')->get(['id', 'name']);
+        $centreIds = $centres->pluck('id')->all();
+        if (! $centreIds) {
+            return response()->json(['centres' => [], 'staff' => []]);
+        }
+
+        $roles = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
+        $rows = DB::table('role_assignments as ra')
+            ->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', true)
+            ->whereIn('ra.role', $roles)
+            ->where('u.status', 'active')
+            ->whereNull('u.deleted_at')
+            ->where(function ($w) use ($agencyId, $centreIds) {
+                $w->where('ra.agency_id', $agencyId)->orWhereIn('ra.centre_id', $centreIds);
+            })
+            ->orderBy('u.first_name')->orderBy('u.last_name')
+            ->get(['ra.user_id', 'ra.role', 'ra.centre_id', 'u.first_name', 'u.last_name']);
+
+        // Centres reached by an explicit room assignment, for the agency-attached roles
+        // whose own row carries centre_id NULL.
+        $viaRooms = DB::table('educator_rooms as er')
+            ->join('rooms as r', 'r.id', '=', 'er.room_id')
+            ->whereIn('r.centre_id', $centreIds)
+            ->get(['er.user_id', 'r.centre_id'])
+            ->groupBy('user_id');
+
+        $staff = [];
+        foreach ($rows as $r) {
+            $uid = (int) $r->user_id;
+            if (! isset($staff[$uid])) {
+                $staff[$uid] = [
+                    'user_id' => $uid,
+                    'name' => trim($r->first_name.' '.$r->last_name),
+                    'roles' => [],
+                    'centre_ids' => [],
+                ];
+            }
+            if (! in_array($r->role, $staff[$uid]['roles'], true)) {
+                $staff[$uid]['roles'][] = $r->role;
+            }
+            if ($r->centre_id && in_array((int) $r->centre_id, $centreIds, true)) {
+                $staff[$uid]['centre_ids'][] = (int) $r->centre_id;
+            }
+            foreach (($viaRooms[$uid] ?? collect()) as $rm) {
+                $staff[$uid]['centre_ids'][] = (int) $rm->centre_id;
+            }
+        }
+        foreach ($staff as $uid => $row) {
+            $staff[$uid]['centre_ids'] = array_values(array_unique($row['centre_ids']));
+        }
+
+        return response()->json([
+            'centres' => $centres,
+            'staff' => array_values($staff),
+        ]);
+    }
+
+    /**
+     * POST /operations/closures/bulk — one holiday across several centres.
+     *
+     * Writes exactly what addClosure() writes, once per DISTINCT centre, and runs the same
+     * announcement path — a holiday is a closure, so the existing routine already covers
+     * schedule bands, autofill, educator hours and closures:remind.
+     *
+     * A centre whose date already carries a closure is SKIPPED, not doubled — the same
+     * rule holidays:sync follows, which is what makes this safe to run twice and what
+     * stops a generated stat holiday being overwritten by a hand-made one.
+     */
+    public function addClosureBulk(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'centre_ids' => 'required|array|min:1',
+            'centre_ids.*' => 'integer',
+            'closure_date' => 'required|date',
+            'end_date' => 'nullable|date|after_or_equal:closure_date',
+            'closure_type' => 'required|in:holiday,pd_day,emergency,renovation,other',
+            'reason' => 'nullable|string|max:200',
+            'affects_billing' => 'nullable|boolean',
+            'notify' => 'nullable|boolean',
+        ]);
+
+        $centreIds = array_values(array_unique(array_map('intval', $data['centre_ids'])));
+
+        // EVERY centre is checked before ANYTHING is written, so a partial write cannot
+        // leave some centres closed after a refusal half way down the list.
+        foreach ($centreIds as $cid) {
+            $this->assertCentreAccess($request, $cid);
+        }
+
+        $start = $data['closure_date'];
+        $end = $data['end_date'] ?? $data['closure_date'];
+
+        $created = [];
+        $skipped = [];
+
+        foreach ($centreIds as $cid) {
+            /* Already closed on any of these days? Leave it alone. Overlap, not equality:
+               an existing multi-day closure covering this date counts. */
+            $clash = DB::table('centre_closures')
+                ->where('centre_id', $cid)
+                ->where('closure_date', '<=', $end)
+                ->where(function ($q) use ($start) {
+                    $q->where('end_date', '>=', $start)
+                        ->orWhere(function ($q2) use ($start) {
+                            $q2->whereNull('end_date')->where('closure_date', '>=', $start);
+                        });
+                })
+                ->first(['id', 'closure_type']);
+
+            if ($clash) {
+                $skipped[] = [
+                    'centre_id' => $cid,
+                    'centre_name' => DB::table('centres')->where('id', $cid)->value('name'),
+                    'reason' => 'Already closed on that date',
+                ];
+                continue;
+            }
+
+            $id = DB::table('centre_closures')->insertGetId([
+                'centre_id' => $cid,
+                'closure_date' => $start,
+                'end_date' => $data['end_date'] ?? null,
+                'closure_type' => $data['closure_type'],
+                'reason' => $data['reason'] ?? null,
+                'affects_billing' => $data['affects_billing'] ?? true,
+                'created_by_id' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $created[] = [
+                'id' => (int) $id,
+                'centre_id' => $cid,
+                'centre_name' => DB::table('centres')->where('id', $cid)->value('name'),
+            ];
+        }
+
+        /* The SAME notification decision addClosure() makes, asked once for the agency
+           rather than per centre — telling everyone the moment a closure is entered is a
+           choice, and an agency drafting a year of dates does not want each keystroke
+           mailed out. `notify:false` from the caller suppresses it regardless. */
+        if ($created) {
+            $agencyId = (int) DB::table('centres')->where('id', $created[0]['centre_id'])->value('agency_id');
+            $aSettings = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true) ?: [];
+            $remindersOn = ($aSettings['closure_reminders_enabled'] ?? true) !== false;
+            $immediate = ($aSettings['closure_reminder_immediate'] ?? true) !== false;
+            $wants = ($data['notify'] ?? true) !== false;
+
+            foreach ($created as $row) {
+                if ($wants && $remindersOn && $immediate) {
+                    $this->announceClosure($row['id'], $row['centre_id']);
+                }
+                // Admins and directors who hold no role AT the centre are told either way.
+                $this->announceClosureChange($row['id'], $row['centre_id'], 'added');
+            }
+        }
+
+        return response()->json([
+            'created' => $created,
+            'skipped' => $skipped,
+            'created_count' => count($created),
+            'skipped_count' => count($skipped),
+        ], 201);
     }
 
     private function assertCentreAccess(Request $request, int $centreId): void

@@ -51,8 +51,14 @@ class PayrollDocumentController extends Controller
     {
         $agencyId = $this->agency($request);
 
+        /* The payee's own address travels with the row so "email this payslip" can be
+           PREFILLED rather than typed from memory. leftJoin because a synced document can
+           carry a payee name and no account behind it — those simply get no default, which
+           is the honest answer. The endpoint still requires an address either way: a
+           default recipient is how somebody's pay reaches an inbox nobody chose. */
         $q = DB::table('payroll_documents as pd')
             ->leftJoin('centres as c', 'c.id', '=', 'pd.centre_id')
+            ->leftJoin('users as pu', 'pu.id', '=', 'pd.user_id')
             ->where('pd.agency_id', $agencyId);
 
         if ($from = $request->query('from')) {
@@ -84,6 +90,7 @@ class PayrollDocumentController extends Controller
                 'pd.kind', 'pd.reference', 'pd.period_start', 'pd.period_end',
                 'pd.units', 'pd.unit_label', 'pd.rate', 'pd.gross', 'pd.net', 'pd.currency',
                 'pd.status', 'pd.source', 'pd.issued_at', 'pd.paid_at', 'c.name as centre_name',
+                'pu.email as payee_email',
             ]);
 
         $totals = [];
@@ -146,6 +153,129 @@ class PayrollDocumentController extends Controller
         ]);
 
         return response()->json(['ok' => true, 'status' => $status]);
+    }
+
+    /**
+     * Email a payslip to a named address, with the PDF attached.
+     *
+     * The attachment comes from pdf() rather than being drawn again here. That endpoint
+     * serves the SOURCE system's document when one exists — iLearn's payslip carries
+     * branding, the non-employee clause and year-to-date figures a locally-drawn one
+     * does not — so rendering a second copy would email somebody a different payslip
+     * from the one they can download a moment later.
+     */
+    public function email(Request $request, int $id): JsonResponse
+    {
+        /* REQUIRED. An optional recipient falling back to "whoever this document
+           belongs to" means any request that loses the field silently posts a person's
+           pay to an address nobody chose. The dialog prefills it. */
+        $data = $request->validate([
+            'to' => 'required|email|max:180',
+            'message' => 'nullable|string|max:800',
+        ]);
+
+        $agencyId = $this->agency($request);
+        $doc = DB::table('payroll_documents')->where('id', $id)->where('agency_id', $agencyId)->first();
+        abort_unless($doc, 404, 'Not found.');
+
+        if (! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) {
+            return response()->json([
+                'sent' => false,
+                'reason' => 'Email is switched off for this agency (Settings → "Send notifications and emails").',
+            ], 409);
+        }
+
+        $agency = DB::table('agencies')->where('id', $agencyId)->first(['name']);
+        $agencyName = $agency->name ?? 'your agency';
+        $who = trim((string) ($doc->payee_name ?: ''));
+        if ($who === '' && $doc->user_id) {
+            $u = DB::table('users')->where('id', $doc->user_id)->first(['first_name', 'last_name']);
+            $who = $u ? trim($u->first_name . ' ' . $u->last_name) : '';
+        }
+        $period = trim((string) $doc->period_start) === trim((string) $doc->period_end)
+            ? (string) $doc->period_end
+            : $doc->period_start . ' to ' . $doc->period_end;
+        $label = $doc->kind === 'invoice' ? 'payroll invoice' : 'payslip';
+
+        // The document, before the send: a failure here is a missing attachment, never
+        // a half-sent message.
+        $pdfBytes = null;
+        try {
+            $pdfBytes = $this->pdf($request, $id)->getContent();
+            if (! is_string($pdfBytes) || ! str_starts_with($pdfBytes, '%PDF')) { $pdfBytes = null; }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        $note = trim((string) ($data['message'] ?? ''));
+        $body = '<p>Hello' . ($who !== '' ? ' ' . e($who) : '') . ',</p>'
+            . '<p>Your ' . $label . ' for <strong>' . e($period) . '</strong> is attached.</p>'
+            . ($note !== '' ? '<p>' . nl2br(e($note)) . '</p>' : '')
+            . '<p style="color:#64748b;font-size:13px;">Net pay on this ' . $label . ': <strong>$'
+            . number_format((float) $doc->net, 2) . '</strong>.</p>';
+
+        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+            'eyebrow' => strtoupper($label),
+            'title' => $agencyName,
+            'subtitle' => ucfirst($label) . ' — ' . $period,
+            'preheader' => ucfirst($label) . ' for ' . $period . ' from ' . $agencyName,
+        ]);
+
+        $subject = ucfirst($label) . ' — ' . $period . ' — ' . $agencyName;
+        $to = $data['to'];
+        $sentAt = now();
+
+        try {
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
+                function ($m) use ($to, $who, $subject, $pdfBytes, $doc, $label) {
+                    $m->to($to, $who !== '' ? $who : null)->subject($subject);
+                    if ($pdfBytes !== null) {
+                        $m->attachData($pdfBytes,
+                            str_replace(' ', '-', $label) . '-' . ($doc->period_end ?: $doc->id) . '.pdf',
+                            ['mime' => 'application/pdf']);
+                    }
+                });
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['sent' => false, 'reason' => 'The mail server refused it: ' . $e->getMessage()], 502);
+        }
+
+        /* WHAT HAPPENED, not what was attempted. The suppression listener sits on
+           MessageSending and can hold this back after the mailer has accepted it;
+           reporting sent:true regardless would tell an admin somebody has their pay
+           slip when nothing left the building. */
+        $verdict = DB::table('email_logs')
+            ->whereRaw('LOWER(to_email) = ?', [mb_strtolower($to)])
+            ->where('created_at', '>=', $sentAt->copy()->subMinutes(2))
+            ->orderByDesc('id')->first(['status', 'error']);
+        $blocked = $verdict && strtolower((string) $verdict->status) === 'suppressed';
+
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id,
+            'agency_id' => $agencyId,
+            'action' => 'payroll_document.emailed',
+            'entity_type' => 'payroll_document',
+            'entity_id' => $id,
+            'payload' => json_encode([
+                'summary' => ($blocked ? 'Tried to email' : 'Emailed') . ' the ' . $label . ' for '
+                    . ($who ?: 'a payee') . ' covering ' . $period . ' to ' . $to
+                    . ($blocked ? ' — held back by a mail switch' : ''),
+                'to' => $to,
+                'document_id' => $id,
+                'net' => (float) $doc->net,
+                'attachment' => $pdfBytes !== null,
+                'delivered' => ! $blocked,
+            ]),
+        ]);
+
+        return response()->json([
+            'sent' => ! $blocked,
+            'attachment' => $pdfBytes !== null,
+            'reason' => $blocked
+                ? 'The mail layer held it back: ' . ($verdict->error ?: 'a delivery switch is off for this recipient.')
+                : null,
+        ]);
     }
 
     /** Re-run the backfill for this agency. Idempotent, so it is safe to press twice. */

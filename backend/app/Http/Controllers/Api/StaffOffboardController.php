@@ -508,8 +508,7 @@ final class StaffOffboardController extends Controller
                 'preheader' => 'Your last day with ' . $agencyName . ' and your final pay.',
             ]);
 
-            \App\Services\AgencyMailer::forAgency($agencyId)->mailer()
-                ->html($html, function ($m) use ($user, $agencyName) {
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($user, $agencyName) {
                     $m->to($user->email)->subject('Leaving ' . $agencyName . ' — your access and final pay');
                     // The account is deactivated moments after this, and a closed account
                     // is exactly what the mail gate blocks.

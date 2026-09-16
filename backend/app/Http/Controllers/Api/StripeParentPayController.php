@@ -37,7 +37,7 @@ final class StripeParentPayController extends Controller
 {
     public function __construct()
     {
-        $key = env('STRIPE_SECRET');
+        $key = \App\Support\StripeConfig::secret();
         if ($key) Stripe::setApiKey($key);
     }
 
@@ -54,7 +54,7 @@ final class StripeParentPayController extends Controller
 
     public function setupIntent(Request $request): JsonResponse
     {
-        abort_unless(env('STRIPE_SECRET'), 503, 'Stripe not configured');
+        abort_unless(\App\Support\StripeConfig::secret(), 503, 'Stripe not configured');
         $family = $this->parentFamily($request);
         $customerId = $family->stripe_customer_id;
         if (!$customerId) {
@@ -74,13 +74,13 @@ final class StripeParentPayController extends Controller
         ]);
         return response()->json([
             'client_secret' => $si->client_secret,
-            'publishable_key' => env('STRIPE_KEY'),
+            'publishable_key' => \App\Support\StripeConfig::publishable(),
         ]);
     }
 
     public function saveCard(Request $request): JsonResponse
     {
-        abort_unless(env('STRIPE_SECRET'), 503);
+        abort_unless(\App\Support\StripeConfig::secret(), 503, \App\Support\StripeConfig::NOT_CONFIGURED);
         $data = $request->validate(['payment_method' => 'required|string']);
         $family = $this->parentFamily($request);
         PaymentMethod::retrieve($data['payment_method'])
@@ -115,7 +115,7 @@ final class StripeParentPayController extends Controller
      */
     public function chargeInvoice(Request $request, int $invoiceId): JsonResponse
     {
-        abort_unless(env('STRIPE_SECRET'), 503);
+        abort_unless(\App\Support\StripeConfig::secret(), 503, \App\Support\StripeConfig::NOT_CONFIGURED);
         $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
         abort_unless($invoice, 404);
         $family = DB::table('families')->where('id', $invoice->family_id)->first();
@@ -167,9 +167,15 @@ final class StripeParentPayController extends Controller
                     DB::table('payments')->insert([
                         'invoice_id'   => $invoiceId,
                         'amount'       => $amount,
-                        'method'       => 'stripe',
+                        // 'stripe' was never a member of payments.method — the insert
+                        // would have failed on the enum even with the right column names.
+                        'method'       => 'stripe_card',
                         'paid_at'      => now(),
-                        'stripe_pi_id' => $pi->id,
+                        // Column is stripe_payment_id. As stripe_pi_id it threw, so a
+                        // charge Stripe had already taken was never written down.
+                        'stripe_payment_id' => $pi->id,
+                        'status'       => 'succeeded',
+                        'family_id'    => $invoice->family_id ?? null,
                         'created_at'   => now(),
                         'updated_at'   => now(),
                     ]);

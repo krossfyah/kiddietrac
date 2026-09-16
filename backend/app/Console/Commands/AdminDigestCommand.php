@@ -72,7 +72,17 @@ class AdminDigestCommand extends Command
 
             foreach ($this->recipients((int) $agency->id, $test) as $r) {
                 try {
-                    AgencyMailer::forAgency((int) $agency->id)->mailer()->html($html, function ($m) use ($r, $subject, $test) {
+                    AgencyMailer::forAgency((int) $agency->id)->html($html, function ($m) use ($r, $subject, $test, $agency) {
+                        // Engagement mail: withheld from accounts nobody has claimed.
+                        try { $m->getHeaders()->addTextHeader('X-KT-Engagement', '1'); }
+                        catch (\Throwable $e) {}
+                        // Say which agency this belongs to. Without it the mail layer falls
+                        // back to resolving a tenant from the recipient's ADDRESS, and an
+                        // address that exists in two agencies then resolves to whichever was
+                        // found first — which is how one agency's send was logged under
+                        // another's audit trail. A sender that knows its agency must say so.
+                        try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) (int) $agency->id); }
+                        catch (\Throwable $e) {}
                         $m->to($r->email, trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')))->subject($subject);
                         if ($test) {
                             // A test must reach the tester regardless of agency suppression.

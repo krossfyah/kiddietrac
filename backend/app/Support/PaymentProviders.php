@@ -28,6 +28,12 @@ final class PaymentProviders
     private const FIELDS = [
         self::ZUM => [
             'base_url' => ['label' => 'API base URL', 'secret' => false],
+            /* Zum's own quickstart posts a WalletId alongside every transaction, and
+               their docs say plainly: "If you are using the API, you will need the
+               wallet ID to create transactions involving wallet." Money collected from
+               a parent lands in the agency's Zum wallet and money paid out leaves it,
+               so without this there is nowhere for a transaction to go. */
+            'wallet_id' => ['label' => 'Zum wallet ID', 'secret' => false],
             'username' => ['label' => 'API username', 'secret' => true],
             'password' => ['label' => 'API password', 'secret' => true],
             'webhook_secret' => ['label' => 'Webhook secret', 'secret' => true],
@@ -152,6 +158,20 @@ final class PaymentProviders
      * screen that cannot show the current value would wipe the keys. To clear one, send
      * the string 'null'.
      */
+    /**
+     * sandbox or production, for a configured provider.
+     *
+     * Whether money is real is not a detail a caller should have to dig for. The parent
+     * billing screen in particular has to say so out loud: a sandbox provider enabled on
+     * a live agency puts working-looking payment buttons in front of real families.
+     */
+    public static function mode(int $agencyId, string $provider): ?string
+    {
+        $row = self::row($agencyId, $provider);
+
+        return $row ? ($row->mode ?: 'sandbox') : null;
+    }
+
     public static function save(int $agencyId, string $provider, array $values, ?int $byUserId = null): void
     {
         $existing = self::configAllowingDisabled($agencyId, $provider);
@@ -206,6 +226,100 @@ final class PaymentProviders
      * secret against each configured agency in turn, compared in constant time. Returns
      * null when nothing matches — an unmatched callback is never guessed at.
      */
+    /**
+     * Which agency signed this callback, given the raw body and the signature header.
+     *
+     * Zum signs with HMAC-SHA256 over the raw request body, keyed with the webhook secret
+     * we set in their portal — and because each agency has its own secret, the signature
+     * is also the identity. That is why this returns an agency rather than a boolean.
+     *
+     * The RAW body matters. Re-serialising the parsed payload would change key order and
+     * spacing and produce a different digest for the same message, so the caller must pass
+     * $request->getContent(), never json_encode($request->all()).
+     *
+     * Hex and base64 are both accepted because providers differ in how they render the
+     * digest, and the plaintext secret is still honoured last for a static-secret setup.
+     * Every comparison is constant time.
+     */
+    /**
+     * EVERY agency whose secret validates this signature.
+     *
+     * Two agencies can share one provider account — a sandbox pointed at by both —
+     * and then they share a webhook secret, so the singular form below can only
+     * return the first of them. Callers that need to attribute a callback to a
+     * specific record should take the candidates from here and let the record's own
+     * agency decide, checking it is among them.
+     */
+    public static function agenciesForWebhookSignature(string $provider, string $given, string $rawBody): array
+    {
+        $given = trim($given);
+        if ($given === '') {
+            return [];
+        }
+        if (str_contains($given, '=') && ! str_ends_with($given, '=')) {
+            $parts = explode('=', $given, 2);
+            if (strlen($parts[1]) > 16) {
+                $given = $parts[1];
+            }
+        }
+
+        $out = [];
+        $rows = DB::table('agency_payment_providers')
+            ->where('provider', $provider)->where('enabled', true)->get(['agency_id']);
+
+        foreach ($rows as $r) {
+            $secret = (string) (self::config((int) $r->agency_id, $provider)['webhook_secret'] ?? '');
+            if ($secret === '') {
+                continue;
+            }
+            $hex = hash_hmac('sha256', $rawBody, $secret);
+            $b64 = base64_encode(hex2bin($hex) ?: '');
+            if (hash_equals($hex, strtolower($given))
+                || hash_equals($b64, $given)
+                || hash_equals($secret, $given)) {
+                $out[] = (int) $r->agency_id;
+            }
+        }
+
+        return $out;
+    }
+
+    public static function agencyForWebhookSignature(string $provider, string $given, string $rawBody): ?int
+    {
+        $given = trim($given);
+        if ($given === '') {
+            return null;
+        }
+        // Some senders prefix the scheme, e.g. "sha256=abc123".
+        if (str_contains($given, '=') && ! str_ends_with($given, '=')) {
+            $parts = explode('=', $given, 2);
+            if (strlen($parts[1]) > 16) {
+                $given = $parts[1];
+            }
+        }
+
+        $rows = DB::table('agency_payment_providers')
+            ->where('provider', $provider)->where('enabled', true)->get(['agency_id']);
+
+        foreach ($rows as $r) {
+            $secret = (string) (self::config((int) $r->agency_id, $provider)['webhook_secret'] ?? '');
+            if ($secret === '') {
+                continue;
+            }
+
+            $hex = hash_hmac('sha256', $rawBody, $secret);
+            $b64 = base64_encode(hex2bin($hex) ?: '');
+
+            if (hash_equals($hex, strtolower($given))
+                || hash_equals($b64, $given)
+                || hash_equals($secret, $given)) {
+                return (int) $r->agency_id;
+            }
+        }
+
+        return null;
+    }
+
     public static function agencyForWebhookSecret(string $provider, string $given): ?int
     {
         if ($given === '') {

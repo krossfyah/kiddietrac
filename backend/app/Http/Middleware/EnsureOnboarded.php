@@ -51,8 +51,8 @@ class EnsureOnboarded
         }
 
         // Platform admins are never trapped.
-        $isPlatform = DB::table('role_assignments')->where('user_id', $user->id)
-            ->where('role', 'platform_admin')->where('active', true)->exists();
+        // Same question, one shared read per request. See App\Support\UserRoles.
+        $isPlatform = \App\Support\UserRoles::has($request, 'platform_admin');
         if ($isPlatform) {
             return $next($request);
         }
@@ -91,6 +91,20 @@ class EnsureOnboarded
         }
         // App chrome the onboarding screen needs.
         if ($p === 'branding') {
+            return true;
+        }
+        /* THE PARENT WIZARD'S OWN ENDPOINTS. Without these the gate blocked the very
+           screen it exists to enforce: a guardian could not read their children, save
+           them, or upload their photos, so onboarding could never be completed and the
+           wizard reported "please check your connection" (the client turns this 403 into
+           a network message). Reported by Shantel, 2026-09-07, and it affected every
+           guardian mid-onboarding.
+
+           Safe to open: these routes are already behind auth:sanctum AND role:guardian,
+           and the controller resolves ownChildIds($request->user()->id), so a caller can
+           only ever reach their OWN children. Matched by prefix because two of the three
+           carry a {child} id — and because listing exact paths is what let this happen. */
+        if ($p === 'parent/onboarding' || str_starts_with($p, 'parent/onboarding/')) {
             return true;
         }
         // Agency-admin onboarding steps (country, white-label/features, team invites).

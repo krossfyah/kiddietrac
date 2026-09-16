@@ -89,9 +89,12 @@ class SiteSubscriberController extends Controller
         // done. Guarded — a failed receipt must not undo the removal.
         try {
             \Illuminate\Support\Facades\Mail::to($row->email)
-                ->send(new \App\Mail\SubscriberUnsubscribed(
+                ->send((new \App\Mail\SubscriberUnsubscribed(
                     (string) $row->email, (string) ($row->name ?? ''), 'admin'
-                ));
+                ))->withSymfonyMessage(function ($msg) {
+                    // Marketing-site subscriber, not a tenant's contact.
+                    \App\Support\MailScope::platform($msg);
+                }));
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Unsubscribe confirmation failed', [
                 'email' => $row->email, 'error' => $e->getMessage(),
