@@ -80,6 +80,31 @@ final class CentreOffboardController extends Controller
             $staff = count($report['staff_closed'] ?? []);
             $errors = $report['errors'] ?? [];
 
+        /* WHERE THE CHILDREN ACTUALLY ENDED UP.
+           Counts of "transferred" and "withdrawn" say what the operation did; they do not
+           say whether anybody is still standing in a provider that has just closed, which
+           is the one thing a director has to act on before tomorrow morning. Counted from
+           the database after the work, not inferred from the plan. */
+        $stillEnrolledAfter = 0;
+        $roomsLeft = [];
+        try {
+            $stillEnrolledAfter = DB::table('children as ch')
+                ->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->where('f.centre_id', $centre->id)
+                ->where('ch.enrollment_status', 'enrolled')
+                ->whereNull('ch.deleted_at')->count();
+
+            $roomsLeft = DB::table('rooms as r')
+                ->leftJoin('enrollments as e', function ($j) {
+                    $j->on('e.room_id', '=', 'r.id')->whereNull('e.end_date');
+                })
+                ->where('r.centre_id', $centre->id)
+                ->groupBy('r.id', 'r.name')
+                ->select('r.name', DB::raw('COUNT(DISTINCT e.child_id) as kids'))
+                ->get()->filter(fn ($x) => (int) $x->kids > 0)->values()->all();
+        } catch (\Throwable $e) {
+        }
+
             $line = function (string $label, string $value) {
                 return '<tr><td style="padding:7px 12px 7px 0;color:#64748B;white-space:nowrap;">'.e($label)
                     .'</td><td style="padding:7px 0;color:#0F172A;font-weight:600;">'.e($value).'</td></tr>';
@@ -94,6 +119,29 @@ final class CentreOffboardController extends Controller
                 .$line('Staff accounts closed', (string) $staff)
                 .$line('Archived', ! empty($data['archive']) ? 'yes' : 'no')
                 .'</table>'
+
+                /* The ratio question, answered plainly. Silence here would read as "all
+                   clear", and the one case worth emailing about is the one where it is
+                   not. */
+                .($stillEnrolledAfter > 0
+                    ? '<div style="background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;'
+                        .'border-radius:12px;padding:14px 16px;margin:0 0 16px;">'
+                        .'<div style="font-weight:800;color:#991B1B;font-size:14.5px;">'
+                        .$stillEnrolledAfter.' child'.($stillEnrolledAfter === 1 ? ' is' : 'ren are')
+                        .' still enrolled here</div>'
+                        .'<div style="color:#7F1D1D;font-size:13px;margin-top:4px;line-height:1.55;">'
+                        .'They have nowhere to be tomorrow and no staff assigned to them. '
+                        .'Transfer or withdraw them before this provider stops operating.</div>'
+                        .($roomsLeft
+                            ? '<ul style="margin:10px 0 0;padding-left:18px;color:#7F1D1D;font-size:13px;">'
+                                .implode('', array_map(function ($r) {
+                                    return '<li style="margin:2px 0;">'.e($r->name ?: 'Room').' — '
+                                        .(int) $r->kids.' child'.((int) $r->kids === 1 ? '' : 'ren').'</li>';
+                                }, $roomsLeft)).'</ul>'
+                            : '')
+                        .'</div>'
+                    : '<p style="margin:0 0 16px;color:#166534;">No children remain enrolled here — '
+                        .'every place has been moved or ended, so no ratio is left open.</p>')
                 /* Say what did not work, in the same breath. A closure that half-happened
                    and reported success is the one outcome nobody could act on. */
                 .($errors

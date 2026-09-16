@@ -421,6 +421,15 @@ final class EmailCatalogue
                 'preview' => 'none',
             ],
             [
+                'key' => 'staff-offboarded', 'audience' => 'office',
+                'name' => 'Staff off-boarded — rooms and ratio impact',
+                'fires' => 'When a staff member is off-boarded, after the work is done. Leads with any room they were the only educator on and how many children are enrolled there.',
+                'to' => 'The agency\'s admins and the directors of their centres, minus whoever did it',
+                'subject' => 'Staff off-boarded — {name} ({n} rooms uncovered)',
+                'source' => 'Http/Controllers/Api/StaffOffboardController.php:notifyOffice',
+                'preview' => 'none',
+            ],
+            [
                 'key' => 'provider-closed', 'audience' => 'office',
                 'name' => 'Provider closed',
                 'fires' => 'When a provider is closed through the off-boarding flow, after the work is done — it reports what actually happened, including anything that failed.',

@@ -294,6 +294,9 @@ final class StaffOffboardController extends Controller
             ]);
         } catch (\Throwable $e) { /* auditing must never break the departure */ }
 
+        /* AFTER the work, so it reports what actually happened rather than the plan. */
+        $this->notifyOffice($user, $agencyId, $lastDay, $rooms, $report, $unpaid);
+
         return response()->json([
             'ok' => empty($report['errors']),
             'report' => $report,
@@ -340,6 +343,159 @@ final class StaffOffboardController extends Controller
         }
 
         return [$user, $agencyId];
+    }
+
+    /**
+     * Tell the office what this departure leaves behind.
+     *
+     * Off-boarding emailed exactly one person: the educator leaving. The directors and
+     * admins who have to cover her rooms on Monday were told nothing — they were BCC'd
+     * on the "your account has been deactivated" notice, which is about her access and
+     * says nothing about children, rooms or ratios.
+     *
+     * THE RATIO FACT IS THE POINT OF THIS EMAIL. A room she was the only educator on is a
+     * room that opens tomorrow with nobody assigned to it, and the number of children
+     * enrolled there is exactly how big that problem is. Everything else here is
+     * housekeeping by comparison.
+     *
+     * Best-effort throughout: a notice that fails must never undo an off-boarding that
+     * has already happened. (Anthony, 2026-09-16)
+     */
+    private function notifyOffice(object $user, int $agencyId, string $lastDay, array $rooms, array $report, $unpaid): void
+    {
+        try {
+            $actorId = (int) (request()->user()->id ?? 0);
+            $centreIds = collect($rooms)->pluck('room_id')->filter()->all();
+            $centreIds = $centreIds
+                ? DB::table('rooms')->whereIn('id', $centreIds)->pluck('centre_id')->filter()->unique()->all()
+                : [];
+
+            $to = DB::table('role_assignments as ra')
+                ->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.active', 1)
+                ->where(function ($q) use ($agencyId, $centreIds) {
+                    $q->where(function ($x) use ($agencyId) {
+                        $x->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId);
+                    });
+                    if ($centreIds) {
+                        $q->orWhere(function ($x) use ($centreIds) {
+                            $x->where('ra.role', 'centre_director')->whereIn('ra.centre_id', $centreIds);
+                        });
+                    }
+                })
+                ->where('u.id', '!=', $actorId)
+                ->whereNull('u.deleted_at')->whereNotNull('u.email')
+                ->distinct()->pluck('u.email')->filter()->unique()->values()->all();
+            if (! $to) {
+                return;
+            }
+
+            $name = trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: 'A staff member';
+            $actor = DB::table('users')->where('id', $actorId)->first(['first_name', 'last_name']);
+            $actorName = trim(($actor->first_name ?? '').' '.($actor->last_name ?? '')) ?: 'An administrator';
+
+            /* Children per room, counted now. "3 children in a room with nobody on it" is
+               a sentence a director can act on; "1 room uncovered" is not. */
+            $uncovered = [];
+            $covered = [];
+            foreach ($rooms as $r) {
+                $kids = 0;
+                try {
+                    $kids = DB::table('enrollments as e')
+                        ->join('children as ch', 'ch.id', '=', 'e.child_id')
+                        ->where('e.room_id', $r['room_id'])->whereNull('e.end_date')
+                        ->whereNull('ch.deleted_at')->where('ch.enrollment_status', 'enrolled')
+                        ->distinct()->count('ch.id');
+                } catch (\Throwable $e) {
+                }
+                $row = ['name' => ($r['centre_name'] ? $r['centre_name'].' · ' : '').$r['name'],
+                        'kids' => $kids, 'others' => (int) ($r['other_educators'] ?? 0)];
+                if ($row['others'] === 0) { $uncovered[] = $row; } else { $covered[] = $row; }
+            }
+            $kidsAffected = array_sum(array_column($uncovered, 'kids'));
+
+            $line = function (string $label, string $value) {
+                return '<tr><td style="padding:7px 12px 7px 0;color:#64748B;white-space:nowrap;">'.e($label)
+                    .'</td><td style="padding:7px 0;color:#0F172A;font-weight:600;">'.e($value).'</td></tr>';
+            };
+
+            $body = '<p style="margin:0 0 14px;"><strong>'.e($actorName).'</strong> off-boarded '
+                .'<strong>'.e($name).'</strong>.</p>'
+
+                .($uncovered
+                    ? '<div style="background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;'
+                        .'border-radius:12px;padding:14px 16px;margin:0 0 16px;">'
+                        .'<div style="font-weight:800;color:#991B1B;font-size:14.5px;">'
+                        .count($uncovered).' room'.(count($uncovered) === 1 ? '' : 's')
+                        .' now have no other educator assigned</div>'
+                        .'<div style="color:#7F1D1D;font-size:13px;margin-top:4px;line-height:1.55;">'
+                        .($kidsAffected > 0
+                            ? $kidsAffected.' enrolled child'.($kidsAffected === 1 ? '' : 'ren')
+                                .' sit in those rooms. Ratios there will not be met until somebody is assigned.'
+                            : 'No children are enrolled in them at the moment.')
+                        .'</div>'
+                        .'<ul style="margin:10px 0 0;padding-left:18px;color:#7F1D1D;font-size:13px;">'
+                        .implode('', array_map(function ($r) {
+                            return '<li style="margin:2px 0;">'.e($r['name']).' — '
+                                .$r['kids'].' child'.($r['kids'] === 1 ? '' : 'ren').'</li>';
+                        }, $uncovered))
+                        .'</ul></div>'
+                    : '<p style="margin:0 0 16px;color:#166534;">Every room they held is still covered by '
+                        .'another educator.</p>')
+
+                .'<table role="presentation" style="border-collapse:collapse;font-size:14px;margin:0 0 16px;">'
+                .$line('Last working day', $lastDay)
+                .$line('Rooms they held', (string) count($rooms))
+                .$line('Rooms handed over', (string) ($report['reassigned'] ?? 0))
+                .$line('Future shifts cancelled', (string) ($report['shifts_cancelled'] ?? 0))
+                .$line('Open shifts closed', (string) ($report['punches_closed'] ?? 0))
+                .$line('Tasks reassigned', (string) ($report['tasks_moved'] ?? 0))
+                .(isset($unpaid['hours']) && (float) $unpaid['hours'] > 0
+                    ? $line('Unpaid hours outstanding', (string) $unpaid['hours'])
+                    : '')
+                .'</table>'
+
+                .($covered
+                    ? '<p style="margin:0 0 6px;font-weight:700;color:#475569;">Still covered:</p>'
+                        .'<ul style="margin:0 0 14px;padding-left:18px;color:#0F172A;font-size:13.5px;">'
+                        .implode('', array_map(function ($r) {
+                            return '<li style="margin:2px 0;">'.e($r['name']).' — '.$r['others']
+                                .' other educator'.($r['others'] === 1 ? '' : 's').'</li>';
+                        }, $covered)).'</ul>'
+                    : '')
+
+                .(! empty($report['errors'])
+                    ? '<p style="margin:0 0 6px;font-weight:700;color:#B91C1C;">'
+                        .count($report['errors']).' step(s) did not complete:</p>'
+                        .'<ul style="margin:0 0 14px;padding-left:18px;color:#0F172A;">'
+                        .implode('', array_map(function ($e) {
+                            return '<li style="margin:2px 0;">'.e(($e['stage'] ?? 'step').': '.($e['message'] ?? '')).'</li>';
+                        }, array_slice($report['errors'], 0, 10))).'</ul>'
+                    : '')
+
+                .'<p style="margin:0;font-size:12.5px;color:#64748B;">Room assignments are on the '
+                .'educator\'s record; ratios are on Room ratios. The full detail is in the audit log.</p>';
+
+            $subject = 'Staff off-boarded — '.$name
+                .($uncovered ? ' ('.count($uncovered).' room'.(count($uncovered) === 1 ? '' : 's').' uncovered)' : '');
+
+            $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+                'eyebrow' => 'Staffing',
+                'title' => $subject,
+                'preheader' => $actorName.' off-boarded '.$name,
+            ]);
+
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject) {
+                $m->to($to[0])->subject($subject);
+                if (count($to) > 1) {
+                    $m->bcc(array_slice($to, 1));
+                }
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Staff off-board notice failed', [
+                'user' => $user->id ?? null, 'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function roomsFor(int $userId): array
