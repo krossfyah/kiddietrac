@@ -57,6 +57,106 @@
     } catch (e) { try { w.location.href = url; } catch (_e) {} }
   }
 
+  /* ANDROID'S WEBVIEW CANNOT RENDER A PDF. AT ALL.
+
+     Desktop Chrome and iOS WKWebView both have a built-in PDF viewer, so
+     `<iframe src="…pdf">` shows the document and the panel looked finished. Android's
+     WebView has no such viewer and no plugin to fall back on: the iframe loads, renders
+     nothing, and you get a blank white rectangle inside a correct-looking dialog.
+     Anthony, 2026-09-15: "viewing immuzation upload files on mobile apk doesnt show the
+     contents in the popup and a blank window."
+
+     pdf.js draws to a canvas, which a WebView renders like any other drawing — it is how
+     kt-form-filler already shows a fillable form inside the APK, so the library, the
+     version and the worker URL are deliberately the same three constants. A second
+     viewer built a different way would disagree with that one within a month.
+
+     Only PDFs, and only where the frame cannot do it: an image is an <img>, and desktop
+     keeps the iframe, which is lighter and needs no network. And if the library will not
+     load — offline, CDN blocked — the panel says so and offers to hand the file to the
+     system, which is the one thing it must never do SILENTLY. */
+  /* SERVED BY US, NOT BY A CDN, and that is the whole reason this works.
+
+     From unpkg, getDocument() parsed the file fine — page count, page size, all
+     correct — and page.render() then hung forever against a blank canvas. Rendering
+     is the part that needs the WORKER, and a Worker cannot be constructed from
+     another origin; pdf.js falls back to a fake worker that never settles here,
+     with nothing in the console to say so. Measured: settled='pending', ink=0 on a
+     900x585 canvas that was fully opaque and completely empty.
+
+     Same-origin also means it works with no network at all, which matters for an
+     app people open in a car park. 1.4MB, fetched only when somebody actually opens
+     a PDF. (2026-09-15) */
+  /* Generous: a health-unit printout on a slow phone is a real case, and cutting a
+     working render short to show an error would be its own bug. */
+  var RENDER_WATCHDOG_MS = 12000;
+  var PDFJS_URL = '/js/vendor/pdf.min.js';
+  var PDFJS_WORKER = '/js/vendor/pdf.worker.min.js';
+
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var existing = d.querySelector('script[data-kt-lib="' + src + '"]');
+      if (existing) {
+        if (existing.dataset.loaded) { return res(); }
+        existing.addEventListener('load', function () { res(); });
+        existing.addEventListener('error', rej);
+        return;
+      }
+      var el = d.createElement('script');
+      el.src = src; el.async = true; el.setAttribute('data-kt-lib', src);
+      el.onload = function () { el.dataset.loaded = '1'; res(); };
+      el.onerror = function () { rej(new Error('Could not load ' + src)); };
+      d.head.appendChild(el);
+    });
+  }
+
+  function ensurePdfJs() {
+    return loadScript(PDFJS_URL).then(function () {
+      var lib = w.pdfjsLib || w.pdfjsDistBuildPdf;
+      if (!lib) { throw new Error('PDF viewer failed to load'); }
+      try { lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; } catch (e) {}
+      return lib;
+    });
+  }
+
+  /* Every page, top to bottom, in one scrolling column. A card is one page and a health
+     unit printout is three; paging controls would be furniture for a document you are
+     going to scroll anyway. */
+  function renderPdfInto(host, buf) {
+    return ensurePdfJs().then(function (pdfjs) {
+      return pdfjs.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
+    }).then(function (doc) {
+      host.innerHTML = '';
+      var width = Math.max(280, Math.min(900, host.clientWidth - 24));
+      var chain = Promise.resolve();
+      for (var i = 1; i <= doc.numPages; i++) {
+        (function (n) {
+          chain = chain.then(function () {
+            return doc.getPage(n).then(function (page) {
+              var base = page.getViewport({ scale: 1 });
+              var viewport = page.getViewport({ scale: width / base.width });
+              var canvas = d.createElement('canvas');
+              // Device resolution so text stays crisp, capped at 2 — at dpr 3 the canvas
+              // is 9x the pixel area for no perceptible gain, which is most of why the
+              // form filler used to crawl in the APK.
+              var dpr = Math.min(2, w.devicePixelRatio || 1);
+              canvas.width = Math.floor(viewport.width * dpr);
+              canvas.height = Math.floor(viewport.height * dpr);
+              canvas.style.cssText = 'display:block;margin:0 auto 12px;width:'
+                + Math.floor(viewport.width) + 'px;max-width:100%;border-radius:6px;background:#fff;'
+                + 'box-shadow:0 2px 10px rgba(8,20,40,.25);';
+              host.appendChild(canvas);
+              var ctx = canvas.getContext('2d');
+              ctx.scale(dpr, dpr);
+              return page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            });
+          });
+        }(i));
+      }
+      return chain;
+    });
+  }
+
   function view(url, opts) {
     if (!url) return null;
     opts = opts || {};
@@ -74,7 +174,18 @@
        PDF and everything fetched through an authorised request landed in the iframe.
        An <img> scales and centres properly where an iframe shows a scrollbox, so the
        caller — who has the Blob and therefore its MIME type — can say. */
-    var inner = (isImage(url) || opts.image)
+    /* A PDF in a WebView needs canvas, not a frame — see the note above. Decided from
+       the MIME type the caller passed (it holds the Blob) and the URL as a fallback,
+       because a blob: URL has no extension to read. */
+    var mime = String(opts.mime || '');
+    var looksPdf = /pdf/i.test(mime) || /\.pdf(\?|#|$)/i.test(String(url || ''));
+    var usePdfJs = looksPdf && nativePrintUnavailable();
+
+    var inner = usePdfJs
+      ? '<div class="ktdv-pdf" data-kt-scroll="1" style="flex:1;overflow:auto;background:#0B1220;padding:14px 12px;">'
+        + '<div style="color:#94A3B8;font-size:13px;text-align:center;padding:18px;">Opening the document…</div>'
+        + '</div>'
+      : (isImage(url) || opts.image)
       ? '<div style="flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;">'
         + '<img src="' + esc(url) + '" alt="' + esc(title) + '" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;">'
         + '</div>'
@@ -104,6 +215,58 @@
       try { if (opts.onClose) opts.onClose(); } catch (e) {}
     }
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+    if (usePdfJs) {
+      var pdfHost = ov.querySelector('.ktdv-pdf');
+      /* A WATCHDOG, because "it renders" is not something this can assume.
+
+         pdf.js draws through a scheduler that depends on the page being live. A web view
+         that has throttled the document — backgrounded, or mid-transition — stalls the
+         render with the promise still pending and the canvas opaque and empty, and
+         nothing is logged. That is indistinguishable, to the reader, from the blank
+         iframe this was written to replace.
+
+         So the render races a timer. If it has not produced a page in time the panel says
+         so and offers the system viewer, which is the one thing that always works. Never
+         a blank rectangle: whatever fails, the reader gets a sentence and a way forward. */
+      var settled = false;
+      var watchdog = new Promise(function (_res, rej) {
+        w.setTimeout(function () {
+          if (!settled) { rej(new Error('The document viewer did not finish loading.')); }
+        }, RENDER_WATCHDOG_MS);
+      });
+      Promise.race([
+        w.fetch(url)
+          .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.arrayBuffer(); })
+          .then(function (buf) { return renderPdfInto(pdfHost, buf); })
+          .then(function () { settled = true; }),
+        watchdog,
+      ])
+        .catch(function (e) {
+          settled = true;
+          /* NEVER A BLANK PANEL. Say what happened and offer the one thing that still
+             works — handing the file to the system viewer. */
+          pdfHost.innerHTML = '';
+          var box = d.createElement('div');
+          box.style.cssText = 'max-width:420px;margin:40px auto;background:#fff;border-radius:12px;'
+            + 'padding:20px;text-align:center;font-size:13.5px;color:#334155;';
+          box.innerHTML = '<div style="font-size:30px;margin-bottom:8px;">📄</div>'
+            + '<div style="font-weight:800;color:#0F172A;margin-bottom:6px;">'
+            + 'This document could not be shown here</div>'
+            + '<div style="color:#64748B;margin-bottom:14px;">'
+            + esc((e && e.message) || 'The viewer could not load.')
+            + ' You can still open it outside the app.</div>';
+          var b2 = d.createElement('button');
+          b2.type = 'button';
+          b2.setAttribute('data-kt-iconized', '1');
+          b2.textContent = 'Open the document';
+          b2.style.cssText = 'background:#1F6080;color:#fff;border:0;border-radius:9px;'
+            + 'padding:10px 18px;font-size:13.5px;font-weight:800;cursor:pointer;';
+          b2.addEventListener('click', function () { openExternally(url); });
+          box.appendChild(b2);
+          pdfHost.appendChild(box);
+        });
+    }
+
     ov.querySelector('.ktdv-close').addEventListener('click', close);
     ov.querySelector('.ktdv-new').addEventListener('click', function () { openExternally(url); });
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
@@ -338,6 +501,7 @@
     try { url = w.URL.createObjectURL(blob); } catch (e) { return null; }
     var caller = opts.onClose;
     return view(url, Object.assign({}, opts, {
+      mime: opts.mime || blob.type || '',
       image: opts.image != null ? opts.image : /^image\//i.test(blob.type || ''),
       onClose: function () {
         try { w.URL.revokeObjectURL(url); } catch (e) {}
