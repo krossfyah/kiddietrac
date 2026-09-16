@@ -43,6 +43,23 @@ Your recorded shifts live under **My hours** (and **My schedule** if your centre
 - Your scheduled shifts, if set
 - The running total for the week
 
+## If the strip says it could not check
+
+Sometimes the strip reports **"Couldn't check your shift"** instead of your status. That
+means the app could not reach the server for a moment — a lift, a dead spot, a slow
+morning on the network. It is not a sign that your account is wrong.
+
+Tap **Retry**. The strip is tappable in that state, so you can also clock in straight from
+it once the connection comes back. If it keeps failing, tell your director rather than
+starting the day unclocked.
+
+## Where to see your pay
+
+**My hours** has an **Issued** tab showing the payslips the agency has actually issued
+you, alongside what you have earned by week. Your payment details — e-Transfer or direct
+deposit — live under **Settings → My profile & security**. See
+[My hours and my pay](my-hours-and-pay).
+
 ## "Payroll" means hours, not pay
 
 In Kiddietrac, the time clock records **hours worked** — it is not a payroll or pay-rate system. Your centre uses these hours in whatever way they run payroll. If a shift looks wrong, tell your director; they can correct a punch.

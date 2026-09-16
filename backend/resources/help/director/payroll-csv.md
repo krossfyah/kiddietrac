@@ -27,3 +27,9 @@ Only closed punches are counted — anyone still clocked in won't show until the
 ## File format
 
 `payroll-YYYY-MM-DD-to-YYYY-MM-DD.csv`, UTF-8 with BOM, opens cleanly in Excel / Numbers / Sheets.
+
+## Correcting the hours first
+
+The export reads the same punches as **Timesheets**. If a shift is wrong — a clock-out
+nobody pressed, a shift that was never clocked — fix it there before you export, not in
+the spreadsheet afterwards. See [Timesheets and correcting hours](timesheets).

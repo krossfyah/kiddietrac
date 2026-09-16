@@ -30,3 +30,8 @@ reported overdue for a dose they were given, which is what naive matching did.
 - A child with nothing recorded is listed rather than skipped: an empty record is the
   thing you most need to see.
 - Fix the underlying data on the child's own record — the report only reads.
+- To file a card **and** record the doses off it in one action, use **＋ Upload a record**
+  on the Immunizations screen or the child's Immunization tab. See
+  [Filing an immunization record](filing-an-immunization-record).
+- A record sitting on file is not a recorded dose. A parent's upload does not clear a
+  due flag until somebody reads the card and ticks the doses.

@@ -22,7 +22,12 @@ The list below the button shows your last 60 punches with in/out timestamps and 
 
 ## Manager view
 
-Directors and agency admins see every staff member's punches at their centre via the existing **Timesheets** screen, which rolls up time-clock entries plus any manual shift records.
+Directors and agency admins see every staff member's punches at their centre on
+**Timesheets**, which rolls up time-clock entries plus any manual shift records.
+
+Each row there carries a **⋮** menu: correct a shift, add one that was never clocked, or
+remove one that never happened. An educator's own clock only toggles, so a shift left open
+overnight can only be fixed from there. See [Timesheets and correcting hours](timesheets).
 
 ## Source field
 

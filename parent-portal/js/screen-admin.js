@@ -2024,12 +2024,34 @@
         ok ? '#16A34A' : '#B45309');
     } catch (e) { _toast('⚠️', 'Resend failed', e && e.message ? e.message : 'error', '#DC2626'); }
   }
+  /* SAY WHICH OF THE TWO THINGS THIS DOES.
+
+     The endpoint stopped always minting a temporary password on 2026-09-14: an account
+     that is active and has signed in gets a reset LINK instead, and its current password
+     keeps working. This copy was never updated, so the confirm promised "a new temporary
+     password will be emailed" for the case where that is exactly what does not happen,
+     and the toast then reported "Password reset & emailed" either way.
+
+     An admin reading both would reasonably tell the user their old password had stopped
+     working, which is the opposite of what happened — and it is the sentence that sends
+     somebody hunting through their inbox for a password that was never sent. */
   async function rowResetPassword(u) {
-    if (!await _confirm("Reset " + (u.name || u.email) + "'s password? A new temporary password will be emailed to " + (u.email || 'them') + '.')) return;
+    var sendsLink = !!u.last_login_at && _claimed(u);   // the endpoint's own rule
+    var ask = sendsLink
+      ? 'Send ' + (u.name || u.email) + ' a password reset link? Their current password keeps '
+        + 'working until they choose a new one.'
+      : 'Reset ' + (u.name || u.email) + "'s password? A new temporary password will be emailed to "
+        + (u.email || 'them') + '.';
+    if (!await _confirm(ask)) return;
     try {
       var r = await Api.post('/admin/users/' + u.id + '/reset-password', { send_email: true });
-      _toast(r && r.email_sent ? '✅' : '⚠️', r && r.email_sent ? 'Password reset & emailed' : 'Reset done — email failed',
-        r && r.email_sent ? (u.email || '') : ('Share manually: ' + ((r && r.temp_password) || '')),
+      // The server says which it actually did; trust that over the guess made above.
+      var link = r && r.mode === 'reset_link';
+      _toast(r && r.email_sent ? '✅' : '⚠️',
+        r && r.email_sent ? (link ? 'Reset link sent' : 'Password reset & emailed')
+                          : (link ? 'Could not send the reset link' : 'Reset done — email failed'),
+        r && r.email_sent ? ((r.message || u.email) || '')
+                          : (link ? (u.email || '') : ('Share manually: ' + ((r && r.temp_password) || ''))),
         r && r.email_sent ? '#16A34A' : '#B45309');
     } catch (e) { _toast('⚠️', 'Reset failed', e && e.message ? e.message : 'error', '#DC2626'); }
   }

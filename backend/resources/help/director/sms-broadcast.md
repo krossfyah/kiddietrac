@@ -7,10 +7,25 @@ order: 40
 
 Send a one-off SMS to staff or families. Use it for emergencies (closures, evacuations, severe weather) where email isn't urgent enough.
 
+## Text or Call
+
+A **Text / Call** switch sits at the top of the screen. Everything below it — the audience
+picker, the message box, the record of what was sent — works the same way for either.
+
+A call rings the person's phone and reads a short message out loud, for the one class of
+notice you cannot assume anybody read. It is narrower than a text about who it may reach.
+See [Announcement calls](voice-announcements).
+
 ## Prerequisites
 
-1. Twilio account active on the platform side (set up by KiddieTrac).
-2. **Administration → Billing settings → SMS enabled** turned on.
+1. **A carrier configured and selected** in **Settings → Carrier settings**. Twilio or
+   Telnyx; voice runs over Telnyx. The agency sets this up itself — it is no longer
+   something KiddieTrac does for you. Credentials are an agency-admin job, so if nothing
+   is sending and you are a centre director, that is who to ask.
+   See [Carrier settings](carrier-settings).
+2. **Notifications on for the agency**, under **Settings → Email settings**. That is a
+   cross-channel master switch, and with it off nothing sends however well a carrier is
+   configured.
 3. Each recipient must:
    - Have a phone number on their user record
    - Have **sms_opt_in** set to yes (they confirm during onboarding or in profile settings).

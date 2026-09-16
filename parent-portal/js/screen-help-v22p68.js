@@ -710,6 +710,24 @@
     return t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 50);
   }
 
+  /* Is this slug one of the articles THIS reader is served? state.categorized is the
+     role-filtered list the sidebar is built from, so it is the same answer the server
+     would give. Unknown before the list has loaded, and the honest answer then is yes —
+     a link that briefly works and then resolves is better than one silently flattened
+     on a slow connection. */
+  function visibleSlug(slug) {
+    var cats = state && state.categorized;
+    if (!cats) { return true; }
+    for (var c in cats) {
+      if (!Object.prototype.hasOwnProperty.call(cats, c)) { continue; }
+      var list = cats[c] || [];
+      for (var i = 0; i < list.length; i++) {
+        if ((list[i].slug || list[i]) === slug) { return true; }
+      }
+    }
+    return false;
+  }
+
   function renderMarkdown(md) {
     let html = md;
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -741,7 +759,36 @@
     // by the [text](url) matcher. Used for annotated screenshots in guides.
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="kt-help-img" loading="lazy">');
     html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#help/$1" class="kt-help-wiki">$1</a>');
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    /* ANOTHER GUIDE IS NOT A WEBSITE.
+
+       Every link was rendered as href="<target>" target="_blank", which is right for
+       https://… and wrong for the way guides refer to each other: `[Refunds](refunds)`
+       became a relative link, so clicking it opened app.kiddietrac.com/refunds in a new
+       tab and 404'd. Three cross-references in the corpus had been dead since they were
+       written, and nothing about them looked broken until somebody clicked one.
+
+       A target with no scheme, no slash and no dot is a slug in this library — the same
+       thing [[wiki-style]] links already resolve to. It opens in place, keeping the
+       reader inside Help, and keeps whatever readable label the author wrote rather than
+       showing them a raw slug. Anything else is still an outside link in a new tab. */
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (m, text, href) {
+      if (/^[a-z0-9][a-z0-9-]*$/i.test(href)) {
+        /* A LINK THE READER CANNOT FOLLOW IS WORSE THAN NO LINK.
+
+           Agency admins, centre directors and auditors all read the `director` library,
+           and articles inside it are narrowed further by a `roles:` tag — so a guide can
+           quite correctly reference one that this particular reader is not served. The
+           reference is still worth making: a director should know the carrier settings
+           exist even though an agency admin fills them in.
+
+           So the SENTENCE survives and only the link is dropped. The alternative is
+           either a dead link or writing every cross-reference for the least-privileged
+           reader, which makes the guides worse for everybody. */
+        if (!visibleSlug(href)) { return text; }
+        return '<a href="#help/' + href + '" class="kt-help-wiki">' + text + '</a>';
+      }
+      return '<a href="' + href + '" target="_blank" rel="noopener">' + text + '</a>';
+    });
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
     html = html.replace(/(<li>.*<\/li>(?:\n<li>.*<\/li>)*)/g, '<ul>$1</ul>');
     html = html.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
@@ -1028,18 +1075,19 @@
     document.head.appendChild(style);
   }
 
-  function checkHashAndRender() {
-    if (location.hash.startsWith('#help')) {
-      const main = document.querySelector('main, .kt-main, #app-main');
-      if (main) renderHelp(main);
-    }
-  }
+  /* THE SHELL OWNS ROUTING, and this had been quietly agreeing with it by accident.
 
+     This looked for `main, .kt-main, #app-main`. The portal's container is `#appMain`,
+     so the selector never matched, `main` was always null and the handler has never
+     rendered anything — which is the only reason it did not fight the shell for the same
+     node on every hash change.
+
+     Now that #help/<slug> routes properly, leaving a second renderer listening would be
+     two writers on #appMain. Removed rather than repaired: renderHelp reads the slug out
+     of the hash when the shell calls it, which is the whole job. */
   document.addEventListener('DOMContentLoaded', () => {
     setTimeout(injectFloatingHelpButton, 500);
-    checkHashAndRender();
   });
-  window.addEventListener('hashchange', checkHashAndRender);
 
   window.KT = window.KT || {};
   window.KT.renderHelp = renderHelp;

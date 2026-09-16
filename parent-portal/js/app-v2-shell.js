@@ -1750,8 +1750,22 @@
     const isPlatform = !!(user && Array.isArray(user.roles) && user.roles.indexOf('platform_admin') !== -1)
       || sessionStorage.getItem('kt_is_platform_admin') === '1';
 
+    /* A SUB-PATH IS A PARAMETER, NOT A DIFFERENT SCREEN (2026-09-16).
+
+       Only `?` was stripped, so `#help/timesheets` was looked up whole and matched
+       nothing — every deep link into a guide landed on the dashboard. That includes the
+       link the Help screen's own "Copy link" button produces, and every cross-reference
+       between two guides.
+
+       Tried only AFTER the exact key, so nothing that resolves today changes: a screen
+       whose hash genuinely contains a slash would still win. The screen reads the tail
+       out of location.hash itself, exactly as the Help screen already does. */
+    const baseHash = hash.indexOf('/') !== -1 ? hash.split('/')[0] : '';
+
     const fn = screens[screenKey]
       || (isPlatform ? screens['platform_admin:' + hash] : null)
+      || (baseHash ? screens[role + ':' + baseHash] : null)
+      || (baseHash && isPlatform ? screens['platform_admin:' + baseHash] : null)
       || screens[fallbackKey] || screens['guardian:today'];
 
     if (!fn) {

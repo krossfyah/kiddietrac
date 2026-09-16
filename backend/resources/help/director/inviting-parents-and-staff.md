@@ -1,6 +1,6 @@
 ---
 title: Inviting parents and staff
-category: Enrollment
+category: Enrolment
 order: 2
 ---
 
@@ -40,6 +40,30 @@ They click the link and log in. **Tell them to change their password immediately
    - **Educator** — uses the tablet view, can log activities, take photos, message parents
    - **Director** — full admin access including billing and compliance
 4. Click **Send invitation**
+
+## Three lists, not one
+
+**Administration → User management** separates them, with a count on each:
+
+- **👥 Active users** — everybody signing in.
+- **✉️ Invited** — invited and never claimed. If somebody says they never got an email,
+  this is the tab that says whether an account is waiting for them.
+- **🗄️ De-boarded / deactivated** — closed accounts. They are refused at the sign-in door,
+  so resetting a password on one produces a password nobody can use. Look here before
+  troubleshooting a lockout.
+
+## Re-inviting somebody
+
+**Resend welcome** no longer does the same thing to everybody, and the difference matters.
+
+- **An account never claimed** gets a fresh temporary password. That is exactly what
+  "resend the welcome" means, and nothing is taken away.
+- **An account already active** gets a **reset link**, and nothing is changed. Their
+  current password keeps working.
+
+It used to replace the password and end every session for anybody, which is how pressing
+it to help a parent who "can't get in" became the reason she could not get in. See
+[Resetting a user's password](resetting-a-users-password).
 
 ## What if the email doesn't arrive?
 
