@@ -891,7 +891,11 @@
     });
     diagRow.appendChild(diagSw);
     aboutCard.appendChild(diagRow);
-    paneAbout.appendChild(aboutCard);
+    /* One About, drawn by the shared component, so the copy on a user record and the
+       copy here cannot say different things about the same build. The card built above
+       is the fallback for a load-order surprise. */
+    if (KT.AccountPanes && KT.AccountPanes.about) { KT.AccountPanes.about(paneAbout); }
+    else { paneAbout.appendChild(aboutCard); }
   }
 
   function field(parent, label, type, val) {

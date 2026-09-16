@@ -2095,6 +2095,18 @@
 
        Read-only by design, not by omission: see the module header. */
     const paneAccount = Dom.el('div', { style: 'display:none;' });
+    /* YOUR OWN RECORD GETS AN ABOUT TAB; NOBODY ELSE'S DOES.
+
+       Since "My profile" opens this dialog on yourself, About had to come with it — it
+       was the one thing left behind on the screen that was removed. But it describes the
+       DEVICE, not the person: on somebody else's record a build number reads as theirs,
+       which is false and is the sort of thing a support conversation then proceeds from.
+
+       So it is offered when the record is yours, and only then. */
+    var _meId = 0;
+    try { _meId = (JSON.parse(sessionStorage.getItem('kt_user') || '{}') || {}).id || 0; } catch (e) {}
+    const _isSelf = !!_meId && String(_meId) === String(user.id);
+    const paneAbout = Dom.el('div', { style: 'display:none;' });
 
     const _detailsTab = mkTab('Details', paneDetails);
     mkTab('📎 Files & documents', paneFiles);
@@ -2103,6 +2115,7 @@
     mkTab('🕓 Clock in / out', paneClock);
     mkTab('🔐 Account & pay', paneAccount);
     mkTab('🗄️ Data & retention', paneData);
+    if (_isSelf) { mkTab('ℹ️ About', paneAbout); }
 
     /* Both panes, one subject, admin mode. They share a single read of
        /admin/users/{id}/account-profile — three panes asking the same question three
@@ -2130,6 +2143,10 @@
     root.appendChild(paneClock);
     root.appendChild(paneAccount);
     root.appendChild(paneData);
+    if (_isSelf) {
+      root.appendChild(paneAbout);
+      if (window.KT && KT.AccountPanes && KT.AccountPanes.about) { KT.AccountPanes.about(paneAbout); }
+    }
     _detailsTab.style.color = '#1F6080'; _detailsTab.style.borderBottomColor = '#1F6080';
     // Existing sections all append to `body` → point it at the Details pane so the
     // rest of this function is unchanged; only the Files card targets paneFiles.

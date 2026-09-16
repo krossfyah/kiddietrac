@@ -213,10 +213,103 @@
     failed(host, 'Documents for another person are on the Files & documents tab.');
   }
 
+  // ───────────────────────────────────────────────────────────── about ──
+  /* ABOUT IS ABOUT THIS DEVICE, NOT ABOUT THAT PERSON.
+
+     Build number, licence line, whether this is the installed app or a browser, the
+     asset fingerprint the WebView actually loaded, and the diagnostics toggle. Every one
+     of those describes the machine the reader is sitting at.
+
+     Which is why it is offered on your OWN record and on nobody else's. On "Manage Emily
+     Chen" a build number reads as EMILY's build number, and it is not — it is yours, and
+     a support conversation started from a wrong version is worse than one started from
+     no version. The caller decides; this only draws it.
+
+     Three numbers rather than one, so an install can be told from a cache:
+       Web build  — window.KT_VERSION, set in the page head: the portal code.
+       App build  — the installed APK's versionName (versionCode), read from Capacitor.
+                    Unchanged after a reinstall means the install did not take.
+       assets     — the ?v= fingerprint actually loaded. Stale while Web build is new is
+                    a service-worker cache, not a deploy that failed. */
+  function about(host) {
+    host.innerHTML = '';
+    var card = el('div', CARD);
+    card.appendChild(el('div', SECT, 'About'));
+
+    var box = el('div', 'text-align:center;margin:10px 0 4px;font-size:11.5px;color:#64748B;line-height:1.7;');
+    box.appendChild(el('div', 'font-weight:800;color:#334155;font-size:12.5px;', 'KiddieTrac'));
+    box.appendChild(el('div', '', 'Web build ' + (window.KT_VERSION || '—')));
+    box.appendChild(el('div', 'color:#94A3B8;font-size:10.5px;margin-top:2px;',
+      '© 2021–2026 KiddieTrac. All rights reserved.'));
+
+    var appLine = el('div', 'font-weight:700;color:#334155;', 'App build: checking…');
+    box.appendChild(appLine);
+
+    try {
+      var sc = document.querySelector('script[src*="kt-account-panes.js"]')
+            || document.querySelector('script[src*="app-v2-shell.js"]');
+      var mm = sc && sc.src.match(/[?&]v=([^&"]+)/);
+      var px = window.innerWidth + '×' + window.innerHeight
+        + ' · ≤768:' + (window.matchMedia && window.matchMedia('(max-width:768px)').matches ? 'yes' : 'no');
+      box.appendChild(el('div', 'color:#94A3B8;font-size:10px;',
+        'assets ' + (mm ? mm[1] : 'n/a') + ' · ' + px));
+    } catch (e) {}
+
+    try {
+      var App = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App;
+      var native = window.Capacitor && (Capacitor.isNativePlatform ? Capacitor.isNativePlatform() : Capacitor.isNative);
+      if (App && App.getInfo) {
+        App.getInfo().then(function (info) {
+          appLine.textContent = 'App build: ' + (info.version || '?') + ' (' + (info.build || '?') + ')';
+        }).catch(function () { appLine.textContent = 'App build: native info unavailable'; });
+      } else if (native) {
+        appLine.textContent = 'App build: (App plugin missing)';
+      } else {
+        appLine.textContent = 'Running in a web browser (not the installed app)';
+        appLine.style.color = '#94A3B8';
+        appLine.style.fontWeight = '400';
+      }
+    } catch (e) { appLine.textContent = 'App build: —'; }
+    card.appendChild(box);
+
+    /* The diagnostics chip. A labelled button rather than a switch: this panel is drawn
+       inside a dialog as well as on a page, and a control that says "On" or "Off" in
+       words needs no sweep to have arrived to be readable. */
+    var row = el('div', 'display:flex;align-items:center;justify-content:space-between;gap:12px;'
+      + 'margin:14px 2px 2px;padding-top:14px;border-top:1px solid #EEF2F6;');
+    var text = el('div', '');
+    text.appendChild(el('div', 'font-weight:700;color:#334155;font-size:13px;', 'Diagnostics overlay'));
+    text.appendChild(el('div', 'font-size:11.5px;color:#94A3B8;margin-top:1px;',
+      'Show the on-screen debug chip (for support / troubleshooting).'));
+    row.appendChild(text);
+
+    function isOn() { try { return localStorage.getItem('kt_diag') === '1'; } catch (e) { return false; } }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('data-kt-iconized', '1');
+    function paint() {
+      var on = isOn();
+      btn.textContent = on ? 'On' : 'Off';
+      btn.style.cssText = 'min-width:62px;height:30px;border-radius:9px;font-size:12.5px;font-weight:800;'
+        + 'cursor:pointer;border:1px solid ' + (on ? '#A7F3D0' : '#E2E8F0') + ';'
+        + 'background:' + (on ? '#ECFDF5' : '#F8FAFC') + ';color:' + (on ? '#065F46' : '#64748B') + ';';
+    }
+    paint();
+    btn.addEventListener('click', function () {
+      try { localStorage.setItem('kt_diag', isOn() ? '0' : '1'); } catch (e) {}
+      paint();
+      try { if (window.__ktDiagRefresh) window.__ktDiagRefresh(); } catch (e) {}
+    });
+    row.appendChild(btn);
+    card.appendChild(row);
+    host.appendChild(card);
+  }
+
   KT.AccountPanes = {
     payroll: payroll,
     security: security,
     documents: documents,
+    about: about,
     // Exposed so a screen can drop a stale read after it writes.
     forget: forget,
     _when: when,
