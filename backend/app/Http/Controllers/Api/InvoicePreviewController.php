@@ -86,8 +86,21 @@ final class InvoicePreviewController extends Controller
             'total_cents'   => 132500,
         ];
 
-        $renderer = app(InvoicePdfRenderer::class);
-        $html = $renderer->renderHtml($sampleInvoice, $agency);
+        /* THE PREVIEW SHOWS THE STYLE THIS AGENCY HAS CHOSEN.
+
+           The Branding screen renders this panel directly beside the invoice-style
+           dropdown, and a preview showing the other style is worse than no preview at
+           all. `?template=` lets the screen preview a choice BEFORE it is saved — it is
+           read-only and validated against the catalogue, so it can only ever show one of
+           the real templates. (2026-09-17) */
+        $requested = (string) $request->query('template', '');
+        $template = array_key_exists($requested, \App\Services\InvoiceDocument::TEMPLATES)
+            ? $requested
+            : \App\Services\InvoiceDocument::templateFor($agency ? (int) $agency->id : null);
+
+        $html = $template === 'ilearn'
+            ? app(\App\Services\IlearnInvoiceRenderer::class)->renderSample($agency, false)
+            : app(InvoicePdfRenderer::class)->renderHtml($sampleInvoice, $agency);
 
         return response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
     }

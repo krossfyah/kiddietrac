@@ -228,36 +228,9 @@
       var globalOn = !!(res && res.global_enabled);
       var ins = {};
 
-      /* THE INVOICE TEMPLATE SELECTOR (2026-09-17).
-
-         Anthony asked for iLearn's invoice layout to be available in KiddieTrac "and add
-         this in the invoice template selector where things can be configured if
-         required". The options come from the server (InvoiceDocument::TEMPLATES) rather
-         than being listed here, so adding a third template is a backend change only. */
-      var tplSel = null;
-      (function () {
-        var templates = (res && res.invoice_templates) || null;
-        if (!templates) { return; }
-        var current = (res && res.invoice_template) || 'kiddietrac';
-        var card = Dom.el('div', { style: 'background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px 18px;margin-bottom:16px;' });
-        card.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#1F6080;margin-bottom:8px;' }, 'Invoice template'));
-        card.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:10px;line-height:1.5;' },
-          'The document a family receives when you email them an invoice, and what the PDF looks like.'));
-        tplSel = Dom.el('select', { style: 'width:100%;max-width:420px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;' });
-        Object.keys(templates).forEach(function (k) {
-          var o = Dom.el('option', { value: k }, templates[k].label || k);
-          if (k === current) { o.selected = true; }
-          tplSel.appendChild(o);
-        });
-        card.appendChild(tplSel);
-        var blurb = Dom.el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:8px;line-height:1.5;min-height:32px;' },
-          (templates[current] && templates[current].blurb) || '');
-        tplSel.addEventListener('change', function () {
-          blurb.textContent = (templates[tplSel.value] && templates[tplSel.value].blurb) || '';
-        });
-        card.appendChild(blurb);
-        wrap.appendChild(card);
-      })();
+      /* The invoice style lives in Branding, with the logo and the colour — an
+         invoice's look is the agency's brand, and Anthony asked for it there. It was
+         briefly here; two editors for one setting is how the two drift. (2026-09-17) */
       if (!globalOn) {
         wrap.appendChild(Dom.el('div', { style: 'background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:14px;' },
           '⏸ Automated reminders are currently OFF platform-wide. Your schedule is saved and will start sending once reminders are enabled for the platform.'));
@@ -314,7 +287,6 @@
           cc_admin: ins.cc_admin.checked,
           custom_message: ins.custom_message.value || '',
         };
-        if (tplSel) { payload.invoice_template = tplSel.value; }
         saveBtn.disabled = true; msg.style.color = '#1F6080'; msg.textContent = 'Saving…';
         Api.post('/admin/billing-reminders', payload).then(function () {
           msg.style.color = '#16A34A'; msg.textContent = '✓ Saved.';

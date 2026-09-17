@@ -269,6 +269,14 @@ final class FeatureFlagController extends Controller
                 'brand_support_email' => $agency->brand_support_email ?? null,
                 'brand_bank_info'     => $agency->brand_bank_info ?? null,
                 'brand_address'       => $this->agencySetting($agency, 'brand_address'),
+                /* THE INVOICE STYLE. It belongs with the logo, the colour and the
+                   business address — an invoice's look IS the agency's brand, and
+                   Anthony asked for it here rather than buried in a reminders tab:
+                   "there should be a drop down to choose invoice style types for brand
+                   settings". Served with the catalogue so the screen never keeps its own
+                   copy of the options. (2026-09-17) */
+                'invoice_template'    => \App\Services\InvoiceDocument::templateFor((int) $agency->id),
+                'invoice_templates'   => \App\Services\InvoiceDocument::TEMPLATES,
                 'brand_privacy_url'   => $this->agencySetting($agency, 'brand_privacy_url'),
                 'brand_terms_url'     => $this->agencySetting($agency, 'brand_terms_url'),
                 'powered_by_visible'  => isset($agency->powered_by_visible) ? (int) $agency->powered_by_visible : 1,
@@ -328,6 +336,7 @@ final class FeatureFlagController extends Controller
             'brand_support_email' => ['nullable', 'email', 'max:255'],
             'brand_bank_info'     => ['nullable', 'string', 'max:2000'],
             'brand_address'       => ['nullable', 'string', 'max:500'],
+            'invoice_template'    => ['nullable', 'string', 'in:' . implode(',', array_keys(\App\Services\InvoiceDocument::TEMPLATES))],
             'brand_privacy_url'   => ['nullable', 'string', 'max:500'],
             'brand_terms_url'     => ['nullable', 'string', 'max:500'],
             'powered_by_visible'  => ['nullable', 'integer', 'in:0,1'],
@@ -400,7 +409,7 @@ final class FeatureFlagController extends Controller
 
         // brand_address / brand_privacy_url / brand_terms_url have no columns —
         // store them in the settings JSON (v22p88: address; v22p90: privacy/terms).
-        $jsonKeys = ['brand_address', 'brand_privacy_url', 'brand_terms_url'];
+        $jsonKeys = ['brand_address', 'brand_privacy_url', 'brand_terms_url', 'invoice_template'];
         $touchesJson = false;
         foreach ($jsonKeys as $jk) { if (array_key_exists($jk, $data)) { $touchesJson = true; break; } }
         if ($touchesJson) {

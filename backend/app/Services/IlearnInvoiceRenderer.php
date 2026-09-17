@@ -184,6 +184,75 @@ final class IlearnInvoiceRenderer
         );
     }
 
+    /* THE SAME DOCUMENT, WITH SAMPLE FIGURES — for the Branding screen's live preview.
+       A style selector whose preview shows the OTHER style is worse than no preview, and
+       the preview panel sits directly beside the dropdown. Deliberately the same layout()
+       call as the real thing, so the preview cannot drift from what a family receives.
+       (2026-09-17) */
+    public function renderSample(?object $agency, bool $forPdf = false): string
+    {
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $money = fn ($v) => '$' . number_format((float) $v, 2);
+
+        $settings = [];
+        if ($agency && ! empty($agency->settings)) {
+            try { $settings = json_decode((string) $agency->settings, true) ?: []; } catch (Throwable $ex) {}
+        }
+        $agencyName = $agency->name ?? 'Your childcare agency';
+        $logo = $this->inlineLogo($agency->brand_logo_url ?? $agency->logo_url ?? null);
+
+        $lines = [
+            ['Full-time childcare — June 2026', 1, 1650.00],
+            ['Late pickup fee (June 8)', 1, 25.00],
+            ['Field trip — Royal Botanical Gardens', 1, 35.00],
+        ];
+        $rows = '';
+        foreach ($lines as [$d, $q, $amt]) {
+            $rows .= '<tr><td>' . $e($d) . '</td><td class="num">' . $q . '</td><td class="num">' . $money($amt) . '</td></tr>';
+        }
+
+        $number = 'PREVIEW-' . date('Ymd');
+        $body = '<table class="meta" style="width:100%;border-collapse:collapse">'
+            . '<tr><td style="vertical-align:top;width:55%;padding:2px 0">'
+            . '<span class="k">Bill to:</span> <strong>The Thompson Family</strong>'
+            . '<div style="margin-top:2px;font-size:.88rem;line-height:1.4;color:#334155">'
+            . '<span class="k">Address:</span> <span style="white-space:pre-line">12 Example Street'
+            . "
+" . 'Toronto ON M5V 1A1</span></div>'
+            . '<div style="margin-top:2px"><span class="k">Email:</span> sarah.thompson@example.com</div></td>'
+            . '<td style="vertical-align:top;width:45%;padding:2px 0"><span class="k">Status:</span> Unpaid</td></tr>'
+            . '<tr><td style="padding:2px 0"><span class="k">Date:</span> ' . $e(date('F j, Y')) . '</td>'
+            . '<td style="padding:2px 0"><span class="k">Due:</span> ' . $e(date('F j, Y', strtotime('+14 days'))) . '</td></tr>'
+            . '</table>'
+            . '<table class="lines"><thead><tr><th>Description</th><th class="num">Qty</th>'
+            . '<th class="num">Amount</th></tr></thead><tbody>' . $rows . '</tbody></table>'
+            . '<table class="totals">'
+            . '<tr><td>Subtotal</td><td>' . $money(1710) . '</td></tr>'
+            . '<tr><td>Subsidy</td><td>−' . $money(385) . '</td></tr>'
+            . '<tr class="grand"><td>Total</td><td>' . $money(1325) . '</td></tr>'
+            . '</table>'
+            . '<div style="margin-top:14px;padding:10px 14px;background:#EFF6FF;border:1px solid #93C5FD;'
+            . 'border-radius:8px;font-size:.82rem;color:#1E3A5F;line-height:1.55">'
+            . '<strong>💳 Paying by Interac e-Transfer?</strong> Please include your invoice number '
+            . '<strong>' . $e($number) . '</strong> in the e-Transfer message when sending payment to '
+            . '<strong>' . $e($agencyName) . '</strong>.</div>'
+            . '<div style="margin-top:14px;padding:10px 14px;background:#FEFCE8;border:1px solid #EAB308;'
+            . 'border-radius:8px;font-size:.82rem;color:#334155;line-height:1.55">'
+            . '<strong>Please file this document away safely for future reference.</strong></div>';
+
+        return $this->layout(
+            $body,
+            $agencyName,
+            trim((string) ($settings['brand_address'] ?? '')),
+            (string) ($agency->contact_email ?? $agency->brand_support_email ?? ''),
+            (string) ($agency->contact_phone ?? ''),
+            $logo,
+            'Invoice', $number,
+            'Sample invoice · ' . $agencyName,
+            $forPdf
+        );
+    }
+
     /** iLearn's <x-print.layout>, reproduced. Tables rather than flex/grid — dompdf. */
     private function layout(string $slot, string $agencyName, string $addr, string $email,
         string $phone, ?string $logo, string $docTitle, string $docSub, string $footNote, bool $pdf): string

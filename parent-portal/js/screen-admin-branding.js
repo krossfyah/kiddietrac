@@ -88,6 +88,26 @@
             ${field('Privacy policy URL', 'kt-privacy', brand.brand_privacy_url || '', 'https://yourdomain.com/privacy', 'Linked from the "Powered by Kiddietrac" footer on campaigns.')}
             ${field('Terms & conditions URL', 'kt-terms', brand.brand_terms_url || '', 'https://yourdomain.com/terms', 'Linked from the campaign footer alongside your privacy policy.')}
 
+            ${(function () {
+              /* INVOICE STYLE — it belongs with the logo and the colour, because the
+                 invoice IS the brand as far as a family is concerned. The options come
+                 from the server (InvoiceDocument::TEMPLATES) so a template added later
+                 shows up here with no change to this file. (2026-09-17) */
+              var tpls = brand.invoice_templates || null;
+              if (!tpls) { return ''; }
+              var cur = brand.invoice_template || 'kiddietrac';
+              var opts = Object.keys(tpls).map(function (k) {
+                return '<option value="' + esc(k) + '"' + (k === cur ? ' selected' : '') + '>' + esc(tpls[k].label || k) + '</option>';
+              }).join('');
+              var blurb = (tpls[cur] && tpls[cur].blurb) || '';
+              return '<div style="margin-bottom:14px;">'
+                + '<label style="display:block;font-size:12px;font-weight:700;color:#6B7280;margin-bottom:6px;">Invoice style</label>'
+                + '<select id="kt-invoice-template" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">'
+                + opts + '</select>'
+                + '<div id="kt-invoice-template-blurb" style="font-size:11px;color:#64748B;margin-top:4px;line-height:1.5;">' + esc(blurb) + '</div>'
+                + '</div>';
+            })()}
+
             <div style="display:flex;align-items:center;gap:10px;padding:12px;background:#F9FAFB;border-radius:8px;margin-top:14px;">
               <input type="checkbox" id="kt-poweredby" ${brand.powered_by_visible == 0 ? '' : 'checked'} style="width:18px;height:18px;cursor:pointer;">
               <label for="kt-poweredby" style="font-size:13px;color:#374151;cursor:pointer;flex:1;">
@@ -115,6 +135,19 @@
     `;
 
     refreshPreview(container, agencyId);
+
+    /* The blurb follows the choice, so somebody can read what each style is before
+       saving rather than after seeing an invoice go out in it. */
+    (function () {
+      const sel = $('#kt-invoice-template', container);
+      const note = $('#kt-invoice-template-blurb', container);
+      if (!sel || !note) { return; }
+      const tpls = brand.invoice_templates || {};
+      sel.addEventListener('change', () => {
+        note.textContent = (tpls[sel.value] && tpls[sel.value].blurb) || '';
+        refreshPreview(container, agencyId);
+      });
+    })();
 
     $('#kt-preview-btn',      container).addEventListener('click', () => refreshPreview(container, agencyId));
     $('#kt-save',             container).addEventListener('click', () => save(container, agencyId));
@@ -195,7 +228,12 @@
     const iframe = $('#kt-preview-iframe', container);
     iframe.srcdoc = '<div style="padding:40px;text-align:center;color:#64748B;font-family:sans-serif;">Loading preview…</div>';
     try {
-      const res = await fetch(apiBase() + '/invoices/preview-sample?agency_id=' + agencyId + '&_=' + Date.now(), {
+      /* Preview the style that is SELECTED, not only the one that is saved — the
+         dropdown sits beside this panel and somebody choosing a style expects to see
+         it. */
+      const tplEl = $('#kt-invoice-template', container);
+      const tplQ = tplEl && tplEl.value ? '&template=' + encodeURIComponent(tplEl.value) : '';
+      const res = await fetch(apiBase() + '/invoices/preview-sample?agency_id=' + agencyId + tplQ + '&_=' + Date.now(), {
         headers: { 'Authorization': 'Bearer ' + token() },
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -217,6 +255,7 @@
       brand_support_email:  $('#kt-support', container).value.trim() || null,
       brand_address:        $('#kt-address', container).value.trim() || null,
       brand_bank_info:      $('#kt-bank',    container).value.trim() || null,
+      invoice_template:     ($('#kt-invoice-template', container) || {}).value || undefined,
       brand_privacy_url:    $('#kt-privacy', container).value.trim() || null,
       brand_terms_url:      $('#kt-terms',   container).value.trim() || null,
       powered_by_visible:   $('#kt-poweredby', container).checked ? 1 : 0,

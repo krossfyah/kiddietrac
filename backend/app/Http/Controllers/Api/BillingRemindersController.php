@@ -95,13 +95,6 @@ final class BillingRemindersController extends Controller
             'agency_name'    => $row->name,
             'reminders'      => $this->read($agencyId),
             'global_enabled' => (bool) config('billing.reminders_enabled'),
-            /* THE INVOICE TEMPLATE SELECTOR rides along on this call rather than getting
-               a route of its own: it is configured on the same screen, by the same
-               people, and one round trip is one round trip. The catalogue is served with
-               the current choice so the UI never carries its own copy of the options —
-               a template added in InvoiceDocument::TEMPLATES appears here for free. */
-            'invoice_template'  => \App\Services\InvoiceDocument::templateFor($agencyId),
-            'invoice_templates' => \App\Services\InvoiceDocument::TEMPLATES,
         ]);
     }
 
@@ -120,7 +113,6 @@ final class BillingRemindersController extends Controller
             'channel_email'       => ['nullable', 'boolean'],
             'cc_admin'            => ['nullable', 'boolean'],
             'custom_message'      => ['nullable', 'string', 'max:500'],
-            'invoice_template'    => ['nullable', 'string', 'in:' . implode(',', array_keys(\App\Services\InvoiceDocument::TEMPLATES))],
         ]);
 
         $current = $this->read($agencyId);
@@ -161,21 +153,6 @@ final class BillingRemindersController extends Controller
             // never fail the save on audit
         }
 
-        /* Stored at the TOP of settings, not inside billing_reminders: the template is a
-           property of the agency's invoices, not of its reminder schedule, and burying
-           it under a reminders key is how the next person fails to find it. */
-        if ($request->filled('invoice_template')) {
-            $row = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
-            $s = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
-            $s['invoice_template'] = (string) $request->input('invoice_template');
-            DB::table('agencies')->where('id', $agencyId)
-                ->update(['settings' => json_encode($s), 'updated_at' => now()]);
-        }
-
-        return response()->json([
-            'status' => 'saved',
-            'reminders' => $current,
-            'invoice_template' => \App\Services\InvoiceDocument::templateFor($agencyId),
-        ]);
+        return response()->json(['status' => 'saved', 'reminders' => $current]);
     }
 }
