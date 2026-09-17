@@ -451,8 +451,7 @@ final class ClockReminderCommand extends Command
 
         $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
         $name = $firstName ?: 'there';
-        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;color:#111827;">'
-            . '<h2 style="color:#1F6080;margin:0 0 12px;">⏰ Time clock reminder</h2>'
+        $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111827;">'
             . '<p style="font-size:15px;line-height:1.6;">Hi ' . e($name) . ',</p>'
             . '<p style="font-size:15px;line-height:1.6;">' . e($lead) . '</p>'
             . '<div style="background:#F3F8FB;border-left:4px solid #1F6080;border-radius:8px;padding:12px 16px;margin:16px 0;font-size:14px;line-height:1.6;">'
@@ -489,6 +488,30 @@ final class ClockReminderCommand extends Command
             . '</div>'
             . '<p style="font-size:14px;line-height:1.6;">Open the app and tap <strong>Clock in / out</strong> to fix this in a few seconds. Thank you!</p>'
             . '</div>';
+
+        /* THE SAME ENVELOPE AS EVERY OTHER EMAIL (2026-09-17).
+
+           This one drew its own `<h2>` and stopped — no KiddieTrac header, and nothing
+           saying which childcare agency was writing. Anthony: "add the kiddietrac logo as
+           we have this on other email templates and add the agency logo at the footer
+           like we have this on other emails."
+
+           There is nothing to hand-build: `EmailTemplate::wrap()` is what the closure,
+           incident, immunization and digest emails already go through. It puts the
+           KiddieTrac banner at the top (or the agency's own artwork on a branded banner
+           for a white-label agency), and its footer already carries the AGENCY's logo,
+           address, phone and contact address — "a parent should see who is writing to
+           them", and so should an educator. Dark-mode palette and the mobile breakpoint
+           come with it.
+
+           Passing $agencyId is what selects that agency's branding; passing null would
+           produce a plain KiddieTrac email with no agency in the footer at all. */
+        $html = \App\Services\EmailTemplate::wrap($agencyId ?: null, $body, [
+            'eyebrow'   => 'TIME CLOCK',
+            'title'     => $subject,
+            'subtitle'  => $shiftWindow ? ('Scheduled today ' . $shiftWindow) : '',
+            'preheader' => $lead,
+        ]);
 
         try {
             $svc = AgencyMailer::forAgency($agencyId ?: null);
