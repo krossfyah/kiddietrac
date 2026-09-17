@@ -37,44 +37,77 @@ final class CheckFeatureFlag
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        // Resolve agency: users.agency_id is the most common shape; if not present,
-        // fall back to users.centre_id -> centres.agency_id.
-        $agencyId = null;
-        if (isset($user->agency_id)) {
-            $agencyId = $user->agency_id;
-        } elseif (isset($user->centre_id)) {
-            $row = DB::table('centres')->where('id', $user->centre_id)->first(['agency_id']);
-            if ($row) $agencyId = $row->agency_id;
-        }
+        /* THE AGENCY COMES FROM role_assignments, NOT FROM THE USER ROW (2026-09-17).
+         *
+         * This read `$user->agency_id`, falling back to `$user->centre_id` — and the
+         * users table has NEITHER column. Both `isset()` calls were always false, so
+         * `$agencyId` was always null, and null takes the "let the request through"
+         * branch below. The gate could not have refused anything, on any route, ever.
+         * It was never registered as a middleware alias either, so nothing noticed.
+         *
+         * Membership in this product lives in `role_assignments`, and a platform admin
+         * works inside whichever agency they have switched into — the same rule the rest
+         * of the API follows through X-Active-Agency-Id. */
+        $agencyId = $this->resolveAgency($request, $user);
 
         if (! $agencyId) {
-            // No agency context — let the request through, the controller will
-            // do its own auth. We're a feature gate, not an auth gate.
+            // No agency context — let the request through; the controller does its own
+            // auth. This is a feature gate, not an auth gate.
             return $next($request);
         }
 
-        $agency = DB::table('agencies')->where('id', $agencyId)->first(['feature_flags', 'plan_code']);
-        if (! $agency) return $next($request);
+        $flags = \App\Http\Controllers\Api\FeatureFlagController::effectiveFor($agencyId);
 
-        $flags = [];
-        if (! empty($agency->feature_flags)) {
-            try {
-                $flags = json_decode($agency->feature_flags, true) ?: [];
-            } catch (\Throwable $e) {
-                $flags = [];
-            }
-        }
-
-        // Allow if: flag isn't set (unknown = allow), or flag is truthy
+        // Unknown feature, or switched on: allowed. Absent means allowed by design —
+        // agencies that predate a flag must not lose the feature the day it ships.
         if (! array_key_exists($flag, $flags) || $flags[$flag]) {
             return $next($request);
         }
 
+        $plan = DB::table('agencies')->where('id', $agencyId)->value('plan_code');
+
         return response()->json([
             'message' => 'This feature is not available on your current plan.',
             'feature' => $flag,
-            'plan'    => $agency->plan_code ?? null,
+            'plan'    => $plan ?: null,
             'contact' => 'Contact your account manager to upgrade.',
         ], 403);
+    }
+
+    /**
+     * Which agency is this request acting inside?
+     *
+     * The active-agency header is honoured only for somebody who actually holds a role
+     * there, or for a platform admin — the same test the rest of the API applies, so a
+     * header cannot be used to shop for an agency whose flags are more generous.
+     */
+    private function resolveAgency(Request $request, $user): ?int
+    {
+        $header = (int) $request->header('X-Active-Agency-Id');
+        if ($header) {
+            $mayUse = DB::table('role_assignments')
+                ->where('user_id', $user->id)->where('active', true)
+                ->where(function ($q) use ($header) {
+                    $q->where('agency_id', $header)->orWhere('role', 'platform_admin');
+                })->exists();
+            if ($mayUse) {
+                return $header;
+            }
+        }
+
+        $direct = DB::table('role_assignments')
+            ->where('user_id', $user->id)->where('active', true)
+            ->whereNotNull('agency_id')->value('agency_id');
+        if ($direct) {
+            return (int) $direct;
+        }
+
+        // Centre-only roles (educators, directors) reach their agency through the centre.
+        $viaCentre = DB::table('role_assignments as ra')
+            ->join('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $user->id)->where('ra.active', true)
+            ->value('c.agency_id');
+
+        return $viaCentre ? (int) $viaCentre : null;
     }
 }

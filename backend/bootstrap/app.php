@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuditActivity;
+use App\Http\Middleware\CheckFeatureFlag;
 use App\Http\Middleware\EnforceAuditorReadOnly;
 use App\Http\Middleware\EnsureOnboarded;
 use App\Http\Middleware\EnsureRole;
@@ -23,6 +24,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register custom middleware alias used in route definitions
         $middleware->alias([
             'role' => EnsureRole::class,
+            /* `feature:lesson_plans` on a route group. The middleware has existed since
+               v15 and its own docblock documents this usage — but the alias was never
+               registered, so any route that had tried to use it would have thrown
+               "Target class [feature] does not exist" rather than gating anything.
+               Nothing used it, so nothing failed, and the whole feature-flag system was
+               decorative. (2026-09-17) */
+            'feature' => CheckFeatureFlag::class,
         ]);
 
         // Make Sanctum stateful for the parent-portal SPA on app.kiddietrac.com

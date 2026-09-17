@@ -909,11 +909,42 @@ final class AuthController extends Controller
             ? DB::table('agencies')->where('id', $tzAgencyId)->value('timezone')
             : null;
 
+        /* WHICH SCREENS THIS AGENCY HAS SWITCHED OFF (2026-09-17).
+           Feature flags were enforced nowhere — not by a route, not by the menu — so an
+           agency admin could turn "Sales CRM" off and watch nothing happen. The shell
+           now hides the nav items a switched-off feature owns, and it reads the list
+           from the catalog rather than keeping a second copy of the mapping in JS.
+           Empty for all but the agencies that have actually switched something off. */
+        /* THE ACTIVE AGENCY, not the first one on the user's role list. A platform admin
+           holds a role at iLearn and works inside whichever agency they switched into;
+           reading their flags from the role row would have shown them iLearn's menu
+           while they were standing in Test Agency. Same rule as every other scoped read
+           — honour X-Active-Agency-Id, but only for somebody entitled to use it. */
+        $featureAgencyId = $tzAgencyId ?: $agencyId;
+        try {
+            $hdr = (int) request()->header('X-Active-Agency-Id');
+            if ($hdr) {
+                $mayUse = DB::table('role_assignments')
+                    ->where('user_id', $user->id)->where('active', true)
+                    ->where(function ($q) use ($hdr) {
+                        $q->where('agency_id', $hdr)->orWhere('role', 'platform_admin');
+                    })->exists();
+                if ($mayUse) {
+                    $featureAgencyId = $hdr;
+                }
+            }
+        } catch (\Throwable $e) {
+            // No request context (a console render of this payload) — keep the role's agency.
+        }
+
         return [
             'id' => $user->id,
             'email' => $user->email,
             'username' => $user->username ?? null,
             'agency_timezone' => $agencyTz ?: 'America/Toronto',
+            'hidden_screens' => \App\Http\Controllers\Api\FeatureFlagController::hiddenHashesFor(
+                $featureAgencyId ? (int) $featureAgencyId : null
+            ),
             // Shown once when the app opens: the centre is closed today, or will be
             // shortly. Omitted entirely when there is nothing to say, so the client can
             // test for the key rather than unpacking an empty object.

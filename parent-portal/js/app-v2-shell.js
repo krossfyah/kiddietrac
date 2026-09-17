@@ -61,6 +61,71 @@
 
   // ──────────────── Nav builder (v17 — grouped sidebar) ────────
   // Each section: { label, items: [{ hash, label, icon, badgeKey? }] }
+  /* FEATURE FLAGS, FINALLY CONNECTED TO SOMETHING (2026-09-17).
+
+     A flag could be switched off for an agency and every menu item stayed exactly where
+     it was — the flags were stored, shown in an admin screen, and read by nothing. The
+     API gate is the half that matters for entitlement (CheckFeatureFlag); this is the
+     half people can see.
+
+     The list of hidden screens arrives on the user payload as `hidden_screens`, computed
+     from the catalog on the server. Deliberately NOT a copy of the feature→screen map in
+     JavaScript: one mapping, in one file, or the next screen added to a feature gets
+     remembered in one of the two places.
+
+     An EMPTY list is the normal case — a flag has to be explicitly switched off to
+     appear here — so this costs a filter over a dozen items and changes nothing for
+     almost everybody. A section left with no items is dropped rather than rendered as a
+     bare heading. */
+  /* FILTERING navItemsForRole() IS NOT ENOUGH — three things build this menu.
+
+     The sidebar sections come from navItemsForRole(), but `agency-switcher.js` injects a
+     whole Platform/Sales block into #navLinks after its /auth/agencies fetch returns, and
+     `screen-role-home.js` paints tiles into the screen itself. Filtering the first one
+     left the sales items sitting in the menu with the flag off — which is what testing
+     on Test Agency showed, and is exactly the sort of thing that makes a feature flag
+     untrustworthy.
+
+     So the rule is applied to the LIVE DOM as well: anything pointing at a hidden hash
+     goes, whoever put it there and whenever. Runs only for an agency that has switched
+     something off, and a nav link is cheap to look up. (2026-09-17) */
+  function hiddenHashes() {
+    try {
+      var u = Auth.user();
+      return (u && Array.isArray(u.hidden_screens)) ? u.hidden_screens : [];
+    } catch (e) { return []; }
+  }
+
+  function pruneHiddenLinks(root) {
+    var hidden = hiddenHashes();
+    if (!hidden.length || !root) { return; }
+    hidden.forEach(function (h) {
+      var sel = '[href="#' + h + '"],[data-hash="' + h + '"]';
+      var nodes;
+      try { nodes = root.querySelectorAll(sel); } catch (e) { return; }
+      [].forEach.call(nodes, function (el) {
+        /* The tile or link itself, not a wrapper that might hold siblings — except a
+           nav-link wrapper the switcher builds, which exists only for this item. */
+        var target = el.closest('.kt-tile, .nav-link, li') || el;
+        if (target && target.parentNode && target !== root) { target.remove(); }
+      });
+    });
+  }
+  window.KT.pruneHiddenLinks = pruneHiddenLinks;
+
+  function hideSwitchedOff(sections, user) {
+    var hidden = (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [];
+    if (!hidden.length) { return sections; }
+    var off = {};
+    hidden.forEach(function (h) { off[String(h)] = true; });
+
+    return (sections || []).map(function (sec) {
+      if (!sec || !Array.isArray(sec.items)) { return sec; }
+      var kept = sec.items.filter(function (it) { return !(it && off[String(it.hash)]); });
+      return { label: sec.label, items: kept };
+    }).filter(function (sec) { return sec && Array.isArray(sec.items) && sec.items.length; });
+  }
+
   function navItemsForRole(role) {
     if (role === 'agency_admin') {
       // v22p34: hide legacy 'Agencies' entry for callers who are ALSO platform_admin
@@ -598,8 +663,21 @@
     Dom.clear(links);
 
     const role = Roles.primaryRoleOf(user);
-    const sections = navItemsForRole(role);
+    const sections = hideSwitchedOff(navItemsForRole(role), user);
     scheduleBuildFoot();
+
+    /* The switcher's Platform/Sales block lands in #navLinks after an async fetch, so a
+       one-shot prune here would run before it exists. Watch instead — for an agency with
+       nothing switched off this never attaches at all. */
+    try {
+      if (hiddenHashes().length && !window.__ktNavPruneObs) {
+        var _nl = Dom.$('#navLinks');
+        if (_nl && window.MutationObserver) {
+          window.__ktNavPruneObs = new MutationObserver(function () { pruneHiddenLinks(_nl); });
+          window.__ktNavPruneObs.observe(_nl, { childList: true, subtree: true });
+        }
+      }
+    } catch (e) {}
     const isSidebar = (role === 'agency_admin' || role === 'centre_director');
 
     if (isSidebar) {
@@ -1957,6 +2035,25 @@
     const hash = (window.location.hash || ('#' + homeHashForRole(role))).replace('#', '').split('?')[0];
     _trackNav(hash);
 
+    /* A hidden menu item is not a closed door — the hash still works if you type it,
+       and several screens are linked to from other screens. Say so plainly instead of
+       rendering a feature the agency does not have. The API refuses it too
+       (CheckFeatureFlag); this is the part that explains itself. (2026-09-17) */
+    try {
+      var _hidden = (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [];
+      if (_hidden.indexOf(hash) !== -1) {
+        ensureTopbar(hash);
+        main.appendChild(emptyState(
+          '🔒',
+          'Not included in this plan',
+          'This section is switched off for your agency. Your administrator can turn it '
+          + 'back on, or contact your account manager about adding it.'
+        ));
+        __ktDropSnapshot();
+        return;
+      }
+    } catch (e) {}
+
     // Clearing #appMain took the top bar with it. Put it back before the screen renders
     // a single node, so the bar is already there when the banner draws — otherwise it
     // was missing until kt-topbar's 1.2s poll, and popped in on top of the banner.
@@ -2109,6 +2206,8 @@
           try { if (normaliseBanners(main, hash)) bannerSpend(hash); } catch (e) {}
         };
         __ensure();
+        // Tiles for a switched-off feature, painted into the screen by role-home.
+        try { pruneHiddenLinks(main); } catch (e) {}
         // Some screens (Vacation holds) clear main and render their header seconds
         // later — after the old 4s window had closed, which left them with no banner
         // at all. The 15-run budget is what keeps this cheap.

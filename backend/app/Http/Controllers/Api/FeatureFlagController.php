@@ -21,21 +21,135 @@ final class FeatureFlagController extends Controller
      * Catalog of features that can be flagged. Add new ones here as
      * we ship features that should be gateable.
      */
+    /* THE CATALOG IS THE CONTRACT (rewritten 2026-09-17).
+     *
+     * The v15 list below had fourteen entries and the portal has since grown to 134
+     * screens, so most of what an agency can be sold could not be switched off, and
+     * several of the entries named things that no longer exist under those words.
+     * Anthony: "feature flags section make sure this is updated with the current
+     * options and the wiring works".
+     *
+     * `hashes` is the new part and the load-bearing one: the portal screens a feature
+     * owns. The shell hides those nav items when the flag is off, and it is what makes a
+     * flag testable — switch it off, and you can SEE which screens went. A flag with no
+     * hashes gates an API or a behaviour rather than a screen, and says so.
+     *
+     * Every original key is kept with its original meaning. A stored flag is a decision
+     * somebody made about a paying agency; renaming a key silently re-enables whatever
+     * it used to switch off.
+     *
+     * DEFAULT IS ON. An absent flag means allowed — see CheckFeatureFlag. Adding a
+     * feature here therefore changes nothing for anybody until it is explicitly
+     * switched off for an agency.
+     */
     public const FEATURES = [
-        'lesson_plans'      => ['label' => 'Lesson plans (HDLH)',          'plan_min' => 'starter'],
-        'staff_scheduling'  => ['label' => 'Staff scheduling',             'plan_min' => 'starter'],
-        'timesheets'        => ['label' => 'Timesheet CSV export',         'plan_min' => 'starter'],
-        'certifications'    => ['label' => 'Staff certification tracking', 'plan_min' => 'starter'],
-        'announcements'     => ['label' => 'Centre-wide announcements',    'plan_min' => 'free'],
-        'chat'              => ['label' => 'Parent ↔ provider messaging',  'plan_min' => 'free'],
-        'push_notifications'=> ['label' => 'Web push notifications',       'plan_min' => 'free'],
-        'autopay'           => ['label' => 'Stripe autopay',               'plan_min' => 'growth'],
-        'waitlist'          => ['label' => 'Waitlist management',          'plan_min' => 'starter'],
-        'white_label'       => ['label' => 'White-label invoicing',        'plan_min' => 'growth'],
-        'cwelcc_reporting'  => ['label' => 'CWELCC subsidy reporting',     'plan_min' => 'starter'],
-        'analytics'         => ['label' => 'Agency analytics dashboard',   'plan_min' => 'growth'],
-        'mrr_dashboard'     => ['label' => 'MRR / billing dashboard',      'plan_min' => 'enterprise'],
-        'multi_centre'      => ['label' => 'Multiple centres per agency',  'plan_min' => 'starter'],
+        // ── Daily care ────────────────────────────────────────────────────────────
+        'lesson_plans'      => ['label' => 'Lesson plans & curriculum',    'plan_min' => 'starter',    'group' => 'Daily care',
+            'hashes' => ['lesson-plans', 'curriculum', 'hdlh-gaps']],
+        'observations'      => ['label' => 'Observations & portfolios',    'plan_min' => 'starter',    'group' => 'Daily care',
+            'hashes' => ['observations', 'photos', 'videos', 'photo-tagging']],
+        'daily_log'         => ['label' => 'Daily log & care records',     'plan_min' => 'free',       'group' => 'Daily care',
+            'hashes' => ['care-log', 'menu']],
+        'attendance'        => ['label' => 'Check-in, attendance & ratios', 'plan_min' => 'free',      'group' => 'Daily care',
+            'hashes' => ['checkin', 'attendance-pattern', 'room-ratios', 'late-pickups', 'late-events']],
+        'field_trips'       => ['label' => 'Walks, field trips & GPS',     'plan_min' => 'starter',    'group' => 'Daily care',
+            'hashes' => ['field-trips', 'trip-gps', 'bus-routes', 'zones']],
+        'conferences'       => ['label' => 'Parent conferences',           'plan_min' => 'starter',    'group' => 'Daily care',
+            'hashes' => ['conferences']],
+
+        // ── Health & safety ───────────────────────────────────────────────────────
+        'immunizations'     => ['label' => 'Immunization tracking',        'plan_min' => 'starter',    'group' => 'Health & safety',
+            'hashes' => ['immunizations']],
+        'medications'       => ['label' => 'Medication administration',    'plan_min' => 'starter',    'group' => 'Health & safety',
+            'hashes' => ['medications']],
+        'incidents'         => ['label' => 'Incident reporting',           'plan_min' => 'free',       'group' => 'Health & safety',
+            'hashes' => ['incidents']],
+        'allergy_alerts'    => ['label' => 'Allergy alerts',               'plan_min' => 'free',       'group' => 'Health & safety',
+            'hashes' => ['allergy-alerts']],
+        'wellness'          => ['label' => 'Wellness screening & digest',  'plan_min' => 'starter',    'group' => 'Health & safety',
+            'hashes' => ['wellness-digest']],
+
+        // ── Family engagement ─────────────────────────────────────────────────────
+        'chat'              => ['label' => 'Parent ↔ provider messaging',  'plan_min' => 'free',       'group' => 'Family engagement',
+            'hashes' => ['chat', 'messages']],
+        'announcements'     => ['label' => 'Announcements & news',         'plan_min' => 'free',       'group' => 'Family engagement',
+            'hashes' => ['announcements']],
+        'push_notifications' => ['label' => 'Push notifications',          'plan_min' => 'free',       'group' => 'Family engagement',
+            'hashes' => []],   // no screen — gates the push transport itself
+        'awards'            => ['label' => 'Child awards & certificates',  'plan_min' => 'starter',    'group' => 'Family engagement',
+            'hashes' => ['awards']],
+        'parent_feedback'   => ['label' => 'Parent feedback & NPS',        'plan_min' => 'starter',    'group' => 'Family engagement',
+            'hashes' => ['parent-feedback', 'nps']],
+        'sms'               => ['label' => 'SMS & voice announcements',    'plan_min' => 'growth',     'group' => 'Family engagement',
+            'hashes' => ['sms', 'sms-settings']],
+
+        // ── Staff ─────────────────────────────────────────────────────────────────
+        'staff_scheduling'  => ['label' => 'Staff scheduling',             'plan_min' => 'starter',    'group' => 'Staff',
+            'hashes' => ['schedule', 'staff-calendar', 'substitutes', 'room-rotations', 'educator-rooms']],
+        'timesheets'        => ['label' => 'Time clock & timesheets',      'plan_min' => 'starter',    'group' => 'Staff',
+            'hashes' => ['timesheets', 'time-clock', 'time-off']],
+        'payroll'           => ['label' => 'Payroll documents & payslips', 'plan_min' => 'growth',     'group' => 'Staff',
+            'hashes' => ['payroll']],
+        'certifications'    => ['label' => 'Certifications & background checks', 'plan_min' => 'starter', 'group' => 'Staff',
+            'hashes' => ['certifications', 'background-checks']],
+        'tasks'             => ['label' => 'Task assignment',              'plan_min' => 'free',       'group' => 'Staff',
+            'hashes' => ['tasks', 'my-tasks']],
+        'home_visits'       => ['label' => 'Home visits & inspection forms', 'plan_min' => 'starter',  'group' => 'Staff',
+            'hashes' => ['home-visits', 'home-visit-reports', 'new-home-visit', 'hcc-forms', 'inspection']],
+
+        // ── Billing & payments ────────────────────────────────────────────────────
+        'billing'           => ['label' => 'Invoicing & billing',          'plan_min' => 'starter',    'group' => 'Billing & payments',
+            'hashes' => ['billing', 'bulk-invoices', 'billing-schedule', 'billing-settings',
+                'payment-plans', 'tuition-increases', 'refunds', 'account-ledgers']],
+        'autopay'           => ['label' => 'Card & bank autopay',          'plan_min' => 'growth',     'group' => 'Billing & payments',
+            'hashes' => ['payment-providers']],
+        'expenses'          => ['label' => 'Expenses, suppliers & POs',    'plan_min' => 'growth',     'group' => 'Billing & payments',
+            'hashes' => ['expenses']],
+        'accounting_sync'   => ['label' => 'Accounting export & QuickBooks', 'plan_min' => 'growth',   'group' => 'Billing & payments',
+            'hashes' => ['external-billing', 'quickbooks']],
+        'white_label'       => ['label' => 'White-label branding & site',  'plan_min' => 'growth',     'group' => 'Billing & payments',
+            'hashes' => ['admin-branding', 'marketing-site']],
+
+        // ── Compliance & reporting ────────────────────────────────────────────────
+        'forms'             => ['label' => 'Forms, e-signatures & documents', 'plan_min' => 'starter', 'group' => 'Compliance & reporting',
+            'hashes' => ['forms', 'forms-manager', 'my-forms', 'edocuments', 'signed-docs',
+                'doc-workflows', 'document-templates']],
+        'compliance'        => ['label' => 'Compliance dashboard',         'plan_min' => 'starter',    'group' => 'Compliance & reporting',
+            'hashes' => ['compliance']],
+        'cwelcc_reporting'  => ['label' => 'CWELCC & CACFP reporting',     'plan_min' => 'starter',    'group' => 'Compliance & reporting',
+            'hashes' => ['cwelcc', 'cacfp']],
+        'reports'           => ['label' => 'Reports & scheduled exports',  'plan_min' => 'starter',    'group' => 'Compliance & reporting',
+            'hashes' => ['reports']],
+        'audit_log'         => ['label' => 'Audit log',                    'plan_min' => 'starter',    'group' => 'Compliance & reporting',
+            'hashes' => ['audit-logs']],
+        'data_retention'    => ['label' => 'Data retention & archiving',   'plan_min' => 'growth',     'group' => 'Compliance & reporting',
+            'hashes' => ['data-retention']],
+
+        // ── Growth ────────────────────────────────────────────────────────────────
+        'waitlist'          => ['label' => 'Waitlist & enrolment pipeline', 'plan_min' => 'starter',   'group' => 'Growth',
+            'hashes' => ['synced-waitlist', 'reenrollment', 'renewals']],
+        'tours'             => ['label' => 'Tours & enquiries',            'plan_min' => 'starter',    'group' => 'Growth',
+            'hashes' => ['tours']],
+        'marketing'         => ['label' => 'Marketing & drip campaigns',   'plan_min' => 'growth',     'group' => 'Growth',
+            'hashes' => ['marketing-campaigns', 'drip-campaigns']],
+        /* The hashes here were checked against the nav the portal actually builds, not
+           guessed from the names: `sales-plans`, `sales-lead` and `sales-chat` are real
+           screens and `sales-invoices` belongs to the platform's own billing. Testing on
+           Test Agency is what caught it — the flag was off and the menu still had six
+           sales items in it. */
+        'sales_crm'         => ['label' => 'Sales CRM',                    'plan_min' => 'growth',     'group' => 'Growth',
+            'hashes' => ['sales', 'sales-leads', 'sales-lead', 'sales-new', 'sales-followups',
+                'sales-plans', 'sales-demo', 'sales-chat', 'sales-invoices']],
+        'analytics'         => ['label' => 'Analytics & forecasting',      'plan_min' => 'growth',     'group' => 'Growth',
+            'hashes' => ['forecast', 'engagement', 'anomalies', 'retention']],
+        'ai_tools'          => ['label' => 'AI tools & report cards',      'plan_min' => 'growth',     'group' => 'Growth',
+            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status']],
+
+        // ── Platform ──────────────────────────────────────────────────────────────
+        'multi_centre'      => ['label' => 'Multiple centres per agency',  'plan_min' => 'starter',    'group' => 'Platform',
+            'hashes' => ['admin-centres']],
+        'mrr_dashboard'     => ['label' => 'MRR / billing dashboard',      'plan_min' => 'enterprise', 'group' => 'Platform',
+            'hashes' => ['admin-mrr']],
     ];
 
     /**
@@ -58,6 +172,59 @@ final class FeatureFlagController extends Controller
             'features' => self::FEATURES,
             'plans'    => self::PLANS,
         ]);
+    }
+
+    /**
+     * EVERY feature, resolved to a yes/no for one agency. ONE definition, used by the
+     * admin screen, the API gate (CheckFeatureFlag) and the portal shell — three places
+     * that were each free to disagree about what "off" meant, and a flag that hides a
+     * menu but not its endpoint is worse than no flag.
+     *
+     * Absent means ALLOWED, deliberately: agencies have been using these features for
+     * months without a flags row, and a default of "deny" would switch the product off
+     * for all of them the moment this shipped.
+     *
+     * @return array<string,bool>
+     */
+    public static function effectiveFor(?int $agencyId): array
+    {
+        $stored = [];
+        if ($agencyId) {
+            $raw = DB::table('agencies')->where('id', $agencyId)->value('feature_flags');
+            if ($raw) {
+                try { $stored = json_decode((string) $raw, true) ?: []; } catch (\Throwable $e) { $stored = []; }
+            }
+        }
+
+        $out = [];
+        foreach (self::FEATURES as $key => $meta) {
+            $out[$key] = array_key_exists($key, $stored) ? (bool) $stored[$key] : true;
+        }
+
+        return $out;
+    }
+
+    /**
+     * The nav hashes an agency may NOT see, from the same source of truth.
+     *
+     * The shell asks for this rather than reimplementing the catalog in JavaScript —
+     * a second copy of the mapping is a second thing to forget when a screen is added.
+     *
+     * @return list<string>
+     */
+    public static function hiddenHashesFor(?int $agencyId): array
+    {
+        $hidden = [];
+        foreach (self::effectiveFor($agencyId) as $key => $on) {
+            if ($on) {
+                continue;
+            }
+            foreach (self::FEATURES[$key]['hashes'] ?? [] as $h) {
+                $hidden[] = $h;
+            }
+        }
+
+        return array_values(array_unique($hidden));
     }
 
     /**

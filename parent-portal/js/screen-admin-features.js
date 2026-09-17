@@ -60,7 +60,18 @@
 
     // Parse #admin-features/{id} from hash if present
     const hashParts = (window.location.hash.replace('#', '').split('/'));
-    const preselectId = hashParts[1] ? parseInt(hashParts[1], 10) : (ags[0] && ags[0].id);
+    /* THE AGENCY YOU ARE STANDING IN, not the first one in the list.
+       `ags[0]` is alphabetical, which means a super admin who has switched into Test
+       Agency opened this screen looking at iLearn's flags — and the Save button under
+       them writes to whatever is selected. Editing a live tenant's entitlements because
+       a picker defaulted is not a mistake worth leaving available. An explicit
+       #admin-features/<id> still wins. (2026-09-17) */
+    let activeId = 0;
+    try { activeId = parseInt(sessionStorage.getItem('kt_active_agency_id') || '', 10) || 0; } catch (e) {}
+    const activeIsListed = activeId && ags.some(a => Number(a.id) === activeId);
+    const preselectId = hashParts[1]
+      ? parseInt(hashParts[1], 10)
+      : (activeIsListed ? activeId : (ags[0] && ags[0].id));
 
     container.innerHTML = `
       <div style="padding:24px;max-width:1800px;">
@@ -102,7 +113,28 @@
     const featuresRaw = catalog.features || {};
     const features = Array.isArray(featuresRaw)
       ? featuresRaw
-      : Object.keys(featuresRaw).map(code => ({ code, name: featuresRaw[code].label || code, plan_min: featuresRaw[code].plan_min }));
+      : Object.keys(featuresRaw).map(code => ({
+        code,
+        name: featuresRaw[code].label || code,
+        plan_min: featuresRaw[code].plan_min,
+        group: featuresRaw[code].group || 'Other',
+        hashes: featuresRaw[code].hashes || [],
+      }));
+
+    /* GROUPED, AND SAYING WHAT EACH ONE ACTUALLY TURNS OFF.
+
+       Fourteen flags fitted in one grid; the catalog now covers the whole product and a
+       flat wall of forty switches is unreadable. The screen list under each one is the
+       point as much as the label — "Daily care" means nothing until you can see that
+       switching it off takes Lesson plans, Curriculum and HDLH gaps out of the menu.
+       Both come straight from the catalog, so a feature added there appears here with
+       no change to this file. (2026-09-17) */
+    const byGroup = {};
+    const groupOrder = [];
+    features.forEach(function (f) {
+      if (!byGroup[f.group]) { byGroup[f.group] = []; groupOrder.push(f.group); }
+      byGroup[f.group].push(f);
+    });
 
     body.innerHTML = `
       <div style="background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px;">
@@ -125,10 +157,14 @@
 
       <div style="background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px;">
         <h3 style="margin:0 0 4px;font-size:15px;">Feature overrides</h3>
-        <p style="margin:0 0 12px;color:#6B7280;font-size:12px;">Auto = follow plan default · On = force enabled · Off = force disabled.</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
-          ${features.map(f => featureRow(f, flags[f.code])).join('')}
-        </div>
+        <p style="margin:0 0 12px;color:#6B7280;font-size:12px;">Auto = follow plan default · On = force enabled · Off = force disabled. Switching a feature off hides its screens from everyone at this agency and refuses its API.</p>
+        ${groupOrder.map(g => `
+          <div style="margin:0 0 6px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#1F6080;margin:14px 0 8px;">${esc(g)}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
+              ${byGroup[g].map(f => featureRow(f, flags[f.code])).join('')}
+            </div>
+          </div>`).join('')}
       </div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -173,6 +209,9 @@
         <div style="flex:1;min-width:0;">
           <div style="font-weight:700;font-size:13px;color:#111827;">${esc(feature.name || feature.code)}</div>
           <div style="font-size:11px;color:#64748B;margin-top:2px;">code: ${esc(feature.code)}${feature.plan_min ? ' · plan ≥ ' + esc(feature.plan_min) : ''}</div>
+          ${(feature.hashes && feature.hashes.length)
+            ? `<div style="font-size:11px;color:#94A3B8;margin-top:4px;line-height:1.5;">Hides: ${feature.hashes.map(esc).join(', ')}</div>`
+            : '<div style="font-size:11px;color:#94A3B8;margin-top:4px;">No menu item — gates the API only.</div>'}
         </div>
       </div>
       <select id="kt-flag-${esc(feature.code)}" style="width:100%;margin-top:8px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;background:white;">

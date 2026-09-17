@@ -583,8 +583,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/{id}/pdf', [\App\Http\Controllers\Api\HccFormController::class, 'pdf'])->where('id','[0-9]+');
         });
 
-        // Platform sales CRM (leads pipeline, activities/follow-ups, quotes). sales_rep + superadmin.
-        Route::middleware('role:sales_rep,platform_admin')->prefix('sales')->group(function () {
+        /* Platform sales CRM (leads pipeline, activities/follow-ups, quotes). sales_rep +
+           superadmin — and now the sales_crm feature flag, which is the first route group
+           in this file to actually use one. `feature:` was documented in the middleware
+           since v15 and registered nowhere; a flag that hides a menu while its API keeps
+           answering is not a flag. Absent flag = allowed, so this changes nothing for an
+           agency that has not switched it off. (2026-09-17) */
+        Route::middleware(['role:sales_rep,platform_admin', 'feature:sales_crm'])->prefix('sales')->group(function () {
             Route::get('/leads', [\App\Http\Controllers\Api\SalesController::class, 'index']);
             Route::post('/leads', [\App\Http\Controllers\Api\SalesController::class, 'store']);
             Route::get('/leads/{lead}', [\App\Http\Controllers\Api\SalesController::class, 'show'])->where('lead','[0-9]+');
@@ -1305,7 +1310,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/purchase-orders/{po}/convert-to-bill', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'convertToBill']);
         Route::delete('/purchase-orders/{po}', [\App\Http\Controllers\Api\PurchaseOrderController::class, 'destroy']);
 
-        Route::get('/expenses/summary', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'summary']);
+        // Expense module behind its own flag — see the note on the sales group above.
+        Route::get('/expenses/summary', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'summary'])
+            ->middleware('feature:expenses');
         Route::get('/expense-invoices', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'index']);
         Route::post('/expense-invoices', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'store']);
         Route::get('/expense-invoices/{bill}', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'show']);
