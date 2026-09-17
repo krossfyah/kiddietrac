@@ -508,8 +508,34 @@
      So the build sits in the foot of the sidebar, under the account, where a desktop
      user looks for it — answering the common question outright and opening the panel
      for the rest. One muted line; it must not compete with the navigation above it. */
+  /* ...AND ONLY WHERE A SIDEBAR FOOT IS ACTUALLY A FOOT.
+
+     On a phone, and for the top-nav roles, #appSidebar is not a column down the side of
+     the page — it is a full-width header strip, so its "foot" lands directly under the
+     top bar, above the first real thing on the screen. Anthony, 2026-09-17, with the
+     phone in hand: "the about information is shown just below the top bar ... we needed
+     this information added to the user profile view for desktop." Right on both counts:
+     the panel itself belongs on the About tab of a person's own record, where it now is,
+     and this line is a desktop convenience that has no business costing a phone a row.
+
+     Measured rather than guessed from the role — a sidebar as wide as the viewport is a
+     header. One rule covers the phone, the APK, a narrow desktop window and the
+     guardian/educator top-nav layout on a big screen, without naming any of them. */
+  function footIsSidebarColumn() {
+    var sb = document.getElementById('appSidebar');
+    if (!sb) { return false; }
+    var w = sb.getBoundingClientRect().width;
+    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    if (!(w > 0) || !(vw > 0)) { return false; }
+    return vw >= 981 && w <= vw * 0.5;
+  }
+
   function installBuildFoot() {
-    if (document.getElementById('kt-foot-build')) { return; }
+    var existing = document.getElementById('kt-foot-build');
+    /* Removes as well as adds: a desktop window dragged narrow, or a tablet turned, has
+       to lose the line the same way it never gets one on a phone. */
+    if (!footIsSidebarColumn()) { if (existing) { existing.remove(); } return; }
+    if (existing) { return; }
     if (!(window.KT && KT.sidebarFoot)) { return; }
     var v = window.KT_VERSION || '';
     var b = document.createElement('button');
@@ -543,7 +569,27 @@
      cost worth optimising; a control that vanishes and cannot come back is.
      (Anthony, 2026-09-16) */
   window.addEventListener('hashchange', function () {
-    try { if (!document.getElementById('kt-foot-build')) { installBuildFoot(); } } catch (e) {}
+    try { installBuildFoot(); } catch (e) {}
+  });
+
+  /* Layout, not navigation, decides whether the line belongs — so a resize has to be
+     asked too, or a window dragged narrow keeps a foot the layout no longer has room
+     for. Debounced: a drag fires this continuously and the work is a measurement. */
+  /* The measurement needs a laid-out sidebar, and buildNav() runs before the stylesheets
+     have finished having their say — measured too early, a desktop reads as a phone and
+     quietly drops the line for the rest of the session. So ask again next frame and once
+     more after the paint has settled; installBuildFoot() is idempotent in both
+     directions, so a repeat costs a getBoundingClientRect. */
+  function scheduleBuildFoot() {
+    try { installBuildFoot(); } catch (e) {}
+    requestAnimationFrame(function () { try { installBuildFoot(); } catch (e) {} });
+    setTimeout(function () { try { installBuildFoot(); } catch (e) {} }, 400);
+  }
+
+  var _footRz = null;
+  window.addEventListener('resize', function () {
+    if (_footRz) { clearTimeout(_footRz); }
+    _footRz = setTimeout(function () { try { installBuildFoot(); } catch (e) {} }, 180);
   });
 
   function buildNav(user) {
@@ -553,7 +599,7 @@
 
     const role = Roles.primaryRoleOf(user);
     const sections = navItemsForRole(role);
-    try { installBuildFoot(); } catch (e) {}
+    scheduleBuildFoot();
     const isSidebar = (role === 'agency_admin' || role === 'centre_director');
 
     if (isSidebar) {
