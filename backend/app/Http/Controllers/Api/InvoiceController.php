@@ -527,7 +527,8 @@ final class InvoiceController extends Controller
                     . " CONVERT(items USING utf8mb4) COLLATE utf8mb4_unicode_ci as items,"
                     . " CONVERT(source_label USING utf8mb4) COLLATE utf8mb4_unicode_ci as source_label,"
                     . " CONVERT(pdf_url USING utf8mb4) COLLATE utf8mb4_unicode_ci as pdf_url,"
-                    . " CONVERT('provider' USING utf8mb4) COLLATE utf8mb4_unicode_ci as kt_source");
+                    . " CONVERT('provider' USING utf8mb4) COLLATE utf8mb4_unicode_ci as kt_source,"
+                    . " CONVERT('parent' USING utf8mb4) COLLATE utf8mb4_unicode_ci as counterparty");
 
             $native = DB::table('invoices as i')
                 ->join('centres as c', 'c.id', '=', 'i.centre_id')
@@ -542,9 +543,40 @@ final class InvoiceController extends Controller
                     . " CONVERT(NULL USING utf8mb4) COLLATE utf8mb4_unicode_ci as items,"
                     . " CONVERT('KiddieTrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as source_label,"
                     . " CONVERT(i.pdf_url USING utf8mb4) COLLATE utf8mb4_unicode_ci as pdf_url,"
-                    . " CONVERT('kiddietrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as kt_source");
+                    . " CONVERT('kiddietrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as kt_source,"
+                    . " CONVERT('parent' USING utf8mb4) COLLATE utf8mb4_unicode_ci as counterparty");
 
-            return $ext->unionAll($native);
+            /* THE THIRD SOURCE: what the agency bills or pays somebody who is not a
+               family — an educator or provider's pay invoice, a contractor's, or one
+               raised against a parent outside the enrolment billing. `payee_invoices`
+               already carries the answer in its own `kind` column, which is where the
+               filter's options come from rather than a list invented here. Anything
+               with an unrecognised kind lands in "Other", visible rather than dropped.
+
+               Its money columns are shaped differently — `reference` not `number`,
+               `amount`/`subtotal` not `total`, and no running paid figure — so they are
+               mapped rather than assumed, and a paid one reports its balance as zero.
+               (Anthony, 2026-09-17) */
+            $payee = DB::table('payee_invoices')
+                ->where('agency_id', $agencyId)
+                ->selectRaw("id, agency_id, payee_family_id as family_id,"
+                    . " CONVERT('kiddietrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as external_source,"
+                    . " CONVERT(reference USING utf8mb4) COLLATE utf8mb4_unicode_ci as number,"
+                    . " CONVERT(status USING utf8mb4) COLLATE utf8mb4_unicode_ci as status,"
+                    . " created_at as issued_at, period_end as due_at,"
+                    . " COALESCE(subtotal, amount) as total,"
+                    . " CASE WHEN status = 'paid' THEN COALESCE(subtotal, amount) ELSE 0 END as amount_paid,"
+                    . " CASE WHEN status IN ('paid','void') THEN 0 ELSE COALESCE(subtotal, amount) END as balance_due,"
+                    . " CONVERT('CAD' USING utf8mb4) COLLATE utf8mb4_unicode_ci as currency,"
+                    . " CONVERT(payee_name USING utf8mb4) COLLATE utf8mb4_unicode_ci as description,"
+                    . " CONVERT(NULL USING utf8mb4) COLLATE utf8mb4_unicode_ci as items,"
+                    . " CONVERT('KiddieTrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as source_label,"
+                    . " CONVERT(NULL USING utf8mb4) COLLATE utf8mb4_unicode_ci as pdf_url,"
+                    . " CONVERT('payee' USING utf8mb4) COLLATE utf8mb4_unicode_ci as kt_source,"
+                    . " CONVERT(CASE WHEN kind IN ('educator','parent','contractor') THEN kind ELSE 'misc' END"
+                    . "   USING utf8mb4) COLLATE utf8mb4_unicode_ci as counterparty");
+
+            return $ext->unionAll($native)->unionAll($payee);
         };
 
         // Family labels (primary guardian's name) for every family in this agency's
@@ -579,6 +611,16 @@ final class InvoiceController extends Controller
             $base->where('ei.status', $statusFilter)->where('ei.status', '!=', 'void');
         } else {
             $base->where('ei.status', '!=', 'void');
+        }
+
+        /* WHO THE INVOICE IS WITH. One dropdown rather than four sub-tabs — Anthony
+           asked for tabs and then said a filter would be "easier and cleaner", which it
+           is: the screen already has a filter row, and the totals above the table then
+           describe whatever is being looked at instead of a fixed slice. */
+        $party = strtolower(trim((string) $request->query('counterparty', '')));
+        if ($party !== '' && $party !== 'all' && in_array($party, ['parent', 'educator', 'contractor', 'misc'], true)) {
+            $statsBase->where('ei.counterparty', $party);
+            $base->where('ei.counterparty', $party);
         }
 
         // Optional per-family filter.
@@ -684,6 +726,7 @@ final class InvoiceController extends Controller
                    opens in our own viewer. The screen keys on this rather than guessing
                    from the label. */
                 'kt_source'    => $r->kt_source ?? 'provider',
+                'counterparty' => $r->counterparty ?? 'parent',
                 'source_label' => ($r->kt_source ?? '') === 'kiddietrac'
                     ? 'KiddieTrac'
                     : ($r->agency_name ?: ($r->source_label ?: ucfirst((string) $r->external_source))),

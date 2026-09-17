@@ -44,7 +44,43 @@
     return '<span style="background:' + b.bg + ';color:' + b.fg + ';padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap;">' + esc(b.t) + '</span>';
   }
 
-  var state = { page: 1, family_id: 0, search: '', sort: '', dir: 'asc', busy: false };
+  var state = { page: 1, family_id: 0, search: '', sort: '', dir: 'asc', busy: false, counterparty: '' };
+
+  /* WHAT THIS AGENCY CALLS THE PEOPLE IT PAYS.
+
+     `payee_invoices.kind` stores 'educator' — a stored value, never renamed — but iLearn
+     calls them Providers and Test Agency calls them Educators, and the agency already
+     chose which in Settings ("Facilities are called: Centres / Rooms / Providers",
+     agencies.settings.centre_term). kt-term.js caches that answer in sessionStorage, so
+     the label follows the agency with nothing new to configure. (2026-09-17) */
+  function payeeLabel() {
+    var t = '';
+    try { t = sessionStorage.getItem('kt_centre_term') || ''; } catch (e) {}
+    return t === 'provider' ? 'Provider' : 'Educator';
+  }
+
+  /* AND THE LABEL HAS TO SURVIVE A COLD LOAD.
+
+     kt-term.js fetches the term once per session and caches it; on the first load of a
+     session this screen can build its filter row before that answer arrives, and iLearn
+     — which is set to "Providers" — read "Educators" until the next navigation. So the
+     option is re-labelled after every list load, and the term is fetched here if nothing
+     has cached it yet. Cheap: /agency/centre-term is readable by any role and the result
+     is shared through the same sessionStorage key kt-term.js uses. */
+  async function relabelPayeeOption(container) {
+    try {
+      var cached = '';
+      try { cached = sessionStorage.getItem('kt_centre_term') || ''; } catch (e) {}
+      if (!cached) {
+        var r = await Api.get('/agency/centre-term');
+        if (r && r.term) {
+          try { sessionStorage.setItem('kt_centre_term', r.term); } catch (e) {}
+        }
+      }
+      var opt = container.querySelector('#xb-party option[value="educator"]');
+      if (opt) { opt.textContent = payeeLabel() + 's'; }
+    } catch (e) { /* the default label is already correct for most agencies */ }
+  }
 
   function statCard(label, value, sub, c1, c2, ink, tint) {
     return '<div style="background:' + tint + ';border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:16px 17px;">'
@@ -137,7 +173,8 @@
       + (state.family_id ? '&family_id=' + state.family_id : '')
       + (state.search ? '&search=' + encodeURIComponent(state.search) : '')
       + (state.sort ? '&sort=' + state.sort + '&dir=' + state.dir : '')
-      + (state.status ? '&status=' + encodeURIComponent(state.status) : '');
+      + (state.status ? '&status=' + encodeURIComponent(state.status) : '')
+      + (state.counterparty ? '&counterparty=' + encodeURIComponent(state.counterparty) : '');
     var d;
     try { d = await Api.get('/agency/external-invoices' + qs); }
     catch (e) {
@@ -156,6 +193,7 @@
     var fams = d.families || [];
 
     // Family filter (rebuild only when empty, so typing search doesn't reset it)
+    relabelPayeeOption(container);
     var famSel = container.querySelector('#xb-family');
     if (famSel && !famSel.getAttribute('data-built')) {
       famSel.innerHTML = '<option value="0">All families (' + fams.length + ')</option>'
@@ -209,6 +247,27 @@
          no provider document, and editing it there would write to a table it is not in.
          It opens in the portal's own viewer instead, which is the same sheet the payment
          schedules and the ledger use. (2026-09-17) */
+      /* A PAYEE INVOICE IS IN A THIRD TABLE, and neither set of actions fits it.
+         View/Download fetch a provider document it has none of, and Edit patches
+         `external_invoices`, which it is not in — it would 404 at best and edit a
+         stranger's row at worst. It is listed so the money is visible and the filter
+         works; it is managed where it is raised, on My Pay. (2026-09-17) */
+      if (i.kt_source === 'payee') {
+        return '<tr>'
+          + '<td style="' + td + 'font-weight:700;color:#0F172A;">' + esc(i.description || i.family || '—') + '</td>'
+          + '<td style="' + td + '">' + roleCell(i.role) + '</td>'
+          + '<td style="' + td + 'font-variant-numeric:tabular-nums;">' + esc(i.number || '—')
+            + '<div style="font-size:10.5px;color:#94A3B8;font-weight:700;letter-spacing:.3px;">'
+            + esc(String(i.counterparty || '').toUpperCase()) + '</div></td>'
+          + '<td style="' + td + '">' + statusBadge(i.status, i.is_open, i.due_at) + '</td>'
+          + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.issued_at) + '</td>'
+          + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.due_at) + '</td>'
+          + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;">' + money(i.total, i.currency) + '</td>'
+          + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;color:#16A34A;">' + money(i.amount_paid, i.currency) + '</td>'
+          + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;font-weight:800;color:' + (i.is_open ? '#B45309' : '#16A34A') + ';">' + money(i.balance_due, i.currency) + '</td>'
+          + '<td style="' + td + 'text-align:right;white-space:nowrap;color:#94A3B8;font-size:12px;">Raised in My Pay</td>'
+          + '</tr>';
+      }
       if (i.kt_source === 'kiddietrac') {
         return '<tr>'
           + '<td style="' + td + 'font-weight:700;color:#0F172A;">' + esc(i.family || '—') + '</td>'
@@ -323,6 +382,13 @@
       // part of what is outstanding — so they need a tab of their own to be reachable.
       + '<div id="xb-tabs" class="kt-subtabs" style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 14px;padding:0 0 2px;"></div>'
       + '<div class="kt-card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'
+      +   '<select id="xb-party" style="padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;min-width:180px;background:#fff;">'
+      +     '<option value="">Everyone</option>'
+      +     '<option value="parent">Parents</option>'
+      +     '<option value="educator">' + esc(payeeLabel() + 's') + '</option>'
+      +     '<option value="contractor">Contractors</option>'
+      +     '<option value="misc">Other</option>'
+      +   '</select>'
       +   '<select id="xb-family" style="padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;min-width:220px;background:#fff;"><option value="0">All families</option></select>'
       +   '<input id="xb-search" placeholder="🔍 Search invoice # / description / status…" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;box-sizing:border-box;">'
       + '</div>'
@@ -355,6 +421,18 @@
     }
     paintTabs();
 
+    var partySel = container.querySelector('#xb-party');
+    if (partySel) {
+      partySel.value = state.counterparty || '';
+      partySel.addEventListener('change', function () {
+        state.counterparty = partySel.value || '';
+        /* The family filter only means something for parents — a contractor has no
+           family — so it is cleared rather than left applying invisibly. */
+        if (state.counterparty && state.counterparty !== 'parent') { state.family_id = 0; }
+        state.page = 1;
+        load(container);
+      });
+    }
     var famSel = container.querySelector('#xb-family');
     famSel.addEventListener('change', function () { state.family_id = +famSel.value || 0; state.page = 1; load(container); });
     var searchEl = container.querySelector('#xb-search');
