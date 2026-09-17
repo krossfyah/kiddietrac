@@ -34,6 +34,21 @@ final class ImmunizationRemindersController extends Controller
         'include_missing'      => true,       // children with no record on file at all
         'stale_after_months'   => 12,         // a record older than this needs updating; 0 = never
         'custom_message'       => '',
+
+        /* THE PARENT-FACING REMINDER (2026-09-17) — a second, separate send.
+           Everything above tells the OFFICE which children to chase. These tell the
+           FAMILY directly, on the same schedule, and are off until somebody turns them
+           on: an email to a parent about their child's health record is not something to
+           start sending because a default said so.
+
+           parent_lead_months is how far ahead "coming up" reaches. required_only keeps
+           it to the doses the agency's own schedule marks as required, because an
+           optional vaccine is a conversation, not a compliance chase. */
+        'notify_parents'       => false,
+        'parent_lead_months'   => 2,
+        'parent_required_only' => true,
+        'parent_bcc_staff'     => true,       // the office sees what the family was told
+        'parent_push'          => true,       // in-app + push alongside the email
     ];
 
     private function resolveAgencyId(Request $request): int
@@ -114,6 +129,12 @@ final class ImmunizationRemindersController extends Controller
             'include_missing' => ['nullable', 'boolean'],
             'stale_after_months' => ['nullable', 'integer', 'min:0', 'max:60'],
             'custom_message' => ['nullable', 'string', 'max:500'],
+            'notify_parents' => ['nullable', 'boolean'],
+            // 12 months of lead would mean telling a parent about a dose due next year.
+            'parent_lead_months' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'parent_required_only' => ['nullable', 'boolean'],
+            'parent_bcc_staff' => ['nullable', 'boolean'],
+            'parent_push' => ['nullable', 'boolean'],
         ]);
 
         $current = self::read($agencyId);
@@ -130,7 +151,11 @@ final class ImmunizationRemindersController extends Controller
         /* Turning it on while every recipient box is unchecked would save happily and
            then send to nobody, which reads as a broken feature rather than a setting. */
         if ($current['enabled']
-            && ! $current['notify_agency_admins'] && ! $current['notify_directors'] && ! $current['notify_educators']) {
+            && ! $current['notify_agency_admins'] && ! $current['notify_directors'] && ! $current['notify_educators']
+            // Parents count as a destination: an agency that wants families told and
+            // nobody in the office copied is a legitimate choice, and refusing to save
+            // it would be this validator inventing a policy. (2026-09-17)
+            && ! $current['notify_parents']) {
             return response()->json([
                 'message' => 'Choose at least one group to send these reminders to.',
                 'errors' => ['notify_agency_admins' => ['Pick at least one recipient group.']],
