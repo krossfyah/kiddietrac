@@ -1439,6 +1439,23 @@
         + 'pointer-events:none;z-index:300;background:' + (getComputedStyle(main).backgroundColor || '#fff') + ';';
       document.body.appendChild(snap);
       window.__ktSnapGen = (gen == null ? null : gen);
+      /* AND HIDE WHAT IS UNDERNEATH IT (2026-09-17).
+
+         The clone is a picture of #appMain pinned at the rect #appMain occupied when it
+         was taken. The live screen then rebuilds underneath — and it does not land in
+         exactly the same place: the top bar is re-inserted, a banner is inserted and
+         then normalised, the content is a different height. Anything that ends up
+         outside the clone's rect is not covered by it, so the reader sees the frozen
+         banner AND the new banner a few dozen pixels below it, at once. Anthony
+         photographed precisely that on the audit log: the same hero twice, the upper one
+         clipped mid-sentence by the clone's overflow:hidden, "Loading audit log…"
+         underneath.
+
+         A cover that only covers what used to be there is not a cover. `visibility` —
+         not `display` — because layout must be preserved: screens measure their own
+         markup while rendering, and a display:none column measures zero. Restored in
+         __ktDropSnapshot, which every exit path goes through. */
+      try { main.style.visibility = 'hidden'; } catch (e) {}
       // Mobile scrolls #appMain itself, so an unscrolled clone would show the top of the
       // page while the reader is halfway down it.
       try { snap.scrollTop = main.scrollTop; } catch (e) {}
@@ -1461,6 +1478,14 @@
       var old = document.getElementById('kt-refresh-snap');
       if (old && old.parentNode) { old.parentNode.removeChild(old); }
       window.__ktSnapGen = null;
+    } catch (e) {}
+    /* ALWAYS, and outside the try above: if the clone is gone and #appMain is still
+       hidden, the reader is looking at an empty page. Every failure path in this file
+       ends here, which is the point — there is one place that can un-hide the screen and
+       it runs even when the removal above throws. */
+    try {
+      var m = document.getElementById('appMain');
+      if (m && m.style.visibility === 'hidden') { m.style.visibility = ''; }
     } catch (e) {}
   }
 
@@ -2102,6 +2127,10 @@
       } catch (e) {}
     } catch (e) {
       console.error('Screen render error:', e);
+      /* Uncover FIRST. The cover hides #appMain while it is up, so an error state
+         rendered behind it is an error state nobody can read — six seconds of blank
+         page until the failsafe fires. */
+      __ktDropSnapshot();
       Dom.clear(main);
       main.appendChild(emptyState('⚠️', 'Something went wrong', e.message || 'Please refresh the page.'));
     }
