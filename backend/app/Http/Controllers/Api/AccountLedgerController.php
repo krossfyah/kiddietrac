@@ -955,12 +955,37 @@ class AccountLedgerController extends Controller
                 report($e);
             }
         }
+        /* InvoicePdfRenderer RETURNS HTML, despite its name — renderFromInvoiceId()
+           ends in `return $this->renderHtml(...)`. This assigned that straight into
+           $pdfBytes and attached it as `invoice-….pdf` with mime application/pdf, so
+           every native invoice ever emailed from this screen went out as an HTML file
+           wearing a .pdf extension: a parent's reader refuses to open it.
+
+           The line directly above guards the EXTERNAL path against exactly this — "a
+           login page is a 200 too — an HTML file named .pdf is worse than none" — and
+           the native path had no such check. InvoiceController does the conversion
+           correctly twelve hundred lines away; this is the same idiom, and dompdf has
+           been a dependency all along. (2026-09-17) */
         if ($pdfBytes === null && $kind === 'native') {
             try {
-                $pdfBytes = app(\App\Services\InvoicePdfRenderer::class)->renderFromInvoiceId($id);
+                $rendered = app(\App\Services\InvoicePdfRenderer::class)->renderFromInvoiceId($id);
+                if ($rendered !== null) {
+                    // Remote images enabled for the agency's own logo in the letterhead.
+                    $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+                    $dompdf->loadHtml($rendered, 'UTF-8');
+                    $dompdf->setPaper('letter', 'portrait');
+                    $dompdf->render();
+                    $pdfBytes = $dompdf->output();
+                }
             } catch (\Throwable $e) {
                 report($e);
             }
+        }
+
+        /* One last look before it goes out, whichever path produced it. Sending no
+           attachment with a line saying so beats sending a file that will not open. */
+        if ($pdfBytes !== null && ! str_starts_with((string) $pdfBytes, '%PDF')) {
+            $pdfBytes = null;
         }
 
         $note = trim((string) ($data['message'] ?? ''));
