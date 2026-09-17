@@ -94,13 +94,17 @@ final class InvoicePreviewController extends Controller
            read-only and validated against the catalogue, so it can only ever show one of
            the real templates. (2026-09-17) */
         $requested = (string) $request->query('template', '');
-        $template = array_key_exists($requested, \App\Services\InvoiceDocument::TEMPLATES)
+        $template = array_key_exists($requested, \App\Services\InvoiceDocument::templates())
             ? $requested
             : \App\Services\InvoiceDocument::templateFor($agency ? (int) $agency->id : null);
 
-        $html = $template === 'ilearn'
-            ? app(\App\Services\IlearnInvoiceRenderer::class)->renderSample($agency, false)
-            : app(InvoicePdfRenderer::class)->renderHtml($sampleInvoice, $agency);
+        if ($template === 'ilearn') {
+            $html = app(\App\Services\IlearnInvoiceRenderer::class)->renderSample($agency, false);
+        } elseif (array_key_exists($template, \App\Services\InvoiceStyleRenderer::STYLES)) {
+            $html = app(\App\Services\InvoiceStyleRenderer::class)->renderSample($agency, $template, false);
+        } else {
+            $html = app(InvoicePdfRenderer::class)->renderHtml($sampleInvoice, $agency);
+        }
 
         return response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
     }

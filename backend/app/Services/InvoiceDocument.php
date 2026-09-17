@@ -26,8 +26,8 @@ use Throwable;
  */
 final class InvoiceDocument
 {
-    /** The selector's options. Key = stored value, and the label is what the UI shows. */
-    public const TEMPLATES = [
+    /** The two bespoke documents. The ten style variants are merged in below. */
+    private const BESPOKE = [
         'kiddietrac' => [
             'label' => 'KiddieTrac (default)',
             'blurb' => 'The standard KiddieTrac invoice, branded with your logo, colour and support address.',
@@ -37,6 +37,26 @@ final class InvoiceDocument
             'blurb' => 'The iLearn invoice layout — purple header rule, Bill-to block, Interac reference reminder and record-keeping note. For agencies whose families already receive this document.',
         ],
     ];
+
+    /**
+     * The selector's options. Key = stored value, and the label is what the UI shows.
+     *
+     * A METHOD RATHER THAN A CONSTANT (2026-09-17): the ten styles live in
+     * InvoiceStyleRenderer beside the specs that draw them, so adding an eleventh is one
+     * entry there and nothing here. Callers already ask this class, so the change is
+     * invisible to them.
+     *
+     * @return array<string,array{label:string,blurb:string}>
+     */
+    public static function templates(): array
+    {
+        $out = self::BESPOKE;
+        foreach (InvoiceStyleRenderer::STYLES as $key => $spec) {
+            $out[$key] = ['label' => $spec['label'], 'blurb' => $spec['blurb']];
+        }
+
+        return $out;
+    }
 
     public static function templateFor(?int $agencyId): string
     {
@@ -48,7 +68,7 @@ final class InvoiceDocument
             $s = $raw ? (json_decode((string) $raw, true) ?: []) : [];
             $t = (string) ($s['invoice_template'] ?? 'kiddietrac');
 
-            return array_key_exists($t, self::TEMPLATES) ? $t : 'kiddietrac';
+            return array_key_exists($t, self::templates()) ? $t : 'kiddietrac';
         } catch (Throwable $e) {
             return 'kiddietrac';
         }
@@ -71,8 +91,13 @@ final class InvoiceDocument
     {
         $agencyId = self::agencyOfInvoice($invoiceId);
 
-        if (self::templateFor($agencyId) === 'ilearn') {
+        $template = self::templateFor($agencyId);
+
+        if ($template === 'ilearn') {
             return app(IlearnInvoiceRenderer::class)->renderFromInvoiceId($invoiceId, $forPdf);
+        }
+        if (array_key_exists($template, InvoiceStyleRenderer::STYLES)) {
+            return app(InvoiceStyleRenderer::class)->renderFromInvoiceId($invoiceId, $template, $forPdf);
         }
 
         return app(InvoicePdfRenderer::class)->renderFromInvoiceId($invoiceId);
