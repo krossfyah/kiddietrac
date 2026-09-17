@@ -1418,7 +1418,15 @@
      over the top for the duration. The reader keeps seeing the old screen until the new
      one is ready, then it is uncovered in one frame. The clone is pointer-events:none, so
      it is purely something to look at — clicks go to the real DOM underneath. */
-  function __ktSnapshot(main) {
+  /* WHOSE COVER IS IT? (2026-09-17)
+
+     One cover element, and any number of renders that might take it away. A render that
+     is superseded must not pull the cover off the screen that replaced it, and the
+     render that put it up must not find it already gone. So the cover is stamped with
+     the generation that raised it, and a drop that names a generation is ignored unless
+     it owns the thing it is dropping. The failsafe and the early-exit paths drop
+     unconditionally, which is right: at that point nobody is going to. */
+  function __ktSnapshot(main, gen) {
     try {
       __ktDropSnapshot();
       var r = main.getBoundingClientRect();
@@ -1430,6 +1438,7 @@
         + 'width:' + r.width + 'px;height:' + r.height + 'px;overflow:hidden;'
         + 'pointer-events:none;z-index:300;background:' + (getComputedStyle(main).backgroundColor || '#fff') + ';';
       document.body.appendChild(snap);
+      window.__ktSnapGen = (gen == null ? null : gen);
       // Mobile scrolls #appMain itself, so an unscrolled clone would show the top of the
       // page while the reader is halfway down it.
       try { snap.scrollTop = main.scrollTop; } catch (e) {}
@@ -1442,11 +1451,16 @@
     } catch (e) { return null; }
   }
 
-  function __ktDropSnapshot() {
+  function __ktDropSnapshot(gen) {
+    // Named a generation and it is not ours any more: a newer render owns this cover.
+    try {
+      if (gen != null && window.__ktSnapGen != null && window.__ktSnapGen !== gen) { return; }
+    } catch (e) {}
     try { if (window.__ktSnapKill) { clearTimeout(window.__ktSnapKill); window.__ktSnapKill = null; } } catch (e) {}
     try {
       var old = document.getElementById('kt-refresh-snap');
       if (old && old.parentNode) { old.parentNode.removeChild(old); }
+      window.__ktSnapGen = null;
     } catch (e) {}
   }
 
@@ -1741,7 +1755,86 @@
     setTimeout(kick, 60);
   }
 
+  /* ONE RENDER AT A TIME (2026-09-17).
+
+     Anthony: *"when the portal refreshes silently, graphics/screens are re-rendering
+     amongst itself and it looks like its doubling up."* That is exactly what it was.
+
+     THE DEFECT. renderScreen() is async and suspends twice — at
+     `await KT.screenLoader.ensure(...)` and at `await fn(main, ctx)` — and nothing
+     stopped a second call from starting during either. Three callers fire it with no
+     knowledge of each other: kt-live ~600ms after EVERY write (and again in every other
+     tab, over the storage event), kt-auto-refresh every 45s on a live screen and on
+     return-to-app, and the shell itself on hashchange. A write while a screen is still
+     fetching is not an edge case; it is a Tuesday.
+
+     Proved with a screen that paints, awaits, then paints again — the shape of almost
+     every screen here. Two renders 600ms apart left ONE #appMain holding:
+
+         P2 header
+         P1 body-after-await      <- the previous render's content, in the new screen
+         P2 body-after-await
+
+     Both renders had cleared #appMain and both kept painting into it afterwards. Two
+     screens' content interleaved, each sweep and banner pass running over the other's
+     work: "re-rendering amongst itself", and where the two produce similar blocks,
+     doubled.
+
+     THE RULE. A background refresh has nobody waiting on it, so it QUEUES: if a render
+     is already running, remember that one more is wanted and run it — once, however many
+     arrive — when the current one is done. Navigation is different: somebody just
+     clicked, so it starts immediately and the in-flight render stands down at its next
+     checkpoint instead (see __ktGen below). Coalescing also means a burst of writes
+     costs one repaint rather than four.
+
+     What this does NOT reach: a screen that returns while its own fetch is still in
+     flight and then paints into the container it was handed. Serialising renders cannot
+     help there — that render has already finished — and the fix is a per-render
+     container, which #appMain cannot be without moving 47 CSS rules and three observers
+     that bind to the node. Left alone deliberately, and written down here rather than
+     half-done. */
+  var _rsRunning = 0;
+  var _rsQueued = false;
+  var _rsQueuedFor = '';
+
   async function renderScreen() {
+    var _silentNow = false;
+    try { _silentNow = !!window.__ktSilentRefresh; } catch (e) {}
+
+    /* A background refresh waits its turn — and several of them collapse into the one
+       follow-up, so a burst of writes costs a single repaint. Navigation never waits:
+       somebody just clicked. It runs alongside, and the older render stands down at its
+       next checkpoint rather than finishing into a screen that has moved on. */
+    if (_rsRunning > 0 && _silentNow) {
+      _rsQueued = true;
+      _rsQueuedFor = location.hash;
+      // Consumed by the follow-up, not by a render that is already past reading it.
+      try { window.__ktSilentRefresh = false; } catch (e) {}
+      return;
+    }
+
+    _rsRunning++;
+    try {
+      await renderScreenOnce();
+    } finally {
+      _rsRunning--;
+      if (_rsRunning === 0 && _rsQueued) {
+        var _for = _rsQueuedFor;
+        _rsQueued = false; _rsQueuedFor = '';
+        /* Dropped if the reader has since moved: that navigation rendered the new screen
+           from fresh data a moment ago, and refreshing it again would be a second
+           rebuild of a page nobody has finished reading yet. */
+        if (_for === location.hash) {
+          setTimeout(function () {
+            try { window.__ktSilentRefresh = true; } catch (e) {}
+            renderScreen();
+          }, 0);
+        }
+      }
+    }
+  }
+
+  async function renderScreenOnce() {
     /* A re-render of the screen you are already on (a save, a tab switch) is NOT
        navigation. The resets below are correct for navigation and stay as they are;
        this records where you were so the same-screen case can be put back. */
@@ -1783,7 +1876,7 @@
       _ktSilent = !!window.__ktSilentRefresh && _ktSameScreen;
       window.__ktSilentRefresh = false;
     } catch (e) {}
-    if (_ktSilent && main) { __ktSnapshot(main); }
+    if (_ktSilent && main) { __ktSnapshot(main, (window.__ktRenderGen || 0) + 1); }
 
     Dom.clear(main);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
@@ -1853,6 +1946,12 @@
        is absent or a file 404s, which leaves the original behaviour intact. */
     if (window.KT && KT.screenLoader) {
       try { await KT.screenLoader.ensure(role, hash); } catch (e) {}
+      /* CHECKPOINT. Fetching a role's screen files can take a while on a cold cache,
+         and navigation supersedes rather than queues — so by the time this resolves the
+         reader may be two screens along. Painting now would drop this screen's content
+         into theirs. Our cover goes with us — if a newer render raised its own, the
+         generation test leaves that one alone. */
+      if (__ktGen !== window.__ktRenderGen) { __ktDropSnapshot(__ktGen); return; }
     }
 
     // Route based on role + hash
@@ -1895,6 +1994,14 @@
 
     try {
       await fn(main, { user, role, params: parseParams() });
+      /* CHECKPOINT. Everything below this line acts on #appMain — restoring a scroll
+         position, dropping the cover, inserting and normalising a banner. If the reader
+         has navigated while this screen was rendering, all of it would be done TO
+         SOMEBODY ELSE'S SCREEN: their page yanked to our scroll position, their cover
+         pulled off mid-render, our section's banner inserted over their content. The
+         deferred banner passes already carried this test; the work that runs right here
+         did not. */
+      if (__ktGen !== window.__ktRenderGen) { __ktDropSnapshot(__ktGen); return; }
       /* Uncover on the next frame: the render has returned, so the new content is in the
          DOM, and one frame lets the browser paint it before the picture of the old screen
          is taken away. Removing it synchronously here shows a blank flash again. */
@@ -1906,7 +2013,7 @@
            runs alongside it: the frame is what makes the swap seamless when the tab is
            visible, the timer is what guarantees it ends. */
         var _dropped = false;
-        var _drop = function () { if (_dropped) { return; } _dropped = true; __ktDropSnapshot(); };
+        var _drop = function () { if (_dropped) { return; } _dropped = true; __ktDropSnapshot(__ktGen); };
         __ktWaitSettled(main, function () {
           /* BEFORE the uncover, never after: the phase has to be right in the DOM the
              reader is about to be shown, or the banner still snaps — just later. */
