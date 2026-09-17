@@ -1321,14 +1321,8 @@ final class InvoiceController extends Controller
         // and the button are the useful part, and the invoice is in the app regardless.
         $pdf = null;
         try {
-            $rendered = app(\App\Services\InvoicePdfRenderer::class)->renderFromInvoiceId($invoiceId);
-            if ($rendered !== null) {
-                $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
-                $dompdf->loadHtml($rendered, 'UTF-8');
-                $dompdf->setPaper('letter', 'portrait');
-                $dompdf->render();
-                $pdf = $dompdf->output();
-            }
+            // The agency's chosen template — see InvoiceDocument.
+            $pdf = \App\Services\InvoiceDocument::pdf($invoiceId);
         } catch (\Throwable $e) {
             Log::warning('invoice PDF failed for email', ['invoice' => $invoiceId, 'error' => $e->getMessage()]);
         }

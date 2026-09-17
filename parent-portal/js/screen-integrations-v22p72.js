@@ -560,6 +560,17 @@
     { key: 'closures',  label: 'Closures',  icon: '🗓', id: 'es-closures' },
     { key: 'birthdays', label: 'Birthdays', icon: '🎂', birthdays: true },
     { key: 'immunization', label: 'Immunization', icon: '🩹', immunization: true },
+    /* Billing reminders. They were only ever on the Billing screen's own Reminders
+       tab, which is a reasonable place for them and not where anybody looked — Anthony:
+       "billing reminders switch where is this located as I don't see this under the
+       settings section". Every other automated send an agency configures — closures,
+       birthdays, immunization — is on this screen, so this is where somebody goes
+       looking for the next one.
+
+       The SAME renderer as the Billing screen (KT.BillingSetup.renderReminders), not a
+       second copy of the form: one editor, two entrances, so the two cannot drift about
+       what the settings are. (2026-09-17) */
+    { key: 'billing', label: 'Billing', icon: '💳', billing: true },
     /* The Reseller "Email" screen, folded in here. requiresEl means the tab only
        appears when its container was actually rendered — platform admins only, since
        nobody else can load /platform/mail-settings. */
@@ -749,6 +760,7 @@
 
     var birthdaysLoaded = false;
     var immunizationLoaded = false;
+    var billingLoaded = false;
     function show(key) {
       TABS.forEach(function (t) {
         panes[t.key].style.display = (t.key === key) ? '' : 'none';
@@ -771,6 +783,14 @@
       }
       // Same reasoning as birthdays: its own API call, and most visits here are
       // about something else.
+      if (key === 'billing' && !billingLoaded) {
+        billingLoaded = true;
+        if (window.KT && KT.BillingSetup && KT.BillingSetup.renderReminders) {
+          KT.BillingSetup.renderReminders(panes.billing);
+        } else {
+          panes.billing.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Billing reminder settings could not be loaded.</div>';
+        }
+      }
       if (key === 'immunization' && !immunizationLoaded) {
         immunizationLoaded = true;
         if (window.KT && KT.ImmunizationSettings && KT.ImmunizationSettings.render) {

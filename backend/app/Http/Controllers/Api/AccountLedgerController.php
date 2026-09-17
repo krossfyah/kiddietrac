@@ -967,19 +967,11 @@ class AccountLedgerController extends Controller
            correctly twelve hundred lines away; this is the same idiom, and dompdf has
            been a dependency all along. (2026-09-17) */
         if ($pdfBytes === null && $kind === 'native') {
-            try {
-                $rendered = app(\App\Services\InvoicePdfRenderer::class)->renderFromInvoiceId($id);
-                if ($rendered !== null) {
-                    // Remote images enabled for the agency's own logo in the letterhead.
-                    $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
-                    $dompdf->loadHtml($rendered, 'UTF-8');
-                    $dompdf->setPaper('letter', 'portrait');
-                    $dompdf->render();
-                    $pdfBytes = $dompdf->output();
-                }
-            } catch (\Throwable $e) {
-                report($e);
-            }
+            /* Through the selector, so the agency gets the template it has chosen —
+               KiddieTrac's or iLearn's — rather than whichever renderer this call site
+               happens to name. InvoiceDocument::pdf() returns null for anything that is
+               not really a PDF, which is the mistake this line used to make. */
+            $pdfBytes = \App\Services\InvoiceDocument::pdf($id);
         }
 
         /* One last look before it goes out, whichever path produced it. Sending no

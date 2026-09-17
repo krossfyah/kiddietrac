@@ -33,7 +33,20 @@
 
   function render(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1100px;margin:0 auto;' });
+    /* LEFT-ALIGNED, AND NO HORIZONTAL PADDING WHEN HOSTED.
+
+       Two separate things pushed this pane out of line with everything else under
+       Billing. `margin:0 auto` CENTRED it, so on a wide screen the content drifted
+       right while the subtab strip above stayed left. And the pane is rendered INSIDE
+       #bs-pane, which already sits in a container with 24px of side padding — so its
+       own 24px stacked on top and the content started 48px in, a visible step to the
+       right of the tabs naming it.
+
+       Hosted: vertical padding only, and the host's own padding does the aligning.
+       Standalone (its own screen, no host): keep the 24px so it does not hug the
+       window edge. (Anthony, 2026-09-09) */
+    var _hosted = !!(container && container.closest && container.closest('#bs-pane'));
+    var wrap = Dom.el('div', { style: 'padding:24px ' + (_hosted ? '0' : '24px') + ';max-width:1100px;' });
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1F6080 0%,#16637A 70%,#0EA5A0 100%);' });
@@ -214,6 +227,37 @@
       var r = (res && res.reminders) || {};
       var globalOn = !!(res && res.global_enabled);
       var ins = {};
+
+      /* THE INVOICE TEMPLATE SELECTOR (2026-09-17).
+
+         Anthony asked for iLearn's invoice layout to be available in KiddieTrac "and add
+         this in the invoice template selector where things can be configured if
+         required". The options come from the server (InvoiceDocument::TEMPLATES) rather
+         than being listed here, so adding a third template is a backend change only. */
+      var tplSel = null;
+      (function () {
+        var templates = (res && res.invoice_templates) || null;
+        if (!templates) { return; }
+        var current = (res && res.invoice_template) || 'kiddietrac';
+        var card = Dom.el('div', { style: 'background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px 18px;margin-bottom:16px;' });
+        card.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#1F6080;margin-bottom:8px;' }, 'Invoice template'));
+        card.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:10px;line-height:1.5;' },
+          'The document a family receives when you email them an invoice, and what the PDF looks like.'));
+        tplSel = Dom.el('select', { style: 'width:100%;max-width:420px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;' });
+        Object.keys(templates).forEach(function (k) {
+          var o = Dom.el('option', { value: k }, templates[k].label || k);
+          if (k === current) { o.selected = true; }
+          tplSel.appendChild(o);
+        });
+        card.appendChild(tplSel);
+        var blurb = Dom.el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:8px;line-height:1.5;min-height:32px;' },
+          (templates[current] && templates[current].blurb) || '');
+        tplSel.addEventListener('change', function () {
+          blurb.textContent = (templates[tplSel.value] && templates[tplSel.value].blurb) || '';
+        });
+        card.appendChild(blurb);
+        wrap.appendChild(card);
+      })();
       if (!globalOn) {
         wrap.appendChild(Dom.el('div', { style: 'background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:14px;' },
           '⏸ Automated reminders are currently OFF platform-wide. Your schedule is saved and will start sending once reminders are enabled for the platform.'));
@@ -270,6 +314,7 @@
           cc_admin: ins.cc_admin.checked,
           custom_message: ins.custom_message.value || '',
         };
+        if (tplSel) { payload.invoice_template = tplSel.value; }
         saveBtn.disabled = true; msg.style.color = '#1F6080'; msg.textContent = 'Saving…';
         Api.post('/admin/billing-reminders', payload).then(function () {
           msg.style.color = '#16A34A'; msg.textContent = '✓ Saved.';
