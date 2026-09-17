@@ -11,9 +11,52 @@
   // Open a specific invoice by id from anywhere in the app (e.g. the account
   // ledger's clickable rows). Finds it across the family's children and reuses
   // the same rich invoice detail sheet the Billing screen shows.
+  /* STAFF ARE NOT GUARDIANS, AND THIS ONLY SPOKE GUARDIAN (2026-09-17).
+
+     Every "View invoice" button in the portal comes here — the payment-schedules table,
+     the billing screen, the account ledger. It walked `/parent/children` and then
+     `/parent/children/{id}/invoices`, which resolve the caller's families through the
+     `guardians` table. An admin or a director is nobody's guardian, so the first call
+     answered "Forbidden. Required role: guardian", the catch fired, and they got
+     "Could not open the invoice". Reported by Anthony on the Sanford-Saganek family,
+     whose invoices are the first native ones in that agency.
+
+     This is the same mistake that was found and fixed one function along, for the
+     EXTERNAL invoice button, whose comment says it outright: "This always called the
+     /parent/ one ... a guaranteed 403 for an admin or director." The native twin was
+     left behind, so the bug survived in the path nobody had clicked yet.
+
+     Staff get the staff route — `/director/invoices/{id}`, guarded by
+     authorizeCentreAccess, which is the right question for them — and fall through to
+     the parent path if it refuses. That fall-through matters for the people who are
+     both: a director whose own child attends a centre they do not administer. */
+  function ktIsStaff() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return Array.isArray(u.roles)
+        && u.roles.some(function (r) {
+          return ['agency_admin', 'centre_director', 'platform_admin'].indexOf(r) !== -1;
+        });
+    } catch (e) { return false; }
+  }
+
   window.KT.openInvoiceById = async function (invoiceId) {
     invoiceId = parseInt(invoiceId, 10); if (!invoiceId) return;
     try {
+      if (ktIsStaff()) {
+        try {
+          var sr = await Api.get('/director/invoices/' + invoiceId);
+          if (sr && sr.invoice) {
+            /* No child argument: this is the family's invoice, opened by somebody who
+               is not in that family. The sheet omits the "child · issued" caption
+               rather than inventing a child to name. */
+            openInvoiceDetail(sr.invoice, null);
+            return;
+          }
+        } catch (staffErr) {
+          // Not their centre, or not staff after all — try the guardian path below.
+        }
+      }
       var kids = (state && state.children && state.children.length)
         ? state.children
         : ((await Api.get('/parent/children')).children || []);
@@ -2497,8 +2540,15 @@
     bd.appendChild(grid);
     body.appendChild(bd);
 
-    // Pay
-    if ((inv.balance_due || 0) > 0 && inv.status !== 'paid') {
+    /* Pay — for the person who owes it, not for the office.
+
+       This sheet is the parent's, and staff reach it now too (see openInvoiceById). The
+       copy underneath addresses the reader as the payer — "Send an Interac e-Transfer to
+       your centre's billing" — and the button starts a card payment. An admin opening a
+       family's invoice to look at it must not be handed a way to pay it on their own
+       card by mistake; recording a payment they HAVE received is a different action, on
+       the billing screen, with an audit trail. (2026-09-17) */
+    if ((inv.balance_due || 0) > 0 && inv.status !== 'paid' && !ktIsStaff()) {
       const pay = Dom.el('div', { style: card('padding:16px;') });
       pay.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;margin-bottom:12px;color:var(--ink-900);' }, 'Pay this invoice'));
       const status = Dom.el('div', { style: 'font-size:13px;margin:0 0 10px;min-height:16px;line-height:1.5;' });

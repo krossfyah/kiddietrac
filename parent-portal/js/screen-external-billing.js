@@ -24,13 +24,21 @@
     if (isNaN(d.getTime())) return esc(s);
     return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
   }
-  function statusBadge(status, isOpen) {
-    var s = String(status || '').toLowerCase();
+  function statusBadge(status, isOpen, dueAt) {
+    /* Not due yet reads SCHEDULED rather than Open — 159 of the 166 open invoices
+       here are future-dated, and calling those "open" buried the 7 that are actually
+       late. Derived, never stored: see KT.invoiceStatus in kt-polish.js. */
+    var s = (window.KT && KT.invoiceStatus)
+      ? KT.invoiceStatus(status, dueAt)
+      : String(status || '').toLowerCase();
     var m = {
       paid:     { bg: '#DCFCE7', fg: '#166534', t: 'Paid' },
       void:     { bg: '#E5E7EB', fg: '#4B5563', t: 'Void' },
       overdue:  { bg: '#FEE2E2', fg: '#991B1B', t: 'Overdue' },
       partial:  { bg: '#FEF3C7', fg: '#92400E', t: 'Partial' },
+      /* Calm on purpose. Nothing is wrong and nothing is owed yet, so it must not
+         carry the warning colour that Open (amber) and Overdue (red) do. */
+      scheduled: { bg: '#EEF2FF', fg: '#3730A3', t: 'Scheduled' },
     };
     var b = m[s] || (isOpen ? { bg: '#E0F2FE', fg: '#075985', t: status || 'Open' } : { bg: '#F1F5F9', fg: '#475569', t: status || '—' });
     return '<span style="background:' + b.bg + ';color:' + b.fg + ';padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap;">' + esc(b.t) + '</span>';
@@ -193,6 +201,31 @@
     var td = 'padding:10px 12px;font-size:13px;color:#334155;border-top:1px solid #F1F5F9;vertical-align:middle;';
     var rows = invoices.map(function (i) {
       var acts = '';
+      /* A KIDDIETRAC INVOICE IS NOT A PROVIDER ONE, AND ITS BUTTONS DIFFER.
+
+         This list used to be provider invoices only, so every row's actions assumed a
+         document at the provider — View and Download fetch /agency/external-invoices/{id}
+         and Edit patches the synced copy. A KiddieTrac invoice has none of those: it has
+         no provider document, and editing it there would write to a table it is not in.
+         It opens in the portal's own viewer instead, which is the same sheet the payment
+         schedules and the ledger use. (2026-09-17) */
+      if (i.kt_source === 'kiddietrac') {
+        return '<tr>'
+          + '<td style="' + td + 'font-weight:700;color:#0F172A;">' + esc(i.family || '—') + '</td>'
+          + '<td style="' + td + '">' + roleCell(i.role) + '</td>'
+          + '<td style="' + td + 'font-variant-numeric:tabular-nums;">' + esc(i.number || '—')
+            + '<div style="font-size:10.5px;color:#94A3B8;font-weight:700;letter-spacing:.3px;">KIDDIETRAC</div></td>'
+          + '<td style="' + td + '">' + statusBadge(i.status, i.is_open, i.due_at) + '</td>'
+          + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.issued_at) + '</td>'
+          + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.due_at) + '</td>'
+          + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;">' + money(i.total, i.currency) + '</td>'
+          + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;color:#16A34A;">' + money(i.amount_paid, i.currency) + '</td>'
+          + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;font-weight:800;color:' + (i.is_open ? '#B45309' : '#16A34A') + ';">' + money(i.balance_due, i.currency) + '</td>'
+          + '<td style="' + td + 'text-align:right;white-space:nowrap;">'
+            + '<button type="button" data-kt-iconized="1" data-inv-view="' + esc(String(i.id)) + '"'
+            + ' style="border:none;background:none;cursor:pointer;color:#2563EB;font-weight:600;font-size:12.5px;padding:3px 7px;">👁 View invoice</button></td>'
+          + '</tr>';
+      }
       if (i.has_document || i.pdf_url) {
         acts += '<button type="button" class="xb-act" data-act="view" data-id="' + i.id + '" style="border:none;background:none;cursor:pointer;color:#2563EB;font-weight:600;font-size:12.5px;padding:3px 7px;">👁 View</button>';
         acts += '<button type="button" class="xb-act" data-act="download" data-id="' + i.id + '" style="border:none;background:none;cursor:pointer;color:#0F766E;font-weight:600;font-size:12.5px;padding:3px 7px;">⬇ Download</button>';
@@ -202,7 +235,7 @@
         + '<td style="' + td + 'font-weight:700;color:#0F172A;">' + esc(i.family || '—') + '</td>'
         + '<td style="' + td + '">' + roleCell(i.role) + '</td>'
         + '<td style="' + td + 'font-variant-numeric:tabular-nums;">' + esc(i.number || '—') + '</td>'
-        + '<td style="' + td + '">' + statusBadge(i.status, i.is_open) + '</td>'
+        + '<td style="' + td + '">' + statusBadge(i.status, i.is_open, i.due_at) + '</td>'
         + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.issued_at) + '</td>'
         + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.due_at) + '</td>'
         + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;">' + money(i.total, i.currency) + '</td>'
@@ -256,6 +289,13 @@
     // Row actions (collapsed into one kebab by kt-row-actions on desktop).
     // View/Download open the source invoice in the SYSTEM browser (the APK's
     // in-app WebView can't load the external host directly). Edit opens a modal.
+    /* The KiddieTrac rows' own button — the portal's invoice sheet, the same one the
+       payment schedules and the account ledger open. */
+    body.querySelectorAll('[data-inv-view]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.KT && KT.openInvoiceById) { KT.openInvoiceById(b.getAttribute('data-inv-view')); }
+      });
+    });
     body.querySelectorAll('.xb-act').forEach(function (b) {
       b.addEventListener('click', function () {
         var act = b.getAttribute('data-act');
@@ -275,7 +315,8 @@
     container.setAttribute('data-kt-pretty', '1');
     state = { page: 1, family_id: 0, search: '', sort: '', dir: 'asc', busy: false, status: '' };
     container.innerHTML =
-      '<div style="padding:24px;max-width:1400px;margin:0 auto;">'
+      // Left-aligned like every other billing screen; `margin:0 auto` centred it.
+      '<div style="padding:24px;max-width:1400px;">'
       + '<div class="kt-page-hero"><h2>🧾 Accounting</h2><p>Invoices and balances for the agency. Read-only — payments and balances update automatically as they change at the source.</p></div>'
       + '<div id="xb-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px;"></div>'
       // Voided invoices are excluded from the default list on purpose — they are not

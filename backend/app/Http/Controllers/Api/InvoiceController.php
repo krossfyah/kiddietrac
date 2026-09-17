@@ -478,12 +478,79 @@ final class InvoiceController extends Controller
             return response()->json($empty);
         }
 
-        $isOpenStatus = fn ($s) => ! in_array(strtolower((string) $s), ['paid', 'void'], true);
+        /* A DRAFT IS NOT OWED, AND IT IS NOT PAID EITHER (2026-09-17).
+           Added with the union below: an invoice raised by a payment schedule sits as
+           `draft` until the first of its month. Counting one as open would put money in
+           the "outstanding" figure that nobody has been asked for yet — the same mistake
+           as the 159 "open" invoices that were merely scheduled. It is listed, because a
+           family with only drafts must still be findable; it is not counted. */
+        $isOpenStatus = fn ($s) => ! in_array(strtolower((string) $s), ['paid', 'void', 'draft'], true);
+
+        /* ACCOUNTING IS ALL THE MONEY, NOT ONE OF THE TWO TABLES.
+
+           This screen read `external_invoices` alone — the invoices imported from the
+           provider's own system — so a family billed from inside KiddieTrac appeared
+           nowhere on it. Anthony: "under accounting the new families that have been
+           entered are not showing up either such as the sandford-saganek family."
+
+           He is right, and it is structural rather than about that family: iLearn holds
+           478 provider invoices and 8 native ones, and exactly one family — the one he
+           named — is native-only, which is why it took until now to be visible as a
+           problem. Every family entered in KiddieTrac from here on is in that position.
+
+           So both sources are unioned into one shape and everything downstream — the
+           filters, the search, the sort, the pagination, the family dropdown — works
+           over the union unchanged. `kt_source` says which table a row came from, because
+           the actions differ: a provider invoice opens at the provider, a KiddieTrac one
+           opens in our own viewer. Same money, one list, honest about its origin.
+
+           Related: [[kiddietrac-parent-ledger-external]] and
+           [[kiddietrac-outstanding-balances]] — both say the same thing about other
+           screens, which is how a third one was found reading only half the money. */
+        $unionOf = function () use ($agencyId) {
+            $ext = DB::table('external_invoices')
+                ->where('agency_id', $agencyId)
+                /* EVERY string column is collated explicitly on BOTH sides.
+                   `external_invoices` is utf8mb4_unicode_ci and `invoices` is
+                   utf8mb4_general_ci, and MySQL refuses to UNION two columns whose
+                   collations differ: "Illegal mix of collations". Same family of trap as
+                   the latin1 tables that 500 on Unicode — the schema was built in two
+                   eras and nothing lines them up. Naming one collation here beats
+                   rewriting two live tables to find out what else depends on them. */
+                ->selectRaw("id, agency_id, family_id,"
+                    . " CONVERT(external_source USING utf8mb4) COLLATE utf8mb4_unicode_ci as external_source,"
+                    . " CONVERT(number USING utf8mb4) COLLATE utf8mb4_unicode_ci as number,"
+                    . " CONVERT(status USING utf8mb4) COLLATE utf8mb4_unicode_ci as status,"
+                    . " issued_at, due_at, total, amount_paid, balance_due,"
+                    . " CONVERT(currency USING utf8mb4) COLLATE utf8mb4_unicode_ci as currency,"
+                    . " CONVERT(description USING utf8mb4) COLLATE utf8mb4_unicode_ci as description,"
+                    . " CONVERT(items USING utf8mb4) COLLATE utf8mb4_unicode_ci as items,"
+                    . " CONVERT(source_label USING utf8mb4) COLLATE utf8mb4_unicode_ci as source_label,"
+                    . " CONVERT(pdf_url USING utf8mb4) COLLATE utf8mb4_unicode_ci as pdf_url,"
+                    . " CONVERT('provider' USING utf8mb4) COLLATE utf8mb4_unicode_ci as kt_source");
+
+            $native = DB::table('invoices as i')
+                ->join('centres as c', 'c.id', '=', 'i.centre_id')
+                ->where('c.agency_id', $agencyId)
+                ->selectRaw("i.id, c.agency_id as agency_id, i.family_id,"
+                    . " CONVERT('kiddietrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as external_source,"
+                    . " CONVERT(i.invoice_number USING utf8mb4) COLLATE utf8mb4_unicode_ci as number,"
+                    . " CONVERT(i.status USING utf8mb4) COLLATE utf8mb4_unicode_ci as status,"
+                    . " i.issued_at, i.due_at, i.total, i.amount_paid, i.balance_due,"
+                    . " CONVERT('CAD' USING utf8mb4) COLLATE utf8mb4_unicode_ci as currency,"
+                    . " CONVERT(i.notes USING utf8mb4) COLLATE utf8mb4_unicode_ci as description,"
+                    . " CONVERT(NULL USING utf8mb4) COLLATE utf8mb4_unicode_ci as items,"
+                    . " CONVERT('KiddieTrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as source_label,"
+                    . " CONVERT(i.pdf_url USING utf8mb4) COLLATE utf8mb4_unicode_ci as pdf_url,"
+                    . " CONVERT('kiddietrac' USING utf8mb4) COLLATE utf8mb4_unicode_ci as kt_source");
+
+            return $ext->unionAll($native);
+        };
 
         // Family labels (primary guardian's name) for every family in this agency's
-        // external-invoice set, so each row and the filter dropdown show a name.
-        $familyIds = DB::table('external_invoices')->where('agency_id', $agencyId)
-            ->whereNotNull('family_id')->distinct()->pluck('family_id')->all();
+        // invoice set — both sources — so each row and the filter dropdown show a name.
+        $familyIds = DB::query()->fromSub($unionOf(), 'ei')
+            ->whereNotNull('ei.family_id')->distinct()->pluck('ei.family_id')->all();
         $famLabel = [];
         foreach (DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
             ->whereIn('g.family_id', $familyIds ?: [0])
@@ -495,12 +562,10 @@ final class InvoiceController extends Controller
             }
         }
 
-        $statsBase = DB::table('external_invoices as ei')
-            ->where('ei.agency_id', $agencyId)
+        $statsBase = DB::query()->fromSub($unionOf(), 'ei')
             ->where('ei.status', '!=', 'void');
-        $base = DB::table('external_invoices as ei')
-            ->leftJoin('agencies as a', 'a.id', '=', 'ei.agency_id')
-            ->where('ei.agency_id', $agencyId);
+        $base = DB::query()->fromSub($unionOf(), 'ei')
+            ->leftJoin('agencies as a', 'a.id', '=', 'ei.agency_id');
 
         // Void is hidden unless it is asked for by name. A voided invoice is a real
         // record — raised, then cancelled — but it is not part of "what is outstanding",
@@ -614,7 +679,14 @@ final class InvoiceController extends Controller
                    column then shows a dash rather than inventing one. */
                 'role'         => implode(' · ', array_keys($famRoles[(int) $r->family_id] ?? [])),
                 'source'       => $r->external_source,
-                'source_label' => $r->agency_name ?: ($r->source_label ?: ucfirst((string) $r->external_source)),
+                /* WHICH TABLE, so the row's actions can differ. A provider invoice opens
+                   at the provider through /link; a KiddieTrac one has no such link and
+                   opens in our own viewer. The screen keys on this rather than guessing
+                   from the label. */
+                'kt_source'    => $r->kt_source ?? 'provider',
+                'source_label' => ($r->kt_source ?? '') === 'kiddietrac'
+                    ? 'KiddieTrac'
+                    : ($r->agency_name ?: ($r->source_label ?: ucfirst((string) $r->external_source))),
                 'number'       => $r->number,
                 'status'       => $r->status,
                 'issued_at'    => $r->issued_at,
