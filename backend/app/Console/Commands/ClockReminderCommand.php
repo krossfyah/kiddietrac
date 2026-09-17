@@ -148,18 +148,38 @@ final class ClockReminderCommand extends Command
             $nowLocal = Carbon::now($tz);
             $todayLocal = Carbon::today($tz);
 
+            /* IF THEY ARE ROSTERED, THE ROSTER SAYS WHEN THE DAY ENDS.
+
+               A median of the last month's punches cannot know that today is a closing
+               shift. Somebody scheduled until 6pm was being chased from about 4pm on the
+               strength of their usual 7.5 hours — a reminder to clock out of a shift
+               they are still working, which is exactly the noise that teaches people to
+               ignore these. While the scheduled end has not passed, there is nothing to
+               chase. (2026-09-17) */
+            $todayShift = $this->scheduledShift((int) $e->user_id, $e->centre_id ? (int) $e->centre_id : null, $in->toDateString());
+            if ($todayShift && $todayShift->ends_at
+                && $nowLocal->lt(Carbon::parse($todayShift->ends_at, $tz))) {
+                continue;
+            }
+
             $usual = $this->usualShiftHours((int) $e->user_id, $today);
             $threshold = $usual === null ? 6.0 : max(5.0, $usual + 1.0);
             // Elapsed time is the same number in any zone; only the labels moved.
             if ($in->floatDiffInHours($nowLocal) < $threshold) continue;
 
+            $shiftWindow = $this->shiftWindow($todayShift);
             $inAt = $in->format('g:i A');
 
             if ($in->isSameDay($todayLocal)) {
                 $howLong = number_format($in->floatDiffInHours($nowLocal), 1);
-                $usualLine = $usual === null
-                    ? ''
-                    : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.';
+                /* Prefer the ROSTERED day to the inferred one. "Longer than your usual
+                   day of about 7.5 hours" invites an argument; "your shift was scheduled
+                   to end at 6:00 PM" is a fact somebody can check and correct. */
+                $usualLine = $shiftWindow
+                    ? ' Your shift today was scheduled ' . $shiftWindow . '.'
+                    : ($usual === null
+                        ? ''
+                        : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.');
                 $subject = 'Reminder: you\'re still clocked in';
                 $bodyText = "You clocked in at {$inAt} today and have been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly. If you have already left, ask your administrator to correct the time — clocking out now would record the hours since you clocked in.";
             } else {
@@ -176,7 +196,7 @@ final class ClockReminderCommand extends Command
 
             $this->sendReminder(
                 (int) $e->user_id, (int) $e->centre_id, $e->email, $e->first_name,
-                $subject, $bodyText,
+                $subject, $bodyText, $shiftWindow,
             );
             $n++;
         }
@@ -251,20 +271,50 @@ final class ClockReminderCommand extends Command
                 continue;
             }
 
-            // Did they work this same weekday in the last 14 days? (regular pattern —
-            // we still have no shift schedule table, so their own history is the
-            // best available statement of when they are expected in)
-            $worksThisWeekday = DB::table('time_punches')
-                ->where('user_id', $s->user_id)
-                ->where('punched_in_at', '>=', Carbon::parse($cDate)->subDays(14))
-                ->whereRaw('WEEKDAY(punched_in_at) = ?', [$cDow - 1]) // MySQL WEEKDAY: 0=Mon
-                ->exists();
-            if (! $worksThisWeekday) continue;
+            /* THE ROSTER FIRST, HABIT ONLY AS A FALLBACK.
+
+               Somebody who is on the staff calendar is expected when the calendar says
+               so — not when a fortnight of punches suggests. Two silences come out of
+               this, and both are reminders that should never have been sent:
+
+                 • on the roster, nothing today  → they are not due in. Say nothing.
+                 • on the roster, due at 12:30   → at 9am they are not late yet.
+
+               Only somebody with no roster at all falls back to the weekday pattern,
+               so an agency that has not opened the staff calendar is unaffected. */
+            $tz = AgencyTime::tzForCentre($centreId);
+            $shift = $this->scheduledShift((int) $s->user_id, $centreId, $cDate);
+            $rostered = $this->hasRoster((int) $s->user_id, $cDate);
+
+            if ($rostered) {
+                if (! $shift) continue;                        // not on today's roster
+                if (Carbon::now($tz)->lt(Carbon::parse($shift->starts_at, $tz))) {
+                    continue;                                  // their shift has not started
+                }
+            } else {
+                // Did they work this same weekday in the last 14 days? Their own history
+                // is the best available statement of when they are expected in when
+                // nobody has rostered them.
+                $worksThisWeekday = DB::table('time_punches')
+                    ->where('user_id', $s->user_id)
+                    ->where('punched_in_at', '>=', Carbon::parse($cDate)->subDays(14))
+                    ->whereRaw('WEEKDAY(punched_in_at) = ?', [$cDow - 1]) // MySQL WEEKDAY: 0=Mon
+                    ->exists();
+                if (! $worksThisWeekday) continue;
+            }
+
+            $window = $this->shiftWindow($shift);
+            $lead = $window
+                ? "You're scheduled today from {$window}, and no clock-in has been recorded yet. "
+                  . 'If you are working, please clock in now so your hours are captured.'
+                : "We noticed you're not clocked in today. If you're working, please clock in now "
+                  . 'so your hours are captured. If you\'re off today, you can ignore this.';
 
             $this->sendReminder(
                 (int) $s->user_id, (int) $s->centre_id, $s->email, $s->first_name,
                 'Reminder: don\'t forget to clock in',
-                "We noticed you're not clocked in today. If you're working, please clock in now so your hours are captured. If you're off today, you can ignore this.",
+                $lead,
+                $window,
             );
             $n++;
         }
@@ -288,6 +338,68 @@ final class ClockReminderCommand extends Command
             ->where('start_at', '<=', $day->copy()->endOfDay())
             ->where('end_at', '>=', $day->copy()->startOfDay())
             ->exists();
+    }
+
+    /* THE ROSTER IS THE ANSWER TO "WHEN WERE YOU DUE IN?" (2026-09-17)
+
+       This file said, twice, "we have no shift schedule table" and fell back to asking
+       whether somebody had clocked in on the same weekday in the last fortnight. There
+       IS one — `shifts` (user, room, starts_at, ends_at, status), written by the staff
+       calendar and filled by schedule:autofill — and using it fixes the complaint
+       Anthony raised: a reminder that names no hours cannot be checked, and one based on
+       a fortnight of habit chases people who are not due in yet.
+
+       `starts_at` / `ends_at` are WALL CLOCK in the centre's own zone, stored naive, the
+       same convention as a child's expected drop-off. They are never converted; they are
+       read back in that zone. (SchedulingController compares them against plain local
+       date strings, which only works because of this.)
+
+       @return object|null the roster line for that local date, or null */
+    private function scheduledShift(int $userId, ?int $centreId, string $localDate): ?object
+    {
+        $q = DB::table('shifts as s')
+            ->where('s.user_id', $userId)
+            ->whereIn('s.status', ['scheduled', 'active'])
+            ->whereRaw('DATE(s.starts_at) = ?', [$localDate]);
+
+        if ($centreId) {
+            $q->join('rooms as r', 'r.id', '=', 's.room_id')->where('r.centre_id', $centreId);
+        }
+
+        return $q->orderBy('s.starts_at')->select('s.starts_at', 's.ends_at')->first();
+    }
+
+    /**
+     * Is this person actually rostered — does their centre keep their schedule here?
+     *
+     * This decides whether an EMPTY day means "not working" or means nothing at all. An
+     * agency that has never opened the staff calendar has no rows for anybody, and
+     * reading that as "nobody is scheduled" would silence every reminder in the
+     * building. So the roster only gets to say "you are not due in today" for somebody
+     * who is on it in the first place.
+     */
+    private function hasRoster(int $userId, string $localDate): bool
+    {
+        $from = Carbon::parse($localDate)->subDays(28)->toDateString();
+        $to = Carbon::parse($localDate)->addDays(28)->toDateString();
+
+        return DB::table('shifts')
+            ->where('user_id', $userId)
+            ->whereIn('status', ['scheduled', 'active', 'completed'])
+            ->whereRaw('DATE(starts_at) BETWEEN ? AND ?', [$from, $to])
+            ->exists();
+    }
+
+    /** "7:00 AM to 6:00 PM", or null when there is no roster line to quote. */
+    private function shiftWindow(?object $shift): ?string
+    {
+        if (! $shift) {
+            return null;
+        }
+        $in = Carbon::parse($shift->starts_at)->format('g:i A');
+        $out = $shift->ends_at ? Carbon::parse($shift->ends_at)->format('g:i A') : null;
+
+        return $out ? ($in . ' to ' . $out) : ('from ' . $in);
     }
 
     /**
@@ -315,7 +427,7 @@ final class ClockReminderCommand extends Command
         return $hours[intdiv(count($hours), 2)];          // median, so one long day does not skew it
     }
 
-    private function sendReminder(int $userId, int $centreId, string $to, ?string $firstName, string $subject, string $lead): void
+    private function sendReminder(int $userId, int $centreId, string $to, ?string $firstName, string $subject, string $lead, ?string $shiftWindow = null): void
     {
         if ($this->dryRun) {
             $this->line("  [dry-run] would remind {$to} (user {$userId}) — {$subject}");
@@ -350,15 +462,46 @@ final class ClockReminderCommand extends Command
             . '<li><strong>Payroll</strong> — your pay is calculated from recorded hours; a missing punch can mean a missed or short-paid shift.</li>'
             . '<li><strong>Reporting</strong> — attendance, CACFP and funding reports reconcile against staff hours, so accurate times keep the centre\'s claims correct.</li>'
             . '</ul></div>'
+            /* WHAT WE THINK YOUR HOURS ARE, AND HOW TO CHANGE OUR MIND.
+
+               A reminder that names no hours cannot be checked, so the only thing the
+               reader can do is either clock in or ignore it — and the second one becomes
+               a habit. Naming the rostered shift turns it into something correctable,
+               and says plainly which two actions stop these arriving: fix the schedule,
+               or book the day off before it happens. Approved leave already suppresses
+               the reminder (isOnApprovedTimeOff), so that sentence is a promise the
+               system actually keeps. (Anthony, 2026-09-17) */
+            . '<div style="border:1px solid #E5E7EB;border-radius:8px;padding:12px 16px;margin:16px 0;font-size:14px;line-height:1.6;">'
+            . '<strong>' . ($shiftWindow ? 'Your scheduled hours today' : 'Why you received this') . '</strong><br>'
+            . ($shiftWindow
+                ? 'You are rostered <strong>' . e($shiftWindow) . '</strong>. Reminders are sent against '
+                  . 'this schedule, so if it does not match the hours you actually work, ask your director '
+                  . 'or administrator to update it — once it is right, these reminders will line up with '
+                  . 'your real day.'
+                : 'You are not on the staff schedule for today, so this reminder was based on the days you '
+                  . 'have recently worked. Ask your director or administrator to add your shifts to the '
+                  . 'staff schedule and these reminders will follow your real hours instead.')
+            . '<br><br>'
+            . '<strong>Going to be off?</strong> Book it in advance — submit vacation, sick or personal '
+            . 'leave in the app and, once it is approved, we stop sending these for those days '
+            . 'automatically. Telling us in advance also keeps the room ratios and the day\'s planning '
+            . 'right for everyone else.'
+            . '</div>'
             . '<p style="font-size:14px;line-height:1.6;">Open the app and tap <strong>Clock in / out</strong> to fix this in a few seconds. Thank you!</p>'
             . '</div>';
 
         try {
             $svc = AgencyMailer::forAgency($agencyId ?: null);
-            $m = $svc->mailer();
             $from = $svc->fromAddress();
             $fn = $svc->fromName();
-            $m->html($html, function ($msg) use ($to, $from, $fn, $subject) {
+            /* $svc->html(), NOT $svc->mailer()->html(). The wrapper stamps
+               X-KT-Agency-Id, which is what tells the suppression gate WHICH agency is
+               sending. Without it the gate falls back to judging the send by every
+               account that shares the recipient's address — and one of those belonging
+               to an agency whose master switch is off cancels the message. That is how
+               50 real iLearn emails died in September; this call site was still on the
+               old path. (2026-09-17) */
+            $svc->html($html, function ($msg) use ($to, $from, $fn, $subject) {
                 $msg->to($to)->from($from, $fn)->subject($subject);
             });
         } catch (\Throwable $ex) {

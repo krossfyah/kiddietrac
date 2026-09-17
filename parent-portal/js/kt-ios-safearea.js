@@ -159,10 +159,32 @@
      --kt-safe-* first, env() second: this file substitutes a real value where iOS
      reports zero, and trusting env() alone is what once collapsed the navy band on an
      iPhone. (Anthony, 2026-09-08) */
+  /* THE BOTTOM INSET IS NOT THE SAME THING ON BOTH PLATFORMS (2026-09-17).
+
+     On ANDROID the bottom inset is occupied by a real system nav bar — home, back,
+     recents — drawn over our content. Painting it navy is what makes the app look like
+     it ends where the system bar begins, and that is why this strip exists.
+
+     On iOS there is no such bar. The bottom inset is the home indicator, a thin pill
+     that floats OVER the app, and Apple's own apps run their tab bar underneath it.
+     So the strip was painting a navy band across the bottom of our own white bottom
+     nav — 34pt of it — and the reader saw the bar, then a navy band, then whatever the
+     native shell draws below the web view. Anthony, 2026-09-17, on the iPhone: "the
+     bottom bar has a navy and then another white bar ... we should just bring the
+     kiddietrac bar right to the bottom to fill the area."
+
+     The bar already pays the inset itself (kt-mobile-app.css pads #kt-mobilenav by
+     --kt-safe-bottom), so with the strip gone its own background fills that area — which
+     is exactly what was asked for. The TOP strip stays on both: the status bar is drawn
+     over the app on either platform, and Anthony says the top now looks right. */
+  function wantsBottomFill() {
+    return !isIOS();
+  }
+
   function paintSystemBarFills() {
     var strip = function (id, edge) {
       var el = d.getElementById(id);
-      var want = ownsTheSystemBars();
+      var want = ownsTheSystemBars() && (edge === 'top' || wantsBottomFill());
       if (!want) { if (el) { el.remove(); } return; }
       if (!el) {
         el = d.createElement('div');

@@ -2355,6 +2355,24 @@
       } catch (e) {}
     }
 
+    /* A SIGNED PHOTO URL EXPIRES, AND THE CACHED USER OUTLIVES IT (2026-09-17).
+
+       Protected media is served from `/api/v1/media/f?expires=…` — SignProtectedMedia
+       rewrites every `/storage/…` path on the way out of the API, and 37 of the 67 users
+       with a photo still hold a raw `/storage/…` in the column, which answers **403 on
+       both hosts**, by design. So the only link a client can use is the one the API just
+       handed it, and `kt_user` is a CACHE: the app keeps a session for days, the expiry
+       rolls past, the avatar 403s, and `onerror` falls back to initials for good.
+
+       Anthony, 2026-09-17, on an educator's iPhone: initials where her photo should be.
+       Nothing was wrong with her upload — the file is there and the API signs it
+       correctly. The phone was asking with a link that had gone stale. kt-topbar.js
+       already refreshed this, but it returns early for anyone who is not an admin, so
+       every educator, home visitor and parent kept the expired one.
+
+       One fetch, shared by every avatar on the page, and written back to BOTH stores —
+       fixing the picture on screen without fixing the cache behind it just moves the 403
+       to the next cold start. */
     // Set up nav user pill
     const navAvatar = Dom.$('#navAvatar');
     const navName   = Dom.$('#navName');
@@ -2377,6 +2395,20 @@
          WebKit if error fires for an already-failed cached URL BEFORE the appendChild
          below has run. That threw during boot on iPhone and left a dead shell. */
       img.onerror = () => {
+        /* Ask the server for a fresh link ONCE before giving up. A 403 here almost
+           always means the signature expired, not that the photo is gone. */
+        if (!img.getAttribute('data-kt-retried')) {
+          img.setAttribute('data-kt-retried', '1');
+          KT.refreshUserPhoto().then(function (fresh) {
+            if (fresh) {
+              img.src = /^https?:\/\//i.test(fresh) ? fresh : (apiHost + fresh);
+              return;
+            }
+            if (img.parentNode) { img.parentNode.removeChild(img); }
+            navAvatar.textContent = Fmt.initials(user && user.name);
+          });
+          return;
+        }
         if (img.parentNode) { img.parentNode.removeChild(img); }
         navAvatar.textContent = Fmt.initials(user && user.name);
       };
@@ -2432,6 +2464,40 @@
     window.addEventListener('hashchange', renderScreen);
     renderScreen();
   }
+
+  /* ONE refresh for every avatar on the page — see the note at the nav user pill.
+     Deduped while in flight, and released after 30s so a session long enough to outlive
+     a second expiry can ask again. */
+  var _photoRefresh = null;
+  window.KT.refreshUserPhoto = function () {
+    if (_photoRefresh) { return _photoRefresh; }
+    var tok = null;
+    try { tok = Auth.token(); } catch (e) {}
+    if (!tok) { return Promise.resolve(null); }
+    var api = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    _photoRefresh = fetch(api + '/auth/me', {
+      headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' },
+    }).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (fresh) {
+      if (!fresh || !fresh.photo_url) { return null; }
+      try {
+        [window.sessionStorage, window.localStorage].forEach(function (store) {
+          var raw = store.getItem('kt_user');
+          if (!raw) { return; }
+          var u = JSON.parse(raw);
+          if (!u || typeof u !== 'object') { return; }
+          u.photo_url = fresh.photo_url;
+          store.setItem('kt_user', JSON.stringify(u));
+        });
+      } catch (e) {}
+      return fresh.photo_url;
+    }).catch(function () { return null; });
+    _photoRefresh.then(function () {
+      setTimeout(function () { _photoRefresh = null; }, 30000);
+    });
+    return _photoRefresh;
+  };
 
   // Export
   window.KT.Shell = {

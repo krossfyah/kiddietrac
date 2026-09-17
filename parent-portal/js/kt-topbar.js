@@ -638,14 +638,35 @@
         }
       }).catch(function () {});
   }
+  /* A 403 on an avatar is an EXPIRED SIGNATURE, not a missing photo — see the note in
+     app-v2-shell.js. Neither painter here had an onerror at all, so a stale link left a
+     broken-image glyph in the pill with nothing to recover it. One retry against a fresh
+     link, then the initials. (2026-09-17) */
+  function ktPhotoRetry(img, onGiveUp) {
+    img.onerror = function () {
+      if (img.getAttribute('data-kt-retried')) { if (onGiveUp) { onGiveUp(); } return; }
+      img.setAttribute('data-kt-retried', '1');
+      if (!(window.KT && KT.refreshUserPhoto)) { if (onGiveUp) { onGiveUp(); } return; }
+      KT.refreshUserPhoto().then(function (fresh) {
+        if (!fresh) { if (onGiveUp) { onGiveUp(); } return; }
+        img.src = /^https?:\/\//i.test(fresh) ? fresh : (API.replace(/\/api\/v1\/?$/, '') + fresh);
+      });
+    };
+  }
+
   function paintSidebarAvatar(u) {
     var av = document.getElementById('navAvatar'); if (!av || !u.photo_url) return;
     var apiHost = API.replace(/\/api\/v1\/?$/, '');
     var src = /^https?:\/\//i.test(u.photo_url) ? u.photo_url : (apiHost + u.photo_url);
     av.textContent = '';
     var img = document.createElement('img');
-    img.src = src; img.alt = u.name || '';
+    img.alt = u.name || '';
     img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;';
+    ktPhotoRetry(img, function () {
+      if (img.parentNode) { img.parentNode.removeChild(img); }
+      av.textContent = tbInitials(u);
+    });
+    img.src = src;
     av.appendChild(img);
   }
   // ── Top-bar user avatar (photo → coloured initials) ──────────────────
@@ -671,7 +692,13 @@
     var src = /^https?:\/\//i.test(u.photo_url) ? u.photo_url : (apiHost + u.photo_url);
     sp.className = 'kt-tb-ava'; sp.style.background = '';
     sp.innerHTML = '<img alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
-    sp.querySelector('img').src = src;
+    var tbImg = sp.querySelector('img');
+    ktPhotoRetry(tbImg, function () {
+      sp.className = 'kt-tb-ava kt-tb-ava--init';
+      sp.style.background = avaColour((u && u.name) || '');
+      sp.textContent = tbInitials(u);
+    });
+    tbImg.src = src;
   }
 
   // Let the shell mount the bar the instant it clears #appMain, instead of leaving it
