@@ -47,16 +47,13 @@ class EducatorRoomsController extends Controller
            offer is the intersection: centres the educator holds a role at, AND
            centres the person doing the assigning may access. An agency admin sees
            all nine; a director of one centre still sees only theirs. */
-        $centreIds = array_values(array_filter(
-            $this->centreIdsOf($user),
-            fn ($c) => $this->authorizeCentreAccess($request->user(), $c)
-        ));
+        $centreIds = $this->reachableCentres($request, $user);
 
-        if (! $centreIds) {
+        if ($centreIds === null) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $centreId = $centreIds[0];   // kept for callers that still read one centre
+        $centreId = $centreIds[0] ?? null;   // kept for callers that still read one centre
 
         $rooms = DB::table('rooms as r')
             ->join('centres as c', 'c.id', '=', 'r.centre_id')
@@ -80,13 +77,18 @@ class EducatorRoomsController extends Controller
             'multi_centre' => $multi,
             'rooms' => $rooms,
             'assigned_room_ids' => $assigned,
+            // An office account holds no rooms and never will. Say so, rather than
+            // leaving the panel to infer it from an empty list.
+            'has_centre' => (bool) $centreIds,
             // Told plainly, because the fallback surprises people otherwise.
-            'note' => $assigned
-                ? 'This educator sees only the rooms assigned below.'
-                : ($multi
-                    ? 'No rooms assigned — this educator currently sees every room at all '
-                      . count($centreIds) . ' of their centres.'
-                    : 'No rooms assigned — this educator currently sees every room at their centre.'),
+            'note' => ! $centreIds
+                ? 'This account is not posted to a centre, so there are no rooms to assign.'
+                : ($assigned
+                    ? 'This educator sees only the rooms assigned below.'
+                    : ($multi
+                        ? 'No rooms assigned — this educator currently sees every room at all '
+                          . count($centreIds) . ' of their centres.'
+                        : 'No rooms assigned — this educator currently sees every room at their centre.')),
         ]);
     }
 
@@ -449,15 +451,12 @@ class EducatorRoomsController extends Controller
 
     public function punches(Request $request, int $user): JsonResponse
     {
-        $centreId = $this->centreOf($user);
-        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+        $centreIds = $this->reachableCentres($request, $user);
+        if ($centreIds === null) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $tz = DB::table('centres as c')
-            ->join('agencies as a', 'a.id', '=', 'c.agency_id')
-            ->where('c.id', $centreId)
-            ->value('a.timezone') ?: 'America/Toronto';
+        $tz = $this->timezoneFor($user, $centreIds[0] ?? null);
 
         $rows = DB::table('time_punches')
             ->where('user_id', $user)
@@ -517,6 +516,72 @@ class EducatorRoomsController extends Controller
             ->whereNull('centre_id')
             ->where('agency_id', $agencyId)
             ->exists();
+    }
+
+    /* A PERSON WITH NO CENTRE IS AN EMPTY ANSWER, NOT A REFUSAL (2026-09-17).
+
+       Both reads asked "which of this person's centres may you reach?" and treated an
+       empty result as Forbidden. That is right when somebody holds centres and none of
+       them are yours. It is wrong for the 68 of 106 live accounts who hold NO centre at
+       all — every agency admin, every platform admin, every office account, including
+       the person reading the screen. Opening such a record fired two requests that could
+       only ever fail: the clock history read "Could not load clock records" while a real
+       punch sat in the table, and the audit log filled with rows marked (failed) for
+       something nobody had done wrong. Anthony saw those and asked what was broken.
+
+       403 answers "you may not". It must not be used to say "there is nothing here".
+
+       So: a subject WITH centres still needs one of them to be reachable — unchanged —
+       and a subject with none is readable by anyone already entitled to the record,
+       which is themself or somebody scoped to an agency they belong to. resolveAgencyId()
+       honours X-Active-Agency-Id, so a platform admin is held to the agency they have
+       switched into rather than waved through every tenant.
+
+       @return int[]|null  the reachable centres (possibly empty), or null to refuse. */
+    private function reachableCentres(Request $request, int $user): ?array
+    {
+        $all = $this->centreIdsOf($user);
+
+        if ($all) {
+            $allowed = array_values(array_filter(
+                $all,
+                fn ($c) => $this->authorizeCentreAccess($request->user(), $c)
+            ));
+
+            return $allowed ?: null;
+        }
+
+        $caller = $request->user();
+        if ($caller && (int) $caller->id === $user) {
+            return [];                        // your own record
+        }
+
+        $agencyId = $this->resolveAgencyId($request);
+
+        return ($agencyId && $this->userBelongsToAgency($user, (int) $agencyId)) ? [] : null;
+    }
+
+    /* The zone a shift is READ in. A centre answers through its agency; an office
+       account has no centre, so ask the agency they hold a role at directly. Never the
+       server's zone and never the device's — a punch shown an hour out is a payroll
+       dispute, not a cosmetic slip. */
+    private function timezoneFor(int $userId, ?int $centreId): string
+    {
+        if ($centreId) {
+            $tz = DB::table('centres as c')
+                ->join('agencies as a', 'a.id', '=', 'c.agency_id')
+                ->where('c.id', $centreId)
+                ->value('a.timezone');
+            if ($tz) { return $tz; }
+        }
+
+        $tz = DB::table('role_assignments as ra')
+            ->join('agencies as a', 'a.id', '=', 'ra.agency_id')
+            ->where('ra.user_id', $userId)
+            ->where('ra.active', true)
+            ->value('a.timezone');
+
+        return $tz ?: 'America/Toronto';
     }
 
     private function centreOf(int $userId): ?int

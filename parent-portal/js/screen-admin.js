@@ -2654,6 +2654,12 @@
         const note = Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-bottom:10px;line-height:1.5;' }, d.note || '');
         roomBody.appendChild(note);
 
+        /* An office account — an agency admin, a platform admin, anyone not posted to a
+           centre — has no rooms and no way to be given one. The server says so in
+           has_centre; the sentence above is the whole answer, and a Save button under it
+           would only offer a write that must fail. (2026-09-17) */
+        if (d.has_centre === false) { return; }
+
         const selected = {};
         (d.assigned_room_ids || []).forEach(function (id) { selected[id] = true; });
 
@@ -2773,6 +2779,26 @@
         clockBody.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-bottom:8px;' },
           'Total on record: ' + (d.total_hours || 0) + ' hours across ' + rows.length + ' shift(s).'));
 
+        /* A SHIFT THAT ENDS ON ANOTHER DAY HAS TO SAY SO.
+
+           The row prints the in-day once and then two clock times, so a shift clocked
+           in at 11:56 PM and out at 10:44 PM reads as ending before it began. Anthony's
+           own record is exactly that: one punch, in on 13 July, out on 3 September,
+           1,222 hours — an overnight and a never-clocked-out both render as nonsense,
+           and the second is the one that matters because it is payroll.
+
+           Compared as TEXT. `in_local`/`out_local` are already in the agency's zone, and
+           `new Date('2026-09-03')` is parsed as UTC midnight, which names the day before
+           for anyone west of Greenwich. */
+        const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        function endedLater(p) {
+          const a = String(p.in_local || '').slice(0, 10);
+          const b = String(p.out_local || '').slice(0, 10);
+          if (!a || !b || a === b) { return ''; }
+          const m = b.split('-');
+          return ' on ' + Number(m[2]) + ' ' + (MON[Number(m[1]) - 1] || '');
+        }
+
         const list = Dom.el('div', {});
         rows.slice(0, 20).forEach(function (p) {
           const open = !p.punched_out_at;
@@ -2782,7 +2808,8 @@
           row.appendChild(Dom.el('div', {}, [
             Dom.el('div', { style: 'font-weight:700;color:#111827;' }, p.day || ''),
             Dom.el('div', { style: 'font-size:11.5px;color:#64748B;' },
-              (p.in_time || '—') + ' – ' + (open ? 'still clocked in' : (p.out_time || '—'))),
+              (p.in_time || '—') + ' – '
+                + (open ? 'still clocked in' : ((p.out_time || '—') + endedLater(p)))),
           ]));
           const right = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
           right.appendChild(Dom.el('div', {
