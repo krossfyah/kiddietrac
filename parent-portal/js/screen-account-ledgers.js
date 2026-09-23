@@ -47,12 +47,13 @@
 
   function money(n) {
     n = Number(n) || 0;
-    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(n); }
+    try { return new Intl.NumberFormat('en-CA', {  /* pinned: `undefined` follows the BROWSER, so CAD renders '$' on an en-CA
+                                       machine and 'CA$' on en-US — the same amount, two ways */ style: 'currency', currency: 'CAD' }).format(n); }
     catch (e) { return '$' + n.toFixed(2); }
   }
   function money0(n) {
     n = Number(n) || 0;
-    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(n); }
+    try { return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(n); }
     catch (e) { return '$' + Math.round(n); }
   }
   function esc(s) {
@@ -109,6 +110,249 @@
       var fg = kind === 'parent' ? '#475569' : (kind === 'contractor' ? '#92400E' : '#4338CA');
       return chip(r, bg, fg);
     }).join('');
+  }
+
+  /* What to call this row's state. An invoice that is not due yet says "scheduled"
+     rather than "open": on this agency 159 of 166 open invoices are future-dated, and
+     labelling those as open made the 7 genuinely late ones impossible to pick out.
+     Derived at display time — see KT.invoiceStatus in kt-polish.js for why it is not
+     a stored status. */
+
+  /* ── Issuing a refund ──────────────────────────────────────────────────────
+     The invoice is what a person picks, not the receipt: money that arrived through
+     the iLearn sync has no receipt row at all until one is refunded, so the invoice
+     is the only handle there is on it. The server resolves the receipt underneath
+     and writes one where it is missing.
+
+     role="dialog" matters. KT.uiBusy() looks for exactly that to defer the
+     auto-refresher, and without it #appMain is torn down mid-signature and the
+     dialog closes itself. */
+  function openRefund(userId, container, wrap) {
+    var ov = document.createElement('div');
+    ov.className = 'kt-modal-overlay';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', 'Issue a refund');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;'
+      + 'display:flex;align-items:flex-start;justify-content:center;padding:28px 16px;overflow:auto;';
+
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:16px;max-width:620px;width:100%;'
+      + 'box-shadow:0 24px 60px rgba(15,23,42,.28);overflow:hidden;';
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+
+    var pad = null;
+    function close() {
+      try { if (pad) pad.destroy(); } catch (e) {}
+      ov.remove();
+    }
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    document.addEventListener('keydown', function esc(e) {
+      if (e.key === 'Escape' && document.body.contains(ov)) { close(); document.removeEventListener('keydown', esc); }
+    });
+
+    function shell(bodyHtml) {
+      box.innerHTML =
+        '<div style="padding:16px 20px;border-bottom:1px solid ' + C.rule + ';display:flex;align-items:center;gap:10px;">'
+        + '<div style="font-size:16px;font-weight:800;color:' + C.ink + ';">Issue a refund</div>'
+        + '<button type="button" id="rfx-close" aria-label="Close" style="margin-left:auto;border:none;background:none;'
+        + 'font-size:20px;line-height:1;cursor:pointer;color:' + C.muted + ';">&times;</button></div>'
+        + '<div style="padding:18px 20px;">' + bodyHtml + '</div>';
+      var x = box.querySelector('#rfx-close');
+      if (x) x.onclick = close;
+    }
+
+    shell('<div style="color:' + C.muted + ';font-size:13px;padding:18px 0;text-align:center;">Finding invoices with money on them…</div>');
+
+    Api.get('/refunds/refundable?user_id=' + encodeURIComponent(userId)).then(function (d) {
+      var invs = (d && d.invoices) || [];
+      if (!invs.length) {
+        shell('<div style="padding:14px;background:#F8FAFC;border:1px solid ' + C.rule + ';border-radius:10px;'
+          + 'color:' + C.muted + ';font-size:13.5px;">Nothing on this account has money against it that can be '
+          + 'refunded. An invoice appears here once a payment has been received and not already given back.</div>');
+        return;
+      }
+      renderPick(invs);
+    }).catch(function (e) {
+      shell('<div style="padding:14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;color:#991B1B;'
+        + 'font-size:13.5px;">' + esc((e && e.message) || 'Could not load the invoices for this account.') + '</div>');
+    });
+
+    function renderPick(invs) {
+      var rows = invs.map(function (iv, i) {
+        return '<label style="display:flex;gap:11px;align-items:flex-start;padding:11px 12px;border:1px solid '
+          + C.rule + ';border-radius:10px;margin-bottom:8px;cursor:pointer;">'
+          + '<input type="radio" name="rfx-inv" value="' + i + '" style="margin-top:3px;">'
+          + '<div style="flex:1;min-width:0;">'
+          + '<div style="font-weight:700;color:' + C.ink + ';">' + esc(iv.number) + '</div>'
+          + '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:2px;">'
+          + esc(iv.source) + ' · billed ' + money(iv.total) + ' · received ' + money(iv.paid)
+          + (iv.due_at ? ' · due ' + fmtDate(iv.due_at) : '') + '</div></div>'
+          + '<div style="text-align:right;white-space:nowrap;">'
+          + '<div style="font-size:11px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:.4px;font-weight:800;">Refundable</div>'
+          + '<div style="font-weight:800;color:' + C.ink + ';">' + money(iv.refundable) + '</div></div></label>';
+      }).join('');
+
+      shell('<div style="font-size:13px;color:' + C.muted + ';margin-bottom:10px;">Choose the invoice the money is coming back off.</div>'
+        + rows
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">'
+        + '<button type="button" id="rfx-cancel" style="padding:9px 15px;border:1px solid ' + C.rule
+        + ';background:#fff;color:#334155;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+        + '<button type="button" id="rfx-next" disabled style="padding:9px 15px;border:1px solid #B91C1C;'
+        + 'background:#B91C1C;color:#fff;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;opacity:.5;">Continue</button></div>');
+
+      var next = box.querySelector('#rfx-next');
+      box.querySelector('#rfx-cancel').onclick = close;
+      Array.prototype.forEach.call(box.querySelectorAll('input[name="rfx-inv"]'), function (r) {
+        r.addEventListener('change', function () { next.disabled = false; next.style.opacity = '1'; });
+      });
+      next.onclick = function () {
+        var sel = box.querySelector('input[name="rfx-inv"]:checked');
+        if (sel) renderAmount(invs[Number(sel.value)]);
+      };
+    }
+
+    function renderAmount(iv) {
+      /* One receipt normally. Where an invoice was settled by several payments the
+         refund comes off ONE of them, so which is a real choice rather than something
+         to guess at on the user's behalf. */
+      var recs = (iv.receipts || []).filter(function (r) { return r.refundable > 0.005; });
+      var recPick = recs.length > 1
+        ? '<label style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:'
+          + C.muted + ';display:block;margin-top:12px;">Which payment</label>'
+          + '<select id="rfx-rec" style="width:100%;padding:9px 10px;border:1px solid ' + C.rule
+          + ';border-radius:9px;font-size:13px;margin-top:5px;">'
+          + recs.map(function (r, i) {
+              return '<option value="' + i + '">' + money(r.refundable) + ' left · '
+                + esc(r.method || 'payment') + (r.date ? ' · ' + fmtDate(r.date) : '') + '</option>';
+            }).join('') + '</select>'
+        : '';
+
+      var max = recs.length ? recs[0].refundable : iv.refundable;
+
+      shell('<div style="padding:11px 12px;background:#F8FAFC;border:1px solid ' + C.rule + ';border-radius:10px;margin-bottom:14px;">'
+        + '<div style="font-weight:800;color:' + C.ink + ';">' + esc(iv.number) + '</div>'
+        + '<div style="font-size:12px;color:' + C.muted + ';margin-top:2px;">' + esc(iv.source)
+        + ' · billed ' + money(iv.total) + ' · received ' + money(iv.paid) + '</div></div>'
+        + recPick
+        + '<label style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:' + C.muted + ';display:block;margin-top:12px;">Amount</label>'
+        + '<div style="display:flex;gap:8px;align-items:center;margin-top:5px;">'
+        + '<input id="rfx-amt" type="number" step="0.01" min="0.01" style="flex:1;padding:9px 10px;border:1px solid '
+        + C.rule + ';border-radius:9px;font-size:14px;font-variant-numeric:tabular-nums;">'
+        + '<button type="button" id="rfx-full" style="padding:9px 13px;border:1px solid ' + C.rule
+        + ';background:#fff;color:#334155;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">Full amount</button></div>'
+        + '<div id="rfx-max" style="font-size:11.5px;color:' + C.muted + ';margin-top:4px;"></div>'
+        + '<label style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:' + C.muted + ';display:block;margin-top:12px;">Reason</label>'
+        + '<select id="rfx-reason" style="width:100%;padding:9px 10px;border:1px solid ' + C.rule + ';border-radius:9px;font-size:13px;margin-top:5px;">'
+        + '<option value="requested_by_customer">Family requested it</option>'
+        + '<option value="overpayment">Overpayment</option>'
+        + '<option value="duplicate">Duplicate charge</option>'
+        + '<option value="vacation_credit">Vacation credit</option>'
+        + '<option value="goodwill">Goodwill</option>'
+        + '</select>'
+        + '<label style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:' + C.muted + ';display:block;margin-top:12px;">Notes</label>'
+        + '<textarea id="rfx-notes" rows="2" style="width:100%;padding:9px 10px;border:1px solid ' + C.rule
+        + ';border-radius:9px;font-size:13px;font-family:inherit;margin-top:5px;"></textarea>'
+        + '<div style="margin-top:16px;padding-top:14px;border-top:1px solid ' + C.rule + ';">'
+        + '<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:' + C.muted + ';">Approval</div>'
+        + '<div style="font-size:12px;color:' + C.muted + ';margin:5px 0 9px;">Your name and signature are stored with this refund, '
+        + 'along with the date and time.</div>'
+        + '<input id="rfx-name" type="text" placeholder="Your full name" style="width:100%;padding:9px 10px;border:1px solid '
+        + C.rule + ';border-radius:9px;font-size:13px;margin-bottom:8px;">'
+        + '<div id="rfx-pad"></div>'
+        + '<button type="button" id="rfx-clear" style="margin-top:6px;padding:5px 10px;border:1px solid ' + C.rule
+        + ';background:#fff;color:#475569;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;">Clear signature</button></div>'
+        + '<div id="rfx-err" style="display:none;margin-top:12px;padding:10px 12px;background:#FEF2F2;border:1px solid #FECACA;'
+        + 'border-radius:9px;color:#991B1B;font-size:12.5px;"></div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">'
+        + '<button type="button" id="rfx-cancel2" style="padding:9px 15px;border:1px solid ' + C.rule
+        + ';background:#fff;color:#334155;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+        + '<button type="button" id="rfx-go" style="padding:9px 15px;border:1px solid #B91C1C;background:#B91C1C;'
+        + 'color:#fff;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Approve refund</button></div>');
+
+      var amt = box.querySelector('#rfx-amt');
+      var maxNote = box.querySelector('#rfx-max');
+      var recSel = box.querySelector('#rfx-rec');
+      var err = box.querySelector('#rfx-err');
+
+      function currentMax() {
+        var i = recSel ? Number(recSel.value) : 0;
+        return recs.length ? recs[i].refundable : max;
+      }
+      function syncMax() {
+        var m = currentMax();
+        amt.max = String(m);
+        amt.value = m.toFixed(2);
+        maxNote.textContent = 'At most ' + money(m) + ' can be refunded against this payment.';
+      }
+      syncMax();
+      if (recSel) recSel.addEventListener('change', syncMax);
+      box.querySelector('#rfx-full').onclick = function () { amt.value = currentMax().toFixed(2); };
+
+      /* Guarded: this had no check at all, so if kt-polish.js failed to load the next
+         line threw and took the whole refund dialog with it. A refund that cannot be
+         signed should say so, not disappear. */
+      pad = (window.KT && KT.signaturePadInline)
+        ? KT.signaturePadInline(box.querySelector('#rfx-pad'), { hint: 'Sign here to approve' })
+        : null;
+      if (!pad) {
+        box.querySelector('#rfx-pad').innerHTML = '<div style="padding:14px;color:#B91C1C;font-size:12.5px;">'
+          + 'The signature pad did not load, so this refund cannot be approved here. Please reload the page.</div>';
+      }
+      box.querySelector('#rfx-clear').onclick = function () { if (pad) { pad.clear(); } };
+      box.querySelector('#rfx-cancel2').onclick = close;
+
+      var go = box.querySelector('#rfx-go');
+      go.onclick = function () {
+        err.style.display = 'none';
+        function fail(m) { err.textContent = m; err.style.display = ''; }
+
+        var v = parseFloat(amt.value);
+        if (!(v > 0)) return fail('Enter the amount to refund.');
+        if (v > currentMax() + 0.005) return fail('That is more than the ' + money(currentMax()) + ' left on this payment.');
+        var name = (box.querySelector('#rfx-name').value || '').trim();
+        if (name.length < 2) return fail('Type your full name to approve this refund.');
+        if (!pad || pad.isEmpty()) return fail('Please sign in the box to approve this refund.');
+
+        go.disabled = true;
+        go.textContent = 'Approving…';
+        var i = recSel ? Number(recSel.value) : 0;
+        Api.post('/refunds/invoice', {
+          kind: iv.kind,
+          invoice_id: iv.id,
+          payment_id: recs.length ? recs[i].payment_id : null,
+          amount: Number(v.toFixed(2)),
+          reason: box.querySelector('#rfx-reason').value,
+          notes: box.querySelector('#rfx-notes').value,
+          signature: pad.toDataURL(),
+          signed_name: name,
+        }).then(function (out) {
+          close();
+          if (window.KT && KT.toast) {
+            KT.toast(out && out.status === 'succeeded'
+              ? 'Refund sent: ' + money(v)
+              : 'Refund approved: ' + money(v) + ' — no money has been sent yet', 'success');
+          }
+          /* The balance has moved, so the ledger behind this dialog is now stale.
+             Reloaded through the screen's own path rather than re-fetching by hand, so
+             the summary, the charts and the history all move together. */
+          if (container && wrap && wrap.isConnected) { loadAccount(container, wrap); }
+        }).catch(function (e) {
+          go.disabled = false;
+          go.textContent = 'Approve refund';
+          fail((e && e.message) || 'The refund could not be recorded.');
+        });
+      };
+    }
+  }
+
+  function statusWord(o) {
+    if (!o) return '';
+    var s = (window.KT && KT.invoiceStatus)
+      ? KT.invoiceStatus(o.status, o.due_at)
+      : String(o.status || '');
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
   }
 
   function chip(text, bg, fg) {
@@ -412,14 +656,20 @@
       return '<option value="">No account matches that</option>';
     }
 
-    /* Each option carries its balance, so the choice is informed before it is made
-       rather than after the ledger loads. */
+    /* Name, then role in brackets — and no money.
+
+       These options used to carry a balance ("Amarachi Ihenekwe — $1,760.00 owed"). In a
+       list of 68 that is 68 amounts to read past to find a person, and the ledger states
+       the balance the moment it opens, so it answered a question nobody had asked yet.
+       The role earns its place: it tells a parent from an educator when two people share
+       a surname, and it is the same word the Role filter above uses.
+
+       Roles arrive display-ready from the server ("Parent", "Educator"). Somebody with
+       none gets a bare name rather than a pair of empty brackets. */
     return opts.map(function (a) {
-      var owed = Number(a.outstanding) || 0;
-      var tail = owed > 0.005 ? ' — ' + money(owed) + ' owed'
-        : (Number(a.paid_out) > 0.005 ? ' — ' + money(a.paid_out) + ' paid out' : ' — nothing owed');
+      var roles = (a.roles || []).filter(Boolean).join(', ');
       return '<option value="' + a.user_id + '"' + (String(state.viewing) === String(a.user_id) ? ' selected' : '') + '>'
-        + esc(a.name) + tail + '</option>';
+        + esc(a.name) + (roles ? ' (' + esc(roles) + ')' : '') + '</option>';
     }).join('');
   }
 
@@ -454,6 +704,9 @@
       + '<button type="button" id="al-generate" style="margin-left:auto;padding:8px 14px;border:1px solid ' + C.accent
       + ';background:' + C.accent + ';color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;'
       + 'white-space:nowrap;"' + (state.viewing ? '' : ' disabled') + '>📄 Generate statement</button>'
+      + '<button type="button" id="al-refund" style="padding:8px 14px;border:1px solid #B91C1C;'
+      + 'background:#fff;color:#B91C1C;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;'
+      + 'white-space:nowrap;"' + (state.viewing ? '' : ' disabled') + '>\u21A9 Refund</button>'
       + '<button type="button" id="al-toggle" style="padding:8px 14px;border:1px solid '
       + (inList ? C.accent : '#CBD5E1') + ';background:' + (inList ? C.accent : '#fff') + ';color:'
       + (inList ? '#fff' : '#334155') + ';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">'
@@ -471,6 +724,13 @@
          would replace the label with a mystery glyph. */
       + (inList ? '📄 One account' : '⊞ All accounts') + '</button>'
       + '</div>';
+
+    var refundBtn = host.querySelector('#al-refund');
+    if (refundBtn) {
+      refundBtn.addEventListener('click', function () {
+        if (state.viewing) { openRefund(state.viewing, container, wrap); }
+      });
+    }
 
     var role = host.querySelector('#al-prole');
     role.addEventListener('change', function () {
@@ -938,7 +1198,7 @@
           ? '<div style="color:' + C.bad + ';font-weight:700;font-size:11.5px;">' + o.days_overdue + ' days late</div>' : '';
         return [
           '<strong>' + esc(o.reference) + '</strong>'
-            + '<div style="color:' + C.muted + ';font-size:11.5px;">' + esc(o.status) + '</div>',
+            + '<div style="color:' + C.muted + ';font-size:11.5px;">' + esc(statusWord(o)) + '</div>',
           fmtDate(o.issued_at),
           fmtDate(o.due_at) + late,
           money(o.total),
@@ -950,17 +1210,31 @@
 
     // ── coming up ─────────────────────────────────────────────────────
     var upTable = upcoming.length
-      ? table(['What', 'When', 'Amount'], upcoming.map(function (u) {
+      ? table(['What', 'When', 'Amount', ''], upcoming.map(function (u) {
+        var iv = u.invoice;
         return [
-          esc(u.description) + '<div style="color:' + C.muted + ';font-size:11.5px;">' + esc(u.detail || '') + '</div>',
+          esc(u.description)
+            + '<div style="color:' + C.muted + ';font-size:11.5px;">' + esc(u.detail || '') + '</div>'
+            /* The invoice behind the amount, named on the row. Where it was matched by
+               due date rather than raised here and the totals differ, that is stated —
+               some were adjusted at source after the schedule was agreed, and a silent
+               pairing would hide it. */
+            + (iv
+              ? '<div style="font-size:11.5px;color:' + C.accent + ';font-weight:700;margin-top:2px;">'
+                + esc(iv.number) + '</div>'
+                + (iv.differs
+                  ? '<div style="font-size:11px;color:' + C.warn + ';">The invoice total differs from this amount.</div>'
+                  : '')
+              : '<div style="font-size:11px;color:' + C.faint + ';margin-top:2px;">No invoice raised yet.</div>'),
           u.overdue
             ? '<span style="color:' + C.bad + ';font-weight:700;">' + fmtDate(u.date) + '</span>'
               + '<div style="color:' + C.bad + ';font-size:11.5px;">missed</div>'
             : fmtDate(u.date) + '<div style="color:' + C.faint + ';font-size:11.5px;">in ' + u.days + ' day(s)</div>',
-          u.amount != null ? '<strong>' + money(u.amount) + '</strong>' : '<span style="color:' + C.faint + ';">—</span>'
+          u.amount != null ? '<strong>' + money(u.amount) + '</strong>' : '<span style="color:' + C.faint + ';">—</span>',
+          upActions(iv)
         ];
-      }), [0, 0, 1], ['auto', '26%', '16%'])
-      : empty('Nothing scheduled — no payment plan and no recurring billing on this account.');
+      }), [0, 0, 1, 1], ['auto', '22%', '14%', '52px'])
+      : empty('Nothing scheduled — no payment schedule and no recurring billing on this account.');
 
     // ── paid out, only when there is any ──────────────────────────────
     var outTable = out.length
@@ -1058,6 +1332,99 @@
         if (!w && Dom.toast) { Dom.toast('Your browser blocked the pop-up — allow pop-ups for this site.', 'error'); }
       });
     });
+
+    /* The scheduled rows' invoice actions. Same bound-flag guard: this screen repaints
+       on every filter chip and every account, so an unguarded listener would be added
+       again each pass and fire N times on the Nth click. */
+    root.querySelectorAll('.al-inv').forEach(function (b) {
+      if (b.dataset.bound) { return; }
+      b.dataset.bound = '1';
+      b.addEventListener('click', function () { invoiceAction(b); });
+    });
+  }
+
+  /** Fetch an invoice document with the caller's token. */
+  function invoiceBlob(kind, id) {
+    var t = '';
+    try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''; } catch (e) {}
+    var base = (window.KT && KT.API_BASE) || (window.KT_CONFIG && KT_CONFIG.apiBase)
+      || 'https://api.kiddietrac.com/api/v1';
+    var h = { Authorization: 'Bearer ' + t };
+    /* Staff are authorised against their ACTIVE agency, so it has to travel — without
+       it somebody who works in two agencies gets a 403 on the one they are not in. */
+    try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) { h['X-Active-Agency-Id'] = aid; } } catch (e) {}
+
+    var path = kind === 'external'
+      ? '/invoices/external/' + id + '/document'
+      : '/parent/invoices/' + id + '/pdf';
+
+    return fetch(base + path, { headers: h }).then(function (r) {
+      if (r.ok) { return r.blob(); }
+      // The server's own sentence where there is one: a 410 means the billing system
+      // deleted the document, which retrying will never fix.
+      return r.clone().json().catch(function () { return {}; }).then(function (j) {
+        throw new Error(j.message || ('That document could not be opened (' + r.status + ').'));
+      });
+    });
+  }
+
+  function invoiceAction(b) {
+    var act = b.getAttribute('data-inv-act');
+    var kind = b.getAttribute('data-inv-kind');
+    var id = b.getAttribute('data-inv-id');
+    var say = function (m, k) { if (Dom && Dom.toast) { Dom.toast(m, k || 'info'); } else { alert(m); } };
+    var label = b.textContent;
+
+    if (act === 'email') {
+      /* Prefilled by nobody: the endpoint requires an address for the same reason this
+         asks for one — a default recipient means a lost field emails a real family. */
+      var to = window.prompt('Email this invoice to:', '');
+      if (!to) { return; }
+      b.disabled = true;
+      Api.post('/admin/invoices/' + kind + '/' + id + '/email', { to: to })
+        .then(function (res) {
+          b.disabled = false;
+          say(res.sent
+            ? 'Invoice emailed to ' + to + (res.attachment ? '' : ' — without the document, which could not be built')
+            : 'Not sent: ' + (res.reason || 'the mail layer held it back.'),
+            res.sent ? 'success' : 'error');
+        })
+        .catch(function (e) { b.disabled = false; say(e.message || 'That could not be sent.', 'error'); });
+      return;
+    }
+
+    b.disabled = true; b.textContent = 'Opening…';
+    invoiceBlob(kind, id).then(function (blob) {
+      var url = URL.createObjectURL(blob);
+      if (act === 'save') {
+        var a = document.createElement('a');
+        a.href = url; a.download = 'invoice-' + id + '.pdf';
+        a.click();
+      } else {
+        var w = window.open(url, '_blank');
+        if (!w) { say('Your browser blocked the pop-up — allow pop-ups for this site.', 'error'); }
+      }
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }).catch(function (e) {
+      say(e.message || 'That document could not be opened.', 'error');
+    }).then(function () {
+      b.disabled = false; b.textContent = label;
+    });
+  }
+
+  /* The kebab for one scheduled row. Nothing at all when no invoice exists yet — a
+     billing schedule is only "we will raise something on the 1st", so offering to open
+     a document would be offering something that is not there.
+
+     Plain labelled buttons in the last cell: kt-row-actions.js collapses exactly that
+     into the portal's own kebab. Labels dodge view/open/preview/details/search/manage,
+     each of which kt-icon-buttons.js would replace with a bare glyph. */
+  function upActions(iv) {
+    if (!iv) { return ''; }
+    var a = 'data-inv-kind="' + esc(iv.kind) + '" data-inv-id="' + iv.id + '"';
+    return '<button type="button" class="al-inv" data-inv-act="open" ' + a + '>📄 Invoice document</button>'
+      + '<button type="button" class="al-inv" data-inv-act="save" ' + a + '>⬇ Download invoice</button>'
+      + '<button type="button" class="al-inv" data-inv-act="email" ' + a + '>✉️ Email invoice</button>';
   }
 
   function rowActions(e) {

@@ -175,10 +175,19 @@
       if (window.KT && KT.toast) KT.toast('⚠️', 'Could not email invoice', (e && e.message) || 'Please try again.', '#DC2626');
     }
   }
-  async function renderLedger(main) {
+  async function renderLedger(main, famId) {
+    /* The shell invokes every registered screen as fn(main, ctx), so on a normal render
+       this second argument is the shell's context object, not a family id. Only a plain
+       string or number here came from our own tab handler; anything else is the shell
+       and means "no family chosen". */
+    if (typeof famId !== 'string' && typeof famId !== 'number') { famId = null; }
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading ledger…</div>';
-    const r = await Api.get('/parent/ledger').catch(() => null);
+    /* A guardian can belong to more than one family — two on this platform do — and the
+       API used to answer with whichever row came back first, so the other family's
+       invoices were unreachable and nothing said a second account existed. */
+    const r = await Api.get('/parent/ledger' + (famId ? ('?family_id=' + encodeURIComponent(famId)) : ''))
+      .catch(() => null);
     if (!r) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No ledger available.</div>'; return; }
     const rows = r.data || [];
     const bal = Number(r.current_balance || 0);
@@ -188,6 +197,23 @@
     const balSub = owed
       ? (r.days_overdue > 0 ? (r.days_overdue + ' day' + (r.days_overdue === 1 ? '' : 's') + ' overdue') : 'Please settle when you can')
       : (credit ? 'A credit is on your account' : 'You\'re all settled — thank you! 🎉');
+
+    /* Only drawn when there is something to switch between; one family sees no tabs at
+       all. Each family keeps its OWN balance, statement and PDF — they are separate
+       billing accounts and merging them would produce a statement matching neither. */
+    const fams = Array.isArray(r.families) ? r.families : [];
+    const activeFam = r.family_id || (r.family && r.family.id);
+    const famTabs = fams.length > 1
+      ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 2px 12px;">'
+        + fams.map((f) => {
+            const on = String(f.id) === String(activeFam);
+            return `<button type="button" data-fam="${esc(String(f.id))}" style="height:34px;padding:0 16px;`
+              + `border-radius:999px;font-weight:800;font-size:13px;cursor:pointer;`
+              + `border:1px solid ${on ? '#1F6080' : '#CBD5E1'};background:${on ? '#1F6080' : '#fff'};`
+              + `color:${on ? '#fff' : '#334155'};">${esc(f.family_name || ('Family #' + f.id))}</button>`;
+          }).join('')
+        + '</div>'
+      : '';
 
     const txnHtml = rows.length
       ? (ldIsMobile()
@@ -221,6 +247,8 @@
         <button id="ld-pdf" style="flex:0 0 auto;background:#fff;border:1px solid #E2E8F0;color:#1F6080;font-weight:700;font-size:13px;border-radius:10px;padding:9px 15px;cursor:pointer;">⤓ Statement PDF</button>
       </div>
 
+      ${famTabs}
+
       <div style="background:linear-gradient(135deg,${balGrad});color:#fff;border-radius:18px;padding:20px;margin-bottom:14px;box-shadow:0 12px 28px -14px rgba(0,0,0,.45);">
         <div style="font-size:11.5px;font-weight:800;letter-spacing:.9px;opacity:.9;text-transform:uppercase;">${balLabel}</div>
         <div style="font-size:36px;font-weight:900;line-height:1;margin-top:7px;">${fmtMoney(Math.abs(bal))}</div>
@@ -253,8 +281,24 @@
     // (don't wait for the 4s sweep bus) so it's there on first paint.
     try { if (window.KT && KT.sweepRowActions) KT.sweepRowActions(); } catch (e) {}
 
+    /* Attached ONCE. renderLedger runs again on every tab click, and re-adding here
+       would stack a handler per switch until one click fired a render for each family
+       the parent had ever looked at. */
+    if (main.getAttribute('data-fam-wired') !== '1') {
+      main.setAttribute('data-fam-wired', '1');
+      main.addEventListener('click', (e) => {
+        const f = e.target.closest('[data-fam]');
+        if (!f) return;
+        e.preventDefault();
+        renderLedger(main, f.getAttribute('data-fam'));
+      });
+    }
+
     const _ldPdf = main.querySelector('#ld-pdf');
-    if (_ldPdf) _ldPdf.onclick = () => downloadAuthed('/parent/ledger/pdf', 'statement-' + new Date().toISOString().slice(0, 10) + '.pdf');
+    // The statement must be for the family being LOOKED at, not the first one.
+    if (_ldPdf) _ldPdf.onclick = () => downloadAuthed(
+      '/parent/ledger/pdf' + (activeFam ? ('?family_id=' + encodeURIComponent(activeFam)) : ''),
+      'statement-' + new Date().toISOString().slice(0, 10) + '.pdf');
   }
 
   // ============================ Refunds (director) ============================
@@ -266,15 +310,18 @@
         <p>Process partial or full refunds against any payment. Stripe payments are refunded automatically; manual ones are recorded for audit.</p>
       </div>
       <div class="kt-card">
-        <label style="font-size:13px;font-weight:600;">Select a payment to refund</label>
+        <label style="font-size:13px;font-weight:600;">Choose the payment to refund</label>
         <select id="rf-picker" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-          <option value="">Loading recent payments…</option>
+          <option value="">Finding payments with money on them…</option>
         </select>
         <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:12px;color:#64748B;">or enter a Payment ID directly:</span>
-          <input id="rf-pid" type="number" placeholder="e.g. 1234" style="width:150px;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-          <button id="rf-load" class="kt-btn kt-btn-primary">Load</button>
+          <span style="font-size:12px;color:#64748B;">Or enter the invoice number to refund:</span>
+          <!-- TEXT, not number. Invoice numbers are 'iL-INV-1779383993378' and
+               'INV-202606-0016-079'; a numeric input could not hold either. -->
+          <input id="rf-inv" type="text" placeholder="e.g. iL-INV-1779383993378" style="width:250px;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
+          <button id="rf-load" class="kt-btn kt-btn-primary">Find invoice</button>
         </div>
+        <div id="rf-lookup" style="margin-top:10px;"></div>
         <div id="rf-detail" style="margin-top:20px;"></div>
       </div>
     </div>`;
@@ -284,15 +331,83 @@
       try {
         const res = await Api.get('/refunds/recent-payments');
         const pays = res.data || [];
+        window.__rfEntries = pays;
+        /* Both kinds in one list. A 'payment' is a receipt already on file; an
+           'external' is an invoice holding money that never got one, which is all of
+           iLearn's $40,261.54 — the receipt is written if it is actually refunded. */
         sel.innerHTML = pays.length
-          ? '<option value="">— Select a payment —</option>' + pays.map(p =>
-              `<option value="${p.id}">${esc(p.family_name)} · ${fmtMoney(p.amount)} · ${fmtDate(p.date)}${p.refunded > 0 ? ' · ' + fmtMoney(p.refunded) + ' refunded' : ''} (#${p.id})</option>`).join('')
-          : '<option value="">No payments found for this agency</option>';
-        sel.onchange = () => { const pid = +sel.value; if (pid) { document.getElementById('rf-pid').value = pid; loadPayment(pid); } };
+          ? '<option value="">— Choose a payment —</option>' + pays.map((p, i) =>
+              `<option value="${i}">${esc(p.family_name)} · ${fmtMoney(p.refundable)} refundable · ${p.reference ? esc(p.reference) : '#' + p.id}${p.date ? ' · ' + fmtDate(p.date) : ''}${p.refunded > 0 ? ' · ' + fmtMoney(p.refunded) + ' already refunded' : ''}</option>`).join('')
+          : '<option value="">Nothing on this agency has money that can be refunded</option>';
+        sel.onchange = () => {
+          /* "" is the placeholder, and +"" is 0 — a real index. Checked as a string
+             first, or picking "— Choose a payment —" loads the first family on the
+             list and offers to refund them. */
+          if (sel.value === '') { document.getElementById('rf-detail').innerHTML = ''; return; }
+          const e = (window.__rfEntries || [])[Number(sel.value)];
+          if (!e) return;
+          // #rf-pid is gone — the manual field takes an invoice number now.
+          const lk = document.getElementById('rf-lookup');
+          if (lk) lk.innerHTML = '';
+          if (e.kind === 'external') { loadInvoice(e); } else { loadPayment(e.id); }
+        };
       } catch (e) { sel.innerHTML = '<option value="">Could not load payments — enter an ID below</option>'; }
     })();
     const _rfLoad = main.querySelector('#rf-load');
-    if (_rfLoad) _rfLoad.onclick = () => { const el = main.querySelector('#rf-pid'); if (el) loadPayment(+el.value); };
+    if (_rfLoad) _rfLoad.onclick = () => lookupInvoice();
+    const _rfInv = main.querySelector('#rf-inv');
+    // Enter should work — nobody types a number then reaches for the mouse.
+    if (_rfInv) _rfInv.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookupInvoice(); } });
+
+    /* One number can belong to several invoices — 'PINVO-05082026' belongs to eleven
+       families — so every match is listed and a person chooses. Picking one for them
+       would eventually offer to refund a stranger. */
+    async function lookupInvoice() {
+      const box = document.getElementById('rf-lookup');
+      const num = (document.getElementById('rf-inv').value || '').trim();
+      document.getElementById('rf-detail').innerHTML = '';
+      if (!num) { box.innerHTML = '<div style="color:#64748B;font-size:12.5px;">Enter an invoice number.</div>'; return; }
+      box.innerHTML = '<div style="color:#64748B;font-size:12.5px;">Looking for ' + esc(num) + '…</div>';
+      try {
+        const r = await Api.get('/refunds/lookup?number=' + encodeURIComponent(num));
+        const ms = r.matches || [];
+        if (!ms.length) {
+          box.innerHTML = `<div style="background:#FEF3C7;color:#92400E;padding:11px 13px;border-radius:8px;font-size:12.5px;">
+            No invoice found with the number ${esc(num)}. Check the number, or choose the family from the list above.</div>`;
+          return;
+        }
+        if (ms.length === 1 && ms[0].refundable > 0.005) { box.innerHTML = ''; openMatch(ms[0]); return; }
+        box.innerHTML = `<div style="font-size:12.5px;color:#334155;margin-bottom:6px;">${ms.length} invoice${ms.length > 1 ? 's' : ''} with that number${ms.length > 1 ? ' — choose the right family' : ''}:</div>`
+          + ms.map((m, i) => `<div style="display:flex;gap:10px;align-items:center;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;margin-bottom:6px;">
+              <div style="flex:1;min-width:0;">
+                <strong>${esc(m.family_name || '—')}</strong>
+                <div style="font-size:11.5px;color:#64748B;">${esc(m.number)} · ${esc(m.method)} · billed ${fmtMoney(m.total)} · received ${fmtMoney(m.amount)}</div>
+                ${m.reason ? `<div style="font-size:11.5px;color:#B45309;margin-top:2px;">${esc(m.reason)}</div>` : ''}
+              </div>
+              <div style="text-align:right;white-space:nowrap;">
+                <div style="font-size:10.5px;color:#64748B;text-transform:uppercase;font-weight:800;">Refundable</div>
+                <div style="font-weight:800;">${fmtMoney(m.refundable)}</div>
+              </div>
+              ${m.refundable > 0.005 ? `<button class="kt-btn kt-btn-primary" data-match="${i}" style="font-size:12px;padding:6px 12px;">Refund</button>` : ''}
+            </div>`).join('');
+        box.querySelectorAll('[data-match]').forEach(b => {
+          b.onclick = () => { box.innerHTML = ''; openMatch(ms[+b.dataset.match]); };
+        });
+      } catch (e) {
+        box.innerHTML = `<div style="background:#FEE2E2;color:#991B1B;padding:11px 13px;border-radius:8px;font-size:12.5px;">${esc(e.message || 'Could not look that up.')}</div>`;
+      }
+    }
+
+    /* A native invoice already has a receipt, so its existing panel (with the refund
+       history on it) is the better one. An external invoice has none until it is
+       refunded, which is what loadInvoice handles. Both support partial and full. */
+    function openMatch(m) {
+      if (m.kind === 'native' && m.payment_id) { loadPayment(m.payment_id); return; }
+      loadInvoice({
+        kind: 'external', id: m.id, reference: m.number, amount: m.amount,
+        refunded: m.refunded, refundable: m.refundable, method: m.method,
+      });
+    }
     async function loadPayment(pid) {
       if (!pid) return;
       const r = await Api.get(`/refunds/payment/${pid}`);
@@ -323,25 +438,166 @@
         </select>
         <label style="font-size:13px;font-weight:600;margin-top:10px;display:block;">Notes</label>
         <textarea id="rf-notes" rows="3" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid #E2E8F0;">
+          <label style="font-size:13px;font-weight:600;display:block;">Your name</label>
+          <input id="rf-name" type="text" placeholder="Your full name" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
+          <label style="font-size:13px;font-weight:600;margin-top:10px;display:block;">Signature</label>
+          <div style="font-size:12px;color:#64748B;margin-bottom:6px;">Stored with the refund, along with the date and time.</div>
+          <div id="rf-pad"></div>
+          <button id="rf-clear" type="button" class="kt-btn" style="margin-top:6px;font-size:12px;padding:4px 10px;">Clear signature</button>
+        </div>
         <button id="rf-go" class="kt-btn kt-btn-danger" style="margin-top:14px;">Issue refund</button>
         <div id="rf-out" style="margin-top:10px;"></div>
         </div>
       `;
+      /* The server requires a signature on every route that can refund, so this
+         screen captures one too — otherwise the change that made refunds accountable
+         would simply have broken this page. */
+      const _rfPadHost = main.querySelector('#rf-pad');
+      const _rfPad = (_rfPadHost && window.KT && KT.signaturePadInline)
+        ? KT.signaturePadInline(_rfPadHost, { hint: 'Sign here to approve' })
+        : null;
+      const _rfClear = main.querySelector('#rf-clear');
+      if (_rfClear && _rfPad) _rfClear.onclick = () => _rfPad.clear();
+
       const _rfGo = main.querySelector('#rf-go');
       if (_rfGo) _rfGo.onclick = async () => {
         const amt = parseFloat(document.getElementById('rf-amt').value);
-        if (!amt) return (window.KT && window.KT.toast) ? KT.toast('Amount required', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Amount required') ? 'success' : 'info') : alert('Amount required');
+        const _say = (m) => (window.KT && window.KT.toast) ? KT.toast(m, 'info') : alert(m);
+        if (!amt) return _say('Amount required');
+        const _name = (document.getElementById('rf-name').value || '').trim();
+        if (_name.length < 2) return _say('Type your full name to approve this refund.');
+        if (!_rfPad || _rfPad.isEmpty()) return _say('Please sign in the box to approve this refund.');
         try {
           const out = await Api.post('/refunds', {
             payment_id: pid, amount: amt,
             reason: document.getElementById('rf-reason').value,
             notes: document.getElementById('rf-notes').value,
+            signature: _rfPad.toDataURL(),
+            signed_name: _name,
           });
-          document.getElementById('rf-out').innerHTML = `<div style="background:#DCFCE7;color:#166534;padding:14px;border-radius:8px;">✓ Refund ${out.status} (${out.stripe_refund_id || 'manual'})</div>`;
-          setTimeout(() => document.getElementById('rf-load').click(), 1500);
+          var _done = `<div style="background:#DCFCE7;color:#166534;padding:14px;border-radius:8px;">✓ Refund ${out.status} (${out.stripe_refund_id || 'manual'})</div>`;
+          /* A manual refund has moved no money — the invoice is reversed and the family
+             has been told their centre will arrange it. Offering the transfer here is
+             the difference between that promise being kept and being remembered. */
+          if (out.payout) {
+            _done += `<div style="margin-top:10px;background:#FFF7ED;border:1px solid #FED7AA;color:#9A3412;padding:14px;border-radius:8px;">
+              <div style="font-weight:800;margin-bottom:4px;">No money has been sent yet</div>
+              <div style="font-size:13px;margin-bottom:10px;">This refund is recorded against the invoice, and
+                ${esc(out.payout.name)} has been told you will arrange payment.</div>
+              <button id="rf-payout" class="kt-btn kt-btn-primary" type="button">Send $${Number(out.payout.amount).toFixed(2)} by Interac now</button>
+              <button id="rf-nopayout" class="kt-btn" type="button" style="margin-left:6px;">I'll arrange it myself</button>
+            </div>`;
+          }
+          document.getElementById('rf-out').innerHTML = _done;
+          if (out.payout) {
+            var _po = document.getElementById('rf-payout');
+            var _no = document.getElementById('rf-nopayout');
+            if (_no) _no.onclick = function () { document.getElementById('rf-out').innerHTML = _done.split('<div style="margin-top:10px;')[0]; };
+            if (_po) _po.onclick = async function () {
+              _po.disabled = true; _po.textContent = 'Sending…';
+              try {
+                var r2 = await Api.post('/director/zum/send', {
+                  user_id: out.payout.user_id,
+                  amount: out.payout.amount,
+                  comment: 'Refund of payment #' + pid,
+                });
+                document.getElementById('rf-out').innerHTML =
+                  `<div style="background:#DCFCE7;color:#166534;padding:14px;border-radius:8px;">✓ ${esc(r2.message || 'Sent.')}</div>`;
+              } catch (e2) {
+                // The server's own sentence — "not enough balance in wallet" is actionable.
+                _po.disabled = false; _po.textContent = 'Try again';
+                document.getElementById('rf-out').insertAdjacentHTML('beforeend',
+                  `<div style="margin-top:8px;background:#FEE2E2;color:#991B1B;padding:12px;border-radius:8px;">${esc(e2.message || 'That could not be sent.')}</div>`);
+              }
+            };
+          }
+          // The panel already knows which payment it is showing.
+          setTimeout(() => loadPayment(pid), 2500);
         } catch (e) { document.getElementById('rf-out').innerHTML = `<div style="background:#FEE2E2;color:#991B1B;padding:14px;border-radius:8px;">${esc(e.message || 'Failed')}</div>`; }
       };
     }
+  }
+
+  /* An invoice holding money that never got a receipt row.
+
+     All of iLearn's $40,261.54 is this shape: the integration writes external_invoices
+     and no payment, so there is nothing for loadPayment to fetch and no refund history
+     to list. The receipt is written by the server at the moment a refund is approved.
+
+     Separate from loadPayment for that reason, but it posts to /refunds/invoice, so the
+     guards, the signature, the audit row and the ledger effect are identical. */
+  function loadInvoice(entry) {
+    if (!entry) return;
+    document.getElementById('rf-detail').innerHTML = `
+      <div class="kt-kpi-grid">
+        <div class="kt-kpi"><div class="kt-kpi-label">Received</div><div class="kt-kpi-value">${fmtMoney(entry.amount)}</div></div>
+        <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Refundable</div><div class="kt-kpi-value">${fmtMoney(entry.refundable)}</div></div>
+        <div class="kt-kpi"><div class="kt-kpi-label">Invoice</div><div class="kt-kpi-value" style="font-size:16px;">${esc(entry.reference || ('#' + entry.id))}</div></div>
+      </div>
+      <div style="margin-top:14px;padding:11px 13px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:9px;color:#3730A3;font-size:12.5px;">
+        This money was received in ${esc(entry.method || 'the source system')} and has no payment record here yet.
+        Approving a refund creates that record first, so the refund has something to reverse.
+      </div>
+      <div style="max-width:440px;">
+      <h3 style="margin-top:18px;font-size:15px;color:#0F172A;">Issue new refund</h3>
+      <label style="font-size:13px;font-weight:600;">Amount</label>
+      <input id="rfi-amt" type="number" step="0.01" max="${entry.refundable}" min="0.01" value="${Number(entry.refundable).toFixed(2)}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
+      <div style="font-size:11.5px;color:#64748B;margin-top:4px;">At most ${fmtMoney(entry.refundable)} can be refunded against this invoice.</div>
+      <label style="font-size:13px;font-weight:600;margin-top:10px;display:block;">Reason</label>
+      <select id="rfi-reason" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
+        <option value="requested_by_customer">Family requested it</option>
+        <option value="overpayment">Overpayment</option>
+        <option value="duplicate">Duplicate charge</option>
+        <option value="vacation_credit">Vacation credit</option>
+        <option value="goodwill">Goodwill</option>
+      </select>
+      <label style="font-size:13px;font-weight:600;margin-top:10px;display:block;">Notes</label>
+      <textarea id="rfi-notes" rows="3" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #E2E8F0;">
+        <label style="font-size:13px;font-weight:600;display:block;">Your name</label>
+        <input id="rfi-name" type="text" placeholder="Your full name" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
+        <label style="font-size:13px;font-weight:600;margin-top:10px;display:block;">Signature</label>
+        <div style="font-size:12px;color:#64748B;margin-bottom:6px;">Stored with the refund, along with the date and time.</div>
+        <div id="rfi-pad"></div>
+        <button id="rfi-clear" type="button" class="kt-btn" style="margin-top:6px;font-size:12px;padding:4px 10px;">Clear signature</button>
+      </div>
+      <button id="rfi-go" class="kt-btn kt-btn-danger" style="margin-top:14px;">Issue refund</button>
+      <div id="rfi-out" style="margin-top:10px;"></div>
+      </div>`;
+
+    const padHost = document.getElementById('rfi-pad');
+    const pad = (padHost && window.KT && KT.signaturePadInline)
+      ? KT.signaturePadInline(padHost, { hint: 'Sign here to approve' }) : null;
+    const clr = document.getElementById('rfi-clear');
+    if (clr && pad) clr.onclick = () => pad.clear();
+
+    const go = document.getElementById('rfi-go');
+    go.onclick = async () => {
+      const out = document.getElementById('rfi-out');
+      const fail = (m) => { out.innerHTML = `<div style="background:#FEE2E2;color:#991B1B;padding:12px;border-radius:8px;">${esc(m)}</div>`; };
+      const amt = parseFloat(document.getElementById('rfi-amt').value);
+      if (!(amt > 0)) return fail('Enter the amount to refund.');
+      if (amt > Number(entry.refundable) + 0.005) return fail('That is more than the ' + fmtMoney(entry.refundable) + ' available on this invoice.');
+      const name = (document.getElementById('rfi-name').value || '').trim();
+      if (name.length < 2) return fail('Type your full name to approve this refund.');
+      if (!pad || pad.isEmpty()) return fail('Please sign in the box to approve this refund.');
+
+      go.disabled = true; go.textContent = 'Approving…';
+      try {
+        const res = await Api.post('/refunds/invoice', {
+          kind: 'external', invoice_id: entry.id, amount: Number(amt.toFixed(2)),
+          reason: document.getElementById('rfi-reason').value,
+          notes: document.getElementById('rfi-notes').value,
+          signature: pad.toDataURL(), signed_name: name,
+        });
+        out.innerHTML = `<div style="background:#DCFCE7;color:#166534;padding:14px;border-radius:8px;">✓ Refund ${esc(res.status)} — ${fmtMoney(amt)} recorded against ${esc(entry.reference || ('#' + entry.id))}.${res.status === 'manual' ? ' No money has been sent yet; arrange the payment as usual.' : ''}</div>`;
+        go.textContent = 'Refund recorded';
+      } catch (e) {
+        go.disabled = false; go.textContent = 'Issue refund';
+        fail(e.message || 'The refund could not be recorded.');
+      }
+    };
   }
 
   // ============================ Custom report builder ============================
@@ -529,45 +785,340 @@
   }
 
   // ============================ Immunization Due At Age ============================
-  async function renderImmunSchedule(main) {
+
+  /* TWO VIEWS, NOT TWO CARDS STACKED.
+
+     "Children needing attention" and "Schedule defaults" answer different questions and
+     are used by different people on different days — one is the morning chase list, the
+     other is a policy table somebody edits once a year. Stacked, the policy table pushed
+     the chase list off the screen on a laptop and the schedule was read-only besides.
+     Subtabs, so each is a whole screen when you are in it. (Anthony, 2026-09-10) */
+  var IMS_TAB = 'due';
+
+  function imsTabBar(active) {
+    return [['due', '⚠️ Children due'], ['defaults', '💉 Schedule defaults']].map(function (t) {
+      var on = t[0] === active;
+      return '<button class="ims-tab" data-t="' + t[0] + '" type="button" style="padding:8px 16px;margin-right:8px;'
+        + 'border:1px solid ' + (on ? '#1F6080' : '#D1D5DB') + ';border-radius:9px;background:'
+        + (on ? '#1F6080' : '#fff') + ';color:' + (on ? '#fff' : '#374151')
+        + ';font-weight:700;font-size:13.5px;cursor:pointer;">' + t[1] + '</button>';
+    }).join('');
+  }
+
+  /* Months read as an age, not as a number. "18 months" is fine; "48 months" is a
+     four-year-old and nobody thinks in 48s. */
+  function imsAge(m) {
+    m = Number(m) || 0;
+    if (m < 24) { return m + ' month' + (m === 1 ? '' : 's'); }
+    var y = Math.floor(m / 12), r = m % 12;
+    return y + ' year' + (y === 1 ? '' : 's') + (r ? ' ' + r + ' mo' : '');
+  }
+
+  /* Add or edit one schedule row. The same dialog for both — a separate "add" form is
+     how two things that should agree start disagreeing about what a dose looks like. */
+  function imsEdit(row, after) {
+    var isNew = !row || !row.id;
+    var r = row || { vaccine: '', dose_label: '', due_at_age_months: 2, is_required: 1, notes: '' };
+
+    var ov = document.createElement('div');
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;'
+      + 'justify-content:center;padding:20px;overflow-y:auto;background:rgba(8,20,40,.55);';
+    var lab = 'display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;';
+    var inp = 'width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:14px;box-sizing:border-box;';
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;margin:auto;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="padding:18px 22px;border-bottom:1px solid #EEF2F7;display:flex;align-items:center;gap:12px;">'
+      +   '<div style="font-size:17px;font-weight:800;color:#0F172A;">💉 ' + (isNew ? 'Add a schedule item' : 'Edit schedule item') + '</div>'
+      +   '<button class="modal-close" type="button" aria-label="Close" data-kt-iconized="1" style="margin-left:auto;background:#F1F5F9;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;cursor:pointer;color:#475569;">✕</button>'
+      + '</div>'
+      + '<div style="padding:18px 22px;display:grid;gap:12px;">'
+      +   '<div><label style="' + lab + '">Vaccine *</label><input id="ims-v" style="' + inp + '" value="' + esc(r.vaccine) + '" placeholder="e.g. MMR"></div>'
+      +   '<div><label style="' + lab + '">Dose *</label><input id="ims-d" style="' + inp + '" value="' + esc(r.dose_label) + '" placeholder="e.g. 1st dose"></div>'
+      +   '<div><label style="' + lab + '">Due at age (months) *</label><input id="ims-m" type="number" min="0" max="300" style="' + inp + '" value="' + esc(r.due_at_age_months) + '">'
+      +     '<div id="ims-age" style="font-size:12px;color:#64748B;margin-top:4px;"></div></div>'
+      +   '<label style="display:flex;gap:9px;align-items:center;cursor:pointer;font-size:13.5px;font-weight:600;color:#334155;">'
+      +     '<input id="ims-r" type="checkbox" style="width:18px;height:18px;accent-color:#1F6080;"' + (r.is_required ? ' checked' : '') + '> Required'
+      +   '</label>'
+      +   '<div><label style="' + lab + '">Notes</label><textarea id="ims-n" rows="2" style="' + inp + 'resize:vertical;">' + esc(r.notes || '') + '</textarea></div>'
+      +   '<div id="ims-msg" style="font-size:13px;color:#B91C1C;min-height:18px;"></div>'
+      + '</div>'
+      + '<div style="padding:14px 22px;border-top:1px solid #EEF2F7;display:flex;gap:10px;justify-content:flex-end;">'
+      +   '<button class="modal-close" type="button" style="padding:10px 18px;border:1px solid #D1D5DB;background:#fff;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;color:#475569;">Cancel</button>'
+      +   '<button id="ims-save" type="button" style="padding:10px 22px;border:0;background:#1F6080;color:#fff;border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;">' + (isNew ? 'Add' : 'Save') + '</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+
+    var months = ov.querySelector('#ims-m');
+    var ageEl = ov.querySelector('#ims-age');
+    var paintAge = function () { ageEl.textContent = '= ' + imsAge(months.value); };
+    months.addEventListener('input', paintAge);
+    paintAge();
+
+    ov.querySelectorAll('.modal-close').forEach(function (b) {
+      b.addEventListener('click', function () { ov.remove(); });
+    });
+
+    ov.querySelector('#ims-save').addEventListener('click', function () {
+      var msg = ov.querySelector('#ims-msg');
+      var payload = {
+        vaccine: (ov.querySelector('#ims-v').value || '').trim(),
+        dose_label: (ov.querySelector('#ims-d').value || '').trim(),
+        due_at_age_months: parseInt(months.value, 10),
+        is_required: ov.querySelector('#ims-r').checked,
+        notes: (ov.querySelector('#ims-n').value || '').trim() || null,
+      };
+      if (!payload.vaccine || !payload.dose_label) { msg.textContent = 'Vaccine and dose are both required.'; return; }
+      if (!(payload.due_at_age_months >= 0)) { msg.textContent = 'Due at age must be a number of months.'; return; }
+      if (!isNew) { payload.id = r.id; }
+
+      var btn = ov.querySelector('#ims-save');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      Api.post('/immunization/schedule', payload).then(function () {
+        ov.remove();
+        if (KT.toast) { KT.toast('💉', isNew ? 'Added' : 'Saved', payload.vaccine + ' · ' + payload.dose_label, '#16A34A'); }
+        if (after) { after(); }
+      }).catch(function (e) {
+        btn.disabled = false; btn.textContent = isNew ? 'Add' : 'Save';
+        msg.textContent = (e && e.message) || 'Could not save.';
+      });
+    });
+  }
+
+  /* Read-only detail. Asked for alongside edit because most visits to this table are to
+     CHECK something, and opening an edit form to read a value is how a value gets changed
+     by accident. */
+  function imsView(r) {
+    var ov = document.createElement('div');
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;'
+      + 'justify-content:center;padding:20px;overflow-y:auto;background:rgba(8,20,40,.55);';
+    var line = function (k, v) {
+      return '<div style="display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid #F1F5F9;font-size:13.5px;">'
+        + '<span style="color:#64748B;">' + k + '</span><span style="font-weight:700;color:#0F172A;text-align:right;">' + v + '</span></div>';
+    };
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;margin:auto;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="padding:18px 22px;border-bottom:1px solid #EEF2F7;display:flex;align-items:center;gap:12px;">'
+      +   '<div style="font-size:17px;font-weight:800;color:#0F172A;">💉 ' + esc(r.vaccine) + '</div>'
+      +   '<button class="modal-close" type="button" aria-label="Close" data-kt-iconized="1" style="margin-left:auto;background:#F1F5F9;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;cursor:pointer;color:#475569;">✕</button>'
+      + '</div>'
+      + '<div style="padding:8px 22px 18px;">'
+      +   line('Dose', esc(r.dose_label))
+      /* The raw figure only when it says something the label does not. Under two years the
+         two are the same string, and "2 months (2 months)" reads like a bug. */
+      +   line('Due at age', esc(imsAge(r.due_at_age_months))
+            + (Number(r.due_at_age_months) >= 24
+                ? ' <span style="color:#94A3B8;font-weight:500;">(' + esc(r.due_at_age_months) + ' months)</span>'
+                : ''))
+      +   line('Required', r.is_required ? 'Yes' : 'No')
+      +   (r.notes ? '<div style="padding:10px 0;font-size:13px;color:#475569;line-height:1.55;"><strong>Notes:</strong> ' + esc(r.notes) + '</div>' : '')
+      + '</div></div>';
+    document.body.appendChild(ov);
+    ov.querySelectorAll('.modal-close').forEach(function (b) {
+      b.addEventListener('click', function () { ov.remove(); });
+    });
+  }
+
+  /* EMBEDDABLE.
+
+     These two views used to live on their own screen (#immun-schedule) while the roster,
+     the records table and the received-documents list lived on another (#immunizations).
+     Same subject, two places, and neither one complete — so somebody chasing an overdue
+     dose had to know which of the two to open.
+
+     `opts.embed` renders the panes WITHOUT their own hero and tab bar, so
+     screen-immunizations.js can host them under its own tabs; `opts.pane` picks which.
+     Called standalone (no opts) it behaves exactly as before, which keeps the old hash
+     working for anything that still links to it. (Anthony, 2026-09-10) */
+  async function renderImmunSchedule(main, opts) {
+    opts = (opts && typeof opts === 'object' && (opts.embed || opts.pane)) ? opts : {};
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading schedule…</div>';
     const [sched, due] = await Promise.all([
       Api.get('/immunization/schedule'),
       Api.get('/immunization/due-report').catch(() => ({ data: [] })),
     ]);
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+    const rows = sched.data || [];
+    const kids = due.data || [];
+    const reload = () => renderImmunSchedule(main, opts);
+    const pane = opts.pane || IMS_TAB;
+
+    /* EVERY CHILD, NOT ONLY THE ONES IN TROUBLE.
+
+       This pane and the old "Children" tab read the SAME endpoint and differed only in
+       that this one hid anybody up to date — two tabs, one query, and a reader who had to
+       know which of them answered their question. Merged: the whole roster, ordered so the
+       ones needing attention are already at the top, with the status pill and the running
+       totals the Children tab carried.
+
+       Ordered overdue → due soon → up to date, then by name. A list you open every morning
+       should put the work first without anybody sorting it. */
+    const rank = (c) => (c.overdue > 0 ? 0 : (c.due_soon > 0 ? 1 : 2));
+    const ordered = kids.slice().sort((a, b) =>
+      (rank(a) - rank(b)) || String(a.child_name || '').localeCompare(String(b.child_name || '')));
+
+    const nOver = kids.filter(c => c.overdue > 0).length;
+    const nSoon = kids.filter(c => c.overdue === 0 && c.due_soon > 0).length;
+    const nOk = kids.length - nOver - nSoon;
+
+    const duePane = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;">
+        <span style="padding:6px 12px;border-radius:20px;background:#FEE2E2;color:#991B1B;font-weight:700;">${nOver} overdue</span>
+        <span style="padding:6px 12px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:700;">${nSoon} due soon</span>
+        <span style="padding:6px 12px;border-radius:20px;background:#DCFCE7;color:#166534;font-weight:700;">${nOk} up to date</span>
+      </div>
+      <div class="kt-card">
+        <div class="kt-card-header" style="display:flex;align-items:center;gap:12px;">
+          <h3 class="kt-card-title" style="margin:0;">Every enrolled child</h3>
+          <span style="font-size:12.5px;color:#64748B;">Worked out from each date of birth against the schedule — complete whether or not anybody has typed a dose in.</span>
+        </div>
+        <table data-kt-filter-always="1" data-kt-paginate="25">
+          <thead><tr><th>Child</th><th>Family</th><th>Provider</th><th>Overdue</th><th>Due soon</th><th>Status</th></tr></thead>
+          <tbody>${ordered.map(c => {
+            const st = c.overdue > 0
+              ? ['Overdue', 'kt-pill-danger', '0']
+              : (c.due_soon > 0 ? ['Due soon', 'kt-pill-warning', '1'] : ['Up to date', 'kt-pill-success', '2']);
+            return `<tr>
+          <td data-kt-sort="${esc(String(c.child_name || '').toLowerCase())}"><button type="button" class="imm-child" data-id="${esc(c.child_id || '')}" data-n="${esc(c.child_name || '')}" style="background:none;border:0;padding:0;font:inherit;font-weight:700;color:#1F6080;cursor:pointer;text-align:left;text-decoration:underline;">${esc(c.child_name)}</button></td>
+          <td data-kt-sort="${esc(String(c.family_name || '').toLowerCase())}">${esc(c.family_name)}</td>
+          <td data-kt-sort="${esc(String(c.centre_name || '').toLowerCase())}">${esc(c.centre_name)}</td>
+          <td data-kt-sort="${String(c.overdue || 0).padStart(3, '0')}">${c.overdue > 0 ? `<span class="kt-pill kt-pill-danger">${c.overdue}</span>` : '—'}</td>
+          <td data-kt-sort="${String(c.due_soon || 0).padStart(3, '0')}">${c.due_soon > 0 ? `<span class="kt-pill kt-pill-warning">${c.due_soon}</span>` : '—'}</td>
+          <td data-kt-sort="${st[2]}"><span class="kt-pill ${st[1]}">${st[0]}</span></td>
+        </tr>`;
+          }).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748B;">No enrolled children.</td></tr>'}</tbody>
+        </table>
+      </div>`;
+
+    /* data-kt-no-kebab: this table draws its OWN ⋮, and kt-row-actions would otherwise
+       wrap it in a second one. (The global guard now catches that too — this says it out
+       loud where a reader of this file will see it.) */
+    const defaultsPane = `
+      <div class="kt-card">
+        <div class="kt-card-header" style="display:flex;align-items:center;gap:12px;">
+          <h3 class="kt-card-title" style="margin:0;">Schedule defaults</h3>
+          <span style="font-size:12.5px;color:#64748B;">What each child is measured against. Changing a row re-computes every child's status.</span>
+          <button id="ims-add" type="button" data-kt-iconized="1" style="margin-left:auto;background:#1F6080;color:#fff;border:0;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;">+ Add item</button>
+        </div>
+        <table data-kt-no-kebab="1" data-kt-filter-always="1" data-kt-paginate="25">
+          <thead><tr><th>Vaccine</th><th>Dose</th><th>Due at age</th><th>Required</th><th>Notes</th><th style="text-align:right;"></th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td data-kt-sort="${esc(String(r.vaccine).toLowerCase())}"><strong>${esc(r.vaccine)}</strong></td>
+            <td>${esc(r.dose_label)}</td>
+            <td data-kt-sort="${String(r.due_at_age_months).padStart(4, '0')}">${esc(imsAge(r.due_at_age_months))}</td>
+            <td>${r.is_required ? '<span class="kt-pill kt-pill-info">Required</span>' : '<span style="color:#94A3B8;">Optional</span>'}</td>
+            <td style="max-width:280px;color:#475569;">${r.notes ? esc(r.notes) : '<span style="color:#CBD5E1;">—</span>'}</td>
+            <td style="text-align:right;"><button class="ims-kebab" data-id="${r.id}" type="button" title="Actions" data-kt-iconized="1"
+              style="width:32px;height:32px;border:1px solid #E5E7EB;background:#fff;border-radius:8px;cursor:pointer;font-size:17px;color:#475569;">⋮</button></td>
+          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748B;">No schedule items yet. Add the first one.</td></tr>'}</tbody>
+        </table>
+      </div>`;
+
+    const kpis = `<div class="kt-kpi-grid">
+        <div class="kt-kpi kt-kpi-danger"><div class="kt-kpi-label">Children with overdue doses</div><div class="kt-kpi-value">${kids.filter(c => c.overdue > 0).length}</div></div>
+        <div class="kt-kpi kt-kpi-warning"><div class="kt-kpi-label">Due in next 2 months</div><div class="kt-kpi-value">${kids.filter(c => c.due_soon > 0).length}</div></div>
+        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Schedule items</div><div class="kt-kpi-value">${rows.length}</div></div>
+      </div>`;
+
+    main.innerHTML = opts.embed
+      ? `${kpis}${pane === 'defaults' ? defaultsPane : duePane}`
+      : `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>💉 Immunization "Due At Age"</h2>
         <p>Age-based schedule. Status auto-computed per child from their DOB + administered records.</p>
       </div>
-      <div class="kt-kpi-grid">
-        <div class="kt-kpi kt-kpi-danger"><div class="kt-kpi-label">Children with overdue doses</div><div class="kt-kpi-value">${(due.data || []).filter(c => c.overdue > 0).length}</div></div>
-        <div class="kt-kpi kt-kpi-warning"><div class="kt-kpi-label">Due in next 2 months</div><div class="kt-kpi-value">${(due.data || []).filter(c => c.due_soon > 0).length}</div></div>
-        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Schedule items</div><div class="kt-kpi-value">${(sched.data || []).length}</div></div>
-      </div>
-      <div class="kt-card">
-        <div class="kt-card-header"><h3 class="kt-card-title">Children needing attention</h3></div>
-        <table><thead><tr><th>Child</th><th>Family</th><th>Centre</th><th>Overdue</th><th>Due soon</th></tr></thead>
-        <tbody>${(due.data || []).filter(c => c.overdue + c.due_soon > 0).map(c => `<tr>
-          <td><strong>${esc(c.child_name)}</strong></td>
-          <td>${esc(c.family_name)}</td>
-          <td>${esc(c.centre_name)}</td>
-          <td>${c.overdue > 0 ? `<span class="kt-pill kt-pill-danger">${c.overdue}</span>` : '—'}</td>
-          <td>${c.due_soon > 0 ? `<span class="kt-pill kt-pill-warning">${c.due_soon}</span>` : '—'}</td>
-        </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:#64748B;">All children up to date.</td></tr>'}</tbody></table>
-      </div>
-      <div class="kt-card">
-        <div class="kt-card-header"><h3 class="kt-card-title">Schedule defaults</h3></div>
-        <table><thead><tr><th>Vaccine</th><th>Dose</th><th>Due at age</th><th>Required</th></tr></thead>
-        <tbody>${(sched.data || []).map(s => `<tr>
-          <td><strong>${esc(s.vaccine)}</strong></td>
-          <td>${esc(s.dose_label)}</td>
-          <td>${s.due_at_age_months} months</td>
-          <td>${s.is_required ? '✓' : '—'}</td>
-        </tr>`).join('')}</tbody></table>
-      </div>
+      ${kpis}
+      <div style="margin:18px 0 16px;">${imsTabBar(pane)}</div>
+      ${pane === 'defaults' ? defaultsPane : duePane}
     </div>`;
+
+    main.querySelectorAll('.ims-tab').forEach(b => b.addEventListener('click', () => {
+      IMS_TAB = b.getAttribute('data-t');
+      renderImmunSchedule(main, opts);
+    }));
+
+    const addBtn = main.querySelector('#ims-add');
+    if (addBtn) { addBtn.addEventListener('click', () => imsEdit(null, reload)); }
+
+    const byId = {};
+    rows.forEach(r => { byId[String(r.id)] = r; });
+    main.querySelectorAll('.ims-kebab').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const r = byId[btn.getAttribute('data-id')];
+        if (!r) { return; }
+        imsMenu(btn, r, reload);
+      });
+    });
+
+    /* A name opens that child: what is due, the records on file, and the upload —
+       the same panel the family sees. */
+    main.querySelectorAll('.imm-child').forEach(b => b.addEventListener('click', () => {
+      const id = parseInt(b.getAttribute('data-id'), 10);
+      if (!id) { return; }
+      if (KT.openChildImmun) { KT.openChildImmun(id, b.getAttribute('data-n')); }
+    }));
+
+    /* Both panes render on a tab switch, which changes no hash — so the shared sweep
+       would never see either table. See KT.enhanceTables. */
+    if (KT.enhanceTables) { KT.enhanceTables(); }
+  }
+
+  /* One ⋮ per row: view, edit, delete. Deliberately the same three a reader expects from
+     every other row menu in the portal, in the same order. */
+  function imsMenu(btn, r, after) {
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:2147483000;background:#fff;border:1px solid #E5E7EB;'
+      + 'border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);padding:6px 0;min-width:170px;';
+    const close = () => {
+      if (menu.parentNode) { menu.remove(); }
+      document.removeEventListener('click', onDoc, true);
+      window.removeEventListener('scroll', close, true);
+    };
+    const onDoc = (e) => { if (!menu.contains(e.target) && e.target !== btn) { close(); } };
+    const item = (icon, label, danger, fn) => {
+      const mi = document.createElement('button');
+      mi.type = 'button';
+      mi.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;'
+        + 'border:none;padding:10px 15px;font-size:13.5px;cursor:pointer;font-family:inherit;white-space:nowrap;color:'
+        + (danger ? '#B91C1C' : '#111827') + ';';
+      mi.innerHTML = '<span style="width:18px;text-align:center;">' + icon + '</span><span>' + label + '</span>';
+      mi.onmouseenter = () => { mi.style.background = '#F1F5F9'; };
+      mi.onmouseleave = () => { mi.style.background = 'none'; };
+      mi.onclick = (e) => { e.stopPropagation(); close(); fn(); };
+      menu.appendChild(mi);
+    };
+
+    item('👁', 'View', false, () => imsView(r));
+    item('✏️', 'Edit', false, () => imsEdit(r, after));
+    item('🗑', 'Delete', true, () => {
+      /* Says what it costs. This row is what every child's status is measured against, so
+         removing it silently changes numbers on a screen somebody else is reading. */
+      const msg = 'Remove ' + r.vaccine + ' · ' + r.dose_label + ' from the schedule?\n\n'
+        + 'Every child’s due/overdue status is recalculated against the remaining items.';
+      Promise.resolve(KT.confirm ? KT.confirm(msg) : confirm(msg)).then(ok => {
+        if (!ok) { return; }
+        Api.delete('/immunization/schedule/' + r.id).then(() => {
+          if (KT.toast) { KT.toast('🗑️', 'Removed', r.vaccine + ' · ' + r.dose_label, '#B91C1C'); }
+          if (after) { after(); }
+        }).catch(e => {
+          if (KT.toast) { KT.toast('⚠️', 'Could not remove', (e && e.message) || '', '#B91C1C'); }
+        });
+      });
+    });
+
+    document.body.appendChild(menu);
+    const rect = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth || 170, mh = menu.offsetHeight || 130;
+    menu.style.left = Math.max(8, Math.min(rect.right - mw, innerWidth - mw - 8)) + 'px';
+    menu.style.top = (rect.bottom + 6 + mh > innerHeight - 8 ? Math.max(8, rect.top - mh - 6) : rect.bottom + 6) + 'px';
+    setTimeout(() => {
+      document.addEventListener('click', onDoc, true);
+      window.addEventListener('scroll', close, true);
+    }, 0);
   }
 
   // ============================ CACFP =================================

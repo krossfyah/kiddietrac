@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KiddieTrac — passkey support check</title>
+<!--
+  WHY THIS PAGE EXISTS (2026-09-22)
+  ─────────────────────────────────
+  Before any passkey work is built, one question decides its shape: does WebAuthn
+  actually work inside the KiddieTrac APK's web view, on a real iPhone and a real
+  Android phone? Everything else is known — the APK loads the real https origin
+  (capacitor.config.ts server.url), the RP ID can be kiddietrac.com, and the PHP
+  library installs — but WKWebView's passkey support cannot be read from a spec,
+  only from a device.
+
+  CAPABILITY FLAGS ARE NOT ENOUGH. A web view can report a platform authenticator
+  and still refuse the ceremony, so this page does a REAL registration against the
+  real RP ID and reports what came back.
+
+  NOTHING IS KEPT. No server call, no storage, no account touched: the credential
+  this creates is discarded the moment it is described, and it is created with a
+  random user handle that belongs to no KiddieTrac account. Safe to run on a
+  personal phone; safe to run twice.
+-->
+<style>
+  :root { color-scheme: light; }
+  body { margin:0; font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         background:#F6F8FA; color:#0F172A;
+         padding: env(safe-area-inset-top,0px) 16px calc(env(safe-area-inset-bottom,0px) + 32px); }
+  h1 { font-size:19px; margin:20px 0 4px; }
+  .sub { color:#64748B; font-size:13px; margin:0 0 18px; }
+  .card { background:#fff; border:1px solid #E7EBF0; border-radius:14px; padding:14px 16px; margin:0 0 14px; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:7px 0; border-bottom:1px solid #F1F5F9; font-size:13px; }
+  .row:last-child { border-bottom:0; }
+  .k { color:#475569; }
+  .v { font-weight:700; text-align:right; word-break:break-word; }
+  .yes { color:#0F7B3E; } .no { color:#B42318; } .maybe { color:#B45309; }
+  button { width:100%; padding:14px; font-size:15px; font-weight:700; border-radius:11px;
+           border:0; background:#1F6080; color:#fff; cursor:pointer; }
+  button:disabled { opacity:.55; }
+  pre { background:#0F172A; color:#E2E8F0; padding:12px; border-radius:10px; font-size:11.5px;
+        white-space:pre-wrap; word-break:break-all; margin:12px 0 0; }
+  .copy { background:#fff; color:#1F6080; border:1px solid #CBD5E1; margin-top:10px; }
+  .note { font-size:12px; color:#64748B; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<h1>Passkey support check</h1>
+<p class="sub">Open this <strong>inside the KiddieTrac app</strong> on each phone, then press the button.
+Nothing is saved and no account is touched.</p>
+
+<div class="card" id="env"></div>
+
+<button id="go">Try creating a test passkey</button>
+<div class="note">Your phone will ask for Face ID, fingerprint or a PIN. That prompt appearing is
+itself part of the answer — whatever you then choose, the result is recorded below.</div>
+
+<pre id="out">Waiting…</pre>
+<button class="copy" id="copy">Copy result</button>
+
+<script>
+(function () {
+  'use strict';
+
+  /* The apex, not app.kiddietrac.com: one passkey should work across every
+     subdomain, and the RP ID must be a registrable suffix of this origin. */
+  var RP_ID = 'kiddietrac.com';
+
+  var lines = [];
+  function log(s) { lines.push(s); document.getElementById('out').textContent = lines.join('\n'); }
+
+  function row(k, v, cls) {
+    return '<div class="row"><span class="k">' + k + '</span>'
+         + '<span class="v ' + (cls || '') + '">' + v + '</span></div>';
+  }
+  function tri(b) { return b === true ? 'yes' : b === false ? 'no' : 'maybe'; }
+
+  var inApp = false;
+  try { inApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
+
+  var hasWebAuthn = typeof window.PublicKeyCredential === 'function';
+  var secure = window.isSecureContext === true;
+
+  async function probe() {
+    var uvpa = null, cond = null;
+    if (hasWebAuthn) {
+      try { uvpa = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch (e) { uvpa = null; }
+      try {
+        cond = PublicKeyCredential.isConditionalMediationAvailable
+          ? await PublicKeyCredential.isConditionalMediationAvailable() : false;
+      } catch (e) { cond = null; }
+    }
+
+    document.getElementById('env').innerHTML =
+        row('Running in', inApp ? 'KiddieTrac app' : 'Browser', inApp ? 'yes' : 'maybe')
+      + row('Platform', /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'iOS'
+            : /Android/i.test(navigator.userAgent) ? 'Android' : 'desktop / other')
+      + row('Origin', location.origin)
+      + row('RP ID to be used', RP_ID)
+      + row('Secure context', secure ? 'yes' : 'no', tri(secure))
+      + row('WebAuthn API', hasWebAuthn ? 'present' : 'missing', tri(hasWebAuthn))
+      + row('Platform authenticator', uvpa === null ? 'could not ask' : (uvpa ? 'available' : 'none'), tri(uvpa))
+      + row('Autofill (conditional UI)', cond === null ? 'could not ask' : (cond ? 'yes' : 'no'), tri(cond));
+
+    log('origin      : ' + location.origin);
+    log('in app      : ' + inApp);
+    log('secure ctx  : ' + secure);
+    log('webauthn    : ' + hasWebAuthn);
+    log('platform authr: ' + uvpa);
+    log('conditional : ' + cond);
+    log('ua          : ' + navigator.userAgent);
+    log('');
+    log('Press the button to attempt a real registration.');
+
+    /* SAY WHY IT IS GREY (2026-09-22). A disabled button with no reason makes the
+       reader debug the page instead of reading the answer - and here the reason IS the
+       answer: if the web view has no WebAuthn, passkeys cannot work in the app. */
+    if (!hasWebAuthn || !secure) {
+      var b = document.getElementById('go');
+      b.disabled = true;
+      b.textContent = !hasWebAuthn ? 'Not possible here — no WebAuthn' : 'Not possible here — insecure context';
+      b.style.background = '#B42318';
+
+      var why = document.createElement('div');
+      why.className = 'card';
+      why.style.cssText = 'border-color:#FECACA;background:#FEF2F2;';
+      why.innerHTML = '<div style="font-weight:800;color:#B42318;margin-bottom:6px;">This is the answer</div>'
+        + '<div style="font-size:13px;color:#7F1D1D;line-height:1.6;">'
+        + (!hasWebAuthn
+            ? 'This web view does <b>not expose the WebAuthn API at all</b>, so a passkey cannot be '
+              + 'created or used here. Passkeys would have to be browser-only, with the app keeping '
+              + 'password sign-in.'
+            : 'The page is not running in a secure context, so WebAuthn is blocked. That usually means '
+              + 'the web view loaded something other than https://app.kiddietrac.com.')
+        + '</div></div>';
+      document.getElementById('env').insertAdjacentElement('afterend', why);
+
+      log('');
+      log('>> BUTTON DISABLED: ' + (!hasWebAuthn ? 'no WebAuthn API in this web view' : 'not a secure context'));
+      log('>> That is the result. Send this block to Claude.');
+    }
+  }
+
+  function rand(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
+
+  document.getElementById('go').addEventListener('click', async function () {
+    var btn = this;
+    btn.disabled = true; btn.textContent = 'Asking your phone…';
+    log('');
+    log('--- registration attempt ---');
+    var t0 = Date.now();
+    try {
+      /* A REAL ceremony, because capability flags lie in web views. Random user
+         handle: this credential belongs to no KiddieTrac account and is thrown
+         away below. residentKey required — the sign-in flow has to be
+         usernameless, because 8 accounts here share 3 email addresses. */
+      var cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: rand(32),
+          rp: { id: RP_ID, name: 'KiddieTrac' },
+          user: { id: rand(16), name: 'passkey-support-check', displayName: 'Support check (discarded)' },
+          // ES256 then RS256. EdDSA is deliberately absent: the server has no
+          // sodium extension, so it could not verify one anyway.
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: {
+            authenticatorAttachment: 'platform',
+            residentKey: 'required',
+            userVerification: 'required'
+          },
+          timeout: 60000,
+          attestation: 'none'
+        }
+      });
+
+      var ms = Date.now() - t0;
+      var transports = [];
+      try { transports = cred.response.getTransports ? cred.response.getTransports() : []; } catch (e) {}
+
+      log('RESULT      : SUCCESS  (' + ms + 'ms)');
+      log('type        : ' + cred.type);
+      log('id length   : ' + (cred.rawId ? cred.rawId.byteLength : '?') + ' bytes');
+      log('transports  : ' + (transports.join(',') || '(none reported)'));
+      try { log('alg         : ' + (cred.response.getPublicKeyAlgorithm ? cred.response.getPublicKeyAlgorithm() : 'n/a')); } catch (e) {}
+      log('');
+      log('>> Passkeys WORK here. The credential was NOT saved anywhere.');
+      /* GREEN AND RE-ENABLED. It used to stay grey on success with only the words
+         changed, so "the button is greyed out" could mean either "it worked" or "it is
+         not possible here" - the two opposite outcomes looked identical. (2026-09-22) */
+      btn.textContent = '✓ Worked — passkeys are supported here';
+      btn.style.background = '#0F7B3E';
+      btn.disabled = false;
+
+      var okCard = document.createElement('div');
+      okCard.className = 'card';
+      okCard.style.cssText = 'border-color:#A7F3D0;background:#ECFDF5;';
+      okCard.innerHTML = '<div style="font-weight:800;color:#0F7B3E;margin-bottom:6px;">This is the answer</div>'
+        + '<div style="font-size:13px;color:#065F46;line-height:1.6;">A passkey was created and '
+        + 'immediately discarded. Passkeys work here, in ' + (inApp ? '<b>the KiddieTrac app</b>' : 'this browser')
+        + '.</div></div>';
+      document.getElementById('env').insertAdjacentElement('afterend', okCard);
+    } catch (err) {
+      var ms2 = Date.now() - t0;
+      log('RESULT      : FAILED  (' + ms2 + 'ms)');
+      log('name        : ' + (err && err.name));
+      log('message     : ' + (err && err.message));
+      log('');
+      /* NotAllowedError after a few seconds usually means the reader dismissed
+         the prompt, which is NOT a platform failure. Saying so stops a cancelled
+         tap being read as "iOS cannot do this". */
+      if (err && err.name === 'NotAllowedError' && ms2 > 1500) {
+        log('>> This looks like the prompt was CANCELLED, not a platform failure.');
+        log('   Please try once more and complete the Face ID / fingerprint step.');
+      } else if (err && err.name === 'NotSupportedError') {
+        log('>> The web view refused the ceremony: passkeys are NOT usable here.');
+      } else if (err && err.name === 'SecurityError') {
+        log('>> RP ID rejected for this origin. Expected if origin is not *.' + RP_ID);
+      } else {
+        log('>> Send this whole block to Claude.');
+      }
+      btn.textContent = 'Try again';
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('copy').addEventListener('click', function () {
+    var t = lines.join('\n');
+    /* The sandboxed web view often has no clipboard permission, so select the
+       text as a fallback rather than failing silently. */
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { this.textContent = 'Copied'; }.bind(this))
+        .catch(function () { selectOut(); }.bind(this));
+    } else { selectOut(); }
+  });
+  function selectOut() {
+    var r = document.createRange(); r.selectNodeContents(document.getElementById('out'));
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    document.getElementById('copy').textContent = 'Selected — long-press to copy';
+  }
+
+  probe();
+})();
+</script>
+</body>
+</html>

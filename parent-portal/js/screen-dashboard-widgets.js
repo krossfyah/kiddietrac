@@ -25,7 +25,7 @@
 
   // All widgets share one fixed height + a flex column so they line up perfectly;
   // content that overflows scrolls inside the card (never truncated).
-  var CARD = 'background:#fff;border-radius:16px;box-shadow:0 1px 6px rgba(15,23,42,.06);padding:18px;height:300px;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;';
+  var CARD = 'background:#fff;border-radius:16px;box-shadow:0 1px 6px rgba(15,23,42,.06);padding:18px;height:404px;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;';
   var TITLE = 'font-family:var(--kt-font-display,inherit);font-weight:700;font-size:15px;margin:0 0 13px;color:var(--kt-text,#0D1B2A);display:flex;align-items:center;gap:8px;';
 
   function calendarHtml() {
@@ -35,15 +35,16 @@
     var first = new Date(y, mo, 1).getDay();
     var days = new Date(y, mo + 1, 0).getDate();
     var cells = '';
-    ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(function (d) { cells += '<div style="text-align:center;font-size:10px;font-weight:800;color:#64748B;padding:3px 0;">' + d + '</div>'; });
+    ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(function (d) { cells += '<div style="text-align:center;font-size:10px;font-weight:800;color:#64748B;padding:2px 0;">' + d + '</div>'; });
     for (var i = 0; i < first; i++) cells += '<div></div>';
     for (var dn = 1; dn <= days; dn++) {
       var t = dn === today;
-      cells += '<div data-cal-day="' + dn + '" style="position:relative;text-align:center;font-size:12px;padding:6px 0;border-radius:8px;' + (t ? 'background:var(--brand-blue,#1F6080);color:#fff;font-weight:800;' : 'color:#334155;') + '">' + dn + '</div>';
+      cells += '<div data-cal-day="' + dn + '" style="position:relative;text-align:center;font-size:12px;padding:4px 0;border-radius:8px;' + (t ? 'background:var(--brand-blue,#1F6080);color:#fff;font-weight:800;' : 'color:#334155;') + '">' + dn + '</div>';
     }
     return '<div style="' + CARD + '"><div style="' + TITLE + '">📅 <span>' + esc(label) + '</span></div>'
       + '<div class="kt-cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">' + cells + '</div>'
-      + '<div class="kt-cal-events" style="margin-top:12px;font-size:12px;color:#64748B;">Loading events…</div></div>';
+      + '<div class="kt-cal-events" style="margin-top:10px;padding-top:9px;border-top:1px solid #F1F5F9;'
+        + 'font-size:12px;color:#64748B;">Loading events…</div></div>';
   }
 
   function injectStyleOnce() {
@@ -54,7 +55,18 @@
       '#kt-dash-extra{align-items:stretch;}'
       // The scrolling content region of every widget (title stays pinned on top).
       + '#kt-dash-extra .bd{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;}'
-      + '#kt-dash-extra .kt-cal-events{flex:1 1 auto;min-height:0;overflow-y:auto;}'
+      + '#kt-dash-extra .kt-cal-events{flex:1 1 auto;min-height:0;overflow-y:auto;'
+        + 'overscroll-behavior:contain;}'
+      /* macOS and the WebView hide the overlay scrollbar until you are already
+         scrolling, so a reader who cannot see one concludes there is nothing below the
+         fold. These regions keep a visible bar. */
+      + '#kt-dash-extra .bd,#kt-dash-extra .kt-cal-events{scrollbar-width:thin;'
+        + 'scrollbar-color:#CBD5E1 transparent;}'
+      + '#kt-dash-extra .bd::-webkit-scrollbar,'
+        + '#kt-dash-extra .kt-cal-events::-webkit-scrollbar{width:8px;}'
+      + '#kt-dash-extra .bd::-webkit-scrollbar-thumb,'
+        + '#kt-dash-extra .kt-cal-events::-webkit-scrollbar-thumb{'
+        + 'background:#CBD5E1;border-radius:99px;border:2px solid #fff;}'
       // Recent activity is a MOBILE-only widget (it duplicates the desktop
       // "Recent activity" section, which the user didn't want added to desktop).
       + '@media(min-width:769px){#kt-w-activity{display:none !important;}}';
@@ -76,7 +88,7 @@
       + '<div id="kt-w-security" style="' + CARD + '"><div style="' + TITLE + '">🛡️ <span>Security alerts</span></div><div class="bd" style="color:#64748B;font-size:13px;">Loading…</div></div>'
       + '<div id="kt-w-activity" style="' + CARD + '"><div style="' + TITLE + '">🔔 <span>Recent activity</span></div><div class="bd" style="color:#64748B;font-size:13px;">Loading…</div></div>';
     section.parentNode.insertBefore(extra, section.nextSibling);
-    fillPresence(); fillBirthdays(); fillSecurity(); fillActivity();
+    fillPresence(); fillBirthdays(); fillSecurity(); fillActivity(); fillCalendarEvents();
   }
 
   // ── Recent activity: logins, clock in/out, incidents (shows on mobile too) ──
@@ -182,39 +194,235 @@
             + '<div style="font-size:12px;color:#64748B;">' + esc(b.display) + ' · turning ' + b.turning + '</div></div></div>';
         }).join('');
       }
-      // dot the calendar days that fall in the CURRENT month
-      var thisMonth = new Date().getMonth() + 1;
-      var events = [];
-      list.forEach(function (b) {
-        if (b.month === thisMonth) {
-          var cell = document.querySelector('.kt-cal-grid [data-cal-day="' + b.day + '"]');
-          if (cell && !cell.querySelector('.kt-cal-dot')) {
-            var dot = document.createElement('span');
-            dot.className = 'kt-cal-dot';
-            dot.style.cssText = 'position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#E91E8C;';
-            cell.appendChild(dot);
-          }
-        }
-      });
-      var ev = document.querySelector('.kt-cal-events');
-      if (ev) {
-        var soon = list.slice(0, 3).map(function (b) { return '🎂 ' + esc(b.name) + ' · ' + esc(b.display); });
-        ev.innerHTML = soon.length
-          ? '<div style="font-weight:700;color:#475569;margin-bottom:4px;">Upcoming</div>' + soon.map(function (t) { return '<div style="padding:2px 0;">' + t + '</div>'; }).join('')
-          : '<span style="color:#64748B;">No upcoming events.</span>';
-      }
+      /* The dots and the strip under the grid used to be drawn from here, which is why
+         a closure or four absences left the day looking empty. fillCalendarEvents owns
+         both now, from a feed that knows every kind of event. */
     }).catch(function () {
       bd.innerHTML = '<div style="color:#64748B;font-size:13px;">Unavailable.</div>';
-      var ev = document.querySelector('.kt-cal-events'); if (ev) ev.textContent = '';
     });
+  }
+
+  /* -- The calendar card: dots on the grid, and the day's events beneath ------
+     One feed, the same one the calendar screen draws, so the two never disagree. */
+  var CAL_TONE = {
+    closed:    { fg: '#B91C1C', dot: '#DC2626' },
+    away:      { fg: '#B45309', dot: '#F59E0B' },
+    pending:   { fg: '#92400E', dot: '#F59E0B' },
+    celebrate: { fg: '#BE185D', dot: '#E91E8C' }
+  };
+  // When a day carries more than one event the dot takes the most consequential tone:
+  // a closure must not be hidden behind a birthday.
+  var TONE_RANK = { closed: 4, pending: 3, away: 2, celebrate: 1 };
+  function calTone(t) { return CAL_TONE[t] || { fg: '#475569', dot: '#94A3B8' }; }
+
+  function fillCalendarEvents() {
+    var ev = document.querySelector('.kt-cal-events');
+    if (!ev) return;
+    var now = new Date();
+    /* Local parts, not toISOString(): west of UTC that shifts the date back a day, and
+       "today" on this card would be yesterday's events all evening. */
+    var ymd = function (d) {
+      return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2)
+        + '-' + ('0' + d.getDate()).slice(-2);
+    };
+    var todayStr = ymd(now);
+    // To the end of the visible month at least, so every dot the grid can show is asked
+    // for; the overshoot keeps the list useful near a month boundary.
+    var to = new Date(now.getFullYear(), now.getMonth() + 1, 30);
+
+    Api.get('/director/calendar/overlays?from=' + todayStr + '&to=' + ymd(to)).then(function (d) {
+      var events = (d && d.events) || [];
+
+      // -- dots --
+      var monthPrefix = todayStr.slice(0, 7);
+      var byDay = {};
+      events.forEach(function (e) {
+        if (!e || !e.date) return;
+        (byDay[e.date] = byDay[e.date] || []).push(e);
+      });
+      Object.keys(byDay).forEach(function (date) {
+        if (date.slice(0, 7) !== monthPrefix) return;
+        var dn = parseInt(date.slice(8, 10), 10);
+        var cell = document.querySelector('.kt-cal-grid [data-cal-day="' + dn + '"]');
+        if (!cell || cell.querySelector('.kt-cal-dot')) return;
+        var best = byDay[date].reduce(function (a, b) {
+          return (TONE_RANK[b.tone] || 0) > (TONE_RANK[a.tone] || 0) ? b : a;
+        });
+        var dot = document.createElement('span');
+        dot.className = 'kt-cal-dot';
+        dot.title = byDay[date].length + (byDay[date].length === 1 ? ' event' : ' events');
+        dot.style.cssText = 'position:absolute;bottom:2px;left:50%;transform:translateX(-50%);'
+          + 'width:5px;height:5px;border-radius:50%;background:'
+          // On the filled "today" cell a coloured dot disappears; white reads on it.
+          + (dn === now.getDate() ? '#fff' : calTone(best.tone).dot) + ';';
+        cell.appendChild(dot);
+      });
+
+      // -- the list --
+      var row = function (e) {
+        var t = calTone(e.tone);
+        return '<div style="display:flex;gap:7px;padding:3px 0;align-items:baseline;">'
+          + '<span style="flex:0 0 auto;font-size:12px;">' + esc(e.icon || '•') + '</span>'
+          + '<div style="min-width:0;flex:1;">'
+            + '<div style="color:#334155;font-weight:600;overflow:hidden;text-overflow:ellipsis;'
+              + 'white-space:nowrap;">' + esc(e.title) + '</div>'
+            + (e.detail ? '<div style="color:' + t.fg + ';font-size:11.5px;overflow:hidden;'
+                + 'text-overflow:ellipsis;white-space:nowrap;">' + esc(e.detail) + '</div>' : '')
+          + '</div></div>';
+      };
+      var head = function (txt) {
+        return '<div style="font-weight:800;color:#475569;font-size:11px;letter-spacing:.04em;'
+          + 'text-transform:uppercase;margin:7px 0 2px;">' + esc(txt) + '</div>';
+      };
+
+      // Today is always drawn, even when empty: "nothing today" is an answer, and a
+      // heading that vanishes on a quiet day teaches people to stop reading the card.
+      var html = head('Today')
+        + ((byDay[todayStr] || []).length
+            ? byDay[todayStr].map(row).join('')
+            : '<div style="color:#94A3B8;padding:3px 0;">Nothing scheduled.</div>');
+
+      /* Local midnight from numeric parts. kt-tz-global.js parses a zone-less string as
+         UTC, so new Date('2026-08-30T00:00:00') is 8pm on the 29th here — which labelled
+         Sunday the 30th as "SATURDAY". The day COUNT was right either way (both sides
+         shift equally), so only the name gave it away. */
+      var ymdToLocalDate = function (v) {
+        var p = String(v || '').split('-');
+        return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+      };
+      var ahead = Object.keys(byDay).filter(function (x) { return x > todayStr; }).sort();
+      ahead.slice(0, 8).forEach(function (date) {
+        var dt = ymdToLocalDate(date);
+        var diff = Math.round((dt - ymdToLocalDate(todayStr)) / 86400000);
+        var label = diff === 1 ? 'Tomorrow'
+          : (diff < 7 ? dt.toLocaleDateString(undefined, { weekday: 'long' })
+                      : dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }));
+        html += head(label) + byDay[date].map(row).join('');
+      });
+
+      ev.innerHTML = html;
+    }).catch(function () {
+      ev.innerHTML = '<span style="color:#94A3B8;">Couldn’t load events.</span>';
+    });
+  }
+
+  /* Is the signed-in user a PLATFORM admin (not merely an agency admin)?
+     Checked the same way kt-topbar.js and kt-impersonate.js do, plus the flag the shell
+     stores, because different sign-in paths populate different fields. */
+  function ktIsPlatformAdmin() {
+    try { if (sessionStorage.getItem('kt_is_platform_admin') === '1') { return true; } } catch (e) {}
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return !!(u.is_platform_admin || u.role === 'platform_admin' || u.role_key === 'platform_admin'
+        || (Array.isArray(u.roles) && u.roles.indexOf('platform_admin') !== -1));
+    } catch (e) { return false; }
+  }
+
+  /* CLEARING THE LOG FROM THE CARD, not only from the full screen.
+
+     The button existed on #security-alerts and nowhere else, so anyone working from
+     Agency Overview - which is where these alerts are actually noticed - had no way to
+     tidy the log without first finding the other screen. Same endpoint, same rules: it
+     deletes ACKNOWLEDGED alerts only, the server enforces that, and the clear is itself
+     written to the audit log.
+
+     It is drawn whenever there is something it could remove, including when every alert
+     has been acknowledged and the card is otherwise showing "All clear" - which is
+     precisely the moment somebody wants to empty the log. */
+  function secClearBar(bd, resolvedCount, openCount) {
+    /* ALWAYS DRAWN, even with nothing to clear yet.
+ 
+       Hiding it until something is acknowledged means the control is missing exactly
+       when somebody goes looking for it, and they report it as absent rather than as
+       not-yet-applicable - which is how this went unnoticed twice. The full screen
+       already shows it unconditionally and explains on click; the card now matches. */
+    var bar = document.createElement('div');
+    bar.style.cssText = 'margin-top:10px;padding-top:9px;border-top:1px solid #F1F5F9;display:flex;'
+      + 'align-items:center;gap:8px;';
+    bar.innerHTML = '<span style="font-size:11.5px;color:#94A3B8;flex:1;">'
+        + (resolvedCount ? (resolvedCount + ' acknowledged') : 'Nothing acknowledged yet') + '</span>'
+      + '<button type="button" class="kt-w-sec-clear" title="Removes acknowledged alerts only. Open alerts are never cleared."'
+      + ' style="font-size:12px;font-weight:700;padding:5px 11px;border-radius:8px;border:1px solid #F2C9C3;'
+      + 'background:#fff;color:#BE4038;cursor:pointer;white-space:nowrap;">Clear log</button>';
+    /* PINNED BELOW THE LIST, NOT INSIDE IT.
+ 
+       The card body is overflow-y:auto and the alerts routinely overflow it, so a bar
+       appended into .bd landed below the fold of an inner scroller - present in the DOM,
+       invisible on the card, and reported as missing. It belongs to the CARD, under the
+       scrolling area, where it is always on screen.
+ 
+       fillSecurity() re-runs (it is called again after a successful clear) and only
+       rewrites .bd, so the previous bar has to be removed or they stack up. */
+    var card = bd.parentNode || bd;
+    var prev = card.querySelector('.kt-w-sec-clearbar');
+    if (prev && prev.parentNode) { prev.parentNode.removeChild(prev); }
+    bar.className = 'kt-w-sec-clearbar';
+    card.appendChild(bar);
+
+    bar.querySelector('.kt-w-sec-clear').onclick = function (ev) {
+      /* The rows above are click-through to the full screen; without this the confirm
+         opens and the card navigates away underneath it. */
+      ev.stopPropagation();
+      var btn = ev.currentTarget;
+      /* Say why rather than doing nothing. An unread alert is never cleared - that is
+         the whole guarantee of the log - so the answer is "acknowledge them first", not
+         a dead button. */
+      if (!resolvedCount) {
+        if (KT.toast) {
+          KT.toast('ℹ', 'Nothing to clear',
+            openCount ? 'Acknowledge the open alerts first — unread alerts are never cleared.'
+                      : 'The log is already empty.', '#0369A1');
+        }
+        return;
+      }
+      Promise.resolve(
+        KT.confirm
+          ? KT.confirm({
+              title: 'Clear ' + resolvedCount + ' acknowledged alert' + (resolvedCount === 1 ? '' : 's') + '?',
+              description: 'They are deleted from the log permanently. '
+                + (openCount ? ('The ' + openCount + ' alert' + (openCount === 1 ? '' : 's')
+                    + ' still open will be left in place. ') : '')
+                + 'Clearing is itself recorded in the audit log.',
+              okLabel: 'Clear log'
+            })
+          : window.confirm('Clear ' + resolvedCount + ' acknowledged alert(s)?')
+      ).then(function (ok) {
+        if (!ok) { return; }
+        btn.disabled = true; btn.textContent = 'Clearing\u2026';
+        Api.post('/platform/security-alerts/clear', {}).then(function (r) {
+          if (KT.toast) {
+            KT.toast('\u2713', 'Log cleared',
+              ((r && r.cleared) ? r.cleared : resolvedCount) + ' acknowledged alert(s) removed.', '#16A34A');
+          }
+          fillSecurity();
+        }).catch(function (e) {
+          btn.disabled = false; btn.textContent = 'Clear log';
+          if (KT.toast) { KT.toast('\u26A0', 'Could not clear', (e && e.message) || '', '#DC2626'); }
+        });
+      });
+    };
   }
 
   function fillSecurity() {
     var bd = document.querySelector('#kt-w-security .bd'); if (!bd) return;
+    /* /platform/security-alerts is platform_admin only, and this widget was drawn and
+       fetched for EVERY admin. An agency admin got a "Security alerts — Unavailable"
+       card they can never use, and every dashboard load wrote a 403 into the audit log
+       under their name. The card is removed for them rather than left showing an error
+       about something that was never theirs to see. */
+    if (!ktIsPlatformAdmin()) {
+      var card = document.getElementById('kt-w-security');
+      if (card && card.parentNode) { card.parentNode.removeChild(card); }
+      return;
+    }
     Api.get('/platform/security-alerts').then(function (d) {
       var rows = (d && (d.alerts || d.data || (Array.isArray(d) ? d : []))) || [];
       var open = rows.filter(function (a) { return !a.resolved_at && !a.resolved; });
-      if (!open.length) { bd.innerHTML = '<div style="color:#16A34A;font-size:14px;font-weight:700;">✓ All clear — no active alerts.</div>'; return; }
+      if (!open.length) {
+        bd.innerHTML = '<div style="color:#16A34A;font-size:14px;font-weight:700;">✓ All clear — no active alerts.</div>';
+        secClearBar(bd, rows.length - open.length, 0);
+        return;
+      }
       var TYPE_LABEL = { brute_force_ip: 'Brute force (IP)', mfa_hammering: 'MFA hammering', credential_stuffing: 'Credential stuffing', account_takeover: 'Account takeover' };
       bd.innerHTML = open.slice(0, 5).map(function (a) {
         var sev = String(a.severity || a.level || 'info').toLowerCase();
@@ -239,13 +447,17 @@
           else location.hash = '#security-alerts';
         };
       });
+      secClearBar(bd, rows.length - open.length, open.length);
     }).catch(function () { bd.innerHTML = '<div style="color:#64748B;font-size:13px;">Unavailable.</div>'; });
   }
 
   function start() {
     var m = document.getElementById('appMain');
     if (!m) { setTimeout(start, 300); return; }
-    new MutationObserver(function () { if (document.getElementById('kt-widgets-grid')) inject(); }).observe(m, { childList: true, subtree: true });
+    /* Re-binds when the shell swaps #appMain (kt:main-swapped); a MutationObserver follows a NODE, and this one used to die silently at the first render. */
+    var _wgFn = function () { if (document.getElementById('kt-widgets-grid')) inject(); };
+    if (window.KT && KT.observeMain) { KT.observeMain(_wgFn, { childList: true, subtree: true }); }
+    else { new MutationObserver(_wgFn).observe(m, { childList: true, subtree: true }); }
     if (document.getElementById('kt-widgets-grid')) inject();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();

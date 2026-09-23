@@ -1593,6 +1593,11 @@
           // The moment you need this is usually while scanning the list —
           // somebody says they never received the email.
           iconBtn('🔗', 'Manual sign-in link', function () { rowManualSignIn(u); }),
+          /* Lifting a sign-in lock. Sits here rather than on its own screen because
+             this is where an admin already is when somebody phones to say they cannot
+             get in. A plain button: kt-row-actions.js collapses the last cell's buttons
+             into the ⋮ itself, and adding our own would be a kebab inside a kebab. */
+          iconBtn('🔓', 'Unlock sign-in', function () { rowUnlockLogin(u); }),
         ]);
       }
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, actionEl));
@@ -1863,6 +1868,99 @@
 
   // Read-only user details (the "View" eye icon). Kept separate from Manage so
   // most look-ups don't open the full editing surface.
+  /* WHEN THE PASSWORD WAS LAST SET, AND HOW LONG IT HAS LEFT (2026-09-21).
+
+     Anthony: "add a new field that shows last password reset and days remaining for a
+     password rotation/reset."
+
+     Two facts, not one. The DATE is the audit answer - what an auditor asks and what you
+     check after an incident. The DAYS LEFT is the operational one: whether this is the
+     account that is about to stop somebody signing in on Monday morning. Showing only the
+     date would leave every reader doing 90-day arithmetic in their head.
+
+     The colour carries the urgency so a list of forty is scannable: red when it has
+     already expired or a change is being forced, amber inside a fortnight, plain
+     otherwise. Both numbers come from the API, which computes them from the same policy
+     class the login gate enforces - so the screen can never claim "12 days" for an
+     account the gate is already refusing. */
+  /* WHAT ACTUALLY REACHES THIS PERSON (2026-09-21).
+
+     Anthony: "add a field that shows what they are opt'd into (SMS, email etc) for
+     communication with their child."
+
+     Shown as capabilities rather than stored preferences, because only 5 of 116 people
+     have ever set a preference - a preferences view would say "none set" for everyone and
+     answer nothing. The API reports whether each channel would REACH them and why not
+     when it would not: SMS needs consent AND a number, push needs a signed-in phone.
+
+     A channel that is off still gets a chip, greyed, with the reason on hover. Hiding it
+     would make "no SMS chip" ambiguous between "not opted in" and "we did not check". */
+  function commsChips(c) {
+    var wrap = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;' });
+    if (!c) {
+      wrap.appendChild(Dom.el('span', { style: 'font-size:12.5px;color:#94A3B8;' }, 'Not known'));
+      return wrap;
+    }
+    [
+      ['Email', c.email, '✉️'],
+      ['SMS', c.sms, '💬'],
+      ['App push', c.push, '🔔'],
+      ['Calls', c.voice, '📞'],
+    ].forEach(function (pair) {
+      var label = pair[0], ch = pair[1] || {}, icon = pair[2];
+      var on = !!ch.on;
+      var chip = Dom.el('span', {
+        title: on ? (label + ' — reaches them') : (label + ' — ' + (ch.why || 'off')),
+        style: 'display:inline-flex;align-items:center;gap:5px;border-radius:999px;'
+             + 'padding:3px 10px;font-size:12px;font-weight:700;border:1px solid '
+             + (on ? '#A7F3D0;background:#ECFDF5;color:#065F46;' : '#E2E8F0;background:#F8FAFC;color:#94A3B8;'),
+      }, icon + ' ' + label);
+      wrap.appendChild(chip);
+    });
+    /* Only when they have customised something. The common case is no overrides at all,
+       and a permanent "no overrides" line is noise. */
+    if (c.overrides && c.overrides.length) {
+      wrap.appendChild(Dom.el('span', {
+        title: c.overrides.map(function (o) {
+          return o.event + ': ' + ['email', 'sms', 'push'].filter(function (k) { return o[k]; }).join(', ');
+        }).join(' · '),
+        style: 'font-size:11.5px;color:#B45309;align-self:center;',
+      }, c.overrides.length + ' per-event override' + (c.overrides.length === 1 ? '' : 's')));
+    }
+
+    return wrap;
+  }
+
+  function passwordAgeText(u, fmtDT) {
+    /* The formatter is PASSED IN. fmtDT is `var fmtDT = ...` declared inside
+       showUserView(), so from module scope it does not exist - which is precisely how
+       ticket #88 happened three hours ago with fmtDate on the archived-providers screen.
+       Same shape, caught before deploy this time. */
+    fmtDT = fmtDT || function (d) { return d == null ? '—' : String(d); };
+    if (u.must_change_password) {
+      return { text: 'Change required at next sign-in', colour: '#B91C1C', bold: true };
+    }
+    if (!u.password_changed_at) {
+      /* Not "expired". We genuinely do not know, and saying otherwise sends somebody
+         chasing an account that is fine. */
+      return { text: 'Never recorded', colour: '#94A3B8' };
+    }
+    var when = fmtDT(u.password_changed_at);
+    var d = u.password_days_left;
+    if (d == null) return { text: when, colour: '#334155' };
+    if (d < 0) {
+      var over = Math.abs(d);
+      return { text: when + ' · expired ' + over + ' day' + (over === 1 ? '' : 's') + ' ago',
+               colour: '#B91C1C', bold: true };
+    }
+    if (d === 0) return { text: when + ' · expires today', colour: '#B45309', bold: true };
+    return {
+      text: when + ' · ' + d + ' day' + (d === 1 ? '' : 's') + ' left',
+      colour: d <= 14 ? '#B45309' : '#334155',
+      bold: d <= 14,
+    };
+  }
+
   function showUserView(u, content) {
     var fmtDT = function (d) { if (!d) return '—'; try { return new Date(d).toLocaleString(); } catch (e) { return d; } };
     var rowEl = function (label, val, mono) {
@@ -1889,6 +1987,64 @@
     /* A different fact, worth having beside it: last_login_at is the last
        authentication; this is when they were last actually in the portal. */
     body.appendChild(rowEl('Last seen', fmtDT(u.last_seen_at)));
+    /* Beside the sign-in facts, because that is the group it belongs to: an admin
+       looking at "last login" is already asking questions about this account's access. */
+    (function () {
+      var pw = passwordAgeText(u, fmtDT);
+      var row = rowEl('Password set', pw.text);
+      try {
+        var val = row.lastElementChild;
+        if (val) {
+          val.style.color = pw.colour;
+          if (pw.bold) val.style.fontWeight = '700';
+        }
+      } catch (e) {}
+      body.appendChild(row);
+    })();
+    /* Beside the contact details, because that is the question it answers: we hold this
+       email and this number - do they actually receive anything on them? */
+    (function () {
+      var row = rowEl('Reachable by', '');
+      try {
+        var val = row.lastElementChild;
+        if (val) { Dom.clear(val); val.appendChild(commsChips(u.comms)); }
+      } catch (e) {}
+      body.appendChild(row);
+    })();
+    /* THE OTHER ACCOUNTS THIS PERSON HOLDS (2026-09-21).
+
+       Anthony: Safia "only received one password reset for one account and not the other".
+       She has three live accounts on three DIFFERENT addresses; a reset for one address
+       reaches that account and cannot reach the others. That is correct behaviour and was
+       completely invisible, so it read as a failure.
+
+       Same-ADDRESS siblings are a fact and are covered by one reset request. Same-NAME
+       siblings on a different address are a hint only - two people can share a name - so
+       they are labelled as such and never acted on automatically. */
+    (function () {
+      var others = u.other_accounts || [];
+      if (!others.length) { return; }
+      var byEmail = others.filter(function (o) { return o.match === 'email'; });
+      var byName = others.filter(function (o) { return o.match === 'name'; });
+
+      var host = Dom.el('div', { style: 'display:flex;flex-direction:column;gap:5px;' });
+      if (byEmail.length) {
+        host.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#334155;' },
+          byEmail.length + ' more on this same address — one reset request covers them all'));
+      }
+      byName.forEach(function (o) {
+        host.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#B45309;' },
+          'Same name on ' + (o.email || 'another address')
+          + (o.username ? ' (' + o.username + ')' : '')
+          + ' — a reset here will NOT reach it'));
+      });
+      host.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#94A3B8;' },
+        others.map(function (o) { return '#' + o.user_id + ' ' + (o.username || o.email || ''); }).join(' · ')));
+
+      var row = rowEl('Other accounts', '');
+      try { var v = row.lastElementChild; if (v) { Dom.clear(v); v.appendChild(host); } } catch (e) {}
+      body.appendChild(row);
+    })();
     body.appendChild(rowEl('Onboarded', u.onboarded_at ? fmtDT(u.onboarded_at) : 'Not yet'));
     body.appendChild(rowEl('Created', fmtDT(u.created_at)));
 
@@ -2035,6 +2191,117 @@
      An admin reading both would reasonably tell the user their old password had stopped
      working, which is the opposite of what happened — and it is the sentence that sends
      somebody hunting through their inbox for a password that was never sent. */
+  /* LIFTING A SIGN-IN LOCK, AND SAYING WHY (2026-09-21).
+
+     Anthony: "where is the admin unlock for each user located? It should be under the
+     kebab under user management for each user and proper audit trail when someone hits
+     that function and a pop up with a reason code as well."
+
+     Five failed attempts holds an account for five minutes. That clears itself, so this
+     is for when five minutes is five minutes too long — an educator at the door with
+     children arriving.
+
+     THE REASON IS NOT A FORMALITY. Unlocking is switching a security control off for one
+     person, and the commonest way into an account is not guessing the password, it is
+     persuading somebody helpful to open the door. An audit row reading "Anthony unlocked
+     Safia" tells a reviewer nothing six weeks later; "…because she mistyped it on her
+     phone" tells them everything. A closed list of reasons gets answered honestly in one
+     tap, where a free-text box collects "asdf" — so the only one that takes typing is
+     "Other", which has to be explained.
+
+     KT.prompt cannot do this: it renders text inputs only, and a reason code wants a
+     <select>. Hence a small dialog of its own, at the z-index the portal's other dialogs
+     use so it does not open underneath the nav chrome. */
+  function askUnlockReason(reasons, name) {
+    return new Promise(function (resolve) {
+      var o = document.createElement('div');
+      o.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483640;'
+        + 'display:flex;align-items:center;justify-content:center;padding:16px;';
+      var opts = Object.keys(reasons).map(function (k) {
+        return '<option value="' + k + '">' + reasons[k] + '</option>';
+      }).join('');
+      o.innerHTML = '<div style="background:#fff;border-radius:14px;padding:26px;max-width:440px;width:100%;'
+        + 'box-shadow:0 20px 60px rgba(15,23,42,.25);">'
+        + '<h3 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#0F172A;">Unlock ' + name + '</h3>'
+        + '<p style="margin:0 0 16px;font-size:13.5px;color:#64748B;line-height:1.55;">'
+        + 'They can sign in again straight away. This is recorded against your name, with the '
+        + 'reason you give.</p>'
+        + '<label style="display:block;font-size:13px;font-weight:600;color:#374151;">Reason</label>'
+        + '<select id="kt-unlock-reason" style="width:100%;padding:11px 14px;border:1px solid #E2E8F0;'
+        + 'border-radius:8px;font-size:14px;margin:5px 0 12px;background:#fff;">' + opts + '</select>'
+        + '<label style="display:block;font-size:13px;font-weight:600;color:#374151;">Note '
+        + '<span id="kt-unlock-req" style="color:#94A3B8;font-weight:400;">(optional)</span></label>'
+        + '<input id="kt-unlock-note" type="text" maxlength="300" placeholder="Anything worth recording"'
+        + ' style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #E2E8F0;'
+        + 'border-radius:8px;font-size:14px;margin-top:5px;">'
+        + '<div id="kt-unlock-err" style="color:#DC2626;font-size:12.5px;margin-top:8px;"></div>'
+        + '<div style="margin-top:20px;display:flex;justify-content:flex-end;gap:8px;">'
+        + '<button data-a="cancel" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;'
+        + 'cursor:pointer;font-weight:600;color:#475569;font-size:14px;">Cancel</button>'
+        + '<button data-a="ok" style="background:#1F6080;border:0;padding:10px 18px;border-radius:8px;'
+        + 'cursor:pointer;font-weight:600;color:#fff;font-size:14px;">Unlock</button>'
+        + '</div></div>';
+
+      var sel = o.querySelector('#kt-unlock-reason');
+      var note = o.querySelector('#kt-unlock-note');
+      var req = o.querySelector('#kt-unlock-req');
+      var err = o.querySelector('#kt-unlock-err');
+      /* "Other" is the one that has to be written down, and the label says so before
+         they press the button rather than after. */
+      sel.addEventListener('change', function () {
+        var other = sel.value === 'other';
+        req.textContent = other ? '(required)' : '(optional)';
+        req.style.color = other ? '#B45309' : '#94A3B8';
+      });
+
+      function close(v) { o.remove(); document.removeEventListener('keydown', esc); resolve(v); }
+      function esc(e) { if (e.key === 'Escape') close(null); }
+      document.addEventListener('keydown', esc);
+      o.addEventListener('click', function (e) { if (e.target === o) close(null); });
+      o.querySelector('[data-a="cancel"]').onclick = function () { close(null); };
+      o.querySelector('[data-a="ok"]').onclick = function () {
+        if (sel.value === 'other' && !note.value.trim()) {
+          err.textContent = 'Please say what the reason was.';
+          note.focus();
+          return;
+        }
+        close({ reason: sel.value, note: note.value.trim() });
+      };
+      document.body.appendChild(o);
+      sel.focus();
+    });
+  }
+
+  async function rowUnlockLogin(u) {
+    var reasons;
+    try {
+      var r = await Api.get('/admin/security/locked-accounts');
+      reasons = (r && r.reasons) || null;
+      /* Told BEFORE the dialog opens, because unlocking somebody who was never locked
+         is a no-op that still writes an audit row saying a control was lifted. */
+      var held = ((r && r.data) || []).filter(function (x) { return x.user_id === u.id; })[0];
+      if (!held) {
+        _toast('ℹ️', 'Not locked',
+          (u.name || u.email) + ' is not being held — they can sign in now.', '#0891A6');
+        return;
+      }
+    } catch (e) {
+      _toast('⚠️', 'Could not check', e && e.message ? e.message : 'error', '#DC2626');
+      return;
+    }
+    if (!reasons) { reasons = { other: 'Other (explained below)' }; }
+
+    var answer = await askUnlockReason(reasons, u.name || u.email || 'this person');
+    if (!answer) return;
+
+    try {
+      var res = await Api.post('/admin/users/' + u.id + '/unlock-login', answer);
+      _toast('🔓', 'Unlocked', (res && res.message) || 'They can sign in again now.', '#16A34A');
+    } catch (e) {
+      _toast('⚠️', 'Unlock failed', e && e.message ? e.message : 'error', '#DC2626');
+    }
+  }
+
   async function rowResetPassword(u) {
     var sendsLink = !!u.last_login_at && _claimed(u);   // the endpoint's own rule
     var ask = sendsLink
@@ -2345,6 +2612,21 @@
           if (d.signed_at) bits.push('signed ' + String(d.signed_at).slice(0, 10));
           else if (d.created_at) bits.push(String(d.created_at).slice(0, 10));
           mid.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:1px;' }, bits.join(' · ')));
+
+          /* APPROVED, OR JUST SUBMITTED.
+ 
+             A "synced" badge here would always read yes - the row exists only because
+             the form was filed - so it would say nothing. What this list cannot
+             currently tell you is whether the copy on the record is the one the agency
+             counter-signed or the one the family first sent in, and those are different
+             documents. `notes` carries the approval, set when it is counter-signed. */
+          if (d.category === 'signed_form' && d.notes && /^Counter-signed by/i.test(String(d.notes))) {
+            mid.appendChild(Dom.el('div', {
+              style: 'display:inline-block;margin-top:4px;font-size:10.5px;font-weight:800;color:#0F766E;'
+                + 'background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:1px 8px;',
+              title: String(d.notes)
+            }, '✓ Counter-signed'));
+          }
           row.appendChild(mid);
           var openBtn = Dom.el('button', { type: 'button', style: 'flex:0 0 auto;font-size:12px;font-weight:700;color:#1F6080;background:#fff;cursor:pointer;padding:5px 10px;border:1px solid #1F6080;border-radius:6px;' }, 'Open');
           openBtn.addEventListener('click', function () { openDoc(d); });
@@ -3359,6 +3641,319 @@
     return wrap;
   }
 
+  /* What an archived provider WAS. Built from the row already on screen rather than a
+     new endpoint: there is no live screen to open for an archived record - that is what
+     archived means - so "View" has to answer the question from the list itself. */
+  /* EVERYTHING THIS PROVIDER LEFT BEHIND (2026-09-21).
+
+     Anthony: "the view archived provider should show all the provider information and
+     history on what children were in their care and dates etc (all history for this
+     provider including payroll etc)."
+
+     The first version of this showed six fields read off the list row, which was honest
+     about what it had but useless for the questions people actually bring to an archived
+     provider: who looked after my child and when, who was working that week, what was
+     paid. Those live in /admin/centres/{id}/history.
+
+     Opens IMMEDIATELY with what the row already knows and fills the rest in when it
+     arrives — a dialog that shows a spinner for a second before revealing a name reads as
+     slow, and the name was already on screen behind it.
+
+     Works for live providers too. "What has happened here" is the same question whether
+     or not the record is archived. */
+  function _showArchivedProvider(r, fmt) {
+    var fmtDate = fmt || function (v) { return v == null ? '—' : String(v); };
+
+    var o = Dom.el('div', {
+      style: 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483640;'
+           + 'display:flex;align-items:center;justify-content:center;padding:16px;',
+    });
+    var card = Dom.el('div', {
+      style: 'background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:88vh;'
+           + 'display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(15,23,42,.25);',
+    });
+
+    /* The provider's picture, for recognition. An archived provider is often being
+       looked up months later by somebody who never met them, and a name alone is a
+       weaker anchor than a face. Empty until the history arrives - the list row does not
+       carry a logo - and it simply stays absent when there is none rather than showing a
+       broken-image box, which reads as a fault rather than an absence. */
+    var pic = Dom.el('div', {
+      id: 'kt-ph-pic',
+      style: 'width:46px;height:46px;border-radius:11px;flex:0 0 auto;display:none;'
+           + 'background:#F1F5F9;background-size:cover;background-position:center;'
+           + 'border:1px solid #E2E8F0;',
+    });
+    var head = Dom.el('div', {
+      style: 'padding:20px 22px 14px;border-bottom:1px solid #E5E7EB;display:flex;gap:14px;align-items:center;',
+    }, [
+      pic,
+      Dom.el('div', { style: 'min-width:0;' }, [
+        Dom.el('div', { style: 'font-size:18px;font-weight:800;color:#0F172A;' }, r.name || 'Provider'),
+        Dom.el('div', { id: 'kt-ph-sub', style: 'font-size:12.5px;color:#B45309;margin-top:4px;' }, 'Loading history…'),
+      ]),
+    ]);
+    card.appendChild(head);
+
+    var body = Dom.el('div', { style: 'overflow-y:auto;padding:4px 22px 18px;flex:1 1 auto;' });
+    card.appendChild(body);
+
+    var foot = Dom.el('div', { style: 'padding:13px 22px;border-top:1px solid #E5E7EB;text-align:right;' });
+    var close = Dom.el('button', {
+      style: 'background:#F1F5F9;border:0;padding:9px 18px;border-radius:8px;cursor:pointer;'
+           + 'font-weight:600;color:#475569;font-size:14px;',
+    }, 'Close');
+    function shut() { o.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') shut(); }
+    close.addEventListener('click', shut);
+    document.addEventListener('keydown', onKey);
+    o.addEventListener('click', function (e) { if (e.target === o) shut(); });
+    foot.appendChild(close);
+    card.appendChild(foot);
+    o.appendChild(card);
+    document.body.appendChild(o);
+
+    /* -- small builders, so every section looks the same -------------------- */
+    function section(title, count) {
+      return Dom.el('div', {
+        style: 'font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;'
+             + 'color:#0FA3B1;margin:20px 0 8px;',
+      }, title + (count != null ? ' · ' + count : ''));
+    }
+    function facts(pairs) {
+      var t = Dom.el('table', { style: 'width:100%;border-collapse:collapse;' });
+      pairs.forEach(function (p) {
+        if (p[1] == null || p[1] === '') return;
+        var tr = Dom.el('tr');
+        tr.appendChild(Dom.el('td', {
+          style: 'padding:7px 0;font-size:12.5px;color:#64748B;font-weight:700;width:38%;vertical-align:top;',
+        }, p[0]));
+        tr.appendChild(Dom.el('td', {
+          style: 'padding:7px 0;font-size:13.5px;color:#0F172A;',
+        }, String(p[1])));
+        t.appendChild(tr);
+      });
+      return t;
+    }
+    function table(cols, rows) {
+      if (!rows.length) {
+        return Dom.el('div', { style: 'font-size:13px;color:#94A3B8;padding:6px 0;' }, 'Nothing recorded.');
+      }
+      var wrap = Dom.el('div', { style: 'overflow-x:auto;' });
+      var t = Dom.el('table', { style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+      var hr = Dom.el('tr');
+      cols.forEach(function (c) {
+        hr.appendChild(Dom.el('th', {
+          style: 'text-align:left;padding:7px 10px 7px 0;font-size:10.5px;font-weight:800;color:#6B7280;'
+               + 'text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #E5E7EB;white-space:nowrap;',
+        }, c));
+      });
+      t.appendChild(Dom.el('thead', {}, [hr]));
+      var tb = Dom.el('tbody');
+      rows.forEach(function (cells) {
+        var tr = Dom.el('tr');
+        cells.forEach(function (v, i) {
+          var td = Dom.el('td', {
+            style: 'padding:8px 10px 8px 0;border-bottom:1px solid #F1F5F9;color:'
+                 + (i === 0 ? '#0F172A;font-weight:600;' : '#334155;'),
+          });
+          /* A cell may be an element (an avatar) rather than text. Appending a node
+             through Dom.el's text path would stringify it to [object HTMLDivElement]. */
+          if (v && v.nodeType === 1) { td.appendChild(v); }
+          else { td.textContent = (v == null || v === '') ? '—' : String(v); }
+          tr.appendChild(td);
+        });
+        tb.appendChild(tr);
+      });
+      t.appendChild(tb);
+      wrap.appendChild(t);
+      return wrap;
+    }
+    function money(n) {
+      if (n == null) return null;
+      try { return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+      catch (e) { return '$' + n; }
+    }
+    /* Dates from the API are date-only strings. Rendering them through new Date() would
+       parse as UTC and land on the previous day in every western zone, which on a
+       "child left on" date is a real error. Shown as given. */
+    function day(v) { return v ? String(v).slice(0, 10) : null; }
+
+    /* -- what we already know, drawn at once -------------------------------- */
+    body.appendChild(section('Provider'));
+    var factsHost = Dom.el('div', {});
+    factsHost.appendChild(facts([
+      ['Name', r.name],
+      ['Archived', fmtDate(r.departed_at) + (r.departed_at_is_estimate ? ' (estimated)' : '')],
+      ['Records kept until', fmtDate(r.retained_until)],
+    ]));
+    body.appendChild(factsHost);
+    var rest = Dom.el('div', {});
+    body.appendChild(rest);
+
+    /* -- and the history ----------------------------------------------------- */
+    Api.get('/admin/centres/' + r.id + '/history').then(function (d) {
+      var p = d.provider || {};
+      var sub = document.getElementById('kt-ph-sub');
+      if (sub) {
+        sub.textContent = (p.status === 'archived' ? 'Archived' : 'Active')
+          + (p.supervisor ? ' · ' + p.supervisor : '');
+      }
+
+      /* photo_url is the centre's logo when it has one, and otherwise the PROVIDER'S OWN
+         photograph - in a home childcare agency the provider is a person, and neither
+         archived provider has a logo while one of them has a face on file. Circular when
+         it is a person, square when it is a premises logo, so the shape tells you which
+         you are looking at without a caption.
+
+         Loaded via an Image first: a URL that 404s (an expired signature, a deleted file)
+         then leaves the tile hidden rather than drawing a broken-image box, which reads
+         as a fault instead of an absence. */
+      if (p.photo_url) {
+        var probe = new Image();
+        probe.onload = function () {
+          pic.style.backgroundImage = 'url("' + String(p.photo_url).replace(/"/g, '%22') + '")';
+          pic.style.borderRadius = p.photo_is_person ? '50%' : '11px';
+          pic.style.display = 'block';
+          if (p.photo_person) { pic.title = p.photo_person; }
+        };
+        probe.src = p.photo_url;
+      }
+
+      Dom.clear(factsHost);
+      factsHost.appendChild(facts([
+        ['Supervisor', p.supervisor],
+        ['Address', p.address],
+        ['Phone', p.phone],
+        ['Email', p.email],
+        ['Licence number', p.licence_number],
+        ['Licensed capacity', p.licence_capacity],
+        ['Opening hours', p.hours],
+        ['CWELCC', p.cwelcc ? 'Enrolled' : null],
+        ['Opened', fmtDate(p.opened_at)],
+        ['Archived', p.archived_at ? fmtDate(p.archived_at) : null],
+        ['Records kept until', fmtDate(r.retained_until)],
+      ]));
+      if (p.bio) {
+        factsHost.appendChild(Dom.el('div', {
+          style: 'margin-top:10px;font-size:13px;color:#475569;line-height:1.6;white-space:pre-line;',
+        }, p.bio));
+      }
+
+      var kids = d.children || [];
+      rest.appendChild(section('Children in their care', kids.length));
+      rest.appendChild(table(['Child', 'Family', 'Room', 'From', 'To', 'State'],
+        kids.map(function (c) {
+          return [c.name, c.family, c.room, day(c.start_date), day(c.end_date) || 'open', c.state];
+        })));
+
+      var staff = d.staff || [];
+      rest.appendChild(section('Staff', staff.length));
+      /* Faces, not just names. 69 of 116 people have a photograph on file, and a list of
+         who worked at a provider is exactly where recognising somebody matters - the
+         person asking is often reconstructing who was there on a particular day. Falls
+         back to initials, which is what the rest of the portal does. */
+      rest.appendChild(table(['', 'Name', 'Role', 'From', 'Until', 'Status'],
+        staff.map(function (s) {
+          var av;
+          if (s.photo_url) {
+            av = Dom.el('div', {
+              style: 'width:28px;height:28px;border-radius:50%;background:#F1F5F9;background-size:cover;'
+                   + 'background-position:center;background-image:url("'
+                   + String(s.photo_url).replace(/"/g, '%22') + '");',
+            });
+          } else {
+            var ini = (s.name || '?').split(' ').map(function (w) { return w.charAt(0); })
+              .join('').slice(0, 2).toUpperCase();
+            av = Dom.el('div', {
+              style: 'width:28px;height:28px;border-radius:50%;background:#E2E8F0;color:#475569;'
+                   + 'font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;',
+            }, ini);
+          }
+          return [av, s.name, s.role, fmtDate(s.from), s.until ? fmtDate(s.until) : '—',
+                  s.active ? 'Active' : 'Ended'];
+        })));
+
+      var pr = d.payroll || {};
+      var hours = pr.hours || [];
+      rest.appendChild(section('Hours worked', hours.length));
+      rest.appendChild(table(['Person', 'Hours', 'Shifts', 'First', 'Last'],
+        hours.map(function (h) {
+          return [h.name, h.hours, h.shifts, fmtDate(h.first_shift), fmtDate(h.last_shift)];
+        })));
+
+      var docs = pr.documents || [];
+      rest.appendChild(section('Payroll issued', docs.length));
+      /* WHERE each row came from, and HOW it was matched. 94 of these came across from
+         iLearn carrying no centre_id at all, so they are reached through the people who
+         worked here rather than through the centre record - a weaker link, and the reader
+         is told which it is rather than being left to assume they are the same claim. */
+      var viaPerson = docs.filter(function (x) { return x.matched_by === 'person'; }).length;
+      if (viaPerson) {
+        rest.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin:0 0 8px;' },
+          viaPerson + ' of these carry no provider on the record and are matched through the '
+          + 'person who was paid — including payroll imported from iLearn.'));
+      }
+      rest.appendChild(table(['Payee', 'Kind', 'Period', 'Gross', 'Net', 'Status', 'Source'],
+        docs.map(function (x) {
+          return [x.payee_name, x.kind,
+                  (day(x.period_start) || '?') + ' → ' + (day(x.period_end) || '?'),
+                  money(x.gross), money(x.net), x.status,
+                  (x.origin === 'ilearn' ? 'iLearn' : (x.origin || 'KiddieTrac'))
+                    + (x.matched_by === 'person' ? ' · via person' : '')];
+        })));
+
+      var pinv = pr.invoices || [];
+      rest.appendChild(section('Provider invoices', pinv.length));
+      rest.appendChild(table(['Payee', 'Reference', 'Period', 'Hours', 'Amount', 'Status'],
+        pinv.map(function (x) {
+          return [x.payee_name, x.reference,
+                  (day(x.period_start) || '?') + ' → ' + (day(x.period_end) || '?'),
+                  x.hours, money(x.amount), x.status];
+        })));
+
+      var b = d.billing || { invoices: [], summary: {} };
+      rest.appendChild(section('Family billing', (b.summary || {}).count));
+      if ((b.summary || {}).count) {
+        rest.appendChild(Dom.el('div', { style: 'font-size:13px;color:#475569;margin:0 0 8px;' },
+          'Billed ' + money(b.summary.billed) + ' · paid ' + money(b.summary.paid)));
+      }
+      rest.appendChild(table(['Invoice', 'Family', 'Period', 'Total', 'Paid', 'Status'],
+        (b.invoices || []).map(function (x) {
+          return [x.invoice_number, x.family_name,
+                  (day(x.period_start) || '?') + ' → ' + (day(x.period_end) || '?'),
+                  money(x.total), money(x.amount_paid), x.status];
+        })));
+
+      var files = d.documents || [];
+      rest.appendChild(section('Documents', files.length));
+      rest.appendChild(table(['Title', 'Category', 'Signed', 'Expires', 'Filed'],
+        files.map(function (x) {
+          return [x.title, x.category, x.signed_at ? fmtDate(x.signed_at) : '—',
+                  x.expires_at ? fmtDate(x.expires_at) : '—', fmtDate(x.created_at)];
+        })));
+    }).catch(function (e) {
+      var sub = document.getElementById('kt-ph-sub');
+      if (sub) { sub.textContent = 'Archived'; }
+      /* The six fields above are still on screen and still true, so this says what is
+         missing rather than replacing a partly-useful dialog with an error. */
+      rest.appendChild(Dom.el('div', {
+        style: 'margin-top:16px;padding:12px 14px;background:#FEF2F2;border:1px solid #FECACA;'
+             + 'border-radius:9px;color:#B91C1C;font-size:13px;',
+      }, 'Could not load this provider’s history: ' + ((e && e.message) || 'error')));
+    });
+  }
+
+  /* One way to open an archived child, used by the row and by the View button. */
+  function _openArchivedChild(r) {
+    if (KT.ChildDetail && KT.ChildDetail.openModal) {
+      KT.ChildDetail.openModal(r.id, { archived: true, title: (r.name || 'Child record') + ' (archived)' });
+
+      return;
+    }
+    window.location.hash = 'child-detail?id=' + r.id + '&archived=1';
+  }
+
   async function renderArchivedInto(content, key, renderActive) {
     Dom.clear(content);
     content.appendChild(archiveSwitch(content, key, renderActive, 'archived'));
@@ -3393,10 +3988,16 @@
     body.appendChild(banner);
 
     var GROUPS = [
-      { key: 'families', label: '\ud83d\udc6a Families', cols: ['Family', 'Provider', 'Children', 'Left', 'Kept until'] },
-      { key: 'children', label: '\ud83d\udc76 Children', cols: ['Child', 'Family', 'Provider', 'State', 'Left', 'Kept until'] },
+      /* The trailing '' is the ACTIONS column, same as Providers below: kt-row-actions.js
+         builds the row ⋮ from the buttons in the LAST cell, and it needs a header to
+         sit under. (2026-09-21) */
+      { key: 'families', label: '\ud83d\udc6a Families', cols: ['Family', 'Provider', 'Children', 'Left', 'Kept until', ''] },
+      { key: 'children', label: '\ud83d\udc76 Children', cols: ['Child', 'Family', 'Provider', 'State', 'Left', 'Kept until', ''] },
       { key: 'staff', label: '\ud83d\udc64 Staff & educators', cols: ['Name', 'Role', 'State', 'Left', 'Kept until'] },
-      { key: 'centres', label: '\ud83c\udfeb Providers', cols: ['Provider', 'Archived', 'Kept until'] },
+      /* The trailing '' is the ACTIONS column. kt-row-actions.js builds the row ⋮ from
+         the buttons in the LAST cell of a table, so a header has to exist for it to sit
+         under - never hand-roll a kebab where there is a real table. (2026-09-21) */
+      { key: 'centres', label: '\ud83c\udfeb Providers', cols: ['Provider', 'Archived', 'Kept until', ''] },
     ];
 
     // This section shows ITS OWN group only — no cross-section chips.
@@ -3456,7 +4057,11 @@
          keep full read access for the whole retention period. (Anthony, 2026-08-25) */
       function archivedOpen(g, r) {
         if (g === 'families') return function () { showFamilyDetail(r.id, true); };
-        if (g === 'children') return function () { window.location.hash = 'child-detail?id=' + r.id + '&archived=1'; };
+        /* A POPUP, INCLUDING FOR ARCHIVED (2026-09-21). Anthony: "view children record
+           should be a popup which includes archived records". Same renderer as the full
+           screen - the archived flag was the only difference and it is now a parameter.
+           Falls back to the hash on an old cached build. */
+        if (g === 'children') return function () { _openArchivedChild(r); };
         if (g === 'staff') return function () {
           if (typeof showUserModal === 'function') showUserModal({ id: r.id, first_name: (r.name || '').split(' ')[0], last_name: (r.name || '').split(' ').slice(1).join(' '), email: r.email, status: r.state === 'removed' ? 'deactivated' : 'deactivated' }, null, document.getElementById('appMain'));
           else window.location.hash = 'admin-users';
@@ -3507,6 +4112,145 @@
         tr.appendChild(left);
 
         tr.appendChild(cell(fmtDate(r.retained_until), 'white-space:nowrap;font-weight:600;'));
+
+        /* ARCHIVED PROVIDERS HAD NO ACTIONS AT ALL (2026-09-21).
+
+           Anthony: "under providers and archived providers there should be a kebab to
+           restore and view" - and on this screen there was nothing to find. Every other
+           tab here opens its record on click (archivedOpen() above); 'centres' was the
+           one group that returned null, so an archived provider was a row you could read
+           and nothing else. Restore existed only on the Agency overview, which is a
+           different screen entirely.
+
+           Plain buttons in the last cell: kt-row-actions.js collapses them into the ⋮
+           itself on desktop and leaves them as buttons on a phone. Adding our own menu
+           here would be a kebab inside a kebab. */
+        /* FAMILIES AND CHILDREN GET THE SAME TREATMENT AS PROVIDERS (2026-09-21).
+
+           Anthony: "under families and children section where it has the archived add
+           kebab to view full record with all details and under family add restore in the
+           kebab."
+
+           Opening the record already worked - archivedOpen() above makes the whole ROW
+           clickable - but a row you have to guess is clickable is not a feature anybody
+           can find, and there was no way at all to bring a family back from here.
+
+           Plain buttons in the last cell on purpose: kt-row-actions.js collapses them
+           into the kebab on desktop and leaves them as buttons on a phone. Building a
+           menu here would be a kebab inside a kebab. */
+        function _archViewBtn(onClick) {
+          var b = Dom.el('button', {
+            title: 'View the full record',
+            style: 'background:transparent;border:1px solid #E2E8F0;border-radius:7px;padding:5px 11px;'
+                 + 'font-size:12px;cursor:pointer;color:#334155;margin-left:6px;',
+          }, 'View');
+          b.addEventListener('click', function (ev) { ev.stopPropagation(); onClick(); });
+
+          return b;
+        }
+
+        if (active.key === 'families') {
+          var facts = Dom.el('td', { style: 'padding:11px 14px;text-align:right;white-space:nowrap;' });
+          facts.appendChild(_archViewBtn(function () { showFamilyDetail(r.id, true); }));
+
+          var famRestore = Dom.el('button', {
+            title: 'Bring this family back',
+            style: 'background:transparent;border:1px solid #A7F3D0;border-radius:7px;padding:5px 11px;'
+                 + 'font-size:12px;cursor:pointer;color:#065F46;margin-left:6px;',
+          }, 'Restore');
+          famRestore.addEventListener('click', async function (ev) {
+            ev.stopPropagation();
+            /* Say what it actually does. restoreFamily() re-enrols the children this
+               departure withdrew and reopens the enrolments it closed - a child who had
+               already left separately keeps their own end date. Somebody pressing this
+               should know the children come back with the family. */
+            var kidCount = (r.children == null) ? null : Number(r.children);
+            var ok = await KT.confirm({
+              title: 'Restore “' + (r.name || 'this family') + '”?',
+              description: 'The family becomes active again'
+                + (kidCount ? (' and ' + kidCount + ' child' + (kidCount === 1 ? '' : 'ren')
+                    + ' withdrawn by this departure will be re-enrolled') : '')
+                + '. A child who had already left separately keeps their own end date.',
+              okLabel: 'Restore',
+            });
+            if (!ok) { return; }
+            try {
+              var res = await Api.post('/admin/families/' + r.id + '/restore');
+              var did = (res && res.restored) || {};
+              if (window.KT && KT.toast) {
+                KT.toast('♻️', 'Restored',
+                  (r.name || 'The family') + ' is active again'
+                    + (did.children ? (' · ' + did.children + ' child'
+                        + (did.children === 1 ? '' : 'ren') + ' re-enrolled') : '') + '.',
+                  '#16A34A');
+              }
+              renderArchivedInto(content, key, renderActive);
+            } catch (e) {
+              if (window.KT && KT.toast) {
+                KT.toast('⚠️', 'Could not restore', (e && e.message) || 'error', '#DC2626');
+              }
+            }
+          });
+          facts.appendChild(famRestore);
+          tr.appendChild(facts);
+        }
+
+        if (active.key === 'children') {
+          /* VIEW ONLY, deliberately. A child leaves either with their family or on their
+             own, and a Restore here would have to guess which - and re-enrolling a child
+             whose family is still archived would leave them enrolled at a provider that
+             no longer exists. Restoring the FAMILY brings its children with it, which is
+             the path that cannot produce that state. */
+          var chacts = Dom.el('td', { style: 'padding:11px 14px;text-align:right;white-space:nowrap;' });
+          chacts.appendChild(_archViewBtn(function () { _openArchivedChild(r); }));
+          tr.appendChild(chacts);
+        }
+
+        if (active.key === 'centres') {
+          var act = Dom.el('td', { style: 'padding:11px 14px;text-align:right;white-space:nowrap;' });
+
+          var viewBtn = Dom.el('button', {
+            title: 'View details',
+            style: 'background:transparent;border:1px solid #E2E8F0;border-radius:7px;padding:5px 11px;'
+                 + 'font-size:12px;cursor:pointer;color:#334155;margin-left:6px;',
+          }, 'View');
+          viewBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            _showArchivedProvider(r, fmtDate);
+          });
+          act.appendChild(viewBtn);
+
+          var restoreBtn = Dom.el('button', {
+            title: 'Restore this provider',
+            style: 'background:transparent;border:1px solid #A7F3D0;border-radius:7px;padding:5px 11px;'
+                 + 'font-size:12px;cursor:pointer;color:#065F46;margin-left:6px;',
+          }, 'Restore');
+          restoreBtn.addEventListener('click', async function (ev) {
+            ev.stopPropagation();
+            var ok = await KT.confirm({
+              title: 'Restore “' + (r.name || 'this provider') + '”?',
+              description: 'It becomes active again and reappears everywhere it used to — '
+                + 'rooms, families and reports included.',
+              okLabel: 'Restore',
+            });
+            if (!ok) return;
+            try {
+              await Api.post('/admin/centres/' + r.id + '/restore');
+              if (window.KT && KT.toast) {
+                KT.toast('♻️', 'Restored', (r.name || 'The provider') + ' is active again.', '#16A34A');
+              }
+              renderArchivedInto(content, key, renderActive);
+            } catch (e) {
+              if (window.KT && KT.toast) {
+                KT.toast('⚠️', 'Could not restore', (e && e.message) || 'error', '#DC2626');
+              }
+            }
+          });
+          act.appendChild(restoreBtn);
+
+          tr.appendChild(act);
+        }
+
         tb.appendChild(tr);
       });
       table.appendChild(tb);
@@ -3514,6 +4258,18 @@
       var scroll = Dom.el('div', { style: 'overflow-x:auto;' });
       scroll.appendChild(table);
       pane.appendChild(scroll);
+
+      /* ASK FOR THE KEBAB AND THE TABLE TOOLS (2026-09-21).
+
+         This table appears when you click Active/Archived INSIDE the screen, and an
+         in-screen tab fires no hashchange - which is what both sweeps are driven by. So
+         the buttons rendered as two bare buttons in the last cell and never collapsed
+         into the ⋮, and the table got no search box either. Both sweeps are idempotent,
+         so asking for them here is free. */
+      setTimeout(function () {
+        try { if (window.KT && KT.sweepRowActions) KT.sweepRowActions(); } catch (e) {}
+        try { if (window.KT && KT.enhanceTables) KT.enhanceTables(); } catch (e) {}
+      }, 0);
       pane.appendChild(Dom.el('div', { style: 'margin-top:10px;font-size:12px;color:var(--ink-500,#64748B);' },
         rows.length + ' record' + (rows.length === 1 ? '' : 's')));
     }

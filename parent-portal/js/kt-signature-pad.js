@@ -11,6 +11,17 @@
 (function (window) {
   var KT = window.KT || (window.KT = {});
   KT.signaturePad = function (opts) {
+    /* CALLED THE OLD WAY? SAY SO, DO NOT GUESS.
+
+       The inline pad takes (hostElement, opts) and the overlay takes (opts). They shared
+       a name for a month, so a caller written against the inline one reaches here with a
+       DOM node as `opts` — and used to get a silent, wrong overlay whose Promise was then
+       treated as a handle. Hand it to the real inline pad when that is loaded, and make
+       the mistake visible either way rather than letting it fail three screens away. */
+    if (opts && opts.nodeType === 1) {
+      try { console.error('[kt-signature-pad] called with a host element — use KT.signaturePadInline(host, opts) for an in-page pad.'); } catch (e) {}
+      if (KT.signaturePadInline) { return KT.signaturePadInline(opts, arguments[1] || {}); }
+    }
     opts = opts || {};
     return new Promise(function (resolve) {
       var ov = document.createElement('div');

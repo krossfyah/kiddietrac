@@ -34,6 +34,41 @@ final class AuthController extends Controller
         ]);
 
         $login = trim((string) $data['email']);
+
+        /* TOO MANY WRONG ANSWERS (2026-09-21).
+
+           Checked before any account lookup or hash, so a held account costs an attacker
+           a cheap 429 rather than a bcrypt comparison - and so the hold cannot be probed
+           for whether the account exists.
+
+           Five failures in fifteen minutes, then a FIVE MINUTE hold that clears itself.
+           Short on purpose: a hard lock is a denial-of-service, because anyone who knows
+           an educator's email can shut her out of drop-off by typing rubbish five times.
+           An admin can lift it immediately (POST /admin/users/{user}/unlock-login).
+
+           This is the gap the 20 Sep probe walked through: 109 attempts in 18 minutes,
+           paced at about six a minute, which is under both rate limits. Counting
+           failures per identifier catches exactly that - slow, patient guessing at one
+           account - which a per-minute limiter is designed not to notice. */
+        $heldFor = \App\Services\PasswordPolicy::lockedFor($login);
+        if ($heldFor > 0) {
+            $this->audit($request, null, 'login_blocked_locked', null, null, [
+                'login' => $login,
+                'reason' => 'too_many_failed_attempts',
+                'minutes_remaining' => $heldFor,
+                'summary' => 'Refused a sign-in for ' . $login . ': too many failed attempts, '
+                    . 'held for another ' . $heldFor . ' minute' . ($heldFor === 1 ? '' : 's') . '.',
+            ]);
+
+            return response()->json([
+                'message' => 'Too many failed sign-in attempts. Please wait '
+                    . $heldFor . ' minute' . ($heldFor === 1 ? '' : 's')
+                    . ' and try again, or ask your administrator to unlock your account.',
+                'code' => 'account_locked',
+                'minutes_remaining' => $heldFor,
+            ], 429);
+        }
+
         $uname = ! empty($data['username']) ? mb_strtolower(trim((string) $data['username'])) : '';
         $user = null;
         if ($uname !== '') {
@@ -416,6 +451,15 @@ final class AuthController extends Controller
         ]);
         \App\Services\PasswordPolicy::record($user->id, $newHash);
 
+        /* The age the 90-day rotation is measured from. Stamped wherever a password is
+           actually set, or the clock never starts and the policy is decorative. */
+        try {
+            DB::table('users')->where('id', $user->id)->update([
+                'password_changed_at' => now(),
+                'password_expiry_notified_at' => null,
+            ]);
+        } catch (\Throwable $e) { /* never fail a password change over its own bookkeeping */ }
+
         $this->audit($request, $user->id, 'password_changed', 'user', $user->id, [
             'cleared_forced_change' => ! empty($user->must_change_password),
         ]);
@@ -489,10 +533,23 @@ final class AuthController extends Controller
                    whoever reads the log — a typo, an account that was switched off, and
                    a username that belongs to somebody else's address — and they were all
                    being written as the same row. */
-                $held = DB::table('users')->whereRaw('LOWER(username) = ?', [$wanted])
-                    ->whereNull('deleted_at')->first();
+                /* AN ARCHIVED ACCOUNT IS NOT A TYPO (2026-09-21).
+
+                   This looked only at live rows, so a username belonging to an account
+                   that had been ARCHIVED came back as `no_such_username` - the same row a
+                   misspelling writes. Safia Ali archived her own educator login
+                   (safia-educator) on 16 Sep and then asked to reset it eight times over
+                   five days; every attempt was filed as though she had mistyped it, so
+                   nothing in the log said what was actually wrong.
+
+                   Withholding it from the REQUESTER is deliberate and unchanged - the
+                   response below still says the same thing for every outcome. This is
+                   only about what the agency's own audit log is allowed to say. */
+                $held = DB::table('users')->whereRaw('LOWER(username) = ?', [$wanted])->first();
                 if (! $held) {
                     $refusal = 'no_such_username';
+                } elseif ($held->deleted_at) {
+                    $refusal = 'that_account_was_archived';
                 } elseif (in_array($held->status, \App\Support\Audience::OFF_STATUSES, true)) {
                     $refusal = 'that_username_is_switched_off';
                 } else {
@@ -515,11 +572,72 @@ final class AuthController extends Controller
             /* A request matching nothing used to vanish completely, so "I don't see any
                attempts to reset the password" had no answer either way. Recorded with no
                user_id; the response below is unchanged, nothing is disclosed. */
-            $this->audit($request, null, 'password_reset_unmatched', null, null, [
-                'identifier' => $login,
-                'username' => $uname !== '' ? $uname : null,
-                'reason' => $refusal ?: 'no_match',
-            ]);
+            /* WHOSE ACCOUNT WAS THIS? (2026-09-21)
+
+               Anthony: "safia sent a few password resets and they are not logging."
+               They were logging - with agency_id NULL, which the audit viewer excludes
+               from every agency on purpose, so nobody at iLearn could see that one of
+               their admins had been locked out and retrying for five days.
+
+               "No live account" is not the same as "no account". The identifier here
+               named a real archived user, and an archived user still knows which agency
+               it belonged to. Resolve it and stamp the row so the people who can actually
+               DO something about it are the ones who see it. 10 of the 20 rows already on
+               file resolve this way; the rest - probes, typos, addresses we have never
+               heard of - genuinely have no owner and stay platform-level, which is the
+               correct place for them.
+
+               Deliberately NOT disclosed to the requester: the response below is
+               unchanged and identical for every outcome. This only decides which audit
+               log the row appears in. */
+            $owner = null;
+            if ($uname !== '') {
+                $owner = DB::table('users')->whereRaw('LOWER(username) = ?', [$uname])
+                    ->first(['id', 'first_name', 'last_name', 'status', 'deleted_at']);
+            }
+            if (! $owner && $looksLikeEmail) {
+                /* Only when the address names exactly ONE account. A shared address
+                   (see EmailAccounts) would otherwise attribute the attempt to whichever
+                   row happened to sort first - and on a cross-agency address that is a
+                   row filed under the wrong tenant. */
+                $onEmail = DB::table('users')->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($login)])
+                    ->get(['id', 'first_name', 'last_name', 'status', 'deleted_at']);
+                if ($onEmail->count() === 1) {
+                    $owner = $onEmail->first();
+                }
+            }
+
+            $ownerAgency = null;
+            if ($owner) {
+                /* Any assignment, active or not: the roles on an archived account are
+                   switched off, and that is exactly the account we are trying to name. */
+                $ownerAgency = DB::table('role_assignments')->where('user_id', $owner->id)
+                    ->whereNotNull('agency_id')->orderByRaw("role = 'guardian' ASC")
+                    ->value('agency_id');
+            }
+
+            $this->audit($request, null, 'password_reset_unmatched', $owner ? 'user' : null,
+                $owner ? (int) $owner->id : null, array_filter([
+                    'identifier' => $login,
+                    'username' => $uname !== '' ? $uname : null,
+                    'reason' => $refusal ?: 'no_match',
+                    /* Readable on its own, without a second lookup - the log has to say
+                       WHAT was affected, not just that something was. */
+                    'account' => $owner ? trim($owner->first_name . ' ' . $owner->last_name) : null,
+                    'account_status' => $owner ? ($owner->deleted_at ? 'archived' : $owner->status) : null,
+                    'archived_at' => $owner && $owner->deleted_at ? (string) $owner->deleted_at : null,
+                    'summary' => $owner
+                        ? ('A password reset was asked for "' . ($uname !== '' ? $uname : $login)
+                            . '", which belongs to ' . trim($owner->first_name . ' ' . $owner->last_name)
+                            . ($owner->deleted_at
+                                ? ' - an account ARCHIVED on ' . substr((string) $owner->deleted_at, 0, 10)
+                                    . '. No email was sent, and none can be: the account no longer exists. '
+                                    . 'Restore it, or point them at their remaining account.'
+                                : ' - which cannot currently be signed into (' . $owner->status . '). '
+                                    . 'No email was sent.')
+                        )
+                        : null,
+                ], fn ($v) => $v !== null), $ownerAgency ? (int) $ownerAgency : null);
         }
 
         /* Invalidate outstanding tokens for the accounts being re-minted for, and NOTHING
@@ -870,7 +988,10 @@ final class AuthController extends Controller
         } catch (\Throwable $e) { /* analytics only — never block login */ }
     }
 
-    private function formatUser(User $user): array
+    /* PUBLIC so the passkey sign-in path returns the SAME user shape from the SAME
+       method. Duplicating it there would let the two responses drift, and a client
+       would then behave differently depending on which door somebody came in by. */
+    public function formatUser(User $user): array
     {
         $assignments = DB::table('role_assignments')
             ->where('user_id', $user->id)
@@ -1077,6 +1198,17 @@ final class AuthController extends Controller
             // instead of starting over with everything typed so far thrown away.
             'onboarding_step' => ['nullable', 'integer', 'min:0', 'max:30'],
 
+            /* ASKED AS THEY JOIN (2026-09-18).
+
+               Text alerts are consent-gated per person and the only place to say yes was a
+               toggle inside Settings, which a parent never opens: iLearn reached 52 people
+               with 1 opted in, so an agency-wide broadcast reached one person. Asking here
+               is what stops the problem growing - every new family answers on the way in.
+
+               Nullable on purpose. An absent key means "this client did not ask", which
+               must leave the column alone; only an explicit true or false is an answer. */
+            'sms_opt_in'      => ['nullable', 'boolean'],
+
             // Mark as done (default true)
             'complete'        => ['nullable', 'boolean'],
         ]);
@@ -1146,6 +1278,42 @@ final class AuthController extends Controller
         if (! empty($data['username'])) {
             $userUpdate['username'] = trim($data['username']);
         }
+
+        $smsReceipt = false;
+        /* The consent record, not just the flag. What they were shown is stored with it,
+           so the agency can say WHAT was agreed to and not merely that a box was ticked -
+           which is the difference between evidence and an assertion if a carrier ever
+           asks. A no is recorded too, so "never asked" and "said no" stay distinguishable
+           in the coverage view. */
+        if (array_key_exists('sms_opt_in', $data) && $data['sms_opt_in'] !== null) {
+            if ($data['sms_opt_in']) {
+                $userUpdate['sms_opt_in'] = 1;
+                $userUpdate['sms_opt_in_at'] = now();
+                $userUpdate['sms_opt_out_at'] = null;
+                $userUpdate['sms_consent_source'] = 'onboarding';
+                $userUpdate['sms_consent_text'] = \App\Http\Controllers\Api\SmsConsentController::CONSENT_VERSION
+                    . ' :: ' . \App\Http\Controllers\Api\SmsConsentController::CONSENT_TEXT;
+                /* Receipt sent after the row is written, further down - see the note by
+                   the update() call. An unticked box sends nothing, because it is not an
+                   answer and a "you said no" email would be the first they had heard of
+                   a decision they never made. */
+                $smsReceipt = true;
+            } else {
+                /* AN UNTICKED BOX IS NOT A REFUSAL.
+
+                   The first version of this wrote sms_opt_out_at on a false, which would
+                   have filed everyone who simply did not notice the checkbox as having
+                   DECLINED - and declined people are deliberately excluded from the
+                   "ask everyone" email, so one unnoticed checkbox would have silenced
+                   them permanently with nobody able to tell why.
+
+                   Leaving consent unset keeps them in "never asked", which is the truth:
+                   they were shown the question and did not say yes. A real no still
+                   exists and is recorded - the "No thanks" button on the emailed page, a
+                   director recording one, or a STOP reply - those set the timestamp. */
+                $userUpdate['sms_opt_in'] = 0;
+            }
+        }
         $wasOnboarded = ! empty($user->onboarded_at);
         $isCompleting = ($data['complete'] ?? true) === true;
         // Done — drop the resume point, so that if an admin later reopens
@@ -1156,6 +1324,33 @@ final class AuthController extends Controller
         $userUpdate['updated_at']     = now();
         if ($isCompleting) {
             $userUpdate['onboarded_at'] = now();
+
+            /* ANY FORM SIGNED BEFORE THIS ACCOUNT EXISTED NOW GETS FILED.
+ 
+               A signed form is filed onto the signer's record at signature time, and
+               that filing is best-effort so it can never fail the submission itself. The
+               cost is that a form signed while the account was still half-made - invited,
+               unmatched, created moments later by a different route - can end up complete
+               in Forms Manager and absent from the family's Documents, with nothing
+               anywhere saying so.
+ 
+               Finishing onboarding is the moment that gap is closable for this person, so
+               it is closed here rather than waiting for the nightly pass. Cheap when there
+               is nothing to do: one indexed lookup that returns no rows, and no writes. */
+            try {
+                $filed = \App\Support\SignedFormFiler::syncForUser((int) $user->id);
+                if ($filed > 0) {
+                    \Illuminate\Support\Facades\Log::info('onboarding: filed signed forms that had no document', [
+                        'user_id' => (int) $user->id, 'filed' => $filed,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                /* Never worth failing onboarding over - the nightly pass will catch it. */
+                \Illuminate\Support\Facades\Log::warning('onboarding: form document sync failed', [
+                    'user_id' => (int) $user->id, 'err' => $e->getMessage(),
+                ]);
+            }
+
             /* And make the account active. Setting onboarded_at alone left status at
                'invited', and the mail gate blocks every routine email to an invited
                account — so people who had finished onboarding and were working daily
@@ -1192,6 +1387,14 @@ final class AuthController extends Controller
         }
 
         DB::table('users')->where('id', $user->id)->update($userUpdate);
+
+        /* The text-alert receipt, after the row exists so it quotes what was stored.
+           Only on a yes: an unticked box is not an answer, and "you said no" would be the
+           first they had heard of a decision they never made. A failed receipt must not
+           fail onboarding - the consent is recorded either way and email_logs shows it. */
+        if ($smsReceipt) {
+            try { \App\Services\SmsConsentReceipt::send((int) $user->id, true, 'onboarding'); } catch (\Throwable $e) {}
+        }
 
         // Onboarding-success confirmation — sent ONCE, the first time onboarding
         // completes. Uses the branded layout (logo header + privacy/terms footer);
@@ -1266,15 +1469,41 @@ final class AuthController extends Controller
         };
     }
 
-    private function audit(Request $request, ?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, string|array|null $details = null): void
+    private function audit(Request $request, ?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, string|array|null $details = null, ?int $agencyId = null): void
     {
         try {
             \App\Support\Audit::write([
                 'user_id' => $userId,
                 // Stamp the acting agency so login/mfa events are agency-scoped in
                 // the per-agency audit log + activity feed (no cross-tenant bleed).
-                'agency_id' => $userId ? \App\Support\AuditScope::resolve((int) $userId, $request) : null,
-                'entity_type' => 'centre', 'entity_id' => null,
+                /* SIGNED-OUT EVENTS COULD NOT BE SEEN (2026-09-21).
+
+                   Anthony: "password reset requests are not showing up in the audit log
+                   - why?" Because they were written with agency_id NULL, and the viewer
+                   shows ONLY rows stamped with the active agency (deliberately - an
+                   unstamped row used to leak across tenants).
+
+                   AuditScope::resolve() answers the question "which agency was this ACTOR
+                   working inside", and it reads X-Active-Agency-Id to do it. A password
+                   reset arrives from a signed-out browser with no such header, so for a
+                   platform_admin it returned NULL every time - which is correct for a
+                   platform-level ACTION and wrong for an event ABOUT an account.
+
+                   For these events the question is different: not "where was this person
+                   working" but "whose account is this". ownAgency() answers that, needs
+                   no header, and cannot be spoofed by one. Measured before the change: 9
+                   of 43 reset requests unstamped, and every one of the 17 unmatched
+                   attempts - those genuinely have no account and stay platform-level. */
+                /* AN EVENT WITH NO SIGNED-IN USER CAN STILL BELONG TO AN AGENCY
+                   (2026-09-21). A refused reset has no $userId by definition - that is
+                   what "unmatched" means - but the identifier still names somebody's
+                   account often enough to be worth attributing. $agencyId carries that
+                   in; see forgotPassword(). Everything else keeps the old behaviour. */
+                'agency_id' => $agencyId
+                    ?: ($userId
+                        ? (\App\Support\AuditScope::ownAgency((int) $userId)
+                            ?: \App\Support\AuditScope::resolve((int) $userId, $request))
+                        : null),
                 'action' => $action,
                 'entity_type' => $targetType,
                 'entity_id' => $targetId,

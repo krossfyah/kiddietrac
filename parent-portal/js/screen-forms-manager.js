@@ -178,7 +178,7 @@
       el.innerHTML = '<div style="overflow-x:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">'
         + '<table data-kt-paginate="25" data-kt-filter-always="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
         + '<thead><tr style="background:#F9FAFB;">'
-        +   th('Sent') + th('Forms') + th('Sent to') + th('Signed') + th('Emailed') + th('By') + th('')
+        +   th('Sent') + th('Forms') + th('Sent to') + th('Signed') + th('Emailed') + th('Read') + th('By') + th('')
         + '</tr></thead><tbody>'
         + rows.map(function (r) {
             var titles = (r.forms || []);
@@ -208,6 +208,49 @@
             var kForms = String(titles[0] || '').toLowerCase();
             var kWho   = String((people[0] && (people[0].name || people[0].email)) || '').toLowerCase();
             var kMail  = !r.notified ? '0 not sent' : (r.emailed > 0 ? '2 sent ' + r.emailed : '1 none went');
+
+            /* WAS IT OPENED (2026-09-17).
+
+               Anthony: "add read receipt to the forms manager table for multiple forms."
+
+               "Sent" and "Signed" left a gap somebody kept falling into: a package showing
+               0 of 7 signed might be a family ignoring their paperwork or an email that
+               never arrived, and chasing the first when it is the second annoys a parent
+               who never received anything. This is the middle answer.
+
+               DELIVERY FIRST, THEN READING. A suppressed or failed email is a different
+               problem from an unopened one and must not read as "just not opened yet" -
+               that is precisely what happened to Safia's send, which sat looking ignored
+               when it had never left the building.
+
+               An open is evidence, not proof: some clients prefetch images and some strip
+               them entirely, so "not opened" can mean either. It is worth showing because
+               the strong signal - opened - is trustworthy, and the weak one is labelled
+               rather than dressed up. */
+            var readCell;
+            var kRead;
+            if (!r.notified) {
+              readCell = '<span style="color:#CBD5E1;">—</span>';
+              kRead = '0';
+            } else if ((r.delivered_count || 0) === 0) {
+              readCell = '<span style="font-size:11px;font-weight:800;color:#B91C1C;background:#FEE2E2;'
+                + 'border:1px solid #FCA5A5;border-radius:999px;padding:2px 9px;white-space:nowrap;"'
+                + ' title="The email never left — it was suppressed or failed. Open the package to see why.">'
+                + 'Not delivered</span>';
+              kRead = '1';
+            } else if ((r.read_count || 0) === 0) {
+              readCell = '<span style="font-size:11px;font-weight:800;color:#64748B;background:#F1F5F9;'
+                + 'border:1px solid #CBD5E1;border-radius:999px;padding:2px 9px;white-space:nowrap;"'
+                + ' title="Delivered, but no open recorded. Some mail apps never report one.">'
+                + 'Unopened</span>';
+              kRead = '2';
+            } else {
+              readCell = '<span style="font-size:11px;font-weight:800;color:#166534;background:#DCFCE7;'
+                + 'border:1px solid #BBF7D0;border-radius:999px;padding:2px 9px;white-space:nowrap;"'
+                + ' title="An open was recorded for ' + r.read_count + ' of ' + r.recipient_count + ' recipient(s).">'
+                + '✓ Read ' + r.read_count + ' of ' + r.recipient_count + '</span>';
+              kRead = '3';
+            }
 
             /* HOW MUCH HAS COME BACK. A package is forms x people signatures; this is how
                many of them exist. Sorted on the RATIO, not the count — "2 of 2" is
@@ -240,6 +283,7 @@
               + '<td data-kt-sort="' + esc(kWho) + '" style="padding:11px 14px;color:#334155;">' + whoCell + '</td>'
               + '<td data-kt-sort="' + esc(String(pct.toFixed(4))) + '" style="padding:11px 14px;white-space:nowrap;">' + doneCell + '</td>'
               + '<td data-kt-sort="' + esc(kMail) + '" style="padding:11px 14px;white-space:nowrap;">' + mail + '</td>'
+              + '<td data-kt-sort="' + esc(kRead) + '" style="padding:11px 14px;white-space:nowrap;">' + readCell + '</td>'
               + '<td data-kt-sort="' + esc(String(r.sent_by || '').toLowerCase()) + '" style="padding:11px 14px;color:#475569;white-space:nowrap;">' + esc(r.sent_by || '—') + '</td>'
               + '<td style="padding:11px 8px;text-align:right;">'
               +   '<button class="pk-kebab" data-id="' + r.id + '" data-kt-iconized="1" title="Actions" '
@@ -314,6 +358,12 @@
       +   esc(d.sent_by || '—') + '</div>'
       + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Emailed</div>'
       +   (d.notified ? esc(String(d.emailed)) + ' of ' + people.length : 'not sent') + '</div>'
+      /* The same answer as the table's Read column, so opening a package never disagrees
+         with the row it was opened from. */
+      + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Read</div>'
+      +   (!d.notified ? '—'
+            : ((d.delivered_count || 0) === 0 ? 'not delivered'
+              : esc(String(d.read_count || 0)) + ' of ' + people.length)) + '</div>'
       + '<div><div style="font-size:11px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;">Signed</div>'
       +   doneSlots + ' of ' + totalSlots + '</div>'
       + '</div>';
@@ -700,6 +750,17 @@
           if (!r) { return; }
           openMenu(btn, function (item) {
             item('👁', 'View files', false, function () { viewFileRequest(r.id); });
+            /* THE LINK THE FAMILY WAS SENT (2026-09-17). Anthony: "open link for the
+               request files table."
+
+               Until now the only copy of the upload link lived in the email. A parent who
+               never got it, lost it, or is standing at the desk with the documents on
+               their phone left staff with nothing to hand them - the only move was another
+               reminder email and hope.
+
+               It is the SAME link, not a new one, so the copy already in their inbox keeps
+               working. It is also a real credential, so fetching it is audited. */
+            item('\u{1F517}', 'Open upload link', false, function () { openFileRequestLink(r); });
             if (r.received > 0) {
               item('⬇️', 'Download ' + r.received + ' file(s)', false, function () { downloadFileRequest(r.id); });
             }
@@ -806,6 +867,26 @@
       btn.disabled = false;
       btn.textContent = was;
     });
+  }
+
+  /* Opens the signed upload page and puts the link on the clipboard, because the two
+     things staff actually do with it are "show me" and "send me that so I can text it". */
+  async function openFileRequestLink(r) {
+    try {
+      var res = await Api.get('/admin/file-requests/' + r.id + '/link');
+      if (!res || !res.url) { throw new Error('No link came back.'); }
+
+      window.open(res.url, '_blank');
+      try { await navigator.clipboard.writeText(res.url); } catch (e) { /* not fatal */ }
+
+      if (KT.toast) {
+        KT.toast('\u{1F517}', 'Upload link opened',
+          'Copied to the clipboard — valid for ' + (res.expires_days || 21)
+            + ' days, for ' + (res.to || 'this family') + '.', '#1F6080');
+      }
+    } catch (e) {
+      if (KT.toast) { KT.toast('⚠️', 'Could not get that link', (e && e.message) || '', '#B91C1C'); }
+    }
   }
 
   function viewFileRequest(id) {
@@ -1816,15 +1897,19 @@
             // Description gets its own sortable column. As a grey sub-line under the
             // title it was easy to miss entirely, and it could not be sorted or scanned.
             + '<td style="padding:9px 14px;color:#475569;max-width:320px;">' + (f.description ? esc(f.description) : '<span style="color:#CBD5E1;">—</span>') + '</td>'
-            + '<td style="padding:9px 14px;">' + (auds || '—')
+            /* Both cells CLOSE. The "Assigned to" td used to be left open and a
+               "+N named" chip was emitted after the NEXT cell had already closed, so it
+               belonged to no cell at all: the browser hoisted it out of the table and it
+               rendered as a loose "+1 named" line above the rows, once per form. The
+               named-recipient count is still on the form's Edit dialog, where it can be
+               acted on rather than just counted at. */
+            + '<td style="padding:9px 14px;">' + (auds || '—') + '</td>'
             // Whether a completed copy is emailed on, and where to. Without this the
             // only way to know was to open Edit on every form one at a time.
             + '<td style="padding:9px 14px;white-space:nowrap;">' + (f.notify_email
                 ? '<span style="font-size:11px;font-weight:800;color:#0F766E;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:2px 9px;">On</span>'
                   + '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">' + esc(f.notify_email) + '</div>'
                 : '<span style="font-size:11px;font-weight:800;color:#64748B;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:999px;padding:2px 9px;">Off</span>') + '</td>'
-            + (f.named_count ? '<span style="display:inline-block;background:#FFF7ED;color:#C2410C;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:800;margin-left:4px;">+' + f.named_count + ' named</span>' : '')
-            + '</td>'
             + '<td style="padding:9px 14px;color:#475569;white-space:nowrap;">'
             + esc(f.uploaded_by || '—')
             + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(fmtStamp(f.created_at)) + '</div></td>'
@@ -1873,7 +1958,7 @@
       var rows = (d && d.signoffs) || [];
       if (!rows.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms have been signed yet.</div>'; return; }
       el.innerHTML = '<table data-kt-no-kebab="1" data-kt-paginate="25" data-kt-filter-always="1" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Signed by', 'Signed (agency time)', 'Copy emailed', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Signed by', 'Signed (agency time)', 'Copy emailed', 'Sent back', 'Counter-signed', 'Synced', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || '—';
           // The description is what the form is FOR — a list of titles like "test 8"
@@ -1895,8 +1980,112 @@
                       ? '<span style="font-size:11px;font-weight:800;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:999px;padding:2px 9px;">Not sent</span>'
                       : '<span style="font-size:11px;color:#94A3B8;">Not set up</span>')
               ) + '</td>'
+            /* SENT BACK TO THE SIGNER, and whether they have resubmitted since.
+
+               A returned form still looks completed in every other column - it was
+               signed, the copy was emailed - so without this the tab shows it as done
+               while everyone is actually waiting on the parent. The count matters too:
+               a form returned three times is a different conversation from one returned
+               once. */
+            + '<td style="padding:9px 14px;white-space:nowrap;">' + (
+                r.correction_requested_at
+                  ? (r.corrected_at
+                      ? '<span style="font-size:11px;font-weight:800;color:#0F766E;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:2px 9px;">Resubmitted</span>'
+                        + '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">Sent back ' + esc(fmtStamp(r.correction_requested_at)) + '</div>'
+                      : '<span style="font-size:11px;font-weight:800;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:999px;padding:2px 9px;">Awaiting signer</span>'
+                        + '<div style="font-size:11px;color:#94A3B8;margin-top:3px;">' + esc(fmtStamp(r.correction_requested_at))
+                          + ((r.correction_count || 0) > 1 ? ' \u00B7 ' + r.correction_count + 'x' : '') + '</div>')
+                  : '<span style="color:#CBD5E1;">\u2014</span>'
+              ) + '</td>'
+            /* COUNTER-SIGNED, or waiting on us.
+
+               Without this column a form the parent completed weeks ago and nobody has
+               looked at is indistinguishable from one that was reviewed and returned -
+               which is the gap the whole feature exists to close. "Awaiting review" is
+               a prompt, not a decoration. */
+            + '<td style="padding:9px 14px;white-space:nowrap;">' + (
+                r.countersigned_at
+                  ? '<span style="color:#16A34A;font-weight:700;">\u2713 ' + esc(fmtStamp(r.countersigned_at)) + '</span>'
+                    + (r.countersigner_name ? '<div style="font-size:11px;color:#94A3B8;">' + esc(r.countersigner_name) + '</div>' : '')
+                  : '<span style="font-size:11px;font-weight:800;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:999px;padding:2px 9px;">Awaiting review</span>'
+              ) + '</td>'
+            /* SYNCED — is this form actually ON the signer's record?
+
+               "Completed" and "filed" are different facts. Filing runs at signature time
+               and is best-effort by design, so a form can be complete here and missing
+               from the family's Documents — most often because the account did not exist
+               yet when it was signed. Nothing showed that, so the only way to find out
+               was for somebody to go looking for a document that was never there. */
+            + '<td style="padding:9px 14px;white-space:nowrap;">' + (function () {
+                /* "FILED" HAS TO SAY WHERE, AND CHECK THAT SOMEBODY IS THERE.
+
+                   The first version only asked whether a documents row existed. That row
+                   is scoped to a user id, and a row pointing at an account that no longer
+                   exists is filed onto nothing - it reported a confident green tick for a
+                   document nobody could open. Anthony found exactly that. So the target is
+                   resolved too, and the cell names the record it went to: "synced" with no
+                   answer to "synced WHERE" is not an answer. */
+                if (!r.document_id) {
+                  return '<span style="font-size:11px;font-weight:800;color:#B91C1C;background:#FEF2F2;'
+                    + 'border:1px solid #FECACA;border-radius:999px;padding:2px 9px;" '
+                    + 'title="Completed, but not on the signer’s record yet">Not filed</span>';
+                }
+                if (!r.document_user_exists) {
+                  return '<span style="font-size:11px;font-weight:800;color:#B45309;background:#FEF3C7;'
+                    + 'border:1px solid #FDE68A;border-radius:999px;padding:2px 9px;" '
+                    + 'title="A document row exists but the account it was filed to (user '
+                    + esc(String(r.document_user_id || '?')) + ') no longer exists, so nobody can open it.">'
+                    + 'Orphaned</span>';
+                }
+                var onWhom = (r.document_user_name || '').trim();
+                return '<span style="color:#16A34A;font-weight:700;" title="Filed on '
+                  + esc(onWhom || 'the signer') + '’s record">✓ Filed</span>'
+                  + (onWhom ? '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + esc(onWhom) + '</div>' : '');
+              })() + '</td>'
             + '<td style="padding:9px 8px;text-align:right;">' + kebab(r) + '</td></tr>';
         }).join('') + '</tbody></table>';
+      /* Offered only when there is something to fix — and stated as a count, because
+         "some forms are missing from records" is the kind of thing an admin needs to see
+         the size of before deciding whether to worry. */
+      var unfiled = rows.filter(function (x) { return !x.document_id; }).length;
+      var orphaned = rows.filter(function (x) { return x.document_id && !x.document_user_exists; }).length;
+      if (orphaned) {
+        /* Separated from "not filed" because the remedy is different: re-running the
+           sync will not help a document whose owner is gone - somebody has to decide
+           whose record it belongs on. */
+        var ob = document.createElement('div');
+        ob.style.cssText = 'margin:0 0 12px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;'
+          + 'padding:10px 14px;font-size:13px;color:#92400E;';
+        ob.innerHTML = '<strong>' + orphaned + '</strong> completed form' + (orphaned === 1 ? '' : 's')
+          + ' were filed to an account that no longer exists, so nobody can open them. '
+          + 'Syncing will not fix these — the sign-off needs to be pointed at a real person first.';
+        el.insertBefore(ob, el.firstChild);
+      }
+      if (unfiled) {
+        var bar = document.createElement('div');
+        bar.style.cssText = 'margin:0 0 12px;background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;'
+          + 'padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+        bar.innerHTML = '<span style="font-size:13px;color:#7F1D1D;flex:1;min-width:220px;">'
+          + '<strong>' + unfiled + '</strong> completed form' + (unfiled === 1 ? ' is' : 's are')
+          + ' not on the signer’s record yet — usually because the account did not exist when it was signed.</span>'
+          + '<button id="fm-sync" type="button" style="background:#B91C1C;color:#fff;border:0;border-radius:9px;'
+          + 'padding:8px 14px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">Sync now</button>';
+        el.insertBefore(bar, el.firstChild);
+        bar.querySelector('#fm-sync').onclick = function (ev) {
+          var b = ev.currentTarget;
+          b.disabled = true; b.textContent = 'Syncing…';
+          Api.post('/admin/managed-forms/signoffs/sync-documents', {}).then(function (d) {
+            toast(d && d.remaining ? '⚠' : '✓',
+              'Sync complete', (d && d.message) || '', (d && d.remaining) ? '#B45309' : '#16A34A');
+            var host = document.querySelector('#fm-comp');
+            if (host) { renderCompleted(host.parentNode || host); }
+          }).catch(function (e) {
+            b.disabled = false; b.textContent = 'Sync now';
+            toast('⚠', 'Could not sync', (e && e.message) || '', '#B91C1C');
+          });
+        };
+      }
+
       wireKebabs(el, rows);
       if (KT.enhanceTables) { KT.enhanceTables(); }
     }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
@@ -1931,6 +2120,35 @@
         menu.appendChild(item('\uD83D\uDC41', 'View form', false, function () {
           openPdfPopup(fileUrl(r.filled_file_url || r.file_url), r.form_title || 'Form');
         }));
+
+        /* REVIEW AND COUNTER-SIGN.
+
+           Offered only while there is nothing to see yet: counter-signing twice would
+           mean two agency signatures on one agreement, and the server refuses it with a
+           409 anyway. Once it is done the entry becomes the finished document. */
+        if (!r.countersigned_at) {
+          menu.appendChild(item('\u270D\uFE0F', 'Review & counter-sign', false, function () {
+            /* RE-FIND THE HOST, DO NOT REUSE THE CAPTURED ONE.
+
+               `el` is whichever #fm-comp existed when these kebabs were wired. Any
+               re-render since - a tab click, a background refresh - has replaced it,
+               and writing into the old node updates a div no longer on the page: the
+               counter-signature saved, the email went, and the row still read
+               "Awaiting review" until the tab was clicked again. */
+            openCountersign(r, function () {
+              var host = document.querySelector('#fm-comp');
+              if (host) { renderCompleted(host.parentNode || host); }
+            });
+          }));
+        } else {
+          menu.appendChild(item('\uD83D\uDCDC', 'View the counter-signed PDF', false, function () {
+            if (!r.countersigned_file_url) {
+              toast('\u2139\uFE0F', 'No stamped copy', 'The counter-signature is recorded, but the PDF could not be stamped. The original form is unchanged.', '#B45309');
+              return;
+            }
+            openPdfPopup(fileUrl(r.countersigned_file_url), (r.form_title || 'Form') + ' (counter-signed)');
+          }));
+        }
         // Send the completed copy to the address configured ON THE FORM: for
         // submissions signed before that address was set, and to re-send one that
         // still shows as "Not sent".
@@ -1944,10 +2162,35 @@
         menu.appendChild(item('⬇️', r.filled_file_url ? 'Download completed form' : 'Download blank form (not completed)', false, function () {
           openUrl(fileUrl(r.filled_file_url || r.file_url));
         }));
-        menu.appendChild(item('✉️', 'Email the signer', false, function () {
-          var to = r.email || ''; var subj = encodeURIComponent('Re: ' + (r.form_title || 'signed form'));
-          window.location.href = 'mailto:' + to + '?subject=' + subj;
-        }));
+        /* RETURN IT, rather than opening a blank mailto.
+
+           The old entry handed the admin their desktop mail client with an empty
+           message and no record anywhere that a form had been questioned. Nothing made
+           the form outstanding for the parent again either, so even a perfectly worded
+           email left them with no way to resubmit. */
+        if (!r.countersigned_at) {
+          /* data-kt-inpage OR THE SHELL EATS THE CLICK.
+ 
+             app-v2-shell treats any control whose label matches /back/ as a back
+             button, swallows the click and navigates history. "Send back to the signer"
+             matches, so choosing it jumped to the previous screen and the dialog never
+             opened. The attribute is the documented opt-out for an in-page action. */
+          var backItem = item('↩️',
+            (r.correction_requested_at && !r.corrected_at) ? 'Sent back \u2014 waiting on the signer' : 'Send back to the signer',
+            false, function () {
+              if (r.correction_requested_at && !r.corrected_at) {
+                toast('\u23F3', 'Already sent back',
+                  'This was returned ' + fmtStamp(r.correction_requested_at) + ' and is waiting for them to resubmit.', '#B45309');
+                return;
+              }
+              openReturnDialog(r, function () {
+                var host = document.querySelector('#fm-comp');
+                if (host) { renderCompleted(host.parentNode || host); }
+              });
+            });
+          backItem.setAttribute('data-kt-inpage', '1');
+          menu.appendChild(backItem);
+        }
 
         /* WITHDRAW THE SIGNATURE.
 
@@ -1984,6 +2227,438 @@
         setTimeout(function () { document.addEventListener('click', onDoc, true); }, 0);
       });
     });
+  }
+
+  /* SEND A COMPLETED FORM BACK FOR CORRECTION.
+
+     The note is mandatory here as well as on the server. A form returned with no reason
+     is a rejection the parent cannot act on, and they resubmit the same thing - which
+     costs another round trip and teaches them the portal is noise.
+
+     It does not close on a backdrop click: it holds text somebody typed. */
+  function openReturnDialog(r, onDone) {
+    var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || 'the signer';
+    var to = (r.email || '').trim();
+
+    var ov = document.createElement('div');
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.35);">'
+      + '<div style="background:#0B2545;color:#fff;padding:14px 18px;">'
+        + '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">SEND BACK FOR CORRECTION</div>'
+        + '<div style="font-size:16px;font-weight:800;margin-top:2px;">' + esc(r.form_title || 'Form') + '</div>'
+        + '<div style="font-size:12px;opacity:.85;margin-top:2px;">Completed by ' + esc(who) + ' \u00B7 ' + esc(fmtStamp(r.signed_at)) + '</div>'
+      + '</div>'
+      + '<div style="padding:20px;">'
+        + '<label for="fm-rt-note" style="display:block;font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">What needs changing</label>'
+        + '<textarea id="fm-rt-note" rows="4" maxlength="2000" placeholder="e.g. The start date is missing, and the emergency contact number has a digit missing."'
+          + ' style="width:100%;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>'
+        + '<div style="font-size:11.5px;color:#94A3B8;margin-top:6px;line-height:1.5;">This is the only thing they are told, so be specific.</div>'
+        + '<div style="margin-top:14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 14px;font-size:12.5px;color:#475569;line-height:1.6;">'
+          + '<strong>What happens:</strong> the form becomes outstanding for ' + esc(who) + ' again with their answers still in it, and '
+          + (to ? ('an email goes to <strong>' + esc(to) + '</strong>')
+                : '<strong>no email can be sent \u2014 there is no address on their account</strong>')
+          + '. This submission is kept exactly as it is; their correction arrives as a new one.'
+        + '</div>'
+        + '<div id="fm-rt-err" style="display:none;margin-top:12px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;border-radius:10px;padding:10px 12px;font-size:12.5px;"></div>'
+        + '<div style="display:flex;gap:10px;margin-top:18px;">'
+          /* THIRD control in this one feature caught by the shell's /back/ rule -
+             the kebab entry, the counter-sign "Back to the form", and now the submit
+             button itself, whose label is "Send it back". Any button in this codebase
+             whose text contains the word "back" needs this attribute or the shell
+             swallows the click and navigates history instead. */
+          + '<button id="fm-rt-go" data-kt-inpage="1" style="flex:1;background:#B45309;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;">Send it back</button>'
+          + '<button id="fm-rt-cancel" style="flex:0 0 auto;background:#F1F5F9;color:#334155;border:0;border-radius:10px;padding:12px 18px;font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>'
+        + '</div>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+
+    var err = ov.querySelector('#fm-rt-err');
+    function fail(m) { err.textContent = m; err.style.display = ''; }
+    ov.querySelector('#fm-rt-cancel').onclick = function () { ov.remove(); };
+
+    var go = ov.querySelector('#fm-rt-go');
+    go.onclick = function () {
+      err.style.display = 'none';
+      var note = (ov.querySelector('#fm-rt-note').value || '').trim();
+      if (note.length < 3) { fail('Please say what needs changing \u2014 they have nothing else to go on.'); return; }
+      go.disabled = true; go.textContent = 'Sending\u2026';
+      Api.post('/admin/managed-forms/signoffs/' + r.id + '/return', { note: note }).then(function (d) {
+        ov.remove();
+        /* Report whether it actually reached them. A parent who is never told is the
+           whole failure mode this feature is meant to remove. */
+        toast(d && d.sent ? '\u21A9\ufe0f' : '\u26A0', d && d.sent ? 'Sent back' : 'Recorded, not emailed',
+          (d && d.message) || '', d && d.sent ? '#B45309' : '#B91C1C');
+        if (onDone) { onDone(); }
+      }).catch(function (e) {
+        go.disabled = false; go.textContent = 'Send it back';
+        fail((e && e.message) || 'Could not send it back.');
+      });
+    };
+  }
+
+  /* REVIEW, THEN COUNTER-SIGN. TWO STEPS, IN THAT ORDER.
+
+     Counter-signing asserts that somebody READ the thing. A flow that offers the pen
+     from a table row lets an admin sign a document they have never opened, which turns
+     the assertion into a rubber stamp. So the form itself opens first, full size, and
+     the pen is only reachable from the second step.
+
+     The signature is captured and SHOWN before anything is submitted. Clicking a button
+     that both signs and sends in one motion gives no chance to look at what was drawn;
+     here the last click is "Complete", with the signature visible above it.
+
+     It does NOT close on a backdrop click. Every other dialog in this screen does, but
+     none of the others holds a review note somebody typed - losing that to a stray click,
+     or to a text selection that ends outside the panel, is not a fair trade for the
+     convenience of dismissing it.
+  */
+  function openCountersign(r, onDone) {
+    /* ONE AT A TIME. Two of these on screen means two elements carrying every id this
+       dialog looks itself up by, and the second one silently drives the first: the
+       visible panel stops responding while the hidden one changes step. A double-tap on
+       the kebab is enough to cause it. */
+    if (document.getElementById('cs-step1')) { return; }
+    var who = (((r.first_name || '') + ' ' + (r.last_name || '')).trim()) || r.signer_name || r.email || 'the parent';
+    var parentTo = (r.email || '').trim();
+    var agencyTo = (r.form_notify_email || '').trim();
+    var formUrl = fileUrl(r.filled_file_url || r.file_url);
+    var signature = null;
+    var annotated = null;   // {base64, notes} once the reviewer adds anything
+
+    var ov = document.createElement('div');
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:18px;';
+
+    function stepPill(n, label, on) {
+      return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;'
+        + 'color:' + (on ? '#fff' : 'rgba(255,255,255,.55)') + ';">'
+        + '<span style="width:19px;height:19px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;'
+        + 'background:' + (on ? '#22B1B3' : 'rgba(255,255,255,.18)') + ';color:#fff;font-size:11px;">' + n + '</span>'
+        + label + '</span>';
+    }
+
+    ov.innerHTML = '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
+        + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      /* header */
+      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:14px;flex:0 0 auto;flex-wrap:wrap;">'
+        + '<div style="min-width:0;flex:1;">'
+          + '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">REVIEW &amp; COUNTER-SIGN</div>'
+          + '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+            + esc(r.form_title || 'Form') + '</div>'
+          + '<div style="font-size:11.5px;opacity:.8;margin-top:1px;">Completed by ' + esc(who) + ' · ' + esc(fmtStamp(r.signed_at)) + '</div>'
+        + '</div>'
+        + '<div id="cs-steps" style="display:flex;gap:14px;align-items:center;">'
+          + '<span id="cs-p1">' + stepPill(1, 'Review', true) + '</span>'
+          + '<span style="opacity:.4;">→</span>'
+          + '<span id="cs-p2">' + stepPill(2, 'Counter-sign', false) + '</span>'
+        + '</div>'
+        + '<button id="cs-x" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;'
+          + 'border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
+      + '</div>'
+
+      /* ── step 1: the form, full size, plus anything the reviewer wants to add ── */
+      + '<div id="cs-step1" style="flex:1;display:flex;flex-direction:column;min-height:0;">'
+        + (formUrl
+            ? '<iframe id="cs-frame" src="' + esc(formUrl) + '" title="Completed form" '
+              + 'style="flex:1;width:100%;border:0;background:#fff;min-height:0;"></iframe>'
+            : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748B;background:#fff;">'
+              + 'This form was signed as a read-and-sign notice, so there is no PDF to review.</div>')
+        + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E5E7EB;padding:12px 16px;">'
+          + '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">'
+            + '<label for="cs-note" style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;">Add information</label>'
+            + '<span style="font-size:11.5px;color:#94A3B8;">optional — appears on the counter-signature page and in the email</span>'
+            + (formUrl ? '<button id="cs-annotate" type="button" style="margin-left:auto;background:#0E7490;border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;color:#fff;cursor:pointer;white-space:nowrap;">'
+                + (r.fillable ? '✎ Edit the form' : '✎ Add information to the form') + '</button>' : '')
+            + (formUrl ? '<button id="cs-newtab" type="button" style="background:#F1F5F9;border:0;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;white-space:nowrap;">Open in a new tab</button>' : '')
+          + '</div>'
+          + '<textarea id="cs-note" rows="2" maxlength="2000" placeholder="e.g. Reviewed against the enrolment record. Allergy plan confirmed. Approved." '
+            + 'style="width:100%;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:10px;padding:9px 12px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>'
+        + '</div>'
+      + '</div>'
+
+      /* ── step 2: sign, look at it, complete ── */
+      + '<div id="cs-step2" hidden style="flex:1;overflow:auto;background:#F6F9FC;padding:20px;display:none;">'
+        + '<div style="max-width:560px;margin:0 auto;">'
+          + '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px 18px;">'
+            + '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">You are counter-signing</div>'
+            + '<div style="font-size:14px;color:#0F172A;line-height:1.7;">'
+              + '<strong>' + esc(r.form_title || 'Form') + '</strong><br>'
+              + 'Completed by ' + esc(who) + ' on ' + esc(fmtStamp(r.signed_at))
+            + '</div>'
+            + '<div id="cs-noteview" style="margin-top:12px;"></div>'
+            + '<div id="cs-addedview"></div>'
+          + '</div>'
+
+          + '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px 18px;margin-top:12px;">'
+            + '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Your signature</div>'
+            + '<div id="cs-sigbox" style="border:2px dashed #CBD5E1;border-radius:10px;background:#FBFDFF;min-height:96px;'
+              + 'display:flex;align-items:center;justify-content:center;padding:10px;">'
+              + '<button id="cs-sign" type="button" style="background:#065F46;color:#fff;border:0;border-radius:10px;'
+                + 'padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">✍️ Add your signature</button>'
+            + '</div>'
+            + '<div style="font-size:11.5px;color:#94A3B8;margin-top:8px;line-height:1.5;">'
+              + 'Added on a new final page. Nothing the parent signed is altered.</div>'
+          + '</div>'
+
+          + '<label style="display:flex;align-items:flex-start;gap:9px;margin-top:12px;font-size:13px;color:#334155;cursor:pointer;'
+            + 'background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 16px;">'
+            + '<input type="checkbox" id="cs-send" checked style="margin-top:2px;width:16px;height:16px;cursor:pointer;">'
+            + '<span>Email the counter-signed copy to both sides'
+              + '<span style="display:block;font-size:11.5px;color:#94A3B8;margin-top:2px;">'
+                + (parentTo ? esc(parentTo) : '<em>no address on the signer’s account</em>')
+                + ' &amp; ' + (agencyTo ? esc(agencyTo) : '<em>no address set on the form</em>')
+              + '</span></span>'
+          + '</label>'
+          + '<div id="cs-err" style="display:none;margin-top:12px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;'
+            + 'border-radius:10px;padding:10px 12px;font-size:12.5px;"></div>'
+        + '</div>'
+      + '</div>'
+
+      /* footer */
+      + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E5E7EB;padding:12px 16px;display:flex;gap:10px;align-items:center;">'
+        /* Same hijack: "Back to the form" matches the shell's back rule, so without
+           data-kt-inpage this navigated away from the dialog instead of returning to
+           step 1. */
+        + '<button id="cs-back" hidden type="button" data-kt-inpage="1" style="background:#F1F5F9;color:#334155;border:0;border-radius:10px;'
+          + 'padding:11px 16px;font-weight:700;font-size:13px;cursor:pointer;">← Back to the form</button>'
+        + '<button id="cs-cancel" type="button" style="background:#F1F5F9;color:#334155;border:0;border-radius:10px;'
+          + 'padding:11px 16px;font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>'
+        /* THE OTHER ANSWER TO A REVIEW.
+ 
+           Reviewing a form has two possible outcomes - accept it, or ask for a fix - and
+           until now only one of them was reachable from here. An admin who opened the
+           document, found a problem and wanted it corrected had to close the dialog,
+           find the row again and open a different menu entry. data-kt-inpage because the
+           label contains "back", which the shell otherwise claims as history navigation. */
+        + '<button id="cs-sendback" type="button" data-kt-inpage="1" style="background:#FEF3C7;color:#92400E;'
+          + 'border:1px solid #FDE68A;border-radius:10px;padding:11px 16px;font-weight:700;font-size:13px;'
+          + 'cursor:pointer;">↩️ Send back for correction</button>'
+        + '<div style="flex:1;"></div>'
+        + '<button id="cs-next" type="button" style="background:#1F6080;color:#fff;border:0;border-radius:10px;'
+          + 'padding:11px 20px;font-weight:800;font-size:13px;cursor:pointer;">Next: counter-sign →</button>'
+        + '<button id="cs-done" hidden disabled type="button" style="background:#065F46;color:#fff;border:0;border-radius:10px;'
+          + 'padding:11px 20px;font-weight:800;font-size:13px;cursor:not-allowed;opacity:.45;">Complete counter-signature</button>'
+      + '</div>'
+      + '</div>';
+
+    document.body.appendChild(ov);
+
+    var $ = function (id) { return ov.querySelector(id); };
+    var err = $('#cs-err');
+    function fail(m) { err.textContent = m; err.style.display = ''; }
+    function close() { if (ov.parentNode) { ov.parentNode.removeChild(ov); } }
+
+    $('#cs-x').onclick = close;
+    $('#cs-cancel').onclick = close;
+    if ($('#cs-newtab')) { $('#cs-newtab').onclick = function () { openUrl(formUrl); }; }
+
+    /* EDITING THE DOCUMENT ITSELF, not just adding a note beside it.
+
+       The parent's PDF is flattened by the time it gets here, so kt-form-filler has
+       no AcroForm fields to fill and reports the form as not fillable. kt-form-annotate
+       draws onto the page instead, on a COPY - `filled_file_url` still points at exactly
+       what the parent signed. */
+    function afterEdit(res, label) {
+      ov.style.display = 'flex';
+      if (!res) { return; }
+      annotated = res;
+      var b = $('#cs-annotate');
+      b.textContent = '✎ ' + label + ' — edit again';
+      b.style.background = '#065F46';
+      /* Show the edited copy, so what is reviewed on screen is what gets sent. */
+      var fr = $('#cs-frame');
+      if (fr) { fr.src = 'data:application/pdf;base64,' + res.base64; }
+    }
+
+    if ($('#cs-annotate')) {
+      $('#cs-annotate').onclick = function () {
+
+        /* A FILLABLE FORM IS EDITED THROUGH ITS OWN FIELDS.
+
+           The copy the parent returned is FLATTENED - the AcroForm fields were written
+           into the page and discarded - so there is nothing left on it to type into.
+           The fields still exist on the blank template, so review reopens THAT with the
+           parent's answers loaded and the reviewer corrects or completes them in the
+           same boxes the parent used. Writing a teal note on top of a form that has a
+           proper empty field for the thing being added would be the wrong answer.
+
+           A non-fillable form (a scan, a PDF with no fields) has nothing to reopen, so
+           it keeps the annotate layer. */
+        if (r.fillable) {
+          if (!KT.formFiller) { toast('⚠', 'Not available', 'The form editor did not load.', '#B91C1C'); return; }
+          ov.style.display = 'none';
+          Api.get('/admin/managed-forms/' + r.managed_form_id + '/signoff/' + r.id).then(function (d) {
+            var sg = (d && d.signoff) || {};
+            var vals = {};
+            try {
+              vals = typeof sg.field_values === 'string' ? (JSON.parse(sg.field_values) || {}) : (sg.field_values || {});
+            } catch (e) { vals = {}; }
+            var before = JSON.parse(JSON.stringify(vals));
+            return KT.formFiller.open({
+              id: r.managed_form_id,
+              title: (r.form_title || 'Form'),
+              fileUrl: fileUrl(sg.file_url || r.file_url),   // the BLANK template, which still has its fields
+              draftValues: vals,
+              reviewMode: true,
+              reviewSignature: sg.signature || null,
+              reviewSignerName: r.signer_name || '',
+              reviewSignedOn: fmtStamp(r.signed_at)
+            }).then(function (res) {
+              if (!res || !res.base64) { ov.style.display = 'flex'; return; }
+              /* WHICH FIELDS CHANGED, NAMED INDIVIDUALLY. The rebuilt document carries
+                 the parent's own signature, so it has to say exactly what the agency
+                 altered - otherwise the counter-signature quietly certifies answers the
+                 parent never gave. */
+              var changes = [];
+              var after = res.values || {};
+              Object.keys(after).forEach(function (k) {
+                var av = String(after[k] == null ? '' : after[k]);
+                var bv = String(before[k] == null ? '' : before[k]);
+                if (av !== bv) {
+                  changes.push({ page: 1, text: bv
+                    ? ('Field "' + k + '" changed from "' + bv + '" to "' + av + '"')
+                    : ('Field "' + k + '" completed: "' + av + '"') });
+                }
+              });
+              afterEdit({ base64: res.base64, notes: changes },
+                changes.length ? (changes.length + ' field' + (changes.length === 1 ? '' : 's') + ' changed') : 'form rebuilt');
+            });
+          }).catch(function (e) {
+            ov.style.display = 'flex';
+            toast('⚠', 'Could not open the form', (e && e.message) || '', '#B91C1C');
+          });
+          return;
+        }
+
+        if (!KT.formAnnotate) { toast('⚠', 'Not available', 'The form editor did not load.', '#B91C1C'); return; }
+        ov.style.display = 'none';
+        KT.formAnnotate.open({ url: formUrl, title: r.form_title || 'Form' }).then(function (res) {
+          afterEdit(res, res ? (res.notes.length + ' addition' + (res.notes.length === 1 ? '' : 's')) : '');
+        }).catch(function () { ov.style.display = 'flex'; });
+      };
+    }
+
+    /* THE PANES CARRY AN INLINE display, SO `hidden` ALONE DOES NOTHING.
+
+       `el.hidden` works by way of the UA rule [hidden]{display:none}, which an inline
+       style attribute outranks - and both panes set their own display to lay out the
+       viewer. Setting hidden flipped the attribute while the pane stayed on screen:
+       step 2 was "active" and invisible behind step 1. Drive display directly for the
+       panes, and keep hidden for the buttons, which have no inline display. */
+    function show(step) {
+      var s1 = $('#cs-step1'), s2 = $('#cs-step2');
+      s1.style.display = (step === 1) ? 'flex' : 'none';
+      s2.style.display = (step === 2) ? 'block' : 'none';
+      s1.hidden = step !== 1;
+      s2.hidden = step !== 2;
+      $('#cs-next').hidden = step !== 1;
+      $('#cs-done').hidden = step !== 2;
+      $('#cs-back').hidden = step !== 2;
+      $('#cs-cancel').hidden = step !== 1;
+      $('#cs-sendback').hidden = step !== 1;
+      $('#cs-p1').innerHTML = stepPill(1, 'Review', step === 1);
+      $('#cs-p2').innerHTML = stepPill(2, 'Counter-sign', step === 2);
+    }
+
+    /* CLOSE THIS ONE BEFORE OPENING THE NEXT.
+ 
+       Leaving the review dialog stacked behind the return dialog means two panels
+       carrying ids this screen looks itself up by, and dismissing the front one reveals
+       a counter-signature flow for a form that has just been sent back - which is a
+       state that should no longer be reachable. One window at a time. */
+    $('#cs-sendback').onclick = function () {
+      close();
+      openReturnDialog(r, onDone);
+    };
+
+    $('#cs-next').onclick = function () {
+      /* Carry the note forward as written. Showing it back on the signing step is the
+         last chance to notice a typo that is about to be printed onto a PDF and mailed
+         to a family. */
+      var note = ($('#cs-note').value || '').trim();
+      var adds = (annotated && annotated.notes) ? annotated.notes : [];
+      $('#cs-addedview').innerHTML = adds.length
+        ? '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px;">'
+          + (r.fillable ? 'Changed on the form itself' : 'Added to the form itself') + '</div>'
+          + adds.map(function (a) {
+              return '<div style="background:#ECFEFF;border-left:3px solid #0E7490;border-radius:8px;padding:8px 11px;'
+                + 'font-size:12.5px;color:#155E75;line-height:1.5;margin-bottom:6px;white-space:pre-wrap;">'
+                + '<strong>Page ' + a.page + ':</strong> ' + esc(a.text) + '</div>';
+            }).join('')
+        : '';
+      $('#cs-noteview').innerHTML = note
+        ? '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Information you added</div>'
+          + '<div style="background:#F8FAFC;border-left:3px solid #22B1B3;border-radius:8px;padding:9px 11px;font-size:13px;color:#334155;line-height:1.55;white-space:pre-wrap;">'
+          + esc(note) + '</div>'
+        : '<div style="font-size:12.5px;color:#94A3B8;">No extra information added.</div>';
+      show(2);
+    };
+    $('#cs-back').onclick = function () { err.style.display = 'none'; show(1); };
+
+    $('#cs-sigbox').addEventListener('click', function (e) {
+      if (e.target.id !== 'cs-sign' && e.target.id !== 'cs-redo') { return; }
+      /* The pad sits at z-index 2147482000 and this panel at 2147483001, so summoning it
+         from here paints it behind: the canvas is live but from the user's seat nothing
+         happened. Stand the dialog down while the pad is up rather than trade z-indexes
+         with a component several full-screen sheets already summon. */
+      ov.style.display = 'none';
+      KT.signaturePad({
+        title: 'Counter-sign this form',
+        subtitle: 'Your signature is added on a new final page. Nothing the parent signed is altered.',
+        okLabel: 'Use this signature'
+      }).then(function (dataUrl) {
+        /* 'flex', not '' — clearing the property drops the inline display:flex this
+           overlay relies on for centring, and the panel comes back adrift at the left
+           edge and clipped. Restore the value, never just unset it. */
+        ov.style.display = 'flex';
+        if (!dataUrl) { return; }
+        signature = dataUrl;
+        $('#cs-sigbox').style.border = '1px solid #E5E7EB';
+        $('#cs-sigbox').style.background = '#fff';
+        $('#cs-sigbox').innerHTML = '<div style="width:100%;display:flex;align-items:center;gap:12px;">'
+          + '<img src="' + esc(dataUrl) + '" alt="Your signature" style="max-height:80px;max-width:70%;">'
+          + '<button id="cs-redo" type="button" style="margin-left:auto;background:#F1F5F9;border:0;border-radius:9px;'
+          + 'padding:8px 13px;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer;">Sign again</button></div>';
+        $('#cs-done').disabled = false;
+        $('#cs-done').style.opacity = '1';
+        $('#cs-done').style.cursor = 'pointer';
+      }).catch(function () { ov.style.display = 'flex'; });
+    });
+
+    $('#cs-done').onclick = function () {
+      if (!signature) { fail('Please add your signature first.'); return; }
+      err.style.display = 'none';
+      var btn = $('#cs-done');
+      btn.disabled = true; btn.textContent = 'Counter-signing…';
+      Api.post('/admin/managed-forms/signoffs/' + r.id + '/countersign', {
+        signature: signature,
+        note: ($('#cs-note').value || '').trim() || null,
+        send: !!$('#cs-send').checked,
+        annotated_pdf: annotated ? annotated.base64 : null,
+        annotations: annotated ? annotated.notes : null
+      }).then(function (d) {
+        close();
+        /* Say who it actually reached, not who it was aimed at. A suppressed parent is a
+           silent non-delivery otherwise, and the admin carries on believing the family
+           has their copy. */
+        var sent = (d && d.sent_to) || [];
+        toast('✍️', 'Counter-signed',
+          sent.length ? ('Sent to ' + sent.join(' and ') + '.')
+                      : (($('#cs-send') && !$('#cs-send').checked)
+                          ? 'Recorded. No email was sent.'
+                          : 'Recorded, but nothing could be emailed — check the delivery settings for this agency.'),
+          sent.length ? '#16A34A' : '#B45309');
+        if (onDone) { onDone(); }
+      }).catch(function (e) {
+        btn.disabled = false; btn.textContent = 'Complete counter-signature';
+        fail((e && e.message) || 'Could not counter-sign.');
+      });
+    };
+
+    show(1);
   }
 
   function viewSignoff(r) {

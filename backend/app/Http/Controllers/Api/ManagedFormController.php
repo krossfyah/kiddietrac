@@ -75,6 +75,93 @@ class ManagedFormController extends Controller
      * @param  int[]  $candidateIds
      * @return int[]
      */
+    /**
+     * A place to hang a signature for somebody who is not on the system yet.
+     *
+     * Deliberately minimal and deliberately inert:
+     *
+     *  - THE PASSWORD IS UNUSABLE. A random 64-byte value is hashed in, so the column is
+     *    satisfied (it is NOT NULL) and no password on earth matches it. This account
+     *    cannot be signed into; it exists so a form can be assigned and signed through a
+     *    signed link. Inviting them properly stays a separate, deliberate act
+     *    ([[kiddietrac-mailed-password-is-a-key]]).
+     *  - `status` is 'not_invited'. That is an ENUM
+     *    (active, invited, not_invited, suspended, deactivated) and 'pending' is not in it
+     *    - it would have failed with "Data truncated", the same trap as invoice_lines
+     *    .line_type and payments.method. 'not_invited' is also the honest word: the
+     *    account exists and nobody has been invited to it yet, which is precisely the
+     *    state. AuthController::login already rejects anything outside 'active'.
+     *  - `onboarded_at` stays null. They have not onboarded; pretending otherwise would
+     *    skip the onboarding they will be asked for when they are properly invited.
+     *  - The NAME is taken from the address, because there is nothing else to go on, and
+     *    a blank name renders as an empty greeting in the form email. It is a first guess
+     *    a human corrects later, not a claim about who they are.
+     *  - A `role_assignments` row at THIS agency is what makes them findable next time -
+     *    agencyMemberIds() reads exactly that - so the second send matches instead of
+     *    creating a duplicate.
+     *
+     * Returns the new user id, or null if the address is unusable.
+     */
+    private function createPendingRecipient(int $agencyId, string $email, Request $request): ?int
+    {
+        $email = mb_strtolower(trim($email));
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        /* A name from the local part: "anne.marie.smith@x.com" -> "Anne Marie Smith".
+           Better than blank, and obviously provisional to anybody reading it. */
+        $local = substr($email, 0, strpos($email, '@') ?: strlen($email));
+        $words = array_values(array_filter(preg_split('/[._\-+]+/', $local) ?: []));
+        $words = array_map(fn ($w) => ucfirst(preg_replace('/\d+/', '', $w)), $words);
+        $words = array_values(array_filter($words, fn ($w) => $w !== ''));
+        $first = $words[0] ?? 'New';
+        $last = count($words) > 1 ? implode(' ', array_slice($words, 1)) : 'Parent';
+
+        $userId = DB::table('users')->insertGetId([
+            'email' => $email,
+            // Unusable by construction: nothing hashes to a random 64 bytes.
+            'password' => bcrypt(bin2hex(random_bytes(32))),
+            'first_name' => mb_substr($first, 0, 80),
+            'last_name' => mb_substr($last, 0, 80),
+            'status' => 'not_invited',
+            'must_change_password' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        /* Guardian at this agency, and only this one. */
+        /* No updated_at: role_assignments has created_at only. */
+        DB::table('role_assignments')->insert([
+            'user_id' => $userId,
+            'role' => 'guardian',
+            'agency_id' => $agencyId,
+            'active' => 1,
+            'created_at' => now(),
+        ]);
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => $agencyId,
+                'user_id' => $request->user()->id,
+                'action' => 'user.created_for_forms',
+                'entity_type' => 'user',
+                'entity_id' => $userId,
+                'payload' => json_encode([
+                    'email' => $email,
+                    'name' => trim($first . ' ' . $last),
+                    'status' => 'not_invited',
+                    'summary' => 'Created a not-yet-invited account for ' . $email
+                        . ' so forms could be sent to a parent who is not on the system yet. '
+                        . 'It has no usable password and cannot be signed into until they are invited.',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* the account stands even if the audit row does not */ }
+
+        return (int) $userId;
+    }
+
     private function agencyMemberIds(int $agencyId, array $candidateIds): array
     {
         $candidateIds = array_values(array_unique(array_filter(array_map('intval', $candidateIds))));
@@ -354,10 +441,60 @@ class ManagedFormController extends Controller
         }
         $unmatched = array_values(array_diff($typed, $matchedTyped));
 
+        /* A PARENT WHO IS NOT ON THE SYSTEM YET IS THE NORMAL CASE (2026-09-17).
+
+           Anthony: "we need to send forms to new parents that are not onboarded or on the
+           system yet through this method."
+
+           This used to refuse: "No account at this agency uses that address. A form has to
+           be assigned to somebody who can sign in here." True of the data model - a form
+           is assigned to a user id and a signature hangs off one - and exactly backwards
+           as a product rule. Enrolment paperwork is the FIRST thing a new family is sent,
+           before they have an account, which made the one workflow that most needs this
+           the one it refused.
+
+           So an unrecognised address gets a placeholder account and the forms go out. The
+           signed fill link (/forms/fill/{form}/{user}) needs no login and no onboarding -
+           SignedFormController::page() checks only that the form is assigned to that user
+           - so the parent can fill and sign before they have ever seen a password.
+
+           WHAT IS DELIBERATELY NOT DONE HERE:
+           - No password is set, so the account cannot be signed into. It is a place to
+             hang a signature, not an invitation; inviting them properly is a separate,
+             explicit act ([[kiddietrac-mailed-password-is-a-key]]).
+           - An account at ANOTHER agency with the same address is never reused. One
+             address legitimately lives in two agencies ([[kiddietrac-shared-email-cross-agency]]),
+             and attaching this agency's paperwork to a stranger's account is the leak that
+             memory exists to prevent.
+           - No existing account is ever modified. The family wizard once renamed a super
+             admin by matching on email ([[kiddietrac-email-is-not-an-identity]]); this only
+             ever INSERTs.
+
+           Every creation is audited and named back to the caller, because an admin who
+           mistypes an address should be able to see that a placeholder was made. */
+        $created = [];
+        if ($unmatched) {
+            foreach ($unmatched as $addr) {
+                try {
+                    $newId = $this->createPendingRecipient($agencyId, $addr, $request);
+                    if ($newId) {
+                        $ids[] = $newId;
+                        $created[] = $addr;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Could not create a pending form recipient', [
+                        'email' => $addr, 'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+            $ids = array_values(array_unique($ids));
+            $unmatched = array_values(array_diff($unmatched, $created));
+        }
+
         if (empty($ids)) {
             return response()->json([
                 'message' => $unmatched
-                    ? 'No account at this agency uses ' . implode(', ', $unmatched) . '. A form has to be assigned to somebody who can sign in here.'
+                    ? 'Could not send to ' . implode(', ', $unmatched) . '. Check the address and try again.'
                     : 'Choose at least one person to send it to.',
                 'unmatched' => $unmatched,
             ], 422);
@@ -460,6 +597,10 @@ class ManagedFormController extends Controller
             /* Said out loud, never swallowed: typing an address that has no account is the
                easiest way to believe somebody was sent something they were not. */
             'unmatched'  => $unmatched,
+            /* Placeholder accounts made for addresses that had none. Named, not counted:
+               an admin who mistypes an address needs to see WHICH one was created so they
+               can correct it, and a number tells them nothing. */
+            'created'    => $created,
             /* A typed address that several accounts here share. Reported rather than
                guessed at: the package went to one of them, and the admin is the only one
                who knows whether that was the person they meant. */
@@ -524,8 +665,74 @@ class ManagedFormController extends Controller
             }
         }
 
+        /* WAS IT EVEN OPENED (2026-09-17).
+
+           Anthony: "add read receipt to the forms manager table for multiple forms."
+
+           "Sent" and "signed" left a gap an admin kept falling into: a package that shows
+           0 of 7 signed might be a family ignoring their paperwork, or an email that
+           never arrived - and chasing the first when it is the second annoys a parent who
+           never got anything. The open tracker already existed on email_logs
+           (tracking_token / opened_at / opens); nothing read it here.
+
+           MATCHED TO THE RIGHT SEND, not merely to the address. A family who is sent two
+           packages has two emails, and attaching the newer open to the older package
+           would report paperwork as read that nobody has seen. Each send therefore claims
+           only the log rows between itself and the NEXT send to that same address.
+
+           ONE query for the page, like the signature counts above: this screen is opened
+           every morning and a per-row fan-out is what saturates this host at drop-off. */
+        $sendWindows = [];          // email => ascending list of send timestamps
+        foreach ($rows as $r) {
+            foreach ((json_decode((string) $r->recipients, true) ?: []) as $person) {
+                $addr = mb_strtolower(trim((string) ($person['email'] ?? '')));
+                if ($addr !== '') { $sendWindows[$addr][] = strtotime((string) $r->created_at); }
+            }
+        }
+        foreach ($sendWindows as $addr => $times) {
+            $times = array_values(array_unique($times));
+            sort($times);
+            $sendWindows[$addr] = $times;
+        }
+
+        $opens = [];                // "email|sendTs" => ['opened_at' => ..., 'status' => ...]
+        if ($sendWindows) {
+            $logs = DB::table('email_logs')
+                ->where('agency_id', $agencyId)
+                ->whereIn(DB::raw('LOWER(TRIM(to_email))'), array_keys($sendWindows))
+                ->where(function ($q) {
+                    $q->where('subject', 'like', '%need your signature%')
+                      ->orWhere('subject', 'like', '%forms need%');
+                })
+                ->orderBy('created_at')
+                ->get(['to_email', 'subject', 'status', 'opened_at', 'opens', 'created_at']);
+
+            foreach ($logs as $log) {
+                $addr = mb_strtolower(trim((string) $log->to_email));
+                $at = strtotime((string) $log->created_at);
+                $times = $sendWindows[$addr] ?? [];
+
+                /* The send this email belongs to: the latest one at or before it. 60s of
+                   slack because the row is written a moment after the send is recorded. */
+                $owner = null;
+                foreach ($times as $t) {
+                    if ($at >= $t - 60) { $owner = $t; } else { break; }
+                }
+                if ($owner === null) { continue; }
+
+                $key = $addr . '|' . $owner;
+                /* A resend supersedes the attempt before it: what matters is whether the
+                   LAST attempt arrived and was opened, not that an earlier one failed. */
+                $opens[$key] = [
+                    'status' => (string) $log->status,
+                    'opened_at' => $log->opened_at,
+                    'opens' => (int) ($log->opens ?? 0),
+                ];
+            }
+        }
+
         return response()->json([
-            'sends' => $rows->map(function ($r) use ($signedPairs) {
+            'sends' => $rows->map(function ($r) use ($signedPairs, $opens) {
                 $titles = json_decode((string) $r->form_titles, true) ?: [];
                 $people = json_decode((string) $r->recipients, true) ?: [];
                 $formIds = array_map('intval', json_decode((string) $r->form_ids, true) ?: []);
@@ -539,10 +746,31 @@ class ManagedFormController extends Controller
                     }
                 }
 
+                /* Per recipient, so a package to four people can say which two read it -
+                   a single "opened" flag for the package would be true when one of four
+                   opened it, which is exactly the family you would then fail to chase. */
+                $sendTs = strtotime((string) $r->created_at);
+                $read = 0;
+                $delivered = 0;
+                $people = array_map(function ($person) use ($opens, $sendTs, &$read, &$delivered) {
+                    $addr = mb_strtolower(trim((string) ($person['email'] ?? '')));
+                    $hit = $opens[$addr . '|' . $sendTs] ?? null;
+                    $person['delivery'] = $hit['status'] ?? null;       // sent | suppressed | failed
+                    $person['opened_at'] = $hit['opened_at'] ?? null;
+                    $person['opens'] = $hit['opens'] ?? 0;
+                    if (($hit['status'] ?? '') === 'sent') { $delivered++; }
+                    if (! empty($hit['opened_at'])) { $read++; }
+
+                    return $person;
+                }, $people);
+
                 return [
                     'id'          => (int) $r->id,
                     'sent_at'     => $r->created_at,
                     'sent_by'     => $r->sent_by_name,
+                    /* Counted here so the table does not have to walk the recipients. */
+                    'read_count'      => $read,
+                    'delivered_count' => $delivered,
                     'forms'       => $titles,
                     'form_count'  => (int) $r->form_count,
                     'recipients'  => $people,
@@ -1191,6 +1419,17 @@ class ManagedFormController extends Controller
             /* The gate is agency-scoped and reads this header; without it one agency's
                OFF switch can silence another agency's mail to a shared address. */
             try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); } catch (\Throwable $e2) {}
+            /* TRANSACTIONAL, NOT ENGAGEMENT (2026-09-17).
+
+               Without this, a form package to a brand-new parent is cancelled by the
+               not-onboarded gate in SuppressAgencyMail - which is what happened to
+               Safia's 7-form send: the forms were assigned and the email never left.
+
+               A form package is the paperwork a family is asked to sign BEFORE they have
+               an account, and its links are signed and need no login. The gate reads this
+               header and lets it through; every other gate, and every other kind of mail
+               to an unclaimed account, is unaffected. */
+            try { $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1'); } catch (\Throwable $e2) {}
         });
 
         return true;
@@ -1309,14 +1548,51 @@ class ManagedFormController extends Controller
         $rows = DB::table('managed_form_signoffs as s')
             ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
             ->leftJoin('users as u', 'u.id', '=', 's.user_id')
+            /* Did this actually reach the signer's record? Filing is best-effort at
+               signature time, so "completed" and "filed" are genuinely different facts
+               and the tab was only ever showing the first one. */
+            ->leftJoin('documents as doc', function ($j) {
+                $j->on('doc.source_id', '=', 's.id')
+                  ->where('doc.source_type', '=', \App\Support\SignedFormFiler::SOURCE);
+            })
+            /* WHO THE DOCUMENT WAS ACTUALLY FILED TO.
+
+               A documents row existing is not the same as somebody being able to reach
+               it. The row is scoped to a user id, and if that account is gone the file
+               is filed onto nothing - so the tab has to check the target, not just the
+               row. */
+            ->leftJoin('users as du', 'du.id', '=', 'doc.scope_id')
             ->where('f.agency_id', $agencyId)
+            /* A DRAFT IS NOT A COMPLETED FORM.
+
+               This list had no signed_at filter, so forms somebody opened and abandoned
+               were listed under "Completed" with no signed date - 10 of them on iLearn
+               alone. They also reported as "Not filed", which is true and meaningless: a
+               draft is not supposed to be filed anywhere. */
+            ->whereNotNull('s.signed_at')
             ->orderByDesc('s.signed_at')
             ->select([
                 's.id', 's.managed_form_id', 's.signer_name', 's.signed_at',
                 'f.title as form_title', 'f.description as form_description',
-                'f.file_url', 's.filled_file_url',
+                /* `fillable` decides whether review can edit the form's own FIELDS or
+                   only write on top of it: a completed fillable form is flattened, so
+                   the fields live on the blank template, not on the copy the parent
+                   returned. */
+                'f.file_url', 'f.fillable', 's.filled_file_url',
                 'f.notify_email as form_notify_email', 's.notified_at', 's.notified_to',
+                /* The counter-signature state, so the Completed table can say whether a
+                   form is still waiting on the agency rather than looking finished. */
+                's.countersigned_at', 's.countersigner_name', 's.countersigner_role',
+                's.countersigned_file_url', 's.returned_at', 's.returned_to',
+                /* Sent back to the signer for correction, and whether they have since
+                   resubmitted. Without this the Completed tab shows a form as finished
+                   while everyone is waiting on the parent. */
+                's.correction_requested_at', 's.correction_requested_by_name',
+                's.correction_note', 's.correction_sent_to', 's.corrected_at', 's.correction_count',
                 'u.first_name', 'u.last_name', 'u.email',
+                'doc.id as document_id', 'doc.created_at as document_filed_at',
+                'doc.scope_id as document_user_id', 'du.id as document_user_exists',
+                DB::raw("TRIM(CONCAT(COALESCE(du.first_name,''),' ',COALESCE(du.last_name,''))) as document_user_name"),
             ])
             ->limit(500)
             ->get();
@@ -1366,6 +1642,251 @@ class ManagedFormController extends Controller
         return response()->json(['ok' => true, 'message' => 'Copy emailed to ' . $row->notify_email . '.']);
     }
 
+    /**
+     * POST /admin/managed-forms/signoffs/{id}/return
+     *
+     * Send a completed form back to the person who signed it, with a note saying what
+     * needs fixing, and make it outstanding for them again so they can resubmit.
+     *
+     * WHY NOT JUST DELETE THE SIGN-OFF. That was the only existing way to make a form
+     * outstanding again, and it destroys the record: the completed PDF, the answers, the
+     * fact that they submitted at all. A form that was wrong and then corrected is not
+     * the same thing as a form that was never submitted, and an inspector asking "when
+     * did you first receive this" needs the difference. The original row stays exactly
+     * as filed; the correction arrives as a NEW sign-off.
+     *
+     * THE NOTE IS REQUIRED. A form returned with no reason is a rejection the parent
+     * cannot act on, and they will resubmit the same thing.
+     */
+    public function returnToSigner(Request $request, int $id): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $agencyId = $this->agencyId($request);
+
+        $data = $request->validate([
+            'note' => ['required', 'string', 'min:3', 'max:2000'],
+        ]);
+
+        $row = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->leftJoin('users as u', 'u.id', '=', 's.user_id')
+            ->where('s.id', $id)->where('f.agency_id', $agencyId)
+            ->select([
+                's.id', 's.user_id', 's.signer_name', 's.signed_at', 's.countersigned_at',
+                's.correction_requested_at', 's.corrected_at', 's.correction_count',
+                'f.id as form_id', 'f.title', 'f.agency_id',
+                'u.email as signer_email', 'u.first_name', 'u.last_name',
+            ])
+            ->first();
+
+        if (! $row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! $row->signed_at) {
+            return response()->json(['message' => 'That form has not been completed yet.'], 422);
+        }
+        /* A counter-signed form has already been certified and mailed to both sides.
+           Sending it back would leave a signed certificate in circulation for a document
+           the agency has just disowned. Withdraw the counter-signature first. */
+        if ($row->countersigned_at) {
+            return response()->json([
+                'message' => 'That form has already been counter-signed, so it cannot be sent back.',
+            ], 409);
+        }
+        if ($row->correction_requested_at && ! $row->corrected_at) {
+            return response()->json([
+                'message' => 'That form has already been sent back and is waiting on the signer.',
+            ], 409);
+        }
+
+        $to = trim((string) ($row->signer_email ?? ''));
+        $who = trim((string) ($row->signer_name
+            ?: trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? ''))));
+        $me = $request->user();
+        $byName = trim(($me->first_name ?? '') . ' ' . ($me->last_name ?? '')) ?: 'The agency';
+        $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?? 'Your childcare provider');
+
+        DB::table('managed_form_signoffs')->where('id', $row->id)->update([
+            'correction_requested_at' => now(),
+            'correction_requested_by_id' => (int) $me->id,
+            'correction_requested_by_name' => $byName,
+            'correction_note' => $data['note'],
+            'correction_sent_to' => $to ?: null,
+            /* Cleared so a form returned a second time is outstanding again rather than
+               still counting as corrected from last time. */
+            'corrected_at' => null,
+            'correction_count' => (int) $row->correction_count + 1,
+            'updated_at' => now(),
+        ]);
+
+        /* "SENT" HAS TO MEAN DELIVERED, NOT HANDED TO THE MAILER.
+ 
+           Mail::html returning without throwing says nothing: SuppressAgencyMail cancels
+           at MessageSending, AFTER this call has returned, so a suppressed recipient
+           looked identical to a delivered one and the audit line read "Emailed to ..."
+           for mail that never left. Ask the same question the gate will ask, before
+           claiming anything. */
+        $sent = false;
+        $blocked = false;
+        if ($to && filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            $blocked = \App\Support\Suppression::isUser((int) $row->user_id);
+            if ($blocked) {
+                \App\Support\Suppression::note('email', (int) $row->user_id, 'form_correction_request');
+            } else {
+                $sent = $this->mailCorrectionRequest((int) $agencyId, $to, $who, (string) $row->title,
+                    $data['note'], $byName, $agencyName);
+            }
+        }
+
+        /* THE INBOX, NOT JUST THE EMAIL.
+
+           Email is the one channel the agency does not control: it is suppressed for
+           some agencies, bounces for others, and lands in spam for the rest. The person
+           is being asked to do something, so it has to reach the place they actually
+           look - the bell, and their phone. Same pattern as every other action notice on
+           the platform. */
+        try {
+            \App\Support\Notify::write([
+                'user_id' => (int) $row->user_id,
+                'type' => 'form_correction',
+                'title' => 'Please correct: ' . $row->title,
+                'body' => mb_substr($data['note'], 0, 240),
+                'data' => json_encode(['link' => '#my-forms', 'form_id' => (int) $row->form_id]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('managed form: correction notification failed', ['err' => $e->getMessage()]);
+        }
+        try {
+            app(\App\Services\FcmService::class)->sendToUser(
+                (int) $row->user_id,
+                'Please correct: ' . $row->title,
+                mb_substr($data['note'], 0, 160),
+                '#my-forms',
+                false
+            );
+        } catch (\Throwable $e) {
+        }
+
+        $this->audit($request, 'managed_form.returned_to_signer', (int) $row->id, [
+            'summary' => $byName . ' sent "' . $row->title . '" back to ' . ($who ?: 'the signer')
+                . ' for correction. Reason: "' . mb_substr($data['note'], 0, 300) . '".'
+                . ($sent ? ' Emailed to ' . $to . '.'
+                    : ' NO EMAIL WAS SENT'
+                      . ($blocked ? ' — delivery is switched off for this agency or recipient.'
+                        : ($to ? ' — the mailer refused it.' : ' — no address on their account.'))),
+            'form_id' => (int) $row->form_id,
+            'signoff_id' => (int) $row->id,
+            'sent_to' => $sent ? $to : null,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'sent' => $sent,
+            'sent_to' => $sent ? $to : null,
+            /* Said plainly rather than implied by a green toast: the form is outstanding
+               for them either way, but if nothing was emailed somebody has to tell them. */
+            'message' => $sent
+                ? ('Sent back to ' . $who . ' at ' . $to . '. The form is waiting for them to resubmit.')
+                : ($to
+                    ? ('The form is outstanding for ' . ($who ?: 'them') . ' again, but NO email was sent — '
+                       . ($blocked ? 'delivery is switched off for this agency or recipient.' : 'the mailer refused it.')
+                       . ' You will need to tell them another way.')
+                    : 'Recorded, but ' . ($who ?: 'the signer') . ' has no email address on their account, so nothing was sent.'),
+        ]);
+    }
+
+    /** The "please correct this" email. Returns whether it actually went. */
+    private function mailCorrectionRequest(int $agencyId, string $to, string $who, string $title,
+        string $note, string $byName, string $agencyName): bool
+    {
+        try {
+            $tz = \App\Support\AgencyTime::tz($agencyId);
+            $now = now()->setTimezone($tz);
+
+            $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
+                . ($who ? 'Hi ' . e($who) . ',<br><br>' : '')
+                . e($agencyName) . ' has looked at the form you submitted and needs a change before it '
+                . 'can be accepted.</p>'
+                . EmailTemplate::calloutBox(
+                    '<strong>Form:</strong> ' . e($title)
+                    . '<br><strong>Reviewed by:</strong> ' . e($byName)
+                    . '<br><strong>On:</strong> ' . e($now->format('D, M j, Y') . ' at ' . $now->format('g:i A')),
+                    'warning')
+                . EmailTemplate::calloutBox(
+                    '<strong>What needs changing</strong><br>' . nl2br(e($note)), 'info')
+                . '<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#334155;">'
+                . 'The form is waiting for you in the portal. Your previous answers are still there, '
+                . 'so you only need to change what is mentioned above, then sign and submit it again.</p>'
+                . '<p style="margin:18px 0 0;"><a href="https://app.kiddietrac.com/dashboard.html#my-forms" '
+                . 'style="display:inline-block;background:#1F6080;color:#fff;text-decoration:none;font-weight:700;'
+                . 'font-size:15px;padding:13px 26px;border-radius:10px;">Open the form</a></p>';
+
+            $html = EmailTemplate::wrap($agencyId, $body, [
+                'eyebrow'   => 'ACTION NEEDED',
+                'title'     => 'Please correct and resubmit',
+                'subtitle'  => $title,
+                'preheader' => $agencyName . ' needs a change to ' . $title . '.',
+            ]);
+
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $who, $title, $agencyId) {
+                $m->to($to, $who ?: null)->subject('Please correct and resubmit: ' . $title);
+                try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); } catch (\Throwable $e) {}
+            });
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('managed form: correction request email failed', [
+                'to' => $to, 'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * POST /admin/managed-forms/signoffs/sync-documents
+     *
+     * File any of this agency's signed forms whose document never got written — the
+     * button behind the "Synced" column. The nightly pass does the same thing; this is
+     * for when somebody is looking at the gap right now and wants it closed, typically
+     * straight after the missing account was finally created.
+     */
+    public function syncDocuments(Request $request): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $agencyId = $this->agencyId($request);
+
+        $before = \App\Support\SignedFormFiler::unfiledCount($agencyId);
+        \App\Support\SignedFormFiler::backfill($agencyId);
+        $after = \App\Support\SignedFormFiler::unfiledCount($agencyId);
+
+        $this->audit($request, 'managed_form.documents_synced', null, [
+            'summary' => 'Synced signed forms to signer records: ' . ($before - $after)
+                . ' filed' . ($after ? ', ' . $after . ' still unfiled.' : '.'),
+            'filed' => $before - $after,
+            'remaining' => $after,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'filed' => $before - $after,
+            'remaining' => $after,
+            /* A remaining count is not a failure to hide: it means something else is
+               wrong with those rows - no completed file, or a signer whose account is
+               gone - and it needs a person, not another retry. */
+            'message' => $before === 0
+                ? 'Everything was already filed.'
+                : (($after === 0)
+                    ? ('Filed ' . ($before - $after) . ' form' . (($before - $after) === 1 ? '' : 's') . ' onto the signer records.')
+                    : ('Filed ' . ($before - $after) . '; ' . $after . ' could not be filed — their signer account or completed file is missing.')),
+        ]);
+    }
+
     /** GET /admin/managed-forms/{id}/signoff/{signoffId} — one signed record (with signature). */
     public function signoffDetail(Request $request, int $id, int $signoffId): JsonResponse
     {
@@ -1398,14 +1919,55 @@ class ManagedFormController extends Controller
         }
         // Only a SIGNED form leaves the list. A draft keeps its place — with the
         // answers so far — so the user can come back and finish it.
-        $signed = DB::table('managed_form_signoffs')->where('user_id', $uid)
-            ->whereNotNull('signed_at')->pluck('managed_form_id')->all();
+        /* A SIGN-OFF SENT BACK FOR CORRECTION DOES NOT COUNT AS SIGNED.
+
+           Otherwise returning a form would tell the parent to fix it while the form
+           itself stayed hidden from them - the one thing that makes the whole feature
+           useless. `corrected_at` closes it again when they resubmit, so a returned form
+           does not follow them forever. */
+        /* ONLY THE LATEST SIGN-OFF PER FORM DECIDES.
+
+           Judging every sign-off breaks the moment a form goes round twice: after the
+           first correction the OLD row is signed-and-corrected, so it still counts as
+           done, and sending the NEW one back leaves the form hidden from the person
+           being asked to fix it. The second round silently did nothing. Reduce to the
+           most recent submission per form and ask only that one. */
+        $history = DB::table('managed_form_signoffs')->where('user_id', $uid)
+            ->whereNotNull('signed_at')
+            ->orderByDesc('signed_at')->orderByDesc('id')
+            ->get(['id', 'managed_form_id', 'field_values', 'correction_requested_at', 'correction_note', 'corrected_at']);
+
+        $latest = [];
+        foreach ($history as $h) {
+            if (! isset($latest[(int) $h->managed_form_id])) {
+                $latest[(int) $h->managed_form_id] = $h;
+            }
+        }
+
+        $signed = [];
+        $pending = [];          // form_id => the returned sign-off, for answers + reason
+        foreach ($latest as $fid => $h) {
+            if ($h->correction_requested_at && ! $h->corrected_at) {
+                $pending[(int) $fid] = $h;
+            } else {
+                $signed[] = (int) $fid;
+            }
+        }
         // A REUSABLE form is never "done" — an educator fills it again for the next
         // child or the next week — so signing it must not remove it from the list.
         $reusableIds = DB::table('managed_forms')->where('reusable', 1)->pluck('id')->all();
         $signed = array_values(array_diff($signed, $reusableIds));
         $drafts = DB::table('managed_form_signoffs')->where('user_id', $uid)
             ->whereNull('signed_at')->pluck('field_values', 'managed_form_id')->all();
+
+        /* The answers they already gave, carried over from the returned submission.
+           The email tells them "your previous answers are still there, change only what
+           is mentioned" - without this that is a lie and they retype the whole form. */
+        foreach ($pending as $fid => $h) {
+            if (! isset($drafts[$fid]) && $h->field_values) {
+                $drafts[$fid] = $h->field_values;
+            }
+        }
         $forms = DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
             ->when(! empty($signed), fn ($q) => $q->whereNotIn('id', $signed))
             ->orderByDesc('id')->get()
@@ -1415,13 +1977,18 @@ class ManagedFormController extends Controller
                role") is what let a form addressed to one parent stay visible to
                every guardian in the agency. */
             ->pipe(fn ($rows) => collect(\App\Support\FormAudience::filter($rows, $uid, $roles)))
-            ->map(function ($f) use ($drafts) {
+            ->map(function ($f) use ($drafts, $pending) {
                 $raw = $drafts[$f->id] ?? null;
                 return [
                     'id' => $f->id, 'title' => $f->title, 'description' => $f->description,
                     'file_url' => $f->file_url, 'fillable' => (bool) ($f->fillable ?? false),
                     'reusable' => (bool) ($f->reusable ?? false),
                     'draft_values' => $raw ? (json_decode($raw, true) ?: null) : null,
+                    /* A form that reappears with no explanation reads as a bug in the
+                       portal. Carry the reviewer's words through to the person who has
+                       to act on them. */
+                    'correction_note' => isset($pending[$f->id]) ? $pending[$f->id]->correction_note : null,
+                    'returned_at' => isset($pending[$f->id]) ? $pending[$f->id]->correction_requested_at : null,
                 ];
             })
             ->values();
@@ -1567,6 +2134,14 @@ class ManagedFormController extends Controller
             DB::table('managed_form_signoffs')->where('id', $open->id)->update($row);
             $signoffId = (int) $open->id;
         } else {
+            /* Closing the loop. The new submission is a NEW row - the original stays
+               as filed, with its own PDF - so the pending return has to be marked
+               resolved on the OLD row or the form stays outstanding for ever. */
+            DB::table('managed_form_signoffs')
+                ->where('managed_form_id', $id)->where('user_id', $uid)
+                ->whereNotNull('correction_requested_at')->whereNull('corrected_at')
+                ->update(['corrected_at' => now(), 'updated_at' => now()]);
+
             $signoffId = (int) DB::table('managed_form_signoffs')->insertGetId($row + [
                 'managed_form_id' => $id, 'user_id' => $uid, 'created_at' => now(),
             ]);
@@ -1781,5 +2356,381 @@ class ManagedFormController extends Controller
                 } catch (\Throwable $e) {}
             }
         })->onQueue('mail');
+    }
+
+    /**
+     * POST /admin/managed-forms/signoffs/{id}/countersign
+     *
+     * The second half of an exchange that only ever had a first half: the parent filled
+     * it in and signed, the agency received a copy, and nothing recorded that anybody had
+     * read it — let alone agreed to it. This records the agency's signature as a separate
+     * act by a separate party, appends it to the completed PDF, and sends the finished
+     * document to BOTH sides.
+     *
+     * THE PARENT'S SIGNATURE IS NEVER TOUCHED. `signature` and `field_values` stay exactly
+     * as they were submitted. A record that merged the two could not answer "what did the
+     * parent actually sign", which is the only question that matters if it is ever
+     * disputed.
+     */
+    public function countersign(Request $request, int $id): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $agencyId = $this->agencyId($request);
+
+        $data = $request->validate([
+            'signature' => ['required', 'string', 'max:400000'],   // base64 PNG data URL
+            'name' => ['nullable', 'string', 'max:190'],
+            'note' => ['nullable', 'string', 'max:2000'],
+            /* Default ON. The whole point of the request is that both sides end up with
+               the finished document; making that opt-in would leave the common case
+               half-done. */
+            'send' => ['nullable', 'boolean'],
+
+            /* THE REVIEWED DOCUMENT, when the agency filled something in during review.
+               Base64 of a PDF the browser produced with pdf-lib. 12MB of base64 is
+               roughly a 9MB PDF, which is larger than anything this platform has ever
+               stored for a form. */
+            'annotated_pdf' => ['nullable', 'string', 'max:12000000'],
+            'annotations' => ['nullable', 'array', 'max:80'],
+            'annotations.*.page' => ['required_with:annotations', 'integer', 'min:1', 'max:500'],
+            'annotations.*.text' => ['required_with:annotations', 'string', 'max:2000'],
+        ]);
+
+        if (! preg_match('#^data:image/(png|jpe?g);base64,#i', $data['signature'])) {
+            return response()->json(['message' => 'That signature could not be read.'], 422);
+        }
+
+        $row = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->leftJoin('users as u', 'u.id', '=', 's.user_id')
+            ->where('s.id', $id)->where('f.agency_id', $agencyId)
+            ->select([
+                's.id', 's.user_id', 's.signer_name', 's.signed_at', 's.filled_file_url',
+                's.countersigned_at', 's.correction_requested_at', 's.corrected_at',
+                'f.id as form_id', 'f.title', 'f.description', 'f.notify_email', 'f.agency_id',
+                'u.email as signer_email', 'u.first_name as signer_first', 'u.last_name as signer_last',
+            ])
+            ->first();
+
+        if (! $row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! $row->signed_at) {
+            /* Counter-signing something nobody has signed would produce a document that
+               asserts an agreement that never happened. */
+            return response()->json(['message' => 'That form has not been completed yet.'], 422);
+        }
+        if ($row->countersigned_at) {
+            return response()->json(['message' => 'That form has already been counter-signed.'], 409);
+        }
+        /* THE TWO ACTIONS CONTRADICT EACH OTHER.
+ 
+           Sending a form back says "this submission is not acceptable"; counter-signing
+           says "the agency accepts this submission". Allowing both would put a signed
+           certificate on a document the agency has already disowned, and the parent is
+           mid-way through replacing it. Whichever was done in error has to be undone
+           first. */
+        if ($row->correction_requested_at && ! $row->corrected_at) {
+            return response()->json([
+                'message' => 'That form was sent back for correction and is waiting on the signer, so it cannot be counter-signed yet.',
+            ], 409);
+        }
+
+        $me = $request->user();
+        $counterName = trim((string) ($data['name'] ?? ''))
+            ?: trim(($me->first_name ?? '') . ' ' . ($me->last_name ?? ''))
+            ?: 'Agency';
+        $counterRole = (string) (DB::table('role_assignments')->where('user_id', $me->id)
+            ->where('active', true)->orderByRaw("role = 'platform_admin' DESC")
+            ->value('role') ?? '');
+        $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?? 'The agency');
+        $signerName = $row->signer_name
+            ?: trim(($row->signer_first ?? '') . ' ' . ($row->signer_last ?? ''));
+
+        /* ── stamp the PDF, if we can ────────────────────────────────────────
+           A failure here is NOT a failure of the counter-signature. It is recorded
+           either way and the original is sent instead, with the email saying plainly
+           who counter-signed and when. A missing page beats a missing record. */
+        $storedUrl = null;
+
+        /* THE REVIEWED COPY IS A NEW FILE. THE PARENT'S IS NEVER OVERWRITTEN.
+
+           When the agency adds information during review the browser hands back the
+           document with those additions drawn on. That becomes the base for the
+           counter-signature page, and it is written alongside the original - which
+           `filled_file_url` still points at, unchanged. Merging the two would destroy
+           the only record of what the parent actually signed. */
+        $reviewedAbs = null;
+        if (! empty($data['annotated_pdf'])) {
+            $bin = base64_decode(preg_replace('#^data:application/pdf;base64,#i', '', (string) $data['annotated_pdf']), true);
+            /* A truncated upload, or anything that is not a PDF, must not silently
+               replace the document: fall through to the original instead. */
+            if ($bin !== false && strncmp($bin, '%PDF', 4) === 0 && strlen($bin) > 500) {
+                $relR = 'managed-forms/' . $agencyId . '/reviewed/' . \Illuminate\Support\Str::random(40) . '.pdf';
+                Storage::disk('public')->put($relR, $bin);
+                $reviewedAbs = Storage::disk('public')->path($relR);
+            } else {
+                \Illuminate\Support\Facades\Log::warning('countersign: reviewed PDF rejected', [
+                    'signoff' => $row->id, 'bytes' => $bin === false ? 0 : strlen((string) $bin),
+                ]);
+            }
+        }
+
+        if ($reviewedAbs || $row->filled_file_url) {
+            $abs = $reviewedAbs ?: Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $row->filled_file_url));
+            $made = \App\Support\ManagedFormCountersign::append(
+                $abs, (string) $row->title, (string) $signerName, (string) $row->signed_at,
+                $counterName, str_replace('_', ' ', $counterRole), (string) $data['signature'],
+                $data['note'] ?? null, $agencyName, $data['annotations'] ?? null
+            );
+            if ($made) {
+                $rel = 'managed-forms/' . $agencyId . '/countersigned/' . \Illuminate\Support\Str::random(40) . '.pdf';
+                Storage::disk('public')->put($rel, (string) file_get_contents($made));
+                @unlink($made);
+                $storedUrl = '/storage/' . $rel;
+            }
+        }
+
+        DB::table('managed_form_signoffs')->where('id', $row->id)->update([
+            'countersigned_at' => now(),
+            'countersigned_by_id' => (int) $me->id,
+            'countersigner_name' => $counterName,
+            'countersigner_role' => $counterRole ?: null,
+            'countersignature' => mb_substr((string) $data['signature'], 0, 400000),
+            'countersign_note' => $data['note'] ?? null,
+            'countersigned_file_url' => $storedUrl,
+            'updated_at' => now(),
+        ]);
+
+        /* APPROVED -> THE SIGNER'S OWN COPY BECOMES THE APPROVED ONE.
+
+           SignedFormFiler already put a documents row on their record when they signed,
+           so the form is in their Documents section - but pointing at what THEY sent,
+           not at what the agency approved. Once it is counter-signed the copy they keep
+           should be the counter-signed one, or the family's record and the agency's
+           disagree about the same document. Same row, updated in place: two rows would
+           drift the moment one is deleted. */
+        if ($storedUrl) {
+            try {
+                $doc = DB::table('documents')
+                    ->where('source_type', \App\Support\SignedFormFiler::SOURCE)
+                    ->where('source_id', (int) $row->id)
+                    ->first(['id', 'title']);
+                if ($doc) {
+                    DB::table('documents')->where('id', $doc->id)->update([
+                        'file_url' => $storedUrl,
+                        'file_size' => (int) (@filesize(Storage::disk('public')->path(preg_replace('#^/storage/#', '', $storedUrl))) ?: 0),
+                        'signed_at' => now(),
+                        'notes' => 'Counter-signed by ' . $counterName
+                            . (($data['note'] ?? null) ? ' — ' . mb_substr((string) $data['note'], 0, 300) : ''),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                /* Never worth failing the counter-signature over: it is recorded, the
+                   PDF exists, and the email still goes. */
+                Log::warning('countersign: could not refresh the filed document', ['err' => $e->getMessage()]);
+            }
+        }
+
+        $sent = [];
+        if (($data['send'] ?? true)) {
+            $sent = $this->returnCountersigned($row, $storedUrl, $counterName, $data['note'] ?? null, $agencyName);
+        }
+
+        $this->audit($request, 'managed_form.countersigned', (int) $row->id, [
+            'summary' => $counterName . ' counter-signed "' . $row->title . '" completed by '
+                . ($signerName ?: 'a parent') . '.'
+                . ($storedUrl ? ' A counter-signed PDF was produced.' : ' The PDF could not be stamped, so the original stands with the signature recorded here.')
+                . (! empty($data['annotations'])
+                    ? ' ' . count($data['annotations']) . ' addition(s) were made to the form during review: '
+                      . implode('; ', array_map(function ($a) {
+                            return 'p' . ($a['page'] ?? '?') . ' "' . mb_substr((string) ($a['text'] ?? ''), 0, 120) . '"';
+                        }, $data['annotations'])) . '.'
+                    : '')
+                . ($sent ? ' Sent to: ' . implode(', ', $sent) . '.' : ' Not sent.'),
+            'form_id' => (int) $row->form_id,
+            'signoff_id' => (int) $row->id,
+            'stamped' => (bool) $storedUrl,
+            'sent_to' => $sent,
+            /* Named individually, not counted: "3 additions" cannot answer which line
+               on the form the agency wrote. */
+            'annotations' => array_map(function ($a) {
+                return 'p' . ($a['page'] ?? '?') . ': ' . mb_substr((string) ($a['text'] ?? ''), 0, 160);
+            }, $data['annotations'] ?? []),
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'stamped' => (bool) $storedUrl,
+            'file_url' => $storedUrl,
+            'sent_to' => $sent,
+            /* Said out loud rather than implied by a silent success: if the stamp failed
+               the reviewer should know the attachment is the original. */
+            'message' => $storedUrl
+                ? ('Counter-signed' . ($sent ? ' and sent to ' . implode(' and ', $sent) : '') . '.')
+                : ('Counter-signature recorded. The PDF could not be stamped, so the original was '
+                   . ($sent ? 'sent instead' : 'left as it is') . '.'),
+        ]);
+    }
+
+    /**
+     * Send the finished document to BOTH sides.
+     *
+     * SUPPRESSION IS RESPECTED FOR THE PARENT AND BYPASSED FOR THE AGENCY, deliberately.
+     * The agency's notify_email is their own inbox and their own choice — the existing
+     * completed-form mail already bypasses for it. A parent under do-not-contact is a
+     * person somebody decided must not be emailed, and a counter-signature is not a
+     * reason to overrule that.
+     */
+    private function returnCountersigned(object $row, ?string $storedUrl, string $counterName, ?string $note, string $agencyName): array
+    {
+        $agencyTo = trim((string) ($row->notify_email ?? ''));
+        $parentTo = trim((string) ($row->signer_email ?? ''));
+
+        $absPdf = null;
+        $useUrl = $storedUrl ?: $row->filled_file_url;
+        if ($useUrl) {
+            $cand = Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $useUrl));
+            if (is_file($cand)) {
+                $absPdf = $cand;
+            }
+        }
+        $attachName = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) $row->title)
+            . ($storedUrl ? '-countersigned' : '') . '.pdf';
+
+        /* BUILT THE SAME WAY AS THE COMPLETED-FORM MAIL, deliberately.
+
+           This lands in the same inbox, often minutes apart from the "Completed form"
+           notice for the same document. A second layout for the second half of one
+           exchange reads as a different system talking, so it uses the same callout
+           boxes, the same agency-timezone stamps and the same dated subject line. */
+        $tz = \App\Support\AgencyTime::tz((int) $row->agency_id);
+        $now = now()->setTimezone($tz);
+        $stamp = $now->format('D, M j, Y');
+        $stampFull = $now->format('D, M j, Y') . ' at ' . $now->format('g:i A')
+            . ' (' . $now->format('T') . ')';
+
+        $signedWhen = '';
+        if ($row->signed_at) {
+            try {
+                $signedWhen = \Illuminate\Support\Carbon::parse($row->signed_at)
+                    ->setTimezone($tz)->format('D, M j, Y') . ' at '
+                    . \Illuminate\Support\Carbon::parse($row->signed_at)->setTimezone($tz)->format('g:i A');
+            } catch (\Throwable $e) {
+            }
+        }
+        $signerLabel = (string) ($row->signer_name ?: 'the parent');
+
+        /* The date belongs in the subject: these accumulate in one inbox and without it
+           two counter-signatures of the same form are indistinguishable unopened. */
+        $subject = 'Counter-signed: ' . $row->title . " \u{2014} " . $stamp;
+
+        $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
+            . e($agencyName) . ' has reviewed and counter-signed <strong>' . e((string) $row->title)
+            . '</strong> on ' . e($stampFull) . '.</p>'
+            . \App\Services\EmailTemplate::calloutBox(
+                '<strong>Form:</strong> ' . e((string) $row->title)
+                . (($row->description ?? '') ? '<br><strong>About:</strong> ' . e((string) $row->description) : '')
+                . '<br><strong>Completed by:</strong> ' . e($signerLabel)
+                . ($parentTo ? ' (' . e($parentTo) . ')' : '')
+                . ($signedWhen ? '<br><strong>Signed at:</strong> ' . e($signedWhen) : '')
+                . '<br><strong>Counter-signed by:</strong> ' . e($counterName)
+                . '<br><strong>Counter-signed at:</strong> ' . e($stampFull),
+                'info'
+            )
+            /* The reviewer's note gets its own box in green. It is the one part of this
+               email somebody actually wrote, and burying it in a grey paragraph is how
+               a condition attached to an approval goes unread. */
+            . ($note !== null && trim($note) !== ''
+                ? \App\Services\EmailTemplate::calloutBox(
+                    '<strong>Note from the reviewer</strong><br>' . nl2br(e(trim($note))), 'success')
+                : '')
+            . '<p style="margin:14px 0 0;font-size:13.5px;color:#64748B;line-height:1.6;">'
+            . ($storedUrl
+                ? 'The completed form is attached, with the counter-signature on the final page.'
+                : 'The completed form is attached. The counter-signature is recorded in KiddieTrac.')
+            . ' Please keep this for your records.</p>';
+
+        $html = \App\Services\EmailTemplate::wrap((int) $row->agency_id, $body, [
+            'eyebrow' => 'COUNTER-SIGNED',
+            'title' => (string) $row->title,
+            'subtitle' => 'Reviewed by ' . $counterName,
+            'preheader' => $agencyName . ' counter-signed ' . $row->title . '.',
+        ]);
+
+        $sent = [];
+
+        /* The parent first: they are the side that has never been told anything. */
+        if ($parentTo && filter_var($parentTo, FILTER_VALIDATE_EMAIL)) {
+            if (\App\Support\Suppression::isUser((int) $row->user_id)) {
+                \App\Support\Suppression::note('email', (int) $row->user_id, 'form_countersigned');
+            } else {
+                $this->queueCountersignMail((int) $row->agency_id, $parentTo, $subject, $html, $absPdf, $attachName, false);
+                $sent[] = $parentTo;
+            }
+        }
+
+        if ($agencyTo && filter_var($agencyTo, FILTER_VALIDATE_EMAIL) && strcasecmp($agencyTo, $parentTo) !== 0) {
+            $this->queueCountersignMail((int) $row->agency_id, $agencyTo, $subject, $html, $absPdf, $attachName, true);
+            $sent[] = $agencyTo;
+        }
+
+        if ($sent) {
+            DB::table('managed_form_signoffs')->where('id', $row->id)->update([
+                'returned_at' => now(),
+                'returned_to' => mb_substr(implode(', ', $sent), 0, 400),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return $sent;
+    }
+
+    /**
+     * SENT THROUGH AgencyMailer, LIKE EVERY OTHER NOTICE ON THIS PLATFORM.
+     *
+     * This used to call Mail::html() directly, which skips the X-KT-Agency-Id stamp.
+     * Without that header SuppressAgencyMail cannot tell whose mail this is and falls
+     * back to judging it by every account sharing the recipient's address - and an
+     * address that holds a role in a switched-off agency then cancels mail that a
+     * completely different agency sent. That is not hypothetical: it silently killed 50
+     * real iLearn notices on 2026-09-16, which is why AgencyMailer::html() exists and
+     * why nothing should be composing mail without it.
+     */
+    private function queueCountersignMail(int $agencyId, string $to, string $subject, string $html, ?string $absPdf, string $attachName, bool $bypassSuppression): void
+    {
+        dispatch(function () use ($agencyId, $to, $subject, $html, $absPdf, $attachName, $bypassSuppression) {
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject, $absPdf, $attachName, $bypassSuppression) {
+                $m->to($to)
+                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
+                  ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
+                  ->subject($subject);
+                if ($absPdf) {
+                    $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
+                }
+                if ($bypassSuppression) {
+                    $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+                }
+            });
+        })->onQueue('mail');
+    }
+
+    private function audit(Request $request, string $action, ?int $entityId, array $payload): void
+    {
+        try {
+            \App\Support\Audit::write([
+                'user_id' => optional($request->user())->id,
+                'agency_id' => $this->agencyId($request),
+                'action' => $action,
+                'entity_type' => 'managed_form_signoff',
+                'entity_id' => $entityId,
+                'payload' => json_encode($payload),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+        }
     }
 }

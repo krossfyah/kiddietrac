@@ -148,6 +148,20 @@
         return '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
           + '<div style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(f.title) + '</div>'
           + (f.description ? '<div style="font-size:13px;color:#64748B;margin-top:3px;line-height:1.5;">' + esc(f.description) + '</div>' : '')
+          /* SAY WHY IT IS BACK.
+
+             A form the family already completed reappearing in "to sign" with no
+             explanation reads as a portal fault, and they either ignore it or resubmit
+             exactly what they sent the first time. The reviewer's words are the only
+             thing that makes the second attempt different from the first. */
+          + (f.correction_note
+              ? '<div style="margin-top:9px;background:#FEF3C7;border:1px solid #FDE68A;border-left:3px solid #B45309;'
+                + 'border-radius:8px;padding:9px 11px;">'
+                + '<div style="font-size:11px;font-weight:800;color:#92400E;text-transform:uppercase;letter-spacing:.4px;">'
+                + 'Sent back for correction' + (f.returned_at ? ' · ' + esc(fmtWhen(f.returned_at)) : '') + '</div>'
+                + '<div style="font-size:13px;color:#7C2D12;margin-top:3px;line-height:1.5;white-space:pre-wrap;">'
+                + esc(f.correction_note) + '</div></div>'
+              : '')
           + (f.draft_values ? '<div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#0F766E;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:3px 10px;">💾 Draft saved</div>' : '')
           + '<div style="display:flex;gap:10px;margin-top:13px;flex-wrap:wrap;">'
           + '<button class="mf-view" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;">📄 Read the form</button>'

@@ -197,6 +197,18 @@ final class SignedFormController extends Controller
             'updated_at'      => now(),
         ];
 
+        /* CLOSE ANY PENDING CORRECTION, EXACTLY AS THE IN-PORTAL ROUTE DOES.
+
+           There are two ways to submit a form - the portal and an emailed signed link -
+           and a fix applied to only one of them is a bug waiting for the other to be
+           used. Without this, a parent who resubmits from the email leaves the request
+           open for ever: the form stays outstanding, the Completed tab keeps reading
+           "Awaiting signer", and nobody can tell why. */
+        DB::table('managed_form_signoffs')
+            ->where('managed_form_id', $form)->where('user_id', $u)
+            ->whereNotNull('correction_requested_at')->whereNull('corrected_at')
+            ->update(['corrected_at' => now(), 'updated_at' => now()]);
+
         $draft = DB::table('managed_form_signoffs')
             ->where('managed_form_id', $form)->where('user_id', $u)->whereNull('signed_at')->first(['id']);
         if ($draft) {

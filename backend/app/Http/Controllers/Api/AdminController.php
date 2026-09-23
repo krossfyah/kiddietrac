@@ -732,7 +732,36 @@ final class AdminController extends Controller
         $input = is_array($data['input'] ?? null) ? $data['input'] : [];
         $fromPayload = $data['name'] ?? $data['email'] ?? $data['to'] ?? ($input['name'] ?? $input['email'] ?? $input['family_name'] ?? null);
         if (is_string($fromPayload) && trim($fromPayload) !== '') {
-            return $fromPayload;
+            /* THE ENTITY COLUMN NAMES ONE THING, NOT A DISTRIBUTION LIST (2026-09-18).
+
+               Anthony: "the audit table where the entity column is now much wider and has
+               changed as to how it was prior."
+
+               `to` on an email.sent row is the recipients JOINED WITH COMMAS, and a batch
+               send puts all four addresses in one string:
+
+                 mr.anthonyhosein@gmail.com, integration+ilearn@kiddietrac.com,
+                 info@ilearnhcc.com, lloy_king@ilearnhcc.com
+
+               106 characters with no break except the commas. The audit table lays out
+               auto, so one row like that sets the width of the whole column and squeezes
+               every other one — measured at 319px on iLearn against 187px on an agency
+               with no batch sends in view.
+
+               Name the first recipient and COUNT the rest. Nothing is lost: the full list
+               is in the payload, which the detail modal prints in full when the row is
+               clicked. */
+            $name = trim($fromPayload);
+            if (str_contains($name, ',')) {
+                $parts = array_values(array_filter(array_map('trim', explode(',', $name)), fn ($x) => $x !== ''));
+                if (count($parts) > 1) {
+                    return $parts[0] . ' +' . (count($parts) - 1) . ' more';
+                }
+            }
+
+            /* And a single value can still be long — a subject line, a pasted note. The
+               column is a label, so bound it here too rather than relying on the browser. */
+            return mb_strlen($name) > 72 ? mb_substr($name, 0, 72) . '…' : $name;
         }
         // The middleware derives entity_type from the URL, which frequently yields
         // junk like "id" (from ".../managed-forms/9/sign") — so the record was never
@@ -1742,6 +1771,120 @@ final class AdminController extends Controller
 
         $users = $usersQuery->orderBy('first_name')->limit(200)->get();
 
+        /* HOW EACH PERSON CAN ACTUALLY BE REACHED (2026-09-21).
+
+           Anthony: "add a field that shows what they are opt'd into (SMS, email etc) for
+           communication with their child."
+
+           Deliberately NOT a list of preference flags. notification_prefs holds five rows
+           for five people out of 116 - almost nobody has ever touched their preferences -
+           so echoing that column would show "no preferences set" for everyone and answer
+           nothing. The question an admin is really asking is "if something happens to this
+           child today, does the parent hear about it, and how?"
+
+           So each channel is reported as whether it would REACH them, with the reason when
+           it would not: SMS needs consent AND a number, push needs a registered device,
+           and a preference row can still switch one off for a particular event.
+
+           Batched into three queries for the whole page rather than three per user - this
+           list loads 200 people and an N+1 here would be 600 round trips. */
+        $userIds = $users->pluck('id')->all();
+
+        $deviceCount = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('device_tokens') && $userIds) {
+                $deviceCount = DB::table('device_tokens')->whereIn('user_id', $userIds)
+                    ->whereIn('platform', ['android', 'ios'])
+                    ->selectRaw('user_id, COUNT(*) n')->groupBy('user_id')
+                    ->pluck('n', 'user_id')->all();
+            }
+        } catch (\Throwable $e) {
+        }
+
+        /* OTHER ACCOUNTS THE SAME PERSON HOLDS (2026-09-21).
+
+           Anthony: Safia "only received one password reset for one account and not the
+           other". She has THREE live accounts, on three DIFFERENT addresses -
+           safia_a@hotmail.com, info@ilearnhcc.com and safia03@gmail.com. A reset request
+           for one address reaches that account and cannot reach the others, which is
+           correct and also completely invisible to her. Lloydene King has FIVE across
+           four addresses.
+
+           The self-service reset itself is sound: verified today that one request against
+           a shared address mints a token per live account and delivers one email each.
+           What was missing is anybody being able to SEE that a person is split across
+           several accounts before wondering why one reset did not cover them all.
+
+           Two kinds of sibling, reported separately because they are not equally certain:
+             - SAME ADDRESS: a fact. One reset request covers all of them.
+             - SAME NAME, different address: a strong hint and nothing more. Two people
+               can share a name, and treating a name as an identity is what once renamed
+               the super admin by email match. Never acted on automatically; shown so a
+               human can judge.
+
+           Batched for the page, like the comms lookup below it. */
+        $siblings = [];
+        try {
+            if ($userIds) {
+                $me = DB::table('users')->whereIn('id', $userIds)
+                    ->get(['id', 'email', 'first_name', 'last_name'])->keyBy('id');
+
+                $emails = $me->pluck('email')->filter()->map(fn ($e) => mb_strtolower(trim($e)))->unique()->all();
+                $names = $me->map(fn ($u) => mb_strtolower(trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))))
+                    ->filter()->unique()->all();
+
+                $pool = DB::table('users')->whereNull('deleted_at')->where('status', '!=', 'deactivated')
+                    ->where(function ($w) use ($emails, $names) {
+                        if ($emails) { $w->whereIn(DB::raw('LOWER(TRIM(email))'), $emails); }
+                        if ($names) {
+                            $w->orWhereIn(
+                                DB::raw("LOWER(TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))))"),
+                                $names
+                            );
+                        }
+                    })
+                    ->get(['id', 'email', 'username', 'first_name', 'last_name', 'status']);
+
+                foreach ($me as $id => $u) {
+                    $myEmail = mb_strtolower(trim((string) $u->email));
+                    $myName = mb_strtolower(trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')));
+                    $list = [];
+                    foreach ($pool as $o) {
+                        if ((int) $o->id === (int) $id) { continue; }
+                        $oEmail = mb_strtolower(trim((string) $o->email));
+                        $oName = mb_strtolower(trim(($o->first_name ?? '') . ' ' . ($o->last_name ?? '')));
+                        $sameEmail = $myEmail !== '' && $oEmail === $myEmail;
+                        $sameName = $myName !== '' && $oName === $myName;
+                        if (! $sameEmail && ! $sameName) { continue; }
+                        $list[] = [
+                            'user_id' => (int) $o->id,
+                            'email' => $o->email,
+                            'username' => $o->username,
+                            'match' => $sameEmail ? 'email' : 'name',
+                        ];
+                    }
+                    if ($list) { $siblings[$id] = $list; }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $prefRows = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('notification_prefs') && $userIds) {
+                foreach (DB::table('notification_prefs')->whereIn('user_id', $userIds)
+                    ->get(['user_id', 'event_key', 'email', 'sms', 'push']) as $pr) {
+                    $prefRows[(int) $pr->user_id][] = [
+                        'event' => str_replace('_', ' ', (string) $pr->event_key),
+                        'email' => (bool) $pr->email,
+                        'sms' => (bool) $pr->sms,
+                        'push' => (bool) $pr->push,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
         // Get all roles for these users
         $allAssignments = DB::table('role_assignments')
             ->whereIn('user_id', $users->pluck('id'))
@@ -1804,7 +1947,10 @@ final class AdminController extends Controller
             // The Users table must render even if delivery data cannot be read.
         }
 
-        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy) {
+        /* $deviceCount and $prefRows must be imported HERE as well: the comms closure
+           below is nested inside this one, and PHP closures capture nothing implicitly.
+           Missing them off this line is what 500'd the whole users list. */
+        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy, $deviceCount, $prefRows, $siblings) {
             $roles = ($allAssignments[$u->id] ?? collect())->pluck('role')->unique()->values()->all();
             $guardianLinks = $allGuardianLinks[$u->id] ?? collect();
             // Only a family that is still here makes someone a current guardian.
@@ -1858,6 +2004,69 @@ final class AdminController extends Controller
                 'last_seen_at' => $u->last_seen_at ?? null,
                 'last_login_at' => $u->last_login_at,
                 'onboarded_at' => $u->onboarded_at ?? null,
+                /* PASSWORD AGE (2026-09-21).
+
+                   Anthony: "add a new field that shows last password reset and days
+                   remaining for a password rotation/reset."
+
+                   Two separate facts, because they answer different questions. WHEN it
+                   was last set is the audit answer; DAYS LEFT is the operational one -
+                   whether this is the account about to lock somebody out on Monday
+                   morning. Computed here from the one policy class so the screen cannot
+                   drift from what the login gate actually enforces.
+
+                   Null when unknown rather than 0: an account with no recorded change
+                   date is "we do not know", and rendering that as "expires today" would
+                   send an admin chasing something that is not true. */
+                'password_changed_at' => $u->password_changed_at ?? null,
+                'password_days_left' => \App\Services\PasswordPolicy::daysLeft($u->password_changed_at ?? null),
+                'password_expired' => \App\Services\PasswordPolicy::isExpired($u->password_changed_at ?? null),
+                'password_max_age_days' => \App\Services\PasswordPolicy::maxAgeDays(),
+                /* Already being asked to change it - an admin reset, or an expiry the
+                   gate has caught. Without this the screen would show "3 days left" for
+                   somebody who is locked out of everything right now. */
+                'must_change_password' => (bool) ($u->must_change_password ?? false),
+                /* What would actually reach this person. See the note by the batch above:
+                   these are capabilities, not stored preferences. */
+                /* Why a password reset for one address does not cover the others. */
+                'other_accounts' => $siblings[$u->id] ?? [],
+                'comms' => (function () use ($u, $deviceCount, $prefRows) {
+                    $hasPhone = trim((string) ($u->phone ?? '')) !== '';
+                    $hasEmail = trim((string) ($u->email ?? '')) !== '';
+                    $devices = (int) ($deviceCount[$u->id] ?? 0);
+
+                    return [
+                        'email' => [
+                            'on' => $hasEmail,
+                            /* On by default for everyone with an address - the agency and
+                               centre switches are applied in the mail layer, not here, so
+                               this says "we hold a way to email them", not "nothing can
+                               stop it". */
+                            'why' => $hasEmail ? null : 'No email address on file',
+                        ],
+                        'sms' => [
+                            'on' => (bool) ($u->sms_opt_in ?? false) && $hasPhone,
+                            'why' => ! ($u->sms_opt_in ?? false)
+                                ? (($u->sms_opt_out_at ?? null) ? 'Declined text alerts' : 'Has not opted in')
+                                : (! $hasPhone ? 'No mobile number on file' : null),
+                            'since' => $u->sms_opt_in_at ?? null,
+                            'source' => $u->sms_consent_source ?? null,
+                        ],
+                        'push' => [
+                            'on' => $devices > 0,
+                            'why' => $devices > 0 ? null : 'No phone app signed in',
+                            'devices' => $devices,
+                        ],
+                        'voice' => [
+                            'on' => ! ($u->voice_opt_out ?? false) && $hasPhone,
+                            'why' => ($u->voice_opt_out ?? false) ? 'Asked not to be called'
+                                : (! $hasPhone ? 'No phone number on file' : null),
+                        ],
+                        /* Only when they have actually customised something - an empty
+                           list is the normal case and saying so would be noise. */
+                        'overrides' => $prefRows[$u->id] ?? [],
+                    ];
+                })(),
                 'invite' => (function () use ($u, $inviteBy) {
                     $k = mb_strtolower(trim((string) ($u->email ?? '')));
                     $i = $inviteBy[$k] ?? null;
@@ -5891,6 +6100,20 @@ final class AdminController extends Controller
         $name = (string) Str::uuid() . '.' . $ext;
         $file->storeAs('avatars', $name, 'public');
 
+        /* Make the small copy NOW, while we are already holding the file. (2026-09-21)
+
+           MediaFileController falls back to generating it on first request, so this is
+           not required for correctness — it just moves the one-off resize off the first
+           person to open a roster and onto the upload that caused it. Failure is fine and
+           silent: the original is still served, and the next fetch will try again. */
+        try {
+            \App\Support\MediaThumb::make(
+                \Illuminate\Support\Facades\Storage::disk('public')->path('avatars/' . $name),
+                384
+            );
+        } catch (\Throwable $e) {
+        }
+
         $publicPath = '/storage/avatars/' . $name;
         DB::table('users')->where('id', $userId)->update([
             'photo_url'  => $publicPath,
@@ -6607,7 +6830,7 @@ final class AdminController extends Controller
         $docs = DB::table('documents')
             ->where('scope_type', 'user')->where('scope_id', $userId)
             ->orderByDesc('created_at')
-            ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'signature_url', 'expires_at', 'created_at']);
+            ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'signature_url', 'expires_at', 'created_at', 'notes']);
 
         return response()->json(['documents' => $docs]);
     }

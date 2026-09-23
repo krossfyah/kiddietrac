@@ -63,8 +63,20 @@
   function absUrl(u) {
     if (!u) return '';
     var path = String(u);
-    var m = /^https?:\/\/[^/]+(\/.*)$/.exec(path);
-    if (m) path = m[1];                       // strip whatever host was handed to us
+
+    /* AN ABSOLUTE URL IS LEFT ALONE.
+
+       This used to strip the host and re-attach window.location.origin, which was
+       harmless while file_url was a relative /storage/... path — the portal host
+       serves those. Once protected media began handing out SIGNED absolute URLs on
+       the API host, stripping the host asked app.kiddietrac.com (a static host with
+       no /api route) for /api/v1/media/f?...&signature=... and Apache answered 404.
+
+       That is the 404 educators hit on "Fill & sign" for the Daily Supervision
+       Check. A signed URL names the only host that can honour it; rewriting that
+       host cannot make it more correct and can only break it. */
+    if (/^https?:\/\//i.test(path)) { return path; }
+
     if (path.charAt(0) !== '/') path = '/' + path;
     return w.location.origin + path;
   }
@@ -134,7 +146,7 @@
       // the only way out of this sheet — sat behind the system clock, off-screen.
       // The footer already respected safe-area-inset-bottom; the top was missed.
       // env() resolves to 0px on desktop, so this is a no-op there.
-      + '<div style="background:#0B2545;color:#fff;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 13px) calc(env(safe-area-inset-right,0px) + 16px) 13px calc(env(safe-area-inset-left,0px) + 16px);">'
+      + '<div style="background:#0B2545;color:#fff;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 13px) calc(env(safe-area-inset-right,0px) + 16px) 13px calc(env(safe-area-inset-left,0px) + 16px);">'
       + '  <div style="min-width:0;flex:1;">'
       + '    <div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FILL &amp; SIGN</div>'
       + '    <div style="font-size:16px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
@@ -143,7 +155,7 @@
       + '</div>'
       + '<div id="kt-ff-hint" style="flex:0 0 auto;background:#EFF6FF;color:#1E40AF;font-size:12.5px;padding:9px 16px;border-bottom:1px solid #DBEAFE;">Tap a highlighted box to type. Scroll for more pages.</div>'
       + '<div class="kt-ff-scroll" id="kt-ff-scroll"><div style="padding:40px;text-align:center;color:#64748B;font-size:13.5px;">Opening the form…</div></div>'
-      + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E7EDF3;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);">'
+      + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E7EDF3;padding:10px 14px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 12px);">'
       + '  <div id="kt-ff-msg" style="font-size:12.5px;color:#64748B;min-height:16px;margin-bottom:8px;"></div>'
       + '  <div class="kt-ff-actions">'
       + '    <button id="kt-ff-draft" type="button" class="kt-ff-btn kt-ff-btn--ghost">Save draft</button>'
@@ -157,6 +169,89 @@
   /**
    * Open the filler. Resolves true once the form has been submitted.
    */
+  /* THE SAME FILLER, SIGNED-IN OR NOT.
+
+     A form package emails a TEMPORARY link so a parent can fill and sign without hunting
+     for a password — the link IS the capability, exactly like the parent day-feedback and
+     time-off links already in the portal. That page has no bearer token, so every call
+     here has to be able to go two ways:
+
+       · in the portal  -> KT.Api, which carries the bearer and the agency header
+       · from a link    -> a plain fetch to the SIGNED urls the page was handed
+
+     `form.links` is what the signed page supplies. Nothing else about the filler changes,
+     so the two routes cannot drift into different behaviour — a parent gets the same
+     fields, the same signature pad and the same flattened PDF either way.
+     (Anthony, 2026-09-09) */
+  function noAuth(form) { return !!(form && form.links && form.links.submit); }
+
+  function ffPost(form, path, body, signedUrl) {
+    if (noAuth(form)) {
+      return fetch(signedUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) { throw new Error(j.message || ('HTTP ' + r.status)); }
+          return j;
+        });
+      });
+    }
+    return KT.Api.post(path, body);
+  }
+
+  /* THE COMPLETED PDF GOES AS A FILE, NOT AS TEXT INSIDE JSON.
+
+     It used to be base64 in the JSON body. That works until the form is big: this host
+     caps a request body with no file part at ~1 MB (mod_security's
+     SecRequestBodyNoFilesLimit) while a real multipart upload passes several MB — the
+     admin library happily accepts a 2.2 MB PDF through the same server. Base64 also
+     inflates by a third, so a 2.2 MB form became a 2.9 MB body and Apache answered a bare
+     "413 Payload Too Large" that closed the connection before Laravel ever saw it. The
+     page could not explain it, because nothing in the app was involved.
+
+     As multipart the bytes travel as bytes. field_values rides along as a JSON string
+     because form data has no nesting, and the server decodes it. (Anthony, 2026-09-10) */
+  function b64ToBlob(b64, type) {
+    var bin = atob(b64);
+    var len = bin.length;
+    var out = new Uint8Array(len);
+    for (var i = 0; i < len; i++) { out[i] = bin.charCodeAt(i); }
+    return new Blob([out], { type: type || 'application/pdf' });
+  }
+
+  function ffSubmit(form, path, fields, filledB64, signedUrl) {
+    var fd = new FormData();
+    fd.append('signature', fields.signature);
+    fd.append('field_values', JSON.stringify(fields.field_values || {}));
+    if (filledB64) {
+      fd.append('filled_file', b64ToBlob(filledB64, 'application/pdf'), 'completed-form.pdf');
+    }
+
+    if (noAuth(form)) {
+      /* No Content-Type header on purpose — the browser has to set the multipart
+         boundary, and naming the type by hand produces a body nothing can parse. */
+      return fetch(signedUrl, { method: 'POST', headers: { Accept: 'application/json' }, body: fd })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (!r.ok) { throw new Error(j.message || httpHint(r.status)); }
+            return j;
+          });
+        });
+    }
+    return KT.Api.postForm(path, fd);
+  }
+
+  /* A status code a person can act on. 413 in particular used to surface as a bare
+     "Could not submit" after several minutes of typing. */
+  function httpHint(status) {
+    if (status === 413) { return 'That form is too large to send from this device. Please tell your centre — they can shrink the file.'; }
+    if (status === 409) { return 'This form has already been signed.'; }
+    if (status === 404) { return 'This link is no longer valid. Please ask your centre to send it again.'; }
+    return 'Could not submit (HTTP ' + status + '). Please try again.';
+  }
+
   function open(form) {
     return new Promise(function (resolve) {
       var ov = buildSheet(form.title || 'Form');
@@ -238,17 +333,26 @@
       scroll.addEventListener('touchcancel', endPinch, { passive: true });
       var msg = ov.querySelector('#kt-ff-msg');
       var submitBtn = ov.querySelector('#kt-ff-submit');
+      if (form.reviewMode) { submitBtn.textContent = 'Save changes'; }
       var hint = ov.querySelector('#kt-ff-hint');
       var done = false;
 
+      /* REVIEW MODE RESOLVES WITH THE DOCUMENT, not a boolean.
+
+         The normal path submits the form itself and only needs to say whether that
+         happened. A review has no submit of its own - the agency is amending the answers
+         before counter-signing - so it hands the rebuilt PDF back to its caller, which
+         attaches it to the counter-signature instead. */
       function close(result) {
         if (done) return; done = true;
         document.body.style.overflow = prevOverflow;
         ov.remove();
-        resolve(!!result);
+        resolve((result && typeof result === 'object') ? result : !!result);
       }
       ov.querySelector('#kt-ff-close').addEventListener('click', function () {
-        if (dirty && !w.confirm('Close without submitting? Anything you typed will be lost.')) return;
+        if (dirty && !w.confirm(form.reviewMode
+              ? 'Close without saving? Your changes to the form will be lost.'
+              : 'Close without submitting? Anything you typed will be lost.')) { return; }
         close(false);
       });
 
@@ -264,7 +368,10 @@
       // Re-read the draft from the server on open. The caller passes what it had
       // when the list was rendered, which goes stale the moment a draft is saved —
       // relying on it alone is how "nothing was saved" happens.
-      var draftReady = KT.Api.get('/managed-forms/assigned').then(function (d) {
+      /* The signed page is handed its own draft (if any) by the server, so it must not
+         call the authenticated list — that would 401 and, worse, the catch below would
+         hide it as "no draft". */
+      var draftReady = noAuth(form) ? Promise.resolve() : KT.Api.get('/managed-forms/assigned').then(function (d) {
         var list = (d && d.forms) || [];
         for (var i = 0; i < list.length; i++) {
           if (String(list[i].id) === String(form.id) && list[i].draft_values) {
@@ -387,7 +494,9 @@
       draftBtn.addEventListener('click', function () {
         draftBtn.disabled = true; draftBtn.textContent = 'Saving…';
         msg.style.color = '#64748B'; msg.textContent = '';
-        KT.Api.post('/managed-forms/' + form.id + '/draft', { field_values: collectValues(annotationStorage, fieldMap) })
+        ffPost(form, '/managed-forms/' + form.id + '/draft',
+               { field_values: collectValues(annotationStorage, fieldMap) },
+               form.links && form.links.draft)
           .then(function () {
             // Saving a draft ends the sitting — close the sheet rather than leaving
             // the user staring at the form wondering whether it took.
@@ -403,11 +512,37 @@
       });
 
       submitBtn.addEventListener('click', function () {
+        var values = collectValues(annotationStorage, fieldMap);
+
+        /* ── REVIEW: rebuild the document and hand it back ───────────────────
+
+           No signature is asked for here. The agency signs once, on the
+           counter-signature step, and asking twice would put the reviewer's mark in
+           the SIGNER's box - which is precisely the confusion this whole feature
+           exists to avoid. The parent's own signature is re-embedded so the rebuilt
+           document still shows who signed it, and which fields the agency changed is
+           reported by the caller on the counter-signature page. */
+        if (form.reviewMode) {
+          submitBtn.disabled = true; submitBtn.textContent = 'Saving\u2026';
+          msg.style.color = '#64748B'; msg.textContent = 'Rebuilding the form\u2026';
+          fillAndFlatten(pdfBytes, values, form.reviewSignature || null,
+              form.reviewSignerName || '', form.reviewSignedOn || '')
+            .then(function (b64) {
+              if (!b64) { throw new Error('The form could not be rebuilt.'); }
+              close({ base64: b64, values: values });
+            })
+            .catch(function (e) {
+              submitBtn.disabled = false; submitBtn.textContent = 'Save changes';
+              msg.style.color = '#B91C1C';
+              msg.textContent = (e && e.message) || 'Could not save the changes.';
+            });
+          return;
+        }
+
         if (!KT.signaturePad) {
           msg.style.color = '#B91C1C'; msg.textContent = 'Signature pad unavailable.';
           return;
         }
-        var values = collectValues(annotationStorage, fieldMap);
         KT.signaturePad({
           title: 'Sign: ' + (form.title || 'form'),
           subtitle: 'Draw your signature to submit this completed form.',
@@ -429,11 +564,10 @@
               return null;
             })
             .then(function (filledB64) {
-              return KT.Api.post('/managed-forms/' + form.id + '/sign', {
+              return ffSubmit(form, '/managed-forms/' + form.id + '/sign', {
                 signature: sigDataUrl,
                 field_values: values,
-                filled_file: filledB64 || null,
-              });
+              }, filledB64, form.links && form.links.submit);
             })
             .then(function () {
               if (KT.toast) KT.toast('✅', 'Form submitted', 'Thank you — your completed form has been filed.', '#16A34A');
@@ -452,7 +586,15 @@
   /** Let the browser paint before the next chunk of work. */
   function yieldFrame() {
     return new Promise(function (res) {
-      (w.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () { setTimeout(res, 0); });
+      /* rAF DOES NOT FIRE ON A HIDDEN TAB, and this yield sits between every page and
+         every batch of fields - so a form opened and then backgrounded stopped rendering
+         mid-way and sat on "Preparing the form...". The fallback above only covers a
+         browser with no rAF at all, which is not the case that bites. Race a timer
+         against it, the same way kt-animate had to after the identical wedge. */
+      var done = false;
+      function go() { if (done) { return; } done = true; res(); }
+      (w.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () { setTimeout(go, 0); });
+      setTimeout(go, 250);
     });
   }
 

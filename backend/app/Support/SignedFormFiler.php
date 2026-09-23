@@ -93,6 +93,67 @@ final class SignedFormFiler
     }
 
     /**
+     * File everything this ONE person has signed that is not filed yet.
+     *
+     * The hook for "the account did not exist when the form was signed". Filing happens
+     * at signature time and is best-effort by design - it must never fail a submission -
+     * which means a form signed against an account that is later created, renamed or
+     * repaired can sit unfiled with nobody the wiser. Running this when a user is
+     * created or onboarded closes that window for them specifically, cheaply, instead of
+     * waiting for the nightly pass.
+     *
+     * Cheap on purpose: it looks only at sign-offs with no document, so the normal case
+     * (everything already filed) is one indexed query and no writes.
+     *
+     * @return int how many were newly filed
+     */
+    public static function syncForUser(int $userId): int
+    {
+        if ($userId <= 0) {
+            return 0;
+        }
+
+        $ids = DB::table('managed_form_signoffs as s')
+            ->leftJoin('documents as d', function ($j) {
+                $j->on('d.source_id', '=', 's.id')->where('d.source_type', '=', self::SOURCE);
+            })
+            ->where('s.user_id', $userId)
+            ->whereNotNull('s.signed_at')
+            ->whereNull('d.id')
+            ->pluck('s.id');
+
+        $n = 0;
+        foreach ($ids as $id) {
+            self::file((int) $id);
+            $n++;
+        }
+
+        return $n;
+    }
+
+    /**
+     * Sign-offs that are signed but have no filed document, across the platform.
+     *
+     * Separate from backfill() because the answer is worth SEEING: a number that should
+     * always be zero is a working alarm, and one that is quietly non-zero is the bug this
+     * whole mechanism exists to prevent.
+     *
+     * @return int
+     */
+    public static function unfiledCount(?int $agencyId = null): int
+    {
+        return DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->leftJoin('documents as d', function ($j) {
+                $j->on('d.source_id', '=', 's.id')->where('d.source_type', '=', self::SOURCE);
+            })
+            ->whereNotNull('s.signed_at')
+            ->whereNull('d.id')
+            ->when($agencyId, fn ($q) => $q->where('f.agency_id', $agencyId))
+            ->count();
+    }
+
+    /**
      * Every sign-off that has no document yet, filed.
      *
      * Used by the one-off backfill and safe to run again: file() keys on the source pair,

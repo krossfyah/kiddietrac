@@ -65,8 +65,24 @@ final class EmailTemplate
         $useKtHeader = ($brand['logo_url'] === $ktDefaultLogo);
         $titleBlock = '';
         if ($useKtHeader) {
-            $headerRow = '<tr><td style="padding:0;line-height:0;font-size:0;">'
-                . '<img src="https://app.kiddietrac.com/email-header.png" alt="KiddieTrac — Smart Childcare Management Platform" width="620" style="display:block;width:100%;max-width:620px;height:auto;border:0;border-radius:16px 16px 0 0;"></td></tr>';
+            /* THE HEADER MUST SURVIVE IMAGES BEING OFF.
+
+               This banner used to be nothing but a remote PNG, and the eyebrow/title
+               sit in the card BELOW it -- so in Gmail, which blocks remote images by
+               default, the entire header vanished and the mail arrived as plain text
+               on white. It looked right in Outlook only because Outlook had already
+               downloaded the image. "Branded in Outlook, bare in Gmail" is that
+               difference and nothing else.
+
+               Two changes, neither of which alters how it looks once the image loads:
+               a bgcolor sampled from the artwork's own left edge (#021B51), so a
+               blocked image leaves a branded navy band rather than nothing, and alt
+               text styled white so it is legible on that band instead of invisible.
+
+               The source PNG was 1920x819 and 1042 KB for a 620pt-wide slot. It is
+               now a 1240px JPEG at 58 KB -- the same picture, 94% lighter. */
+            $headerRow = '<tr><td bgcolor="#021B51" style="padding:0;line-height:0;font-size:0;background-color:#021B51;border-radius:16px 16px 0 0;">'
+                . '<img src="https://app.kiddietrac.com/email-header-v2.jpg" alt="KiddieTrac — Smart Childcare Management Platform" width="620" style="display:block;width:100%;max-width:620px;height:auto;border:0;border-radius:16px 16px 0 0;color:#FFFFFF;font-size:15px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;"></td></tr>';
             $titleBlock = ($eyebrow ? '<div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#1BA7AC;margin-bottom:4px;">' . $eyebrow . '</div>' : '')
                 . '<div class="kt-h" style="font-size:22px;font-weight:800;color:#0B2545;line-height:1.2;">' . $title . '</div>'
                 . ($subtitle ? '<div style="font-size:14px;color:#64748B;margin-top:4px;">' . $subtitle . '</div>' : '')
@@ -99,6 +115,17 @@ final class EmailTemplate
             // stayed dark on the dark card and became unreadable. !important in a media
             // query outranks an inline style, so the text is reclaimed explicitly.
             . '.kt-card p,.kt-card div,.kt-card span,.kt-card td,.kt-card th,.kt-card li{color:#D6DEE9 !important;}'
+            /* CALLOUTS IN DARK MODE.
+               calloutBox paints a LIGHT tint inline (#EFF6FF and friends) while the rule
+               above forces near-white text onto every td in the card. The result was a
+               box whose bold labels - "Form:", "Note from the reviewer" - were white on
+               pale blue, i.e. gone. Every email that uses a callout was affected, not
+               just one. The fill goes dark and the 4px tone border stays, so info /
+               warning / danger / success still read apart. Specificity matters here:
+               `.kt-card td` is (0,1,1), so this must be (0,2,1) to win. */
+            . '.kt-card td.kt-callout,td.kt-callout{background:#1B2740 !important;color:#D6DEE9 !important;}'
+            . '.kt-card td.kt-callout strong,td.kt-callout strong{color:#F1F5F9 !important;}'
+            . '.kt-card td.kt-callout a,td.kt-callout a{color:#7CC3E8 !important;}'
             . '.kt-card .kt-muted,.kt-card small{color:#9AA8BC !important;}'
             // Buttons keep their own contrast - they sit on a solid brand colour, so the
             // reclaim above would make the label unreadable in the other direction.
@@ -179,7 +206,7 @@ final class EmailTemplate
         ];
         $p = $palette[$tone] ?? $palette['info'];
         return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="margin:18px 0;">'
-            . '<tr><td style="background:' . $p['bg'] . ';border-left:4px solid ' . $p['border'] . ';border-radius:8px;padding:12px 14px;font-size:13px;color:' . $p['fg'] . ';line-height:1.4;">'
+            . '<tr><td class="kt-callout" style="background:' . $p['bg'] . ';border-left:4px solid ' . $p['border'] . ';border-radius:8px;padding:12px 14px;font-size:13px;color:' . $p['fg'] . ';line-height:1.4;">'
             . $message
             . '</td></tr></table>';
     }
@@ -403,9 +430,47 @@ final class EmailTemplate
                 . 'Powered by <a href="https://www.kiddietrac.com" style="color:#94A3B8;text-decoration:none;font-weight:700;">KiddieTrac</a> — The Smart Childcare Management Platform.<br>'
                 . '🌐 <a href="https://www.kiddietrac.com" style="color:#94A3B8;text-decoration:none;">www.kiddietrac.com</a>'
                 . ' &nbsp;·&nbsp; ✉️ <a href="https://www.kiddietrac.com/#subscribe" style="color:#94A3B8;text-decoration:none;">Subscribe for updates</a>'
+                /* Inside the powered_by block on purpose: a white-label agency's mail
+                   carries their branding, not ours, so it must not assert our copyright
+                   either. The year is the sending year, not a constant to go stale. */
+                . '<br>&copy; ' . date('Y') . ' KiddieTrac. All Rights Reserved.'
                 . '</div>';
         }
         return $html;
+    }
+
+    /**
+     * THE SAME FOOTER, FOR A PAGE RATHER THAN AN EMAIL (2026-09-18).
+     *
+     * Anthony, on the text-alert consent page: "at the bottom it shows KiddieTrac change
+     * this to show the typical KiddieTrac footer".
+     *
+     * It said the word and nothing else. The signed pages people reach from an email -
+     * consent, a form to sign, a file to upload - are the ones seen by somebody who is not
+     * signed in and may not recognise us, so they are exactly where the contact route and
+     * the legal links matter. Wording is kept identical to footer() above so the page and
+     * the email that led to it do not say different things; it is separate because that
+     * one is built around an agency's own branding block and an email's table layout.
+     */
+    public static function pageFooterHtml(): string
+    {
+        $muted = 'color:#94A3B8;text-decoration:none;';
+
+        return '<div style="margin-top:18px;font-size:11.5px;color:#94A3B8;line-height:1.7;text-align:center;">'
+            . '<div style="color:#64748B;">You\'re receiving this from <strong style="color:#475569;">KiddieTrac</strong>. '
+            . 'Please don\'t reply — <strong>noreply@kiddietrac.com</strong> is not a monitored inbox. '
+            . 'For help, contact your site administrator or our sales &amp; support team at '
+            . '<a href="mailto:info@kiddietrac.com" style="color:#1F6080;text-decoration:none;">info@kiddietrac.com</a>.</div>'
+            . '<div style="margin-top:10px;">'
+            . '<a href="https://www.kiddietrac.com/privacy" style="color:#1F6080;text-decoration:none;">Privacy Policy</a>'
+            . ' &nbsp;·&nbsp; <a href="https://www.kiddietrac.com/terms" style="color:#1F6080;text-decoration:none;">Terms of Use</a>'
+            . '</div>'
+            . '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0;font-size:11px;">'
+            . 'Powered by <a href="https://www.kiddietrac.com" style="' . $muted . 'font-weight:700;">KiddieTrac</a> — The Smart Childcare Management Platform.<br>'
+            . '🌐 <a href="https://www.kiddietrac.com" style="' . $muted . '">www.kiddietrac.com</a>'
+            . ' &nbsp;·&nbsp; ✉️ <a href="https://www.kiddietrac.com/#subscribe" style="' . $muted . '">Subscribe for updates</a>'
+            . '<br>&copy; ' . date('Y') . ' KiddieTrac. All Rights Reserved.'
+            . '</div></div>';
     }
 
     private static function absoluteUrl(string $maybeRelative): string
