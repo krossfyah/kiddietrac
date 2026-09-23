@@ -265,6 +265,43 @@ html.kt-gating .loading-state{visibility:hidden!important;}
 }catch(e){}})();
 </script>
 <script>
+/* THE ROLE CLASS, AT PARSE TIME (2026-09-23).
+
+   Every phone-sized rule for the header strip is keyed on body.role-* — 149 rules
+   across five stylesheets. The shell sets that class, but only once app-v2-shell.js
+   has parsed, and it is one of 162 scripts totalling 3.19MB. On a phone that is
+   seconds, and until then the sidebar renders at DESKTOP proportions: measured at
+   390px, the wordmark is 159x82 instead of 66x34 and the brand block 195x112 instead
+   of 102x64. That is the reported "icons and images are big, then go normal" on a
+   first APK login. The boot cover usually hides it, but the cover has a 10s cap and
+   a cold first launch can outlast it.
+
+   Nothing here needs the network: the role is already in storage, put there by the
+   login that just happened (and restored by the biometric block above). Reading it
+   inline costs microseconds and gets the class on <body> before the first paint.
+
+   It is a GUESS from cache, so it is labelled. app-v2-shell removes it if the
+   authoritative role turns out to differ — a stale cached role must not outlive
+   the real one. */
+(function () { try {
+  var raw = sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user');
+  if (!raw) return;
+  var u = JSON.parse(raw) || {};
+  /* Same precedence the shell uses: an active view-as wins, then role_key — the
+     singular field the portal actually gates on — then the array. */
+  var role = null;
+  try { role = sessionStorage.getItem('kt_view_as') || null; } catch (e) {}
+  role = role || u.role_key || u.role || (u.roles && u.roles.length ? u.roles[0] : null);
+  if (!role) return;
+  var cls = 'role-' + String(role).replace(/_/g, '-');
+  var b = document.body;
+  if (!b) return;
+  b.classList.add(cls);
+  if (role === 'agency_admin' || role === 'centre_director') b.classList.add('layout-sidebar');
+  b.setAttribute('data-kt-early-role', cls);
+} catch (e) {} })();
+</script>
+<script>
 (function(){
 /* Hand the NATIVE (Capacitor) splash off to this web splash immediately so the
    app shows ONE continuous boot instead of native-splash-then-web-splash. */
@@ -381,7 +418,7 @@ function showReloadGate(){
   <script src="/js/kt-parent-chrome.js?v=v20260906greet1" defer></script>
   <script src="/js/session-timeout.js?v=202609090500" defer></script>
   <script src="/js/kt-illustrations.js?v=20260811greet" defer></script>
-  <script src="/js/app-v2-shell.js?v=20260923sil1" defer></script>
+  <script src="/js/app-v2-shell.js?v=20260923role1" defer></script>
   <!-- Off unless localStorage.kt_diag === "1". Records what TRIGGERED each
        re-render, how long the cover held, and which files were still writing
        afterwards. Exists because the automation browser is always document.hidden,

@@ -2676,6 +2676,22 @@
     // threw during boot and left a blank shell with nothing to act on. Boot without the
     // role class instead, and say what is wrong.
     const roleClass = role ? ('role-' + role.replace('_', '-')) : null;
+
+    /* An EARLY GUESS may already be on <body>, applied inline at parse time from the
+       cached user so the phone header is not desktop-sized for the whole boot (see
+       dashboard.src.html). It is a guess from cache, and a cached role can be stale —
+       so if the authoritative role disagrees, take the guess off before adding the
+       real one. Leaving both would style the page as two roles at once. */
+    try {
+      const early = document.body.getAttribute('data-kt-early-role');
+      if (early) {
+        if (early !== roleClass) {
+          document.body.classList.remove(early);
+          if (!isSidebarRole) document.body.classList.remove('layout-sidebar');
+        }
+        document.body.removeAttribute('data-kt-early-role');
+      }
+    } catch (e) {}
     if (isSidebarRole && roleClass) {
       document.body.classList.add('layout-sidebar', roleClass);
     } else {
