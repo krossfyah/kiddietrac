@@ -318,6 +318,12 @@ final class SmsConsentController extends Controller
             'sms_consent_text' => self::CONSENT_VERSION . ' :: ' . self::CONSENT_TEXT,
             'updated_at' => now(),
         ]);
+
+        /* The written record, emailed to the person (2026-09-18). AFTER the update, so it
+           quotes the wording actually stored rather than what we were about to store.
+           Both helpers do this, which covers the app toggle and a START/YES from the
+           handset in one place. See App\Services\SmsConsentReceipt. */
+        \App\Services\SmsConsentReceipt::send($userId, true, $source);
     }
 
     private function optOut(int $userId, string $source): void
@@ -336,6 +342,11 @@ final class SmsConsentController extends Controller
             'sms' => 0,
             'updated_at' => now(),
         ]);
+
+        /* A NO IS ALSO A RECORD. Anthony asked for a confirmation "once you opt'd in or
+           do not opt'd in" - and the no is the one more likely to be disputed later, so
+           it is the one that most needs a copy in the person's own inbox. */
+        \App\Services\SmsConsentReceipt::send($userId, false, $source);
     }
 
     /**

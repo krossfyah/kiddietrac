@@ -660,6 +660,35 @@
     t.appendChild(thead);
 
     var tb = Dom.el('tbody');
+    /* A CELL CAP ON A td DOES NOTHING (2026-09-18).
+
+       Anthony: "the audit table where the entity column is now much wider and has
+       changed as to how it was prior."
+
+       The Action cell already carried max-width:360px and had since it was written. It
+       never worked: this table is table-layout:auto, and the auto algorithm sizes each
+       column from its CONTENT - a max-width on the td itself is advisory and the browser
+       ignores it. Measured live: that cell was 468px wide inside a 1585px table.
+
+       Nothing changed in this file. What changed is the DATA. The Action column prints
+       the payload's ready-made `summary` verbatim, uncapped, and yesterday's billing work
+       wrote the three longest summaries the log has ever held - 452, 414 and 215
+       characters (invoice.renumbered lists every invoice it renumbered, by number). 49 of
+       716 summary rows are over 90 characters, and the longest are the newest, so they
+       all land on page one. One row stretched the column and squeezed every other.
+
+       The constraint has to go on a BLOCK INSIDE the cell, where max-width is honoured,
+       and the text is clamped to two lines. Nothing is lost: clicking the row opens the
+       detail modal, which shows the full Details line and the raw payload, and the full
+       text is on the title attribute for a hover. */
+    var clamp = function (text, lines, width) {
+      return Dom.el('div', {
+        style: 'max-width:' + width + 'px;display:-webkit-box;-webkit-line-clamp:' + lines + ';'
+             + '-webkit-box-orient:vertical;overflow:hidden;word-break:break-word;',
+        title: text,
+      }, text);
+    };
+
     var iconFor = function (a) {
       a = a || '';
       if (ACTION_ICONS[a]) return ACTION_ICONS[a];
@@ -694,14 +723,21 @@
         title: l.action || '',
       }, rowActionLabel(l));
       actLine.appendChild(lbl);
+      actLine.style.cssText = 'max-width:360px;word-break:break-word;';
       actCell.appendChild(actLine);
-      if (l.summary) actCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;margin-top:3px;word-break:break-word;' }, l.summary));
+      if (l.summary) {
+        var sm = clamp(l.summary, 2, 360);
+        sm.style.cssText += 'font-size:11px;color:#6B7280;margin-top:3px;line-height:1.45;';
+        actCell.appendChild(sm);
+      }
       row.appendChild(actCell);
 
       // Entity — the resolved NAME with a plain-English type label; no raw ids.
       var entCell = Dom.el('td', { style: 'padding:10px 14px;color:#374151;vertical-align:top;' });
       if (l.entity_name) {
-        entCell.appendChild(Dom.el('div', { style: 'font-weight:600;color:#111827;' }, l.entity_name));
+        var en = clamp(l.entity_name, 2, 220);
+        en.style.cssText += 'font-weight:600;color:#111827;';
+        entCell.appendChild(en);
         if (l.entity_type) entCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, prettyEntityType(l.entity_type)));
       } else {
         entCell.appendChild(Dom.el('div', { style: 'color:#374151;' }, l.entity_type ? prettyEntityType(l.entity_type) : '—'));
@@ -711,7 +747,11 @@
       // Actor
       var actorCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;' });
       actorCell.appendChild(Dom.el('div', { style: 'font-weight:600;color:#111827;' }, l.actor_name || 'system'));
-      if (l.actor_email) actorCell.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, l.actor_email));
+      if (l.actor_email) {
+        var ae = clamp(l.actor_email, 1, 220);
+        ae.style.cssText += 'font-size:11px;color:#64748B;';
+        actorCell.appendChild(ae);
+      }
       row.appendChild(actorCell);
 
       // Where it came from. A raw payload blob was noise — nobody audits by
