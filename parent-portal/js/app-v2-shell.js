@@ -1213,9 +1213,30 @@
        sitting third behind a title and a tab strip is one that was meant to be at the
        top, whereas one halfway down the page belongs where the screen put it. */
     var par = banner.parentElement;
-    if (par && par.firstElementChild !== banner) {
-      var idx = [].indexOf.call(par.children, banner);
-      if (idx > 0 && idx <= 2) { par.insertBefore(banner, par.firstElementChild); changed = true; }
+    if (par) {
+      /* THE TOP BAR IS CHROME, NOT THE SCREEN.
+         This hoisted the banner to par.firstElementChild, and on any screen whose hero is
+         a DIRECT child of #appMain that first child is #kt-topbar — so the banner was
+         lifted ABOVE the greeting bar and the page read hero, then greeting, then content.
+         Immunizations was the visible one; screens that wrap their hero in a padding div
+         were untouched, which is why it looked like one screen's bug rather than this
+         function's. heroAnchor() below has always known about the bar; this did not.
+
+         Walked rather than matched with :scope, which older WebViews in the packaged app
+         do not all support — and a normaliser that throws leaves every banner unshimmered. */
+      var bar = null;
+      for (var bi = 0; bi < par.children.length; bi++) {
+        if (par.children[bi].id === 'kt-topbar') { bar = par.children[bi]; break; }
+      }
+      var anchor = bar ? bar.nextElementSibling : par.firstElementChild;
+      var base = bar ? 1 : 0;
+      if (anchor !== banner) {
+        var idx = [].indexOf.call(par.children, banner);
+        /* Same bounded window as before, measured from the first real content slot: a
+           banner sitting third behind a title and a tab strip was meant to be at the top,
+           one halfway down the page belongs where the screen put it. */
+        if (idx > base && idx <= base + 2) { par.insertBefore(banner, anchor); changed = true; }
+      }
     }
     return changed;
   }
