@@ -952,17 +952,65 @@
         + ';color:' + fg + ';font-size:12.5px;font-weight:700;cursor:pointer';
     }
 
-    function iconFor(d) {
-      switch (String(d.kind || '')) {
-        case 'PDF': return '📄';
-        case 'Spreadsheet': return '📊';
-        case 'Presentation': return '📑';
-        case 'Word': case 'Text': return '📝';
-        case 'Image': return '🖼️';
-        case 'Video': return '🎬';
-        case 'Archive': return '🗜️';
-        default: return '📎';
+    /* A REAL FILE ICON, the shape a desktop uses: a white sheet with a folded corner and
+       a coloured tab carrying the extension. Emoji were close enough to read as decoration
+       and not close enough to scan — three of the eight rendered as the same beige page on
+       Windows, so a deck and a spreadsheet looked identical in the column meant to tell
+       them apart.
+
+       Drawn as inline SVG rather than fetched: the artifact CSP blocks outside images, an
+       icon font is another thing to load before the shelf can be read, and a sheet of paper
+       is eleven elements. Colours are the ones people already associate with the formats. */
+    var FILE_COLOURS = {
+      PDF: '#D93025', Word: '#2B579A', Spreadsheet: '#217346', Presentation: '#D24726',
+      Image: '#7C3AED', Video: '#0EA5E9', Archive: '#B45309', Text: '#475569',
+    };
+
+    function iconFor(d, px) {
+      var size = px || 34;
+      var kind = String(d.kind || '');
+      var colour = FILE_COLOURS[kind] || '#94A3B8';
+      var ext = String(d.extension || '').toUpperCase().slice(0, 4);
+
+      var ns = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 32 40');
+      svg.setAttribute('width', String(size));
+      svg.setAttribute('height', String(Math.round(size * 40 / 32)));
+      svg.setAttribute('aria-hidden', 'true');
+      svg.style.cssText = 'flex:none;display:block;';
+
+      function node(name, attrs) {
+        var n = document.createElementNS(ns, name);
+        Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+        return n;
       }
+
+      // the sheet, with the top-right corner cut away
+      svg.appendChild(node('path', {
+        d: 'M4 1.5h14.5L28 11v27.5H4z', fill: '#fff', stroke: '#CBD5E1', 'stroke-width': '1.4',
+        'stroke-linejoin': 'round',
+      }));
+      // the fold
+      svg.appendChild(node('path', {
+        d: 'M18.5 1.5V11H28', fill: '#EEF2F7', stroke: '#CBD5E1', 'stroke-width': '1.4',
+        'stroke-linejoin': 'round',
+      }));
+      // the coloured tab across the lower half
+      svg.appendChild(node('rect', {
+        x: '2', y: '21', width: '26', height: '13', rx: '2.5', fill: colour,
+      }));
+      if (ext) {
+        var label = node('text', {
+          x: '15', y: '30.4', 'text-anchor': 'middle', fill: '#fff',
+          'font-size': ext.length > 3 ? '7' : '8.4',
+          'font-weight': '800', 'font-family': 'system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
+          'letter-spacing': '.2',
+        });
+        label.textContent = ext;
+        svg.appendChild(label);
+      }
+      return svg;
     }
     function sizeOf(d) {
       var b = Number(d.file_size || 0);
@@ -1067,7 +1115,7 @@
         }
 
         var nameCell = [el('div', { style: 'display:flex;gap:10px;align-items:flex-start' }, [
-          el('span', { style: 'font-size:20px;line-height:1.1;flex:none' }, [iconFor(d)]),
+          iconFor(d, 30),
           el('div', { style: 'min-width:0' }, [
             // The real name, extension and all.
             el('div', { style: 'font-weight:700;color:#0F172A;word-break:break-word' }, [d.file_name || d.title || 'Document']),
@@ -1082,10 +1130,16 @@
 
         tb.appendChild(el('tr', { style: 'border-bottom:1px solid #F1F5F9' }, [
           td(nameCell, '', String(d.file_name || d.title || '').toLowerCase()),
-          td([el('span', {
-            style: 'display:inline-block;background:#F1F5F9;color:#334155;border:1px solid #E2E8F0;'
-              + 'border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;white-space:nowrap',
-          }, [d.kind || 'File'])], 'white-space:nowrap', String(d.kind || '')),
+          /* The EXTENSION first: that is what somebody scanning this column is looking
+             for, with the human word beneath it. */
+          td([el('div', { style: 'display:flex;flex-direction:column;gap:3px;align-items:flex-start' }, [
+            el('span', {
+              style: 'display:inline-block;background:' + (FILE_COLOURS[String(d.kind || '')] || '#94A3B8')
+                + ';color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:800;'
+                + 'letter-spacing:.6px;white-space:nowrap',
+            }, [d.extension ? String(d.extension).toUpperCase() : '\u2014']),
+            el('span', { style: 'color:#64748B;font-size:11.5px;white-space:nowrap' }, [d.kind || 'File']),
+          ])], 'white-space:nowrap', String(d.extension || d.kind || '')),
           td([d.folder
                 ? el('span', { style: 'color:#334155' }, ['📁 ' + d.folder])
                 : el('span', { style: 'color:#CBD5E1' }, ['—'])], 'white-space:nowrap', String(d.folder || '')),

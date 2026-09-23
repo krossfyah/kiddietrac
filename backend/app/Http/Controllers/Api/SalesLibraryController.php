@@ -76,13 +76,19 @@ class SalesLibraryController extends Controller
             'documents' => $rows->map(fn ($d) => [
                 'id' => (int) $d->id,
                 'title' => $d->title,
-                /* THE NAME WITH ITS EXTENSION. `title` is what somebody typed and may say
-                   nothing about the format; the extension is how a reader knows whether
-                   they are opening a deck or a spreadsheet. Falls back to the title for
-                   the rows uploaded before this column existed. */
-                'file_name' => $d->file_name ?: $d->title,
-                'extension' => self::extensionOf($d->file_name ?: $d->title),
-                'kind' => self::kindOf($d->file_name ?: $d->title, $d->file_type),
+                /* THE NAME WITH ITS EXTENSION.
+                   `title` is what somebody typed and usually says nothing about the
+                   format. `file_name` holds the uploaded name — but only for rows filed
+                   since that column existed, and falling back to the bare title gave
+                   "KiddieTrac Presentation 09232026" with no .pptx anywhere on the row.
+
+                   THE STORED PATH IS THE ONE SOURCE THAT IS ALWAYS RIGHT: store() writes
+                   the file as `<uuid>.<ext>`, so every row that has a file has its real
+                   extension in file_url whatever else is missing. Derive from there and
+                   an eight-year-old row displays correctly without touching the data. */
+                'file_name' => self::displayName($d->file_name, $d->title, $d->file_url),
+                'extension' => self::extensionOf($d->file_url) ?: self::extensionOf($d->file_name ?: $d->title),
+                'kind' => self::kindOf($d->file_url ?: ($d->file_name ?: $d->title), $d->file_type),
                 'folder_id' => $d->folder_id ? (int) $d->folder_id : null,
                 'folder' => $d->folder_name,
                 'notes' => $d->notes,
@@ -254,6 +260,25 @@ class SalesLibraryController extends Controller
                 ? ('Folder deleted. ' . $moved . ' file' . ($moved === 1 ? '' : 's') . ' moved to All files.')
                 : 'Folder deleted.',
         ]);
+    }
+
+    /**
+     * The name to show: the uploaded one, else the typed title with the real extension
+     * put back on it. Never invents an extension that is not in the stored path.
+     */
+    private static function displayName(?string $fileName, ?string $title, ?string $fileUrl): string
+    {
+        $name = trim((string) $fileName);
+        if ($name !== '') {
+            return $name;
+        }
+        $t = trim((string) $title) ?: 'Document';
+        $ext = self::extensionOf($fileUrl);
+        if (! $ext) {
+            return $t;
+        }
+        // Do not end up with "deck.pptx.pptx" when the title already carries it.
+        return mb_strtolower(self::extensionOf($t) ?: '') === $ext ? $t : ($t . '.' . $ext);
     }
 
     /** The bit after the last dot, when it looks like an extension at all. */
