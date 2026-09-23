@@ -35,6 +35,12 @@ class AgencyRouterTransport extends AbstractTransport
 
         $cfg = $this->agencyConfigForMessage($email);
 
+        /* NO sendmail fallback on the agency paths, deliberately. A white-labelled
+           agency sends from its own domain; relaying that through this server would
+           fail its SPF and land the mail in spam under the agency name. Better a
+           logged transport failure somebody can be told about. GraphTransport now
+           raises a TransportException for network faults too, so this fails cleanly
+           instead of as an unhandled crash. */
         if ($cfg && $cfg['provider'] === 'graph') {
             $email->from(new Address($cfg['from'], (string) ($cfg['from_name'] ?? '')));
             (new GraphTransport($cfg['graph']))->send($email, $envelope);
@@ -102,7 +108,18 @@ class AgencyRouterTransport extends AbstractTransport
                 {
                     try {
                         (new GraphTransport($this->graph))->send($message->getOriginalMessage(), $message->getEnvelope());
-                    } catch (TransportException $e) {
+                    } catch (\Throwable $e) {
+                        /* Throwable, not TransportException. The narrow catch WAS the
+                           defect: a DNS fault arrives as ConnectionException, which is
+                           not a TransportException, so it went straight past this net.
+                           GraphTransport now converts its own failures; this stays wide
+                           so the next transport that forgets cannot take mail down.
+
+                           Logged, because a silent fallback would hide a permanently
+                           broken Graph config behind mail that still appears to work. */
+                        \Illuminate\Support\Facades\Log::warning('Graph send failed, falling back to sendmail', [
+                            'error' => substr($e->getMessage(), 0, 300),
+                        ]);
                         (new SendmailTransport())->send($message->getOriginalMessage(), $message->getEnvelope());
                     }
                 }

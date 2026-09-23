@@ -15,8 +15,14 @@ use Symfony\Component\Mime\MessageConverter;
  * Sends mail through the Microsoft Graph API (app-only / client-credentials).
  *
  * Config (from PlatformSettings::applyMail): tenant, client_id, client_secret, from.
- * On ANY failure it throws a TransportException, which lets Laravel's failover
- * transport fall back to sendmail — so email can't go down if the secret lapses.
+ * EVERY failure leaves here as a TransportException. That is the contract the
+ * sendmail safety net in AgencyRouterTransport depends on, and until 2026-09-23
+ * it was only half true: both calls below go out through the Laravel HTTP client,
+ * which raises Illuminate\Http\Client\ConnectionException on a DNS or connect
+ * fault. That is not a TransportException, so it sailed past the net and killed
+ * the queued job with the mail still unsent. Four arrival notifications to real
+ * parents were lost that way on 22 and 23 Sep 2026, while sendmail was up
+ * the whole time.
  */
 class GraphTransport extends AbstractTransport
 {
@@ -39,14 +45,23 @@ class GraphTransport extends AbstractTransport
             throw new TransportException('Graph: no sender address configured.');
         }
 
-        $resp = Http::withToken($token)
-            ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
-            ->acceptJson()
-            ->timeout(20)
-            ->post('https://graph.microsoft.com/v1.0/users/'.rawurlencode($from).'/sendMail', [
-                'message' => $this->toGraphMessage($email, $from),
-                'saveToSentItems' => false,
-            ]);
+        /* A request that THREW never produced a response, so the failure has to be
+           converted here rather than inspected below. Anything already a
+           TransportException is re-thrown untouched so its message survives. */
+        try {
+            $resp = Http::withToken($token)
+                ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                ->acceptJson()
+                ->timeout(20)
+                ->post('https://graph.microsoft.com/v1.0/users/'.rawurlencode($from).'/sendMail', [
+                    'message' => $this->toGraphMessage($email, $from),
+                    'saveToSentItems' => false,
+                ]);
+        } catch (TransportException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new TransportException('Graph sendMail could not reach Microsoft: '.$e->getMessage(), 0, $e);
+        }
 
         if ($resp->status() !== 202) {
             throw new TransportException('Graph sendMail failed ('.$resp->status().'): '.substr((string) $resp->body(), 0, 300));
@@ -66,15 +81,23 @@ class GraphTransport extends AbstractTransport
         if ($cached) {
             return $cached;
         }
-        $r = Http::asForm()
-            ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
-            ->timeout(20)
-            ->post('https://login.microsoftonline.com/'.rawurlencode($cfg['tenant']).'/oauth2/v2.0/token', [
-                'client_id'     => $cfg['client_id'],
-                'client_secret' => $cfg['client_secret'],
-                'scope'         => 'https://graph.microsoft.com/.default',
-                'grant_type'    => 'client_credentials',
-            ]);
+        /* Minting the token reaches the network too, so it carries the same risk.
+           Returning null here would be actively misleading: the caller reports that
+           as an expired secret, which sends whoever reads the log into the Azure
+           portal to fix something that is not broken. */
+        try {
+            $r = Http::asForm()
+                ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                ->timeout(20)
+                ->post('https://login.microsoftonline.com/'.rawurlencode($cfg['tenant']).'/oauth2/v2.0/token', [
+                    'client_id'     => $cfg['client_id'],
+                    'client_secret' => $cfg['client_secret'],
+                    'scope'         => 'https://graph.microsoft.com/.default',
+                    'grant_type'    => 'client_credentials',
+                ]);
+        } catch (\Throwable $e) {
+            throw new TransportException('Graph: could not reach the token endpoint: '.$e->getMessage(), 0, $e);
+        }
         $tok = $r->json('access_token');
         if ($tok) {
             Cache::put($key, $tok, 3000);

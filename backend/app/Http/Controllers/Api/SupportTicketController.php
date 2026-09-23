@@ -578,7 +578,13 @@ final class SupportTicketController extends Controller
     private function notifyReporterResolved($ticket, string $status, $actor): void
     {
         try {
-            if (str_starts_with((string) $ticket->body, 'Automatically filed from a crash report')) {
+            /* BOTH machine prefixes. This matched only the CLIENT crash endpoint
+               ("...from a crash report"), while the server-side handler writes
+               "...from an unhandled server error" - 45 of the 77 auto-filed tickets on
+               2026-09-23, every one of them able to mail a "your request has been
+               resolved" to whichever user happened to be signed in when the server
+               threw. Matching the shared prefix covers both and any third filer. */
+            if (str_starts_with((string) $ticket->body, 'Automatically filed from ')) {
                 return;   // machine-filed; there is no correspondent
             }
             $uid = (int) ($ticket->raised_by_user_id ?? 0);

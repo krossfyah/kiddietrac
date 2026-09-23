@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -35,6 +36,12 @@ final class ProblemReport
      * De-duplication is by SUBJECT, matching the crash endpoint: the same fault
      * reported twenty times is one problem, not twenty tickets.
      *
+     * Held under a LOCK, because the bursts this exists for arrive all at once. A bad
+     * deploy breaks every in-flight poll in the same second, and on 2026-09-22 six
+     * requests each read "no open ticket with this subject", each found none, and each
+     * inserted one: tickets #93 to #98, one fault, six rows. Checking and inserting
+     * without a lock de-duplicates sequential reports and nothing else.
+     *
      * @return int|null  the ticket id, or null if nothing was filed
      */
     public static function fileTicket(
@@ -44,8 +51,23 @@ final class ProblemReport
         ?int $userId = null,
         string $priority = 'high'
     ): ?int {
+        $lock = null;
         try {
             $subject = mb_substr(trim($subject) !== '' ? $subject : 'Unknown problem', 0, 190);
+
+            /* Ten seconds is the lock, five is how long a caller will wait for it. Both
+               are generous for two queries, and the failure mode is deliberately soft:
+               if the lock cannot be taken we carry on unsynchronised rather than drop
+               the report, because a duplicate ticket is a far smaller problem than a
+               fault nobody hears about. */
+            try {
+                $lock = Cache::lock('problemreport:'.md5($subject), 10);
+                if (! $lock->block(5, null)) {
+                    $lock = null;
+                }
+            } catch (Throwable $e) {
+                $lock = null;
+            }
 
             $existing = DB::table('support_tickets')
                 ->where('category', 'technical')->where('status', 'open')
@@ -91,7 +113,16 @@ final class ProblemReport
         } catch (Throwable $e) {
             // Reporting a problem must never become one.
             Log::error('ProblemReport: could not file a ticket', ['error' => $e->getMessage()]);
+
             return null;
+        } finally {
+            // Every path out, including the two early returns above.
+            if ($lock) {
+                try {
+                    $lock->release();
+                } catch (Throwable $e) {
+                }
+            }
         }
     }
 
