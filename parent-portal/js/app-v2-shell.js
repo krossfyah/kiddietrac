@@ -17,6 +17,91 @@
 
   const { Auth, Api, Fmt, Dom } = window.KT;
 
+  /* ─── A PER-RENDER #appMain ─────────────────────────────────────────────────
+     THE PROBLEM. A screen is handed `main` (#appMain) and paints into it AFTER an
+     await. Navigate — or let a background refresh land — while that fetch is still in
+     flight, and the abandoned screen's late paint arrives in the screen that replaced
+     it. Serialising renders cannot reach this: that render already returned.
+
+     165 render paths in 50 files write to the handed container after an await. Guarding
+     each one (the liveEl() + generation pattern in screen-provider-day.js) is 165 edits
+     that must all stay correct forever. Swapping the NODE fixes all of them at once: a
+     stale writer keeps its reference and paints into an orphan, where nothing is seen.
+
+     WHAT IT COSTS. `#appMain` id-based CSS keeps working — 47 rules select `#appMain > *`
+     and they match the new node exactly as they did the old one. But a MutationObserver
+     binds to a NODE, so every observer watching #appMain stops silently at the swap. Ten
+     of them do: kt-animate, kt-banner-normalize, kt-clockbar, kt-mobile-tables,
+     kt-mobilenav, kt-phone, kt-reload-diag, role-widgets, screen-dashboard-widgets, and
+     the shell's own. Silently is the dangerous word — no error, just phone tables that
+     stop restacking and a clock bar that never reappears.
+
+     So the swap announces itself and the observers re-bind through observeMain() below.
+     Checked first: none of those files HOLDS the node across calls — every one resolves
+     it with getElementById at use time — so the binding is the only thing at risk. */
+  KT.observeMain = function (fn, opts) {
+    var options = opts || { childList: true, subtree: true };
+    var obs;
+    try { obs = new MutationObserver(fn); } catch (e) { return null; }
+
+    function bind() {
+      var m = document.getElementById('appMain');
+      try { obs.disconnect(); } catch (e) {}
+      if (m) { try { obs.observe(m, options); } catch (e) {} }
+    }
+
+    bind();
+    try { document.addEventListener('kt:main-swapped', bind); } catch (e) {}
+
+    return obs;
+  };
+
+  /* Replace #appMain with an empty node of the same identity, and hand the new one back.
+     Falls back to the old behaviour on ANY failure, and can be turned off outright with
+     window.__ktNoMainSwap — this sits on the path every screen in the portal renders
+     through, so it must never be the thing that takes the app down. */
+  function __ktSwapMain(main) {
+    try {
+      if (window.__ktNoMainSwap || !main || !main.parentNode) { Dom.clear(main); return main; }
+
+      var fresh = document.createElement(main.tagName);
+      /* EVERY attribute, including data-kt-pretty. It is applied 250ms after a
+         navigation, so a fresh node without it would drop the table styling on every
+         refresh and get it back a quarter-second later — a flash, which is the opposite
+         of what this work is for. */
+      for (var i = 0; i < main.attributes.length; i++) {
+        var a = main.attributes[i];
+        try { fresh.setAttribute(a.name, a.value); } catch (e) {}
+      }
+
+      /* #appMain is the ONE scroller on a phone. A fresh node starts at the top, which
+         would throw the reader back to the beginning of a list on every refresh. */
+      var top = 0;
+      try { top = main.scrollTop || 0; } catch (e) {}
+
+      main.parentNode.replaceChild(fresh, main);
+      try { fresh.scrollTop = top; } catch (e) {}
+
+      try {
+        document.dispatchEvent(new CustomEvent('kt:main-swapped', { detail: { node: fresh } }));
+      } catch (e) {
+        /* Older WebViews without the CustomEvent constructor still get their observers
+           back, because a failure here must not leave ten sweeps dead. */
+        try {
+          var ev = document.createEvent('Event');
+          ev.initEvent('kt:main-swapped', false, false);
+          document.dispatchEvent(ev);
+        } catch (e2) {}
+      }
+
+      return fresh;
+    } catch (e) {
+      try { Dom.clear(main); } catch (e2) {}
+
+      return main;
+    }
+  }
+
   // ──────────────── Role detection ─────────────────────────────
   const Roles = {
     primaryRoleOf(user) {
@@ -271,6 +356,25 @@
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'payment-providers',  label: 'Payment providers',       icon: '💳' },
+          /* SETTINGS, not Reseller. Backups are platform-level (one database sits behind
+             every agency, so the controller still requires platform_admin) but "where do
+             I check the backups" is a settings question, and Reseller is where the
+             billing-the-agencies screens live. Anthony went to Settings and did not find
+             it, which is the whole argument. */
+          ...(isPlatformAdmin_v22p34
+            ? [{ hash: 'backups', label: 'Backups', icon: '🗄️' }]
+            : []),
+          /* TEMPORARY, 2026-09-22 — REMOVE AFTER THE PASSKEY DEVICE TEST.
+
+             The APK has no address bar, so /passkey-check.html was unreachable from
+             inside the app - which is the ONE place the answer actually matters, because
+             a web view can refuse a ceremony it reports itself capable of. This is a
+             tappable way in, platform-admin only. Delete this entry and the screen
+             registration in screen-passkey-check.js once iPhone and Android have both
+             been read. */
+          ...(isPlatformAdmin_v22p34
+            ? [{ hash: 'passkey-check', label: 'Passkey check (temp)', icon: '🔑' }]
+            : []),
           /* Two-factor lives in the personal profile for EVERY role now — this entry
              used to be the exception, kept because agency admins and centre directors
              had no profile screen. They do as of 2026-09-01 (screen-settings registers
@@ -943,6 +1047,7 @@
     'marketing-site': 'Your public website.',
     'sms': 'Send a one-off text to staff or families.',
     'email-settings': 'The mailbox your agency sends from.',
+    'backups': 'The nightly copy of the platform database — when it last ran, and how many are kept.',
     'sms-settings': 'The carriers your agency texts and calls through.',
     'notifications': 'What the app tells people about, and how.',
     'tickets': 'Operational issues, tracked to resolution.',
@@ -1345,8 +1450,51 @@
     if (window.KT && KT.goBack) KT.goBack(); else window.ktBack();
   }, true);
 
+  /* THE ROLE YOU CHOSE, REMEMBERED FOR NEXT TIME (2026-09-17).
+
+     Anthony: "super admin logging into mobile APK can you default my role to super admin
+     or the last role that I chose when logging off please."
+
+     `kt_view_as` lives in sessionStorage and dies with the session, which is right - a
+     preview of a lower role should not outlive the sitting. What made it sticky on the
+     APK is that kt-biometric.js copied it into localStorage and restored it on every
+     unlock, so a role previewed once came back for good, and an unlock is the NORMAL way
+     into the app on a phone.
+
+     So the preference is recorded HERE instead, at the only moment somebody actually
+     chooses a role, and the biometric path no longer guesses.
+
+     KEYED TO THE USER. A device is shared - a director's tablet, a kiosk - and a
+     preference stored loose in localStorage would hand the next person to sign in the
+     previous person's role. The same trap as the active agency, which is session-only
+     for exactly this reason ([[kiddietrac-active-agency-localstorage]]). An entry whose
+     uid does not match the account signing in is ignored, not applied.
+
+     Choosing "Super admin (default)" is a choice too: it is stored as an empty role so
+     the next sign-in honours it rather than falling through to some older preference. */
+  window.ktViewAsPrefSave = function (role) {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      if (!u || !u.id) { return; }
+      localStorage.setItem('kt_view_as_pref', JSON.stringify({ uid: u.id, role: role || '' }));
+    } catch (e) {}
+  };
+
+  /** The remembered role for the account signing in, or null when there isn't one. */
+  window.ktViewAsPrefFor = function (userId) {
+    try {
+      var raw = localStorage.getItem('kt_view_as_pref');
+      if (!raw) { return null; }
+      var p = JSON.parse(raw);
+      if (!p || String(p.uid) !== String(userId)) { return null; }
+
+      return typeof p.role === 'string' ? p.role : null;
+    } catch (e) { return null; }
+  };
+
   window.ktViewAs = function (role) {
     try { if (role) sessionStorage.setItem('kt_view_as', role); else sessionStorage.removeItem('kt_view_as'); } catch (e) {}
+    window.ktViewAsPrefSave(role);
     // Drop the current hash so the new role lands on ITS home screen (e.g. a
     // parent's "today") instead of the previous role's page or a bogus #dashboard.
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
@@ -1541,10 +1689,16 @@
          itself. This fires regardless of what the render does. */
       /* Must outlast __ktWaitSettled's own ceiling, or the failsafe uncovers the
          screen in the middle of the wait it was meant to back up. */
-      window.__ktSnapKill = setTimeout(__ktDropSnapshot, 6000);
+      window.__ktSnapKill = setTimeout(__ktDropSnapshot, SNAP_KILL_MS);
       return snap;
     } catch (e) { return null; }
   }
+
+  /* How long the cover may hold, and how long entrance animations stay suppressed.
+     The second MUST be longer than the first: a suppression that expires while the
+     screen is still covered is a re-render the reader watches happen. */
+  var SNAP_KILL_MS = 6000;
+  var SILENT_WINDOW_MS = SNAP_KILL_MS + 1500;
 
   function __ktDropSnapshot(gen) {
     // Named a generation and it is not ours any more: a newer render owns this cover.
@@ -1556,6 +1710,14 @@
       var old = document.getElementById('kt-refresh-snap');
       if (old && old.parentNode) { old.parentNode.removeChild(old); }
       window.__ktSnapGen = null;
+      /* A GRACE ON THE WAY OUT. A screen that finishes painting on the same frame the
+         cover is removed would otherwise animate in full view — the cover did its job
+         right up to the moment it stopped. Only ever extends, never shortens, so a
+         navigation that legitimately wants its animations is unaffected: it sets the
+         window to 0 and nothing here raises it. */
+      if (window.__ktSilentUntil) {
+        window.__ktSilentUntil = Math.max(window.__ktSilentUntil, Date.now() + 800);
+      }
     } catch (e) {}
     /* ALWAYS, and outside the try above: if the clone is gone and #appMain is still
        hidden, the reader is looking at an empty page. Every failure path in this file
@@ -1944,7 +2106,7 @@
     var _ktSameScreen = (location.hash === window.__ktLastHash);
     var _ktPrevScroll = _ktSameScreen ? __ktScrollPos() : 0;
     window.__ktLastHash = location.hash;
-    const main = Dom.$('#appMain');
+    let main = Dom.$('#appMain');   // reassigned by __ktSwapMain below
     // Reset scroll to the top BEFORE we clear + render. If we only reset after
     // render, the shell's hashchange listener (registered before kt-mobilenav's)
     // paints the new, tall screen at the OLD scroll position for a frame first —
@@ -1978,10 +2140,60 @@
     try {
       _ktSilent = !!window.__ktSilentRefresh && _ktSameScreen;
       window.__ktSilentRefresh = false;
+
+      /* PUBLISH IT, so the decorators can see it too. (2026-09-21)
+
+         Anthony: "when the portal refreshes we still see the refresh as the icons,
+         images re-render etc."
+
+         _ktSilent was a local, used only to decide whether to lay the cover over the
+         screen. Everything else that runs after a render had no idea a refresh was
+         silent - and kt-animate in particular treats every card it has not seen before
+         as an ARRIVAL: opacity 0, 12px down, fade and slide in over half a second, count
+         the headline number up from zero, redraw the chart strokes.
+
+         Its guards are expando properties on the DOM nodes (__ktSeen, __ktRevealed,
+         __ktCounted). A refresh calls Dom.clear(main) and builds BRAND NEW nodes, so
+         nothing is remembered and the whole entrance replays - every 45 seconds, and
+         again ~600ms after every write, in this tab and every other one. The cards carry
+         the icons and the avatars, so what the reader sees is the screen dissolving and
+         rebuilding itself while they are using it.
+
+         A timestamp rather than a flag: the cards do not exist yet at this point. Almost
+         no screen here finishes inside its render function - it paints a placeholder,
+         returns, and fills in from a .then() a second or two later - so a flag consumed
+         on the next line would be long gone by the time the cards appear. The window
+         covers the render and its late paint; navigation clears it, because navigation
+         SHOULD look like something happened. */
+      /* IT HAS TO OUTLAST THE COVER. (2026-09-23)
+
+         This was 3000 while __ktSnapKill holds the cover for 6000, which left a
+         three-second hole: the screen is still hidden behind the clone, but the
+         animations are no longer suppressed. Anything arriving in that hole is treated
+         as an arrival — opacity 0, slide up, count the numbers from zero — and the
+         reader sees the tail of it the moment the cover lifts.
+
+         On a desk that hole is theoretical: a screen fills in well under three seconds
+         on wifi and the window never expires early. On the APK over mobile data three
+         seconds is an ordinary time for a screen to finish, which is exactly why this
+         reproduced on the phone and nowhere else. Same code, slower network, different
+         outcome.
+
+         Tied to the cover's own ceiling with a margin rather than to another hand-picked
+         number, so the two cannot drift apart again. */
+      window.__ktSilentUntil = _ktSilent ? (Date.now() + SILENT_WINDOW_MS) : 0;
     } catch (e) {}
     if (_ktSilent && main) { __ktSnapshot(main, (window.__ktRenderGen || 0) + 1); }
 
-    Dom.clear(main);
+    /* A FRESH NODE, not a cleared one — see __ktSwapMain. Anything still holding the old
+       #appMain (a screen that returned with its fetch in flight) now paints into an
+       orphan instead of into whatever replaced it.
+
+       AFTER the snapshot on purpose: __ktSnapshot clones the node it is given and sets
+       visibility:hidden on it, and the swap copies every attribute across — so the new
+       node inherits that hidden style and stays covered. __ktDropSnapshot re-queries
+       #appMain by id, so it un-hides whichever node is live by then. */
+    main = __ktSwapMain(main);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
 
     /* THIS RENDER'S GENERATION. Every deferred banner pass carries the number it was

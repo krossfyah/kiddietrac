@@ -102,6 +102,16 @@ class ParentImmunizationRecordController extends Controller
             ->get(['proof_document_url', 'vaccine', 'dose_label', 'administered_on'])
             ->groupBy('proof_document_url');
 
+        /* WHAT THE UPLOADER SAID IT SHOWS, which is a different question from what was
+           read off it above. A card with a claim and no doses is one nobody has
+           transcribed yet — the single most useful thing to know when looking at a pile
+           of them. */
+        $claims = DB::table('immunization_record_claims')
+            ->whereIn('document_id', $docs->pluck('id')->all() ?: [0])
+            ->orderBy('vaccine')
+            ->get(['document_id', 'vaccine', 'dose_label', 'administered_on', 'confirmed_at'])
+            ->groupBy('document_id');
+
         return $docs->map(fn ($d) => [
             'id' => (int) $d->id,
             'child_id' => (int) $d->scope_id,
@@ -116,6 +126,14 @@ class ParentImmunizationRecordController extends Controller
                when it expires. Same mechanism every <img src> in the portal already uses,
                and stableExpiry() keeps it cacheable. */
             'print_url' => \App\Support\ProtectedMedia::sign($d->file_url),
+            /* Named `covers_claimed` and never `doses`: the two must not be mistaken for
+               each other by any reader, here or on screen. */
+            'covers_claimed' => collect($claims->get($d->id, []))->map(fn ($r) => [
+                'vaccine' => $r->vaccine,
+                'dose_label' => $r->dose_label,
+                'administered_on' => $r->administered_on,
+                'confirmed' => (bool) $r->confirmed_at,
+            ])->values()->all(),
             'doses' => collect($covered->get($d->file_url, []))->map(fn ($r) => [
                 'vaccine' => $r->vaccine,
                 'dose_label' => $r->dose_label,
@@ -149,6 +167,13 @@ class ParentImmunizationRecordController extends Controller
                a file cannot travel in a JSON body, so the structured half has to be
                carried as a field. Shape: [{vaccine, dose_label, administered_on?}, …] */
             'doses' => ['nullable', 'string', 'max:20000'],
+
+            /* WHAT THE UPLOADER SAYS THE CARD SHOWS. Same shape as `doses` and a
+               completely different meaning: `doses` is the centre RECORDING a dose,
+               this is anyone SAYING what they think is on the page. A parent may send
+               it; it writes no dose, clears no flag, and counts towards no compliance
+               figure until somebody at the centre confirms it. */
+            'covers' => ['nullable', 'string', 'max:20000'],
         ]);
 
         /* READING A CARD IS A CLINICAL JUDGEMENT, AND IT IS THE CENTRE'S TO MAKE.
@@ -185,6 +210,27 @@ class ParentImmunizationRecordController extends Controller
             ], 403);
         }
 
+        /* THE CLAIM. Parsed exactly like a dose and stored somewhere else entirely, so
+           there is no path by which ticking a box on a phone becomes a recorded
+           immunisation. Capped so a crafted request cannot write an unbounded number of
+           rows against one upload. */
+        $covers = [];
+        foreach ((array) json_decode((string) ($data['covers'] ?? ''), true) as $c) {
+            if (! is_array($c) || count($covers) >= 60) {
+                continue;
+            }
+            $vaccine = trim((string) ($c['vaccine'] ?? ''));
+            if ($vaccine === '') {
+                continue;
+            }
+            $on = trim((string) ($c['administered_on'] ?? ''));
+            $covers[] = [
+                'vaccine' => mb_substr($vaccine, 0, 100),
+                'dose_label' => mb_substr(trim((string) ($c['dose_label'] ?? '')), 0, 40) ?: null,
+                'administered_on' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $on) ? $on : null,
+            ];
+        }
+
         $file = $request->file('file');
         $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
         $name = (string) Str::uuid() . '.' . $ext;
@@ -204,6 +250,36 @@ class ParentImmunizationRecordController extends Controller
             'uploaded_by_id' => $request->user()->id,
             'created_at' => now(),
         ]);
+
+        /* THE TICKLIST, FILED AGAINST THE CARD. Written after the document so the claim
+           can never point at nothing, and ignored quietly on failure: a parent who has
+           just handed over their child's record must not be shown an error because the
+           optional half of it did not save. The document is the thing that mattered. */
+        if ($covers) {
+            try {
+                $agencyId = (int) DB::table('families as f')
+                    ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                    ->where('f.id', $child->family_id)->value('c.agency_id');
+                $rows = [];
+                foreach ($covers as $c) {
+                    $rows[] = $c + [
+                        'document_id' => $docId,
+                        'child_id' => $childId,
+                        'agency_id' => $agencyId ?: null,
+                        'claimed_by_id' => (int) $request->user()->id,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+                /* insertOrIgnore, not insert: the unique key is (document, vaccine, dose)
+                   and a double-submitted form must not fail the upload it belongs to. */
+                DB::table('immunization_record_claims')->insertOrIgnore($rows);
+            } catch (\Throwable $e) {
+                Log::warning('immunization claim not saved', [
+                    'document' => $docId, 'child' => $childId, 'err' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $childName = trim(($child->preferred_name ?: $child->first_name) . ' ' . $child->last_name);
 

@@ -138,11 +138,19 @@
       +   'PDF or a photo of the card, up to 10 MB.</div>'
 
       + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
-      + 'What does this record cover?</label>'
+      + (scope === 'parent' ? 'What does this record show?' : 'What does this record cover?') + '</label>'
       + '<div style="color:#64748B;font-size:12px;margin-bottom:8px;">'
-      +   'Tick each dose the record shows. A date is optional — leave it blank if the '
-      +   'card is unclear, the dose still counts as recorded. Anything the card shows '
-      +   'that is not on the list can be added underneath.</div>'
+      +   (scope === 'parent'
+            /* Said plainly, because the difference is the whole safeguard: a parent is
+               telling the centre what is on the page, not clearing their own child's
+               compliance. Promising otherwise would be a lie the first time somebody
+               checked whether their child still showed overdue. */
+            ? 'Tick each immunisation you can see on the record. This helps '
+              + 'the centre read it \u2014 they will confirm each one before it counts. '
+              + 'A date is optional; leave it blank if the card is unclear.'
+            : 'Tick each dose the record shows. A date is optional \u2014 leave it blank if the '
+              + 'card is unclear, the dose still counts as recorded. Anything the card shows '
+              + 'that is not on the list can be added underneath.') + '</div>'
       + '<div class="fr-doses" style="border:1px solid #E2E8F0;border-radius:10px;max-height:260px;'
       +   'overflow:auto;" data-kt-scroll="1"></div>'
       + '<div class="fr-donenote" style="color:#64748B;font-size:12px;margin:6px 0 0;"></div>'
@@ -354,7 +362,16 @@
             fd.append('file', f);
             fd.append('title', 'Immunization record');
             fd.append('notes', form.querySelector('.fr-notes').value || '');
-            if (doses.length) { fd.append('doses', JSON.stringify(doses)); }
+            /* THE ONLY LINE THAT DECIDES WHICH OF THE TWO THIS IS.
+
+               Identical payload, different field: `doses` is the centre recording what it
+               read, `covers` is the uploader saying what they see. The server refuses
+               `doses` from a guardian regardless, so this is defence in depth rather than
+               the defence itself — but sending the right field means a parent never meets
+               that 403 in normal use. */
+            if (doses.length) {
+              fd.append(scope === 'parent' ? 'covers' : 'doses', JSON.stringify(doses));
+            }
 
             return KT.Api.postForm('/' + scope + '/children/' + id + '/immunization-records', fd)
               .then(function (res) {
@@ -733,11 +750,17 @@
       var msg = document.createElement('span');
       msg.style.cssText = 'font-size:12.5px;color:#64748B;';
 
-      /* Staff get the dialog — the document AND what it says, in one action. A parent
-         has nothing to tick, so their button still goes straight to the file picker, and
-         so does everyone's if the shell's Modal is somehow not loaded. */
+      /* EVERYONE GETS THE DIALOG NOW — but it asks each of them a different question.
+
+         Staff tick what they have READ off the card, and that writes doses. A parent
+         ticks what they believe the card SHOWS, and that writes a claim the centre then
+         confirms. Same list, same card, two different acts, and the server keeps them
+         apart: `doses` is refused from a guardian, `covers` is not.
+
+         The plain file picker remains the fallback for anyone whose shell Modal did not
+         load, so handing the record over never depends on the dialog. */
       btn.addEventListener('click', function () {
-        if (scope !== 'parent' && fileRecordModal()) { return; }
+        if (fileRecordModal()) { return; }
         input.click();
       });
       input.addEventListener('change', function () {

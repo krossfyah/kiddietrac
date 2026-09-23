@@ -22,6 +22,24 @@
   var MQ = '(max-width:600px)';
   function isPhone() { return window.matchMedia && window.matchMedia(MQ).matches; }
 
+  /* WHY THE SELECTOR IS A :not() AND NOT THE CLASS THIS FILE ADDS.
+
+     The card layout used to be gated on .kt-mcards, which JavaScript adds — and this
+     file runs on a 120ms debounce that every DOM mutation during a render resets. So on
+     a phone the sequence was: paint a 675–1400px desktop table on a 412px screen, wait
+     for the screen to stop changing, then restack it into cards. The reader watches the
+     whole page reflow on every load. That is the "screens resize on initial load" on
+     mobile, and it cannot happen on a desktop because the whole block is inside
+     @media (max-width:600px).
+
+     Inverted: the cards are the default at this width and JS marks the exceptions
+     (.kt-nomc) instead of marking the takers. The browser now lays them out on the first
+     paint, and the later pass only adds the column labels — text appearing inside a box
+     that is already the right shape, rather than the shape changing underneath it.
+
+     The exceptions are rare (a layout table with no header row, or a screen that built
+     its own mobile view) and they now flicker instead of everything else. That is the
+     right way round. */
   function injectStyle() {
     if (document.getElementById('kt-mobile-tables-style')) return;
     var s = document.createElement('style');
@@ -30,23 +48,23 @@
       '@media (max-width:600px){',
       // The wrapper some screens add for horizontal scrolling is no longer needed.
       '  #appMain .kt-table-scroll, #appMain .table-wrap, #appMain .table-responsive{overflow-x:visible !important;}',
-      '  #appMain table.kt-mcards{display:block;width:100% !important;min-width:0 !important;border-collapse:separate;border-spacing:0;}',
-      '  #appMain table.kt-mcards thead{display:none;}',
-      '  #appMain table.kt-mcards tbody{display:block;width:100%;}',
-      '  #appMain table.kt-mcards tr{display:block;width:100%;box-sizing:border-box;background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:12px 14px;margin:0 0 10px;box-shadow:0 1px 4px rgba(15,23,42,.05);}',
-      '  #appMain table.kt-mcards tr:active{background:#F8FAFC;}',
-      '  #appMain table.kt-mcards td{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;width:auto !important;',
+      '  #appMain table:not(.kt-nomc){display:block;width:100% !important;min-width:0 !important;border-collapse:separate;border-spacing:0;}',
+      '  #appMain table:not(.kt-nomc) thead{display:none;}',
+      '  #appMain table:not(.kt-nomc) tbody{display:block;width:100%;}',
+      '  #appMain table:not(.kt-nomc) tr{display:block;width:100%;box-sizing:border-box;background:#fff;border:1px solid #E7EDF3;border-radius:14px;padding:12px 14px;margin:0 0 10px;box-shadow:0 1px 4px rgba(15,23,42,.05);}',
+      '  #appMain table:not(.kt-nomc) tr:active{background:#F8FAFC;}',
+      '  #appMain table:not(.kt-nomc) td{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;width:auto !important;',
       '    border:none !important;padding:4px 0 !important;text-align:left !important;white-space:normal !important;font-size:13.5px;}',
       // Column header, shown as a dim label beside the value.
-      '  #appMain table.kt-mcards td::before{content:attr(data-label);flex:0 0 auto;color:#64748B;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding-top:2px;}',
-      '  #appMain table.kt-mcards td[data-label=""]::before{display:none;}',
+      '  #appMain table:not(.kt-nomc) td::before{content:attr(data-label);flex:0 0 auto;color:#64748B;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding-top:2px;}',
+      '  #appMain table:not(.kt-nomc) td[data-label=""]::before{display:none;}',
       // First cell reads as the card title: no label, bigger, full width.
-      '  #appMain table.kt-mcards td.kt-mcard-title{display:block;font-size:15px;font-weight:800;color:#0F172A;padding:0 0 6px !important;}',
-      '  #appMain table.kt-mcards td.kt-mcard-title::before{display:none;}',
-      '  #appMain table.kt-mcards td.kt-mcard-empty{display:none;}',
+      '  #appMain table:not(.kt-nomc) td.kt-mcard-title{display:block;font-size:15px;font-weight:800;color:#0F172A;padding:0 0 6px !important;}',
+      '  #appMain table:not(.kt-nomc) td.kt-mcard-title::before{display:none;}',
+      '  #appMain table:not(.kt-nomc) td.kt-mcard-empty{display:none;}',
       // Value side of each row.
-      '  #appMain table.kt-mcards td > *{min-width:0;}',
-      '  #appMain table.kt-mcards td{color:#334155;}',
+      '  #appMain table:not(.kt-nomc) td > *{min-width:0;}',
+      '  #appMain table:not(.kt-nomc) td{color:#334155;}',
       '}',
     ].join('\n');
     document.head.appendChild(s);
@@ -140,12 +158,16 @@
     if (!isPhone()) return;
     var main = document.getElementById('appMain');
     if (!main) return;
-    injectStyle();
     liftBannerActions();
     [].forEach.call(main.querySelectorAll('table'), function (t) {
-      // Leave a table alone if a screen has already built its own mobile view,
-      // or if it's a layout table with no header row.
-      if (t.closest('.kt-no-mcards')) return;
+      /* Leave a table alone if a screen has already built its own mobile view, or if it
+         is a layout table with no header row — and SAY SO on the element, because the
+         stylesheet now applies the card layout unless told otherwise. */
+      if (t.closest('.kt-no-mcards') || !labelsOf(t) || !labelsOf(t).length) {
+        t.classList.add('kt-nomc');
+        return;
+      }
+      t.classList.remove('kt-nomc');
       restack(t);
     });
   }
@@ -156,10 +178,17 @@
   // Screens render (and re-render) asynchronously, so watch #appMain rather than
   // trying to hook every screen's render.
   function boot() {
+    /* BEFORE anything renders. This used to be called from apply(), which is behind the
+       debounce — so the rules themselves arrived after the table they were meant to
+       shape. Injected once, up front, and the media query decides whether it does
+       anything. */
+    injectStyle();
     apply();
     var main = document.getElementById('appMain');
     if (main && window.MutationObserver) {
-      new MutationObserver(schedule).observe(main, { childList: true, subtree: true });
+      /* Re-binds when the shell swaps #appMain (kt:main-swapped); a MutationObserver follows a NODE, and this one used to die silently at the first render. */
+      if (window.KT && KT.observeMain) { KT.observeMain(schedule, { childList: true, subtree: true }); }
+      else { new MutationObserver(schedule).observe(main, { childList: true, subtree: true }); }
     }
     window.addEventListener('hashchange', schedule);
     if (window.matchMedia) {

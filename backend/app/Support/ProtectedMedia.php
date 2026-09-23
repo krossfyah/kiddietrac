@@ -34,6 +34,15 @@ class ProtectedMedia
     /** Folders under the public disk that must never be served without a signature. */
     public const FOLDERS = [
         'child-documents',
+        /* A CHILD'S PHOTOGRAPH, which was served unsigned and publicly readable by
+           anyone holding the URL — while `child-documents` beside it was protected.
+           Nothing emits one into an email or a PDF (checked: only the two upload
+           endpoints write this folder), so the 12-hour expiry costs nothing here.
+
+           It also routes them through MediaFileController for the first time, which is
+           where they finally get thumbnailed: they were being served as untouched camera
+           originals, 2.18 MB on average and one at 8000x6000, to fill a 30px circle. */
+        'child-photos',
         'agreements',
         'managed-forms',
         'chat-attachments',
