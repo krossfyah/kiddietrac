@@ -405,6 +405,18 @@
   // Public hook so screens that re-render in place (Waitlist changing centre,
   // etc.) can force an immediate re-sweep instead of waiting for the bus/interval.
   KT.sweepRowActions = function () { try { sweep(); } catch (e) {} };
+
+  /* REGISTER AS A TABLE ENHANCER TOO.
+     `KT.enhanceTables()` is what a screen calls when it rebuilds a table outside the
+     normal render path - an in-screen TAB fires no hashchange, so the shared sweep never
+     sees it. It ran kt-polish and kt-table-filter and NOT this file, so those tables got
+     a search box and sortable headers but no kebab: the Immunizations "Due at age" roster
+     sat beside a Records table that had one, which is exactly the inconsistency somebody
+     notices. Registering here fixes every such table at once, instead of each screen
+     having to remember a second call. Guarded as always - a cell with no action controls,
+     a table marked data-kt-no-kebab, or one that draws its own menu is still skipped. */
+  KT.tableEnhancers = KT.tableEnhancers || [];
+  KT.tableEnhancers.push(function () { try { sweep(); } catch (e) {} });
   if (KT.sweepBus) KT.sweepBus.on(sweep); else setInterval(sweep, 4000);
   if (DESKTOP.addEventListener) DESKTOP.addEventListener('change', sweep);
   else if (DESKTOP.addListener) DESKTOP.addListener(sweep); // older WebView

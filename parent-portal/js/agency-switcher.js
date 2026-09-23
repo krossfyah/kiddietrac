@@ -96,7 +96,14 @@
       '<a href="#sales-plans" class="nav-link" data-hash="sales-plans">' +
         '<span class="nav-icon">💲</span><span class="nav-label">Plans &amp; pricing</span></a>' +
       '<a href="#sales-demo" class="nav-link" data-hash="sales-demo">' +
-        '<span class="nav-icon">🚀</span><span class="nav-label">Launch demo</span></a>';
+        '<span class="nav-icon">🚀</span><span class="nav-label">Launch demo</span></a>' +
+      /* Superadmin-only, and this whole section already is — it is injected behind
+         the same platform check. Deliberately NOT mirrored into the sales_rep nav
+         in app-v2-shell: the repository holds pricing and contract templates, and a
+         rep gets 403 from the API. Showing them a door that does not open is worse
+         than not showing it. */
+      '<a href="#sales-library" class="nav-link" data-hash="sales-library">' +
+        '<span class="nav-icon">📁</span><span class="nav-label">Files repository</span></a>';
     navLinks.insertBefore(sales, section.nextSibling);
   }
 

@@ -291,12 +291,6 @@
              aggregate, this is the individual invoices behind it. Reseller because that
              is a platform_admin section, and the API is guarded role:platform_admin. */
           { hash: 'sales-invoices', label: 'Invoices',         icon: '🧾' },
-          /* The sales team's own shelf - price sheets, decks, contract templates.
-             In Reseller and nowhere else: it lives under the sales section but it is
-             NOT for sales reps, whose nav is built separately below and does not get
-             this entry. The API is guarded role:platform_admin and the controller
-             checks the live role table again. */
-          { hash: 'sales-library',  label: 'Reference library', icon: '📚' },
           { hash: 'admin-features', label: 'Feature flags',    icon: '⚙️' },
           { hash: 'admin-branding', label: 'Branding',         icon: '🎨' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },

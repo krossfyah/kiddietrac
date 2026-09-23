@@ -976,7 +976,7 @@
           <span style="font-size:12.5px;color:#64748B;">Worked out from each date of birth against the schedule — complete whether or not anybody has typed a dose in.</span>
         </div>
         <table data-kt-filter-always="1" data-kt-paginate="25">
-          <thead><tr><th>Child</th><th>Family</th><th>Provider</th><th>Overdue</th><th>Due soon</th><th>Status</th></tr></thead>
+          <thead><tr><th>Child</th><th>Family</th><th>Provider</th><th>Overdue</th><th>Due soon</th><th>Status</th><th></th></tr></thead>
           <tbody>${ordered.map(c => {
             const st = c.overdue > 0
               ? ['Overdue', 'kt-pill-danger', '0']
@@ -988,8 +988,12 @@
           <td data-kt-sort="${String(c.overdue || 0).padStart(3, '0')}">${c.overdue > 0 ? `<span class="kt-pill kt-pill-danger">${c.overdue}</span>` : '—'}</td>
           <td data-kt-sort="${String(c.due_soon || 0).padStart(3, '0')}">${c.due_soon > 0 ? `<span class="kt-pill kt-pill-warning">${c.due_soon}</span>` : '—'}</td>
           <td data-kt-sort="${st[2]}"><span class="kt-pill ${st[1]}">${st[0]}</span></td>
+          <td style="text-align:right;white-space:nowrap;">
+            <button type="button" data-kt-iconized="1" class="imm-child" data-id="${esc(c.child_id || '')}" data-n="${esc(c.child_name || '')}" style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">View immunisations</button>
+            <button type="button" data-kt-iconized="1" class="imm-childrec" data-id="${esc(c.child_id || '')}" style="margin-left:6px;padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">Open child record</button>
+          </td>
         </tr>`;
-          }).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748B;">No enrolled children.</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748B;">No enrolled children.</td></tr>'}</tbody>
         </table>
       </div>`;
 
@@ -1056,10 +1060,20 @@
 
     /* A name opens that child: what is due, the records on file, and the upload —
        the same panel the family sees. */
-    main.querySelectorAll('.imm-child').forEach(b => b.addEventListener('click', () => {
+    /* .imm-child is now BOTH the underlined name and the row action — one selector,
+       one handler, so the two cannot drift apart. stopPropagation because the action
+       sits inside a row that may gain a click of its own later, and a kebab item that
+       also triggers the row is the classic double-fire. */
+    main.querySelectorAll('.imm-child').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
       const id = parseInt(b.getAttribute('data-id'), 10);
       if (!id) { return; }
       if (KT.openChildImmun) { KT.openChildImmun(id, b.getAttribute('data-n')); }
+    }));
+    main.querySelectorAll('.imm-childrec').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = parseInt(b.getAttribute('data-id'), 10);
+      if (id) { window.location.hash = '#child-detail?id=' + id; }
     }));
 
     /* Both panes render on a tab switch, which changes no hash — so the shared sweep

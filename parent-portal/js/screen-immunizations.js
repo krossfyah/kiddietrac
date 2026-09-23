@@ -303,6 +303,13 @@
     container.querySelectorAll('[data-delete]').forEach(function (btn) {
       btn.addEventListener('click', function () { confirmDelete(parseInt(btn.dataset.delete, 10), container); });
     });
+    /* THE DOSES TABLE HAD NO KEBAB, and the Records table beside it did - which is
+       exactly the inconsistency somebody notices. Nothing was wrong with the markup:
+       Edit and Delete are already plain buttons in the last cell, which is all
+       kt-row-actions asks for. It simply runs its sweep when the SCREEN renders, and
+       this table is built after an await, by which time the sweep has been and gone.
+       One nudge, same as the Records table. */
+    if (window.KT && KT.sweepRowActions) { setTimeout(KT.sweepRowActions, 0); }
   }
 
   function immRow(r) {
