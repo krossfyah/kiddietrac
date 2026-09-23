@@ -374,6 +374,143 @@ class ParentImmunizationRecordController extends Controller
      * admins hold no tenant role by design and are allowed through explicitly rather than
      * by accident. Anything unrecognised is a no.
      */
+    /**
+     * FILL IN A RECORD THAT ARRIVED BARE.
+     *
+     * The common case this exists for: a parent photographs the card and sends it
+     * without ticking anything, because reading a smudged line is not their job. The
+     * document is then on file saying only that a card arrived, and the compliance
+     * picture still shows nothing. Somebody at the centre has to read it.
+     *
+     * Until now that meant filing a SECOND copy of the same card through store() just
+     * to attach doses to it, which is how a child ends up with three identical
+     * photographs on their record. This writes the doses against the document that is
+     * already there.
+     *
+     * Staff only, by the same test that guards doses on upload: deciding what a card
+     * shows is a clinical judgement and it is the centre's to make. A guardian gets the
+     * same 403 here as they would there.
+     */
+    public function details(Request $request, int $childId, int $docId): JsonResponse
+    {
+        $this->assertChild((int) $request->user()->id, $childId);
+
+        if (! $this->mayRecordDoses((int) $request->user()->id, $childId)) {
+            return response()->json([
+                'message' => 'Only the centre can record which doses a record covers.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'doses' => ['required', 'array', 'min:1', 'max:60'],
+            'doses.*.vaccine' => ['required', 'string', 'max:100'],
+            'doses.*.dose_label' => ['nullable', 'string', 'max:40'],
+            'doses.*.administered_on' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
+        /* The document has to belong to THIS child and be an immunization record.
+           Without this a valid doc id from another child would attach doses to the
+           wrong file - the id is in the URL and the URL is user input. */
+        $doc = DB::table('documents')
+            ->where('id', $docId)
+            ->where('scope_type', 'child')
+            ->where('scope_id', $childId)
+            ->where('category', self::CATEGORY)
+            ->first(['id', 'file_url']);
+        if (! $doc) {
+            return response()->json(['message' => 'That record was not found for this child.'], 404);
+        }
+
+        /* Same de-duplication as the upload path: a dose already on file is reported
+           back as skipped rather than written twice. */
+        $already = DB::table('immunizations')->where('child_id', $childId)
+            ->get(['vaccine', 'dose_label'])
+            ->mapWithKeys(fn ($r) => [mb_strtolower(trim($r->vaccine . '|' . $r->dose_label)) => true]);
+
+        $recorded = [];
+        $skipped = [];
+        foreach ($data['doses'] as $d) {
+            $vaccine = trim((string) $d['vaccine']);
+            if ($vaccine === '') {
+                continue;
+            }
+            $doseLabel = trim((string) ($d['dose_label'] ?? '')) ?: null;
+            $on = $d['administered_on'] ?? null;
+            $key = mb_strtolower(trim($vaccine . '|' . $doseLabel));
+            $label = trim($vaccine . ' ' . (string) $doseLabel);
+            if ($already->has($key)) {
+                $skipped[] = $label;
+                continue;
+            }
+            try {
+                $immId = DB::table('immunizations')->insertGetId([
+                    'child_id' => $childId,
+                    'vaccine' => $vaccine,
+                    'dose_label' => $doseLabel,
+                    'administered_on' => $on,
+                    // Joins the dose to the card it was read off, exactly as store() does.
+                    'proof_document_url' => $doc->file_url,
+                    'recorded_by_id' => $request->user()->id,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $already->put($key, true);
+                $recorded[] = $label;
+
+                /* CLOSE THE MATCHING CLAIM. If the uploader ticked this one, the tick was
+                   a question and this is the answer - leaving it open would show the
+                   record as still needing a look forever. */
+                DB::table('immunization_record_claims')
+                    ->where('document_id', $docId)
+                    ->whereRaw('LOWER(vaccine) = ?', [mb_strtolower($vaccine)])
+                    ->where(function ($q) use ($doseLabel) {
+                        $doseLabel === null
+                            ? $q->whereNull('dose_label')
+                            : $q->whereRaw('LOWER(dose_label) = ?', [mb_strtolower($doseLabel)]);
+                    })
+                    ->update([
+                        'confirmed_at' => now(),
+                        'confirmed_by_id' => $request->user()->id,
+                        'immunization_id' => $immId,
+                        'updated_at' => now(),
+                    ]);
+            } catch (\Throwable $e) {
+                Log::warning('Immunization detail insert failed', [
+                    'child' => $childId, 'document' => $docId, 'dose' => $label, 'e' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        /* Granular, naming every dose - a count cannot answer "was the 2nd DTaP entered
+           from that card", which is the only question ever asked of this log. */
+        try {
+            \App\Support\Audit::write([
+                'user_id' => $request->user()->id,
+                'agency_id' => $this->agencyOfChild($childId),
+                'action' => 'child.immunization_details_recorded',
+                'entity_type' => 'child',
+                'entity_id' => $childId,
+                'payload' => json_encode([
+                    'document_id' => $docId,
+                    'doses_recorded' => $recorded,
+                    'doses_already_on_file' => $skipped,
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Immunization details audit failed', ['child' => $childId, 'e' => $e->getMessage()]);
+        }
+
+        return response()->json([
+            'id' => $docId,
+            'recorded' => $recorded,
+            'skipped' => $skipped,
+            'message' => $recorded
+                ? (count($recorded) . ' dose' . (count($recorded) === 1 ? '' : 's') . ' recorded.')
+                : 'Nothing new to record - those doses were already on file.',
+        ]);
+    }
+
     private function mayRecordDoses(int $userId, int $childId): bool
     {
         try {

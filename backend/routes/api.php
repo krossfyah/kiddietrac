@@ -1298,6 +1298,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
                 [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'download'])
                 ->whereNumber('child')->whereNumber('doc');
 
+            /* Filling in a record that arrived bare - the parent sent the photograph and
+               ticked nothing. Staff-gated inside the controller, same test as doses on
+               upload. Deliberately NOT mirrored on the parent routes above. */
+            Route::post('/children/{child}/immunization-records/{doc}/details',
+                [\App\Http\Controllers\Api\ParentImmunizationRecordController::class, 'details'])
+                ->whereNumber('child')->whereNumber('doc');
+
             Route::post  ('/children/{child}/documents',                [ChildController::class, 'uploadDocument'])->where('child', '[0-9]+');
             Route::get   ('/children/{child}/documents/{doc}/download', [ChildController::class, 'downloadDocument'])->where(['child' => '[0-9]+', 'doc' => '[0-9]+']);
             Route::delete('/children/{child}/documents/{doc}',          [ChildController::class, 'deleteDocument'])->where(['child' => '[0-9]+', 'doc' => '[0-9]+']);

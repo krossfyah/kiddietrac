@@ -194,6 +194,16 @@
       + '</div>'
       + '<div id="ip-host" style="padding:18px 22px;max-height:min(72vh,780px);overflow-y:auto;" data-kt-scroll="1"></div>'
       + '</div>';
+    /* BELOW THE SHELL MODAL LAYER, ON PURPOSE.
+       This overlay is hand-rolled rather than a Shell modal, and it was sitting at
+       z-index 2147479000 while KT.Shell.Modal renders its dialogs at 100000. So
+       "Upload a record", opened FROM this overlay, appeared 21,000x lower than the
+       thing that opened it and rendered BEHIND it: the dialog was there and working,
+       it just could not be seen, so filing a record looked like nothing had happened
+       and the only visible way out was this overlay's own X. Same family as the
+       confirm-under-the-gates bug. It still has to clear the app chrome, which is what
+       the huge number was for - 99000 does that and stays under the dialogs. */
+    ov.style.zIndex = '99000';
     document.body.appendChild(ov);
     ov.querySelector('.modal-close').addEventListener('click', function () { ov.remove(); });
 
