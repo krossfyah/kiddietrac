@@ -365,8 +365,37 @@
   }
 
   /* ---- sweep ---------------------------------------------------------- */
-  function sweep() {
+  /* WHERE THE SWEEP LOOKS.
+     #appMain is the portal, and for years it was the only place a list could be. It is
+     not: a few panels are drawn into a hand-rolled overlay appended to <body> — the
+     child immunization panel opened from the Immunizations screen is one — and those
+     kept their inline buttons no matter how they were marked, because nothing here ever
+     looked at them.
+
+     Opt-IN rather than sweeping the document: this file rewrites the last cell of every
+     row it finds, and turning that loose on every dialog in the portal would kebabify
+     things nobody asked it to. A panel that wants the treatment says so with
+     data-kt-row-actions, and gets exactly the same contract as a table in #appMain. */
+  function sweepRoots() {
+    var roots = [];
     var main = d.getElementById('appMain');
+    if (main) roots.push(main);
+    var optedIn = d.querySelectorAll('[data-kt-row-actions]');
+    for (var i = 0; i < optedIn.length; i++) {
+      // Skip one already covered by #appMain, or it is swept twice per pass.
+      if (!main || !main.contains(optedIn[i])) roots.push(optedIn[i]);
+    }
+    return roots;
+  }
+
+  function sweep() {
+    var roots = sweepRoots();
+    for (var r = 0; r < roots.length; r++) sweepIn(roots[r]);
+    // If the row/kebab behind an open menu got re-rendered away, drop the menu.
+    if (openMenu && !d.contains(openMenu.kebab)) closeMenu();
+  }
+
+  function sweepIn(main) {
     if (!main) return;
 
     /* Phones kebabify too, as of 2026-09-02. This used to restore the raw buttons at
@@ -397,8 +426,6 @@
         if (ccell) kebabify(ccell);
       }
     }
-    // If the row/kebab behind an open menu got re-rendered away, drop the menu.
-    if (openMenu && !d.contains(openMenu.kebab)) closeMenu();
   }
 
   /* ---- wiring --------------------------------------------------------- */

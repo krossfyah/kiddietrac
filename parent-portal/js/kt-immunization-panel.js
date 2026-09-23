@@ -28,6 +28,14 @@
   'use strict';
   var KT = (window.KT = window.KT || {});
 
+  var TH = 'padding:9px 12px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;'
+    + 'letter-spacing:.4px;white-space:nowrap;';
+  var TD = 'padding:10px 12px;vertical-align:top;';
+  var BTN = 'padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;'
+    + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;';
+  var BTN_PRIMARY = 'padding:6px 12px;border-radius:8px;border:1px solid #1F6FB2;background:#1F6FB2;'
+    + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#fff;';
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -769,95 +777,107 @@
       recEl.innerHTML = '<div style="font-weight:800;font-size:13px;color:#0F172A;margin-bottom:8px;">'
         + (scope === 'parent' ? 'Records you have sent in' : 'Records on file') + '</div>';
 
-      var list = document.createElement('div');
-      list.style.cssText = 'font-size:13px;';
       if (!records.length) {
-        list.innerHTML = '<div style="color:#64748B;padding:6px 0;">Nothing on file yet — '
-          + 'a clear photo of the immunisation card is enough.</div>';
-      } else {
-        records.forEach(function (r) {
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 0;'
-            + 'border-top:1px solid #F1F5F9;flex-wrap:wrap;';
-          row.innerHTML = '<div style="flex:1;min-width:170px;">'
-            + '<div style="font-weight:600;color:#0F172A;">' + esc(r.title || 'Immunization record') + '</div>'
-            + '<div style="color:#64748B;font-size:12px;">'
-            +   esc(String(r.uploaded_at || '').slice(0, 10))
-            +   (r.uploaded_by ? '  ·  ' + esc(r.uploaded_by) : '')
-            +   (r.uploaded_by_parent ? '' : '  ·  added by the centre')
-            +   '  ·  ' + esc(fmtSize(r.file_size))
-            + '</div>'
-            /* WHAT WAS READ OFF IT, wherever the record is shown. This is the half that
-               makes a parent's and an educator's view the same view as the director's:
-               the document alone says a card arrived, the dose list says what the centre
-               concluded from it, and only the second one is checkable. */
-            + ((r.doses && r.doses.length)
-                ? '<div style="margin-top:5px;color:#166534;font-size:12px;">✓ '
-                    + r.doses.map(function (x) {
-                        return esc(String(x.vaccine || '') + ' ' + String(x.dose_label || '')).trim()
-                          + (x.administered_on ? ' (' + esc(fmtDay(x.administered_on)) + ')' : '');
-                      }).join(' · ')
-                  + '</div>'
-                /* NOTHING WAS READ OFF IT YET. Worth saying out loud on every row: a
-                   document on file looks like a job finished, and until somebody has
-                   transcribed it the compliance picture still shows this child as
-                   having nothing. Where the uploader ticked what they believed the card
-                   shows, say so - that is a head start for whoever picks it up, not a
-                   result. */
-                : '<div style="margin-top:5px;font-size:12px;color:#92400E;">'
-                    + '<span style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:999px;'
-                    +   'padding:1px 8px;font-weight:700;">Details pending</span> '
-                    + ((r.covers_claimed && r.covers_claimed.length)
-                        ? '<span style="color:#64748B;">uploader listed '
-                            + r.covers_claimed.map(function (x) {
-                                return esc(String(x.vaccine || '') + ' ' + String(x.dose_label || '')).trim();
-                              }).join(', ')
-                            + ' — not confirmed</span>'
-                        : '<span style="color:#64748B;">the record is on file, the doses are not</span>')
-                  + '</div>')
-            + (r.notes
-                ? '<div style="margin-top:5px;color:#475569;font-size:12px;white-space:pre-wrap;">'
+        var none = document.createElement('div');
+        none.style.cssText = 'color:#64748B;padding:6px 0;font-size:13px;';
+        none.textContent = 'Nothing on file yet — a clear photo of the immunisation card is enough.';
+        recEl.appendChild(none);
+        if (canUpload) { recEl.appendChild(uploader()); }
+        return;
+      }
+
+      /* A TABLE, and data-kt-row-actions so it gets the standard kebab.
+         This panel is drawn in two places: inside #appMain on the child's own tab, and
+         inside a hand-rolled overlay appended to <body> when it is opened from the
+         Immunizations screen. kt-row-actions only ever swept #appMain, so the second one
+         kept its inline buttons; the attribute opts it in wherever it happens to be. */
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'overflow-x:auto;border:1px solid #E2E8F0;border-radius:10px;background:#fff;';
+      var tbl = document.createElement('table');
+      tbl.setAttribute('data-kt-row-actions', '1');
+      tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px;';
+
+      tbl.innerHTML =
+        '<thead><tr style="background:#F8FAFC;text-align:left;">'
+        + '<th style="' + TH + '">Record</th>'
+        + '<th style="' + TH + '">What it shows</th>'
+        + '<th style="' + TH + '">Added</th>'
+        + '<th style="' + TH + '"></th>'
+        + '</tr></thead>';
+
+      var tb = document.createElement('tbody');
+      records.forEach(function (r) {
+        var tr = document.createElement('tr');
+        tr.style.cssText = 'border-top:1px solid #F1F5F9;';
+
+        var pending = !(r.doses && r.doses.length);
+        var shows = pending
+          ? '<span style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:999px;'
+            +   'padding:1px 8px;font-weight:700;color:#92400E;font-size:12px;">Details pending</span>'
+            + ((r.covers_claimed && r.covers_claimed.length)
+                ? '<div style="color:#64748B;font-size:12px;margin-top:4px;">uploader listed '
+                    + r.covers_claimed.map(function (x) {
+                        return esc(String(x.vaccine || '') + ' ' + String(x.dose_label || '')).trim();
+                      }).join(', ') + ' — not confirmed</div>'
+                : '<div style="color:#64748B;font-size:12px;margin-top:4px;">the record is on file, the doses are not</div>')
+          : '<span style="color:#166534;font-size:12.5px;">✓ '
+            + r.doses.map(function (x) {
+                return esc(String(x.vaccine || '') + ' ' + String(x.dose_label || '')).trim()
+                  + (x.administered_on ? ' (' + esc(fmtDay(x.administered_on)) + ')' : '');
+              }).join(' · ') + '</span>';
+
+        tr.innerHTML =
+          '<td style="' + TD + '">'
+          +   '<div style="font-weight:600;color:#0F172A;">' + esc(r.title || 'Immunization record') + '</div>'
+          +   '<div style="color:#94A3B8;font-size:12px;margin-top:2px;">' + esc(fmtSize(r.file_size)) + '</div>'
+          +   (r.notes
+                ? '<div style="margin-top:4px;color:#475569;font-size:12px;white-space:pre-wrap;">'
                     + '<span style="color:#94A3B8;">Note:</span> ' + esc(r.notes) + '</div>'
                 : '')
-            + '</div>';
+          + '</td>'
+          + '<td style="' + TD + '">' + shows + '</td>'
+          + '<td style="' + TD + 'white-space:nowrap;">'
+          +   '<div style="color:#334155;">' + esc(String(r.uploaded_at || '').slice(0, 10)) + '</div>'
+          +   '<div style="color:#94A3B8;font-size:12px;margin-top:2px;">'
+          +     esc(r.uploaded_by || '') + (r.uploaded_by_parent ? '' : (r.uploaded_by ? ' · centre' : 'the centre'))
+          +   '</div>'
+          + '</td>';
 
-          var view = document.createElement('button');
-          view.type = 'button';
-          /* KEEP THE WORD. kt-icon-buttons replaces any short label it recognises with a
-             glyph, and its ONLY opt-out is the data-kt-iconized flag it also stamps on
-             what it has finished with — data-kt-no-icon is read by nobody. Un-opted, this
-             became a bare blue square beside a record, and the uploader below became a
-             square with the words "PDF or a photo, up to 10 MB." orphaned next to it.
-             These are not row actions in a table; they are the only two things you can do
-             on this panel. (Anthony, 2026-09-15) */
-          view.dataset.ktIconized = '1';
-          view.textContent = 'View';
-          view.style.cssText = 'padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;'
-            + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;';
-          view.addEventListener('click', function () { openRecord(r, view); });
-          row.appendChild(view);
+        /* Plain buttons in the LAST cell; the platform collapses them. */
+        var actions = document.createElement('td');
+        actions.style.cssText = TD + 'text-align:right;white-space:nowrap;';
 
-          /* The other half of "Details pending": somewhere to actually do it. Staff
-             only - the server refuses doses from a guardian, and offering a parent a
-             button that 403s is worse than not offering it. Shown once there is nothing
-             read off the card yet; re-reading a card that has already been transcribed
-             is a different job (editing a dose) and belongs on the dose, not here. */
-          if (scope === 'director' && !(r.doses && r.doses.length)) {
-            var fill = document.createElement('button');
-            fill.type = 'button';
-            fill.dataset.ktIconized = '1';   // keep the words - see the note on View
-            fill.textContent = 'Add details';
-            fill.style.cssText = 'padding:6px 12px;border-radius:8px;border:1px solid #1F6FB2;'
-              + 'background:#1F6FB2;font-size:12.5px;font-weight:700;cursor:pointer;color:#fff;';
-            fill.addEventListener('click', function () { openDetailsEditor(r); });
-            row.appendChild(fill);
-          }
+        var view = document.createElement('button');
+        view.type = 'button';
+        view.dataset.ktIconized = '1';
+        view.textContent = 'View';
+        view.style.cssText = BTN;
+        view.addEventListener('click', function (e) { e.stopPropagation(); openRecord(r, view); });
+        actions.appendChild(view);
 
-          list.appendChild(row);
-        });
-      }
-      recEl.appendChild(list);
+        if (scope === 'director' && pending) {
+          var fill = document.createElement('button');
+          fill.type = 'button';
+          fill.dataset.ktIconized = '1';
+          // Its own glyph: kt-row-actions picks a fallback icon from the label and tests
+          // view/open/DETAILS before add, so this would otherwise be a second eye.
+          fill.textContent = '➕ Add details';
+          fill.style.cssText = 'margin-left:6px;' + BTN_PRIMARY;
+          fill.addEventListener('click', function (e) { e.stopPropagation(); openDetailsEditor(r); });
+          actions.appendChild(fill);
+        }
+
+        tr.appendChild(actions);
+        tb.appendChild(tr);
+      });
+
+      tbl.appendChild(tb);
+      wrap.appendChild(tbl);
+      recEl.appendChild(wrap);
       if (canUpload) { recEl.appendChild(uploader()); }
+
+      /* Built after an await, so the sweep has already run for this render. */
+      if (window.KT && KT.sweepRowActions) { setTimeout(KT.sweepRowActions, 0); }
     }
 
     /* ONE implementation, called from two places: this panel and the agency-wide
