@@ -1070,7 +1070,7 @@
 
       // ── layout: folders | shelf ────────────────────────────────────────
       var grid = el('div', { style: 'display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:16px;align-items:start' }, []);
-      grid.appendChild(folderRail(shown));
+      grid.appendChild(folderRail());
 
       var right = el('div', { style: 'min-width:0' }, []);
       grid.appendChild(right);
@@ -1181,33 +1181,86 @@
       if (window.KT && KT.sweepRowActions) { setTimeout(KT.sweepRowActions, 0); }
     }
 
-    function folderRail(shown) {
-      var rail = el('div', { style: 'background:#fff;border:1px solid #e6ebf1;border-radius:12px;padding:8px;min-width:0' }, []);
-      function row(label, count, active, onClick, onDelete) {
-        var a = el('button', { type: 'button', style:
-          'display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;text-align:left;'
-          + 'padding:8px 10px;border-radius:9px;border:0;cursor:pointer;font-size:13px;font-weight:700;'
-          + (active ? 'background:#E0F2FE;color:#075985;' : 'background:transparent;color:#334155;') }, []);
-        a.appendChild(el('span', { style: 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, [label]));
-        a.appendChild(el('span', { style: 'flex:none;color:#94A3B8;font-weight:600' }, [String(count)]));
-        a.addEventListener('click', onClick);
-        var wrap = el('div', { style: 'display:flex;align-items:center;gap:4px' }, [a]);
+    /**
+     * THE FOLDER RAIL.
+     *
+     * Every row is the SAME four-column grid — icon, name, count, delete — so the counts
+     * line up under each other and the crosses sit in one straight edge. It was a flex row
+     * holding a width:100% button with the cross as a SIBLING: the button claimed the whole
+     * width, the cross was squeezed by whatever was left, and "All files" (which has no
+     * cross at all) ended at a different edge from every folder under it. Three different
+     * reasons for the same crooked column.
+     *
+     * The empty fourth cell on All files is load-bearing: drop it and that row has three
+     * columns while the others have four, which is the misalignment coming straight back.
+     *
+     * The row is a div rather than a button because a button cannot contain another button,
+     * and the delete has to be its own control to carry its own label and its own click.
+     * It takes the keyboard handling a button would have given it.
+     */
+    function folderRail() {
+      var rail = el('div', { style: 'background:#fff;border:1px solid #e6ebf1;border-radius:12px;padding:6px;min-width:0' }, []);
+
+      function row(icon, label, count, active, onClick, onDelete) {
+        var r = el('div', {
+          role: 'button',
+          tabindex: '0',
+          title: label,
+          style: 'display:grid;grid-template-columns:18px minmax(0,1fr) auto 22px;align-items:center;'
+            + 'column-gap:8px;padding:7px 8px;border-radius:9px;cursor:pointer;font-size:13px;'
+            + 'font-weight:700;line-height:1.3;'
+            + (active ? 'background:#E0F2FE;color:#075985;' : 'color:#334155;'),
+        }, []);
+
+        r.appendChild(el('span', { style: 'font-size:14px;line-height:1;text-align:center' }, [icon]));
+        r.appendChild(el('span', {
+          style: 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+        }, [label]));
+        // Tabular figures so 1 and 11 occupy the same width and the column stays straight.
+        r.appendChild(el('span', {
+          style: 'color:#94A3B8;font-weight:600;font-variant-numeric:tabular-nums;font-size:12.5px',
+        }, [String(count)]));
+
         if (onDelete) {
-          var x = el('button', { type: 'button', title: 'Delete folder', style:
-            'flex:none;border:0;background:transparent;color:#94A3B8;cursor:pointer;font-size:14px;padding:6px' }, ['✕']);
+          var x = el('button', {
+            type: 'button',
+            title: 'Delete folder',
+            'aria-label': 'Delete folder',
+            style: 'border:0;background:transparent;color:#94A3B8;cursor:pointer;font-size:12px;'
+              + 'line-height:1;padding:3px;border-radius:5px;width:22px;height:22px;',
+          }, ['✕']);
           x.addEventListener('click', function (e) { e.stopPropagation(); onDelete(); });
-          wrap.appendChild(x);
+          x.addEventListener('mouseenter', function () { x.style.background = '#FEE2E2'; x.style.color = '#B91C1C'; });
+          x.addEventListener('mouseleave', function () { x.style.background = 'transparent'; x.style.color = '#94A3B8'; });
+          r.appendChild(x);
+        } else {
+          r.appendChild(el('span', {}, []));      // keeps the grid four columns wide
         }
-        return wrap;
+
+        r.addEventListener('click', onClick);
+        r.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+        });
+        if (!active) {
+          r.addEventListener('mouseenter', function () { r.style.background = '#F8FAFC'; });
+          r.addEventListener('mouseleave', function () { r.style.background = 'transparent'; });
+        }
+        return r;
       }
-      rail.appendChild(row('All files', state.docs.length, state.folderId === null,
-        function () { state.folderId = null; paint(); }));
+
+      rail.appendChild(row('🗂', 'All files', state.docs.length, state.folderId === null,
+        function () { state.folderId = null; paint(); }, null));
+
       if (!state.folders.length) {
-        rail.appendChild(el('div', { style: 'color:#94A3B8;font-size:12px;padding:8px 10px;line-height:1.5' },
-          ['No folders yet. Use New folder to group price sheets, decks or contracts.']));
+        rail.appendChild(el('div', {
+          style: 'color:#94A3B8;font-size:12px;padding:8px 10px;line-height:1.5',
+        }, ['No folders yet. Use New folder to group price sheets, decks or contracts.']));
       }
+
       state.folders.forEach(function (f) {
-        rail.appendChild(row('📁 ' + f.name, f.count, Number(state.folderId) === Number(f.id),
+        /* The icon is its OWN cell, not part of the label — glued to the front of the text
+           it pushed every folder name one glyph right of "All files". */
+        rail.appendChild(row('📁', f.name, f.count, Number(state.folderId) === Number(f.id),
           function () { state.folderId = f.id; paint(); },
           function () { deleteFolder(f); }));
       });
