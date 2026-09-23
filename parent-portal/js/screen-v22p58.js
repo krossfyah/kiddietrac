@@ -976,7 +976,7 @@
           <span style="font-size:12.5px;color:#64748B;">Worked out from each date of birth against the schedule — complete whether or not anybody has typed a dose in.</span>
         </div>
         <table data-kt-filter-always="1" data-kt-paginate="25">
-          <thead><tr><th>Child</th><th>Family</th><th>Provider</th><th>Overdue</th><th>Due soon</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Child</th><th>Family</th><th>Provider</th><th>Overdue</th><th>Due soon</th><th>Uploaded</th><th>Status</th><th></th></tr></thead>
           <tbody>${ordered.map(c => {
             const st = c.overdue > 0
               ? ['Overdue', 'kt-pill-danger', '0']
@@ -987,13 +987,28 @@
           <td data-kt-sort="${esc(String(c.centre_name || '').toLowerCase())}">${esc(c.centre_name)}</td>
           <td data-kt-sort="${String(c.overdue || 0).padStart(3, '0')}">${c.overdue > 0 ? `<span class="kt-pill kt-pill-danger">${c.overdue}</span>` : '—'}</td>
           <td data-kt-sort="${String(c.due_soon || 0).padStart(3, '0')}">${c.due_soon > 0 ? `<span class="kt-pill kt-pill-warning">${c.due_soon}</span>` : '—'}</td>
+          <td data-kt-sort="${esc(String(c.record_filed_at || ''))}">${(() => {
+            /* Sorted on the RAW timestamp, shown as a date — sorting on "3 days ago"
+               orders alphabetically, which is how a column like this ends up putting
+               April before yesterday. */
+            if (!c.record_filed_at) {
+              return '<span style="color:#CBD5E1;">—</span>';
+            }
+            const when = String(c.record_filed_at).slice(0, 10);
+            const who = c.record_filed_by ? `<div style="color:#94A3B8;font-size:11.5px;margin-top:2px;">${esc(c.record_filed_by)}</div>` : '';
+            const flag = c.record_pending
+              ? '<div style="margin-top:3px;"><span style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:700;color:#92400E;white-space:nowrap;">Needs details</span></div>'
+              : '';
+            return `<span style="color:#334155;white-space:nowrap;">${esc(when)}</span>${who}${flag}`;
+          })()}</td>
           <td data-kt-sort="${st[2]}"><span class="kt-pill ${st[1]}">${st[0]}</span></td>
           <td style="text-align:right;white-space:nowrap;">
             <button type="button" data-kt-iconized="1" class="imm-child" data-id="${esc(c.child_id || '')}" data-n="${esc(c.child_name || '')}" style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">View immunisations</button>
+            <button type="button" data-kt-iconized="1" class="imm-recs" data-id="${esc(c.child_id || '')}" data-n="${esc(c.child_name || '')}" style="margin-left:6px;padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">📄 Records on file</button>
             <button type="button" data-kt-iconized="1" class="imm-childrec" data-id="${esc(c.child_id || '')}" style="margin-left:6px;padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">Open child record</button>
           </td>
         </tr>`;
-          }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748B;">No enrolled children.</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:#64748B;">No enrolled children.</td></tr>'}</tbody>
         </table>
       </div>`;
 
@@ -1069,6 +1084,17 @@
       const id = parseInt(b.getAttribute('data-id'), 10);
       if (!id) { return; }
       if (KT.openChildImmun) { KT.openChildImmun(id, b.getAttribute('data-n')); }
+    }));
+    /* Straight to the card the family sent in. Same panel as View immunisations, one
+       tab along - which is where somebody chasing a missing record is actually going,
+       and it saves them the click every time. The leading glyph is deliberate: the
+       fallback icon picker tests view/open/details before anything else, so an unlabelled
+       "Records on file" would come out as a third eye in the menu. */
+    main.querySelectorAll('.imm-recs').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = parseInt(b.getAttribute('data-id'), 10);
+      if (!id) { return; }
+      if (KT.openChildImmun) { KT.openChildImmun(id, b.getAttribute('data-n'), 'recs'); }
     }));
     main.querySelectorAll('.imm-childrec').forEach(b => b.addEventListener('click', (e) => {
       e.stopPropagation();

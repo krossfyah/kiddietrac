@@ -999,14 +999,7 @@
       ]);
       host.appendChild(bar);
 
-      var formWrap = el('div', { style: 'display:none;margin-bottom:14px' }, []);
-      host.appendChild(formWrap);
-      addBtn.addEventListener('click', function () {
-        var open = formWrap.style.display !== 'none';
-        formWrap.style.display = open ? 'none' : 'block';
-        addBtn.textContent = open ? '＋ Add a file' : '✕ Cancel';
-        if (!open) { clear(formWrap); formWrap.appendChild(uploader()); }
-      });
+      addBtn.addEventListener('click', openUploadDialog);
 
       if (!docs.length) {
         host.appendChild(el('div', {
@@ -1113,52 +1106,87 @@
         + '</label>';
     }
 
-    function uploader() {
+    /**
+     * ADD A FILE, in a dialog.
+     *
+     * It was an inline panel that pushed the shelf down the moment you opened it —
+     * which is backwards: the shelf is what the screen is for, and adding to it is the
+     * occasional act. A dialog also gives the form somewhere to put its own error and a
+     * Cancel that means something.
+     */
+    function openUploadDialog() {
+      var M = window.KT && KT.Shell && KT.Shell.Modal;
+      if (!M) { toast('⚠️', 'Unavailable', 'This dialog could not open.', '#DC2626'); return; }
+
       var INPUT = 'width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #CBD5E1;'
         + 'border-radius:9px;font-size:13.5px;background:#fff;';
-      var wrap = el('div', {
-        style: 'background:#fff;border:1px solid #e6ebf1;border-radius:12px;padding:18px',
-      });
-      wrap.innerHTML =
-        '<div style="font-weight:800;color:#0F172A;font-size:14px;margin-bottom:14px;">Add a file</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;">'
-        +   field('File', 'PDF, deck, sheet or image — up to 25 MB',
-                  '<input type="file" class="sl-file" style="' + INPUT + 'padding:8px 10px;">')
+
+      function field(label, hint, controlHtml) {
+        return '<label style="display:block">'
+          + '<span style="display:block;font-size:12px;font-weight:800;color:#334155;'
+          +   'text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">' + label + '</span>'
+          + controlHtml
+          + (hint ? '<span style="display:block;color:#94A3B8;font-size:11.5px;margin-top:4px;">' + hint + '</span>' : '')
+          + '</label>';
+      }
+
+      var form = document.createElement('div');
+      form.innerHTML =
+        field('File', 'PDF, deck, sheet or image — up to 25 MB',
+              '<input type="file" class="sl-file" style="' + INPUT + 'padding:8px 10px;">')
+        + '<div style="height:14px"></div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;">'
         +   field('Title', 'Left blank, the file name is used',
                   '<input class="sl-title" placeholder="e.g. Price sheet 2026" style="' + INPUT + '">')
-        +   field('Category', 'Groups the shelf — e.g. Pricing, Decks, Contracts',
+        +   field('Category', 'Groups the shelf — e.g. Pricing, Decks',
                   '<input class="sl-cat" list="sl-cats" placeholder="Pricing" style="' + INPUT + '">'
                   + '<datalist id="sl-cats"></datalist>')
         + '</div>'
-        + '<div style="margin-top:14px;">'
-        +   field('Notes', 'What it is for, and who it is aimed at',
-                  '<textarea class="sl-notes" rows="2" style="' + INPUT + 'resize:vertical;"></textarea>')
-        + '</div>'
+        + '<div style="height:14px"></div>'
+        + field('Notes', 'What it is for, and who it is aimed at',
+                '<textarea class="sl-notes" rows="3" style="' + INPUT + 'resize:vertical;"></textarea>')
         + '<div class="sl-err" style="color:#B91C1C;font-size:12.5px;margin-top:10px;"></div>';
 
-      var go = el('button', { type: 'button', style: 'margin-top:14px;' + btnCss('#0C6070', '#fff', '#0C6070') }, ['Add to repository']);
-      go.addEventListener('click', async function () {
-        var err = wrap.querySelector('.sl-err'); err.textContent = '';
-        var f = wrap.querySelector('.sl-file').files[0];
-        if (!f) { err.textContent = 'Choose a file.'; return; }
-        if (f.size > 25 * 1024 * 1024) { err.textContent = 'That file is larger than 25 MB.'; return; }
-        go.disabled = true; go.textContent = 'Uploading…';
-        var fd = new FormData();
-        fd.append('file', f);
-        fd.append('title', wrap.querySelector('.sl-title').value || '');
-        fd.append('category', wrap.querySelector('.sl-cat').value || '');
-        fd.append('notes', wrap.querySelector('.sl-notes').value || '');
-        try {
-          var res = await KT.Api.postForm('/sales/library', fd);
-          toast('📁', 'Added', (res && res.message) || '');
-          reload();
-        } catch (e) {
-          err.textContent = (e && e.message) || 'Could not upload that file.';
-          go.disabled = false; go.textContent = 'Add to repository';
-        }
+      M.open({
+        // `body`, not `content` — the dialog renders a string or a Node from `body` and
+        // silently ignores anything else.
+        title: '📁 Add a file to the repository',
+        body: form,
+        large: true,
+        actions: [
+          { label: 'Cancel' },
+          {
+            label: 'Add to repository',
+            primary: true,
+            busyLabel: 'Uploading…',
+            handler: function () {
+              var err = form.querySelector('.sl-err');
+              err.textContent = '';
+              var f = form.querySelector('.sl-file').files[0];
+              // Returning false keeps the dialog open and restores the button, which is
+              // the whole reason a validation failure belongs here and not in a toast.
+              if (!f) { err.textContent = 'Choose a file.'; return false; }
+              if (f.size > 25 * 1024 * 1024) { err.textContent = 'That file is larger than 25 MB.'; return false; }
+
+              var fd = new FormData();
+              fd.append('file', f);
+              fd.append('title', form.querySelector('.sl-title').value || '');
+              fd.append('category', form.querySelector('.sl-cat').value || '');
+              fd.append('notes', form.querySelector('.sl-notes').value || '');
+
+              return KT.Api.postForm('/sales/library', fd)
+                .then(function (res) {
+                  toast('📁', 'Added', (res && res.message) || '');
+                  reload();
+                })
+                .catch(function (e) {
+                  err.textContent = (e && e.message) || 'Could not upload that file.';
+                  return false;
+                });
+            },
+          },
+        ],
       });
-      wrap.appendChild(go);
-      return wrap;
     }
 
     reload();

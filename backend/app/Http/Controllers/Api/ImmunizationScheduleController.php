@@ -214,6 +214,8 @@ final class ImmunizationScheduleController extends Controller
                 'title' => $latestFiled['title'],
                 'uploaded_at' => $latestFiled['uploaded_at'],
                 'uploaded_by' => $latestFiled['uploaded_by'],
+                // What was read off it — empty means the card is filed and untranscribed.
+                'doses' => $latestFiled['doses'] ?? [],
                 'uploaded_by_parent' => $latestFiled['uploaded_by_parent'],
                 'count' => count($filed),
             ] : null,
@@ -247,6 +249,14 @@ final class ImmunizationScheduleController extends Controller
                    people, and they looked identical here. */
                 'record_on_file' => ! empty($payload['record_on_file']),
                 'record_filed_at' => $payload['record_on_file']['uploaded_at'] ?? null,
+                /* Who sent it, and whether anybody has read it yet. The roster column
+                   needs both: "a card arrived last Tuesday" and "a card arrived last
+                   Tuesday and is still nobody's job done" are different rows to act on,
+                   and the second is the one worth chasing. `doses` on the latest record
+                   is the same test the records list and the digest use. */
+                'record_filed_by' => $payload['record_on_file']['uploaded_by'] ?? null,
+                'record_pending' => ! empty($payload['record_on_file'])
+                    && empty($payload['record_on_file']['doses']),
             ];
         })->sortByDesc('overdue')->values();
         return response()->json(['data' => $rows]);

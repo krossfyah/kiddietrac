@@ -178,7 +178,12 @@
      "Upload it for them" is the request an admin has while looking at an overdue row, and
      until now it meant leaving for the child record and finding the attachments tab. Same
      panel the family sees, so the two are never looking at different lists. */
-  function openChildImmun(childId, name) {
+  /**
+   * @param {string} [tab] 'recs' lands on Records on file instead of What is due.
+   *   The panel already exposed __ktShowRecords for the filing dialog; the third
+   *   argument is optional, so every existing two-argument call is unchanged.
+   */
+  function openChildImmun(childId, name, tab) {
     var ov = document.createElement('div');
     ov.className = 'kt-scrim';
     ov.setAttribute('data-no-modal-guard', '1');
@@ -210,6 +215,15 @@
     var host = ov.querySelector('#ip-host');
     if (KT.immunPanel) {
       KT.immunPanel(host, { id: childId, first_name: name }, { scope: 'director', canUpload: true });
+      /* The panel paints "What is due" first and only defines the hook once it has.
+         Switching on the next tick rather than immediately, so this is not a race with
+         its own mount; if the hook is ever missing the reader simply lands on the
+         default tab, which is a worse shortcut and not a broken screen. */
+      if (tab === 'recs') {
+        setTimeout(function () {
+          try { if (host.__ktShowRecords) { host.__ktShowRecords(); } } catch (e) {}
+        }, 0);
+      }
     } else {
       host.innerHTML = '<div style="color:#B91C1C;font-size:13px;">This view could not load. Please reload the page.</div>';
     }
