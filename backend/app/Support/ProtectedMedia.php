@@ -33,6 +33,10 @@ class ProtectedMedia
 {
     /** Folders under the public disk that must never be served without a signature. */
     public const FOLDERS = [
+        /* Commercial material for the whole platform - price sheets, contract
+           templates. Readable by superadmins only, so it must never be servable
+           from its /storage path by anyone holding the URL. */
+        'sales-library',
         'child-documents',
         /* A CHILD'S PHOTOGRAPH, which was served unsigned and publicly readable by
            anyone holding the URL — while `child-documents` beside it was protected.

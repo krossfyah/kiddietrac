@@ -85,6 +85,19 @@
   function fmtTime(s) { if (!s) return ''; try { var d = new Date(s.replace(' ', 'T')); return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return s; } }
   function me() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function salesAuthed() { var r = (me().roles) || []; return r.indexOf('sales_rep') > -1 || r.indexOf('platform_admin') > -1; }
+  /* SUPERADMIN, for showing the library at all.
+     Read from the cached user because this only decides whether to DRAW something —
+     the server decides whether to answer, and it re-reads the live role table. A stale
+     cached role here shows a tile that then refuses; it cannot hand anything over. */
+  function isSuperAdmin() {
+    try {
+      var u = me() || {};
+      if (u.is_platform_admin) { return true; }
+      if (String(u.role_key || u.role || '') === 'platform_admin') { return true; }
+      return (u.roles || []).indexOf('platform_admin') !== -1;
+    } catch (e) { return false; }
+  }
+
   function guarded(fn) {
     return function (c, ctx) {
       if (!salesAuthed()) { c.innerHTML = ''; c.appendChild(el('div', { style: 'padding:48px 20px;text-align:center;color:#64748B' }, ['🔒 The sales workspace is for the sales team and superadmins.'])); return; }
@@ -902,6 +915,178 @@
       ]),
     ]);
   }
+  /**
+   * THE REFERENCE LIBRARY — superadmin only.
+   *
+   * Price sheets, comparison decks, contract templates: material the sales side needs to
+   * hand, belonging to KiddieTrac rather than to any agency. Deliberately plain — a list,
+   * an uploader and a way to open one — because a reference shelf that needs explaining
+   * is a reference shelf nobody uses.
+   */
+  async function renderLibrary(container) {
+    clear(container); ensureSalesCss();
+
+    if (!isSuperAdmin()) {
+      container.appendChild(el('div', { style: 'padding:48px 20px;text-align:center;color:#64748B' },
+        ['\uD83D\uDD12 The reference library is for superadmins.']));
+      return;
+    }
+
+    container.appendChild(hero('Reference library',
+      'Price sheets, decks and templates for the sales team. Only superadmins can see this.', '\uD83D\uDCDA'));
+
+    var host = el('div', {});
+    container.appendChild(host);
+    host.appendChild(el('div', { style: 'padding:26px;text-align:center;color:#64748B' }, ['Loading the library\u2026']));
+
+    async function reload() {
+      clear(host);
+      host.appendChild(el('div', { style: 'padding:26px;text-align:center;color:#64748B' }, ['Loading the library\u2026']));
+      var data;
+      try { data = await Api.get('/sales/library'); }
+      catch (e) {
+        clear(host);
+        host.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Could not load: ' + (e.message || e)])]));
+        return;
+      }
+      clear(host);
+      host.appendChild(uploader());
+
+      var docs = data.documents || [];
+      if (!docs.length) {
+        host.appendChild(card([el('div', { style: 'color:#64748B;padding:8px 0' },
+          ['Nothing here yet. Add the first price sheet or deck above.'])]));
+        return;
+      }
+
+      var tbl = el('table', { style: 'width:100%;border-collapse:collapse;background:#fff;border:1px solid #e6ebf1;border-radius:12px;overflow:hidden' });
+      var thead = el('thead', {}, [el('tr', { style: 'background:#F9FAFB;text-align:left' }, [
+        el('th', { style: 'padding:11px 12px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase' }, ['Document']),
+        el('th', { style: 'padding:11px 12px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase' }, ['Category']),
+        el('th', { style: 'padding:11px 12px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase' }, ['Added']),
+        el('th', { style: 'padding:11px 12px' }, ['']),
+      ])]);
+      var tb = el('tbody', {});
+      docs.forEach(function (d) {
+        var actions = el('td', { style: 'padding:11px 12px;text-align:right;white-space:nowrap' }, []);
+
+        /* Plain buttons in the last cell — kt-row-actions collapses them into the
+           standard kebab. Never draw our own here. */
+        var open = el('button', { type: 'button', 'data-kt-iconized': '1', style: btnCss('#fff', '#0F172A', '#CBD5E1') }, ['View']);
+        open.addEventListener('click', function (e) { e.stopPropagation(); openDoc(d); });
+        actions.appendChild(open);
+
+        var del = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'margin-left:6px;' + btnCss('#fff', '#B91C1C', '#FCA5A5') }, ['\uD83D\uDDD1 Remove']);
+        del.addEventListener('click', function (e) { e.stopPropagation(); removeDoc(d, reload); });
+        actions.appendChild(del);
+
+        tb.appendChild(el('tr', { style: 'border-top:1px solid #F1F5F9' }, [
+          el('td', { style: 'padding:11px 12px' }, [
+            el('div', { style: 'font-weight:700;color:#0F172A' }, [d.title || 'Document']),
+            el('div', { style: 'color:#94A3B8;font-size:12px' }, [fileMeta(d)]),
+            d.notes ? el('div', { style: 'color:#475569;font-size:12px;margin-top:3px;white-space:pre-wrap' }, [d.notes]) : el('span', {}, []),
+          ]),
+          el('td', { style: 'padding:11px 12px;color:#475569' }, [d.category || '\u2014']),
+          el('td', { style: 'padding:11px 12px;color:#475569;white-space:nowrap' }, [
+            String(d.uploaded_at || '').slice(0, 10) + (d.uploaded_by ? ' \u00b7 ' + d.uploaded_by : ''),
+          ]),
+          actions,
+        ]));
+      });
+      tbl.appendChild(thead); tbl.appendChild(tb);
+      host.appendChild(el('div', { style: 'overflow-x:auto;margin-top:14px' }, [tbl]));
+      if (window.KT && KT.sweepRowActions) { setTimeout(KT.sweepRowActions, 0); }
+    }
+
+    function btnCss(bg, fg, br) {
+      return 'padding:6px 12px;border-radius:8px;border:1px solid ' + br + ';background:' + bg
+        + ';color:' + fg + ';font-size:12.5px;font-weight:700;cursor:pointer';
+    }
+
+    function fileMeta(d) {
+      var kb = Number(d.file_size || 0);
+      var size = kb > 1048576 ? (kb / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(kb / 1024)) + ' KB';
+      var kind = String(d.file_type || '').split('/').pop().toUpperCase();
+      return (kind ? kind + ' \u00b7 ' : '') + size;
+    }
+
+    /* Signed, bearer-free and short-lived, so it can be handed to the real browser —
+       the packaged app cannot open a /storage path and cannot carry the session out. */
+    function openDoc(d) {
+      if (!d.open_url) { toast('\u26A0\uFE0F', 'Unavailable', 'That file has no link.', '#DC2626'); return; }
+      try {
+        if (window.KT && KT.openDocumentExternally) { KT.openDocumentExternally(d.open_url, d.title); return; }
+      } catch (e) {}
+      window.open(d.open_url, '_blank', 'noopener');
+    }
+
+    async function removeDoc(d, done) {
+      var ok = true;
+      try {
+        if (KT.confirm) {
+          ok = await KT.confirm({
+            title: 'Remove from the library?',
+            description: '\u201C' + (d.title || 'This document') + '\u201D stops being listed. The file itself is kept.',
+            okLabel: 'Remove',
+          });
+        }
+      } catch (e) { ok = false; }
+      if (!ok) { return; }
+      try {
+        await Api.del('/sales/library/' + d.id);
+        toast('\uD83D\uDDD1', 'Removed', d.title || '');
+        done();
+      } catch (e) { toast('\u26A0\uFE0F', 'Could not remove', e.message || '', '#DC2626'); }
+    }
+
+    function uploader() {
+      var wrap = el('div', { style: 'background:#fff;border:1px solid #e6ebf1;border-radius:12px;padding:16px' });
+      wrap.innerHTML =
+        '<div style="font-weight:800;color:#0F172A;margin-bottom:10px;">Add a document</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;align-items:end;">'
+        +   '<label style="font-size:12.5px;font-weight:700;color:#334155;">Title'
+        +     '<input class="sl-title" placeholder="Optional \u2014 the file name is used" '
+        +       'style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;"></label>'
+        +   '<label style="font-size:12.5px;font-weight:700;color:#334155;">Category'
+        +     '<input class="sl-cat" list="sl-cats" placeholder="e.g. Pricing" '
+        +       'style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;">'
+        +     '<datalist id="sl-cats"></datalist></label>'
+        +   '<label style="font-size:12.5px;font-weight:700;color:#334155;">File'
+        +     '<input type="file" class="sl-file" style="width:100%;box-sizing:border-box;margin-top:4px;font-size:12.5px;"></label>'
+        + '</div>'
+        + '<label style="display:block;margin-top:10px;font-size:12.5px;font-weight:700;color:#334155;">Notes'
+        +   '<textarea class="sl-notes" rows="2" placeholder="What this is for, who it is aimed at" '
+        +     'style="width:100%;box-sizing:border-box;margin-top:4px;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;"></textarea></label>'
+        + '<div class="sl-err" style="color:#B91C1C;font-size:12.5px;margin-top:8px;"></div>';
+
+      var go = el('button', { type: 'button', style: 'margin-top:10px;' + btnCss('#0C6070', '#fff', '#0C6070') }, ['Add to library']);
+      go.addEventListener('click', async function () {
+        var err = wrap.querySelector('.sl-err'); err.textContent = '';
+        var f = wrap.querySelector('.sl-file').files[0];
+        if (!f) { err.textContent = 'Choose a file.'; return; }
+        if (f.size > 25 * 1024 * 1024) { err.textContent = 'That file is larger than 25 MB.'; return; }
+        go.disabled = true; go.textContent = 'Uploading\u2026';
+        var fd = new FormData();
+        fd.append('file', f);
+        fd.append('title', wrap.querySelector('.sl-title').value || '');
+        fd.append('category', wrap.querySelector('.sl-cat').value || '');
+        fd.append('notes', wrap.querySelector('.sl-notes').value || '');
+        try {
+          var res = await KT.Api.postForm('/sales/library', fd);
+          toast('\uD83D\uDCDA', 'Added', (res && res.message) || '');
+          reload();
+        } catch (e) {
+          err.textContent = (e && e.message) || 'Could not upload that file.';
+          go.disabled = false; go.textContent = 'Add to library';
+        }
+      });
+      wrap.appendChild(go);
+      return wrap;
+    }
+
+    reload();
+  }
+
   function salesTiles() {
     var tiles = [
       { hash: 'sales', icon: '📊', label: 'Pipeline' }, { hash: 'sales-leads', icon: '🎯', label: 'Leads' },
@@ -909,6 +1094,11 @@
       { hash: 'sales-demo', icon: '🚀', label: 'Launch demo' },
       { hash: 'notifications', icon: '🔔', label: 'Inbox' }, { hash: 'help', icon: '📖', label: 'Help' },
     ];
+    /* Superadmin only. A sales rep never sees the tile, and never gets the 403
+       that would follow if they did. */
+    if (isSuperAdmin()) {
+      tiles.splice(5, 0, { hash: 'sales-library', icon: '📚', label: 'Reference library' });
+    }
     var grid = el('div', { class: 'kt-tile-grid' }, tiles.map(function (t) {
       return el('a', { class: 'kt-tile', href: '#' + t.hash }, [el('span', { class: 'kt-tile-icon', 'aria-hidden': 'true' }, [t.icon]), el('span', { class: 'kt-tile-label' }, [t.label])]);
     }));
@@ -944,6 +1134,11 @@
     KT.Shell.registerScreen(role + ':sales-plans', guarded(renderPlans));
     KT.Shell.registerScreen(role + ':sales-demo', guarded(renderDemo));
     KT.Shell.registerScreen(role + ':sales-chat', guarded(renderChat));
+    /* Registered for every sales-capable role, and renderLibrary refuses anyone
+       who is not a superadmin. Registering it only for platform_admin would look
+       tighter and be worse: platform_admin resolves to the agency_admin shell, so
+       the screen would simply not exist for the very people it is for. */
+    KT.Shell.registerScreen(role + ':sales-library', guarded(renderLibrary));
     // NOTE: sales Announcements + the standalone "Team chat" section were retired per
     // product direction — sales messaging now lives in the shared portal chat dock
     // (top-bar 💬), restricted to the sales team + superadmins. sales-news is no longer

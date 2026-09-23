@@ -735,6 +735,19 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/announcements', [\App\Http\Controllers\Api\SalesController::class, 'announcementsStore']);
             Route::delete('/announcements/{announcement}', [\App\Http\Controllers\Api\SalesController::class, 'announcementsDestroy'])->where('announcement','[0-9]+');
         });
+
+        /* THE SALES REFERENCE LIBRARY - SUPERADMIN ONLY.
+           A SEPARATE group from the CRM above on purpose. That one is
+           role:sales_rep,platform_admin; this is commercial material for the platform
+           - price sheets, contract templates, licensing paperwork - and a sales rep
+           must not reach it. Sharing the group would have handed it to them with one
+           word of middleware and no other sign. The controller asks again. */
+        Route::middleware('role:platform_admin')->prefix('sales')->group(function () {
+            Route::get   ('/library',                 [\App\Http\Controllers\Api\SalesLibraryController::class, 'index']);
+            Route::post  ('/library',                 [\App\Http\Controllers\Api\SalesLibraryController::class, 'store']);
+            Route::get   ('/library/{doc}/download',  [\App\Http\Controllers\Api\SalesLibraryController::class, 'download'])->whereNumber('doc');
+            Route::delete('/library/{doc}',           [\App\Http\Controllers\Api\SalesLibraryController::class, 'destroy'])->whereNumber('doc');
+        });
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         // v22p3.5: onboarding wizard submission
