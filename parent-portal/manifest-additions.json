@@ -1,0 +1,177 @@
+{
+ "/js/screen-director.js": {
+  "hashes": [
+   "children",
+   "compliance",
+   "dashboard",
+   "families",
+   "staff",
+   "today"
+  ],
+  "roles": [
+   "${role}"
+  ]
+ },
+ "/js/screen-edocuments.js": {
+  "hashes": [
+   "edocuments"
+  ],
+  "roles": [
+   "agency_admin",
+   "centre_director",
+   "guardian"
+  ]
+ },
+ "/js/screen-immunizations.js": {
+  "hashes": [
+   "immunizations"
+  ],
+  "roles": [
+   "agency_admin",
+   "centre_director",
+   "educator",
+   "guardian"
+  ]
+ },
+ "/js/screen-knowledge-base.js": {
+  "hashes": [
+   "knowledge-base"
+  ],
+  "roles": [
+   "agency_admin",
+   "auditor",
+   "centre_director",
+   "educator",
+   "guardian",
+   "home_visitor",
+   "platform_admin",
+   "sales_rep"
+  ]
+ },
+ "/js/screen-legacy-shim.js": {
+  "hashes": [
+   "ach-pay",
+   "agency-billing",
+   "ai-churn",
+   "ai-docs",
+   "allergy-alerts",
+   "announcements",
+   "anomalies",
+   "attendance-pattern",
+   "autopay",
+   "autopay-card",
+   "background-checks",
+   "billing-schedule",
+   "bus-routes",
+   "cacfp",
+   "care-log",
+   "chat",
+   "checkin",
+   "closures",
+   "conferences",
+   "curriculum",
+   "cwelcc",
+   "directory",
+   "doc-autolink",
+   "doc-workflows",
+   "drip-campaigns",
+   "engagement",
+   "feedback",
+   "field-trips",
+   "forecast",
+   "hdlh-gaps",
+   "immun-schedule",
+   "inspection",
+   "language",
+   "late-pickups",
+   "ledger",
+   "lesson-plans",
+   "menu",
+   "milestones",
+   "nps",
+   "payment-plans",
+   "payroll",
+   "photo-tagging",
+   "photos",
+   "pickup-auth",
+   "portfolio",
+   "reenrollment",
+   "referrals",
+   "refunds",
+   "renewals",
+   "report-cards",
+   "reports",
+   "retention",
+   "room-ratios",
+   "room-rotations",
+   "signed-docs",
+   "sms",
+   "substitutes",
+   "tickets",
+   "time-clock",
+   "time-off",
+   "tours",
+   "trends",
+   "trip-gps",
+   "tuition-increases",
+   "vacation-holds",
+   "videos",
+   "wallet",
+   "wellness",
+   "wellness-digest",
+   "zones"
+  ],
+  "roles": [
+   "agency_admin",
+   "centre_director",
+   "educator",
+   "guardian",
+   "home_visitor",
+   "platform_admin"
+  ]
+ },
+ "/js/screen-medications.js": {
+  "hashes": [
+   "medications"
+  ],
+  "roles": [
+   "agency_admin",
+   "centre_director",
+   "educator",
+   "guardian"
+  ]
+ },
+ "/js/screen-settings.js": {
+  "hashes": [
+   "settings"
+  ],
+  "roles": [
+   "agency_admin",
+   "centre_director",
+   "educator",
+   "guardian",
+   "home_visitor",
+   "platform_admin",
+   "sales_rep"
+  ]
+ },
+ "/js/screen-support.js": {
+  "hashes": [
+   "support"
+  ],
+  "roles": [
+   "educator",
+   "guardian"
+  ]
+ },
+ "/js/screen-withdrawals.js": {
+  "hashes": [
+   "withdraw",
+   "withdrawals"
+  ],
+  "roles": [
+   "*",
+   "guardian"
+  ]
+ }
+}

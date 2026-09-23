@@ -15,11 +15,8 @@
    We standardise EVERYTHING on Inter + DM Sans and align the CSS vars
    so var-based rules match the !important rules. (Inter + DM Sans are
    loaded via <link> in dashboard.html <head>.)                         */
-:root {
-  --kt-font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-  --kt-font-display: 'DM Sans', 'Inter', -apple-system, sans-serif !important;
-  --kt-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
+/* Design tokens for this file now live in kt-tokens.css, which is the
+   only :root in the portal. The values were moved unchanged. */
 
 /* Body / general text → Inter */
 body,

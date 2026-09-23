@@ -33,32 +33,8 @@
 }
 
 /* ============================ Refined palette ============================ */
-:root {
-  --kt-brand: #1F6080;
-  --kt-brand-light: #4A90B8;
-  --kt-brand-dark: #0F4258;
-  --kt-brand-vibrant: #2D7BA8;
-  --kt-accent: #F97316;
-  --kt-accent-hover: #EA580C;
-  --kt-success: #059669;
-  --kt-warning: #D97706;
-  --kt-danger: #DC2626;
-  --kt-info: #4F46E5;
-  --kt-purple: #9333EA;
-  --kt-pink: #DB2777;
-  --kt-bg: #F7F9FC;
-  --kt-bg-elevated: #FFFFFF;
-  --kt-text: #0F172A;
-  --kt-text-muted: #475569;
-  --kt-text-subtle: #94A3B8;
-  --kt-border: #E2E8F0;
-  --kt-border-light: #F1F5F9;
-  --kt-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --kt-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --kt-shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
-  --kt-shadow-lg: 0 20px 40px -12px rgba(15, 23, 42, 0.12), 0 8px 16px -8px rgba(15, 23, 42, 0.08);
-  --kt-shadow-glow: 0 0 0 4px rgba(74, 144, 184, 0.12);
-}
+/* Design tokens for this file now live in kt-tokens.css, which is the
+   only :root in the portal. The values were moved unchanged. */
 
 [data-kt-pretty] {
   background:

@@ -5,34 +5,8 @@
 */
 
 /* ============================ Design tokens ============================ */
-:root {
-  /* Spacing scale (4px grid) */
-  --kt-space-1: 4px;
-  --kt-space-2: 8px;
-  --kt-space-3: 12px;
-  --kt-space-4: 16px;
-  --kt-space-5: 20px;
-  --kt-space-6: 24px;
-  --kt-space-8: 32px;
-  --kt-space-10: 40px;
-  --kt-space-14: 56px;
-
-  /* Border radius scale */
-  --kt-r-sm: 6px;
-  --kt-r-md: 10px;
-  --kt-r-lg: 14px;
-  --kt-r-xl: 18px;
-
-  /* Input states */
-  --kt-input-border: #CBD5E1;
-  --kt-input-border-hover: #94A3B8;
-  --kt-input-border-focus: #1F6080;
-  --kt-input-bg: #FDFEFF;
-  --kt-input-bg-focus: #FFFFFF;
-  --kt-input-shadow-focus: 0 0 0 4px rgba(31, 96, 128, 0.14), 0 1px 4px rgba(31, 96, 128, 0.06);
-
-  /* Smooth scroll */
-}
+/* Design tokens for this file now live in kt-tokens.css, which is the
+   only :root in the portal. The values were moved unchanged. */
 html { scroll-behavior: smooth; }
 ::selection { background: rgba(31, 96, 128, 0.18); color: #0F172A; }
 
@@ -119,7 +93,16 @@ html { scroll-behavior: smooth; }
   opacity: 1;
 }
 
-[data-kt-pretty] input[type="checkbox"]:not(.kt-switchified):not([role="switch"]),
+/* Scoped to .kt-nosw (2026-08-19). This used to read
+   `:not(.kt-switchified)`, which matched EVERY checkbox until kt-switches.js had
+   swept the page, and repainted it as a 20x20 square with !important — the first
+   half of the old/new flicker. It now applies only where a square is actually
+   wanted; see the switch rules in kt-consistency-polish.css. */
+[data-kt-pretty] input[type="checkbox"].kt-nosw,
+[data-kt-pretty] table input[type="checkbox"],
+[data-kt-pretty] [role="grid"] input[type="checkbox"],
+[data-kt-pretty] [data-kt-noswitch] input[type="checkbox"],
+[data-kt-pretty] .kt-checkbox-group input[type="checkbox"],
 [data-kt-pretty] input[type="radio"] {
   width: 20px !important;
   height: 20px !important;
@@ -190,7 +173,13 @@ html { scroll-behavior: smooth; }
 }
 
 /* ============================ Buttons consistency ============================ */
-[data-kt-pretty] button:not(.kt-row-check):not(.kt-pager-input) {
+/* Switches excluded. --kt-r-md is 10px, forced with !important on every button —
+   and a switch IS a button, so its inline border-radius:999px lost and the pill
+   rendered as a rounded square with the knob sitting proud of it. Paired with the
+   44px tap-target floor in v22p66, that is the whole of the "toggle looks broken"
+   report, and why fixing the switch itself never held: neither rule could be
+   outranked from the control. 2026-09-01. */
+[data-kt-pretty] button:not(.kt-row-check):not(.kt-pager-input):not([role="switch"]):not([aria-pressed]) {
   font-weight: 600 !important;
   border-radius: var(--kt-r-md) !important;
   letter-spacing: -0.005em !important;

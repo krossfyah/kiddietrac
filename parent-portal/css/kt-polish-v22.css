@@ -6,15 +6,8 @@
    cascade.
    ============================================================ */
 
-:root {
-  --kt-hero-grad: linear-gradient(135deg, #1F6080 0%, #2C8AAC 55%, #8EC73C 130%);
-  --kt-hero-grad-warm: linear-gradient(135deg, #FF8A65 0%, #F9A26C 50%, #FFC07A 100%);
-  --kt-elev-1: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --kt-elev-2: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.05);
-  --kt-elev-3: 0 12px 28px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(15, 23, 42, 0.06);
-  --kt-radius-lg: 18px;
-  --kt-easing: cubic-bezier(0.4, 0.0, 0.2, 1);
-}
+/* Design tokens for this file now live in kt-tokens.css, which is the
+   only :root in the portal. The values were moved unchanged. */
 
 /* ── Page-level fade-in for screen mounts ──────────────────── */
 @keyframes kt-fade-in-up {
@@ -141,7 +134,7 @@ button:not(:disabled):active {
 }
 
 /* Better focus rings — visible but not ugly */
-button:focus-visible,
+button:not([role="switch"]):not([aria-pressed]):focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -264,7 +257,7 @@ textarea:focus-visible {
 .page-header-v17 .actions .btn-primary { background: #fff !important; color: #1F6080 !important; border-color: #fff !important; }
 
 /* v22 (2026-06) — guarantee ALL form fields are clearly visible everywhere (incl. modals not under [data-kt-pretty]) */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="hidden"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="time"]):not([type="date"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]),
 textarea,
 select {
   border: 1.5px solid #CBD5E1 !important;
@@ -280,6 +273,45 @@ select {
   min-height: 0 !important;
   background-position: right 8px center !important;
 }
+/* ── Native date/time fields ───────────────────────────────────────────────
+   Excluded from the rule above, and styled here instead, because that rule reserves
+   26px on the right for a SELECT's dropdown arrow. A time or date input already
+   paints its own picker indicator inside the field, so it was paying for the arrow
+   twice — and with the forced 13px font that left "08:30 AM" about six pixels short
+   of fitting. Chrome clipped the last glyph: "08:30 AI", "10:30 PN", or a
+   24h-looking "11:00" with the meridiem sliced off completely. On the weekly menu
+   and the lesson planner that is not just untidy, it is ambiguous: a snack at
+   "10:30" means different things depending on how you read it.
+
+   Same look as every other field, minus the reservation — plus a width floor so no
+   author-supplied fixed width can squeeze the meridiem out again.
+   (Anthony, 2026-08-27) */
+input[type="time"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  border: 1.5px solid #CBD5E1 !important;
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-radius: 8px !important;
+  padding: 5px 10px !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  /* !important because several screens set an inline min-width that is too small. */
+  min-width: 128px !important;
+}
+input[type="date"],
+input[type="month"],
+input[type="week"] {
+  min-width: 152px !important;
+}
+input[type="datetime-local"] {
+  min-width: 220px !important;
+}
+
 /* The 26px right padding above is reserved for the dropdown arrow, and it is
    !important — so it silently eats 18px of content box inside ANY select that was
    authored with its own fixed width/max-width for a smaller padding. That is what

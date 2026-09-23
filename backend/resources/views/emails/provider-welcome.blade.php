@@ -60,6 +60,14 @@
     .kt-bordered { border-color:#2C3A50 !important; }
     .kt-bordered td { border-color:#2C3A50 !important; }
 
+    /* The logo panel is the ONE thing that must not follow the dark palette: it
+       holds the original logo, which is artwork drawn on white. Invert the panel
+       and the logo keeps its own white rectangle while the panel goes dark, so
+       the file's edges show as a bright box. Pinned white, with the outline
+       darkened just enough to still read against the dark page. */
+    .kt-logobar, .kt-logobar td { background:#FFFFFF !important; }
+    .kt-logobar { border-color:#C6D0DE !important; }
+
   }
 
   /* Outlook.com rewrites colours and prefixes the body, so it needs its own
@@ -71,6 +79,8 @@
   [data-ogsc] .kt-muted, [data-ogsc] .kt-foot { color:#93A0B8 !important; }
   [data-ogsc] .kt-panel, [data-ogsb] .kt-panel { background:#1E2939 !important; color:#D6DEEC !important; }
   [data-ogsc] .kt-panel-head, [data-ogsb] .kt-panel-head { background:#232F42 !important; color:#EAF1FF !important; }
+  [data-ogsc] .kt-logobar, [data-ogsb] .kt-logobar { background:#FFFFFF !important; border-color:#C6D0DE !important; }
+  [data-ogsc] .kt-logobar td, [data-ogsb] .kt-logobar td { background:#FFFFFF !important; }
 </style>
 </head>
 <body style="margin:0;padding:0;background:#EEF1F6;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0B1A33;">
@@ -79,18 +89,29 @@
   <tr><td align="center" class="kt-page" style="padding:24px 14px;background:#EEF1F6;color:#0B1A33;">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
-      {{-- Hero banner with the agency logo incorporated (white badge, enlarged) --}}
-      <tr><td style="background:linear-gradient(135deg,{{ $primary }} 0%,{{ $accent }} 135%);border-radius:16px 16px 0 0;padding:30px 34px 30px;">
-        @if(!empty($agencyLogoUrl))
-          {{-- Straight onto the gradient, at nearly double the size. The white
-               badge behind it was there to guarantee contrast for any logo an
-               agency might upload, but it read as a sticker pasted on the banner —
-               and this logo is a transparent PNG with bright artwork, so it sits on
-               the dark gradient without help. An agency whose logo is dark ink on
-               transparent would want the badge back; that is a per-agency call, not
-               a default. --}}
-          <img src="{{ $agencyLogoUrl }}" alt="{{ $agencyName }}" style="height:86px;max-height:86px;width:auto;display:block;margin:0 0 18px;">
-        @else
+      {{-- Logo panel — a white, outlined band sitting ABOVE the gradient.
+
+           The logo has been through both other options and neither held up. On a
+           white badge floating inside the banner it read as a sticker; straight
+           onto the gradient it needed its background cut away, and a cut-out is
+           only ever as good as the file — soft edges, drop shadows and anti-aliased
+           type all leave a halo on a dark ground.
+
+           Giving it its own white band sidesteps the problem rather than fighting
+           it: the ORIGINAL logo is used, untouched, on the white it was drawn for,
+           and the outline stops the band from bleeding into the page behind it.
+           It also generalises — any logo an agency uploads, light or dark, sits
+           correctly on white, which is not true of the gradient. --}}
+      @if(!empty($agencyLogoPanelUrl))
+      <tr><td align="center" class="kt-logobar" style="background:#FFFFFF;border:1px solid #D7DEE8;border-bottom:none;border-radius:16px 16px 0 0;padding:22px 24px 20px;">
+        <img src="{{ $agencyLogoPanelUrl }}" alt="{{ $agencyName }}" width="286" style="width:286px;max-width:100%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;">
+      </td></tr>
+      @endif
+
+      {{-- Hero banner. Square on top when the logo panel is above it, so the two
+           read as one card rather than two stacked ones. --}}
+      <tr><td style="background:linear-gradient(135deg,{{ $primary }} 0%,{{ $accent }} 135%);border-radius:{{ !empty($agencyLogoPanelUrl) ? '0' : '16px 16px 0 0' }};padding:30px 34px 30px;">
+        @if(empty($agencyLogoPanelUrl))
           <div style="color:#ffffff;font-size:23px;font-weight:800;margin-bottom:18px;letter-spacing:-0.3px;">{{ $agencyName }}</div>
         @endif
         <div style="color:#CFE9EA;font-size:12px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;">A warm welcome to our family</div>

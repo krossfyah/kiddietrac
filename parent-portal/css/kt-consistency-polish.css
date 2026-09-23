@@ -195,7 +195,7 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
    in the toolbar for a light background. !important because several of these buttons
    carry inline colours from the screen that drew them. */
 #appMain .kt-page-actions .kt-btn,
-#appMain .kt-page-actions button,
+#appMain .kt-page-actions button:not([role="switch"]):not([aria-pressed]),
 #appMain .kt-page-actions a.btn {
   background: #FFFFFF !important;
   color: #1F6080 !important;
@@ -416,8 +416,14 @@ body button[role="switch"] {
   -webkit-appearance: none;
   appearance: none;
   box-sizing: border-box;
-  min-height: 0;
-  padding: 0;
+  /* !important on the three properties a generic button rule reaches for. The
+     exclusions added to those rules are the real fix; this is the guard that means
+     the NEXT one written without thinking about switches cannot break the toggle
+     again. Width, height, background and radius are deliberately still left to the
+     control's own inline styles. */
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: 0 !important;
   border: none;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
@@ -582,7 +588,6 @@ input.kt-switchified:checked:hover,
 input.kt-switchified:checked:focus { background: #159FB4 !important; }
 input.kt-switchified:disabled { opacity: .5 !important; }
 
-
 /* ══ Buttons in dialogs ══════════════════════════════════════════════════════
    Every .kt-btn rule in this portal is written as `[data-kt-pretty] .kt-btn`, and
    data-kt-pretty lives on the screen container. Modals are appended to document.body,
@@ -641,7 +646,6 @@ input.kt-switchified:disabled { opacity: .5 !important; }
 .kt-btn-secondary:hover:not(:disabled),
 [data-kt-pretty] .kt-btn-secondary:hover:not(:disabled) { background: #E2E8F0; border-color: #CBD5E1; }
 
-
 /* ── Today, made visible (2026-08-27) ────────────────────────────────────────
    Every screen that marks today had picked its own tint, and each was chosen on a
    good monitor in a dark room: #F0F9FF and rgba(224,242,254,.45) are both within a
@@ -650,10 +654,8 @@ input.kt-switchified:disabled { opacity: .5 !important; }
 
    A tint with enough contrast to survive daylight and a printer, plus an accent edge,
    because colour alone fails for a colour-blind reader and disappears in greyscale. */
-:root {
-  --kt-today-bg: #DCEEF7;
-  --kt-today-edge: #1F6080;
-}
+/* Design tokens for this file now live in kt-tokens.css, which is the
+   only :root in the portal. The values were moved unchanged. */
 
 /* A whole row in a table (the child's weekly schedule, rosters, any day list). */
 tr.kt-today-row > td,
@@ -710,5 +712,42 @@ table thead th.kt-today-cell {
   tr.kt-today-row > td, tr.kt-today-row > th,
   td.kt-today-cell, th.kt-today-cell, .kt-today-block {
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+}
+
+/* ── A finger-sized floor under small controls, on touch only (2026-09-03) ────
+   The sweep found sub-28px tap targets. No button sets a hard height below 28px —
+   the small heights in the codebase are badges, dots, avatars and checkboxes. The
+   real ones are ~29 buttons with 1–4px of vertical padding (filter chips and inline
+   pills, mostly chat / external waitlist / external billing) computing to roughly
+   18–24px.
+
+   Fixed here rather than in 29 files, and scoped to `pointer: coarse` — phones and
+   the APK — because that is where a small target actually costs a mis-tap. Desktop
+   keeps the tight chip geometry it is meant to have.
+
+   32px, not 44: it matches the compact control size this portal already targets, so
+   a chip grows to the size of everything else on a phone.
+
+   min-height ONLY, no !important, and switches/checkboxes/radios excluded —
+   input.kt-switchified pins 28px with !important and a competing floor is what made
+   the knob bulge out of the track in August. */
+@media (pointer: coarse) {
+  #appMain button,
+  #appMain .btn,
+  #appMain [role="button"],
+  #modalRoot button,
+  #modalRoot .btn {
+    min-height: 32px;
+  }
+
+  /* Anything whose size IS its meaning keeps it. */
+  #appMain input.kt-switchified,
+  #appMain input[type="checkbox"],
+  #appMain input[type="radio"],
+  #appMain .kt-ka-kebab,
+  #modalRoot input[type="checkbox"],
+  #modalRoot input[type="radio"] {
+    min-height: 0;
   }
 }

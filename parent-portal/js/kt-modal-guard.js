@@ -47,7 +47,19 @@
     return best;
   }
 
+  /* A dialog whose body is a cross-origin iframe cannot be inspected — the vendor's
+     own ✕ lives in THEIR document. Treat "cannot see" as "assume it has one", never
+     as "there is none": guessing the latter is what put a second ✕ on top of Zum's
+     close button, and ours was the worse one (it rips the overlay out of the DOM, so
+     the SDK never learns the user closed it). */
+  function isVendorFrame(card) {
+    if (!card) { return false; }
+    if (card.tagName === 'IFRAME') { return true; }
+    return !!card.querySelector('iframe');
+  }
+
   function hasClose(card) {
+    if (isVendorFrame(card)) return true;
     if (card.querySelector('.modal-close, .kt-modal-x, [data-close], [aria-label="Close"]')) return true;
     var els = card.querySelectorAll('button, a, span, i');
     for (var i = 0; i < els.length; i++) {
@@ -77,8 +89,12 @@
     // (2) Containment — keep the dialog on-screen and scroll inside it.
     var ccs;
     try { ccs = getComputedStyle(card); } catch (e) { ccs = {}; }
-    if (!ccs.maxHeight || ccs.maxHeight === 'none') card.style.maxHeight = '90vh';
-    if (ccs.overflowY === 'visible' || !ccs.overflowY) card.style.overflowY = 'auto';
+    /* An iframe is sized by its own content and scrolls itself. Capping it at 90vh
+       and forcing overflow from out here fights the vendor's own layout. */
+    if (!isVendorFrame(card)) {
+      if (!ccs.maxHeight || ccs.maxHeight === 'none') card.style.maxHeight = '90vh';
+      if (ccs.overflowY === 'visible' || !ccs.overflowY) card.style.overflowY = 'auto';
+    }
     if (ccs.position === 'static' || !ccs.position) card.style.position = 'relative';
 
     // (1) Close "×" — only if the dialog doesn't already have one.

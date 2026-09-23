@@ -575,6 +575,7 @@
           Dom.el('th', {}, 'Email'),
           Dom.el('th', {}, 'Role'),
           Dom.el('th', {}, 'Certifications'),
+          Dom.el('th', {}, 'Contractor'),
           Dom.el('th', {}, 'Status'),
         )
       ));
@@ -593,6 +594,31 @@
         row.appendChild(Dom.el('td', {},
           (s.certifications || []).map(c => c.cert_type.replace('_', ' ')).join(', ') || '—'
         ));
+        /* Marks who counts as a contractor, which is what the "All contractors"
+           announcement audience sends to. There is no role that means it and no
+           employment field to infer it from, so it is stated per person. */
+        const sw = Dom.el('input', { type: 'checkbox' });
+        sw.checked = !!s.is_contractor;
+        sw.setAttribute('data-kt-switch', '1');   // render as a toggle, not a tick box
+        sw.setAttribute('aria-label', 'Mark ' + s.first_name + ' as a contractor');
+        sw.addEventListener('change', async () => {
+          const want = sw.checked;
+          sw.disabled = true;
+          try {
+            await Api.patch('/director/staff/' + s.id + '/contractor', { is_contractor: want });
+            s.is_contractor = want;
+            Dom.toast(s.first_name + (want ? ' is now a contractor' : ' is no longer a contractor'), 'success');
+          } catch (e) {
+            // Put the switch back where it was. A toggle that stays flipped after a
+            // failed save is a screen quietly disagreeing with the database.
+            sw.checked = !want;
+            Dom.toast('Could not save that — ' + (e && e.message ? e.message : 'try again'), 'error');
+          } finally {
+            sw.disabled = false;
+          }
+        });
+        row.appendChild(Dom.el('td', {}, sw));
+
         row.appendChild(Dom.el('td', {},
           s.status === 'active'
             ? Dom.el('span', { class: 'tag tag-success' }, 'ACTIVE')
@@ -641,6 +667,72 @@
     }
   }
 
+  /**
+   * Sign a child in or out from the director's roster.
+   *
+   * The API has always allowed this — POST /provider/check-in is gated on
+   * `role:educator,centre_director,agency_admin,platform_admin`, and requireClockIn()
+   * explicitly exempts supervisors because they do not clock on to a room. What was
+   * missing was any way to DO it: the only screens calling that endpoint register under
+   * `educator:`, so a director's only route was View-as → Educator. A director covering
+   * the door while an educator is on a break should not have to impersonate one.
+   * (Anthony, 2026-08-26)
+   *
+   * Marks attendance, which parents are notified about — so it confirms first.
+   */
+  /* Correcting the past is a director's job, not an educator's — an educator who
+     forgot asks their director. Mirrors the server check, which is the one that counts. */
+  function _mayCorrectAttendance() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var roles = u.roles || [];
+      return ['centre_director', 'agency_admin', 'platform_admin'].some(function (r) {
+        return roles.indexOf(r) !== -1;
+      });
+    } catch (e) { return false; }
+  }
+
+  async function directorCheckEvent(child, room, btn, card) {
+    var goingIn = !child.is_at_centre;
+    var name = child.display_name || 'this child';
+
+    var ok = await KT.confirm({
+      title: (goingIn ? 'Sign in ' : 'Sign out ') + name + '?',
+      description: goingIn
+        ? (name + ' will be marked present in ' + (room.room_name || 'this room')
+           + ' as of now, and their family is notified.')
+        : (name + ' will be marked as gone home as of now, and their family is notified.'),
+      okLabel: goingIn ? 'Sign in' : 'Sign out',
+    });
+    if (!ok) return;
+
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = goingIn ? 'Signing in\u2026' : 'Signing out\u2026';
+
+    try {
+      await Api.post(goingIn ? '/provider/check-in' : '/provider/check-out', {
+        child_id: child.id,
+        room_id: room.room_id,
+      });
+      // Reflect it immediately rather than making them hunt for a refresh.
+      child.is_at_centre = goingIn;
+      if (window.KT && KT.Dom && KT.Dom.toast) {
+        KT.Dom.toast(name + (goingIn ? ' signed in' : ' signed out'), 'success');
+      }
+      var hash = (location.hash || '').replace('#', '').split('?')[0];
+      if (hash === 'today') { location.reload(); return; }
+      btn.textContent = original;
+      btn.disabled = false;
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = original;
+      var msg = (e && e.message) || 'Could not record that.';
+      if (window.KT && KT.Dom && KT.Dom.toast) KT.Dom.toast(msg, 'error');
+      else alert(msg);
+    }
+  }
+
   function renderRoomCardForDirector(room, roster) {
     const wrap = Dom.el('div', { class: 'card', style: 'margin-bottom: 16px;' });
 
@@ -684,6 +776,48 @@
           'Not in yet',
         ));
       }
+
+      /* Manual sign in / out. Quiet styling on purpose — this is the exception, not
+         the normal route in (parents scan, educators tap the roster). */
+      var act = Dom.el('button', {
+        type: 'button',
+        style: 'margin-top:8px;width:100%;padding:6px 8px;font-size:12px;font-weight:700;'
+          + 'font-family:inherit;cursor:pointer;border-radius:7px;border:1px solid '
+          + (child.is_at_centre
+              ? '#E2E8F0;background:#fff;color:#475569;'
+              : '#BFDBFE;background:#EFF6FF;color:#1E40AF;'),
+      }, child.is_at_centre ? 'Sign out' : 'Sign in');
+      act.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        directorCheckEvent(child, room, act, card);
+      });
+      card.appendChild(act);
+
+      /* Signing in above records "now", which is what you want at the door and wrong
+         for a day somebody forgot. This is the other case: the time it actually
+         happened, entered afterwards and marked as such. Directors and admins only —
+         the server enforces that regardless of who can see this button. */
+      if (window.KT && KT.AttendanceFix && _mayCorrectAttendance()) {
+        var fix = Dom.el('button', {
+          type: 'button',
+          title: 'Record a sign in or out that was missed on an earlier day',
+          style: 'margin-top:6px;width:100%;padding:5px 8px;font-size:11.5px;font-weight:700;'
+            + 'font-family:inherit;cursor:pointer;border-radius:7px;border:1px dashed #CBD5E1;'
+            + 'background:#fff;color:#64748B;',
+        }, '⏱ Fix a missed entry');
+        fix.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          KT.AttendanceFix.open(
+            { id: child.id, name: child.display_name || 'this child' },
+            function () {
+              var hash = (location.hash || '').replace('#', '').split('?')[0];
+              if (hash === 'today') { location.reload(); }
+            }
+          );
+        });
+        card.appendChild(fix);
+      }
+
       grid.appendChild(card);
     });
 

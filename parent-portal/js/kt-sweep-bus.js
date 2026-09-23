@@ -26,6 +26,9 @@
   var observer = null;
   var debTimer = null;
   var pending = false;
+  /* When `pending` was raised. rAF never fires on a hidden tab, so without this a
+     mutation that arrives while backgrounded wedges the bus for good. */
+  var pendingSince = 0;
 
   function mainEl() { return document.getElementById('appMain'); }
 
@@ -50,6 +53,7 @@
   function schedule() {
     if (pending) return;
     pending = true;
+    pendingSince = Date.now();
     setTimeout(runAll, 0);
   }
 
@@ -62,6 +66,7 @@
   function scheduleFrame() {
     if (pending) return;
     pending = true;
+    pendingSince = Date.now();
     (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(runAll);
   }
 
@@ -93,5 +98,20 @@
 
   // Slow safety net — only while the tab is visible (backgrounded WebViews are
   // paused anyway). One coalesced pass every 6s is negligible vs the old 14 timers.
-  setInterval(function () { if (!document.hidden) schedule(); }, 6000);
+  setInterval(function () {
+    if (document.hidden) return;
+    /* Clear a pending flag that rAF is never going to honour — see pendingSince.
+       Without this the safety net calls schedule(), which returns immediately
+       because pending is still true, and the bus stays dead until a reload. */
+    if (pending && Date.now() - pendingSince > 2000) pending = false;
+    schedule();
+  }, 6000);
+
+  /* Coming back to a backgrounded tab is the moment the wedge matters most: the
+     screen may have rendered while hidden and gone undecorated. Clear and re-run. */
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    if (pending && Date.now() - pendingSince > 500) pending = false;
+    schedule();
+  });
 })(window);

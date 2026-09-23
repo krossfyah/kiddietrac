@@ -5,18 +5,8 @@
    main containers on screens we own).
 */
 
-:root {
-  --kt-brand: #1F6080;
-  --kt-brand-light: #3a86ad;
-  --kt-brand-dark: #154057;
-  --kt-success: #10B981;
-  --kt-warning: #F59E0B;
-  --kt-danger: #EF4444;
-  --kt-info: #6366F1;
-  --kt-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
-  --kt-shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
-  --kt-shadow-lg: 0 14px 28px -8px rgba(15, 23, 42, 0.10), 0 8px 12px -4px rgba(15, 23, 42, 0.05);
-}
+/* Design tokens for this file now live in kt-tokens.css, which is the
+   only :root in the portal. The values were moved unchanged. */
 
 /* Containers ============================================================== */
 [data-kt-pretty] {

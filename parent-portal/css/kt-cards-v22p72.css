@@ -7,13 +7,8 @@
    • consistent padding + border
    ═══════════════════════════════════════════════════════════════════ */
 
-:root {
-  --kt-card-radius: 16px;
-  --kt-card-border: 1px solid #EAEFF3;
-  --kt-card-shadow: 0 1px 2px rgba(16,40,64,.04), 0 6px 16px -8px rgba(16,40,64,.12);
-  --kt-card-shadow-hover: 0 4px 10px rgba(16,40,64,.08), 0 16px 32px -12px rgba(16,40,64,.22);
-  --kt-card-accent: linear-gradient(90deg, #1F6080 0%, #2D7BA8 45%, #4A90B8 70%, #F97316 100%);
-}
+/* Design tokens for this file now live in kt-tokens.css, which is the
+   only :root in the portal. The values were moved unchanged. */
 
 /* Unified base for every card flavour in the content area */
 .app-main .card,

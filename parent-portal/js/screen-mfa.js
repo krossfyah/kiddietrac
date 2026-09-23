@@ -73,14 +73,26 @@
     return row;
   }
 
-  function renderMfa(container) {
+  /**
+   * @param {HTMLElement} container
+   * @param {{embedded?: boolean}=} opts  embedded = drawn inside the profile's
+   *        Security card, which already supplies the page padding and a heading.
+   *        Same code either way: two-factor is one flow, and a second copy of it
+   *        living in Settings would be the copy that stops matching the first.
+   */
+  function renderMfa(container, opts) {
+    var embedded = !!(opts && opts.embedded);
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    var wrap = Dom.el('div', {
+      style: embedded ? '' : 'padding:24px;max-width:1800px;margin:0 auto;',
+    });
     container.appendChild(wrap);
 
-    wrap.appendChild(Dom.el('h1', {
-      style: 'font-size:24px;margin:0 0 16px;',
-    }, '🔐 Two-factor authentication'));
+    if (!embedded) {
+      wrap.appendChild(Dom.el('h1', {
+        style: 'font-size:24px;margin:0 0 16px;',
+      }, '🔐 Two-factor authentication'));
+    }
 
     var loading = Dom.el('div', {
       style: 'padding:40px;text-align:center;color:#6B7280;',
@@ -89,7 +101,9 @@
 
     Api.get('/auth/mfa/status').then(function (status) {
       Dom.clear(wrap);
-      wrap.appendChild(Dom.el('h1', { style: 'font-size:24px;margin:0 0 16px;' }, '🔐 Two-factor authentication'));
+      if (!embedded) {
+        wrap.appendChild(Dom.el('h1', { style: 'font-size:24px;margin:0 0 16px;' }, '🔐 Two-factor authentication'));
+      }
       wrap.appendChild(card(null, [
         statusBadge(status.enabled),
         Dom.el('p', {
@@ -245,7 +259,27 @@
     Shell.registerScreen('sales_rep:mfa', renderMfa);
     Shell.registerScreen('guardian:mfa', renderMfa);
     Shell.registerScreen('home_visitor:mfa', renderMfa);
+    /* The super admin was the one role with no route to this screen at all. The
+       intent behind their exemption is that enforcement must never lock a support
+       account out — not that the most privileged account on the platform should be
+       unable to protect itself. Registered here; still never FORCED (kt-mfa-gate.js
+       returns early for platform_admin, and required() below stays false). */
+    Shell.registerScreen('platform_admin:mfa', renderMfa);
   }
 
-  KT.MfaScreen = { render: renderMfa };
+  KT.MfaScreen = {
+    render: renderMfa,
+    /* Everyone except the platform support account, which is deliberately exempt —
+       see kt-mfa-gate.js. Directors and agency admins are REQUIRED to have it; the
+       rest may. Exported so Settings does not re-derive the rule. */
+    /* Who may USE it — everyone with a role, super admin included. */
+    appliesTo: function (roles) {
+      return (roles || []).length > 0;
+    },
+    required: function (roles) {
+      var r = roles || [];
+      if (r.indexOf('platform_admin') !== -1) { return false; }
+      return r.indexOf('agency_admin') !== -1 || r.indexOf('centre_director') !== -1;
+    },
+  };
 })(window);
