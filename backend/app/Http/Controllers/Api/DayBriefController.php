@@ -507,10 +507,26 @@ final class DayBriefController extends Controller
         $qr = 0; $manual = 0;
         foreach ($children as $c) {
             $evs = $checksByChild[$c->id] ?? [];
+
+            /* THE VISIT THEY ARE IN, not the first one of the day.
+               This kept the FIRST check_in and the LAST check_out, which is fine until a
+               child leaves and comes back: Yahya signed in 08:21, out 10:41, back in 11:14
+               and the row read "in 08:21 · out 10:41 · status in" — an out-time on a child
+               who is present, and no sign the second arrival had registered at all. It was
+               reported as the table not updating on the second sign-in, and from the row it
+               is indistinguishable from exactly that.
+
+               Events arrive ordered by occurred_at, so one pass is enough: an arrival opens
+               a visit and clears whatever the last one closed with. The full day is still in
+               the timeline below; this column answers "where are they now". */
             $inEv = null; $outEv = null;
             foreach ($evs as $e) {
-                if ($e->event_type === 'check_in') { if (! $inEv) $inEv = $e; ((int) ($e->kiosk_source ?? 0) > 0) ? $qr++ : $manual++; }
-                if ($e->event_type === 'check_out') $outEv = $e;
+                if ($e->event_type === 'check_in') {
+                    $inEv = $e;
+                    $outEv = null;     // a new arrival supersedes the previous departure
+                    ((int) ($e->kiosk_source ?? 0) > 0) ? $qr++ : $manual++;
+                }
+                if ($e->event_type === 'check_out') { $outEv = $e; }
             }
             $last = $evs ? end($evs) : null;
             $status = ! $evs ? 'away' : ($last->event_type === 'check_in' ? 'in' : 'out');
