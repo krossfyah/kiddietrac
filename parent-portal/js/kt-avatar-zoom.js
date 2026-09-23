@@ -216,6 +216,14 @@
       if (cur.getAttribute('data-closing') || !cur.isConnected) { if (cur.parentNode) cur.parentNode.removeChild(cur); }
       else return;                                                // genuinely open
     }
+    /* An avatar inside an interactive control belongs to that control. Zooming is a
+       convenience; pressing the thing is why it is on screen. Without this the walk
+       screen's child chips could not be selected by tapping the child's photo — the
+       zoom swallowed the click and no child was ever added. */
+    if (e.target.closest && e.target.closest(
+        '.ktw-chip,button,[role="button"],label,a,summary,[data-kt-select],input')) {
+      return;
+    }
     var hit = findAvatar(e.target);
     if (!hit) return;
     e.preventDefault();

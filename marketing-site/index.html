@@ -370,6 +370,8 @@ textarea.form-input{resize:vertical;min-height:110px}
 .chat-window{position:absolute;bottom:70px;right:0;width:340px;background:white;border-radius:18px;box-shadow:var(--shadow-lg);border:1px solid rgba(0,0,0,.08);overflow:hidden;display:none}
 .chat-window.open{display:flex;flex-direction:column}
 .chat-header{background:linear-gradient(135deg,var(--teal-dk),var(--teal));padding:16px 18px;color:white;display:flex;align-items:center;gap:12px}
+.chat-close{margin-left:auto;width:30px;height:30px;flex:0 0 auto;border:0;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1;cursor:pointer;transition:background .15s}
+.chat-close:hover{background:rgba(255,255,255,.34)}
 .chat-avatar{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:18px}
 .chat-header-info strong{font-size:15px;font-weight:800;display:block}
 .chat-header-info span{font-size:12px;opacity:.8}
@@ -2526,6 +2528,7 @@ html,body{overflow-x:hidden;max-width:100%}
     <div class="chat-header">
       <div class="chat-avatar">👩🏻‍💼</div>
       <div class="chat-header-info"><strong>Maya — KiddieTrac</strong><span><i class="chat-presence"></i>Online — usually replies in a minute</span></div>
+      <button class="chat-close" type="button" aria-label="End this chat" onclick="ktEndChat()">✕</button>
     </div>
     <div class="chat-intro" id="chatIntro" style="display:none;padding:16px;border-bottom:1px solid #eef2f5;background:#f8fafc">
       <div style="font-size:13.5px;color:var(--dark);font-weight:700;margin-bottom:10px">👋 Before we start — who am I chatting with?</div>
@@ -2535,13 +2538,7 @@ html,body{overflow-x:hidden;max-width:100%}
     </div>
     <div class="chat-messages" id="chatMessages">
       <div class="chat-msg bot"><div class="chat-who">Maya</div><div class="chat-bubble">👋 Hi, I'm Maya. How can I help you today?</div></div>
-      <div class="chat-msg bot"><div class="chat-bubble">Ask me about pricing, CWELCC, white label or booking a demo — or tell me what you're trying to sort out.</div></div>
-    </div>
-    <div class="chat-quick" id="chatQuick">
-      <button class="chat-quick-btn" onclick="sendQuick('Tell me about pricing')">💰 Pricing</button>
-      <button class="chat-quick-btn" onclick="sendQuick('What is white label?')">🏷️ White Label</button>
-      <button class="chat-quick-btn" onclick="sendQuick('How does CWELCC work?')">🍁 CWELCC</button>
-      <button class="chat-quick-btn" onclick="sendQuick('How do I start a free trial?')">🚀 Free Trial</button>
+      <div class="chat-msg bot"><div class="chat-bubble">What are you trying to sort out? Pricing, CWELCC, moving off another system — whatever it is, ask away.</div></div>
     </div>
     <div class="chat-input-row">
       <input id="chatInput" type="text" placeholder="Type your question…">
@@ -3165,40 +3162,272 @@ function toggleChat() {
   if (n) n.style.display = 'none';
   if (w.classList.contains('open') && !ktChatInfo()) {
     var intro = document.getElementById('chatIntro'); if (intro) intro.style.display = 'block';
-    var q = document.getElementById('chatQuick'); if (q) q.style.display = 'none';
     var ir = document.querySelector('#chatWindow .chat-input-row'); if (ir) ir.style.display = 'none';
   }
 }
+/* ── What Maya has picked up so far ───────────────────────────────────────
+   A person does not ask you twice how many centres you run. Anything the visitor
+   mentions is kept here for the rest of the conversation, and every follow-up
+   checks this first. */
+const ktChat = {
+  facts: {},          // centres, province, current, timeline
+  asked: {},          // follow-ups already put to them, so none is repeated
+  topics: {},         // topics already covered, so the answer can be shorter
+  transcript: [],     // what gets sent to sales when the chat ends
+  ended: false,
+};
+
+/* One idea, several ways of saying it. Repeating a paragraph word for word is what
+   makes a scripted chat obvious the second time you hit the same topic. */
+function ktPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+const KT_OPENERS = {
+  first: ['', '', 'Sure — ', 'Of course. ', 'Happy to. '],
+  again: ['To add to that — ', 'Building on what I said — ', 'One more thing there — '],
+};
+
+/* The follow-ups, in the order a salesperson would actually get to them. Each is
+   asked at most once, and only when Maya does not already know the answer. */
+const KT_FOLLOWUPS = [
+  { key: 'centres',  q: ['How many centres are you running?',
+                         'Out of interest, how many sites is this for?'] },
+  { key: 'province', q: ['Which province are you in? It changes the funding side quite a bit.',
+                         'Whereabouts are you — which province?'] },
+  { key: 'current',  q: ['What are you using at the moment?',
+                         'Are you moving off another system, or starting fresh?'] },
+  { key: 'timeline', q: ['When are you hoping to have something in place?',
+                         'Is there a date you are working towards?'] },
+];
+
+/* Something worth saying back about what they just told us. This is the difference
+   between a form that collects answers and a conversation that reacts to them. */
+function ktOnLearned() {
+  const f = ktChat.facts;
+  if (f.current && !ktChat.topics._onCurrent) {
+    ktChat.topics._onCurrent = true;
+    return f.current === 'paper'
+      ? 'Coming off paper is actually the easiest move — there is nothing to untangle, we just set it up the way you want it.'
+      : 'We move people off ' + f.current + ' fairly often, so the migration is a well-worn path — children, families and history all come across.';
+  }
+  if (f.province && !ktChat.topics._onProvince) {
+    ktChat.topics._onProvince = true;
+    return f.province === 'Ontario'
+      ? 'Ontario means CWELCC is handled natively rather than bolted on, which is usually the deciding factor.'
+      : f.province + ' — noted. Funding rules differ there, and the team can walk you through what applies.';
+  }
+  if (f.timeline && !ktChat.topics._onTimeline) {
+    ktChat.topics._onTimeline = true;
+    return 'That is very doable. Onboarding usually takes a couple of weeks, and we do the data migration.';
+  }
+  if (f.centres && !ktChat.topics._onCentres) {
+    ktChat.topics._onCentres = true;
+    return +f.centres > 1
+      ? 'Across that many sites you get one view of the whole organisation, with each centre still running its own day.'
+      : 'For a single site everything sits on one screen, which keeps the admin down.';
+  }
+  return null;
+}
+
+function ktNextFollowup() {
+  for (const f of KT_FOLLOWUPS) {
+    if (!ktChat.facts[f.key] && !ktChat.asked[f.key]) {
+      ktChat.asked[f.key] = true;
+      return ktPick(f.q);
+    }
+  }
+  return null;
+}
+
+/* Read what they told us. Nothing clever — the point is that the conversation
+   notices an answer rather than sailing past it. */
+const KT_PROVINCES = {
+  ontario: 'Ontario', 'on': 'Ontario', alberta: 'Alberta', 'bc': 'British Columbia',
+  'british columbia': 'British Columbia', quebec: 'Quebec', manitoba: 'Manitoba',
+  saskatchewan: 'Saskatchewan', 'nova scotia': 'Nova Scotia', 'new brunswick': 'New Brunswick',
+  newfoundland: 'Newfoundland', 'pei': 'PEI', 'prince edward island': 'PEI',
+};
+function ktLearn(text) {
+  const lc = text.toLowerCase();
+  const before = JSON.stringify(ktChat.facts);
+  const num = lc.match(/\b(\d{1,3})\s*(centres?|centers?|sites?|locations?|rooms?|daycares?)\b/)
+    || (ktChat.asked.centres && !ktChat.facts.centres ? lc.match(/^\s*(\d{1,3})\b/) : null);
+  if (num) ktChat.facts.centres = num[1];
+  for (const k in KT_PROVINCES) {
+    if (new RegExp('\\b' + k + '\\b').test(lc)) { ktChat.facts.province = KT_PROVINCES[k]; break; }
+  }
+  const using = lc.match(/\b(?:use|using|on|with)\s+(hipaa|hi ?mama|lillio|brightwheel|procare|kangarootime|playground|famly|storypark|kinderlime|paper|spreadsheets?|excel)\b/);
+  if (using) ktChat.facts.current = using[1];
+  if (/\b(nothing|paper|spreadsheet|excel|by hand)\b/.test(lc) && !ktChat.facts.current) ktChat.facts.current = 'paper';
+  if (/\b(asap|immediately|right away|this month|next month|january|september)\b/.test(lc)) {
+    ktChat.facts.timeline = (lc.match(/\b(asap|immediately|right away|this month|next month|january|september)\b/) || [])[1];
+  }
+  return JSON.stringify(ktChat.facts) !== before;
+}
+
+/* An acknowledgement of what was just said. A reply that jumps straight to the
+   pitch reads as a machine however well the pitch is written. */
+function ktAck(text) {
+  const lc = text.toLowerCase();
+  if (ktChat.facts.centres && !ktChat.topics._ackCentres) {
+    ktChat.topics._ackCentres = true;
+    const n = +ktChat.facts.centres;
+    return n >= 5 ? `${n} centres — so reporting across sites is going to matter to you. `
+      : n > 1 ? `${n} centres, got it. ` : 'A single site — that keeps things simple. ';
+  }
+  if (ktChat.facts.province === 'Ontario' && !ktChat.topics._ackOnt) {
+    ktChat.topics._ackOnt = true;
+    return 'Ontario — so CWELCC is in play. ';
+  }
+  if (/\b(frustrat|annoying|hate|struggl|nightmare|painful|slow)\b/.test(lc)) {
+    return ktPick(['That sounds like a headache. ', 'Yes, I hear that a lot. ']);
+  }
+  if (/\b(thanks|thank you|cheers|great|perfect|awesome)\b/.test(lc)) {
+    return ktPick(['Glad that helps. ', 'No problem at all. ']);
+  }
+  return '';
+}
+
+/* The answers. Split into two parts where there is genuinely a second thought —
+   Maya sends them as separate bubbles with a pause, the way a person types. */
+const KT_ANSWERS = {
+  pricing: {
+    match: (lc) => /\bpric|cost|how much|fee|plan|budget|expensive|\$/.test(lc),
+    a: () => [
+      `Plans run from **$49 CAD/month** for Starter up to **$129/mo** for Professional, and onboarding is free on all of them.`,
+      ktChat.facts.centres && +ktChat.facts.centres >= 5
+        ? `At ${ktChat.facts.centres} sites you would be looking at Professional, and there is multi-site pricing worth a conversation — I can get you an actual number rather than a list price.`
+        : `Everything is billed in real CAD, not converted from USD at whatever today's rate is.`,
+    ],
+  },
+  whitelabel: {
+    match: (lc) => /\bwhite ?label|brand(ing|ed)?|our own name|custom app\b/.test(lc),
+    a: () => [
+      `White label puts the whole thing under **your** brand — your logo, your colours, your domain, and a parent app on iOS and Android with your name on it.`,
+      `It is +$29/mo on any plan. We are the only North American childcare platform that offers it on every tier rather than only at enterprise.`,
+    ],
+  },
+  cwelcc: {
+    match: (lc) => /\bcwelcc|subsid|funding|fee reduction|ministry\b/.test(lc),
+    a: () => [
+      `Full **CWELCC** support on Professional and Enterprise — subsidies are calculated per child, eligibility is tracked, and the submission reports generate themselves.`,
+      `The part people care about: no spreadsheet reconciliation at month end.`,
+    ],
+  },
+  trial: {
+    match: (lc) => /\btrial|free|try it|test drive|get started|sign ?up\b/.test(lc),
+    a: () => [
+      `You get **14 days free** with the full Professional feature set, and no card up front.`,
+      `If you are coming off another system we do the migration for you — children, families, historical records, the lot.`,
+    ],
+  },
+  competition: {
+    match: (lc) => /\bcompet|versus|vs\b|compare|better than|hi ?mama|lillio|brightwheel|procare|famly\b/.test(lc),
+    a: () => [
+      `The honest short version: native CWELCC automation, true CAD billing, white label on every plan, and data hosted in North America.`,
+      ktChat.facts.current
+        ? `Coming from ${ktChat.facts.current}, the two things people notice first are the billing engine and not having to do funding by hand.`
+        : `Billing is where most people feel the difference — it is a proper engine rather than an invoice generator.`,
+    ],
+  },
+  demo: {
+    match: (lc) => /\bdemo|book|meeting|call|walk ?through|see it|show me\b/.test(lc),
+    a: () => [
+      `Happy to set that up — **📅 Book Demo** in the menu at the top has the calendar, and a product demo runs about 45 minutes.`,
+      `If you would rather I just had somebody call you, leave it with me and I will pass this conversation on.`,
+    ],
+  },
+  ilearn: {
+    match: (lc) => /\bilearn|home ?(child ?)?care|home daycare|licens|become a provider\b/.test(lc),
+    a: () => [
+      `That sounds like **iLearn Home Child Care** (ilearnhcc.com) — our partner agency for home providers in Ontario. They handle licensing, CWELCC enrolment and the training.`,
+      `KiddieTrac is the platform underneath it, so the two fit together.`,
+    ],
+  },
+  human: {
+    match: (lc) => /\bare you (a )?(real|human|person|bot|ai)|is this a bot|am i (talking|chatting) to a (real|human|person)|robot\b/.test(lc),
+    a: () => [
+      `No — I am KiddieTrac's assistant, not a person. I did not want to pretend otherwise.`,
+      `I can answer most things here, and anything I cannot I will pass to the team with this conversation attached. Want me to get someone to email you?`,
+    ],
+  },
+  contact: {
+    match: (lc) => /\bphone|address|where are you|contact|email you|speak to someone|talk to someone|sales\b/.test(lc),
+    a: () => [
+      `We are at 246372 Hockley Road, Mono, ON L9W 6K4, and the team answers within about four hours on a working day.`,
+      `If you close this chat I will send the whole conversation over to them, so you do not have to repeat yourself.`,
+    ],
+  },
+};
+
+function ktAnswer(text) {
+  const lc = text.toLowerCase();
+  for (const key in KT_ANSWERS) {
+    if (KT_ANSWERS[key].match(lc)) {
+      const seen = ktChat.topics[key];
+      ktChat.topics[key] = true;
+      const parts = KT_ANSWERS[key].a();
+      // Second time on the same topic, skip the preamble and keep it short.
+      return { key: key, parts: seen ? [ktPick(KT_OPENERS.again) + parts[1]] : parts };
+    }
+  }
+  return null;
+}
+
+/* Send one or two bubbles with a typing pause before each, then a follow-up
+   question if there is one still worth asking. */
+function ktSay(parts, followup) {
+  let delay = 0;
+  parts.forEach(function (p, i) {
+    setTimeout(function () { ktReply(p); }, delay);
+    delay += 700 + Math.min(2200, String(p).length * 13);
+  });
+  if (followup) {
+    setTimeout(function () { ktReply(followup); }, delay + 500);
+  }
+}
+
 function sendChat() {
   const input = document.getElementById('chatInput');
   const msg = input.value.trim();
   if (!msg) return;
   addMsg(msg, 'user');
   input.value = '';
-  setTimeout(() => {
-    const lc = msg.toLowerCase();
-    let resp;
-    if (lc.includes('pric') || lc.includes('cost') || lc.includes('plan')) resp = BOT_RESP.pricing;
-    else if (lc.includes('white') || lc.includes('label') || lc.includes('brand')) resp = BOT_RESP.whitelabel;
-    else if (lc.includes('cwelcc') || lc.includes('subsid')) resp = BOT_RESP.cwelcc;
-    else if (lc.includes('trial') || lc.includes('free') || lc.includes('start')) resp = BOT_RESP.trial;
-    else if (lc.includes('competit') || lc.includes('vs ') || lc.includes('compare')) resp = BOT_RESP.competition;
-    else if (lc.includes('ilearn') || lc.includes('licens') || lc.includes('home daycare')) resp = BOT_RESP.ilearn;
-    else if (lc.includes('book') || lc.includes('demo') || lc.includes('meet')) resp = BOT_RESP.demo;
-    else resp = BOT_RESP.default;
-    ktReply(resp);
-  }, 320);
-}
-function sendQuick(q) {
-  document.getElementById('chatQuick').style.display = 'none';
-  addMsg(q, 'user');
-  setTimeout(() => {
-    const lc = q.toLowerCase();
-    if (lc.includes('pric')) ktReply(BOT_RESP.pricing);
-    else if (lc.includes('white') || lc.includes('label')) ktReply(BOT_RESP.whitelabel);
-    else if (lc.includes('cwelcc') || lc.includes('subsid')) ktReply(BOT_RESP.cwelcc);
-    else ktReply(BOT_RESP.trial);
-  }, 280);
+
+  const learned = ktLearn(msg);
+  const ack = ktAck(msg);
+  const found = ktAnswer(msg);
+
+  setTimeout(function () {
+    if (found) {
+      const parts = found.parts.slice();
+      if (ack) parts[0] = ack + parts[0];
+      // No follow-up when they just asked whether we are human — that is a moment
+      // to answer straight and stop.
+      ktSay(parts, found.key === 'human' ? null : ktNextFollowup());
+      return;
+    }
+
+    /* They told us something rather than asking us something — which is what
+       happens every time they answer one of Maya's own follow-ups. Saying "I am not
+       sure I follow" to the answer you just asked for is the fastest way to give
+       the game away. Take it in, say something about it, move on. */
+    if (learned) {
+      const remark = ktOnLearned();
+      const parts = [];
+      if (ack || remark) parts.push((ack + (remark || '')).trim());
+      if (!parts.length) parts.push(ktPick(['Got it.', 'Noted, thank you.', 'That helps, thanks.']));
+      ktSay(parts, ktNextFollowup());
+      return;
+    }
+
+    // Genuinely did not understand. A person would say so rather than recite an address.
+    const fu = ktNextFollowup();
+    ktSay([ack + ktPick([
+      'I am not certain I have the right end of that one — can you say a bit more about what you are trying to do?',
+      'Let me make sure I answer the right question — what is the situation at your end?',
+      'That one I would rather not guess at. Tell me a little more and I will either answer it or get it to someone who can.',
+    ])], fu);
+  }, 300);
 }
 const KT_AGENT = 'Maya';
 
@@ -3227,6 +3456,7 @@ function addMsg(text, who) {
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
   try { ktChatLog(who === 'user' ? 'visitor' : 'bot', text); } catch (e) {}
+  try { ktRemember(who === 'user' ? 'visitor' : 'bot', text); } catch (e) {}
 }
 
 /* Typing bubble, shown while a reply is being "written".
@@ -3258,6 +3488,79 @@ function ktReply(text) {
 /* Chat capture + logging to the Website backend */
 function ktChatSession() { var s; try { s = sessionStorage.getItem('kt_chat_sid'); } catch (e) {} if (!s) { s = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); try { sessionStorage.setItem('kt_chat_sid', s); } catch (e) {} } return s; }
 function ktChatInfo() { try { return JSON.parse(sessionStorage.getItem('kt_chat_info') || 'null'); } catch (e) { return null; } }
+/* Everything said, kept in the page so the whole conversation can be sent in one
+   piece when it ends. Each line is still logged to the server as it happens, so
+   the two can be compared if a transcript ever looks wrong. */
+function ktRemember(sender, message) {
+  try {
+    ktChat.transcript.push({
+      sender: sender,
+      message: String(message).slice(0, 2000),
+      at: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    });
+  } catch (e) {}
+}
+
+/* What can be told about the visitor without asking them. A salesperson picking
+   this up wants to know where they are and what they were reading. */
+function ktContext() {
+  try {
+    return {
+      timezone: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || '',
+      language: navigator.language || '',
+      page: location.pathname + location.search,
+      referrer: document.referrer || '',
+      screen: window.screen ? (screen.width + '×' + screen.height) : '',
+    };
+  } catch (e) { return {}; }
+}
+
+/* End the chat: hand the conversation to sales, then say so.
+   Called by the ✕, and again on the way out of the page in case they simply
+   leave — an abandoned chat is still a person who was interested. */
+function ktEndChat(silent) {
+  if (ktChat.ended) {
+    if (!silent) { document.getElementById('chatWindow').classList.remove('open'); }
+    return;
+  }
+
+  var info = ktChatInfo() || {};
+  var visitorSaid = ktChat.transcript.some(function (m) { return m.sender === 'visitor'; });
+
+  if (visitorSaid) {
+    ktChat.ended = true;
+    try {
+      fetch('https://api.kiddietrac.com/api/v1/marketing-site/chat/end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // keepalive so the send survives the page being closed — which is exactly
+        // when this matters most.
+        keepalive: true,
+        body: JSON.stringify({
+          session: ktChatSession(),
+          name: info.name || '',
+          email: info.email || '',
+          transcript: ktChat.transcript.slice(-300),
+          context: ktContext(),
+        }),
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  if (silent) return;
+
+  if (visitorSaid) {
+    addMsg('Thanks for your time. I have passed this conversation to our team — someone will follow up'
+      + (info.email ? ' at ' + info.email : '') + '.', 'bot');
+    setTimeout(function () { document.getElementById('chatWindow').classList.remove('open'); }, 1900);
+  } else {
+    document.getElementById('chatWindow').classList.remove('open');
+  }
+}
+
+// If they just close the tab, send it anyway.
+window.addEventListener('pagehide', function () { ktEndChat(true); });
+
 function ktChatLog(sender, message) {
   var info = ktChatInfo() || {};
   try { fetch('https://api.kiddietrac.com/api/v1/marketing-site/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: ktChatSession(), name: info.name || '', email: info.email || '', sender: sender, message: String(message).slice(0, 2000) }), keepalive: true }).catch(function () {}); } catch (e) {}
@@ -3268,10 +3571,9 @@ function ktChatStart() {
   if (!email || email.indexOf('@') === -1) { document.getElementById('chatEmail').focus(); return; }
   try { sessionStorage.setItem('kt_chat_info', JSON.stringify({ name: name, email: email })); } catch (e) {}
   var intro = document.getElementById('chatIntro'); if (intro) intro.style.display = 'none';
-  var q = document.getElementById('chatQuick'); if (q) q.style.display = '';
   var ir = document.querySelector('#chatWindow .chat-input-row'); if (ir) ir.style.display = '';
   ktChatLog('visitor', '[chat started] ' + name + ' <' + email + '>');
-  addMsg('Thanks' + (name ? ' ' + name : '') + '! How can I help you today? 😊', 'bot');
+  ktReply('Thanks' + (name ? ', ' + name : '') + '. What can I help with?');
 }
 
 // ── INIT ─────────────────────────────────────────────────────────

@@ -110,6 +110,7 @@
   function tabContent(c) {
     return card('Contact details', ''
         + field('Contact email', 'contact_email', c.contact_email, 'sales@kiddietrac.com', 'Replaces the primary sales@ email shown across the site.')
+        + field('Chat transcripts to', 'chat_transcript_to', c.chat_transcript_to, 'sales@kiddietrac.com', 'Where a finished website chat is emailed, with the visitor\'s details. Leave blank to use the contact email above.')
         + twoCol(field('Phone', 'contact_phone', c.contact_phone, '+1 416 555 1234', ''), field('Address', 'contact_address', c.contact_address, '246372 Hockley Road, Mono, ON', ''))
         + saveBar('contactMsg', 'contactSave'))
       + card('Social links', ''
@@ -385,6 +386,7 @@
         announce_text: val('ms_text'), announce_cta_text: val('ms_cta'), announce_cta_page: val('ms_page') || 'contact',
         seo_title: val('seo_title'), seo_description: val('seo_description'), og_image: val('og_image'),
         contact_email: val('contact_email'), contact_phone: val('contact_phone'), contact_address: val('contact_address'),
+        chat_transcript_to: val('chat_transcript_to'),
         social_facebook: val('social_facebook'), social_instagram: val('social_instagram'), social_linkedin: val('social_linkedin'), social_x: val('social_x'),
         hero_stat1_num: val('hero_stat1_num'), hero_stat1_lbl: val('hero_stat1_lbl'),
         hero_stat2_num: val('hero_stat2_num'), hero_stat2_lbl: val('hero_stat2_lbl'),
