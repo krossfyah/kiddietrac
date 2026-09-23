@@ -11,7 +11,11 @@
   var API = function () { return (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; };
 
   function mapi(path, method, body) {
-    var h = { 'Authorization': 'Bearer ' + sessionStorage.getItem('kt_token'), 'Accept': 'application/json' };
+    /* Both stores, like every other screen. sessionStorage alone left this card
+       unauthenticated when it renders as a tab inside Email settings. */
+    var _tok = null;
+    try { _tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+    var h = { 'Authorization': 'Bearer ' + _tok, 'Accept': 'application/json' };
     var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa;
     if (body) h['Content-Type'] = 'application/json';
     return fetch(API() + path, { method: method || 'GET', headers: h, body: body ? JSON.stringify(body) : undefined })

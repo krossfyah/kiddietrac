@@ -156,7 +156,16 @@
 
     var data = null;
     try { data = await Api.get('/provider/shifts/me'); } catch (e) {
-      body.innerHTML = '<div style="' + CARD + 'text-align:center;color:#B91C1C;">Could not load your schedule.</div>';
+      /* Say WHY and offer a way out. A bare sentence made a transient 500 look
+         identical to "you have no shifts", with reloading the page as the only
+         escape. */
+      body.innerHTML = '<div style="' + CARD + 'text-align:center;color:#B91C1C;">'
+        + 'Could not load your schedule.<div style="font-size:12px;color:#64748B;margin-top:6px;">'
+        + ((e && e.message) ? String(e.message).replace(/[<>]/g, '') : 'The server did not respond.')
+        + '</div><button type="button" class="kt-retry" style="margin-top:12px;background:#1F6080;color:#fff;'
+        + 'border:0;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;">Try again</button></div>';
+      var rb = body.querySelector('.kt-retry');
+      if (rb) { rb.onclick = function () { render(container); }; }
       return;
     }
     var shifts = (data && data.shifts) || [];
@@ -270,6 +279,15 @@
   // so it keeps the app chrome (top bar + bottom nav) and behaves like every other
   // screen. It used to be a position:fixed;inset:0 body overlay that covered the
   // whole app — that read as "opens full screen, not like the other screens".
+  /* "09:00" -> "9:00 am". A wall-clock schedule value: no timezone conversion. */
+  function t12(hhmm) {
+    var m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || ''));
+    if (!m) return '\u2014';
+    var h = +m[1], ap = h >= 12 ? 'pm' : 'am';
+    h = h % 12; if (!h) h = 12;
+    return h + ':' + m[2] + ' ' + ap;
+  }
+
   async function renderChildRecordScreen(main) {
     var childId = null;
     try { childId = new URLSearchParams((location.hash.split('?')[1] || '')).get('id'); } catch (e) {}
@@ -320,6 +338,20 @@
       html += '</div>';
     } else {
       html += '<div style="' + CARD + 'color:#16A34A;font-weight:700;font-size:13.5px;">✓ No allergies or medical alerts on file.</div>';
+    }
+
+    /* Usual drop-off / pick-up. The room plans the day around these, and an
+       educator wondering "is someone late?" should not have to leave the record
+       to find out. Stored as a wall-clock TIME, so nothing is converted. */
+    if (c.expected_dropoff_time || c.expected_pickup_time) {
+      html += '<div style="' + CARD + '">'
+        + '<div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">Usual times</div>'
+        + '<div style="display:flex;gap:26px;">'
+        + '<div><div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;">DROP-OFF</div>'
+        + '<div style="font-size:15px;font-weight:800;color:#0F172A;margin-top:2px;">' + esc(t12(c.expected_dropoff_time)) + '</div></div>'
+        + '<div><div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;">PICK-UP</div>'
+        + '<div style="font-size:15px;font-weight:800;color:#0F172A;margin-top:2px;">' + esc(t12(c.expected_pickup_time)) + '</div></div>'
+        + '</div></div>';
     }
 
     var guardians = d.guardians || [];

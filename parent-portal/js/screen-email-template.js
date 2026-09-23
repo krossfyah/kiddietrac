@@ -26,9 +26,141 @@
   var activeField = null;   // the contenteditable OR input the toolbar/tags act on
   var url = function (key, suffix) { return '/admin/email-template/' + encodeURIComponent(key) + (suffix || ''); };
 
+  var ET_TAB_KEY = 'kt_et_tab';
+
   async function render(container) {
-    container.innerHTML = '<div style="padding:24px;max-width:860px;margin:0 auto;color:#0F172A;">'
-      + '<h2 style="margin:0 0 4px;font-size:21px;font-weight:800;">✉️ Email templates</h2>'
+    var tab = 'edit';
+    try {
+      var t = sessionStorage.getItem(ET_TAB_KEY);
+      if (t === 'edit' || t === 'all') { tab = t; }
+    } catch (e) {}
+
+    /* role="tab" is not decoration here: kt-icon-buttons.js leaves anything inside a
+       [role="tablist"] alone, and without it the iconiser rewrote "Edit" into a bare
+       pencil with the word moved to a tooltip. Saying what the control IS fixes the
+       display and the screen-reader announcement in one go. */
+    var tabBtn = function (id, label, on) {
+      return '<button type="button" class="kt-et-tab" data-tab="' + id + '"'
+        + ' role="tab" aria-selected="' + (on ? 'true' : 'false') + '" style="'
+        + 'background:none;border:none;border-bottom:3px solid ' + (on ? '#1F6080' : 'transparent')
+        + ';color:' + (on ? '#1F6080' : '#64748B') + ';font-weight:700;font-size:14px;'
+        + 'padding:9px 14px;cursor:pointer;margin-bottom:-1px;">' + label + '</button>';
+    };
+
+    container.innerHTML = '<div style="padding:24px 24px 0;max-width:980px;margin:0 auto;">'
+      + '<div role="tablist" aria-label="Email templates" style="display:flex;gap:2px;'
+      + 'border-bottom:1px solid #E5E7EB;">'
+      + tabBtn('edit', '✏️ Edit', tab === 'edit')
+      + tabBtn('all', '📚 All emails', tab === 'all')
+      + '</div></div>'
+      + '<div id="kt-et-pane"></div>';
+
+    container.querySelectorAll('.kt-et-tab').forEach(function (b) {
+      b.addEventListener('click', function () {
+        try { sessionStorage.setItem(ET_TAB_KEY, b.dataset.tab); } catch (e) {}
+        render(container);
+      });
+    });
+
+    var pane = container.querySelector('#kt-et-pane');
+    if (tab === 'all') { return renderCatalogue(pane); }
+    return renderEditor(pane);
+  }
+
+  /**
+   * The inventory. Read-only by design: this answers "what do we send?", and the four
+   * templates that can actually be reworded link across to the editor rather than
+   * duplicating it here.
+   */
+  async function renderCatalogue(container) {
+    container.innerHTML = '<div style="padding:20px 24px 40px;max-width:980px;margin:0 auto;'
+      + 'color:#94A3B8;">Loading the inventory…</div>';
+    var d;
+    try { d = await Api.get('/admin/email-catalogue'); }
+    catch (e) {
+      container.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: '
+        + esc(e.message) + '</div>';
+      return;
+    }
+
+    var CAP = {
+      render: ['Edit & preview', '#166534', '#F0FDF4', '#BBF7D0'],
+      sample: ['Sample can be sent', '#1D4ED8', '#EFF6FF', '#BFDBFE'],
+      none:   ['Documented', '#64748B', '#F8FAFC', '#E2E8F0'],
+    };
+
+    var html = '<div style="padding:18px 24px 44px;max-width:980px;margin:0 auto;color:#0F172A;">'
+      + '<div style="color:#475569;font-size:13.5px;line-height:1.6;margin-bottom:4px;">'
+      + 'Every email KiddieTrac can send — <strong>' + d.total + '</strong> of them, grouped by '
+      + 'who receives it. Use this to review what goes out in your name.</div>'
+      + '<div style="color:#94A3B8;font-size:12.5px;line-height:1.6;margin-bottom:18px;">'
+      + d.editable + ' can be reworded and previewed here · ' + d.sampleable
+      + ' can send you a real sample · the rest are composed as they are sent and are '
+      + 'described rather than previewed, so nothing here is a mock-up.</div>';
+
+    (d.audiences || []).forEach(function (grp) {
+      html += '<div style="font-size:12px;font-weight:800;letter-spacing:.05em;'
+        + 'text-transform:uppercase;color:#64748B;margin:22px 0 8px;">'
+        + esc(grp.label) + ' <span style="color:#CBD5E1;">· ' + grp.count + '</span></div>';
+
+      (grp.emails || []).forEach(function (e) {
+        var cap = CAP[e.preview] || CAP.none;
+        html += '<div class="kt-et-row" data-key="' + esc(e.key) + '"'
+          + ' data-registry="' + esc(e.registry || '') + '"'
+          + ' style="border:1px solid #EEF2F6;border-radius:10px;padding:12px 14px;'
+          + 'margin-bottom:8px;background:#fff;">'
+
+          + '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">'
+          + '<div style="font-size:14px;font-weight:700;flex:1;min-width:180px;">'
+          + esc(e.name) + '</div>'
+          + '<span style="font-size:10.5px;font-weight:800;letter-spacing:.04em;'
+          + 'text-transform:uppercase;color:' + cap[1] + ';background:' + cap[2]
+          + ';border:1px solid ' + cap[3] + ';border-radius:99px;padding:2px 9px;">'
+          + cap[0] + '</span></div>'
+
+          + '<div style="font-size:12.5px;color:#475569;line-height:1.6;margin-top:6px;">'
+          + esc(e.fires) + '</div>'
+
+          + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:7px;'
+          + 'font-size:12px;color:#64748B;">'
+          + '<div><span style="color:#94A3B8;">To</span> ' + esc(e.to) + '</div>'
+          + (e.subject ? '<div><span style="color:#94A3B8;">Subject</span> '
+              + esc(e.subject) + '</div>' : '')
+          + '</div>'
+
+          + (e.registry
+              ? '<div style="margin-top:9px;"><button type="button" class="kt-et-open"'
+                + ' data-kt-iconized="1"'
+                + ' data-registry="' + esc(e.registry) + '" style="background:#fff;'
+                + 'border:1px solid #1F6080;color:#1F6080;border-radius:7px;padding:4px 11px;'
+                + 'font-size:12px;font-weight:700;cursor:pointer;">Open in the editor →</button></div>'
+              : '')
+
+          /* The source, in small type. It is what makes this list checkable rather than
+             something to take on trust — and `php artisan email:catalogue --check` fails
+             if an email is added without being listed here. */
+          + '<div style="margin-top:7px;font:11px ui-monospace,Menlo,monospace;color:#CBD5E1;'
+          + 'word-break:break-all;">' + esc(e.source) + '</div>'
+          + '</div>';
+      });
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    container.querySelectorAll('.kt-et-open').forEach(function (b) {
+      b.addEventListener('click', function () {
+        try {
+          sessionStorage.setItem(ET_TAB_KEY, 'edit');
+          sessionStorage.setItem('kt_et_jump', b.dataset.registry);
+        } catch (e) {}
+        render(container.parentNode.parentNode || document.getElementById('appMain'));
+      });
+    });
+  }
+
+  async function renderEditor(container) {
+    container.innerHTML = '<div style="padding:20px 24px 40px;max-width:860px;margin:0 auto;color:#0F172A;">'
       + '<div style="color:#64748B;font-size:13px;margin-bottom:16px;line-height:1.5;">Pick a template and customise its words with the rich editor. The logo, contacts and footer are filled in automatically — you control the message.</div>'
       + '<div style="margin-bottom:16px;">'
       + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:5px;">Template to edit</label>'
@@ -47,7 +179,16 @@
     function descFor(key) { var m = list.filter(function (t) { return t.key === key; })[0]; return m ? (m.description || '') : ''; }
     picker.addEventListener('change', function () { descEl.textContent = descFor(picker.value); loadTemplate(container, picker.value); });
 
-    var first = (list[0] && list[0].key) || 'provider-welcome';
+    /* Arrived by pressing "Open in the editor" on a catalogue row — land on THAT
+       template rather than the first one, or the click silently does nothing useful. */
+    var jump = '';
+    try {
+      jump = sessionStorage.getItem('kt_et_jump') || '';
+      if (jump) { sessionStorage.removeItem('kt_et_jump'); }
+    } catch (e) {}
+    var known = list.filter(function (t) { return t.key === jump; }).length > 0;
+
+    var first = (known && jump) || (list[0] && list[0].key) || 'provider-welcome';
     picker.value = first; descEl.textContent = descFor(first);
     loadTemplate(container, first);
   }

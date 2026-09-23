@@ -65,85 +65,211 @@
   }
 
   // ─── 3) Replace renderTripGps with a friendlier version ───────────
-  async function renderTripGpsV2(main) {
-    main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:24px;">Loading trips…</div>';
-    let trips = [];
-    try {
-      const r = await Api.get('/operations/field-trips');
-      trips = r.data || [];
-    } catch (e) { /* ignore */ }
-
-    if (!trips.length) {
-      main.innerHTML = `
-        <div style="padding:24px;max-width:1800px;margin:0 auto;">
-          <div class="kt-page-hero">
-            <h2>📍 Field-trip live tracker</h2>
-            <p>Live location of staff lead on each active trip.</p>
-          </div>
-          <div class="kt-card" style="text-align:center;padding:48px 24px;color:#64748B;">
-            <div style="font-size:64px;line-height:1;margin-bottom:18px;">🚌</div>
-            <h3 style="margin:0 0 8px;color:#1F2937;">No field trips yet</h3>
-            <p style="margin:0 0 18px;">Create one from <strong>Operations → Field trips</strong> to enable live GPS tracking.</p>
-            <a href="#field-trips" class="kt-btn kt-btn-primary" style="display:inline-block;text-decoration:none;">Create a field trip</a>
-          </div>
-        </div>`;
-      return;
-    }
-
-    main.innerHTML = `
-      <div style="padding:24px;max-width:1800px;margin:0 auto;">
-        <div class="kt-page-hero">
-          <h2>📍 Field-trip live tracker</h2>
-          <p>Pick a trip below to see the lead's live GPS location.</p>
-        </div>
-        <div class="kt-card">
-          <label style="font-size:13px;font-weight:600;">Select a trip</label>
-          <select id="ft-select" style="width:100%;padding:11px;border:2px solid #E2E8F0;border-radius:8px;margin-top:6px;background:white;">
-            <option value="">— pick a trip —</option>
-            ${trips.map(t => `<option value="${t.id}">${esc(t.title)} · ${esc(t.destination || '')} · ${esc(t.trip_date || '')}</option>`).join('')}
-          </select>
-          <div id="ft-detail" style="margin-top:20px;"></div>
-        </div>
-      </div>`;
-    document.getElementById('ft-select').onchange = async (e) => {
-      const tid = +e.target.value;
-      const det = document.getElementById('ft-detail');
-      if (!tid) { det.innerHTML = ''; return; }
-      det.innerHTML = '<div style="color:#64748B;padding:14px;">Loading…</div>';
-      let r;
-      try { r = await Api.get(`/field-trips/${tid}/location`); }
-      catch (err) {
-        det.innerHTML = `<div style="background:#FEF2F2;color:#B91C1C;padding:14px;border-radius:10px;">Cannot load this trip: ${esc(err.message || 'unknown error')}</div>`;
-        return;
-      }
-      if (!r.latest) {
-        det.innerHTML = `<div style="background:#FEF3C7;color:#92400E;padding:18px;border-radius:10px;">
-          <strong>${esc(r.trip ? r.trip.title : 'Trip')}</strong><br>
-          No location pings yet. The staff lead needs to open this trip on their phone and tap <em>Start GPS sharing</em>.
-        </div>`;
-        return;
-      }
-      var _dist = (r.distance_m == null) ? '—' : (r.distance_m >= 1000 ? (r.distance_m / 1000).toFixed(2) + ' km' : Math.round(r.distance_m) + ' m');
-      var _steps = (r.steps_est == null) ? '—' : (r.steps_est >= 1000 ? (r.steps_est / 1000).toFixed(1) + 'k' : String(r.steps_est));
-      var _dur = !r.duration_min ? '—' : (r.duration_min < 60 ? r.duration_min + ' min' : Math.floor(r.duration_min / 60) + 'h ' + (r.duration_min % 60) + 'm');
-      det.innerHTML = `<div class="kt-kpi-grid">
-        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Distance</div><div class="kt-kpi-value">${_dist}</div></div>
-        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Steps (est.)</div><div class="kt-kpi-value">${_steps}</div></div>
-        <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Time out</div><div class="kt-kpi-value" style="font-size:18px;">${_dur}</div></div>
-        <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Last ping</div><div class="kt-kpi-value" style="font-size:18px;">${fmtTime(r.latest.recorded_at)}</div></div>
-      </div>
-      <div id="ft-livemap" style="margin-top:18px;height:500px;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0;background:#EAF2F8;"></div>`;
-      // Live, moving Leaflet map (auto-refreshes) — same engine parents & educators see.
-      try {
-        if (det._ktstop) det._ktstop();
-        if (window.KT && KT.WalkTracker && KT.WalkTracker.mountLiveMap) {
-          det._ktstop = KT.WalkTracker.mountLiveMap(document.getElementById('ft-livemap'), tid);
-        }
-      } catch (e) {}
-    };
+  /* Relative time that degrades honestly. A fix from 40 minutes ago is not "where
+     they are", and the screen should say so rather than showing a confident pin. */
+  function ftAge(mins) {
+    if (mins == null) { return { text: 'no fix yet', tone: '#94A3B8' }; }
+    if (mins < 2) { return { text: 'just now', tone: '#15803D' }; }
+    if (mins < 10) { return { text: mins + ' min ago', tone: '#15803D' }; }
+    if (mins < 30) { return { text: mins + ' min ago', tone: '#B45309' }; }
+    if (mins < 60) { return { text: mins + ' min ago', tone: '#B91C1C' }; }
+    var h = Math.floor(mins / 60);
+    return { text: h + 'h ' + (mins % 60) + 'm ago', tone: '#B91C1C' };
   }
 
+  function ftStatusPill(st) {
+    var s2 = String(st || '').toLowerCase();
+    var map = {
+      active:    { bg: '#DCFCE7', fg: '#15803D', label: 'Out now' },
+      completed: { bg: '#F1F5F9', fg: '#475569', label: 'Back' },
+      planned:   { bg: '#EFF6FF', fg: '#1D4ED8', label: 'Planned' },
+      cancelled: { bg: '#FEE2E2', fg: '#B91C1C', label: 'Cancelled' },
+    };
+    var c = map[s2] || { bg: '#F1F5F9', fg: '#475569', label: s2 || 'Unknown' };
+    return '<span style="background:' + c.bg + ';color:' + c.fg + ';border-radius:999px;'
+      + 'padding:3px 11px;font-size:11.5px;font-weight:800;text-transform:uppercase;'
+      + 'letter-spacing:.03em;">' + esc(c.label) + '</span>';
+  }
+
+  function ftPlace(label, p, icon) {
+    if (!p) {
+      return '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;'
+        + 'color:#94A3B8;margin-bottom:3px;">' + esc(label) + '</div>'
+        + '<div style="font-size:13.5px;color:#94A3B8;">No GPS fix</div></div>';
+    }
+    var when = p.at ? (window.KT && KT.fmtDateTime ? KT.fmtDateTime(p.at) : p.at) : '';
+    return '<div style="flex:1;min-width:0;">'
+      + '<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;'
+      + 'color:#94A3B8;margin-bottom:3px;">' + esc(label) + '</div>'
+      + '<div style="font-size:14px;color:#0F172A;font-weight:600;line-height:1.35;">'
+      + icon + ' ' + esc(p.address || (p.lat.toFixed(5) + ', ' + p.lon.toFixed(5))) + '</div>'
+      + (when ? '<div style="font-size:11.5px;color:#94A3B8;margin-top:2px;">' + esc(when) + '</div>' : '')
+      + '</div>';
+  }
+
+  async function renderTripGpsV2(main) {
+    main.setAttribute('data-kt-pretty', '1');
+
+    // Today unless the picker says otherwise. Kept outside the render so paging
+    // between days does not reset it.
+    if (!renderTripGpsV2._date) {
+      var now = new Date();
+      renderTripGpsV2._date = now.getFullYear() + '-'
+        + String(now.getMonth() + 1).padStart(2, '0') + '-'
+        + String(now.getDate()).padStart(2, '0');
+    }
+
+    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+      <div class="kt-page-hero">
+        <h2>📍 Walks &amp; outings</h2>
+        <p>Who is out, who has them, and where they are.</p>
+      </div>
+      <div class="kt-card" style="margin-top:16px;">
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:0 0 auto;">
+            <label style="font-size:11.5px;font-weight:800;color:#64748B;">Day</label>
+            <input id="ft-date" type="date" value="${renderTripGpsV2._date}"
+              style="display:block;height:34px;padding:0 10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;">
+          </div>
+          <button id="ft-prev" class="kt-btn kt-btn-secondary kt-btn-sm" type="button">‹ Previous</button>
+          <button id="ft-today" class="kt-btn kt-btn-secondary kt-btn-sm" type="button">Today</button>
+          <button id="ft-next" class="kt-btn kt-btn-secondary kt-btn-sm" type="button">Next ›</button>
+          <div style="flex:1;"></div>
+          <button id="ft-refresh" class="kt-btn kt-btn-secondary kt-btn-sm" type="button">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="ft-body" style="margin-top:16px;">
+        <div style="padding:24px;color:#64748B;">Loading…</div></div>
+    </div>`;
+
+    var dateEl = main.querySelector('#ft-date');
+    var shift = function (days) {
+      var d = new Date(renderTripGpsV2._date + 'T12:00:00');
+      d.setDate(d.getDate() + days);
+      renderTripGpsV2._date = d.getFullYear() + '-'
+        + String(d.getMonth() + 1).padStart(2, '0') + '-'
+        + String(d.getDate()).padStart(2, '0');
+      dateEl.value = renderTripGpsV2._date;
+      load();
+    };
+    main.querySelector('#ft-prev').onclick = function () { shift(-1); };
+    main.querySelector('#ft-next').onclick = function () { shift(1); };
+    main.querySelector('#ft-today').onclick = function () {
+      var n = new Date();
+      renderTripGpsV2._date = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0')
+        + '-' + String(n.getDate()).padStart(2, '0');
+      dateEl.value = renderTripGpsV2._date;
+      load();
+    };
+    dateEl.onchange = function () { renderTripGpsV2._date = dateEl.value; load(); };
+    main.querySelector('#ft-refresh').onclick = function () { load(); };
+
+    async function load() {
+      var host = main.querySelector('#ft-body');
+      /* The host is gone once the SPA re-renders this screen — and the poller below
+         only checked that `main` was still in the document, which it is: the shell
+         reuses that node and swaps its contents. So a 30-second timer kept firing into
+         a #ft-body that no longer existed, and `host.innerHTML` threw
+         "Cannot set properties of null". That is crash ticket #18, filed from
+         index.html?signed_out=idle — the timer outlived the session itself.
+         (fixed 2026-08-26) */
+      if (!host) {
+        if (renderTripGpsV2._timer) { clearInterval(renderTripGpsV2._timer); renderTripGpsV2._timer = null; }
+        return;
+      }
+      host.innerHTML = '<div style="padding:24px;color:#64748B;">Loading…</div>';
+      var r;
+      try {
+        r = await Api.get('/provider/walks/tracker?date=' + encodeURIComponent(renderTripGpsV2._date));
+      } catch (e) {
+        host.innerHTML = '<div class="kt-card" style="color:#B91C1C;">Could not load that day'
+          + (e && e.message ? ' — ' + esc(e.message) : '') + '.</div>';
+        return;
+      }
+
+      var trips = r.trips || [];
+      if (!trips.length) {
+        host.innerHTML = `<div class="kt-card" style="text-align:center;padding:44px 24px;color:#64748B;">
+          <div style="font-size:54px;line-height:1;margin-bottom:14px;">🚶</div>
+          <h3 style="margin:0 0 6px;color:#1F2937;">Nothing on this day</h3>
+          <p style="margin:0;">No walks or outings were logged. Try another day.</p></div>`;
+        return;
+      }
+
+      host.innerHTML = trips.map(function (t) {
+        var age = ftAge(t.current ? t.current.age_min : null);
+        var live = String(t.status || '').toLowerCase() === 'active';
+        var km = (t.distance_km != null && t.distance_km !== '')
+          ? Number(t.distance_km).toFixed(2) + ' km'
+          : (t.distance_m != null ? (t.distance_m >= 1000 ? (t.distance_m / 1000).toFixed(2) + ' km' : Math.round(t.distance_m) + ' m') : '—');
+
+        return `<div class="kt-card" style="margin-bottom:14px;">
+          <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px;">
+                ${ftStatusPill(t.status)}
+                ${live ? '<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:' + age.tone + ';"><span style="width:8px;height:8px;border-radius:50%;background:' + age.tone + ';"></span>' + esc(age.text) + '</span>' : ''}
+              </div>
+              <h3 style="margin:0;font-size:17px;color:#0F172A;">${esc(t.title || 'Walk')}</h3>
+              <div style="font-size:13px;color:#64748B;margin-top:2px;">
+                ${esc(t.centre_name || '')}${t.destination ? ' · ' + esc(t.destination) : ''}
+                ${t.depart_time ? ' · left ' + esc(String(t.depart_time).slice(0, 5)) : ''}
+                ${t.return_time ? ' · back ' + esc(String(t.return_time).slice(0, 5)) : ''}</div>
+            </div>
+            <div style="text-align:right;flex:0 0 auto;">
+              <div style="font-size:20px;font-weight:900;color:#0F172A;">${esc(km)}</div>
+              <div style="font-size:11.5px;color:#94A3B8;">${t.ping_count || 0} GPS point${(t.ping_count || 0) === 1 ? '' : 's'}</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid #F1F5F9;">
+            <div style="flex:1;min-width:180px;">
+              <div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#94A3B8;margin-bottom:3px;">With</div>
+              <div style="font-size:14px;color:#0F172A;font-weight:600;">🧑‍🏫 ${esc((t.lead && t.lead.name) || 'Unassigned')}</div>
+              ${(t.lead && t.lead.phone) ? '<a href="tel:' + esc(t.lead.phone) + '" style="font-size:12.5px;color:#1F6080;text-decoration:none;">' + esc(t.lead.phone) + '</a>' : ''}
+            </div>
+            ${ftPlace('Set off from', t.from, '🏁')}
+            ${ftPlace(live ? 'Right now' : 'Last seen', t.current, '📍')}
+          </div>
+
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid #F1F5F9;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#94A3B8;margin-bottom:7px;">
+              Children on this outing (${(t.children || []).length})</div>
+            ${(t.children || []).length
+              ? '<div style="display:flex;flex-wrap:wrap;gap:7px;">' + t.children.map(function (c) {
+                  return '<span style="display:inline-flex;align-items:center;gap:6px;background:#F8FAFC;'
+                    + 'border:1px solid #E2E8F0;border-radius:999px;padding:5px 12px 5px 6px;font-size:13px;color:#0F172A;">'
+                    + '<span style="width:22px;height:22px;border-radius:50%;background:#E2E8F0;display:inline-flex;'
+                    + 'align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#475569;">'
+                    + esc((c.name || '?').charAt(0)) + '</span>' + esc(c.name) + '</span>';
+                }).join('') + '</div>'
+              : '<div style="font-size:13px;color:#94A3B8;">No children recorded against this outing.</div>'}
+          </div>
+
+          ${t.map_url ? '<img alt="Route map" src="' + esc(t.map_url) + '" style="margin-top:14px;width:100%;max-width:520px;border-radius:12px;border:1px solid #E2E8F0;display:block;">' : ''}
+        </div>`;
+      }).join('');
+    }
+
+    await load();
+
+    /* Refresh while something is actually out. Polling a day in the past is just
+       noise, so the timer only runs when the day being viewed is today. */
+    if (renderTripGpsV2._timer) { clearInterval(renderTripGpsV2._timer); }
+    renderTripGpsV2._timer = setInterval(function () {
+      /* Check the element the work depends on, not just its container: `main` survives
+         a re-render, #ft-body does not. Checking the wrong one is what let this timer
+         run on after the screen had gone. */
+      if (!document.body.contains(main) || !main.querySelector('#ft-body')) {
+        clearInterval(renderTripGpsV2._timer); renderTripGpsV2._timer = null; return;
+      }
+      var n = new Date();
+      var today = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0')
+        + '-' + String(n.getDate()).padStart(2, '0');
+      if (renderTripGpsV2._date === today) { load(); }
+    }, 30000);
+  }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function fmtTime(d) { return d ? new Date(d).toLocaleString() : ''; }
 

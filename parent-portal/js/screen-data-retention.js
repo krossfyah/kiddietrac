@@ -30,10 +30,28 @@
   // only holds while every unit is a short word, so anything needing explanation ("0
   // means never") belongs in a hint under the label rather than stuffed into the unit
   // and clipped, which is what "months (0 = never)" was doing.
+  /* Which of these periods the nightly retention:purge actually ACTS on. The screen used
+     to present all seven identically, so it read as though every one of them deleted data
+     on a schedule. Three do (and only when auto-enforce is on); the other four are a
+     stated policy and nothing removes them. Saying so is the difference between a
+     compliance page and a compliance promise you are not keeping. (2026-08-25) */
+  var RETENTION_ENFORCED = ['message_months', 'announcement_months', 'suspended_family_months'];
+
+  function retentionBadge(key) {
+    var on = RETENTION_ENFORCED.indexOf(key) !== -1;
+    return '<span title="' + (on
+        ? 'The nightly purge acts on this period when auto-enforce is switched on.'
+        : 'Recorded as your policy. Nothing deletes this automatically.')
+      + '" style="display:inline-block;margin-left:8px;font-size:10px;font-weight:800;'
+      + 'letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:5px;'
+      + (on ? 'color:#1B6350;background:#DFEDE8;' : 'color:#64748B;background:#F1F5F9;')
+      + '">' + (on ? 'Enforced' : 'Policy only') + '</span>';
+  }
+
   function numField(key, label, unit, val, hint, min) {
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid #F1F5F9;">'
       + '<div style="min-width:0;">'
-      + '<label for="c_' + key + '" style="font-size:14px;color:#334155;font-weight:600;">' + esc(label) + '</label>'
+      + '<label for="c_' + key + '" style="font-size:14px;color:#334155;font-weight:600;">' + esc(label) + retentionBadge(key) + '</label>'
       + (hint ? '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + esc(hint) + '</div>' : '')
       + '</div>'
       + '<div style="display:flex;align-items:center;gap:8px;white-space:nowrap;flex-shrink:0;">'
@@ -71,7 +89,7 @@
           + numField('audit_log_months', 'Security & audit trail', 'months', c.audit_log_months))
 
       + card('Automatic enforcement', 'Off by default. When on, records past their retention period are handled automatically by a nightly review. Deletion is permanent — anonymising keeps aggregate stats while removing identifying details.',
-          toggle('auto_enforce', 'Automatically enforce retention', 'Applies the periods above every night.', c.auto_enforce)
+          toggle('auto_enforce', 'Automatically enforce retention', 'Runs nightly and applies only the periods marked ENFORCED above — messages, announcements and suspended families. The rest are recorded as policy and are never deleted automatically.', c.auto_enforce)
           + '<div style="display:flex;align-items:center;gap:12px;padding:10px 0 2px;"><label for="c_enforce_mode" style="font-size:14px;color:#334155;font-weight:600;">When enforcing, records are</label>'
           + '<select id="c_enforce_mode" style="' + INP + 'width:auto;">'
           + '<option value="anonymize"' + (c.enforce_mode !== 'delete' ? ' selected' : '') + '>Anonymised</option>'

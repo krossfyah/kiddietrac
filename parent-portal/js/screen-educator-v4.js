@@ -169,7 +169,7 @@
           }
           setTimeout(() => {
             modal.close();
-            window.location.reload();
+            (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload());
           }, 1500);
         } catch (e) {
           status.style.color = '#c0392b';

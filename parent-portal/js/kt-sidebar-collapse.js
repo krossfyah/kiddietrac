@@ -64,6 +64,6 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
-  setInterval(ensure, 2500); // safety net if the shell re-mounts
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(ensure) : setInterval(ensure, 2500); // safety net if the shell re-mounts
   if (w.KT) w.KT.toggleSidebar = toggle;
 })(window);

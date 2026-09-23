@@ -66,7 +66,7 @@
 
   // Poll (the punch state changes rarely, but this also catches role/view changes
   // and the clock bar loading after us) + react to navigation.
-  setInterval(update, 3000);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(update) : setInterval(update, 3000);
   window.addEventListener('hashchange', function () { setTimeout(update, 800); });
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', function () { setTimeout(update, 1500); });
   else setTimeout(update, 1500);
