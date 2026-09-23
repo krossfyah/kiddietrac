@@ -625,6 +625,14 @@ function showReloadGate(){
   <script src="/js/kt-mobilenav.js?v=20260921swap" defer></script>
   <script src="/js/kt-clockbar.js?v=20260921swap" defer></script>
   <script src="/js/kt-mobile-tables.js?v=20260923mt1" defer></script>
+  <!-- Makes an open dialog FIT A PHONE. The dialogs themselves were fine; what did
+       not fit was their contents - a flex or grid child keeps min-width:auto and so
+       refuses to shrink, leaving a 498px row inside a 291px box with neither wrap nor
+       overflow. Five of the eight tabs on a user record could not be reached at all.
+       It measures each open dialog and repairs only what actually overflows, which is
+       why it also covers the ~148 hand-rolled dialogs nobody will revisit. Phone only;
+       loads after kt-mobilenav.js, whose dialog shape test it mirrors. -->
+  <script src="/js/kt-dialog-fit.js?v=20260923dlg3" defer></script>
   <!-- Draws <option> lists in the page on touch devices. The native Android
        popup takes its text colour from the app theme, not from our CSS, and came
        out white-on-white in the APK. -->
