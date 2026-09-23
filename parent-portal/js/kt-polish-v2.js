@@ -104,7 +104,8 @@
         <span style="font-size:18px;">☑</span>
         <span class="kt-bulk-count" style="font-weight:700;">0 selected</span>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;" class="kt-bulk-btns">
+        <span class="kt-bulk-custom" style="display:flex;gap:8px;"></span>
         <button class="kt-bulk-csv" style="background:rgba(255,255,255,.18);color:#fff;border:0;padding:7px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">⤓ Export selected</button>
         <button class="kt-bulk-clear" style="background:rgba(255,255,255,.16);color:#fff;border:0;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:13px;">Clear</button>
       </div>`;
@@ -116,9 +117,47 @@
     }
     table.parentElement.insertBefore(bar, table);
 
+    /* A SCREEN'S OWN BULK ACTIONS (2026-09-17).
+
+       Anthony: "when selecting multiple rows under payment schedule have an option to
+       issue all now, delete all, download all, same goes for the accounting section."
+
+       The bar only ever offered Export and Clear, which are generic. A screen now sets
+       `table.ktBulkActions = [{label, danger, run(rows)}]` and its buttons appear here.
+
+       Read on every selection change rather than once when the bar is built, because the
+       sweep that builds the bar and the render that knows the actions do not have a fixed
+       order — attaching them at build time worked or silently did nothing depending on
+       which ran first. */
+    function syncCustomActions() {
+      const host = bar.querySelector('.kt-bulk-custom');
+      const acts = table.ktBulkActions || [];
+      const sig = acts.map(a => a.label).join('|');
+      if (host.dataset.sig === sig) { return; }
+      host.dataset.sig = sig;
+      host.innerHTML = '';
+      acts.forEach(function (a) {
+        const b = document.createElement('button');
+        b.textContent = a.label;
+        b.style.cssText = 'background:' + (a.danger ? 'rgba(220,38,38,.9)' : 'rgba(255,255,255,.18)')
+          + ';color:#fff;border:0;padding:7px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;';
+        b.onclick = async function () {
+          const rows = Array.from(tbody.querySelectorAll('.kt-row-check:checked'))
+            .map(cb => cb.closest('tr'));
+          if (!rows.length) { return; }
+          const was = b.textContent;
+          b.disabled = true; b.textContent = 'Working…';
+          try { await a.run(rows); } catch (e) { /* the action reports its own failure */ }
+          b.disabled = false; b.textContent = was;
+        };
+        host.appendChild(b);
+      });
+    }
+
     function updateActionBar() {
       const checked = Array.from(tbody.querySelectorAll('.kt-row-check:checked'));
       const n = checked.length;
+      syncCustomActions();
       bar.querySelector('.kt-bulk-count').textContent = n + ' selected';
       bar.style.display = n > 0 ? 'flex' : 'none';
       // Header checkbox indeterminate
@@ -165,10 +204,26 @@
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
     const rows = Array.from(tbody.children).filter(r => !(r.children.length === 1 && r.querySelector('td').colSpan > 1));
-    if (rows.length < 200) return;
+
+    /* OPT-IN PAGE SIZE: data-kt-paginate="25" on the table.
+
+       The 200-row / 100-per-page rule below is a safety net for tables nobody sized on
+       purpose — it stops a runaway list, it does not make anything readable. A screen
+       that KNOWS its rows are long (a signed document per line, with a signer and a
+       timestamp) wants far fewer than a hundred at a time, and wants them paged from the
+       first screenful rather than only once there are two hundred.
+
+       Reusing this rather than hand-rolling a pager per screen: there is one pager in the
+       portal, one set of controls, one behaviour — and it already cooperates with the
+       filter sweep through data-ktFilterHidden, which a bespoke one would quietly break.
+       (Anthony, 2026-09-09) */
+    const optIn = parseInt(table.getAttribute('data-kt-paginate') || '', 10);
+    const wanted = (optIn > 0) ? optIn : 0;
+    if (!wanted && rows.length < 200) return;
+    if (wanted && rows.length <= wanted) return;   // one page is not a pager
     table.dataset.ktPaginated = '1';
 
-    const PAGE_SIZE = 100;
+    const PAGE_SIZE = wanted || 100;
     let currentPage = 1;
     const totalPages = Math.ceil(rows.length / PAGE_SIZE);
 
@@ -217,15 +272,38 @@
       if (btn.dataset.ktSpinning) return;
       // Only attach to buttons that are likely to trigger async work
       const text = (btn.textContent || '').toLowerCase();
-      if (!/save|submit|send|generate|upload|create|charge|refund|run|approve|deny|publish|sign|book|claim|add|delete|remove|sync|push|extract|tag/.test(text)) return;
+      /* \b MATTERS, and its absence cost a week. Without it this alternation matches a
+         verb ANYWHERE inside the label, so "Bruni Meeser" — b·r·u·n·i — matched "run",
+         and every tap on that provider in the mobile select sheet disabled her row
+         mid-click, leaving a dropdown that silently did nothing.
+
+         Leading boundary only, never trailing: "Uploading" and "Sending" are real async
+         labels and would not survive \b on the end. (Anthony, 2026-09-07) */
+      if (!/\b(?:save|submit|send|generate|upload|create|charge|refund|run|approve|deny|publish|sign|book|claim|add|delete|remove|sync|push|extract|tag)/.test(text)) return;
       // Skip cancel-style buttons
       if (/cancel|close|back|×/i.test(text)) return;
+      /* ATTENDANCE ACTIONS. "Sign in"/"Sign out" match sign in the list above, so this
+         pass disabled them and rewrote their innerHTML for up to 2.5s — and a button that
+         is already disabled when clicked receives NOTHING (measured). A second tap inside
+         that window was silently swallowed, which on a phone is exactly what a tap that
+         "did nothing" invites. They do no async work themselves either: they open a
+         confirmation, and the request happens only after the user confirms. Safe to
+         exclude — this file is not loaded on the login page, so its own Sign in button is
+         untouched. (Anthony, 2026-09-08) */
+      if (/(sign|check)\s*(in|out)/i.test(text)) return;
       // v22p87: do NOT spin buttons that merely OPEN a modal or toggle a panel.
       // They stay in the DOM with no async work to finish, so the spinner used
       // to run for the full 8s — the "circle keeps spinning" bug (e.g. Waitlist
       // "+ Add", the sidebar "⚡ Quick add" header/items). Skip "+"-prefixed
       // creation buttons and anything inside the sidebar / nav / quick-add menu.
       if (/^[+＋➕]/.test((btn.textContent || '').trim())) return;
+      /* And never a dropdown row. The mobile select/date sheets render each <option>
+         as a <button>: it does no async work, it is destroyed when the sheet closes, and
+         disabling it can only break the control — which is precisely what happened. The
+         \b fix above stops today's collision; this stops the next one, because a
+         provider, room or child called "Sandy", "Brunt" or "Tagg" would trip the same
+         wire. */
+      if (btn.closest('.kt-select-sheet, .kt-date-sheet')) return;
       if (btn.closest('.app-sidebar, .kt-sidebar, nav, .kt-v5a-actions, .kt-quickadd-menu, .kt-qa-menu, #kt-quickadd-menu')) return;
 
       const original = btn.innerHTML;
@@ -328,6 +406,18 @@
       attachPagination(t);
     });
   }
+  /* EXPOSED, because a screen that repaints its table without changing the hash gets no
+     sweep otherwise (2026-09-17).
+
+     The bulk-select checkboxes never appeared on the payment schedules table: picking a
+     family re-renders it in place, which fires no hashchange and does not necessarily
+     land on a bus tick, so the freshly-built table was never swept. Same shape as the
+     in-screen TAB problem ([[kiddietrac-enhance-tables]]) and solved the same way —
+     kt-row-actions already exposes KT.sweepRowActions for exactly this, and a screen
+     calls it after an async render. This is that lever for the table primitives. */
+  window.KT = window.KT || {};
+  KT.sweepTables = sweep;
+
   window.addEventListener('hashchange', () => setTimeout(sweep, 450));
   (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 4000);
   setTimeout(sweep, 1000);

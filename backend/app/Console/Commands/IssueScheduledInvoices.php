@@ -49,7 +49,8 @@ final class IssueScheduledInvoices extends Command
             ->whereDate('i.issued_at', '<=', $today)
             ->where('p.status', 'active')
             ->whereNotIn('pi.status', ['cancelled'])
-            ->get(['i.id', 'i.invoice_number', 'i.family_id', 'i.centre_id', 'i.total', 'i.issued_at', 'i.due_at', 'p.id as plan_id']);
+            ->get(['i.id', 'i.invoice_number', 'i.family_id', 'i.centre_id', 'i.total', 'i.issued_at', 'i.due_at',
+                'p.id as plan_id', 'p.created_by_user_id as plan_author_id']);
 
         if ($rows->isEmpty()) {
             $this->info('Nothing to issue.');
@@ -71,8 +72,22 @@ final class IssueScheduledInvoices extends Command
             try {
                 /* Guarded on status again inside the write: two workers, or a run that
                    overlaps the previous one, must not issue the same invoice twice. */
+                /* WHO IS ACCOUNTABLE, not merely what executed it (2026-09-17).
+
+                   This left issued_by_user_id null, and the schedule table read
+                   "Automatic" - true about the mechanism and useless to somebody asking
+                   who billed a family. The person who built the schedule authorised every
+                   invoice on it; this run is carrying out their instruction on the day
+                   they chose, not making a decision of its own. So the invoice is stamped
+                   with them. HOW it went out is not lost: the audit row this writes is
+                   `invoice.issued_from_schedule`, distinct from the
+                   `invoice.issued_manually` that the button writes. */
                 $ok = DB::table('invoices')->where('id', $r->id)->where('status', 'draft')
-                    ->update(['status' => 'sent', 'updated_at' => now()]);
+                    ->update([
+                        'status' => 'sent',
+                        'issued_by_user_id' => $r->plan_author_id ?: null,
+                        'updated_at' => now(),
+                    ]);
                 if (! $ok) {
                     continue;
                 }

@@ -105,6 +105,33 @@
       regW.appendChild(regIn); g1.appendChild(regW); inputs.registration_fee = regIn;
       c1.appendChild(g1); wrap.appendChild(c1);
 
+      /* WHEN A SCHEDULED INVOICE GOES OUT (2026-09-17).
+
+         A payment schedule raises each instalment's invoice as a draft and issues it
+         automatically when the day comes. That day used to be the FIRST OF THE MONTH,
+         which is not a lead time at all: on a biweekly plan the 9th and the 23rd both
+         went out on the 1st, so the family had 8 days' notice on one invoice and 22 on
+         the next, while a 4th-of-the-month instalment got 3.
+
+         It is per-agency because how much warning a family gets is an agency's own
+         policy, and it is here rather than under Reminders because it governs when the
+         invoice itself is raised, not when somebody is chased about it. */
+      var c1b = card('Payment schedules', 'When each instalment\u2019s invoice is issued to the family.');
+      var leadW = Dom.el('div', { style: 'max-width:260px;' });
+      leadW.appendChild(label('Issue invoices this many days before they are due'));
+      var leadIn = Dom.el('input', {
+        type: 'number', min: '0', max: '60', step: '1',
+        value: (d.invoice_issue_lead_days == null ? 5 : d.invoice_issue_lead_days),
+        style: inputStyle(),
+      });
+      leadW.appendChild(leadIn); inputs.invoice_issue_lead_days = leadIn;
+      c1b.appendChild(leadW);
+      c1b.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-top:8px;line-height:1.5;' },
+        'Each instalment stays a pending draft until this many days before its due date, '
+        + 'then issues on its own and the family owes it. Set 0 to issue on the due date '
+        + 'itself. Due dates never change \u2014 only how much notice the family gets.'));
+      wrap.appendChild(c1b);
+
       var c2 = card('Late fees', 'Charged on overdue balances.');
       var g2 = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;' });
       var lfp = Dom.el('input', { type: 'number', step: '0.01', min: '0', max: '25', value: d.late_fee_percent, style: inputStyle() });
@@ -137,13 +164,60 @@
       var apReqL = Dom.el('label', { style: 'display:flex;align-items:center;gap:10px;font-size:14px;color:#111827;cursor:pointer;margin-bottom:14px;' });
       apReqL.appendChild(apReq); apReqL.appendChild(Dom.el('span', {}, 'Require autopay (families must keep a card on file)'));
       c4.appendChild(apDefL); c4.appendChild(apReqL);
-      var surW = Dom.el('div', { style: 'max-width:240px;' });
-      surW.appendChild(label('Card surcharge (%) — optional'));
-      var surIn = Dom.el('input', { type: 'number', step: '0.01', min: '0', max: '10', value: d.card_surcharge_percent || 0, style: inputStyle() });
-      surW.appendChild(surIn); c4.appendChild(surW);
-      inputs.autopay_default = apDef; inputs.autopay_required = apReq; inputs.card_surcharge_percent = surIn;
+      inputs.autopay_default = apDef; inputs.autopay_required = apReq;
       wrap.appendChild(c4);
 
+      /* PAYMENT SURCHARGES (2026-09-17).
+
+         Anthony: "a percentage configurator to allow the total invoice to be calculated
+         by x percent and comes up as a service fee for debit/credit. Same goes for
+         EFT/Interac a configurable option - this can sit in the setting section somewhere
+         under payments configuration."
+
+         `card_surcharge_percent` already existed here and was READ BY NOTHING - stored,
+         editable, and applied nowhere, the same shape as the feature flags that turned
+         out to be decorative. It is wired up now, and the bank rails get their own rate:
+         card is typically 2-3% while an Interac e-Transfer is a flat cost well under 1%,
+         so one number could never have served both. */
+      var c5 = card('Payment surcharges', 'Passed on to families as a service fee when they pay.');
+      var g5 = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;' });
+
+      var cardW = Dom.el('div', {});
+      cardW.appendChild(label('Credit / debit card (%)'));
+      var surIn = Dom.el('input', { type: 'number', step: '0.01', min: '0', max: '10',
+        value: d.card_surcharge_percent || 0, style: inputStyle() });
+      cardW.appendChild(surIn); g5.appendChild(cardW);
+      inputs.card_surcharge_percent = surIn;
+
+      var eftW = Dom.el('div', {});
+      eftW.appendChild(label('EFT / Interac e-Transfer (%)'));
+      var eftIn = Dom.el('input', { type: 'number', step: '0.01', min: '0', max: '10',
+        value: d.eft_surcharge_percent || 0, style: inputStyle() });
+      eftW.appendChild(eftIn); g5.appendChild(eftW);
+      inputs.eft_surcharge_percent = eftIn;
+
+      c5.appendChild(g5);
+      c5.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-top:8px;line-height:1.55;' },
+        'Charged on the amount being paid, not on the invoice total — a family paying in two '
+        + 'instalments is charged the fee on each, which is what the processor bills. Cash and '
+        + 'cheque are never surcharged. Set 0 to absorb the cost yourself. The fee is added as a '
+        + 'visible line on the invoice, and whoever records the payment confirms it first.'));
+      var surPrev = Dom.el('div', { style: 'font-size:12.5px;color:#334155;margin-top:8px;padding:8px 11px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;' });
+      c5.appendChild(surPrev);
+
+      /* A worked example, because a percentage on its own does not tell anybody what a
+         parent will actually be charged. */
+      var showPrev = function () {
+        var cp = parseFloat(surIn.value) || 0;
+        var ep = parseFloat(eftIn.value) || 0;
+        surPrev.innerHTML = 'On a <strong>$500.00</strong> payment: card adds <strong>$'
+          + (500 * cp / 100).toFixed(2) + '</strong>, EFT / Interac adds <strong>$'
+          + (500 * ep / 100).toFixed(2) + '</strong>.';
+      };
+      surIn.addEventListener('input', showPrev);
+      eftIn.addEventListener('input', showPrev);
+      showPrev();
+      wrap.appendChild(c5);
       var msg = Dom.el('div', { style: 'min-height:20px;font-size:13px;margin:6px 0;' });
       wrap.appendChild(msg);
       var saveBtn = Dom.el('button', { style: 'background:#1F6080;color:white;border:none;padding:11px 26px;border-radius:9px;font-weight:700;cursor:pointer;font-size:15px;' }, 'Save billing setup');
@@ -152,12 +226,19 @@
           default_billing_frequency: inputs.default_billing_frequency.value,
           deposit_amount: parseFloat(inputs.deposit_amount.value) || 0,
           registration_fee: parseFloat(inputs.registration_fee.value) || 0,
+          /* parseInt, not `|| 0` on a float: 0 is a legitimate setting here (issue on
+             the due date), and it must survive rather than be treated as "unset". */
+          invoice_issue_lead_days: (function (v) {
+            var n = parseInt(v, 10);
+            return isNaN(n) ? 5 : Math.max(0, Math.min(60, n));
+          })(inputs.invoice_issue_lead_days.value),
           late_fee_percent: parseFloat(inputs.late_fee_percent.value) || 0,
           late_fee_cap: parseFloat(inputs.late_fee_cap.value) || 0,
           late_fee_grace_days: parseInt(inputs.late_fee_grace_days.value, 10) || 0,
           autopay_default: inputs.autopay_default.checked,
           autopay_required: inputs.autopay_required.checked,
           card_surcharge_percent: parseFloat(inputs.card_surcharge_percent.value) || 0,
+          eft_surcharge_percent: parseFloat(inputs.eft_surcharge_percent.value) || 0,
           accepted_payment_methods: Object.keys(methodChecks).filter(function (k) { return methodChecks[k].checked; }),
         };
         saveBtn.disabled = true; msg.style.color = '#1F6080'; msg.textContent = 'Saving…';

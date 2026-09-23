@@ -86,9 +86,22 @@ final class AgencyBillingConfigController extends Controller
             'default_billing_frequency' => $bs['default_billing_frequency'] ?? 'monthly',
             'deposit_amount'            => $bs['deposit_amount'] ?? 0,
             'registration_fee'          => $bs['registration_fee'] ?? 0,
+            /* HOW LONG BEFORE ITS DUE DATE AN INVOICE GOES OUT (2026-09-17).
+
+               A payment schedule used to raise every instalment's invoice dated the
+               FIRST OF ITS MONTH, which gave wildly uneven notice: on a biweekly plan
+               the 9th and the 23rd both issued on the 1st - 8 days and 22 days - while a
+               4th-of-the-month instalment got 3. Five days before the due date, every
+               time, is what Anthony asked for, and it is per-agency because how much
+               warning a family gets is an agency's own policy. */
+            'invoice_issue_lead_days'   => $bs['invoice_issue_lead_days'] ?? 5,
             'autopay_default'           => $bs['autopay_default'] ?? false,
             'autopay_required'          => $bs['autopay_required'] ?? false,
             'card_surcharge_percent'    => $bs['card_surcharge_percent'] ?? 0,
+            /* The bank-rail equivalent (2026-09-17). Card and e-Transfer cost an agency
+               very different amounts, so one rate could not serve both: card is typically
+               2-3%, an Interac e-Transfer is usually a flat cost well under 1%. */
+            'eft_surcharge_percent'     => $bs['eft_surcharge_percent'] ?? 0,
             'accepted_payment_methods'  => $bs['accepted_payment_methods'] ?? ['stripe_card', 'interac', 'cash', 'cheque'],
         ]]);
     }
@@ -104,9 +117,11 @@ final class AgencyBillingConfigController extends Controller
             'default_billing_frequency'  => 'nullable|in:weekly,biweekly,monthly',
             'deposit_amount'             => 'nullable|numeric|min:0|max:100000',
             'registration_fee'           => 'nullable|numeric|min:0|max:100000',
+            'invoice_issue_lead_days'    => 'nullable|integer|min:0|max:60',
             'autopay_default'            => 'nullable|boolean',
             'autopay_required'           => 'nullable|boolean',
             'card_surcharge_percent'     => 'nullable|numeric|min:0|max:10',
+            'eft_surcharge_percent'      => 'nullable|numeric|min:0|max:10',
             'accepted_payment_methods'   => 'nullable|array',
             'accepted_payment_methods.*' => 'in:stripe_card,stripe_ach,interac,cash,cheque,manual',
         ]);
@@ -119,7 +134,7 @@ final class AgencyBillingConfigController extends Controller
         $settings = [];
         if ($row && $row->settings) { $x = json_decode($row->settings, true); if (is_array($x)) $settings = $x; }
         $bs = $settings['billing_setup'] ?? [];
-        foreach (['default_billing_frequency', 'deposit_amount', 'registration_fee', 'autopay_default', 'autopay_required', 'card_surcharge_percent', 'accepted_payment_methods'] as $k) {
+        foreach (['default_billing_frequency', 'deposit_amount', 'registration_fee', 'invoice_issue_lead_days', 'autopay_default', 'autopay_required', 'card_surcharge_percent', 'eft_surcharge_percent', 'accepted_payment_methods'] as $k) {
             if (array_key_exists($k, $d)) $bs[$k] = $d[$k];
         }
         $settings['billing_setup'] = $bs;

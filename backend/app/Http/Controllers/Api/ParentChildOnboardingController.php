@@ -166,8 +166,30 @@ class ParentChildOnboardingController extends Controller
     {
         abort_unless(in_array($child, $this->ownChildIds((int) $request->user()->id), true), 403, 'Not your child.');
 
+        /* A PHONE PHOTO IS BIGGER THAN 6MB (found 2026-09-17).
+
+           Patricia Burgess hit this twice during onboarding - 422 at 15:24, 422 at 15:25,
+           then a different photo succeeded at 15:26 - from Android Chrome. Nothing was
+           broken; the cap was simply below what a modern phone camera produces, and the
+           message did not say so, leaving a parent to guess and retry.
+
+           12MB covers a full-resolution phone photo. HEIC is deliberately still refused:
+           accepting it would store a file most browsers cannot display, so a photo that
+           "uploaded fine" would render as a broken box on every roster and emergency
+           card. Better to say so and let them convert it.
+
+           The messages name the problem AND the fix, because a parent in the middle of
+           onboarding cannot act on "The photo field is invalid." */
         $request->validate([
-            'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
+            'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:12288'],
+        ], [
+            'photo.required' => 'Choose a photo first.',
+            'photo.file' => 'That did not come through as a file. Try choosing the photo again.',
+            'photo.mimes' => 'That photo format is not supported. Please use a JPG, PNG or WebP '
+                . '- if it is a HEIC from an iPhone, open it and choose Share, then Save as JPEG, '
+                . 'or set Camera to "Most Compatible" in Settings.',
+            'photo.max' => 'That photo is too large. The limit is 12MB - most phones can email '
+                . 'or share it at a smaller size, or you can crop it and try again.',
         ]);
 
         $file = $request->file('photo');

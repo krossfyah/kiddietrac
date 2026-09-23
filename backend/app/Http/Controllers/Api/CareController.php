@@ -784,10 +784,51 @@ final class CareController extends Controller
      * in/out (in-app notification + high-priority FCM push). Wrapped so a failure
      * here can NEVER break the punch itself.
      */
+    /* A PUNCH MUST NOT WAIT FOR GOOGLE (2026-09-17).
+
+       Found in the audit log: POST /staff/punch, median **10.4s**, worst 10.9s across
+       seven events. An educator standing at a tablet waited ten seconds to clock in.
+
+       The cause was this method, called inline. It loops over every centre director and
+       agency admin and calls FcmService::sendToUser() for each, which makes a curl POST
+       to fcm.googleapis.com with a 15-SECOND timeout, and falls back to WebPushService
+       (more HTTP) when the person has no handset registered. iLearn has **four** such
+       recipients, so a punch made four sequential round-trips to Google before it
+       answered. Four times a couple of seconds is exactly the ten seconds measured.
+
+       NONE OF IT IS SOMETHING THE PUNCH DEPENDS ON. The clock-in is already written; this
+       is a courtesy notification to somebody else. So it is queued, and the request
+       returns as soon as the row is in.
+
+       QUEUED WORK HERE IS SAFE TO RELY ON: the driver is `database` and the scheduler
+       runs `queue:work --queue=mail,default --stop-when-empty` every minute (verified
+       draining — a job dispatched during this investigation was picked up and gone within
+       the minute). The cost is that a director sees "Safia clocked in" up to a minute
+       later, which is the right trade against making Safia wait.
+
+       The in-request part is now only the dispatch; the work itself moved to
+       deliverClockEvent(), and the closure captures scalars rather than a User model. */
     private function notifyClockEvent($actor, int $centreId, string $action): void
     {
         try {
-            if (!$centreId) return;
+            if (! $centreId) { return; }
+
+            $actorId = (int) ($actor->id ?? 0);
+            $name = trim((($actor->first_name ?? '') . ' ' . ($actor->last_name ?? '')))
+                ?: ($actor->name ?? 'An educator');
+
+            /* Serialising scalars, not the model: a queued closure holding an Eloquent
+               user re-fetches it on the worker and fails loudly if the row has changed. */
+            dispatch(function () use ($actorId, $centreId, $action, $name) {
+                \App\Http\Controllers\Api\CareController::deliverClockEvent($actorId, $centreId, $action, $name);
+            })->onQueue('default');
+        } catch (\Throwable $e) { /* never break the punch */ }
+    }
+
+    /** The part that talks to Google. Runs on the worker, never in a request. */
+    public static function deliverClockEvent(int $actorId, int $centreId, string $action, string $name): void
+    {
+        try {
             $agencyId  = DB::table('centres')->where('id', $centreId)->value('agency_id');
             $centreNm  = DB::table('centres')->where('id', $centreId)->value('name') ?: 'the centre';
             $recipients = DB::table('role_assignments')->where('active', true)
@@ -803,14 +844,13 @@ final class CareController extends Controller
                 })
                 ->pluck('user_id')->unique();
 
-            $name = trim((($actor->first_name ?? '') . ' ' . ($actor->last_name ?? ''))) ?: ($actor->name ?? 'An educator');
             $inOut = $action === 'in' ? 'clocked in' : 'clocked out';
             $icon  = $action === 'in' ? '🟢' : '🔴';
             $title = $icon . ' ' . $name . ' ' . $inOut;
             $body  = $centreNm;
 
             foreach ($recipients as $rid) {
-                if ((int) $rid === (int) ($actor->id ?? 0)) continue;   // don't notify the actor
+                if ((int) $rid === $actorId) continue;   // don't notify the actor
                 \App\Support\Notify::write([
                     'user_id'    => $rid,
                     'type'       => 'clock',
@@ -823,7 +863,11 @@ final class CareController extends Controller
                     app(\App\Services\FcmService::class)->sendToUser((int) $rid, $title, $body, '#dashboard', false);
                 } catch (\Throwable $e) { /* push is best-effort */ }
             }
-        } catch (\Throwable $e) { /* never break the punch */ }
+        } catch (\Throwable $e) {
+            /* On the worker now, so there is no punch left to break - but a failed
+               courtesy notification must still not fail the job and retry forever. */
+            report($e);
+        }
     }
 
     public function myPunches(Request $request): JsonResponse

@@ -277,10 +277,50 @@ final class FeatureFlagController extends Controller
                    copy of the options. (2026-09-17) */
                 'invoice_template'    => \App\Services\InvoiceDocument::templateFor((int) $agency->id),
                 'invoice_templates'   => \App\Services\InvoiceDocument::templates(),
+                /* HOW THE NUMBERS THEMSELVES ARE SHAPED. Beside the invoice's look,
+                   because a number on an invoice is as much the agency's identity as
+                   the logo above it: "invoice numbering naming convention should be
+                   definable for each agency ... wire this up under the branding for
+                   invoices". Served with the presets and a live sample so the screen
+                   never has to guess what a format produces. (2026-09-17) */
+                'invoice_number_format'   => \App\Services\InvoiceNumber::config((int) $agency->id)['format'],
+                'invoice_number_start'    => \App\Services\InvoiceNumber::config((int) $agency->id)['seq_start'],
+                'invoice_number_presets'  => \App\Services\InvoiceNumber::presets(),
+                'invoice_number_sample'   => \App\Services\InvoiceNumber::preview((int) $agency->id,
+                    \App\Services\InvoiceNumber::config((int) $agency->id)['format']),
                 'brand_privacy_url'   => $this->agencySetting($agency, 'brand_privacy_url'),
                 'brand_terms_url'     => $this->agencySetting($agency, 'brand_terms_url'),
                 'powered_by_visible'  => isset($agency->powered_by_visible) ? (int) $agency->powered_by_visible : 1,
             ],
+        ]);
+    }
+
+    /* WHAT A FORMAT WOULD PRODUCE, without consuming a number (2026-09-17).
+
+       The Branding screen shows a live sample as you type the format. It is rendered
+       HERE rather than in JavaScript so the sample and the real invoice number come out
+       of the same class - a second implementation in the browser would drift the moment
+       either side gained a token, and the person choosing the format would be shown a
+       promise the server does not keep.
+
+       Read-only: InvoiceNumber::preview() touches no counter. A preview that took a
+       sequence number would burn one on every keystroke. */
+    public function invoiceNumberPreview(Request $request, int $id): JsonResponse
+    {
+        $agency = DB::table('agencies')->where('id', $id)->first();
+        if (! $agency) return response()->json(['message' => 'Agency not found'], 404);
+        // The same guard show() uses - this reads an agency's own setting.
+        $this->authorizeAccess($request, $agency);
+
+        $format = trim((string) $request->query('format', ''));
+        $start = (int) $request->query('start', 0);
+
+        return response()->json([
+            'sample' => \App\Services\InvoiceNumber::preview(
+                (int) $agency->id,
+                $format !== '' ? $format : \App\Services\InvoiceNumber::DEFAULT_FORMAT,
+                $start > 0 ? $start : null
+            ),
         ]);
     }
 
@@ -337,6 +377,12 @@ final class FeatureFlagController extends Controller
             'brand_bank_info'     => ['nullable', 'string', 'max:2000'],
             'brand_address'       => ['nullable', 'string', 'max:500'],
             'invoice_template'    => ['nullable', 'string', 'in:' . implode(',', array_keys(\App\Services\InvoiceDocument::templates()))],
+            /* Free text, because the whole point is that an agency invents its own
+               prefix. Bounded and stripped of anything that would break a filename or an
+               email subject; unknown {TOKENS} are dropped at render time rather than
+               printed raw on a parent's invoice. */
+            'invoice_number_format' => ['nullable', 'string', 'max:60', 'regex:/^[A-Za-z0-9 _.\\/#{}-]*$/'],
+            'invoice_number_start'  => ['nullable', 'integer', 'min:1', 'max:999999999'],
             'brand_privacy_url'   => ['nullable', 'string', 'max:500'],
             'brand_terms_url'     => ['nullable', 'string', 'max:500'],
             'powered_by_visible'  => ['nullable', 'integer', 'in:0,1'],
@@ -409,7 +455,8 @@ final class FeatureFlagController extends Controller
 
         // brand_address / brand_privacy_url / brand_terms_url have no columns —
         // store them in the settings JSON (v22p88: address; v22p90: privacy/terms).
-        $jsonKeys = ['brand_address', 'brand_privacy_url', 'brand_terms_url', 'invoice_template'];
+        $jsonKeys = ['brand_address', 'brand_privacy_url', 'brand_terms_url', 'invoice_template',
+            'invoice_number_format', 'invoice_number_start'];
         $touchesJson = false;
         foreach ($jsonKeys as $jk) { if (array_key_exists($jk, $data)) { $touchesJson = true; break; } }
         if ($touchesJson) {

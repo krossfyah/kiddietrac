@@ -47,6 +47,11 @@ final class CheckEventController extends Controller
         );
 
         if (isset($result['error'])) {
+            $this->auditRefusal($request->user()->id, 'check_in', $result['error'], [
+                'child_id' => (int) $data['child_id'],
+                'room_id'  => (int) $data['room_id'],
+            ]);
+
             return response()->json(['message' => $result['error']], 422);
         }
 
@@ -85,6 +90,10 @@ final class CheckEventController extends Controller
             ->first();
 
         if (!$existing || $existing->event_type !== 'check_in') {
+            $this->auditRefusal($request->user()->id, 'check_out', 'not_currently_checked_in', [
+                'child_id' => (int) $data['child_id'],
+            ]);
+
             return response()->json(['message' => 'Child is not currently checked in.'], 422);
         }
 
@@ -153,6 +162,14 @@ final class CheckEventController extends Controller
                 if (str_contains($result['error'], 'Already')) {
                     $results['skipped'][] = ['child_id' => $childId, 'reason' => $result['error']];
                 } else {
+                    /* A batch refusal counts the same as a single one. "Already checked
+                       in" is skipped rather than logged - it is the system agreeing with
+                       reality, not refusing anybody - but a real error is a refusal an
+                       educator saw and must be countable. */
+                    $this->auditRefusal($request->user()->id, 'check_in', $result['error'], [
+                        'child_id' => (int) $childId,
+                        'batch'    => true,
+                    ]);
                     $results['errors'][] = ['child_id' => $childId, 'reason' => $result['error']];
                 }
             } else {
@@ -240,6 +257,45 @@ final class CheckEventController extends Controller
      * platform-admins don't clock in, so the gate does NOT apply to them.
      * Returns a 422 JsonResponse to abort, or null to proceed.
      */
+    /* A REFUSED CHECK-IN LEAVES NO TRACE, AND THAT IS THE BUG (2026-09-17).
+
+       Anthony: "eisha was having some trouble earlier signing in or out children etc but
+       i don't see anything logged in the audit log with errors - are we tracking these
+       types of events?"
+
+       We were not. Every successful check-in and check-out writes child.check_in_by_staff
+       / child.check_out_by_staff, and every REFUSAL returned a 422 and wrote nothing:
+       not clocked in, child not found, already checked in, not currently checked in. An
+       educator tapping a child and being told no left the same trace as an educator who
+       never opened the app, so "I was having trouble" could not be checked against
+       anything. Support tickets did not cover it either - those are raised for 5xx and
+       for client crashes, and a refusal is a deliberate 422.
+
+       The same lesson as the unaudited early return found before: if the system says no,
+       the log has to say it said no, and why. Written at INFO weight - a refusal is
+       usually the system working correctly, and the value is being able to count them
+       and see a pattern, not to raise an alarm on each one. */
+    private function auditRefusal(int $userId, string $what, string $reason, array $extra = []): void
+    {
+        try {
+            \App\Support\Audit::write([
+                'user_id'     => $userId,
+                'action'      => 'child.' . $what . '_refused',
+                'entity_type' => 'child',
+                'entity_id'   => $extra['child_id'] ?? null,
+                'payload'     => json_encode(array_merge([
+                    'reason'  => $reason,
+                    'summary' => 'Refused to ' . str_replace('_', ' ', $what) . ' a child: ' . $reason,
+                ], $extra)),
+                'ip_address'  => request()->ip(),
+                'user_agent'  => substr((string) request()->userAgent(), 0, 500),
+                'created_at'  => now(),
+            ]);
+        } catch (\Throwable $e) {
+            /* A refusal must never fail louder than the thing it refused. */
+        }
+    }
+
     private function requireClockIn(int $userId): ?JsonResponse
     {
         $roles = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)->pluck('role')->all();
@@ -261,6 +317,12 @@ final class CheckEventController extends Controller
             ->where('punched_in_at', '>=', now()->subHours(20))
             ->exists();
         if ($open) return null;
+
+        /* The most common refusal by far, and the one that looks like a broken app to
+           the person holding the tablet - they tap a child and nothing happens. Worth
+           counting: a spike here usually means a rota or a clock problem, not a
+           misbehaving educator. */
+        $this->auditRefusal($userId, 'check', 'not_clocked_in');
 
         return response()->json([
             'message' => 'You must be clocked in before you can check children in or out.',

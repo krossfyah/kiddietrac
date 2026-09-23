@@ -126,8 +126,13 @@ final class FeePlanController extends Controller
 
         $created = 0;
         foreach ($families as $f) {
-            $num = 'INV-' . $issue->format('Ym') . '-' . str_pad((string) $f->id, 4, '0', STR_PAD_LEFT)
-                . '-' . strtoupper(substr(md5(uniqid('', true)), 0, 3));
+            /* The agency's numbering convention. This built its own shape with a random
+               md5 fragment on the end - unique, and unreadable to the bookkeeper who has
+               to quote it down a phone. InvoiceNumber guarantees uniqueness without the
+               noise, and $aid is already the agency here. */
+            $num = \App\Services\InvoiceNumber::next((int) $aid, [
+                'date' => $issue, 'family_id' => $f->id,
+            ]);
             $invId = DB::table('invoices')->insertGetId([
                 'centre_id' => $f->centre_id,
                 'family_id' => $f->id,

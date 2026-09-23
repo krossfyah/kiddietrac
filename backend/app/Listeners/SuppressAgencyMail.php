@@ -172,9 +172,30 @@ class SuppressAgencyMail
         // master toggle below.
         $isInvite = false;
         $isEngagement = false;
+        $isFormPackage = false;
         try {
             $hdrs2 = $event->message->getHeaders();
             $isInvite = (bool) ($hdrs2 && $hdrs2->has('X-KT-Invite'));
+
+            /* PAPERWORK A FAMILY MUST SIGN BEFORE THEY ONBOARD (2026-09-17).
+
+               Agreed with Anthony after Safia's 7-form send to a new parent was cancelled
+               here. A form package is the FIRST thing a new family is sent - enrolment
+               agreements, consents - and it carries per-recipient SIGNED links that need
+               no login and no account (SignedFormController::page checks only that the
+               form is assigned). It is the agency asking for something, not the portal
+               asking to be used, so it is transactional and not engagement.
+
+               NARROW ON PURPOSE. This exempts form packages from the not-onboarded gate
+               BELOW and nothing else: the agency master toggle, the suppression allowlist
+               and every other gate still apply, and every other kind of mail is still
+               withheld from an unclaimed account. Named rather than folded into
+               X-KT-Invite so the audit log and this file both say which rule let it
+               through. */
+            $isFormPackage = (bool) ($hdrs2 && $hdrs2->has('X-KT-Form-Package'));
+            if ($isFormPackage && $hdrs2) {
+                $hdrs2->remove('X-KT-Form-Package');
+            }
             /* Engagement mail = digests, summaries, chat round-ups: the
                "come and use the portal" family. Only THIS is withheld from
                someone who has not accepted their invite. Everything else is
@@ -207,7 +228,7 @@ class SuppressAgencyMail
            everything that was not an invite -- which cancelled password resets,
            NDA receipts and "your child arrived" notices for anyone still marked
            'invited'. It now cancels only what is explicitly engagement mail. */
-        if (! $isInvite) {
+        if (! $isInvite && ! $isFormPackage) {
             try {
                 $pending = DB::table('users')
                     // Not-yet-onboarded states: 'invited' (invite sent, awaiting

@@ -302,19 +302,27 @@ final class LedgerController extends Controller
         return $invoice;
     }
 
-    // Build a PDF (bytes) for one invoice using the white-label renderer.
+    /* The invoice as the AGENCY has chosen to draw it. This named InvoicePdfRenderer
+       directly, so a parent downloading their own invoice got the default KiddieTrac
+       document while the agency had chosen iLearn's — the same invoice in two different
+       liveries depending on who asked for it. (2026-09-17) */
     private function renderInvoicePdf(int $invoiceId): ?string
     {
-        $html = app(InvoicePdfRenderer::class)->renderFromInvoiceId($invoiceId);
-        if ($html === null) {
-            return null;
-        }
-        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
-        $dompdf->loadHtml($html, 'UTF-8');
-        $dompdf->setPaper('letter', 'portrait');
-        $dompdf->render();
+        return \App\Services\InvoiceDocument::pdf($invoiceId);
+    }
 
-        return $dompdf->output();
+    /* GET /parent/invoices/{invoice}/document — the invoice to LOOK at.
+       The PDF above is for keeping; this is what the app shows inline, so a parent sees
+       the real document rather than a summary drawn from the same numbers. */
+    public function myInvoiceDocument(Request $request, int $invoice): \Symfony\Component\HttpFoundation\Response
+    {
+        $this->assertGuardianOwnsInvoice($request, $invoice);
+        $html = \App\Services\InvoiceDocument::html($invoice, false);
+        abort_unless($html !== null, 404, 'Invoice not found');
+
+        return new \Symfony\Component\HttpFoundation\Response($html, 200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]);
     }
 
     // GET /parent/invoices/{invoice}/pdf — download one invoice as a PDF.

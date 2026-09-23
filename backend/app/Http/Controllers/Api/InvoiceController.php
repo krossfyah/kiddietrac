@@ -755,6 +755,343 @@ final class InvoiceController extends Controller
      * here is overwritten when that invoice next changes at the source; it's a
      * local correction only.
      */
+    /* VOID AN INVOICE THAT CAME FROM iLEARN (2026-09-17).
+
+       Anthony: "for existing invoices that are scheduled allow them to be edited, voided
+       etc (these are the ones that came from ilearn system)."
+
+       128 of the 129 `open` external invoices are future-dated — the ones the table shows
+       as Scheduled. They could be edited but never cancelled, so the only way to withdraw
+       one was to go and do it in iLearn.
+
+       THE SYNC CAN UNDO THIS, and the caller is told so rather than finding out. This
+       writes to KiddieTrac's copy; iLearn remains the system of record and the next sync
+       may set the status back. That is exactly what the existing Edit dialog warns about,
+       and voiding deserves the same warning because the consequence is larger.
+
+       The family and the office get the same two letters a KiddieTrac void sends — from
+       their side an invoice is an invoice, and "your invoice is cancelled" should not
+       depend on which system raised it. */
+    /* MONEY THAT ARRIVED OUTSIDE THE RAILS (2026-09-17).
+
+       Anthony: "add the resend invoice and manual paid functions for those parents that
+       paid via cash of EFT outside of zum rails etc so a popup comes up to confirm
+       payment with reference number and allow for partial payment."
+
+       recordPayment() already did this for a KiddieTrac invoice. A SYNCED one had no way
+       to take a payment at all, so a parent who handed over cash against an iLearn
+       invoice could only be recorded by editing the amount_paid field by hand - which
+       leaves no record of when it arrived, how, under what reference, or who took it.
+
+       A REAL PAYMENT ROW, not a number nudged. `payments` already has an
+       external_invoice_id column, so the receipt lives in the same table as every other
+       payment and the invoice's totals are DERIVED from the rows rather than typed.
+
+       PARTIAL IS THE NORMAL CASE, not an error: a family paying half now and half on
+       Friday is ordinary, and the status follows the arithmetic - paid when the balance
+       reaches zero, partial while anything is still outstanding.
+
+       OVERPAYMENT IS REFUSED rather than silently absorbed. Taking $400 against a $250
+       invoice usually means the wrong invoice is open; a balance that cannot go below
+       zero would hide that. */
+    /* THE API'S WORDS ARE NOT THE COLUMN'S WORDS (2026-09-17).
+
+       `payments.method` is an ENUM:
+         stripe_card, stripe_ach, interac, eft, card, cash, cheque, manual
+
+       Both manual-payment endpoints validate against a friendlier list - cash, cheque,
+       e_transfer, bank_transfer, credit_card_offline, other - of which only `cash` and
+       `cheque` are actually in the enum. So FOUR of the six methods have always failed
+       with "Data truncated for column 'method'" and a 500, including e-Transfer, which is
+       how most families pay outside the rails. Found while testing the external twin;
+       recordPayment() has carried it since it was written, and it is the same shape as
+       the `reference` vs `reference_number` bug documented in that method.
+
+       Mapped rather than renamed: the friendly values are what the UI and any existing
+       caller send, and changing the ENUM would mean an ALTER on a live payments table. */
+    private static function paymentMethodValue(string $given): string
+    {
+        $map = [
+            'e_transfer' => 'interac',          // Interac e-Transfer
+            'bank_transfer' => 'eft',
+            'credit_card_offline' => 'card',
+            'other' => 'manual',
+        ];
+
+        $v = $map[$given] ?? $given;
+
+        /* Anything still outside the enum is recorded as a manual payment rather than
+           throwing: the money arrived, and a 500 loses that fact entirely. */
+        return in_array($v, ['stripe_card', 'stripe_ach', 'interac', 'eft', 'card', 'cash', 'cheque', 'manual'], true)
+            ? $v : 'manual';
+    }
+
+    public function recordExternalPayment(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($agencyId, 400, 'No active agency.');
+        $row = DB::table('external_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
+        abort_unless($row, 404, 'That invoice no longer exists.');
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'method' => ['required', 'in:cash,cheque,e_transfer,bank_transfer,credit_card_offline,other'],
+            'paid_at' => ['nullable', 'date'],
+            'reference' => ['nullable', 'string', 'max:120'],
+            'notes' => ['nullable', 'string', 'max:500'],
+            'add_surcharge' => ['nullable', 'boolean'],
+        ]);
+
+        if ((string) $row->status === 'void') {
+            return response()->json(['message' => 'That invoice is void. Nothing is owed on it.'], 422);
+        }
+
+        /* A SYNCED INVOICE HAS NO LINES OF OURS, so the fee is added to its total
+           instead. The billing system remains the system of record and the next sync may
+           reset the figure - the dialog says so before the box is ticked. */
+        $amount = round((float) $data['amount'], 2);
+        if (! empty($data['add_surcharge'])) {
+            $pct = \App\Services\PaymentSurcharge::percentFor($agencyId, (string) $data['method']);
+            $fee = \App\Services\PaymentSurcharge::feeOn($amount, $pct);
+            if ($fee > 0.005) {
+                DB::table('external_invoices')->where('id', $id)
+                    ->update(['total' => round((float) $row->total + $fee, 2), 'updated_at' => now()]);
+                $row = DB::table('external_invoices')->where('id', $id)->first();
+                // The family paid the fee as well, so the payment recorded includes it.
+                $amount = round($amount + $fee, 2);
+            }
+        }
+
+        $alreadyPaid = round((float) DB::table('payments')->where('external_invoice_id', $id)
+            ->where('status', 'succeeded')->sum('amount'), 2);
+        /* The synced figure is the starting point: iLearn may have recorded payments this
+           table knows nothing about, and treating our own rows as the whole story would
+           let the same money be taken twice. */
+        $baseline = max(round((float) $row->amount_paid, 2), $alreadyPaid);
+        $outstanding = round((float) $row->total - $baseline, 2);
+
+        if ($amount > $outstanding + 0.005) {
+            return response()->json([
+                'message' => 'That is more than the ' . '$' . number_format(max(0, $outstanding), 2)
+                    . ' outstanding on ' . ($row->number ?: ('#' . $id))
+                    . '. Check the invoice before recording it.',
+                'outstanding' => max(0, $outstanding),
+            ], 422);
+        }
+
+        DB::table('payments')->insert([
+            'external_invoice_id' => $id,
+            'family_id' => $row->family_id,
+            'amount' => $amount,
+            'method' => self::paymentMethodValue((string) $data['method']),
+            'paid_at' => $data['paid_at'] ?? now(),
+            'reference_number' => $data['reference'] ?? null,
+            'notes' => $data['notes'] ?? null,
+            'recorded_by_id' => $request->user()->id,
+            'status' => 'succeeded',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $paid = round($baseline + $amount, 2);
+        $balance = round(max(0, (float) $row->total - $paid), 2);
+        $status = $balance <= 0.005 ? 'paid' : 'open';
+
+        DB::table('external_invoices')->where('id', $id)->update([
+            'amount_paid' => $paid,
+            'balance_due' => $balance,
+            'status' => $status,
+            'updated_at' => now(),
+        ]);
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => $agencyId,
+                'user_id' => $request->user()->id,
+                'action' => 'payment.recorded_manually',
+                'entity_type' => 'external_invoice',
+                'entity_id' => $id,
+                'payload' => json_encode([
+                    'number' => $row->number,
+                    'family_id' => (int) $row->family_id,
+                    'amount' => $amount,
+                    'method' => $data['method'],
+                    'reference' => $data['reference'] ?? null,
+                    'balance_after' => $balance,
+                    'summary' => 'Recorded $' . number_format($amount, 2) . ' by ' . $data['method']
+                        . ' against ' . ($row->number ?: ('#' . $id))
+                        . (($data['reference'] ?? '') !== '' ? ' (ref ' . $data['reference'] . ')' : '')
+                        . '; balance is now $' . number_format($balance, 2) . '.',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail the receipt over its own audit row */ }
+
+        return response()->json([
+            'status' => $status,
+            'amount_paid' => $paid,
+            'balance_due' => $balance,
+            'message' => '$' . number_format($amount, 2) . ' recorded against '
+                . ($row->number ?: ('#' . $id))
+                . ($balance > 0.005 ? '. $' . number_format($balance, 2) . ' still outstanding.' : '. Paid in full.'),
+        ]);
+    }
+
+    /* WHO A RESEND WOULD GO TO, for any invoice in the ledger.
+
+       The addresses are SHOWN and editable rather than assumed: a resend that silently
+       picks its own recipient is how an invoice reaches the wrong inbox
+       ([[never-default-a-recipient]]). `guardians` holds no email, so this joins users. */
+    /* What each method would cost, so the Record-payment dialog can show the fee BEFORE
+       anybody agrees to it. Read-only and charges nothing. */
+    /* Email a receipt for one payment. Defaults to the most recent payment on the
+       invoice, because that is the one somebody has just taken. */
+    public function emailReceipt(Request $request, int $invoiceId): JsonResponse
+    {
+        $data = $request->validate([
+            'to' => ['required', 'email', 'max:180'],
+            'payment_id' => ['nullable', 'integer'],
+        ]);
+
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+        abort_unless($invoice, 404, 'That invoice no longer exists.');
+        $this->assertStaffForFamily($request, (int) $invoice->family_id);
+
+        $paymentId = $data['payment_id'] ?? DB::table('payments')->where('invoice_id', $invoiceId)
+            ->where('status', 'succeeded')->orderByDesc('paid_at')->orderByDesc('id')->value('id');
+        abort_unless($paymentId, 422, 'No payment has been recorded against this invoice yet.');
+
+        // Scoped: a payment id from another invoice must not be receipted against this one.
+        $owns = DB::table('payments')->where('id', $paymentId)->where('invoice_id', $invoiceId)->exists();
+        abort_unless($owns, 404, 'No such payment on this invoice.');
+
+        $r = \App\Services\PaymentReceipt::build((int) $paymentId);
+        abort_unless($r, 422, 'That receipt could not be built.');
+
+        if (! \App\Support\Suppression::agencyNotificationsEnabled($r['agency_id'])) {
+            return response()->json([
+                'sent' => false,
+                'reason' => 'Email is switched off for this agency (Settings → "Send notifications and emails").',
+            ], 409);
+        }
+
+        \App\Services\AgencyMailer::forAgency($r['agency_id'])->html($r['html'],
+            function ($m) use ($data, $r) {
+                $m->to($data['to'])->subject($r['subject']);
+                /* The figures are IN the attachment and nowhere else. If dompdf could not
+                   produce one the covering note still goes, and the response says the
+                   receipt is missing rather than pretending it was sent. */
+                if (! empty($r['pdf'])) {
+                    $m->attachData($r['pdf'], $r['filename'], ['mime' => 'application/pdf']);
+                }
+            });
+
+        return response()->json([
+            'sent' => true,
+            'payment_id' => (int) $paymentId,
+            'attached' => ! empty($r['pdf']),
+        ]);
+    }
+
+    public function surchargeRates(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($agencyId, 400, 'No active agency.');
+
+        return response()->json(['rates' => \App\Services\PaymentSurcharge::rates($agencyId)]);
+    }
+
+    public function billingContacts(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($agencyId, 400, 'No active agency.');
+
+        // The FAMILY must belong to the caller's agency, not merely exist.
+        $ok = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('f.id', $familyId)->where('c.agency_id', $agencyId)->exists();
+        abort_unless($ok, 404, 'No such family.');
+
+        $emails = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $familyId)->whereNotNull('u.email')
+            ->orderByDesc('g.is_primary')
+            ->pluck('u.email')->unique()->values()->all();
+
+        if (! $emails) {
+            $fallback = DB::table('families')->where('id', $familyId)->value('primary_email');
+            if ($fallback) { $emails = [$fallback]; }
+        }
+
+        return response()->json(['emails' => $emails]);
+    }
+
+    public function voidExternalInvoice(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['nullable', 'string', 'max:300']]);
+
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($agencyId, 400, 'No active agency.');
+        $row = DB::table('external_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
+        abort_unless($row, 404, 'That invoice no longer exists.');
+
+        if ((string) $row->status === 'void') {
+            return response()->json(['message' => 'That invoice is already void.'], 422);
+        }
+
+        /* NET of what has been paid. An invoice with money against it cannot simply be
+           cancelled — the same rule the KiddieTrac void applies, for the same reason:
+           voiding it would leave a payment attached to nothing. */
+        $held = round((float) $row->amount_paid, 2);
+        if ($held > 0.005) {
+            return response()->json([
+                'message' => 'This invoice has $' . number_format($held, 2) . ' paid against it. '
+                    . 'Refund or reallocate that in iLearn first, then void it here.',
+                'amount_held' => $held,
+            ], 422);
+        }
+
+        DB::table('external_invoices')->where('id', $id)->update([
+            'status' => 'void',
+            'balance_due' => 0,
+            'updated_at' => now(),
+        ]);
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => $agencyId,
+                'user_id' => $request->user()->id,
+                'action' => 'invoice.voided_external',
+                'entity_type' => 'external_invoice',
+                'entity_id' => $id,
+                'payload' => json_encode([
+                    'number' => $row->number,
+                    'family_id' => (int) $row->family_id,
+                    'total' => (float) $row->total,
+                    'source' => $row->external_source,
+                    'reason' => $data['reason'] ?? null,
+                    'summary' => 'Voided ' . ($row->number ?: ('external #' . $id)) . ' ($'
+                        . number_format((float) $row->total, 2) . '), synced from '
+                        . ($row->external_source ?: 'the billing system')
+                        . (($data['reason'] ?? '') !== '' ? ': ' . $data['reason'] : '')
+                        . '. The next sync may restore it.',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail the void over its own audit row */ }
+
+        /* The letters read `invoice_number`; an external row calls it `number`. Mapped
+           rather than duplicated, so both kinds of void say the same thing. */
+        $row->invoice_number = $row->number;
+        $row->id = $id;
+        $this->notifyVoided($request, $row, (string) ($data['reason'] ?? ''));
+
+        return response()->json([
+            'status' => 'void',
+            'message' => ($row->number ?: ('#' . $id)) . ' has been voided. '
+                . 'It is cancelled in KiddieTrac; the next sync from '
+                . ($row->external_source ?: 'the billing system') . ' may restore it.',
+        ]);
+    }
+
     public function updateExternalInvoice(Request $request, int $id): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
@@ -821,13 +1158,390 @@ final class InvoiceController extends Controller
 
         $withHistory = $this->withPaymentHistory([$this->formatInvoice($invoice)])[0];
 
+        /* WHO THE INVOICE IS ACTUALLY FOR (2026-09-17).
+
+           Anthony: "the popup should show all the info on the parent and their child and
+           if multiple child show this info as well." The dialog had a family NAME and
+           nothing else, so an admin adding a charge could not see who they were billing
+           or which children it covered - and a family with three children looked exactly
+           like a family with one.
+
+           `guardians` holds no name or email; those live on the user, which is why this
+           joins rather than selecting from guardians alone. Children are listed with the
+           room and status an office actually asks about, and withdrawn ones are kept
+           rather than hidden - an invoice may well cover a child who has since left, and
+           dropping them would make the charge look unattached to anybody. */
+        $guardians = DB::table('guardians as g')
+            ->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $invoice->family_id)
+            ->orderByDesc('g.is_primary')
+            ->get([
+                'g.id', 'g.relationship', 'g.is_primary', 'g.can_receive_billing',
+                'g.billing_share_pct',
+                'u.id as user_id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone',
+            ]);
+
+        $children = DB::table('children as c')
+            ->leftJoin('rooms as r', 'r.id', '=', 'c.primary_room_id')
+            ->where('c.family_id', $invoice->family_id)
+            ->whereNull('c.deleted_at')
+            ->orderBy('c.first_name')
+            ->get([
+                'c.id', 'c.first_name', 'c.last_name', 'c.preferred_name',
+                'c.date_of_birth', 'c.enrollment_status', 'c.photo_url',
+                DB::raw('r.name as room_name'),
+            ]);
+
         return response()->json([
             'invoice' => $withHistory,
             'family' => $family,
             'lines' => $lines,
             'payments' => $payments,
             'refunds' => $refunds,
+            'guardians' => $guardians,
+            'children' => $children,
         ]);
+    }
+
+    /* ADD A LINE TO AN INVOICE (2026-09-17).
+
+       Anthony: "add ability to add a line item to add or deduct additional charges with a
+       description and to add optional tax."
+
+       A CREDIT IS A NEGATIVE LINE, not a second concept. "Deduct" could have been a
+       separate discount field, but then two places would move the same total and the
+       invoice document would need to learn about both; a line of -25.00 renders, sums
+       and refunds exactly like a line of 25.00, and the parent sees plainly what was
+       taken off and why.
+
+       DESCRIPTION IS REQUIRED. An unexplained charge on a childcare invoice is the thing
+       a parent phones about, and "Adjustment" tells whoever answers nothing.
+
+       NOT ON A VOID INVOICE. Void means the whole document is withdrawn; adding a line
+       to one would put money back on a piece of paper the family has been told to ignore.
+       A PAID one is allowed on purpose - a late fee raised after payment is ordinary -
+       and the recalculation reopens the balance, which the dialog warns about first. */
+    public function addLine(Request $request, int $invoiceId): JsonResponse
+    {
+        $data = $request->validate([
+            'description' => 'required|string|max:200',
+            'amount' => 'required|numeric|not_in:0|min:-100000|max:100000',
+            'tax_rate' => 'nullable|numeric|min:0|max:100',
+            'child_id' => 'nullable|integer',
+            'line_type' => 'nullable|string|max:40',
+        ]);
+
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+        abort_unless($invoice, 404, 'That invoice no longer exists.');
+        $this->assertStaffForFamily($request, (int) $invoice->family_id);
+
+        if ((string) $invoice->status === 'void') {
+            return response()->json([
+                'message' => 'That invoice is void. Raise a new one rather than adding to it.',
+            ], 422);
+        }
+
+        /* A child id from another family would print a stranger's child on this
+           family's invoice. Scoped rather than trusted. */
+        $childId = $data['child_id'] ?? null;
+        if ($childId) {
+            $ok = DB::table('children')->where('id', $childId)
+                ->where('family_id', $invoice->family_id)->exists();
+            if (! $ok) { $childId = null; }
+        }
+
+        $ALLOWED_TYPES = ['tuition', 'subsidy', 'late_fee', 'extra_day', 'field_trip',
+            'meal', 'supply', 'adjustment', 'tax'];
+        $lineType = $data['line_type'] ?? null;
+        if (! $lineType || ! in_array($lineType, $ALLOWED_TYPES, true)) { $lineType = 'adjustment'; }
+
+        $amount = round((float) $data['amount'], 2);
+        $taxRate = isset($data['tax_rate']) && $data['tax_rate'] !== null && (float) $data['tax_rate'] > 0
+            ? round((float) $data['tax_rate'], 2)
+            : null;
+
+        $lineId = DB::table('invoice_lines')->insertGetId([
+            'invoice_id' => $invoiceId,
+            'child_id' => $childId,
+            'description' => trim((string) $data['description']),
+            /* `line_type` is an ENUM (tuition, subsidy, late_fee, extra_day, field_trip,
+               meal, supply, adjustment, tax) and 'credit' is NOT one of its values - a
+               negative line failed with a 500 until this said 'adjustment'. A credit IS
+               an adjustment; the sign carries the direction, not the type. A caller may
+               still name a more specific one, validated against the enum below. */
+            'line_type' => $lineType,
+            'quantity' => 1,
+            'unit_amount' => $amount,
+            'amount' => $amount,
+            'tax_rate' => $taxRate,
+        ]);
+
+        $totals = $this->applyLineDelta($invoiceId, $amount, $taxRate);
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => DB::table('centres')->where('id', $invoice->centre_id)->value('agency_id'),
+                'user_id' => $request->user()->id,
+                'action' => 'invoice.line_added',
+                'entity_type' => 'invoice',
+                'entity_id' => $invoiceId,
+                'payload' => json_encode([
+                    'invoice_number' => $invoice->invoice_number,
+                    'line_id' => $lineId,
+                    'description' => trim((string) $data['description']),
+                    'amount' => $amount,
+                    'tax_rate' => $taxRate,
+                    'new_total' => $totals['total'],
+                    'summary' => ($amount < 0 ? 'Credited ' : 'Charged ') . '$' . number_format(abs($amount), 2)
+                        . ($taxRate ? ' plus ' . $taxRate . '% tax' : '')
+                        . ' on ' . ($invoice->invoice_number ?: ('#' . $invoiceId))
+                        . ' ("' . trim((string) $data['description']) . '"); total is now $'
+                        . number_format($totals['total'], 2) . '.',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail the edit over its own audit row */ }
+
+        return response()->json(['status' => 'added', 'line_id' => $lineId] + $totals);
+    }
+
+    /* EDIT A LINE: its wording, its amount, its tax (2026-09-17).
+
+       Anthony: "description should be editable for accounting and invoices."
+
+       A description is the sentence a parent reads when they are working out what they
+       are being charged for, and it was the one thing on an invoice that could be wrong
+       and not fixed - the only options were to delete the line and retype it, which
+       renumbers nothing but does lose the line's place in the order.
+
+       THE AMOUNT MOVES BY ITS DIFFERENCE, not by replacement. applyLineDelta() adds a
+       delta to figures that are already correct, so changing 25.00 to 40.00 sends +15.00
+       through exactly the same path as adding a 15.00 line would - which matters because
+       this invoice's subtotal is NOT guaranteed to equal the sum of its lines
+       ([[kiddietrac-lines-do-not-sum-to-subtotal]]) and must never be recomputed. */
+    public function updateLine(Request $request, int $invoiceId, int $lineId): JsonResponse
+    {
+        $data = $request->validate([
+            'description' => 'required|string|max:200',
+            'amount' => 'nullable|numeric|not_in:0|min:-100000|max:100000',
+            'tax_rate' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+        abort_unless($invoice, 404, 'That invoice no longer exists.');
+        $this->assertStaffForFamily($request, (int) $invoice->family_id);
+
+        if ((string) $invoice->status === 'void') {
+            return response()->json(['message' => 'That invoice is void.'], 422);
+        }
+
+        $line = DB::table('invoice_lines')->where('id', $lineId)->where('invoice_id', $invoiceId)->first();
+        abort_unless($line, 404, 'No such line on this invoice.');
+
+        $oldAmount = (float) $line->amount;
+        $oldRate = $line->tax_rate === null ? null : (float) $line->tax_rate;
+        $newAmount = array_key_exists('amount', $data) && $data['amount'] !== null
+            ? round((float) $data['amount'], 2) : $oldAmount;
+        $newRate = array_key_exists('tax_rate', $data)
+            ? ((float) ($data['tax_rate'] ?? 0) > 0 ? round((float) $data['tax_rate'], 2) : null)
+            : $oldRate;
+
+        DB::table('invoice_lines')->where('id', $lineId)->update([
+            'description' => trim((string) $data['description']),
+            'unit_amount' => $newAmount,
+            'amount' => $newAmount,
+            'tax_rate' => $newRate,
+        ]);
+
+        /* Two deltas rather than one: take the old line off exactly as a delete would,
+           then put the new one on exactly as an add would. Computing a single combined
+           delta would have to get the tax arithmetic right in both directions at once. */
+        $this->applyLineDelta($invoiceId, -$oldAmount, $oldRate);
+        $totals = $this->applyLineDelta($invoiceId, $newAmount, $newRate);
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => DB::table('centres')->where('id', $invoice->centre_id)->value('agency_id'),
+                'user_id' => $request->user()->id,
+                'action' => 'invoice.line_updated',
+                'entity_type' => 'invoice',
+                'entity_id' => $invoiceId,
+                'payload' => json_encode([
+                    'invoice_number' => $invoice->invoice_number,
+                    'line_id' => $lineId,
+                    'from' => ['description' => $line->description, 'amount' => $oldAmount, 'tax_rate' => $oldRate],
+                    'to' => ['description' => trim((string) $data['description']), 'amount' => $newAmount, 'tax_rate' => $newRate],
+                    'new_total' => $totals['total'],
+                    'summary' => 'Edited a line on ' . ($invoice->invoice_number ?: ('#' . $invoiceId))
+                        . ': "' . $line->description . '" $' . number_format($oldAmount, 2)
+                        . ' -> "' . trim((string) $data['description']) . '" $' . number_format($newAmount, 2)
+                        . '; total is now $' . number_format($totals['total'], 2) . '.',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail the edit over its own audit row */ }
+
+        return response()->json(['status' => 'updated'] + $totals);
+    }
+
+    /* THE INVOICE'S OWN DESCRIPTION. Accounting lists this in its Description column and
+       had no way to change it for a KiddieTrac invoice - the Edit beside it patches the
+       synced iLearn copy, which this is not in.
+
+       Only the note. Deliberately NOT the totals: money on this invoice moves by adding,
+       editing or removing a LINE, so that every change to a figure has a line explaining
+       it. A free-hand total edit would let the bottom of the invoice disagree with the
+       lines printed above it, with nothing to say why. */
+    public function updateNotes(Request $request, int $invoiceId): JsonResponse
+    {
+        $data = $request->validate([
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+        abort_unless($invoice, 404, 'That invoice no longer exists.');
+        $this->assertStaffForFamily($request, (int) $invoice->family_id);
+
+        $notes = trim((string) ($data['notes'] ?? ''));
+        DB::table('invoices')->where('id', $invoiceId)
+            ->update(['notes' => $notes !== '' ? $notes : null, 'updated_at' => now()]);
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => DB::table('centres')->where('id', $invoice->centre_id)->value('agency_id'),
+                'user_id' => $request->user()->id,
+                'action' => 'invoice.description_updated',
+                'entity_type' => 'invoice',
+                'entity_id' => $invoiceId,
+                'payload' => json_encode([
+                    'invoice_number' => $invoice->invoice_number,
+                    'from' => $invoice->notes,
+                    'to' => $notes,
+                    'summary' => 'Changed the description on ' . ($invoice->invoice_number ?: ('#' . $invoiceId))
+                        . ' to "' . $notes . '".',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail the edit over its own audit row */ }
+
+        return response()->json(['status' => 'updated', 'notes' => $notes]);
+    }
+
+    /* Remove a line. Only one this invoice owns, and never the last one - an invoice
+       with no lines is a total with nothing behind it. */
+    public function deleteLine(Request $request, int $invoiceId, int $lineId): JsonResponse
+    {
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+        abort_unless($invoice, 404, 'That invoice no longer exists.');
+        $this->assertStaffForFamily($request, (int) $invoice->family_id);
+
+        if ((string) $invoice->status === 'void') {
+            return response()->json(['message' => 'That invoice is void.'], 422);
+        }
+
+        $line = DB::table('invoice_lines')->where('id', $lineId)->where('invoice_id', $invoiceId)->first();
+        abort_unless($line, 404, 'No such line on this invoice.');
+
+        if (DB::table('invoice_lines')->where('invoice_id', $invoiceId)->count() <= 1) {
+            return response()->json([
+                'message' => 'An invoice needs at least one line. Void the invoice instead.',
+            ], 422);
+        }
+
+        DB::table('invoice_lines')->where('id', $lineId)->delete();
+        // The same delta, negated: removing a line takes back exactly what adding it put on.
+        $totals = $this->applyLineDelta($invoiceId, -1 * (float) $line->amount,
+            $line->tax_rate === null ? null : (float) $line->tax_rate);
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => DB::table('centres')->where('id', $invoice->centre_id)->value('agency_id'),
+                'user_id' => $request->user()->id,
+                'action' => 'invoice.line_removed',
+                'entity_type' => 'invoice',
+                'entity_id' => $invoiceId,
+                'payload' => json_encode([
+                    'invoice_number' => $invoice->invoice_number,
+                    'description' => $line->description,
+                    'amount' => (float) $line->amount,
+                    'new_total' => $totals['total'],
+                    'summary' => 'Removed "' . $line->description . '" ($'
+                        . number_format((float) $line->amount, 2) . ') from '
+                        . ($invoice->invoice_number ?: ('#' . $invoiceId))
+                        . '; total is now $' . number_format($totals['total'], 2) . '.',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail the edit over its own audit row */ }
+
+        return response()->json(['status' => 'removed'] + $totals);
+    }
+
+    /* THE LINES ARE NOT THE SOURCE OF TRUTH FOR THE SUBTOTAL (2026-09-17).
+
+       This first rebuilt every figure from the lines, which is the textbook answer and
+       is WRONG for this schema. Checked before shipping it: **13 of 25 invoices have
+       lines that do not sum to their stored subtotal.** A CWELCC invoice is the clearest
+       case — subtotal 1450.00, subsidy 435.00, and one line reading
+       "Infant tuition (July 2026, CWELCC-adjusted) = 1015.00", the NET figure. Rebuilding
+       from that line would have set subtotal to 1015, then subtracted the subsidy again
+       and made a $1,015.00 invoice say $580.00. Adding a $25 late fee would have silently
+       taken $435 off the family's bill.
+
+       So a line applies a DELTA to figures that are already correct, rather than
+       replacing them with a recomputation that assumes an invariant this data does not
+       hold. The delta comes from the line itself in the same request that wrote it, so
+       there is nothing to drift out of step — and the untouched part of the invoice is
+       left exactly as whatever raised it intended.
+
+       Subsidy and discount are never touched: they are computed elsewhere, from
+       enrolment and sibling rules, and are not line items. */
+    private function applyLineDelta(int $invoiceId, float $amount, ?float $taxRate): array
+    {
+        $inv = DB::table('invoices')->where('id', $invoiceId)->first([
+            'subtotal', 'tax_amount', 'subsidy_amount', 'discount_amount', 'amount_paid', 'status',
+        ]);
+
+        $taxDelta = ($taxRate !== null && $taxRate > 0) ? ($amount * ($taxRate / 100)) : 0.0;
+
+        $subtotal = round((float) ($inv->subtotal ?? 0) + $amount, 2);
+        $tax = round((float) ($inv->tax_amount ?? 0) + $taxDelta, 2);
+        $total = round($subtotal - (float) ($inv->subsidy_amount ?? 0)
+            - (float) ($inv->discount_amount ?? 0) + $tax, 2);
+        $paid = (float) ($inv->amount_paid ?? 0);
+        // Never negative: an overpaid invoice owes nothing, it does not owe backwards.
+        $balance = round(max(0, $total - $paid), 2);
+
+        $update = [
+            'subtotal' => $subtotal,
+            'tax_amount' => $tax,
+            'total' => $total,
+            'balance_due' => $balance,
+            'updated_at' => now(),
+        ];
+
+        /* A paid invoice that grows a charge is no longer paid, and one whose balance
+           reaches zero is. Left alone otherwise: draft stays draft, void never reaches
+           here, and 'sent' vs 'overdue' is derived at display time
+           ([[kiddietrac-invoice-scheduled-status]]), not stored. */
+        $status = (string) ($inv->status ?? '');
+        if ($status === 'paid' && $balance > 0.005) { $update['status'] = 'sent'; }
+        if ($balance <= 0.005 && $paid > 0 && in_array($status, ['sent', 'open', 'overdue', 'unpaid'], true)) {
+            $update['status'] = 'paid';
+        }
+
+        DB::table('invoices')->where('id', $invoiceId)->update($update);
+
+        return [
+            'subtotal' => $subtotal,
+            'tax_amount' => $tax,
+            'subsidy_amount' => (float) ($inv->subsidy_amount ?? 0),
+            'discount_amount' => (float) ($inv->discount_amount ?? 0),
+            'total' => $total,
+            'amount_paid' => $paid,
+            'balance_due' => $balance,
+            'status' => $update['status'] ?? $status,
+        ];
     }
 
     /**
@@ -996,6 +1710,10 @@ final class InvoiceController extends Controller
             return response()->json(['message' => 'No centre access'], 403);
         }
 
+        /* Resolved ONCE, not per family: numbering is an agency-wide convention and
+           this sits above a loop that can raise dozens of invoices. */
+        $numberingAgencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id') ?: null;
+
         $month = $request->input('month', now()->month);
         $year = $request->input('year', now()->year);
         $issueDate = Carbon::createFromDate($year, $month, 1);
@@ -1145,7 +1863,13 @@ final class InvoiceController extends Controller
                 }
 
                 $total = $subtotal - $subsidyTotal - $discountTotal;
-                $invoiceNumber = 'INV-'.now()->format('Ym').'-'.str_pad((string) $familyId, 4, '0', STR_PAD_LEFT);
+                /* Through the agency's numbering convention. This one carried NO
+                   sequence at all, so two batches for the same family in the same month
+                   produced the same string twice; InvoiceNumber::deduplicate() closes
+                   that even on a format without {SEQ}. */
+                $invoiceNumber = \App\Services\InvoiceNumber::next($numberingAgencyId, [
+                    'date' => now(), 'family_id' => $familyId,
+                ]);
 
                 // v22p42: invoices schema requires period_start + period_end NOT NULL.
                 // Pre-existing bug — generateBatch never set these so the first call
@@ -1355,6 +2079,108 @@ final class InvoiceController extends Controller
      * $300 attached to a cancelled document makes the family's balance right by
      * accident and wrong as soon as anyone asks where the money went. Refund first.
      */
+    /* ISSUE A DRAFT EARLY - the manual counterpart to invoices:issue-scheduled (2026-09-17).
+
+       "how do we take invoices out of draft status?"
+
+       Until now there was no answer a person could act on. A payment schedule raises
+       every instalment as a DRAFT dated the first of the month it falls due in, and the
+       06:00 cron flips each one to 'sent' when that morning arrives. Correct, but it left
+       an admin looking at a column of DRAFT badges with nothing to press and no way to
+       issue one today - so this is that button, doing exactly what the cron does to one
+       invoice, on demand.
+
+       DRAFT ONLY, AND FORWARD ONLY. A draft is the one status nothing in the platform
+       reads as owed: it is absent from the family balance, from Outstanding, and from
+       every reminder. Issuing is therefore the moment the money becomes real, which is
+       why it is deliberate and audited, and why this refuses anything that is not still
+       a draft rather than quietly "re-issuing" a sent, paid or voided invoice.
+
+       ISSUED_AT MOVES TO TODAY. The date was a promise about when the invoice would go
+       out; issuing it early makes that promise wrong, and an invoice stamped 1 October
+       that the family can see on 17 September is how a ledger starts lying. The DUE date
+       is untouched - the family agreed to it and it is what every reminder counts from.
+
+       It does NOT email. Neither does the cron: issuing makes the invoice owed and
+       visible, and sending it is a separate, explicit action on the invoice. */
+    public function issue(Request $request, int $invoiceId): JsonResponse
+    {
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+        abort_unless($invoice, 404);
+        $this->assertStaffForFamily($request, (int) $invoice->family_id);
+
+        if ((string) $invoice->status !== 'draft') {
+            return response()->json([
+                'message' => 'Only a draft can be issued. ' . ($invoice->invoice_number ?: ('#' . $invoiceId))
+                    . ' is already ' . $invoice->status . '.',
+            ], 422);
+        }
+
+        $today = now()->toDateString();
+        $wasScheduledFor = $invoice->issued_at ? substr((string) $invoice->issued_at, 0, 10) : null;
+        $early = $wasScheduledFor && $wasScheduledFor > $today;
+
+        /* Guarded on draft inside the write as well: the 06:00 run and a director
+           pressing the button in the same second must not both issue it. */
+        $ok = DB::table('invoices')->where('id', $invoiceId)->where('status', 'draft')->update([
+            'status' => 'sent',
+            'issued_at' => $early ? $today : $invoice->issued_at,
+            // Null here means the cron or an import did it; a person's id means a person.
+            'issued_by_user_id' => $request->user()->id,
+            'updated_at' => now(),
+        ]);
+        if (! $ok) {
+            return response()->json(['message' => 'That invoice was issued a moment ago by someone else.'], 422);
+        }
+
+        try {
+            $fam = DB::table('families')->where('id', $invoice->family_id)->value('family_name');
+            $agencyId = DB::table('centres')->where('id', $invoice->centre_id)->value('agency_id');
+            \App\Support\Audit::write([
+                'agency_id' => $agencyId,
+                'user_id' => $request->user()->id,
+                'action' => 'invoice.issued_manually',
+                'entity_type' => 'invoice',
+                'entity_id' => $invoiceId,
+                'payload' => json_encode([
+                    'invoice_number' => $invoice->invoice_number,
+                    'family_id' => (int) $invoice->family_id,
+                    'family' => $fam,
+                    'total' => (float) $invoice->total,
+                    'due_at' => $invoice->due_at,
+                    'was_scheduled_for' => $wasScheduledFor,
+                    'issued_early' => $early,
+                    'summary' => 'Issued ' . ($invoice->invoice_number ?: ('#' . $invoiceId))
+                        . ' ($' . number_format((float) $invoice->total, 2) . ') to ' . ($fam ?: ('family ' . $invoice->family_id))
+                        . ' by hand' . ($early ? ' - ' . $wasScheduledFor . ' ahead of its scheduled issue date.' : '.'),
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail the issue over its own audit row */ }
+
+        foreach (DB::table('guardians')->where('family_id', $invoice->family_id)->pluck('user_id') as $gid) {
+            try {
+                \App\Support\Notify::write([
+                    'user_id' => $gid, 'type' => 'invoice',
+                    'title' => 'New invoice',
+                    'body' => ($invoice->invoice_number ?: 'An invoice') . ' for $'
+                        . number_format((float) $invoice->total, 2) . ' is now due '
+                        . ($invoice->due_at ? substr((string) $invoice->due_at, 0, 10) : 'shortly') . '.',
+                    'data' => json_encode(['link' => '#billing', 'invoice_id' => $invoiceId]),
+                    'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) { /* a notification must not fail the issue */ }
+        }
+
+        return response()->json([
+            'status' => 'issued',
+            'issued_at' => $early ? $today : $invoice->issued_at,
+            'message' => ($invoice->invoice_number ?: ('#' . $invoiceId)) . ' is now issued'
+                . ($early ? ' (' . $wasScheduledFor . ' ahead of schedule)' : '')
+                . ' and owed by the family. Email it separately if they should get a copy.',
+        ]);
+    }
+
     public function void(Request $request, int $invoiceId): JsonResponse
     {
         $data = $request->validate([
@@ -1412,12 +2238,213 @@ final class InvoiceController extends Controller
             'updated_at' => now(),
         ]);
 
+        /* A SCHEDULE'S INSTALMENT DIES WITH ITS INVOICE (2026-09-17).
+
+           Voiding the invoice used to leave the payment_plan_installments row `pending`,
+           so the schedule went on counting money that no longer existed: the card's
+           total and instalment count disagreed with the invoices underneath it, and the
+           06:00 issue run would happily raise the next one as though nothing happened.
+           Scoped to THIS invoice, so a hand-made invoice no schedule owns is untouched. */
+        $planIds = DB::table('payment_plan_installments')->where('invoice_id', $invoiceId)
+            ->where('status', 'pending')->pluck('payment_plan_id')->unique();
+        if ($planIds->isNotEmpty()) {
+            DB::table('payment_plan_installments')->where('invoice_id', $invoiceId)
+                ->where('status', 'pending')->update(['status' => 'cancelled']);
+            foreach ($planIds as $pid) {
+                /* The stored total is a cache of the live instalments; recomputed here so
+                   it cannot drift from what the rows actually say. */
+                $live = DB::table('payment_plan_installments')->where('payment_plan_id', $pid)
+                    ->where('status', '!=', 'cancelled')->get(['amount']);
+                DB::table('payment_plans')->where('id', $pid)->update([
+                    'total_amount' => round($live->sum(function ($r) { return (float) $r->amount; }), 2),
+                    'installment_count' => $live->count(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
+
         $this->auditVoid($request, $invoice, (string) ($data['reason'] ?? ''));
+        $this->notifyVoided($request, $invoice, (string) ($data['reason'] ?? ''));
 
         return response()->json([
             'message' => 'Invoice ' . ($invoice->invoice_number ?: ('#' . $invoiceId)) . ' has been voided.',
             'status' => 'void',
         ]);
+    }
+
+    /* WHO NEEDS TO KNOW AN INVOICE WAS CANCELLED (2026-09-17).
+
+       Anthony: "add a void function ... and emails sent on voided invoices to
+       admins/directors and parent (with appropriate wording)."
+
+       TWO AUDIENCES, TWO LETTERS. A parent needs reassurance and one clear instruction:
+       this is cancelled, you do not owe it, ignore any reminder that already went out,
+       and do not pay it if you were about to. An admin needs the facts: which invoice,
+       how much, who voided it and why. One letter to both would either alarm the family
+       with internal detail or leave the office without the detail it needs.
+
+       A BLANK REASON IS NOT SHOWN TO A PARENT. The reason is an internal note, and
+       "No reason given" reads as suspicious in a customer-facing email; the parent
+       letter simply omits it while the staff letter says plainly that none was recorded.
+
+       IT NEVER FAILS THE VOID. The money question is settled by the time this runs, so
+       an unreachable mail server must not leave an invoice half-voided. Every send is
+       individually guarded, for the same reason the audit write is.
+
+       The agency mail gate is honoured ([[kiddietrac-mail-gate-agency-scoping]]): an
+       agency with notifications off sends nothing, rather than sending "quietly". */
+    /* COMPOSING the two letters, separately from SENDING them (2026-09-17).
+
+       Pure: it reads the invoice and returns HTML. Nothing is mailed, so the exact
+       wording can be rendered and reviewed against any invoice without a real family
+       receiving anything - which matters, because Test Agency has email switched off
+       and would otherwise leave this text unverifiable anywhere but production.
+
+       TWO AUDIENCES, TWO LETTERS. A parent needs reassurance and one clear instruction:
+       this is cancelled, you do not owe it, ignore any reminder that already went out,
+       do not pay it if you were about to. An admin needs the facts: which invoice, how
+       much, who voided it and why. One letter to both would either alarm the family with
+       internal detail or leave the office without the detail it needs.
+
+       A BLANK REASON IS NOT SHOWN TO A PARENT. The reason is an internal note, and
+       "no reason given" reads as suspicious in a customer-facing email; the parent
+       letter omits it entirely while the staff letter says plainly that none was
+       recorded.
+
+       @return array{parent:string,staff:string,subject_parent:string,subject_staff:string,agency_id:int}|null
+     */
+    private function voidLetters($invoice, string $reason, string $actor): ?array
+    {
+        $invoiceId = (int) $invoice->id;
+        $number = (string) ($invoice->invoice_number ?: ('#' . $invoiceId));
+        $money = '$' . number_format((float) $invoice->total, 2);
+        /* An EXTERNAL invoice carries agency_id directly and has no centre_id; a
+           KiddieTrac one is the other way round. Either resolves the same agency, and
+           the letters below do not care which table the row came from. */
+        $agencyId = (int) ($invoice->agency_id
+            ?? DB::table('centres')->where('id', $invoice->centre_id ?? 0)->value('agency_id'));
+        if (! $agencyId) { return null; }
+
+        $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your childcare provider');
+        $familyName = (string) (DB::table('families')->where('id', $invoice->family_id)->value('family_name') ?: 'this family');
+        $due = $invoice->due_at ? Carbon::parse($invoice->due_at)->format('j F Y') : null;
+        $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
+
+        $cap = 'font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;';
+        $val = 'font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 10px;';
+        $facts = '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
+            . '<div style="' . $cap . '">Invoice</div><div style="' . $val . '">' . $esc($number) . '</div>'
+            . '<div style="' . $cap . '">Amount</div>'
+            . '<div style="font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 ' . ($due ? '10px' : '0') . ';">' . $esc($money) . '</div>'
+            . ($due ? '<div style="' . $cap . '">Was due</div><div style="font-size:15px;color:#0F172A;margin-top:2px;">' . $esc($due) . '</div>' : '')
+            . '</div></td></tr>';
+
+        $parentBody = '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
+            . '<tr><td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">'
+            . 'We are writing to let you know that the invoice below has been <strong>cancelled</strong> by '
+            . $esc($agencyName) . '.</td></tr>'
+            . $facts
+            . '<tr><td style="padding:14px 0 0;font-size:15px;line-height:1.6;color:#334155;">'
+            . '<strong>There is nothing you need to do.</strong> This amount is no longer owed and has been '
+            . 'removed from your balance. If you have already had a reminder about it, please disregard that '
+            . 'reminder, and if you were about to pay it, there is no longer any need.'
+            . '</td></tr>'
+            . '<tr><td style="padding:12px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
+            . 'If you have already paid this invoice, the amount will be returned to you or applied to another '
+            . 'invoice, and we will be in touch. If a replacement invoice is needed you will receive it '
+            . 'separately. Any questions, just reply to this email.</td></tr>'
+            . '</table>';
+
+        $staffBody = '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
+            . '<tr><td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">'
+            . 'An invoice for <strong>' . $esc($familyName) . '</strong> has been voided. The family has been '
+            . 'told it is cancelled and that no payment is due.</td></tr>'
+            . $facts
+            . '<tr><td style="padding:14px 0 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
+            . '<div style="' . $cap . '">Voided by</div>'
+            . '<div style="font-size:15px;color:#0F172A;margin:2px 0 10px;">' . $esc($actor ?: 'a staff member') . '</div>'
+            . '<div style="' . $cap . '">Reason</div>'
+            . '<div style="font-size:15px;color:#0F172A;margin-top:2px;">'
+            . ($reason !== '' ? $esc($reason) : '<span style="color:#94A3B8;">No reason recorded</span>')
+            . '</div></div></td></tr>'
+            . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
+            . 'The invoice keeps its number and stays in Accounting marked Void, so the trail is intact. If it '
+            . 'belonged to a payment schedule, that instalment has been withdrawn and the schedule total '
+            . 'adjusted to match.</td></tr>'
+            . '</table>';
+
+        return [
+            'agency_id' => $agencyId,
+            'parent' => \App\Services\EmailTemplate::wrap($agencyId, $parentBody, [
+                'eyebrow' => 'INVOICE CANCELLED',
+                'title' => 'Invoice ' . $number . ' has been cancelled',
+                'subtitle' => $money . ' is no longer owed',
+                'preheader' => 'Invoice ' . $number . ' for ' . $money . ' has been cancelled. Nothing to do.',
+            ]),
+            'staff' => \App\Services\EmailTemplate::wrap($agencyId, $staffBody, [
+                'eyebrow' => 'INVOICE VOIDED - STAFF',
+                'title' => $number . ' voided for ' . $familyName,
+                'subtitle' => $money . ', voided by ' . ($actor ?: 'a staff member'),
+                'preheader' => $number . ' (' . $money . ') voided for ' . $familyName . '.',
+            ]),
+            'subject_parent' => 'Invoice ' . $number . ' has been cancelled - nothing to do',
+            'subject_staff' => 'Invoice voided: ' . $number . ' - ' . $familyName,
+        ];
+    }
+
+    /* SENDING them. Resolves who gets what and mails it.
+
+       It never fails the void: the money question is settled by the time this runs, so
+       an unreachable mail server must not leave an invoice half-voided. Every send is
+       individually guarded, for the same reason the audit write is.
+
+       The agency mail gate is honoured - an agency with notifications off sends nothing
+       rather than sending "quietly" ([[kiddietrac-mail-gate-agency-scoping]]). */
+    private function notifyVoided(Request $request, $invoice, string $reason): void
+    {
+        try {
+            $agencyId = (int) ($invoice->agency_id
+                ?? DB::table('centres')->where('id', $invoice->centre_id ?? 0)->value('agency_id'));
+            if (! $agencyId || ! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) { return; }
+
+            $actor = trim((string) (($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? '')));
+            $letters = $this->voidLetters($invoice, $reason, $actor);
+            if (! $letters) { return; }
+
+            $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                ->where('g.family_id', $invoice->family_id)->whereNotNull('u.email')
+                ->get(['u.email', 'u.first_name', 'u.last_name'])->unique('email');
+
+            foreach ($guardians as $g) {
+                try {
+                    $name = trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? ''));
+                    \App\Services\AgencyMailer::forAgency($agencyId)->html($letters['parent'],
+                        function ($m) use ($g, $name, $letters) {
+                            $m->to($g->email, $name ?: null)->subject($letters['subject_parent']);
+                        });
+                } catch (\Throwable $inner) { report($inner); }
+            }
+
+            $staff = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.agency_id', $agencyId)->where('ra.active', 1)
+                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
+                ->whereNotNull('u.email')
+                ->get(['u.email', 'u.first_name', 'u.last_name'])->unique('email');
+
+            foreach ($staff as $u) {
+                try {
+                    $name = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''));
+                    \App\Services\AgencyMailer::forAgency($agencyId)->html($letters['staff'],
+                        function ($m) use ($u, $name, $letters) {
+                            $m->to($u->email, $name ?: null)->subject($letters['subject_staff']);
+                        });
+                } catch (\Throwable $inner) { report($inner); }
+            }
+        } catch (\Throwable $outer) {
+            /* The void itself already succeeded; a failure here is a notification
+               problem, not a billing one. */
+            report($outer);
+        }
     }
 
     private function auditVoid(Request $request, $invoice, string $reason): void
@@ -1492,14 +2519,52 @@ final class InvoiceController extends Controller
             'paid_at' => ['nullable', 'date'],
             'reference' => ['nullable', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:500'],
+            /* THE PROCESSOR'S CUT, PASSED ON (2026-09-17). Off unless asked for: a
+               surcharge is a charge, and adding one because a rate happens to be
+               configured would bill families nobody decided to bill. */
+            'add_surcharge' => ['nullable', 'boolean'],
         ]);
+
+        /* Added BEFORE the payment is recorded, so the payment clears an invoice that
+           already includes the fee. The other order leaves the invoice briefly paid and
+           then unpaid again, which is what a parent's app would show. */
+        /* THE AMOUNT ENTERED IS WHAT IS BEING SETTLED, and the fee is charged ON it. The
+           payment then recorded is settled + fee, because that is what the family actually
+           handed over and what has to clear the invoice.
+
+           Computing the fee on the entered figure and recording only that figure looked
+           right and was not: settling a $500 balance left $14.50 owing, and a user who
+           "helpfully" typed the fee-inclusive $514.50 got 2.9% of THAT ($14.92) and was
+           left owing $0.42. Either way the invoice never reached zero. */
+        $surcharge = 0.0;
+        if (! empty($data['add_surcharge'])) {
+            $agencyId = (int) DB::table('centres')->where('id', $invoice->centre_id)->value('agency_id');
+            $pct = \App\Services\PaymentSurcharge::percentFor($agencyId, (string) $data['method']);
+            $surcharge = \App\Services\PaymentSurcharge::feeOn((float) $data['amount'], $pct);
+
+            if ($surcharge > 0.005) {
+                DB::table('invoice_lines')->insert([
+                    'invoice_id' => $invoiceId,
+                    'description' => \App\Services\PaymentSurcharge::lineLabel((string) $data['method'], $pct),
+                    'line_type' => 'adjustment',
+                    'quantity' => 1,
+                    'unit_amount' => $surcharge,
+                    'amount' => $surcharge,
+                ]);
+                $this->applyLineDelta($invoiceId, $surcharge, null);
+                // The invoice moved, so the figures the rest of this method works from must.
+                $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+                // ...and so does the payment: the family paid the fee too.
+                $data['amount'] = round((float) $data['amount'] + $surcharge, 2);
+            }
+        }
 
         DB::transaction(function () use ($invoiceId, $invoice, $data, $request) {
             DB::table('payments')->insert([
                 'invoice_id' => $invoiceId,
                 'family_id' => $invoice->family_id,
                 'amount' => $data['amount'],
-                'method' => $data['method'],
+                'method' => self::paymentMethodValue((string) $data['method']),
                 'paid_at' => $data['paid_at'] ?? now(),
                 // The column is reference_number; `reference` never existed, so every
                 // manually recorded payment threw SQLSTATE[42S22] instead of saving.
@@ -1523,6 +2588,17 @@ final class InvoiceController extends Controller
             };
 
             DB::table('invoices')->where('id', $invoiceId)->update([
+                /* AMOUNT_PAID WAS NEVER WRITTEN (found 2026-09-17).
+
+                   This updated the balance and the status and left `amount_paid` at 0,
+                   so a fully paid invoice read "total $514.61, paid $0.00, balance $0.00"
+                   - which is what Accounting's PAID column shows, and what the receipt
+                   and the invoice document read. Worse, applyLineDelta() derives the new
+                   balance from amount_paid, so adding a line to an invoice with payments
+                   against it recomputed the balance as though nothing had been paid.
+
+                   Derived from the payment rows, not incremented, so it cannot drift. */
+                'amount_paid' => $totalPaid,
                 'balance_due' => $newBalance,
                 'status' => $newStatus,
                 'updated_at' => now(),
@@ -1700,6 +2776,16 @@ final class InvoiceController extends Controller
             'due_date' => $i->due_at,
             'subtotal' => (float) $i->subtotal,
             'subsidy_amount' => (float) ($i->subsidy_amount ?? 0),
+            /* Added 2026-09-17: the edit dialog shows a tax line and what has been paid,
+               and both were simply missing from this shape - tax_amount came back null
+               on an invoice that plainly carried tax. */
+            'discount_amount' => (float) ($i->discount_amount ?? 0),
+            'tax_amount' => (float) ($i->tax_amount ?? 0),
+            'amount_paid' => (float) ($i->amount_paid ?? 0),
+            /* Accounting's Description column reads this, and the edit dialog now writes
+               it — it was never returned, so the field reloaded empty after every save
+               and looked as though the save had not taken. */
+            'notes' => $i->notes ?? null,
             'total' => (float) $i->total,
             'balance_due' => (float) ($i->balance_due ?? $i->total),
             'status' => $i->status,

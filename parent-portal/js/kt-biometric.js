@@ -199,7 +199,13 @@
       set('kt_bio_token', t);
       var u = sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user'); if (u) set('kt_bio_user', u);
       var a = sessionStorage.getItem('kt_active_agency_id'); if (a) set('kt_bio_agency', a);
-      var v = sessionStorage.getItem('kt_view_as'); if (v) set('kt_bio_view', v);
+      /* The view-as role is no longer carried across an unlock here. It used to be,
+         and that is what made a previewed role stick forever on the APK: unlock is the
+         normal way in on a phone, so whatever role was last being looked at came back
+         every single time, including for a super admin who only meant to glance at a
+         parent's view. The deliberate choice is remembered by ktViewAs() instead, keyed
+         to the account that made it, and applied below. (2026-09-17) */
+      del('kt_bio_view');
     } catch (e) {}
   }
   function restoreSession() {
@@ -207,7 +213,29 @@
       var t = get('kt_bio_token'); if (t) sessionStorage.setItem('kt_token', t);
       var u = get('kt_bio_user'); if (u) sessionStorage.setItem('kt_user', u);
       var a = get('kt_bio_agency'); if (a) sessionStorage.setItem('kt_active_agency_id', a);
-      var v = get('kt_bio_view'); if (v) sessionStorage.setItem('kt_view_as', v);
+      /* THE ROLE THIS ACCOUNT CHOSE, or their real one.
+
+         Applied only when the remembered preference belongs to the account being
+         unlocked; anything else leaves kt_view_as unset, which IS the real role - a
+         super admin lands as super admin. */
+      try {
+        var who = JSON.parse(u || '{}');
+        /* Read here rather than through ktViewAsPrefFor(): this file can run before
+           app-v2-shell.js has defined it, and a helper that is merely absent would look
+           exactly like "no preference" and silently drop a deliberate choice. */
+        var pref = null;
+        try {
+          var raw = get('kt_view_as_pref');
+          var parsed = raw ? JSON.parse(raw) : null;
+          if (parsed && who && who.id && String(parsed.uid) === String(who.id)
+              && typeof parsed.role === 'string') {
+            pref = parsed.role;
+          }
+        } catch (e3) {}
+
+        if (pref) { sessionStorage.setItem('kt_view_as', pref); }
+        else { sessionStorage.removeItem('kt_view_as'); }
+      } catch (e) { try { sessionStorage.removeItem('kt_view_as'); } catch (e2) {} }
       sessionStorage.setItem('kt_login_at', String(Date.now()));
       sessionStorage.setItem('kt_last_activity', String(Date.now()));
     } catch (e) {}

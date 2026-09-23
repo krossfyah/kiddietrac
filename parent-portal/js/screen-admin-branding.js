@@ -108,6 +108,55 @@
                 + '</div>';
             })()}
 
+            ${(function () {
+              /* INVOICE NUMBERING, beside the invoice's look (2026-09-17).
+
+                 Anthony: "invoice numbering naming convention should be definable for
+                 each agency on how they want invoice numbering to start and be formatted
+                 - can you wire this up under the branding for invoices."
+
+                 A free-text format rather than a fixed dropdown, because the whole point
+                 is that an agency invents its own prefix; the presets are a starting
+                 point, not the menu. The sample updates as you type, because a token
+                 language nobody can see the output of is a guessing game — and the
+                 server renders the real thing from the same code that mints the number,
+                 so the sample cannot drift from reality. */
+              var fmt = brand.invoice_number_format || 'INV-{YYYY}{MM}-{FAMILY}-{N}';
+              var start = brand.invoice_number_start || 1001;
+              var presets = brand.invoice_number_presets || {};
+              var sample = brand.invoice_number_sample || '';
+              var opts = Object.keys(presets).map(function (k) {
+                return '<option value="' + esc(k) + '"' + (k === fmt ? ' selected' : '') + '>'
+                  + esc(presets[k]) + '</option>';
+              }).join('');
+              return '<div style="margin-bottom:14px;padding-top:12px;border-top:1px solid #F1F5F9;">'
+                + '<label style="display:block;font-size:12px;font-weight:700;color:#6B7280;margin-bottom:6px;">Invoice numbering</label>'
+                + (opts
+                    ? '<select id="kt-invnum-preset" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-bottom:8px;">'
+                      + '<option value="">Start from a preset\u2026</option>' + opts + '</select>'
+                    : '')
+                + '<input id="kt-invnum-format" type="text" value="' + esc(fmt) + '" spellcheck="false"'
+                + ' style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">'
+                + '<div style="display:flex;gap:10px;align-items:flex-end;margin-top:8px;flex-wrap:wrap;">'
+                + '<div style="flex:0 0 150px;">'
+                + '<label style="display:block;font-size:11px;font-weight:700;color:#6B7280;margin-bottom:4px;">Start numbering at</label>'
+                + '<input id="kt-invnum-start" type="number" min="1" step="1" value="' + esc(String(start)) + '"'
+                + ' style="width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;"></div>'
+                + '<div style="flex:1;min-width:180px;">'
+                + '<label style="display:block;font-size:11px;font-weight:700;color:#6B7280;margin-bottom:4px;">Next invoice will look like</label>'
+                + '<div id="kt-invnum-sample" style="padding:9px 12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;'
+                + 'font-size:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#0F172A;font-weight:700;">'
+                + esc(sample) + '</div></div></div>'
+                + '<div style="font-size:11px;color:#64748B;margin-top:6px;line-height:1.55;">'
+                + '<strong>{YYYY}</strong> year \u00b7 <strong>{YY}</strong> short year \u00b7 <strong>{MM}</strong> month \u00b7 '
+                + '<strong>{DD}</strong> day \u00b7 <strong>{FAMILY}</strong> family number \u00b7 '
+                + '<strong>{N}</strong> instalment \u00b7 <strong>{SEQ}</strong> running number. '
+                + 'Anything else is used as typed. "Start numbering at" only applies to {SEQ}, '
+                + 'and can be raised later but never lowered \u2014 that would reissue numbers '
+                + 'invoices already carry.</div>'
+                + '</div>';
+            })()}
+
             <div style="display:flex;align-items:center;gap:10px;padding:12px;background:#F9FAFB;border-radius:8px;margin-top:14px;">
               <input type="checkbox" id="kt-poweredby" ${brand.powered_by_visible == 0 ? '' : 'checked'} style="width:18px;height:18px;cursor:pointer;">
               <label for="kt-poweredby" style="font-size:13px;color:#374151;cursor:pointer;flex:1;">
@@ -139,6 +188,41 @@
     /* The blurb follows the choice, so somebody can read what each style is before
        saving rather than after seeing an invoice go out in it. */
     (function () {
+      /* The sample is rendered SERVER-side by the same class that mints the real
+         number, so what is shown here and what lands on the invoice cannot disagree.
+         Debounced, because it is a request per keystroke otherwise. */
+      const fmtEl = $('#kt-invnum-format', container);
+      const startEl = $('#kt-invnum-start', container);
+      const sampleEl = $('#kt-invnum-sample', container);
+      const presetEl = $('#kt-invnum-preset', container);
+      if (fmtEl && sampleEl) {
+        let t = null;
+        const refreshSample = function () {
+          clearTimeout(t);
+          t = setTimeout(async function () {
+            try {
+              const q = '?format=' + encodeURIComponent(fmtEl.value || '')
+                + '&start=' + encodeURIComponent(startEl ? startEl.value : '');
+              const r = await api('GET', '/admin/agencies/' + agencyId + '/invoice-number-preview' + q);
+              sampleEl.textContent = (r && r.sample) || '';
+              sampleEl.style.color = '#0F172A';
+            } catch (e) {
+              sampleEl.textContent = 'Could not preview that format';
+              sampleEl.style.color = '#DC2626';
+            }
+          }, 300);
+        };
+        fmtEl.addEventListener('input', refreshSample);
+        if (startEl) { startEl.addEventListener('input', refreshSample); }
+        if (presetEl) {
+          presetEl.addEventListener('change', function () {
+            if (!presetEl.value) { return; }
+            fmtEl.value = presetEl.value;
+            refreshSample();
+          });
+        }
+      }
+
       const sel = $('#kt-invoice-template', container);
       const note = $('#kt-invoice-template-blurb', container);
       if (!sel || !note) { return; }
@@ -256,6 +340,11 @@
       brand_address:        $('#kt-address', container).value.trim() || null,
       brand_bank_info:      $('#kt-bank',    container).value.trim() || null,
       invoice_template:     ($('#kt-invoice-template', container) || {}).value || undefined,
+      invoice_number_format: (($('#kt-invnum-format', container) || {}).value || '').trim() || undefined,
+      invoice_number_start:  (function (v) {
+        var n = parseInt(v, 10);
+        return isNaN(n) || n < 1 ? undefined : n;
+      })(($('#kt-invnum-start', container) || {}).value),
       brand_privacy_url:    $('#kt-privacy', container).value.trim() || null,
       brand_terms_url:      $('#kt-terms',   container).value.trim() || null,
       powered_by_visible:   $('#kt-poweredby', container).checked ? 1 : 0,

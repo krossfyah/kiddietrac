@@ -482,6 +482,59 @@ final class FileRequestController extends Controller
     }
 
     /** POST /admin/file-requests/{id}/remind — ask again. */
+    /* THE LINK THE FAMILY WAS SENT (2026-09-17).
+
+       Anthony: "open link for the request files table."
+
+       The upload page is signed and needs no login, and until now the only copy of that
+       link was inside the email. When a parent says they never got it, or lost it, or is
+       standing at the desk with the documents on their phone, staff had no way to reach
+       the page at all - the only option was a reminder email and hope.
+
+       IT IS THE SAME LINK, not a new one. temporarySignedRoute is deterministic for a
+       given (request, user, expiry window), so opening this does not invalidate the one
+       already in their inbox.
+
+       It is a real credential - anyone holding it can upload against this request - so it
+       is admin-only, agency-scoped, and the fetch is audited. */
+    public function link(Request $request, int $id): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json(['message' => 'Not allowed'], 403);
+        }
+        $agencyId = $this->agencyId($request);
+        $r = DB::table('file_requests')->where('id', $id)->where('agency_id', $agencyId)
+            ->first(['id', 'user_id', 'email', 'status']);
+        if (! $r) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! $r->user_id) {
+            return response()->json(['message' => 'This request has nobody attached to it.'], 422);
+        }
+
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => $agencyId,
+                'user_id' => $request->user()->id,
+                'action' => 'file_request.link_viewed',
+                'entity_type' => 'file_request',
+                'entity_id' => $id,
+                'payload' => json_encode([
+                    'for' => $r->email,
+                    'summary' => 'Opened the upload link for file request #' . $id . ' (' . $r->email . ').',
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) { /* never fail over the audit row */ }
+
+        return response()->json([
+            'url' => \App\Http\Controllers\Api\SignedFileUploadController::linkFor($id, (int) $r->user_id),
+            'to' => $r->email,
+            'expires_days' => \App\Http\Controllers\Api\SignedFileUploadController::LINK_DAYS,
+            'complete' => $r->status === 'complete',
+        ]);
+    }
+
     public function remind(Request $request, int $id): JsonResponse
     {
         if (! $this->isAdmin($request)) {

@@ -42,11 +42,43 @@ final class InvoicePreviewController extends Controller
         if (! $invoice) abort(404, 'Invoice not found');
         abort_unless($this->authorizeCentreAccess($user, (int) $invoice->centre_id), 403);
 
-        $renderer = app(InvoicePdfRenderer::class);
-        $html = $renderer->renderFromInvoiceId($id);
+        /* THE AGENCY'S CHOSEN TEMPLATE, not whichever renderer this line names. This is
+           what "View invoice" opens from Accounting, and it was drawing the default
+           KiddieTrac document for an agency that had chosen iLearn's. (2026-09-17) */
+        $html = \App\Services\InvoiceDocument::html($id, false);
         if ($html === null) abort(404, 'Invoice not found');
 
         return response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
+    }
+
+    /* THE SAME DOCUMENT, AS A FILE (2026-09-17).
+
+       "Download invoice" in the schedule kebab. previewExisting() hands back HTML for an
+       iframe; this hands back the identical document as a PDF, drawn from the agency's
+       CHOSEN template so the file a director saves is the file the family received.
+
+       InvoiceDocument::pdf() returns null rather than guessing when it cannot produce a
+       real PDF - the renderers historically returned HTML from a method called "pdf", and
+       an HTML file wearing a .pdf extension is worse than an honest error, because the
+       parent it is forwarded to simply cannot open it. */
+    public function pdfExisting(Request $request, int $id): Response
+    {
+        $user = $request->user();
+        if (! $user) abort(401);
+
+        $invoice = DB::table('invoices')->where('id', $id)->first();
+        if (! $invoice) abort(404, 'Invoice not found');
+        abort_unless($this->authorizeCentreAccess($user, (int) $invoice->centre_id), 403);
+
+        $pdf = \App\Services\InvoiceDocument::pdf($id);
+        if ($pdf === null) abort(422, 'That invoice could not be rendered as a PDF.');
+
+        $name = 'invoice-' . ($invoice->invoice_number ?: $id) . '.pdf';
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $name . '"',
+        ]);
     }
 
     /**

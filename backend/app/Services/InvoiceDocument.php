@@ -87,7 +87,78 @@ final class InvoiceDocument
     }
 
     /** The document as HTML, in whichever template the agency has chosen. */
+    /* A PAID INVOICE SAYS SO ACROSS THE PAGE (2026-09-17).
+
+       Anthony: "resend the invoice as paid (water marked diagonal) with the receipt."
+
+       A settled invoice and an outstanding one were the same piece of paper apart from a
+       balance line, which is easy to miss on a forwarded PDF and is exactly what somebody
+       squints at when they are not sure whether they still owe money. The watermark
+       answers that from across the room.
+
+       Applied HERE rather than in each renderer: there are twelve of them (iLearn, the
+       ten styles, the default) and a watermark added to one is a watermark missing from
+       eleven. Wrapping the finished document keeps them all in step.
+
+       ONLY WHEN IT IS ACTUALLY SETTLED - balance at or below zero with money against it.
+       A $0 invoice nobody has paid is not "PAID"; it is an invoice for nothing. */
     public static function html(int $invoiceId, bool $forPdf = true): ?string
+    {
+        $doc = self::render($invoiceId, $forPdf);
+
+        return $doc === null ? null : self::withPaidMark($invoiceId, $doc);
+    }
+
+    /** True once the balance is cleared and something was actually paid. */
+    public static function isSettled(int $invoiceId): bool
+    {
+        $i = \Illuminate\Support\Facades\DB::table('invoices')->where('id', $invoiceId)
+            ->first(['status', 'balance_due', 'amount_paid']);
+        if (! $i) { return false; }
+        if ((string) $i->status === 'void') { return false; }
+
+        $paid = (float) ($i->amount_paid ?? 0);
+        $balance = (float) ($i->balance_due ?? 0);
+
+        return $paid > 0.005 && $balance <= 0.005;
+    }
+
+    /**
+     * Stamp a finished invoice document with a diagonal PAID mark.
+     *
+     * `position:fixed` so dompdf repeats it on every page, and a rotate transform for the
+     * diagonal. Behind the content in z-order and heavily transparent, because a
+     * watermark that obscures the figures it is stamped on defeats the document.
+     */
+    private static function withPaidMark(int $invoiceId, string $html): string
+    {
+        if (! self::isSettled($invoiceId)) {
+            return $html;
+        }
+
+        $mark = '<div style="position:fixed;top:38%;left:0;width:100%;text-align:center;'
+            . 'z-index:0;transform:rotate(-28deg);-webkit-transform:rotate(-28deg);'
+            . 'pointer-events:none;">'
+            . '<span style="font-size:96px;font-weight:800;letter-spacing:14px;'
+            . 'color:#16A34A;opacity:.14;border:7px solid #16A34A;border-radius:18px;'
+            . 'padding:10px 42px;">PAID</span></div>';
+
+        /* Injected after <body> where there is one, so it sits in the page rather than
+           before the document starts; appended otherwise, which still renders because it
+           is fixed-position. */
+        $pos = stripos($html, '<body');
+        if ($pos !== false) {
+            $end = strpos($html, '>', $pos);
+            if ($end !== false) {
+                return substr($html, 0, $end + 1) . $mark . substr($html, $end + 1);
+            }
+        }
+
+        return $html . $mark;
+    }
+
+    /** The document itself, before anything is stamped on it. */
+    private static function render(int $invoiceId, bool $forPdf): ?string
     {
         $agencyId = self::agencyOfInvoice($invoiceId);
 
